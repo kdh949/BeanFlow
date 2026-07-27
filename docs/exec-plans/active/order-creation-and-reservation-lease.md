@@ -915,7 +915,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] conflict와 중요한 decision gate 식별
 - [x] 첫 self-contained ExecPlan 작성
 - [x] Milestone 0 결정과 문서 기록
-- [ ] Milestone 1 모듈·테스트 기반
+- [x] Milestone 1 모듈·테스트 기반
 - [ ] Milestone 2 가격 snapshot·배분
 - [ ] Milestone 3 슬롯·재고 예약
 - [ ] Milestone 4 쿠폰·포인트 예약
@@ -939,6 +939,13 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   implementation handoff에는 Operations/Audit scope가 빠져 있었다.
 - 초기 OpenAPI의 create 설명과 달리 `reservationExpiresAt`은 schema상 선택
   필드였다. Milestone 0에서 PENDING_PAYMENT variant의 필수 필드로 수정했다.
+- Milestone 1에서 기존 `spring-modulith-starter-jpa`가 실제 event producer 없이도
+  `event_publication` Entity를 활성화해 Hibernate `validate` 시작을 실패시켰다.
+  ADR-010과 이 Feature의 event non-goal에 맞춰 starter를 비활성화했고
+  `MD-2026-001`에 재도입 조건을 기록했다.
+- 첫 PostgreSQL context 재검증 중 Docker Desktop engine이 중지되어 container가
+  시작 직후 연결 거부를 반환했다. Docker Desktop을 시작한 뒤 같은 명령을 다시
+  실행해 통과했으며 application fallback으로 대체하지 않았다.
 
 ## Decision Log
 
@@ -955,6 +962,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Accepted | worker·조회·결제 명령이 같은 expiry tx를 사용하고 성공 후에만 EXPIRED/409, 실패는 503 | API와 DB 상태 일치, stale 성공 방지 | BR-03, ADR-013 |
 | 2026-07-28 | Accepted | 주문 생성·만료의 변경 target별 AuditRecord, 표준 reason, 서울 달력 5년 보존 | BR-30 누락 범위, target 추적성과 retention 해소 | BR-30, ADR-022 |
 | 2026-07-28 | Accepted | POST /orders 201은 상태별 `{order, payment?}` envelope | lease deadline과 BENEFIT_ONLY Payment를 모호하지 않게 표현 | API conventions, OpenAPI |
+| 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
 
 ## Outcomes & Retrospective
 
@@ -1000,3 +1008,7 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   ADR-026으로 승격하고 configuration/availability/stock 오류를 구분.
 - 2026-07-28: Milestone 0 acceptance criteria를 모두 충족하고 문서·OpenAPI 검증
   통과 결과를 기록. 기능 구현 전에 중단.
+- 2026-07-28: Milestone 1 완료. 8개 owner/shared 모듈의 공개 `api`와 `internal`
+  경계를 선언하고 주입 가능한 Clock/UUID/correlation source, PostgreSQL fail-fast
+  설정과 공통 Testcontainers 기반을 추가. `./gradlew test --tests
+  '*ModularityTests'`와 `./gradlew test --tests '*ApplicationContextTests'` 통과.
