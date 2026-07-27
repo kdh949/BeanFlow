@@ -11,3 +11,8 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+beanflow:
+  idempotency:
+    retry-after-seconds: 2
+  security:
+    jwk-set-uri: ${BEANFLOW_JWK_SET_URI}
