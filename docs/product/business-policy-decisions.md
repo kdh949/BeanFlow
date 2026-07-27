@@ -242,11 +242,14 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 확정 시 쿠폰 할인액, 사용 포인트, 현금 결제액을 주문 항목별로 배분해 스냅샷으로 저장한다. 배분은 각 항목의 할인 전 금액 비율을 기준으로 하고, 원 미만 버림 후 남는 차액은 금액이 큰 항목, 동일하면 주문 항목 순서가 빠른 항목부터 1원씩 배분한다. 품목 부분 환불 시 해당 항목에 저장된 현금 결제액을 환불하고, 사용 포인트를 복원하며, 쿠폰 할인액은 현금으로 환급하지 않는다.
+- **Sequential Allocation Amendment (2026-07-28):** 대상 메뉴가 제한된 쿠폰은 대상 OrderLine의 할인 전 금액만 기준으로 대상 품목에 배분한다. 포인트는 쿠폰 적용 뒤 각 OrderLine에 남은 금액 비율로 모든 품목에 배분하고, 현금 결제액은 품목별 `gross - coupon - points` 잔액이다. 각 배분 단계에서 원 미만을 버린 뒤 남는 차액은 해당 단계 기준 금액이 큰 품목, 동일하면 주문 항목 순서가 빠른 품목부터 1원씩 배분한다. 이 amendment가 앞 문장의 공통 할인 전 금액 기준보다 우선한다.
 - **Rationale:** 환불 시점에 정책을 다시 계산하지 않고 주문 당시 결과를 재현하기 위함이다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Payment, Settlement
 - **Affected Aggregates:** Order, OrderLine, Payment, PointAccount, SettlementAdjustment
 - **Required Tests:**
   - 여러 품목의 할인·포인트 배분 합계 일치
+  - 대상·비대상 혼합 주문에서 비대상 품목의 쿠폰 배분 0
+  - 쿠폰 적용 후 품목별 잔액 기준 포인트 배분
   - 나머지 1원 배분의 결정성
   - 같은 품목 반복 환불 방지
   - 환불 후 승인액·포인트·정산액 tie-out
