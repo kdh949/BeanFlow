@@ -120,6 +120,7 @@ internal class CreateOrderService(
 	private fun statusOf(code: FailureCode): Int =
 		when (code) {
 			FailureCode.INVALID_REQUEST -> 400
+			FailureCode.ACCESS_DENIED -> 403
 			FailureCode.RESOURCE_NOT_FOUND -> 404
 			FailureCode.DEPENDENCY_UNAVAILABLE -> 503
 			else -> 409

@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -63,17 +64,17 @@ internal class PickupReservationService(
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult {
+	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		val slot = slotRepository.findLockedById(current.slotId)
 			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
 		val reservation = reservationRepository.findLockedByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup confirmation source does not match")
 		}
-		return when (reservation.state) {
+		val result = when (reservation.state) {
 			PickupReservationState.RESERVED -> {
 				slot.confirmOne()
 				reservation.state = PickupReservationState.CONFIRMED
@@ -83,23 +84,24 @@ internal class PickupReservationService(
 			PickupReservationState.CONFIRMED -> ReservationTransitionResult.ALREADY_APPLIED
 			PickupReservationState.EXPIRED -> ReservationTransitionResult.NOT_ELIGIBLE
 		}
+		return report(result, reservation.id)
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult {
+	override fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		val slot = slotRepository.findLockedById(current.slotId)
 			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
 		val reservation = reservationRepository.findLockedByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup expiry source does not match")
 		}
 		if (now.isBefore(reservation.expiresAt)) {
-			return ReservationTransitionResult.NOT_ELIGIBLE
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
 		}
-		return when (reservation.state) {
+		val result = when (reservation.state) {
 			PickupReservationState.RESERVED -> {
 				slot.releaseOne()
 				reservation.state = PickupReservationState.EXPIRED
@@ -109,7 +111,11 @@ internal class PickupReservationService(
 			PickupReservationState.EXPIRED -> ReservationTransitionResult.ALREADY_APPLIED
 			PickupReservationState.CONFIRMED -> ReservationTransitionResult.NOT_ELIGIBLE
 		}
+		return report(result, reservation.id)
 	}
+
+	private fun report(result: ReservationTransitionResult, vararg ids: UUID) =
+		ReservationTransitionReport(result, ids.toList())
 
 	private fun fail(code: FailureCode, message: String): Nothing = throw DomainFailure(code, message)
 }

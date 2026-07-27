@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -71,11 +72,11 @@ internal class StockReservationService(
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult =
+	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, null, confirm = true)
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult =
+	override fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, now, confirm = false)
 
 	private fun transition(
@@ -83,9 +84,9 @@ internal class StockReservationService(
 		sourceReference: String,
 		now: Instant?,
 		confirm: Boolean,
-	): ReservationTransitionResult {
+	): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderIdOrderBySellableUnitId(orderId)
-		if (current.isEmpty()) return ReservationTransitionResult.NOT_ELIGIBLE
+		if (current.isEmpty()) return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		val stocks = current.sortedBy(StockReservationEntity::sellableUnitId).associate { reservation ->
 			reservation.sellableUnitId to (
 				stockRepository.findLockedById(reservation.sellableUnitId)
@@ -97,15 +98,15 @@ internal class StockReservationService(
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Stock transition source does not match")
 		}
 		if (!confirm && reservations.any { now!!.isBefore(it.expiresAt) }) {
-			return ReservationTransitionResult.NOT_ELIGIBLE
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservations)
 		}
 		if (reservations.all {
 				it.state == if (confirm) StockReservationState.CONFIRMED else StockReservationState.EXPIRED
 			}) {
-			return ReservationTransitionResult.ALREADY_APPLIED
+			return report(ReservationTransitionResult.ALREADY_APPLIED, reservations)
 		}
 		if (reservations.any { it.state != StockReservationState.RESERVED }) {
-			return ReservationTransitionResult.NOT_ELIGIBLE
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservations)
 		}
 		reservations.forEach { reservation ->
 			val stock = stocks.getValue(reservation.sellableUnitId)
@@ -119,8 +120,13 @@ internal class StockReservationService(
 				reservation.updatedAt = now!!
 			}
 		}
-		return ReservationTransitionResult.APPLIED
+		return report(ReservationTransitionResult.APPLIED, reservations)
 	}
+
+	private fun report(
+		result: ReservationTransitionResult,
+		reservations: List<StockReservationEntity> = emptyList(),
+	) = ReservationTransitionReport(result, reservations.map(StockReservationEntity::id))
 
 	private fun aggregate(requirements: List<StockRequirement>): List<StockRequirement> =
 		requirements.groupBy(StockRequirement::sellableUnitId)

@@ -35,6 +35,7 @@ internal object OrderCreationDatabaseFixture {
 		jdbcTemplate.execute(
 			"""
 			TRUNCATE TABLE
+			    operations_audit_record,
 			    ordering_idempotency_record,
 			    ordering_order_line,
 			    ordering_order,

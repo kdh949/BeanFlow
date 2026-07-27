@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -88,11 +89,11 @@ internal class PointReservationService(
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult =
+	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, null, confirm = true)
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult =
+	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, now, confirm = false)
 
 	private fun transition(
@@ -100,24 +101,28 @@ internal class PointReservationService(
 		sourceReference: String,
 		now: Instant?,
 		confirm: Boolean,
-	): ReservationTransitionResult {
+	): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		val account = accountRepository.findById(current.pointAccountId).orElse(null)
 			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved point account is missing")
 		val lockedAccount = accountRepository.findLockedByCustomerId(account.customerId)
 			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved point account is missing")
 		val reservation = reservationRepository.findLockedByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Point transition source does not match")
 		}
 		if (!confirm && now!!.isBefore(reservation.reservationExpiresAt)) {
-			return ReservationTransitionResult.NOT_ELIGIBLE
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
 		}
 		val terminal = if (confirm) PointReservationState.USED else PointReservationState.RELEASED
-		if (reservation.state == terminal) return ReservationTransitionResult.ALREADY_APPLIED
-		if (reservation.state != PointReservationState.RESERVED) return ReservationTransitionResult.NOT_ELIGIBLE
+		if (reservation.state == terminal) {
+			return report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
+		}
+		if (reservation.state != PointReservationState.RESERVED) {
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+		}
 
 		val allocations = allocationRepository
 			.findAllByPointReservationIdOrderByPointLotId(reservation.id)
@@ -144,8 +149,11 @@ internal class PointReservationService(
 		}
 		reservation.state = terminal
 		reservation.updatedAt = now ?: clock.instant()
-		return ReservationTransitionResult.APPLIED
+		return report(ReservationTransitionResult.APPLIED, reservation.id)
 	}
+
+	private fun report(result: ReservationTransitionResult, vararg ids: UUID) =
+		ReservationTransitionReport(result, ids.toList())
 
 	private fun pointTransaction(
 		reservation: PointReservationEntity,
