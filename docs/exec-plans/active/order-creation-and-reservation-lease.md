@@ -919,7 +919,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] 첫 self-contained ExecPlan 작성
 - [x] Milestone 0 결정과 문서 기록
 - [x] Milestone 1 모듈·테스트 기반
-- [ ] Milestone 2 가격 snapshot·배분
+- [x] Milestone 2 가격 snapshot·배분
 - [ ] Milestone 3 슬롯·재고 예약
 - [ ] Milestone 4 쿠폰·포인트 예약
 - [ ] Milestone 5 atomic create·idempotency·API
@@ -953,6 +953,9 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   BR-12/ADR-014/초기 ExecPlan의 “모든 혜택을 할인 전 gross 비율로 배분”이
   충돌했다. 구현을 중단하고 순차 잔액 기준을 결정한 뒤 관련 정책과 ADR을 먼저
   amendment했다.
+- 정수 비율 배분의 `total * lineBasis`는 최종 KRW 값이 `Long` 범위여도 중간 곱이
+  overflow할 수 있다. 배분 중간 계산만 JDK `BigInteger`를 사용하고 저장·API 결과는
+  계속 non-negative signed 64-bit KRW로 제한했다.
 
 ## Decision Log
 
@@ -1023,3 +1026,7 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
 - 2026-07-28: Milestone 2 착수 전 coupon 대상 제한과 공통 배분 기준의 충돌을 발견.
   Coupon은 eligible line에만, Points는 coupon 적용 후 line 잔액 기준으로 순차
   배분하도록 BR-12와 ADR-014/024를 amendment한 뒤 구현 재개.
+- 2026-07-28: Milestone 2 완료. Merchant menu/option/configuration quote snapshot,
+  sellable requirement 정규화, KRW add/multiply overflow guard와 순차 benefit
+  allocator, immutable OrderLine snapshot을 구현. `./gradlew test --tests
+  '*OrderPricing*' --tests '*OrderTest'` 통과.
