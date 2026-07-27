@@ -28,6 +28,7 @@ Invariants:
 - 일부 예약만 성공한 주문을 생성하지 않는다.
 - 주문 항목과 결제 예정 금액은 결제 시작 후 변경하지 않는다.
 - 마지막 슬롯·재고·쿠폰 수량을 초과할 수 없다.
+- Payment가 `UNKNOWN`이어도 5분 lease를 자동 연장하지 않는다.
 
 ## 3. Payment approval
 
@@ -44,6 +45,14 @@ Failure behavior:
 - PG timeout 또는 응답 유실은 `UNKNOWN`이며 성공·실패로 단정하지 않는다.
 - PG 성공 후 DB 기록 실패는 reconciliation 대상이다.
 - 필수 PG 설정 누락 시 fake provider로 자동 전환하지 않는다.
+- 5분 lease가 먼저 만료되면 Order와 모든 예약을 만료·해제한다.
+- worker가 아직 처리하지 않았더라도 만료 Order 조회·결제 명령은 응답 전에 같은
+  expiry transaction을 실행한다. 성공한 조회는 `EXPIRED`, 실패한 조회는 503이며
+  stale `PENDING_PAYMENT`를 성공으로 반환하지 않는다.
+- 만료 후 reconciliation에서 승인이 확인돼도 Order를 되살리지 않고 Provider
+  void/refund recovery를 시작한다.
+- void/refund 결과 불명 또는 실패는 `RECONCILING`/`MANUAL_REVIEW`와 운영 case로
+  남기며 성공 환불로 표시하지 않는다.
 
 ## 4. Store acceptance and preparation
 
@@ -90,7 +99,7 @@ Failure behavior:
 3. 주문 당시 항목별 배분 스냅샷을 사용한다.
 4. 해당 항목의 현금 결제액을 환불하고 사용 포인트를 복원한다.
 5. 쿠폰 할인액은 현금으로 환급하지 않는다.
-6. 적립 포인트를 회수하고 부족액은 `POINT_RECOVERY_PENDING` 원장에 남긴다.
+6. 적립 포인트를 회수하고 부족액은 Loyalty의 `POINT_RECOVERY_PENDING` 원장에 남긴다.
 7. 정산 확정 전이면 원천 항목에 반영하고, 확정 후면 Adjustment를 생성한다.
 
 ## 9. Settlement dispute
@@ -108,3 +117,7 @@ Failure behavior:
 - 외부 결과가 불명확하면 `UNKNOWN` 또는 `RECONCILING` 상태를 사용한다.
 - 비동기 작업은 로그만 남기지 않고 영속 상태와 재처리 경로를 가진다.
 - 모든 메시지 소비자는 중복 전달 가능성을 가정한다.
+- Order의 terminal 상태는 Payment refund, NotificationDelivery 또는 Analytics
+  projection까지 성공했다는 뜻이 아니다.
+- `PaymentApproved`만으로 SettlementItem을 만들지 않고 `OrderCompleted`를 정산
+  원천으로 사용한다.

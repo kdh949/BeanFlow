@@ -1,19 +1,19 @@
 # Authorization Matrix
 
-| Resource / Action | Customer | Store Owner | Store Staff | Platform Operator |
-|---|---:|---:|---:|---:|
-| 내 주문 생성·조회 | Own | No | No | Read for support |
-| 고객 주문 취소 | Own and allowed state | No | No | Approved operation |
-| 매장 메뉴 조회 | Yes | Yes | Yes | Yes |
-| 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled |
-| 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only |
-| 내 포인트 조회 | Own | No | No | Read with reason |
-| 부분 환불 | No | Owned store with policy | Permission required | Approved operation |
-| 매장 정산 조회 | No | Owned store | No by default | Yes |
-| 이의제기 생성 | No | Owned store | No | No |
-| 이의제기 판정 | No | No | No | Settlement permission |
-| 재처리 | No | No | No | Explicit permission + reason |
-| 권한 변경 | No | Limited | No | Audited |
+| Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
+|---|---:|---:|---:|---:|---:|
+| 내 주문 생성·조회 | Own | No | No | Read for support | No |
+| 고객 주문 취소 | Own and allowed state | No | No | Approved operation | No |
+| 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
+| 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
+| 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
+| 내 포인트 조회 | Own | No | No | Read with reason | No |
+| 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
+| 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
+| 이의제기 생성 | No | Owned store | No | No | No |
+| 이의제기 판정 | No | No | No | No by default | Explicit permission |
+| 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
+| 권한 변경 | No | Limited | No | Audited | No |
 
 ## Enforcement layers
 

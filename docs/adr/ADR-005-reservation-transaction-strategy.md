@@ -42,4 +42,6 @@
 
 ## Related Decisions
 
-BR-03, BR-04, BR-05, ADR-001
+- BR-03, BR-04, BR-05
+- [ADR-001](ADR-001-modular-monolith.md)
+- [ADR-013](ADR-013-payment-unknown-reservation-expiry.md)

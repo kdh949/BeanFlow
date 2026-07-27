@@ -42,4 +42,7 @@
 
 ## Related Decisions
 
-ADR-001, Event Catalog
+- [ADR-001](ADR-001-modular-monolith.md)
+- [Event Catalog](../architecture/event-catalog.md)
+- [ADR-019](ADR-019-notification-retry-and-manual-recovery.md)
+- [ADR-023](ADR-023-analytics-refund-and-late-events.md)

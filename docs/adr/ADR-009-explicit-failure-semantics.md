@@ -42,4 +42,6 @@
 
 ## Related Decisions
 
-docs/architecture/failure-semantics.md
+- [Failure Semantics](../architecture/failure-semantics.md)
+- [ADR-013](ADR-013-payment-unknown-reservation-expiry.md)
+- [ADR-019](ADR-019-notification-retry-and-manual-recovery.md)

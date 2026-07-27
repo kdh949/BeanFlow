@@ -42,4 +42,7 @@ Provider가 원자적 callback 또는 다른 보장 방식을 제공할 때
 
 ## Related Decisions
 
-ADR-007, ADR-009
+- [ADR-007](ADR-007-payment-idempotency-reconciliation.md)
+- [ADR-009](ADR-009-explicit-failure-semantics.md)
+- [ADR-013](ADR-013-payment-unknown-reservation-expiry.md)
+- [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
