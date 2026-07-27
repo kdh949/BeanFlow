@@ -50,6 +50,7 @@ internal class ApiExceptionHandler(
 	private fun statusOf(code: FailureCode): HttpStatus =
 		when (code) {
 			FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
+			FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
 			FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 			FailureCode.DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
 			else -> HttpStatus.CONFLICT

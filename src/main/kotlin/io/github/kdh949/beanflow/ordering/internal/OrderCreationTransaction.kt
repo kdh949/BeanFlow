@@ -15,11 +15,15 @@ import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderPricingCalculator
 import io.github.kdh949.beanflow.ordering.internal.domain.PricingLine
+import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
+import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -38,7 +42,9 @@ internal class OrderCreationTransaction(
 	private val orderRepository: OrderJpaRepository,
 	private val orderLineRepository: OrderLineJpaRepository,
 	private val idempotencyService: OrderIdempotencyService,
+	private val auditRecordOperations: AuditRecordOperations,
 	private val identifierSource: IdentifierSource,
+	private val correlationIdSource: CorrelationIdSource,
 	private val clock: Clock,
 	private val objectMapper: ObjectMapper,
 ) {
@@ -60,7 +66,7 @@ internal class OrderCreationTransaction(
 		)
 		val stockRequirements = aggregateStockRequirements(quotes)
 
-		pickupOperations.reserve(
+		val pickupReservationId = pickupOperations.reserve(
 			ReservePickupCommand(
 				orderId = orderId,
 				storeId = command.storeId,
@@ -69,7 +75,7 @@ internal class OrderCreationTransaction(
 				sourceReference = pickupSource(orderId),
 			),
 		)
-		stockOperations.reserve(
+		val stockReservationIds = stockOperations.reserve(
 			ReserveStockCommand(
 				orderId = orderId,
 				storeId = command.storeId,
@@ -112,7 +118,7 @@ internal class OrderCreationTransaction(
 			couponDiscount = Krw.of(couponQuote?.discountKrw ?: 0),
 			pointsToUse = Krw.of(command.pointsToUseKrw),
 		)
-		if (command.pointsToUseKrw > 0) {
+		val pointReservation = if (command.pointsToUseKrw > 0) {
 			pointOperations.reserve(
 				ReservePointsCommand(
 					orderId = orderId,
@@ -122,6 +128,8 @@ internal class OrderCreationTransaction(
 					sourceReference = pointsSource(orderId),
 				),
 			)
+		} else {
+			null
 		}
 
 		val lineIds = quotes.map { identifierSource.next() }
@@ -170,6 +178,67 @@ internal class OrderCreationTransaction(
 				)
 			},
 		)
+		val correlationId = correlationIdSource.currentOrCreate()
+		val auditSource = createAuditSource(order.id)
+		val auditRecords = mutableListOf(
+			auditCommand(
+				command = command,
+				action = "ORDER_CREATED",
+				targetType = "ORDER",
+				targetId = order.id,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("state" to order.state.name, "payableKrw" to order.payableKrw.toString()),
+			),
+			auditCommand(
+				command = command,
+				action = "PICKUP_RESERVED",
+				targetType = "PICKUP_RESERVATION",
+				targetId = pickupReservationId,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("state" to "RESERVED"),
+			),
+		)
+		stockReservationIds.forEach { reservationId ->
+			auditRecords += auditCommand(
+				command = command,
+				action = "STOCK_RESERVED",
+				targetType = "STOCK_RESERVATION",
+				targetId = reservationId,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("state" to "RESERVED"),
+			)
+		}
+		couponQuote?.let {
+			auditRecords += auditCommand(
+				command = command,
+				action = "COUPON_RESERVED",
+				targetType = "COUPON_RESERVATION",
+				targetId = it.reservationId,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("state" to "RESERVED", "discountKrw" to it.discountKrw.toString()),
+			)
+		}
+		pointReservation?.let {
+			auditRecords += auditCommand(
+				command = command,
+				action = "POINTS_RESERVED",
+				targetType = "POINT_RESERVATION",
+				targetId = it.reservationId,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("state" to "RESERVED", "amountKrw" to command.pointsToUseKrw.toString()),
+			)
+		}
+		auditRecordOperations.appendAll(auditRecords)
 		val response = StoredHttpResponse(
 			status = 201,
 			body = objectMapper.writeValueAsString(
@@ -216,6 +285,28 @@ internal class OrderCreationTransaction(
 		}
 	}
 
+	private fun auditCommand(
+		command: CreateOrderCommand,
+		action: String,
+		targetType: String,
+		targetId: UUID,
+		occurredAt: java.time.Instant,
+		correlationId: String,
+		sourceReference: String,
+		after: Map<String, String>,
+	) = AppendAuditRecordCommand(
+		actorId = command.customerId.toString(),
+		actorType = AuditActorType.CUSTOMER,
+		action = action,
+		targetType = targetType,
+		targetId = targetId,
+		occurredAt = occurredAt,
+		reason = "CUSTOMER_ORDER_CREATION",
+		afterSummary = after,
+		correlationId = correlationId,
+		sourceReference = sourceReference,
+	)
+
 	private fun aggregateStockRequirements(
 		quotes: List<io.github.kdh949.beanflow.merchant.api.MenuLineQuote>,
 	): List<StockRequirement> =
@@ -254,5 +345,6 @@ internal class OrderCreationTransaction(
 		fun stockSource(orderId: UUID) = "order:$orderId:stock"
 		fun couponSource(orderId: UUID) = "order:$orderId:coupon"
 		fun pointsSource(orderId: UUID) = "order:$orderId:points"
+		fun createAuditSource(orderId: UUID) = "order:$orderId:create"
 	}
 }

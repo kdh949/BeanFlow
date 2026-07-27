@@ -10,6 +10,7 @@ import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -126,6 +127,14 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select beanOrder from OrderEntity beanOrder where beanOrder.id = :id")
 	fun findLockedById(@Param("id") id: UUID): OrderEntity?
+
+	@Query(
+		"select beanOrder.id from OrderEntity beanOrder " +
+			"where beanOrder.state = io.github.kdh949.beanflow.ordering.internal.domain.OrderState.PENDING_PAYMENT " +
+			"and beanOrder.reservationExpiresAt <= :now " +
+			"order by beanOrder.reservationExpiresAt, beanOrder.id",
+	)
+	fun findDueIds(@Param("now") now: Instant, pageable: Pageable): List<UUID>
 }
 
 internal interface OrderLineJpaRepository : JpaRepository<OrderLineEntity, UUID> {

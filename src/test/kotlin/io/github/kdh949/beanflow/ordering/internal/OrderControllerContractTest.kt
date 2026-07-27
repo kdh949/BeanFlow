@@ -13,12 +13,16 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.nio.file.Files
 import java.nio.file.Path
+import java.sql.Timestamp
+import java.time.Instant
+import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
@@ -113,6 +117,53 @@ internal class OrderControllerContractTest @Autowired constructor(
 	}
 
 	@Test
+	fun `get materializes a due order before returning it`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		createThroughHttp(fixture, "contract-get-001")
+		val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		makeDue(orderId)
+
+		mockMvc.perform(
+			get("/api/v1/orders/{orderId}", orderId)
+				.with(
+					jwt()
+						.jwt { it.subject(fixture.customerId.toString()) }
+						.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
+				),
+		)
+			.andExpect(status().isOk)
+			.andExpect(jsonPath("$.state").value("EXPIRED"))
+	}
+
+	@Test
+	fun `get verifies ownership before materializing expiry`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		createThroughHttp(fixture, "contract-get-002")
+		val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		makeDue(orderId)
+
+		mockMvc.perform(
+			get("/api/v1/orders/{orderId}", orderId)
+				.with(
+					jwt()
+						.jwt { it.subject(UUID.randomUUID().toString()) }
+						.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
+				),
+		)
+			.andExpect(status().isForbidden)
+			.andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+		org.assertj.core.api.Assertions.assertThat(
+			jdbcTemplate.queryForObject(
+				"SELECT state FROM ordering_order WHERE id = ?",
+				String::class.java,
+				orderId,
+			),
+		).isEqualTo("PENDING_PAYMENT")
+	}
+
+	@Test
 	fun `OpenAPI keeps the state specific create response variants`() {
 		val openApi = Files.readString(Path.of("openapi/beanflow-v1.yaml"))
 
@@ -139,4 +190,25 @@ internal class OrderControllerContractTest @Autowired constructor(
 		  "pointsToUseKrw": 0
 		}
 		""".trimIndent()
+
+	private fun createThroughHttp(fixture: OrderCreationFixture, key: String) {
+		mockMvc.perform(
+			post("/api/v1/orders")
+				.with(
+					jwt()
+						.jwt { it.subject(fixture.customerId.toString()) }
+						.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
+				)
+				.header("Idempotency-Key", key)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(requestBody(fixture)),
+		).andExpect(status().isCreated)
+	}
+
+	private fun makeDue(orderId: UUID) {
+		val dueAt = Timestamp.from(Instant.now().minusSeconds(1))
+		jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
+		jdbcTemplate.update("UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
+		jdbcTemplate.update("UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
+	}
 }

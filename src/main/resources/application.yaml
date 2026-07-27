@@ -14,5 +14,13 @@ spring:
 beanflow:
   idempotency:
     retry-after-seconds: 2
+  reservation-expiry:
+    chunk-size: 100
+    fixed-delay-ms: 30000
+    initial-delay-ms: 60000
+  audit-retention:
+    chunk-size: 100
+    fixed-delay-ms: 3600000
+    initial-delay-ms: 300000
   security:
     jwk-set-uri: ${BEANFLOW_JWK_SET_URI}

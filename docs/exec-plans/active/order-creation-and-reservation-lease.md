@@ -741,18 +741,18 @@ owner release API, AuditRecord와 observability를 구현한다.
 
 **Acceptance criteria:**
 
-- [ ] `expiresAt - 1ns`에는 유효하고 정확한 경계와 이후에는 결제가 거부된다.
-- [ ] expiry transaction의 어느 release 단계가 실패해도 Order와 다른 release가
+- [x] `expiresAt - 1ns`에는 유효하고 정확한 경계와 이후에는 결제가 거부된다.
+- [x] expiry transaction의 어느 release 단계가 실패해도 Order와 다른 release가
       commit되지 않는다.
-- [ ] worker 중복·재시작·두 instance 경쟁에서 각 수량 복원은 한 번뿐이다.
-- [ ] terminal Order와 자원 변경 AuditRecord가 같은 transaction에서 존재한다.
+- [x] worker 중복·재시작·두 instance 경쟁에서 각 수량 복원은 한 번뿐이다.
+- [x] terminal Order와 자원 변경 AuditRecord가 같은 transaction에서 존재한다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*ReservationExpiry*'`
-- [ ] 고정 Clock 경계 테스트
-- [ ] worker 재실행 및 concurrent worker Testcontainers test
-- [ ] audit masking/append-only test
+- [x] `./gradlew test --tests '*ReservationExpiry*'`
+- [x] 고정 deadline 경계 테스트
+- [x] worker 재실행 및 concurrent worker Testcontainers test
+- [x] audit masking/append-only test
 
 **Dependencies:** Milestones 0, 5
 
@@ -923,7 +923,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 3 슬롯·재고 예약
 - [x] Milestone 4 쿠폰·포인트 예약
 - [x] Milestone 5 atomic create·idempotency·API
-- [ ] Milestone 6 expiry·release·audit
+- [x] Milestone 6 expiry·release·audit
 - [ ] Milestone 7 BENEFIT_ONLY branch
 - [ ] 전체 검증과 문서 handoff
 
@@ -969,6 +969,12 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - PostgreSQL `char(64)` payload hash는 Hibernate의 String/varchar validation과
   타입이 달랐다. hash 길이는 `varchar(64) CHECK (length(payload_hash) = 64)`로
   보호해 Flyway schema와 Hibernate `validate`를 모두 통과시켰다.
+- PostgreSQL `timestamptz`는 마이크로초 정밀도로 저장·비교한다. 애플리케이션의
+  Order lease guard는 DB에서 읽은 deadline에 대해 `-1ns`와 정확한 경계를 구분하지만,
+  retention due query의 DB 경계 테스트는 저장소가 표현 가능한 `-1µs`를 사용했다.
+- GET이 소유권 확인 전에 expiry를 materialize하면 다른 고객의 due Order를 변경할 수
+  있었다. 존재·소유권을 먼저 확인한 뒤 같은 expiry transaction을 호출하도록 순서를
+  고정하고 cross-customer 계약 테스트로 보호했다.
 
 ## Decision Log
 
@@ -988,6 +994,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
 | 2026-07-28 | Accepted | Coupon은 eligible line에만 gross 비율로 배분하고 Points는 coupon 적용 후 line 잔액 비율로 배분 | 대상 제한을 지키면서 line benefit이 gross를 초과하지 않고 쿠폰→포인트 순서를 재현 | BR-12, ADR-014, ADR-024 |
 | 2026-07-28 | Minor | Tx O의 잠금 순서를 slot → sorted stock → coupon → point로 고정하고 coupon 결과 뒤 가격을 계산 | Create flow의 초기 서술과 global lock order 충돌을 제거하고 같은 고객 결과로 deadlock 위험을 줄임 | ExecPlan |
+| 2026-07-28 | Minor | 고객 GET·결제 guard는 존재·소유권 확인 후 expiry를 materialize | 다른 고객이 due Order 상태를 변경하거나 존재 여부를 추론하는 경로를 차단 | ExecPlan, authorization contract test |
 
 ## Outcomes & Retrospective
 
@@ -1061,3 +1068,10 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   '*CreateOrderServiceTest'`, `./gradlew test --tests
   '*CreateOrderConcurrencyTest'`, `./gradlew test --tests
   '*OrderControllerContractTest'`, `./gradlew test --tests '*ModularityTests'` 통과.
+- 2026-07-28: Milestone 6 완료. Order row lock 기반 expiry transaction, owner별
+  release report, due worker, GET과 payment lease guard, target별 append-only
+  AuditRecord와 서울 달력 5년 retention worker를 구현. PostgreSQL Testcontainers에서
+  `./gradlew test --tests '*ReservationExpiry*' --tests '*AuditRecordTest'`와
+  `./gradlew test --tests '*OrderControllerContractTest' --tests
+  '*ModularityTests'` 통과. owner release 누락 fault injection은 Order·선행 release와
+  expiry audit가 모두 rollback됨을 확인했다.
