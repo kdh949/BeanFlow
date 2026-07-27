@@ -34,6 +34,8 @@ Order의 할인 snapshot을 재현할 수 없다.
   Business Policy로 먼저 확정한다. 기본 stacking 값은 BR-09에 따라 false다.
 - discount type/value, minimum, maximum, 대상 범위, 비용 부담 주체와 분담률은
   주문 생성 시 Order의 혜택 snapshot에 고정한다.
+- 계산된 coupon 총액은 ADR-014의 순차 배분 clarification에 따라 eligible
+  OrderLine에만 배분한다. 이후 point 배분 기준은 각 line의 coupon 적용 후 잔액이다.
 
 ## Alternatives Considered
 
@@ -62,7 +64,7 @@ snapshot이 일치하고, 비대상 품목으로 최소금액만 채우는 예�
 
 - Promotion은 Campaign과 CouponIssuance를 잠근 뒤 같은 계산 규칙을 재검증해야 한다.
 - Ordering은 Promotion이 반환한 할인 총액과 Campaign snapshot을 ADR-014 규칙으로
-  OrderLine에 결정적으로 배분한다.
+  eligible OrderLine에 결정적으로 배분하고, 비대상 line에는 coupon 0을 저장한다.
 - Campaign schema는 type별 필드 조합, rate 범위, 대상 목록과 비용 분담률을
   CHECK 또는 Aggregate invariant로 검증해야 한다.
 - 자동 기간 할인은 별도 정책이 정해질 때까지 주문 생성 계산에 포함하지 않는다.

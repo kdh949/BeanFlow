@@ -261,9 +261,12 @@ shell이다.
 - `0 <= couponDiscountKrw <= subtotalKrw`.
 - `0 <= pointsAppliedKrw <= subtotalKrw - couponDiscountKrw`.
 - `payableKrw = subtotalKrw - couponDiscountKrw - pointsAppliedKrw`.
-- 쿠폰, 포인트와 현금 금액을 할인 전 line gross 비율로 배분하고 원 미만을 버린 뒤,
-  잔여 원은 line gross가 큰 line, 동률이면 `lineSequence`가 작은 line부터 1원씩
-  배분한다.
+- 쿠폰은 eligible line의 할인 전 gross만 기준으로 eligible line에 배분하고 비대상
+  line에는 0을 배분한다.
+- 포인트는 coupon 적용 후 각 line의 잔액 비율로 모든 line에 배분한다.
+- 현금은 각 line의 `gross - coupon - points` 잔액이다.
+- 각 비율 배분 단계에서 원 미만을 버린 뒤 잔여 원은 해당 단계 기준 금액이 큰 line,
+  동률이면 `lineSequence`가 작은 line부터 1원씩 배분한다.
 - 각 배분 합계는 Order 합계와 정확히 같고 각 line에서
   `coupon + points + cash = lineGross`다.
 - Order 생성 뒤 가격·항목·배분 snapshot은 수정하지 않는다.
@@ -946,6 +949,10 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - 첫 PostgreSQL context 재검증 중 Docker Desktop engine이 중지되어 container가
   시작 직후 연결 거부를 반환했다. Docker Desktop을 시작한 뒤 같은 명령을 다시
   실행해 통과했으며 application fallback으로 대체하지 않았다.
+- Milestone 2 대조에서 BR-08/ADR-024의 “비대상 line은 쿠폰 할인을 받지 않음”과
+  BR-12/ADR-014/초기 ExecPlan의 “모든 혜택을 할인 전 gross 비율로 배분”이
+  충돌했다. 구현을 중단하고 순차 잔액 기준을 결정한 뒤 관련 정책과 ADR을 먼저
+  amendment했다.
 
 ## Decision Log
 
@@ -963,6 +970,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Accepted | 주문 생성·만료의 변경 target별 AuditRecord, 표준 reason, 서울 달력 5년 보존 | BR-30 누락 범위, target 추적성과 retention 해소 | BR-30, ADR-022 |
 | 2026-07-28 | Accepted | POST /orders 201은 상태별 `{order, payment?}` envelope | lease deadline과 BENEFIT_ONLY Payment를 모호하지 않게 표현 | API conventions, OpenAPI |
 | 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
+| 2026-07-28 | Accepted | Coupon은 eligible line에만 gross 비율로 배분하고 Points는 coupon 적용 후 line 잔액 비율로 배분 | 대상 제한을 지키면서 line benefit이 gross를 초과하지 않고 쿠폰→포인트 순서를 재현 | BR-12, ADR-014, ADR-024 |
 
 ## Outcomes & Retrospective
 
@@ -1012,3 +1020,6 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   경계를 선언하고 주입 가능한 Clock/UUID/correlation source, PostgreSQL fail-fast
   설정과 공통 Testcontainers 기반을 추가. `./gradlew test --tests
   '*ModularityTests'`와 `./gradlew test --tests '*ApplicationContextTests'` 통과.
+- 2026-07-28: Milestone 2 착수 전 coupon 대상 제한과 공통 배분 기준의 충돌을 발견.
+  Coupon은 eligible line에만, Points는 coupon 적용 후 line 잔액 기준으로 순차
+  배분하도록 BR-12와 ADR-014/024를 amendment한 뒤 구현 재개.
