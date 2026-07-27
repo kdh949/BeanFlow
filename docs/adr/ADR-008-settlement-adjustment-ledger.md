@@ -42,4 +42,6 @@
 
 ## Related Decisions
 
-BR-16~BR-24
+- BR-21, BR-23
+- [ADR-017](ADR-017-settlement-calculation-and-cost-allocation.md)
+- [ADR-018](ADR-018-settlement-dispute-hold-and-refile.md)
