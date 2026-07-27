@@ -3,6 +3,7 @@
 | System risk | Design mechanism | Verification | Durable evidence |
 |---|---|---|---|
 | 중복 결제 | Idempotency record, unique constraint, UNKNOWN | 동시 재요청·응답 유실 테스트 | ADR, 통합 테스트 |
+| 0원 주문의 외부 결제 우회·부분 확정 | BENEFIT_ONLY Payment, Provider 없는 전용 service, 동일 Tx owner confirm | `BenefitOnlyOrderCreationTest`의 0/1원 분기·동시 key·confirmation fault | BR-11, ADR-016, PostgreSQL Testcontainers 결과 |
 | PG 성공 후 내부 기록 실패 | transaction split, reconciliation | fault injection | 장애 보고서 |
 | 만료 후 뒤늦은 결제 승인 | guarded expiry, late-approval void/refund | `ReservationExpiryTest`의 5분 경계·동시 만료·rollback | BR-03, ADR-013, Testcontainers 결과 |
 | 환불 결과 불명 은폐 | Refund UNKNOWN/RECONCILING | Provider timeout·ACK 유실 | 상태·운영 case |

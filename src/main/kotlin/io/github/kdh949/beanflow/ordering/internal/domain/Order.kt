@@ -64,7 +64,62 @@ class Order private constructor(
 			if (pricing.payable == Krw.ZERO) {
 				invalid("A pending-payment order must have a positive payable amount")
 			}
-			val snapshots = quotes.indices.map { index ->
+			val snapshots = snapshots(lineIds, quotes, pricing)
+			return Order(
+				id = id,
+				customerId = customerId,
+				storeId = storeId,
+				pickupSlotId = pickupSlotId,
+				state = OrderState.PENDING_PAYMENT,
+				lines = snapshots,
+				subtotalKrw = pricing.subtotal.value,
+				couponDiscountKrw = pricing.couponDiscount.value,
+				pointsAppliedKrw = pricing.pointsApplied.value,
+				payableKrw = pricing.payable.value,
+				createdAt = createdAt,
+				reservationExpiresAt = createdAt.plus(RESERVATION_LEASE),
+			)
+		}
+
+		fun benefitOnlyPaid(
+			id: UUID,
+			customerId: UUID,
+			storeId: UUID,
+			pickupSlotId: UUID,
+			lineIds: List<UUID>,
+			quotes: List<MenuLineQuote>,
+			pricing: OrderPricing,
+			createdAt: Instant,
+		): Order {
+			if (quotes.size != pricing.lines.size || lineIds.size != quotes.size) {
+				invalid("Quote, pricing and line identifiers must have the same size")
+			}
+			if (pricing.payable != Krw.ZERO || pricing.pointsApplied == Krw.ZERO) {
+				invalid("A BENEFIT_ONLY order requires zero payable and positive applied points")
+			}
+			val snapshots = snapshots(lineIds, quotes, pricing)
+			return Order(
+				id = id,
+				customerId = customerId,
+				storeId = storeId,
+				pickupSlotId = pickupSlotId,
+				state = OrderState.PAID,
+				lines = snapshots,
+				subtotalKrw = pricing.subtotal.value,
+				couponDiscountKrw = pricing.couponDiscount.value,
+				pointsAppliedKrw = pricing.pointsApplied.value,
+				payableKrw = pricing.payable.value,
+				createdAt = createdAt,
+				reservationExpiresAt = null,
+			)
+		}
+
+		private fun snapshots(
+			lineIds: List<UUID>,
+			quotes: List<MenuLineQuote>,
+			pricing: OrderPricing,
+		): List<OrderLineSnapshot> =
+			quotes.indices.map { index ->
 				val quote = quotes[index]
 				val priced = pricing.lines[index]
 				if (priced.lineSequence != index || quote.menuId != priced.menuId) {
@@ -85,21 +140,6 @@ class Order private constructor(
 					cashPayableKrw = priced.cashPayable.value,
 				)
 			}
-			return Order(
-				id = id,
-				customerId = customerId,
-				storeId = storeId,
-				pickupSlotId = pickupSlotId,
-				state = OrderState.PENDING_PAYMENT,
-				lines = snapshots.toList(),
-				subtotalKrw = pricing.subtotal.value,
-				couponDiscountKrw = pricing.couponDiscount.value,
-				pointsAppliedKrw = pricing.pointsApplied.value,
-				payableKrw = pricing.payable.value,
-				createdAt = createdAt,
-				reservationExpiresAt = createdAt.plus(RESERVATION_LEASE),
-			)
-		}
 
 		private fun invalid(message: String): Nothing =
 			throw DomainFailure(FailureCode.INVALID_REQUEST, message)
