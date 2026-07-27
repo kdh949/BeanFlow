@@ -1,24 +1,31 @@
-## 변경 내용
+## Purpose
 
-<!-- 무엇을 왜 변경했는지 간결하게 작성해 주세요. -->
+## Business rules and invariants
 
-## 검증
+## Affected modules and transaction boundaries
 
-<!-- 실행한 테스트와 확인 결과를 작성해 주세요. -->
+## Failure behavior
 
-- [ ] `./gradlew build`
+## Alternatives considered
 
-## 체크리스트
+## Tests and validation executed
 
-- [ ] 하나의 목적에 집중한 PR입니다.
-- [ ] 관련 문서와 테스트를 함께 갱신했습니다.
-- [ ] 호환성 변경, 운영 영향, 후속 작업을 본문에 기록했습니다.
-- [ ] ADR이 필요한 변경인지 확인했습니다.
-- [ ] 새 비밀 정보나 개인 정보가 포함되지 않았습니다.
+```text
+Command:
+Result:
+```
 
-## 관련 항목
+## Database and query impact
 
-<!-- Issue, ADR, PR 링크를 작성해 주세요. 해당 사항이 없으면 "없음"으로 표시합니다. -->
+## Documentation and decisions
 
-- Issue:
-- ADR:
+- [ ] API contract updated where necessary
+- [ ] Business Policy updated where necessary
+- [ ] ADR updated or added for significant decisions
+- [ ] Minor Decision added where useful
+- [ ] ExecPlan updated
+- [ ] No implicit local, in-memory, fake, mock, cached, stale, or no-op fallback
+- [ ] New failure paths have automated tests
+- [ ] No unmeasured performance claim
+- [ ] No secret, personal context, or unrelated source material
+- [ ] Final diff reviewed

@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: BeanFlow API
+  version: 0.1.0
+  description: >
+    Initial contract skeleton for the BeanFlow transaction lifecycle.
+    Operations and schemas are refined through contract tests.
+servers:
+  - url: /api/v1
+paths:
+  /stores/nearby:
+    get:
+      summary: Search nearby pickup-capable stores
+      parameters:
+        - in: query
+          name: latitude
+          required: true
+          schema: { type: number, format: double }
+        - in: query
+          name: longitude
+          required: true
+          schema: { type: number, format: double }
+        - in: query
+          name: radiusMeters
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Nearby stores }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/menus:
+    get:
+      summary: List currently visible menus for a store
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200": { description: Store menus }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stores/{storeId}/pickup-slots:
+    get:
+      summary: List available pickup slots
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200": { description: Pickup slots }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /orders:
+    post:
+      summary: Create an order and reserve required resources
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Order created }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /orders/{orderId}:
+    get:
+      summary: Get an order
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200": { description: Order }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /orders/{orderId}/cancellations:
+    post:
+      summary: Cancel an order in an allowed state
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Cancellation created }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /orders/{orderId}/payment-confirmations:
+    post:
+      summary: Confirm payment for an order
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: Payment approved }
+        "202": { description: Payment result is unknown and reconciliation is in progress }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /payments/{paymentId}/refunds:
+    post:
+      summary: Create a full or partial refund
+      parameters:
+        - in: path
+          name: paymentId
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Refund created }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /store-orders/{orderId}/status:
+    patch:
+      summary: Transition a store order to an allowed status
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: Updated order status }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /point-accounts/{accountId}:
+    get:
+      summary: Get point account summary
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Point account }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /point-accounts/{accountId}/transactions:
+    get:
+      summary: List point ledger transactions
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Point transactions }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stores/{storeId}/settlements:
+    get:
+      summary: List settlement batches for a store
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200": { description: Settlement batches }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /settlement-items/{itemId}/disputes:
+    post:
+      summary: File a settlement dispute
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Dispute filed }
+        "409": { $ref: "#/components/responses/Conflict" }
+components:
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    StoreId:
+      in: path
+      name: storeId
+      required: true
+      schema: { type: string }
+    OrderId:
+      in: path
+      name: orderId
+      required: true
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        correlationId: { type: string }
+        details:
+          type: array
+          items: { type: object }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: State, resource, or idempotency conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    DependencyUnavailable:
+      description: Required dependency unavailable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
