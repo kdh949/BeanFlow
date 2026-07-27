@@ -7,6 +7,36 @@ internal data class PendingPaymentOrderCreationResponse(
 	val order: OrderResponse,
 )
 
+internal data class BenefitOnlyOrderCreationResponse(
+	val order: BenefitOnlyOrderResponse,
+	val payment: BenefitOnlyPaymentResponse,
+)
+
+internal data class BenefitOnlyOrderResponse(
+	val orderId: UUID,
+	val storeId: UUID,
+	val state: String,
+	val lines: List<OrderLineResponse>,
+	val subtotalKrw: Long,
+	val couponDiscountKrw: Long,
+	val pointsAppliedKrw: Long,
+	val payableKrw: Long,
+	val currency: String,
+	val createdAt: Instant,
+	val updatedAt: Instant,
+)
+
+internal data class BenefitOnlyPaymentResponse(
+	val paymentId: UUID,
+	val orderId: UUID,
+	val type: String,
+	val approvalState: String,
+	val approvedAmountKrw: Long,
+	val currency: String,
+	val updatedAt: Instant,
+	val correlationId: String,
+)
+
 internal data class OrderResponse(
 	val orderId: UUID,
 	val storeId: UUID,

@@ -18,6 +18,9 @@ import io.github.kdh949.beanflow.ordering.internal.domain.PricingLine
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.payment.api.ApproveBenefitOnlyPaymentCommand
+import io.github.kdh949.beanflow.payment.api.BenefitOnlyPaymentOperations
+import io.github.kdh949.beanflow.payment.api.BenefitOnlyPaymentResult
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
@@ -25,6 +28,8 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
@@ -39,6 +44,7 @@ internal class OrderCreationTransaction(
 	private val stockOperations: StockReservationOperations,
 	private val couponOperations: CouponReservationOperations,
 	private val pointOperations: PointReservationOperations,
+	private val benefitOnlyPaymentOperations: BenefitOnlyPaymentOperations,
 	private val orderRepository: OrderJpaRepository,
 	private val orderLineRepository: OrderLineJpaRepository,
 	private val idempotencyService: OrderIdempotencyService,
@@ -133,16 +139,65 @@ internal class OrderCreationTransaction(
 		}
 
 		val lineIds = quotes.map { identifierSource.next() }
-		val order = Order.pendingPayment(
-			id = orderId,
-			customerId = command.customerId,
-			storeId = command.storeId,
-			pickupSlotId = command.pickupSlotId,
-			lineIds = lineIds,
-			quotes = quotes,
-			pricing = pricing,
-			createdAt = createdAt,
-		)
+		val correlationId = correlationIdSource.currentOrCreate()
+		val benefitConfirmation = if (pricing.payable == Krw.ZERO) {
+			val payment = benefitOnlyPaymentOperations.approve(
+				ApproveBenefitOnlyPaymentCommand(
+					paymentId = identifierSource.next(),
+					orderId = orderId,
+					approvedAmountKrw = pricing.payable.value,
+					currency = "KRW",
+					benefitSnapshotReference = benefitSnapshotSource(orderId),
+					sourceReference = paymentSource(orderId),
+					correlationId = correlationId,
+					approvedAt = createdAt,
+				),
+			)
+			val pickup = requireApplied(
+				"PICKUP",
+				pickupOperations.confirm(orderId, pickupSource(orderId)),
+			)
+			val stock = requireApplied(
+				"STOCK",
+				stockOperations.confirm(orderId, stockSource(orderId)),
+			)
+			val coupon = couponQuote?.let {
+				requireApplied(
+					"COUPON",
+					couponOperations.confirm(orderId, couponSource(orderId)),
+				)
+			}
+			val points = requireApplied(
+				"POINTS",
+				pointOperations.confirm(orderId, pointsSource(orderId)),
+			)
+			BenefitOnlyConfirmation(payment, pickup, stock, coupon, points)
+		} else {
+			null
+		}
+		val order = if (benefitConfirmation == null) {
+			Order.pendingPayment(
+				id = orderId,
+				customerId = command.customerId,
+				storeId = command.storeId,
+				pickupSlotId = command.pickupSlotId,
+				lineIds = lineIds,
+				quotes = quotes,
+				pricing = pricing,
+				createdAt = createdAt,
+			)
+		} else {
+			Order.benefitOnlyPaid(
+				id = orderId,
+				customerId = command.customerId,
+				storeId = command.storeId,
+				pickupSlotId = command.pickupSlotId,
+				lineIds = lineIds,
+				quotes = quotes,
+				pricing = pricing,
+				createdAt = createdAt,
+			)
+		}
 		orderRepository.save(
 			OrderEntity(
 				id = order.id,
@@ -178,7 +233,6 @@ internal class OrderCreationTransaction(
 				)
 			},
 		)
-		val correlationId = correlationIdSource.currentOrCreate()
 		val auditSource = createAuditSource(order.id)
 		val auditRecords = mutableListOf(
 			auditCommand(
@@ -238,43 +292,151 @@ internal class OrderCreationTransaction(
 				after = mapOf("state" to "RESERVED", "amountKrw" to command.pointsToUseKrw.toString()),
 			)
 		}
+		benefitConfirmation?.let { confirmation ->
+			auditRecords += auditCommand(
+				command = command,
+				action = "BENEFIT_ONLY_PAYMENT_APPROVED",
+				targetType = "PAYMENT",
+				targetId = confirmation.payment.paymentId,
+				occurredAt = createdAt,
+				correlationId = correlationId,
+				sourceReference = auditSource,
+				after = mapOf("approvalState" to "APPROVED", "approvedAmountKrw" to "0"),
+			)
+			confirmation.pickup.targetIds.forEach { reservationId ->
+				auditRecords += confirmationAudit(
+					command,
+					"PICKUP_CONFIRMED",
+					"PICKUP_RESERVATION",
+					reservationId,
+					createdAt,
+					correlationId,
+					auditSource,
+				)
+			}
+			confirmation.stock.targetIds.forEach { reservationId ->
+				auditRecords += confirmationAudit(
+					command,
+					"STOCK_CONFIRMED",
+					"STOCK_RESERVATION",
+					reservationId,
+					createdAt,
+					correlationId,
+					auditSource,
+				)
+			}
+			confirmation.coupon?.targetIds?.forEach { reservationId ->
+				auditRecords += confirmationAudit(
+					command,
+					"COUPON_CONFIRMED",
+					"COUPON_RESERVATION",
+					reservationId,
+					createdAt,
+					correlationId,
+					auditSource,
+					"USED",
+				)
+			}
+			confirmation.points.targetIds.forEach { reservationId ->
+				auditRecords += confirmationAudit(
+					command,
+					"POINTS_CONFIRMED",
+					"POINT_RESERVATION",
+					reservationId,
+					createdAt,
+					correlationId,
+					auditSource,
+					"USED",
+				)
+			}
+		}
 		auditRecordOperations.appendAll(auditRecords)
 		val response = StoredHttpResponse(
 			status = 201,
 			body = objectMapper.writeValueAsString(
-				PendingPaymentOrderCreationResponse(
-					order = OrderResponse(
-						orderId = order.id,
-						storeId = order.storeId,
-						state = order.state.name,
-						reservationExpiresAt = order.reservationExpiresAt,
-						lines = order.lines.map { line ->
-							OrderLineResponse(
-								orderLineId = line.id,
-								menuId = line.menuId,
-								menuName = line.menuName,
-								optionNames = line.options.map { it.name },
-								unitPriceKrw = line.unitPriceKrw,
-								quantity = line.quantity,
-								couponDiscountKrw = line.couponDiscountKrw,
-								pointsAppliedKrw = line.pointsAppliedKrw,
-								cashPaidKrw = line.cashPayableKrw,
-							)
-						},
-						subtotalKrw = order.subtotalKrw,
-						couponDiscountKrw = order.couponDiscountKrw,
-						pointsAppliedKrw = order.pointsAppliedKrw,
-						payableKrw = order.payableKrw,
-						currency = "KRW",
-						createdAt = order.createdAt,
-						updatedAt = order.createdAt,
-					),
-				),
+				if (benefitConfirmation == null) {
+					pendingPaymentResponse(order)
+				} else {
+					benefitOnlyResponse(order, benefitConfirmation.payment)
+				},
 			),
 		)
 		idempotencyService.complete(idempotencyRecordId, order.id, response)
 		return response
 	}
+
+	private fun requireApplied(
+		owner: String,
+		report: ReservationTransitionReport,
+	): ReservationTransitionReport {
+		if (report.result != ReservationTransitionResult.APPLIED || report.targetIds.isEmpty()) {
+			throw DomainFailure(
+				FailureCode.DEPENDENCY_UNAVAILABLE,
+				"$owner reservation was not eligible for BENEFIT_ONLY confirmation",
+			)
+		}
+		return report
+	}
+
+	private fun pendingPaymentResponse(order: Order) =
+		PendingPaymentOrderCreationResponse(
+			order = OrderResponse(
+				orderId = order.id,
+				storeId = order.storeId,
+				state = order.state.name,
+				reservationExpiresAt = order.reservationExpiresAt,
+				lines = orderLineResponses(order),
+				subtotalKrw = order.subtotalKrw,
+				couponDiscountKrw = order.couponDiscountKrw,
+				pointsAppliedKrw = order.pointsAppliedKrw,
+				payableKrw = order.payableKrw,
+				currency = "KRW",
+				createdAt = order.createdAt,
+				updatedAt = order.createdAt,
+			),
+		)
+
+	private fun benefitOnlyResponse(order: Order, payment: BenefitOnlyPaymentResult) =
+		BenefitOnlyOrderCreationResponse(
+			order = BenefitOnlyOrderResponse(
+				orderId = order.id,
+				storeId = order.storeId,
+				state = order.state.name,
+				lines = orderLineResponses(order),
+				subtotalKrw = order.subtotalKrw,
+				couponDiscountKrw = order.couponDiscountKrw,
+				pointsAppliedKrw = order.pointsAppliedKrw,
+				payableKrw = order.payableKrw,
+				currency = "KRW",
+				createdAt = order.createdAt,
+				updatedAt = order.createdAt,
+			),
+			payment = BenefitOnlyPaymentResponse(
+				paymentId = payment.paymentId,
+				orderId = payment.orderId,
+				type = payment.type,
+				approvalState = payment.approvalState,
+				approvedAmountKrw = payment.approvedAmountKrw,
+				currency = payment.currency,
+				updatedAt = payment.updatedAt,
+				correlationId = payment.correlationId,
+			),
+		)
+
+	private fun orderLineResponses(order: Order): List<OrderLineResponse> =
+		order.lines.map { line ->
+			OrderLineResponse(
+				orderLineId = line.id,
+				menuId = line.menuId,
+				menuName = line.menuName,
+				optionNames = line.options.map { it.name },
+				unitPriceKrw = line.unitPriceKrw,
+				quantity = line.quantity,
+				couponDiscountKrw = line.couponDiscountKrw,
+				pointsAppliedKrw = line.pointsAppliedKrw,
+				cashPaidKrw = line.cashPayableKrw,
+			)
+		}
 
 	private fun validate(command: CreateOrderCommand) {
 		if (command.lines.isEmpty() || command.pointsToUseKrw < 0) {
@@ -294,6 +456,7 @@ internal class OrderCreationTransaction(
 		correlationId: String,
 		sourceReference: String,
 		after: Map<String, String>,
+		before: Map<String, String> = emptyMap(),
 	) = AppendAuditRecordCommand(
 		actorId = command.customerId.toString(),
 		actorType = AuditActorType.CUSTOMER,
@@ -302,9 +465,31 @@ internal class OrderCreationTransaction(
 		targetId = targetId,
 		occurredAt = occurredAt,
 		reason = "CUSTOMER_ORDER_CREATION",
+		beforeSummary = before,
 		afterSummary = after,
 		correlationId = correlationId,
 		sourceReference = sourceReference,
+	)
+
+	private fun confirmationAudit(
+		command: CreateOrderCommand,
+		action: String,
+		targetType: String,
+		targetId: UUID,
+		occurredAt: java.time.Instant,
+		correlationId: String,
+		sourceReference: String,
+		afterState: String = "CONFIRMED",
+	) = auditCommand(
+		command = command,
+		action = action,
+		targetType = targetType,
+		targetId = targetId,
+		occurredAt = occurredAt,
+		correlationId = correlationId,
+		sourceReference = sourceReference,
+		before = mapOf("state" to "RESERVED"),
+		after = mapOf("state" to afterState),
 	)
 
 	private fun aggregateStockRequirements(
@@ -345,6 +530,16 @@ internal class OrderCreationTransaction(
 		fun stockSource(orderId: UUID) = "order:$orderId:stock"
 		fun couponSource(orderId: UUID) = "order:$orderId:coupon"
 		fun pointsSource(orderId: UUID) = "order:$orderId:points"
+		fun paymentSource(orderId: UUID) = "order:$orderId:benefit-only-payment"
+		fun benefitSnapshotSource(orderId: UUID) = "order:$orderId:benefit-snapshot"
 		fun createAuditSource(orderId: UUID) = "order:$orderId:create"
 	}
 }
+
+private data class BenefitOnlyConfirmation(
+	val payment: BenefitOnlyPaymentResult,
+	val pickup: ReservationTransitionReport,
+	val stock: ReservationTransitionReport,
+	val coupon: ReservationTransitionReport?,
+	val points: ReservationTransitionReport,
+)

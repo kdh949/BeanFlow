@@ -36,6 +36,7 @@ internal object OrderCreationDatabaseFixture {
 			"""
 			TRUNCATE TABLE
 			    operations_audit_record,
+			    payment_payment,
 			    ordering_idempotency_record,
 			    ordering_order_line,
 			    ordering_order,
@@ -60,6 +61,73 @@ internal object OrderCreationDatabaseFixture {
 			CASCADE
 			""".trimIndent(),
 		)
+	}
+
+	fun insertPoints(
+		jdbcTemplate: JdbcTemplate,
+		customerId: UUID,
+		amountKrw: Long,
+	): Pair<UUID, UUID> {
+		val accountId = UUID.randomUUID()
+		val lotId = UUID.randomUUID()
+		jdbcTemplate.update(
+			"""
+			INSERT INTO loyalty_point_account (
+			    id, customer_id, available_points_krw, reserved_points_krw
+			)
+			VALUES (?, ?, ?, 0)
+			""".trimIndent(),
+			accountId,
+			customerId,
+			amountKrw,
+		)
+		jdbcTemplate.update(
+			"""
+			INSERT INTO loyalty_point_lot (
+			    id, point_account_id, available_amount_krw, reserved_amount_krw, expires_at
+			)
+			VALUES (?, ?, ?, 0, ?)
+			""".trimIndent(),
+			lotId,
+			accountId,
+			amountKrw,
+			Timestamp.from(Instant.parse("2035-01-01T00:00:00Z")),
+		)
+		return accountId to lotId
+	}
+
+	fun insertFixedCoupon(
+		jdbcTemplate: JdbcTemplate,
+		fixture: OrderCreationFixture,
+		discountKrw: Long,
+	): UUID {
+		val campaignId = UUID.randomUUID()
+		val issuanceId = UUID.randomUUID()
+		jdbcTemplate.update(
+			"""
+			INSERT INTO promotion_campaign (
+			    id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
+			    minimum_eligible_subtotal_krw, maximum_discount_krw, all_menus_eligible
+			)
+			VALUES (?, ?, true, 'FIXED_KRW', ?, NULL, 0, NULL, true)
+			""".trimIndent(),
+			campaignId,
+			fixture.storeId,
+			discountKrw,
+		)
+		jdbcTemplate.update(
+			"""
+			INSERT INTO promotion_coupon_issuance (
+			    id, campaign_id, customer_id, state, coupon_expires_at, reserved_order_id
+			)
+			VALUES (?, ?, ?, 'AVAILABLE', ?, NULL)
+			""".trimIndent(),
+			issuanceId,
+			campaignId,
+			fixture.customerId,
+			Timestamp.from(Instant.parse("2035-01-01T00:00:00Z")),
+		)
+		return issuanceId
 	}
 
 	fun insertBase(

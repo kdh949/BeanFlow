@@ -774,15 +774,15 @@ reservation confirmation, Order `PAID` 전이를 구현한다.
 
 **Acceptance criteria:**
 
-- [ ] payable 0은 Provider port 호출 없이 Payment 한 건, Order `PAID`, confirmed
+- [x] payable 0은 Provider port 호출 없이 Payment 한 건, Order `PAID`, confirmed
       resource를 만든다.
-- [ ] payable 1원 이상은 BENEFIT_ONLY 경로에 진입할 수 없다.
-- [ ] 같은 key 동시 요청에서 Payment와 확정 부수효과가 한 번뿐이다.
+- [x] payable 1원 이상은 BENEFIT_ONLY 경로에 진입할 수 없다.
+- [x] 같은 key 동시 요청에서 Payment와 확정 부수효과가 한 번뿐이다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*BenefitOnlyOrderCreationTest'`
-- [ ] Provider 호출 0회와 금액·예약 tie-out
+- [x] `./gradlew test --tests '*BenefitOnlyOrderCreationTest'`
+- [x] Provider port 부재와 금액·예약 tie-out
 
 **Dependencies:** Milestones 0, 5, 6
 
@@ -924,7 +924,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 4 쿠폰·포인트 예약
 - [x] Milestone 5 atomic create·idempotency·API
 - [x] Milestone 6 expiry·release·audit
-- [ ] Milestone 7 BENEFIT_ONLY branch
+- [x] Milestone 7 BENEFIT_ONLY branch
 - [ ] 전체 검증과 문서 handoff
 
 ## Surprises & Discoveries
@@ -1075,3 +1075,10 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   `./gradlew test --tests '*OrderControllerContractTest' --tests
   '*ModularityTests'` 통과. owner release 누락 fault injection은 Order·선행 release와
   expiry audit가 모두 rollback됨을 확인했다.
+- 2026-07-28: Milestone 7 완료. Payment owner의 `BENEFIT_ONLY/APPROVED/0 KRW`
+  record와 DB 제약을 추가하고, Tx O에서 임시 예약 뒤 Payment 승인, 네 owner 확정,
+  Order `PAID`, target별 audit와 멱등 응답을 원자적으로 커밋했다.
+  `./gradlew test --tests '*BenefitOnlyOrderCreationTest'` 통과. 쿠폰과 포인트를 함께
+  사용하는 0원 주문의 금액·상태 tie-out, 1원 주문 분기, 같은 key 동시 요청의 단일
+  Payment, stock confirmation fault의 전체 rollback, Provider collaborator 부재를
+  PostgreSQL Testcontainers에서 확인했다.

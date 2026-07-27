@@ -61,6 +61,32 @@ internal class OrderControllerContractTest @Autowired constructor(
 	}
 
 	@Test
+	fun `customer creates a benefit only paid order matching the OpenAPI shape`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 1_000)
+
+		mockMvc.perform(
+			post("/api/v1/orders")
+				.with(
+					jwt()
+						.jwt { it.subject(fixture.customerId.toString()) }
+						.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
+				)
+				.header("Idempotency-Key", "contract-benefit-01")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(requestBody(fixture, pointsToUseKrw = 1_000)),
+		)
+			.andExpect(status().isCreated)
+			.andExpect(jsonPath("$.order.state").value("PAID"))
+			.andExpect(jsonPath("$.order.reservationExpiresAt").doesNotExist())
+			.andExpect(jsonPath("$.order.payableKrw").value(0))
+			.andExpect(jsonPath("$.payment.type").value("BENEFIT_ONLY"))
+			.andExpect(jsonPath("$.payment.approvalState").value("APPROVED"))
+			.andExpect(jsonPath("$.payment.approvedAmountKrw").value(0))
+	}
+
+	@Test
 	fun `missing authentication returns the stable error envelope`() {
 		val fixture = OrderCreationFixture()
 
@@ -175,7 +201,7 @@ internal class OrderControllerContractTest @Autowired constructor(
 			.contains("IDEMPOTENCY_REQUEST_IN_PROGRESS")
 	}
 
-	private fun requestBody(fixture: OrderCreationFixture): String =
+	private fun requestBody(fixture: OrderCreationFixture, pointsToUseKrw: Long = 0): String =
 		"""
 		{
 		  "storeId": "${fixture.storeId}",
@@ -187,7 +213,7 @@ internal class OrderControllerContractTest @Autowired constructor(
 		      "quantity": 1
 		    }
 		  ],
-		  "pointsToUseKrw": 0
+		  "pointsToUseKrw": $pointsToUseKrw
 		}
 		""".trimIndent()
 
