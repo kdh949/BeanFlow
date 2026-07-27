@@ -128,7 +128,7 @@ Redis, Kafka, Spring AI는 프로젝트 시작 시 기본 의존성으로 추가
 
 ## 개발 워크플로
 
-BeanFlow는 `main`을 항상 배포 가능한 상태로 유지하는 GitHub Flow를 사용합니다. 최신 `main`에서 짧은 작업 브랜치를 만들고, Pull Request의 승인과 필수 CI 통과 후 squash merge합니다.
+BeanFlow는 `main`을 항상 배포 가능한 상태로 유지하는 GitHub Flow를 사용합니다. 최신 `main`에서 짧은 작업 브랜치를 만들고, Pull Request의 승인과 필수 CI 통과 후 병합합니다.
 
 브랜치 이름, 커밋 규칙, 리뷰 및 병합 기준은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 따릅니다.
 
