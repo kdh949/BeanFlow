@@ -18,4 +18,5 @@ enum class FailureCode {
 class DomainFailure(
 	val code: FailureCode,
 	override val message: String,
+	val retryAfterSeconds: Long? = null,
 ) : RuntimeException(message)

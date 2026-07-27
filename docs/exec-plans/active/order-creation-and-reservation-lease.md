@@ -351,13 +351,13 @@ ADR-025의 멱등 transaction을 기준으로 성공 흐름은 다음 순서를 
 3. UUID supplier로 Order ID와 OrderLine ID를 생성하고 `Clock.instant()`를 한 번 읽는다.
 4. Merchant 공개 API로 store, menu, option, unit price와 sellable unit 요구량을
    snapshot한다.
-5. Promotion 공개 API로 선택적 CouponIssuance를 검증하고 할인 금액·비용 부담
-   snapshot을 계산한다.
-6. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한다.
-7. 모든 요청이 같은 global lock order를 사용한다.
-   PickupSlot ID 한 개, 정렬된 sellable unit ID, CouponIssuance ID,
-   PointAccount ID와 `(expiresAt, pointLotId)` 순서다.
-8. Fulfillment, Inventory, Promotion, Loyalty 공개 API가 같은 transaction에서
+5. Merchant quote의 sellable requirement를 주문 전체에서 합산한다.
+6. 모든 요청이 같은 global lock order를 사용해 Fulfillment와 Inventory 예약을
+   먼저 영속화한다. PickupSlot ID 한 개 뒤 정렬된 sellable unit ID 순서다.
+7. Promotion 공개 API로 선택적 CouponIssuance를 잠가 검증하고 할인 금액·대상 line·
+   비용 부담 snapshot을 계산해 예약한다.
+8. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한 뒤
+   Loyalty가 PointAccount ID와 `(expiresAt, pointLotId)` 순서로 선택적 포인트
    reservation을 영속화한다. 선택하지 않은 쿠폰과 0 point에는 reservation을 만들지
    않는다.
 9. Ordering이 immutable snapshot과 `PENDING_PAYMENT` Order를 저장한다.
@@ -922,7 +922,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 2 가격 snapshot·배분
 - [x] Milestone 3 슬롯·재고 예약
 - [x] Milestone 4 쿠폰·포인트 예약
-- [ ] Milestone 5 atomic create·idempotency·API
+- [x] Milestone 5 atomic create·idempotency·API
 - [ ] Milestone 6 expiry·release·audit
 - [ ] Milestone 7 BENEFIT_ONLY branch
 - [ ] 전체 검증과 문서 handoff
@@ -963,6 +963,12 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   `(expiresAt, pointLotId)`로 잠근다. Account의 available 합계만 검사하면 만료
   Lot과 요약 불일치를 놓칠 수 있어 실제 unexpired Lot 합계도 같은 transaction에서
   다시 검증하도록 구현했다.
+- 초기 Create flow의 coupon 계산 순서와 global lock order가 충돌했다. Merchant
+  quote에서 stock 요구량을 먼저 계산하고 Tx O가 slot → sorted stock → coupon →
+  point 순서로 잠근 뒤 coupon 결과로 가격을 계산하도록 계획과 구현을 맞췄다.
+- PostgreSQL `char(64)` payload hash는 Hibernate의 String/varchar validation과
+  타입이 달랐다. hash 길이는 `varchar(64) CHECK (length(payload_hash) = 64)`로
+  보호해 Flyway schema와 Hibernate `validate`를 모두 통과시켰다.
 
 ## Decision Log
 
@@ -981,6 +987,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Accepted | POST /orders 201은 상태별 `{order, payment?}` envelope | lease deadline과 BENEFIT_ONLY Payment를 모호하지 않게 표현 | API conventions, OpenAPI |
 | 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
 | 2026-07-28 | Accepted | Coupon은 eligible line에만 gross 비율로 배분하고 Points는 coupon 적용 후 line 잔액 비율로 배분 | 대상 제한을 지키면서 line benefit이 gross를 초과하지 않고 쿠폰→포인트 순서를 재현 | BR-12, ADR-014, ADR-024 |
+| 2026-07-28 | Minor | Tx O의 잠금 순서를 slot → sorted stock → coupon → point로 고정하고 coupon 결과 뒤 가격을 계산 | Create flow의 초기 서술과 global lock order 충돌을 제거하고 같은 고객 결과로 deadlock 위험을 줄임 | ExecPlan |
 
 ## Outcomes & Retrospective
 
@@ -1048,3 +1055,9 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   '*CouponReservationRepositoryTest'`, `./gradlew test --tests
   '*PointReservationRepositoryTest'`, `./gradlew test --tests
   '*ModularityTests'` 통과.
+- 2026-07-28: Milestone 5 완료. Merchant JPA quote adapter, Tx I1/T O/T I2
+  IdempotencyRecord, atomic owner orchestration, Order snapshot persistence, JWT Customer
+  ownership과 stable error envelope Controller를 구현. `./gradlew test --tests
+  '*CreateOrderServiceTest'`, `./gradlew test --tests
+  '*CreateOrderConcurrencyTest'`, `./gradlew test --tests
+  '*OrderControllerContractTest'`, `./gradlew test --tests '*ModularityTests'` 통과.
