@@ -1,5 +1,7 @@
 # Establish BeanFlow product and domain foundations
 
+Status: Completed
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. Progress, Surprises & Discoveries, Decision Log와 Outcomes & Retrospective를 작업 중 계속 갱신한다.
 
 ## Purpose / Big Picture
@@ -269,7 +271,7 @@ Security, OpenAPI와 verification script를 같은 변경에서 갱신한다.
 
 ExecPlan 후보:
 
-`docs/exec-plans/active/order-creation-and-reservation-lease.md`
+`docs/exec-plans/completed/order-creation-and-reservation-lease.md`
 
 범위:
 

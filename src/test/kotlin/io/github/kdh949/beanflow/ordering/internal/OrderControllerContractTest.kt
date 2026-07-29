@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
+import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import org.hamcrest.Matchers.matchesPattern
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -30,10 +32,14 @@ import java.util.UUID
 internal class OrderControllerContractTest @Autowired constructor(
 	private val mockMvc: MockMvc,
 	private val jdbcTemplate: JdbcTemplate,
+	private val paymentGateway: ScriptedTestPaymentGateway,
 ) {
 
 	@BeforeEach
-	fun cleanDatabase() = OrderCreationDatabaseFixture.clean(jdbcTemplate)
+	fun cleanDatabase() {
+		OrderCreationDatabaseFixture.clean(jdbcTemplate)
+		paymentGateway.reset()
+	}
 
 	@Test
 	fun `customer creates a pending payment order matching the OpenAPI shape`() {
@@ -201,6 +207,91 @@ internal class OrderControllerContractTest @Autowired constructor(
 			.contains("IDEMPOTENCY_REQUEST_IN_PROGRESS")
 	}
 
+	@Test
+	fun `customer confirms an external payment through the HTTP contract`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		createThroughHttp(fixture, "contract-payment-order")
+		val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		val paymentMethodId = insertPaymentMethod(fixture.customerId)
+		paymentGateway.enqueueApproval(
+			ProviderPaymentResult.Approved("provider-contract-approved", 1_000, "KRW"),
+		)
+
+		mockMvc.perform(
+			post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+				.with(customerJwt(fixture.customerId))
+				.header("Idempotency-Key", "contract-payment-key")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""{"paymentMethodId":"$paymentMethodId"}"""),
+		)
+			.andExpect(status().isOk)
+			.andExpect(jsonPath("$.paymentId").isString)
+			.andExpect(jsonPath("$.orderId").value(orderId.toString()))
+			.andExpect(jsonPath("$.type").value("EXTERNAL"))
+			.andExpect(jsonPath("$.approvalState").value("APPROVED"))
+			.andExpect(jsonPath("$.approvedAmountKrw").value(1_000))
+	}
+
+	@Test
+	fun `unknown and explicit decline use 202 and 422 contracts`() {
+		val unknownFixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, unknownFixture)
+		createThroughHttp(unknownFixture, "contract-payment-unknown-order")
+		var orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		var paymentMethodId = insertPaymentMethod(unknownFixture.customerId)
+		paymentGateway.enqueueApproval(ProviderPaymentResult.Unknown("TIMEOUT"))
+
+		mockMvc.perform(
+			post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+				.with(customerJwt(unknownFixture.customerId))
+				.header("Idempotency-Key", "contract-payment-unknown")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""{"paymentMethodId":"$paymentMethodId"}"""),
+		)
+			.andExpect(status().isAccepted)
+			.andExpect(jsonPath("$.approvalState").value("UNKNOWN"))
+			.andExpect(jsonPath("$.recovery.state").value("REQUESTED"))
+
+		OrderCreationDatabaseFixture.clean(jdbcTemplate)
+		val declinedFixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, declinedFixture)
+		createThroughHttp(declinedFixture, "contract-payment-declined-order")
+		orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		paymentMethodId = insertPaymentMethod(declinedFixture.customerId)
+		paymentGateway.enqueueApproval(ProviderPaymentResult.Declined("DO_NOT_HONOR"))
+
+		mockMvc.perform(
+			post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+				.with(customerJwt(declinedFixture.customerId))
+				.header("Idempotency-Key", "contract-payment-declined")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""{"paymentMethodId":"$paymentMethodId"}"""),
+		)
+			.andExpect(status().isUnprocessableContent)
+			.andExpect(jsonPath("$.code").value("PAYMENT_DECLINED"))
+	}
+
+	@Test
+	fun `payment confirmation enforces order ownership before Provider call`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		createThroughHttp(fixture, "contract-payment-owner-order")
+		val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+		val paymentMethodId = insertPaymentMethod(fixture.customerId)
+
+		mockMvc.perform(
+			post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+				.with(customerJwt(UUID.randomUUID()))
+				.header("Idempotency-Key", "contract-payment-owner")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""{"paymentMethodId":"$paymentMethodId"}"""),
+		)
+			.andExpect(status().isForbidden)
+			.andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+		org.assertj.core.api.Assertions.assertThat(paymentGateway.approvalCalls.get()).isZero()
+	}
+
 	private fun requestBody(fixture: OrderCreationFixture, pointsToUseKrw: Long = 0): String =
 		"""
 		{
@@ -229,6 +320,31 @@ internal class OrderControllerContractTest @Autowired constructor(
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(requestBody(fixture)),
 		).andExpect(status().isCreated)
+	}
+
+	private fun customerJwt(customerId: UUID) =
+		jwt()
+			.jwt { it.subject(customerId.toString()) }
+			.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+
+	private fun insertPaymentMethod(customerId: UUID): UUID {
+		val id = UUID.randomUUID()
+		val now = Timestamp.from(Instant.now())
+		jdbcTemplate.update(
+			"""
+			INSERT INTO payment_method (
+			    id, customer_id, provider, token_reference, display_alias, card_brand,
+			    last_four, status, created_at, updated_at, version
+			)
+			VALUES (?, ?, 'SCRIPTED', ?, 'Contract test', 'TEST', '4242', 'ACTIVE', ?, ?, 0)
+			""".trimIndent(),
+			id,
+			customerId,
+			"test-token:$id",
+			now,
+			now,
+		)
+		return id
 	}
 
 	private fun makeDue(orderId: UUID) {

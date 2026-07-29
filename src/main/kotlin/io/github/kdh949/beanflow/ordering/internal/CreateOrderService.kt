@@ -170,6 +170,7 @@ internal class CreateOrderService(
 			FailureCode.INVALID_REQUEST -> 400
 			FailureCode.ACCESS_DENIED -> 403
 			FailureCode.RESOURCE_NOT_FOUND -> 404
+			FailureCode.PAYMENT_DECLINED -> 422
 			FailureCode.DEPENDENCY_UNAVAILABLE -> 503
 			else -> 409
 		}

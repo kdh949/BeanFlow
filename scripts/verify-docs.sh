@@ -34,7 +34,7 @@ required=(
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
   "docs/review/code-review.md"
-  "docs/exec-plans/active/foundation-domain-model.md"
+  "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
 )
 

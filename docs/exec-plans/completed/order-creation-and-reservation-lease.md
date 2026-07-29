@@ -1,5 +1,7 @@
 # 주문을 생성하고 5분 예약 lease를 원자적으로 관리한다
 
+Status: Completed
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 이 문서는 living document이며 구현 중
 `Progress`, `Surprises & Discoveries`, `Decision Log`, `Outcomes & Retrospective`를
 계속 갱신한다.
@@ -92,7 +94,7 @@ shell이다.
 
 1. **0원 주문과 Feature 범위 충돌 — Resolved**
 
-   `docs/exec-plans/active/foundation-domain-model.md`는 Payment를 첫 Feature의
+   `docs/exec-plans/completed/foundation-domain-model.md`는 Payment를 첫 Feature의
    non-goal로 두지만, BR-11과 ADR-016은 payable이 0원이면 외부 PG 호출 없이
    `BENEFIT_ONLY Payment(APPROVED)`를 만들고 Order를 `PAID`로 처리하도록 요구한다.
    0원 주문을 거부하거나 5분 `PENDING_PAYMENT`로 두는 선택은 Accepted 정책과

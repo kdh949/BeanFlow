@@ -3,6 +3,7 @@
 | Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
 |---|---:|---:|---:|---:|---:|
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
+| 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
 | 고객 주문 취소 | Own and allowed state | No | No | Approved operation | No |
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |

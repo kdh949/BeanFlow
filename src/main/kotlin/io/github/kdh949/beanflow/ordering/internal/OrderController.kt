@@ -48,6 +48,7 @@ data class CreateOrderLineRequest(
 internal class OrderController(
 	private val createOrderUseCase: CreateOrderUseCase,
 	private val getOrderService: GetOrderService,
+	private val paymentConfirmationService: PaymentConfirmationService,
 ) {
 
 	@PostMapping
@@ -84,6 +85,25 @@ internal class OrderController(
 		@PathVariable orderId: UUID,
 	): OrderResponse =
 		getOrderService.get(customerId(jwt), orderId)
+
+	@PostMapping("/{orderId}/payment-confirmations")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	fun confirmPayment(
+		@AuthenticationPrincipal jwt: Jwt,
+		@PathVariable orderId: UUID,
+		@RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+		@Valid @RequestBody request: PaymentConfirmationRequest,
+	): ResponseEntity<String> {
+		val result = paymentConfirmationService.confirm(
+			customerId = customerId(jwt),
+			orderId = orderId,
+			paymentMethodId = requireNotNull(request.paymentMethodId),
+			idempotencyKey = idempotencyKey,
+		)
+		return ResponseEntity.status(result.status)
+			.contentType(MediaType.APPLICATION_JSON)
+			.body(result.body)
+	}
 
 	private fun customerId(jwt: Jwt): UUID =
 		try {

@@ -48,6 +48,10 @@ READY -> APPROVED  (BENEFIT_ONLY only, no external call)
 
 `UNKNOWN`은 terminal failure가 아니다.
 
+Order가 이미 `EXPIRED` 또는 `CANCELLED`인 뒤 승인 사실이 확인되면 Payment는
+`RECONCILING`에 남고 별도 `LATE_VOID -> LATE_REFUND` recovery 상태가
+`SUCCEEDED` 또는 `MANUAL_REVIEW`에 도달한다. 이 경로는 Order 상태를 바꾸지 않는다.
+
 Payment의 표시 상태 `PARTIALLY_REFUNDED`와 `REFUNDED`는 성공한 Refund 합계에서
 파생한다. 승인 결과와 환불 시도 결과를 하나의 enum으로 덮어쓰지 않는다.
 

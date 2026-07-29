@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.payment.internal
 import io.github.kdh949.beanflow.payment.api.ApproveBenefitOnlyPaymentCommand
 import io.github.kdh949.beanflow.payment.api.BenefitOnlyPaymentOperations
 import io.github.kdh949.beanflow.payment.api.BenefitOnlyPaymentResult
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
@@ -39,6 +41,7 @@ internal class BenefitOnlyPaymentService(
 			sourceReference = command.sourceReference,
 			correlationId = command.correlationId,
 			approvedAt = command.approvedAt,
+			createdAt = command.approvedAt,
 			updatedAt = command.approvedAt,
 		)
 		return repository.save(payment).toResult()
@@ -61,7 +64,7 @@ internal class BenefitOnlyPaymentService(
 		orderId = orderId,
 		type = type.name,
 		approvalState = approvalState.name,
-		approvedAmountKrw = approvedAmountKrw,
+		approvedAmountKrw = requireNotNull(approvedAmountKrw),
 		currency = currency,
 		updatedAt = updatedAt,
 		correlationId = correlationId,

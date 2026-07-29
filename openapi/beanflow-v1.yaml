@@ -214,7 +214,7 @@ paths:
               $ref: "#/components/schemas/PaymentConfirmationRequest"
       responses:
         "200":
-          description: Payment approval is confirmed, including BENEFIT_ONLY payment
+          description: External payment approval or late-approval recovery is confirmed
           content:
             application/json:
               schema:
@@ -908,6 +908,7 @@ components:
     PaymentConfirmationRequest:
       type: object
       additionalProperties: false
+      required: [paymentMethodId]
       properties:
         paymentMethodId:
           $ref: "#/components/schemas/Identifier"
@@ -919,7 +920,6 @@ components:
         - orderId
         - type
         - approvalState
-        - approvedAmountKrw
         - currency
         - updatedAt
         - correlationId

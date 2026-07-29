@@ -2,10 +2,10 @@
 
 | System risk | Design mechanism | Verification | Durable evidence |
 |---|---|---|---|
-| 중복 결제 | Idempotency record, unique constraint, UNKNOWN | 동시 재요청·응답 유실 테스트 | ADR, 통합 테스트 |
+| 중복 결제 | Payment IdempotencyRecord insert-first arbitration, Order당 Payment/Provider reference unique, UNKNOWN 조회 | `PaymentConfirmationIntegrationTest`의 동일 key 동시 요청·다른 payload·현재 상태 replay | ADR-007, PostgreSQL Testcontainers 결과 |
 | 0원 주문의 외부 결제 우회·부분 확정 | BENEFIT_ONLY Payment, Provider 없는 전용 service, 동일 Tx owner confirm | `BenefitOnlyOrderCreationTest`의 0/1원 분기·동시 key·confirmation fault | BR-11, ADR-016, PostgreSQL Testcontainers 결과 |
-| PG 성공 후 내부 기록 실패 | transaction split, reconciliation | fault injection | 장애 보고서 |
-| 만료 후 뒤늦은 결제 승인 | guarded expiry, late-approval void/refund | `ReservationExpiryTest`의 5분 경계·동시 만료·rollback | BR-03, ADR-013, Testcontainers 결과 |
+| PG 성공 후 내부 기록 실패 | Tx1/Provider/Tx2 분리, Tx1에서 due reconciliation 생성 | owner fault rollback, claim lease 재시작, Hikari pool 1 테스트 | `PaymentConfirmationIntegrationTest`, `PaymentConnectionBoundaryTest` |
+| 만료 후 뒤늦은 결제 승인 | Order lock과 guarded expiry, late-approval void/refund | 5분 경계 동시 실행, Order 비복구, void/refund 단일 실행 | BR-03, ADR-013, `PaymentConfirmationIntegrationTest` |
 | 환불 결과 불명 은폐 | Refund UNKNOWN/RECONCILING | Provider timeout·ACK 유실 | 상태·운영 case |
 | 슬롯·재고 초과 | reservation, owner row lock, DB constraint | `PickupReservationRepositoryTest`, `StockReservationRepositoryTest`, `ReservationExpiryTest` | PostgreSQL Testcontainers 결과 |
 | 쿠폰 이중 사용 | issuance state, unique constraint | two-order contention | Testcontainers test |

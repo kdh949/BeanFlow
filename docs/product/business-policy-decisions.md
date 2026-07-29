@@ -60,6 +60,10 @@
 - **Amendment (2026-07-28):** 결제 결과 불명 상태에서 자원이 무기한 점유되는 것을 막고 뒤늦은 승인 주문이 이미 해제된 자원을 다시 확정하지 않도록 만료 우선과 명시적 환불 복구를 확정했다.
 - **Point Reservation Amendment (2026-07-28):** 주문 생성 시점에 유효한 PointLot에서 예약한 allocation은 주문 lease가 끝날 때까지 확정 가능성을 보장한다. lease 도중 원 PointLot 만료 시각이 지나도 예약분은 결제 승인에 사용할 수 있다. 예약을 해제할 때 이미 만료된 allocation은 가용 포인트로 복원하지 않고 만료 원장으로 처리한다.
 - **Materialization Amendment (2026-07-28):** `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회·결제 명령은 worker를 기다리지 않고 먼저 Order 만료와 네 자원 해제를 같은 transaction으로 시도한다. 성공하면 `EXPIRED`를 반환하거나 만료 오류로 결제를 거부한다. 해제 실패 시 stale `PENDING_PAYMENT`나 부분 성공을 반환하지 않고 503으로 실패하며 worker 또는 다음 요청이 재시도한다.
+- **Payment Decline Amendment (2026-07-29):** Provider가 승인을 명시적으로
+  거절하면 Payment를 `FAILED`, Order를 `CANCELLED`로 전환하고 네 예약을 같은
+  transaction에서 해제한다. 같은 Order에서 다른 결제수단으로 다시 승인하지 않고
+  고객은 새 주문을 생성한다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
@@ -81,6 +85,9 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 생성 시 재고를 임시 예약하고, 결제 승인 성공 시 확정 차감한다. 결제 실패·예약 만료·결제 전 취소 시 예약을 해제한다. 결제 승인 후 매장이 주문을 거절하면 확정 차감된 재고를 복원한다.
+- **Payment Decline Clarification (2026-07-29):** 여기서 결제 실패는 Provider가
+  부수효과 없음과 거절을 명시적으로 확정한 경우다. timeout과 응답 유실은 실패가
+  아니라 `UNKNOWN`이며 lease 만료 전까지 예약을 유지한다.
 - **Rationale:** 결제 완료 고객의 재고를 우선 보장하고 oversell을 방지한다.
 - **Affected Contexts:** Ordering, Inventory, Payment, Fulfillment
 - **Affected Aggregates:** SellableStock, StockReservation, Order, Payment
@@ -96,6 +103,9 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 생성 시 슬롯을 임시 예약하고, 결제 승인 성공 시 확정한다. 결제 실패·예약 만료·결제 전 취소 시 해제한다. 결제 승인 후 매장이 주문을 거절하면 슬롯을 해제한다.
+- **Payment Decline Clarification (2026-07-29):** 명시 거절은 슬롯 예약을
+  `RELEASED`로 전환한다. `UNKNOWN`은 거절로 간주하지 않으며 정확한 lease
+  deadline에서 기존 만료 정책을 적용한다.
 - **Rationale:** 결제되지 않은 주문이 장시간 슬롯을 점유하지 않게 하면서 결제 중인 고객의 자리를 보호한다.
 - **Affected Contexts:** Ordering, Fulfillment, Payment
 - **Affected Aggregates:** PickupSlot, PickupReservation, Order, Payment
@@ -420,6 +430,11 @@
 - **Status:** Accepted for MVP
 - **Decision:** 멱등성 키의 유효 범위는 `actorId + API operation + Idempotency-Key`다. 서버는 정규화한 요청 payload hash와 처리 상태·응답을 저장한다. 동일 범위의 같은 키와 같은 payload는 기존 결과를 반환하고, 같은 키에 다른 payload가 들어오면 `409 Conflict`를 반환한다.
 - **Order Creation Amendment (2026-07-28):** 주문 생성의 같은 key·같은 payload 재요청은 저장된 최초 HTTP status와 body를 그대로 반환한다. 아직 `PROCESSING`이면 새 실행이나 202 성공 표현 없이 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다. 확정된 실패도 최초 4xx/503을 저장·재생하며 다시 실행하려면 새 key를 사용한다.
+- **Payment Reconciliation Amendment (2026-07-29):** 결제 승인 결과가
+  `UNKNOWN`이면 새 승인을 보내지 않고 Provider 상태를 10초, 30초, 2분, 5분,
+  15분 시점에 최대 다섯 번 조회한다. 계속 불명이면 `MANUAL_REVIEW`와 단일
+  ReprocessingCase를 남기고 자동 조회를 중단한다. 같은 key·payload 재요청은
+  새 부수효과 없이 Payment의 현재 202/200/422 결과를 반환한다.
 - **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다.
 - **Affected Contexts:** Ordering, Payment, Settlement, Operations
 - **Affected Aggregates:** IdempotencyRecord, Order, Payment, SettlementAdjustment
