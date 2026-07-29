@@ -9,7 +9,16 @@
 
 ## Decision
 
-Payment READY를 커밋하고 PG를 호출한 뒤 별도 트랜잭션에서 결과를 기록한다.
+Payment READY/APPROVING과 결제 멱등 레코드를 Tx1에서 커밋하고 PG를 호출한 뒤
+별도 Tx2에서 결과를 기록한다.
+
+2026-07-29 payment-confirmation 구현에서는 Ordering Application Service가 Tx2를
+조정한다. 승인 결과, Order `PAID`, 슬롯·재고·쿠폰·포인트 확정과 AuditRecord를
+하나의 로컬 PostgreSQL transaction으로 커밋한다. Provider latency 동안에는 DB
+transaction 또는 connection을 유지하지 않는다.
+
+Payment 승인 fact의 after-commit 발행은 Tx2가 이미 확정한 예약을 다시 변경하는
+수단이 아니라 Settlement 등 후속 소비자를 위한 사실 전달로 한정한다.
 
 ## Alternatives Considered
 
@@ -25,6 +34,8 @@ DB 자원을 보호하면서 외부 성공·내부 기록 실패를 명시적으
 
 - 중간 UNKNOWN 상태와 reconciliation이 필요하다.
 - 단일 ACID 트랜잭션처럼 보이지 않는다.
+- Ordering coordinator가 Payment와 네 reservation owner의 공개 Application API에
+  동기 의존한다.
 
 ## Verification
 

@@ -37,8 +37,8 @@ All source contexts ── idempotent business facts ──> Analytics
 | Ordering | Inventory | Inventory | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Promotion | Promotion | 검증·예약 API | 주문 금액 확정 전 필요 |
 | Ordering | Loyalty | Loyalty | 포인트 예약 API | 주문 금액 확정 전 필요 |
-| Ordering | Payment | Ordering / Payment | Payment command, fact event | 외부 호출과 DB tx 분리 |
-| Payment | Ordering | Payment | 승인·거절·불명·환불 fact | after-commit, consumer idempotent |
+| Ordering | Payment | Ordering / Payment | Payment command와 Tx2 결과 적용 | 외부 호출과 DB tx 분리, 승인 내부 반영은 로컬 원자성 |
+| Payment | Ordering | Payment | 승인·거절·불명·환불 fact | Tx2 후 후속 소비자용 after-commit, consumer idempotent |
 | Ordering | Notification | Ordering fact | after-commit event | eventual |
 | Ordering | Loyalty | Ordering fact | `OrderCompleted` idempotent event | eventual |
 | Ordering | Settlement | Ordering fact | `OrderCompleted` idempotent event | eventual |
