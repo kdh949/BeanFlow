@@ -35,10 +35,14 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 명시 거절 취소·예약 해제, `UNKNOWN` 조회 reconciliation
 - 늦은 승인 void/refund 복구와 5회 후 `MANUAL_REVIEW`
 
-진행 중:
+후속 확장:
 
-- 실제 PG adapter와 결제수단 등록·폐기 API
-- 외부 결제 운영 부하·장애 주입 측정
+- 실제 PG sandbox adapter
+- 결제수단 등록·폐기 API
+
+검증 예정:
+
+- 지연 Provider 환경의 부하·장애 주입 측정
 
 예정:
 
