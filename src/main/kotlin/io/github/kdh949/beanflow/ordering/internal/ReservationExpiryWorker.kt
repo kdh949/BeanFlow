@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
+import io.github.kdh949.beanflow.ordering.api.ReservationExpiryOutcome
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -41,17 +42,19 @@ internal class ReservationExpiryWorker(
 		val now = clock.instant()
 		val dueIds = orderRepository.findDueIds(now, PageRequest.of(0, chunkSize))
 		dueCount.set(dueIds.size)
-		var processed = 0
+		var expired = 0
 		dueIds.forEach { orderId ->
 			try {
-				expiryUseCase.expireIfDue(orderId, now)
-				processed++
+				val result = expiryUseCase.expireIfDue(orderId, now)
+				if (result.outcome == ReservationExpiryOutcome.EXPIRED) {
+					expired++
+				}
 			} catch (failure: RuntimeException) {
 				logger.error("reservation_expiry_worker orderId={} outcome=FAILED", orderId, failure)
 			}
 		}
 		meterRegistry.timer("beanflow.reservation.expiry.chunk.duration")
 			.record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS)
-		return processed
+		return expired
 	}
 }
