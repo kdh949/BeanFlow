@@ -51,7 +51,9 @@ fix: 결제 승인 재조회 시 완료 상태를 복원한다
 PR을 열기 전에 다음을 확인합니다.
 
 ```bash
-./gradlew build
+./gradlew clean build --stacktrace
+bash scripts/verify-docs.sh
+git diff --check
 ```
 
 PR은 다음 기준을 충족해야 병합할 수 있습니다.
@@ -76,4 +78,7 @@ PR은 다음 기준을 충족해야 병합할 수 있습니다.
 
 ## 아키텍처 결정
 
-코드를 변경하기 전에 `docs/prd/`, `docs/domain/`, `docs/adr/README.md`와 관련 ADR을 확인합니다. 모듈·트랜잭션·데이터 소유권·동기화·공개 API·인증·외부 연동·운영 인프라 등 되돌리기 어려운 결정을 바꾸는 작업은 구현 전에 `proposed` 상태의 ADR을 작성하고 PR에 연결합니다.
+코드를 변경하기 전에 `docs/product/`, `docs/architecture/`, `docs/adr/README.md`,
+`docs/exec-plans/`와 관련 ADR을 확인합니다. 모듈·트랜잭션·데이터 소유권·동기화·
+공개 API·인증·외부 연동·운영 인프라 등 되돌리기 어려운 결정을 바꾸는 작업은
+구현 전에 `proposed` 상태의 ADR을 작성하고 PR에 연결합니다.
