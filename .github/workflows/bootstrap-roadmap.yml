@@ -1,6 +1,11 @@
 name: Bootstrap GitHub roadmap
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/bootstrap-roadmap.yml
+      - scripts/bootstrap-github-roadmap.mjs
+      - scripts/github-roadmap/**
   workflow_dispatch:
     inputs:
       mode:
@@ -14,12 +19,11 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
-  roadmap:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,10 +31,28 @@ jobs:
       - name: Validate roadmap definition
         run: node --test scripts/github-roadmap/roadmap.test.mjs
 
-      - name: Plan or apply roadmap
+      - name: Render roadmap plan
+        run: >-
+          node scripts/bootstrap-github-roadmap.mjs
+          --mode plan
+          --repo "${{ github.repository }}"
+
+  apply:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create or update labels, milestones, issues and sub-issues
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           node scripts/bootstrap-github-roadmap.mjs
-          --mode "${{ inputs.mode }}"
+          --mode apply
           --repo "${{ github.repository }}"
