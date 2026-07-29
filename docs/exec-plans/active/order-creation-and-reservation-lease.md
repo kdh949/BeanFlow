@@ -920,8 +920,8 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 0 결정과 문서 기록
 - [x] Milestone 1 모듈·테스트 기반
 - [x] Milestone 2 가격 snapshot·배분
-- [ ] Milestone 3 슬롯·재고 예약
-- [ ] Milestone 4 쿠폰·포인트 예약
+- [x] Milestone 3 슬롯·재고 예약
+- [x] Milestone 4 쿠폰·포인트 예약
 - [ ] Milestone 5 atomic create·idempotency·API
 - [ ] Milestone 6 expiry·release·audit
 - [ ] Milestone 7 BENEFIT_ONLY branch
@@ -956,6 +956,13 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - 정수 비율 배분의 `total * lineBasis`는 최종 KRW 값이 `Long` 범위여도 중간 곱이
   overflow할 수 있다. 배분 중간 계산만 JDK `BigInteger`를 사용하고 저장·API 결과는
   계속 non-negative signed 64-bit KRW로 제한했다.
+- Testcontainers 검증은 Docker Desktop engine이 중지된 상태에서 provider 탐색
+  실패로 한 차례 중단됐다. engine 준비를 확인한 뒤 동일 PostgreSQL 테스트를
+  재실행해 통과했으며 테스트 DB나 저장소를 다른 구현으로 대체하지 않았다.
+- Point allocation은 Account lock으로 고객 단위 동시 합계를 직렬화한 뒤 Lot을
+  `(expiresAt, pointLotId)`로 잠근다. Account의 available 합계만 검사하면 만료
+  Lot과 요약 불일치를 놓칠 수 있어 실제 unexpired Lot 합계도 같은 transaction에서
+  다시 검증하도록 구현했다.
 
 ## Decision Log
 
@@ -1030,3 +1037,14 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   sellable requirement 정규화, KRW add/multiply overflow guard와 순차 benefit
   allocator, immutable OrderLine snapshot을 구현. `./gradlew test --tests
   '*OrderPricing*' --tests '*OrderTest'` 통과.
+- 2026-07-28: Milestone 3 완료. PickupSlot과 SellableStock row lock, DB
+  CHECK/UNIQUE/FK, order/source idempotency와 reserve/confirm/expire owner API를
+  구현. `./gradlew test --tests '*PickupReservationRepositoryTest'`,
+  `./gradlew test --tests '*StockReservationRepositoryTest'` 및 두 class 동시
+  재실행, `./gradlew test --tests '*ModularityTests'` 통과.
+- 2026-07-28: Milestone 4 완료. Campaign 대상 line 계산과 CouponIssuance row lock,
+  최초 coupon quote snapshot, PointAccount/Lot 잠금과 구체 allocation,
+  USE/EXPIRATION 원장 경로를 구현. `./gradlew test --tests
+  '*CouponReservationRepositoryTest'`, `./gradlew test --tests
+  '*PointReservationRepositoryTest'`, `./gradlew test --tests
+  '*ModularityTests'` 통과.
