@@ -42,7 +42,7 @@
 
 ## Execution Plans
 
-- [Payment Confirmation and Reconciliation](exec-plans/active/payment-confirmation-and-reconciliation.md)
+- [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)
 - [Completed Order Creation and Reservation Lease](exec-plans/completed/order-creation-and-reservation-lease.md)
 
