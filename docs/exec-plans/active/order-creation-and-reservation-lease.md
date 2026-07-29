@@ -351,13 +351,13 @@ ADR-025의 멱등 transaction을 기준으로 성공 흐름은 다음 순서를 
 3. UUID supplier로 Order ID와 OrderLine ID를 생성하고 `Clock.instant()`를 한 번 읽는다.
 4. Merchant 공개 API로 store, menu, option, unit price와 sellable unit 요구량을
    snapshot한다.
-5. Promotion 공개 API로 선택적 CouponIssuance를 검증하고 할인 금액·비용 부담
-   snapshot을 계산한다.
-6. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한다.
-7. 모든 요청이 같은 global lock order를 사용한다.
-   PickupSlot ID 한 개, 정렬된 sellable unit ID, CouponIssuance ID,
-   PointAccount ID와 `(expiresAt, pointLotId)` 순서다.
-8. Fulfillment, Inventory, Promotion, Loyalty 공개 API가 같은 transaction에서
+5. Merchant quote의 sellable requirement를 주문 전체에서 합산한다.
+6. 모든 요청이 같은 global lock order를 사용해 Fulfillment와 Inventory 예약을
+   먼저 영속화한다. PickupSlot ID 한 개 뒤 정렬된 sellable unit ID 순서다.
+7. Promotion 공개 API로 선택적 CouponIssuance를 잠가 검증하고 할인 금액·대상 line·
+   비용 부담 snapshot을 계산해 예약한다.
+8. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한 뒤
+   Loyalty가 PointAccount ID와 `(expiresAt, pointLotId)` 순서로 선택적 포인트
    reservation을 영속화한다. 선택하지 않은 쿠폰과 0 point에는 reservation을 만들지
    않는다.
 9. Ordering이 immutable snapshot과 `PENDING_PAYMENT` Order를 저장한다.
@@ -741,18 +741,18 @@ owner release API, AuditRecord와 observability를 구현한다.
 
 **Acceptance criteria:**
 
-- [ ] `expiresAt - 1ns`에는 유효하고 정확한 경계와 이후에는 결제가 거부된다.
-- [ ] expiry transaction의 어느 release 단계가 실패해도 Order와 다른 release가
+- [x] `expiresAt - 1ns`에는 유효하고 정확한 경계와 이후에는 결제가 거부된다.
+- [x] expiry transaction의 어느 release 단계가 실패해도 Order와 다른 release가
       commit되지 않는다.
-- [ ] worker 중복·재시작·두 instance 경쟁에서 각 수량 복원은 한 번뿐이다.
-- [ ] terminal Order와 자원 변경 AuditRecord가 같은 transaction에서 존재한다.
+- [x] worker 중복·재시작·두 instance 경쟁에서 각 수량 복원은 한 번뿐이다.
+- [x] terminal Order와 자원 변경 AuditRecord가 같은 transaction에서 존재한다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*ReservationExpiry*'`
-- [ ] 고정 Clock 경계 테스트
-- [ ] worker 재실행 및 concurrent worker Testcontainers test
-- [ ] audit masking/append-only test
+- [x] `./gradlew test --tests '*ReservationExpiry*'`
+- [x] 고정 deadline 경계 테스트
+- [x] worker 재실행 및 concurrent worker Testcontainers test
+- [x] audit masking/append-only test
 
 **Dependencies:** Milestones 0, 5
 
@@ -774,15 +774,15 @@ reservation confirmation, Order `PAID` 전이를 구현한다.
 
 **Acceptance criteria:**
 
-- [ ] payable 0은 Provider port 호출 없이 Payment 한 건, Order `PAID`, confirmed
+- [x] payable 0은 Provider port 호출 없이 Payment 한 건, Order `PAID`, confirmed
       resource를 만든다.
-- [ ] payable 1원 이상은 BENEFIT_ONLY 경로에 진입할 수 없다.
-- [ ] 같은 key 동시 요청에서 Payment와 확정 부수효과가 한 번뿐이다.
+- [x] payable 1원 이상은 BENEFIT_ONLY 경로에 진입할 수 없다.
+- [x] 같은 key 동시 요청에서 Payment와 확정 부수효과가 한 번뿐이다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*BenefitOnlyOrderCreationTest'`
-- [ ] Provider 호출 0회와 금액·예약 tie-out
+- [x] `./gradlew test --tests '*BenefitOnlyOrderCreationTest'`
+- [x] Provider port 부재와 금액·예약 tie-out
 
 **Dependencies:** Milestones 0, 5, 6
 
@@ -797,14 +797,14 @@ reservation confirmation, Order `PAID` 전이를 구현한다.
 
 ### Checkpoint: complete feature verification
 
-- [ ] `./gradlew clean test`
-- [ ] `bash scripts/verify-docs.sh`
-- [ ] OpenAPI와 MockMvc contract 일치
-- [ ] Spring Modulith verify와 module dependency 문서 통과
-- [ ] PostgreSQL constraint, rollback, concurrency, idempotency, time 경계 통과
-- [ ] 미실행 검증은 `Not run`으로 기록
-- [ ] 측정하지 않은 성능 결과를 주장하지 않음
-- [ ] 최종 diff에 secret, 개인 문맥, fixture credential과 범위 밖 리팩터링이 없음
+- [x] `./gradlew clean test`
+- [x] `bash scripts/verify-docs.sh`
+- [x] OpenAPI와 MockMvc contract 일치
+- [x] Spring Modulith verify와 module dependency 문서 통과
+- [x] PostgreSQL constraint, rollback, concurrency, idempotency, time 경계 통과
+- [x] 미실행 검증은 `Not run` 또는 `Not configured`로 기록
+- [x] 측정하지 않은 성능 결과를 주장하지 않음
+- [x] 최종 diff에 secret, 개인 문맥, fixture credential과 범위 밖 리팩터링이 없음
 
 ## Required Tests
 
@@ -922,10 +922,10 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 2 가격 snapshot·배분
 - [x] Milestone 3 슬롯·재고 예약
 - [x] Milestone 4 쿠폰·포인트 예약
-- [ ] Milestone 5 atomic create·idempotency·API
-- [ ] Milestone 6 expiry·release·audit
-- [ ] Milestone 7 BENEFIT_ONLY branch
-- [ ] 전체 검증과 문서 handoff
+- [x] Milestone 5 atomic create·idempotency·API
+- [x] Milestone 6 expiry·release·audit
+- [x] Milestone 7 BENEFIT_ONLY branch
+- [x] 전체 검증과 문서 handoff
 
 ## Surprises & Discoveries
 
@@ -963,6 +963,18 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   `(expiresAt, pointLotId)`로 잠근다. Account의 available 합계만 검사하면 만료
   Lot과 요약 불일치를 놓칠 수 있어 실제 unexpired Lot 합계도 같은 transaction에서
   다시 검증하도록 구현했다.
+- 초기 Create flow의 coupon 계산 순서와 global lock order가 충돌했다. Merchant
+  quote에서 stock 요구량을 먼저 계산하고 Tx O가 slot → sorted stock → coupon →
+  point 순서로 잠근 뒤 coupon 결과로 가격을 계산하도록 계획과 구현을 맞췄다.
+- PostgreSQL `char(64)` payload hash는 Hibernate의 String/varchar validation과
+  타입이 달랐다. hash 길이는 `varchar(64) CHECK (length(payload_hash) = 64)`로
+  보호해 Flyway schema와 Hibernate `validate`를 모두 통과시켰다.
+- PostgreSQL `timestamptz`는 마이크로초 정밀도로 저장·비교한다. 애플리케이션의
+  Order lease guard는 DB에서 읽은 deadline에 대해 `-1ns`와 정확한 경계를 구분하지만,
+  retention due query의 DB 경계 테스트는 저장소가 표현 가능한 `-1µs`를 사용했다.
+- GET이 소유권 확인 전에 expiry를 materialize하면 다른 고객의 due Order를 변경할 수
+  있었다. 존재·소유권을 먼저 확인한 뒤 같은 expiry transaction을 호출하도록 순서를
+  고정하고 cross-customer 계약 테스트로 보호했다.
 
 ## Decision Log
 
@@ -981,25 +993,59 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Accepted | POST /orders 201은 상태별 `{order, payment?}` envelope | lease deadline과 BENEFIT_ONLY Payment를 모호하지 않게 표현 | API conventions, OpenAPI |
 | 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
 | 2026-07-28 | Accepted | Coupon은 eligible line에만 gross 비율로 배분하고 Points는 coupon 적용 후 line 잔액 비율로 배분 | 대상 제한을 지키면서 line benefit이 gross를 초과하지 않고 쿠폰→포인트 순서를 재현 | BR-12, ADR-014, ADR-024 |
+| 2026-07-28 | Minor | Tx O의 잠금 순서를 slot → sorted stock → coupon → point로 고정하고 coupon 결과 뒤 가격을 계산 | Create flow의 초기 서술과 global lock order 충돌을 제거하고 같은 고객 결과로 deadlock 위험을 줄임 | ExecPlan |
+| 2026-07-28 | Minor | 고객 GET·결제 guard는 존재·소유권 확인 후 expiry를 materialize | 다른 고객이 due Order 상태를 변경하거나 존재 여부를 추론하는 경로를 차단 | ExecPlan, authorization contract test |
 
 ## Outcomes & Retrospective
 
-아직 구현하지 않았다.
+Milestone 0~7을 완료했다.
 
-현재 결과:
+실제 결과:
 
-- 정책·ADR·OpenAPI·아키텍처의 일치 영역과 구현 차단 결정을 구분했다.
-- Feature 구현 순서, owner, transaction, DB constraint, 실패 의미, test와 운영
-  evidence를 한 문서에 모았다.
-- 추천안만으로 하나가 되지 않는 제품·HTTP 의미는 사용자 질문으로 확정했다.
-- 8개 결정 게이트를 모두 닫고 BR-03/08/11/25/30, ADR-011/013/016/022/024/025/026,
-  architecture, API conventions, error catalog와 OpenAPI에 반영했다.
-- `bash scripts/verify-docs.sh`와 상태별 OpenAPI 추가 assertion이 통과했다.
-- 기능 코드, migration, runtime configuration과 production dependency는 변경하지
-  않았다.
+- POST `/api/v1/orders`는 Merchant snapshot을 기준으로 슬롯 → 정렬된 재고 → 쿠폰 →
+  포인트 순서로 잠그고 Order·OrderLine·owner reservation·IdempotencyRecord와
+  target별 AuditRecord를 한 PostgreSQL transaction으로 커밋한다.
+- 동일 actor/operation/key는 정규화 payload hash와 최초 HTTP response를 보존한다.
+  같은 payload는 재생하고 다른 payload는 409, 처리 중 경쟁은 Retry-After가 있는
+  409를 반환한다.
+- 외부 결제가 필요한 주문은 정확히 5분 lease의 `PENDING_PAYMENT`로 생성된다.
+  worker, GET과 payment lease guard는 같은 Order-lock expiry transaction을 사용하며,
+  경계 시각부터 owner 수량을 한 번만 복원하고 Order를 `EXPIRED`로 만든다.
+- payable 0은 Provider collaborator가 없는 Payment 전용 경로에서
+  `BENEFIT_ONLY/APPROVED/0 KRW` Payment를 만들고 슬롯·재고·선택 쿠폰·포인트를
+  확정한 뒤 active deadline 없는 `PAID` Order로 같은 transaction에서 커밋한다.
+- owner 누락 fault injection에서 생성·BENEFIT_ONLY confirm·expiry 모두 부분 성공을
+  남기지 않고 rollback됐다. 실패는 409/503과 metric/log로 드러나며 fake/local/no-op
+  fallback은 추가하지 않았다.
+- AuditRecord는 일반 API로 수정·삭제할 수 없고 target 변경과 같은 transaction에서
+  append된다. 민감 summary key를 거부하고 Asia/Seoul 달력 5주년부터 내부 retention
+  worker가 제한된 chunk로 삭제한다.
+- 운영 handoff는 `docs/operations/order-reservation-lease-runbook.md`에 due backlog,
+  expiry lag, retention cleanup과 stuck PROCESSING 진단을 기록했다.
 
-Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command와 결과, 남은 위험,
-후속 Payment ExecPlan handoff를 기록한다.
+실제 최종 검증:
+
+- `./gradlew clean test` — 통과
+- `bash scripts/verify-docs.sh` — 통과, OpenAPI 13 paths/43 schemas, Business Policy
+  32개, ADR 26개와 Markdown 61개 검증
+- `./gradlew test --tests '*ModularityTests'` — 통과
+- PostgreSQL Testcontainers owner reservation, create concurrency/idempotency,
+  BENEFIT_ONLY concurrency/rollback, expiry 경계·재시작·동시 worker 지정 테스트 — 통과
+- `./gradlew test --tests '*OrderControllerContractTest'` — 통과
+
+구성·측정 상태:
+
+- 별도 Kotlin lint/static-analysis task — **Not configured**
+- full OpenAPI semantic validator — **Not configured**; 저장소의 YAML parse/local
+  contract check와 MockMvc contract는 실행해 통과
+- stuck IdempotencyRecord 자동 reconciliation — **Not configured**; runbook의
+  read-only 진단과 ADR-025 후속 조건으로 남김
+- 외부 PG 승인·UNKNOWN·reconciliation — 이 Feature 범위 밖, **Not run**
+- 성능·처리량·운영 부하 개선 — **Not measured**; 기능·정합성 결과만 보고
+
+남은 위험은 실제 운영 부하에서 expiry/audit worker의 초기 chunk·delay 가정을
+재측정하는 것과 외부 결제 reconciliation Feature에서 late approval 복구를 연결하는
+것이다. 현재 구현은 이 미구현 경로를 성공이나 빈 결과로 위장하지 않는다.
 
 ## Revision Notes
 
@@ -1048,3 +1094,32 @@ Milestone 완료 시 여기에 실제 관찰 가능한 동작, 실행한 command
   '*CouponReservationRepositoryTest'`, `./gradlew test --tests
   '*PointReservationRepositoryTest'`, `./gradlew test --tests
   '*ModularityTests'` 통과.
+- 2026-07-28: Milestone 5 완료. Merchant JPA quote adapter, Tx I1/T O/T I2
+  IdempotencyRecord, atomic owner orchestration, Order snapshot persistence, JWT Customer
+  ownership과 stable error envelope Controller를 구현. `./gradlew test --tests
+  '*CreateOrderServiceTest'`, `./gradlew test --tests
+  '*CreateOrderConcurrencyTest'`, `./gradlew test --tests
+  '*OrderControllerContractTest'`, `./gradlew test --tests '*ModularityTests'` 통과.
+- 2026-07-28: Milestone 6 완료. Order row lock 기반 expiry transaction, owner별
+  release report, due worker, GET과 payment lease guard, target별 append-only
+  AuditRecord와 서울 달력 5년 retention worker를 구현. PostgreSQL Testcontainers에서
+  `./gradlew test --tests '*ReservationExpiry*' --tests '*AuditRecordTest'`와
+  `./gradlew test --tests '*OrderControllerContractTest' --tests
+  '*ModularityTests'` 통과. owner release 누락 fault injection은 Order·선행 release와
+  expiry audit가 모두 rollback됨을 확인했다.
+- 2026-07-28: Milestone 7 완료. Payment owner의 `BENEFIT_ONLY/APPROVED/0 KRW`
+  record와 DB 제약을 추가하고, Tx O에서 임시 예약 뒤 Payment 승인, 네 owner 확정,
+  Order `PAID`, target별 audit와 멱등 응답을 원자적으로 커밋했다.
+  `./gradlew test --tests '*BenefitOnlyOrderCreationTest'` 통과. 쿠폰과 포인트를 함께
+  사용하는 0원 주문의 금액·상태 tie-out, 1원 주문 분기, 같은 key 동시 요청의 단일
+  Payment, stock confirmation fault의 전체 rollback, Provider collaborator 부재를
+  PostgreSQL Testcontainers에서 확인했다.
+- 2026-07-28: complete feature checkpoint 통과. `./gradlew clean test`,
+  `bash scripts/verify-docs.sh`, `*ModularityTests`, PostgreSQL Testcontainers의
+  owner/create/benefit-only/expiry 지정 test와 `*OrderControllerContractTest`를
+  실제 실행했다. lint/static analysis와 full OpenAPI semantic validator는
+  Not configured, 외부 PG 경로는 범위 밖이라 Not run, 성능은 Not measured로 기록했다.
+- 2026-07-28: `main...HEAD`와 마지막 working diff를 검사해 secret/private key,
+  개인 문맥, 실제 credential/PAN fixture, 생성물과 범위 밖 리팩터링이 없음을 확인.
+  설정의 DB password는 실제 값이 아닌 `${BEANFLOW_DB_PASSWORD}` fail-fast 환경 변수
+  참조만 유지했다.

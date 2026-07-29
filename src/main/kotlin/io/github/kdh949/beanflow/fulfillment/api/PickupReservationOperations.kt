@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.fulfillment.api
 
-import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import java.time.Instant
 import java.util.UUID
 
@@ -14,6 +14,6 @@ data class ReservePickupCommand(
 
 interface PickupReservationOperations {
 	fun reserve(command: ReservePickupCommand): UUID
-	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult
-	fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult
+	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport
+	fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 }

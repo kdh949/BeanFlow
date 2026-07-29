@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.shared.api
 
 enum class FailureCode {
 	INVALID_REQUEST,
+	ACCESS_DENIED,
 	RESOURCE_NOT_FOUND,
 	MENU_CONFIGURATION_NOT_AVAILABLE,
 	PICKUP_SLOT_FULL,
@@ -18,4 +19,5 @@ enum class FailureCode {
 class DomainFailure(
 	val code: FailureCode,
 	override val message: String,
+	val retryAfterSeconds: Long? = null,
 ) : RuntimeException(message)

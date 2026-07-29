@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.promotion.api
 
-import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import java.time.Instant
 import java.util.UUID
 
@@ -38,6 +38,6 @@ data class CouponReservationQuote(
 
 interface CouponReservationOperations {
 	fun reserve(command: ReserveCouponCommand): CouponReservationQuote
-	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult
-	fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult
+	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport
+	fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 }

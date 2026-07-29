@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -97,11 +98,11 @@ internal class CouponReservationService(
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionResult =
+	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, null, confirm = true)
 
 	@Transactional(propagation = Propagation.MANDATORY)
-	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionResult =
+	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport =
 		transition(orderId, sourceReference, now, confirm = false)
 
 	private fun transition(
@@ -109,20 +110,20 @@ internal class CouponReservationService(
 		sourceReference: String,
 		now: Instant?,
 		confirm: Boolean,
-	): ReservationTransitionResult {
+	): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		val issuance = issuanceRepository.findLockedById(current.couponIssuanceId)
 			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved coupon issuance is missing")
 		val reservation = reservationRepository.findLockedByOrderId(orderId)
-			?: return ReservationTransitionResult.NOT_ELIGIBLE
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Coupon transition source does not match")
 		}
 		if (!confirm && now!!.isBefore(reservation.reservationExpiresAt)) {
-			return ReservationTransitionResult.NOT_ELIGIBLE
+			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
 		}
-		return when {
+		val result = when {
 			confirm && reservation.state == CouponReservationState.RESERVED -> {
 				issuance.state = CouponIssuanceState.USED
 				reservation.state = CouponReservationState.USED
@@ -142,7 +143,11 @@ internal class CouponReservationService(
 				ReservationTransitionResult.ALREADY_APPLIED
 			else -> ReservationTransitionResult.NOT_ELIGIBLE
 		}
+		return report(result, reservation.id)
 	}
+
+	private fun report(result: ReservationTransitionResult, vararg ids: UUID) =
+		ReservationTransitionReport(result, ids.toList())
 
 	private fun calculateDiscount(campaign: CampaignEntity, eligibleSubtotal: Long): Long =
 		when (campaign.discountType) {
