@@ -42,7 +42,7 @@ internal class OrderEntity(
 	@Column(nullable = false)
 	val currency: String = "KRW",
 	@Column(name = "reservation_expires_at")
-	val reservationExpiresAt: Instant?,
+	var reservationExpiresAt: Instant?,
 	@Column(name = "created_at", nullable = false)
 	val createdAt: Instant,
 	@Column(name = "updated_at", nullable = false)

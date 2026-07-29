@@ -25,5 +25,14 @@ beanflow:
     chunk-size: 100
     fixed-delay-ms: 3600000
     initial-delay-ms: 300000
+  payment:
+    metrics:
+      unknown-age-delay-ms: 30000
+      unknown-age-initial-delay-ms: 30000
+    reconciliation:
+      chunk-size: 50
+      claim-lease: PT1M
+      fixed-delay-ms: 5000
+      initial-delay-ms: 15000
   security:
     jwk-set-uri: ${BEANFLOW_JWK_SET_URI}

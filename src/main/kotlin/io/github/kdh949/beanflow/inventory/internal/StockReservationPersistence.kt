@@ -57,6 +57,7 @@ internal enum class StockReservationState {
 	RESERVED,
 	CONFIRMED,
 	EXPIRED,
+	RELEASED,
 }
 
 @Entity

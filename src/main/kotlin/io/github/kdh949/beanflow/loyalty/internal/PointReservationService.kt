@@ -113,9 +113,6 @@ internal class PointReservationService(
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Point transition source does not match")
 		}
-		if (!confirm && now!!.isBefore(reservation.reservationExpiresAt)) {
-			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
-		}
 		val terminal = if (confirm) PointReservationState.USED else PointReservationState.RELEASED
 		if (reservation.state == terminal) {
 			return report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)

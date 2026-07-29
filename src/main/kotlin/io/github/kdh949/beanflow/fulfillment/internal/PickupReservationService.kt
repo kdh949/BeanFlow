@@ -82,7 +82,33 @@ internal class PickupReservationService(
 				ReservationTransitionResult.APPLIED
 			}
 			PickupReservationState.CONFIRMED -> ReservationTransitionResult.ALREADY_APPLIED
-			PickupReservationState.EXPIRED -> ReservationTransitionResult.NOT_ELIGIBLE
+			PickupReservationState.EXPIRED, PickupReservationState.RELEASED ->
+				ReservationTransitionResult.NOT_ELIGIBLE
+		}
+		return report(result, reservation.id)
+	}
+
+	@Transactional(propagation = Propagation.MANDATORY)
+	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport {
+		val current = reservationRepository.findByOrderId(orderId)
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+		val slot = slotRepository.findLockedById(current.slotId)
+			?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
+		val reservation = reservationRepository.findLockedByOrderId(orderId)
+			?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+		if (reservation.sourceReference != sourceReference) {
+			fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup release source does not match")
+		}
+		val result = when (reservation.state) {
+			PickupReservationState.RESERVED -> {
+				slot.releaseOne()
+				reservation.state = PickupReservationState.RELEASED
+				reservation.updatedAt = now
+				ReservationTransitionResult.APPLIED
+			}
+			PickupReservationState.RELEASED -> ReservationTransitionResult.ALREADY_APPLIED
+			PickupReservationState.CONFIRMED, PickupReservationState.EXPIRED ->
+				ReservationTransitionResult.NOT_ELIGIBLE
 		}
 		return report(result, reservation.id)
 	}
@@ -109,7 +135,8 @@ internal class PickupReservationService(
 				ReservationTransitionResult.APPLIED
 			}
 			PickupReservationState.EXPIRED -> ReservationTransitionResult.ALREADY_APPLIED
-			PickupReservationState.CONFIRMED -> ReservationTransitionResult.NOT_ELIGIBLE
+			PickupReservationState.CONFIRMED, PickupReservationState.RELEASED ->
+				ReservationTransitionResult.NOT_ELIGIBLE
 		}
 		return report(result, reservation.id)
 	}

@@ -120,9 +120,6 @@ internal class CouponReservationService(
 		if (reservation.sourceReference != sourceReference) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Coupon transition source does not match")
 		}
-		if (!confirm && now!!.isBefore(reservation.reservationExpiresAt)) {
-			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
-		}
 		val result = when {
 			confirm && reservation.state == CouponReservationState.RESERVED -> {
 				issuance.state = CouponIssuanceState.USED

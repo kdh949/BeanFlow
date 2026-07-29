@@ -58,6 +58,7 @@ internal enum class PickupReservationState {
 	RESERVED,
 	CONFIRMED,
 	EXPIRED,
+	RELEASED,
 }
 
 @Entity

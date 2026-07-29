@@ -13,6 +13,7 @@ enum class OrderState {
 	PENDING_PAYMENT,
 	PAID,
 	EXPIRED,
+	CANCELLED,
 }
 
 data class OrderLineSnapshot(
