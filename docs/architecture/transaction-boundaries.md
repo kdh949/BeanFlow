@@ -35,15 +35,23 @@ Revisit when:
 ## Payment approval
 
 ```text
-Tx 1: Payment READY + IdempotencyRecord 저장
+Tx 1: Order/PaymentMethod 검증 + Payment APPROVING + IdempotencyRecord 저장
 commit
 External PG approval
-Tx 2: APPROVED | FAILED | UNKNOWN 저장 + 후속 사실 영속화
+Tx 2 approved: Order lock + 네 예약 확정 + Order PAID + Payment APPROVED + Audit
+Tx 2 declined: Order lock + 네 예약 해제 + Order CANCELLED + Payment FAILED + Audit
+Tx 2 unknown: Payment UNKNOWN + reconciliation schedule
 ```
 
 - DB connection을 Provider latency 동안 점유하지 않는다.
 - timeout은 `UNKNOWN`일 수 있다.
 - PG 성공 후 Tx 2 실패는 reconciliation으로 복구한다.
+- Tx1에서 최초 reconciliation due 시각을 함께 저장해 PG 성공 후 Tx2 전체 실패도
+  stuck `APPROVING` 조회로 복구한다.
+- Tx2 잠금 순서는 Order → Pickup → 정렬된 Stock → Coupon → Point →
+  Payment/Idempotency/Audit다.
+- 명시 거절은 422와 terminal idempotency result를 저장한다. timeout, 연결 오류,
+  응답 유실과 해석 불가 응답은 거절로 바꾸지 않는다.
 - `BENEFIT_ONLY`는 외부 호출 없이 같은 로컬 트랜잭션에서 Payment 승인 사실을
   확정하지만, 주문별 source reference와 IdempotencyRecord를 동일하게 보호한다.
 
