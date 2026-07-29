@@ -36,7 +36,11 @@ internal object OrderCreationDatabaseFixture {
 			"""
 			TRUNCATE TABLE
 			    operations_audit_record,
+			    operations_reprocessing_case,
+			    payment_reconciliation,
+			    payment_idempotency_record,
 			    payment_payment,
+			    payment_method,
 			    ordering_idempotency_record,
 			    ordering_order_line,
 			    ordering_order,
