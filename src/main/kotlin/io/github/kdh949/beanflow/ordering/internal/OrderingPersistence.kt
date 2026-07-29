@@ -151,4 +151,6 @@ internal interface IdempotencyRecordJpaRepository : JpaRepository<IdempotencyRec
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select record from IdempotencyRecordEntity record where record.id = :id")
 	fun findLockedById(@Param("id") id: UUID): IdempotencyRecordEntity?
+
+	fun countByStatusAndStartedAtBefore(status: IdempotencyStatus, startedAt: Instant): Long
 }

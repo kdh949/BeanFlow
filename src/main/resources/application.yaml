@@ -14,6 +14,9 @@ spring:
 beanflow:
   idempotency:
     retry-after-seconds: 2
+    stuck-threshold: PT5M
+    metrics-delay-ms: 30000
+    metrics-initial-delay-ms: 30000
   reservation-expiry:
     chunk-size: 100
     fixed-delay-ms: 30000
