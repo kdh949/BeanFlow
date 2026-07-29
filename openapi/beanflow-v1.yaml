@@ -1,155 +1,428 @@
 openapi: 3.1.0
 info:
   title: BeanFlow API
-  version: 0.1.0
-  description: >
-    Initial contract skeleton for the BeanFlow transaction lifecycle.
-    Operations and schemas are refined through contract tests.
+  version: 0.2.0
+  description: |
+    Initial self-contained contract for BeanFlow discovery, ordering, payment,
+    pickup, loyalty, settlement, and dispute workflows.
+
+    All monetary values are integer KRW. All timestamps are ISO-8601 date-time
+    values with an offset or UTC designator. A 202 response means processing or
+    reconciliation is still in progress and must not be interpreted as success.
 servers:
   - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Discovery
+  - name: Ordering
+  - name: Payment
+  - name: Store Orders
+  - name: Loyalty
+  - name: Settlement
 paths:
   /stores/nearby:
     get:
+      tags: [Discovery]
+      operationId: searchNearbyStores
       summary: Search nearby pickup-capable stores
+      description: |
+        Precise customer coordinates are used only for this request and are not
+        persisted or written to application logs or traces.
       parameters:
-        - in: query
-          name: latitude
-          required: true
-          schema: { type: number, format: double }
-        - in: query
-          name: longitude
-          required: true
-          schema: { type: number, format: double }
-        - in: query
-          name: radiusMeters
-          required: true
-          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/Latitude"
+        - $ref: "#/components/parameters/Longitude"
+        - $ref: "#/components/parameters/RadiusMeters"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       responses:
-        "200": { description: Nearby stores }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+        "200":
+          description: Nearby stores ordered by distance and store ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearbyStorePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /stores/{storeId}/menus:
     get:
+      tags: [Discovery]
+      operationId: listStoreMenus
       summary: List currently visible menus for a store
       parameters:
         - $ref: "#/components/parameters/StoreId"
       responses:
-        "200": { description: Store menus }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Visible menus and options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /stores/{storeId}/pickup-slots:
     get:
+      tags: [Discovery]
+      operationId: listStorePickupSlots
       summary: List available pickup slots
       parameters:
         - $ref: "#/components/parameters/StoreId"
       responses:
-        "200": { description: Pickup slots }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Pickup slots with current remaining capacity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PickupSlotList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /orders:
     post:
+      tags: [Ordering]
+      operationId: createOrder
       summary: Create an order and reserve required resources
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
       responses:
-        "201": { description: Order created }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+        "201":
+          description: |
+            Order creation committed. External-payment orders have a required
+            five-minute reservation deadline. Zero-payable orders include an
+            approved BENEFIT_ONLY payment and no active reservation deadline.
+            An idempotent replay returns the originally stored 201 response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/OrderCreationConflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /orders/{orderId}:
     get:
-      summary: Get an order
+      tags: [Ordering]
+      operationId: getOrder
+      summary: Get an order and materialize a due reservation expiry
+      description: |
+        If a PENDING_PAYMENT order has reached reservationExpiresAt, the server
+        atomically expires the order and releases all reserved resources before
+        returning EXPIRED. If that transaction fails, the request returns 503
+        instead of a stale successful representation.
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
-        "200": { description: Order }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Order visible to the authenticated actor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /orders/{orderId}/cancellations:
     post:
-      summary: Cancel an order in an allowed state
+      tags: [Ordering]
+      operationId: cancelOrder
+      summary: Cancel an order in a customer-allowed state
+      description: |
+        PENDING_PAYMENT and PAID orders not yet ACCEPTED may be cancelled by the
+        owning customer. Order cancellation and payment refund recovery are
+        represented separately.
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancellationRequest"
       responses:
-        "201": { description: Cancellation created }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "201":
+          description: Cancellation recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        "202":
+          description: Order cancellation is recorded but payment recovery is unresolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /orders/{orderId}/payment-confirmations:
     post:
-      summary: Confirm payment for an order
+      tags: [Payment]
+      operationId: confirmOrderPayment
+      summary: Request or confirm payment for an order
+      description: |
+        The same Idempotency-Key and payload never create a second Provider
+        approval. If the Provider result is unknown, the response is 202 and
+        reconciliation continues. If the five-minute order lease expires first,
+        a later approval never revives the order and triggers void or refund
+        recovery.
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentConfirmationRequest"
       responses:
-        "200": { description: Payment approved }
-        "202": { description: Payment result is unknown and reconciliation is in progress }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+        "200":
+          description: Payment approval is confirmed, including BENEFIT_ONLY payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmation"
+        "202":
+          description: Payment result or late-approval recovery is unresolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /payments/{paymentId}/refunds:
     post:
-      summary: Create a full or partial refund
+      tags: [Payment]
+      operationId: createPaymentRefund
+      summary: Create a full or item-based partial refund
       parameters:
-        - in: path
-          name: paymentId
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/PaymentId"
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRefundRequest"
       responses:
-        "201": { description: Refund created }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "201":
+          description: Refund result is confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
+        "202":
+          description: Refund result is unknown or reconciliation is in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /store-orders/{orderId}/status:
     patch:
-      summary: Transition a store order to an allowed status
+      tags: [Store Orders]
+      operationId: transitionStoreOrderStatus
+      summary: Transition an order from the store operational view
+      description: |
+        store-orders is a store-facing view of the Ordering-owned Order, not a
+        separate Aggregate. Cancellation after ACCEPTED is not an allowed target.
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreOrderTransitionRequest"
       responses:
-        "200": { description: Updated order status }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "200":
+          description: Updated Order state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /point-accounts/{accountId}:
     get:
-      summary: Get point account summary
+      tags: [Loyalty]
+      operationId: getPointAccount
+      summary: Get a point account summary
       parameters:
-        - in: path
-          name: accountId
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/PointAccountId"
       responses:
-        "200": { description: Point account }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Point account visible to its owner or an authorized operator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /point-accounts/{accountId}/transactions:
     get:
+      tags: [Loyalty]
+      operationId: listPointTransactions
       summary: List point ledger transactions
       parameters:
-        - in: path
-          name: accountId
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       responses:
-        "200": { description: Point transactions }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Point transactions in stable ledger order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointTransactionPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /stores/{storeId}/settlements:
     get:
-      summary: List settlement batches for a store
+      tags: [Settlement]
+      operationId: listStoreSettlements
+      summary: List settlement batches for an owned store
       parameters:
         - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       responses:
-        "200": { description: Settlement batches }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200":
+          description: Settlement batches ordered by settlement date and ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementBatchPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /settlement-items/{itemId}/disputes:
     post:
-      summary: File a settlement dispute
+      tags: [Settlement]
+      operationId: createSettlementDispute
+      summary: File a dispute for a confirmed settlement item
       parameters:
-        - in: path
-          name: itemId
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/SettlementItemId"
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDisputeRequest"
       responses:
-        "201": { description: Dispute filed }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "201":
+          description: Dispute filed and its expected adjustment amount held internally
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementDispute"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     IdempotencyKey:
       in: header
       name: Idempotency-Key
       required: true
+      description: Unique within actor ID and API operation
       schema:
         type: string
         minLength: 8
@@ -158,41 +431,760 @@ components:
       in: path
       name: storeId
       required: true
-      schema: { type: string }
+      schema:
+        $ref: "#/components/schemas/Identifier"
     OrderId:
       in: path
       name: orderId
       required: true
-      schema: { type: string }
-  schemas:
-    Error:
-      type: object
-      required: [code, message, correlationId]
-      properties:
-        code: { type: string }
-        message: { type: string }
-        correlationId: { type: string }
-        details:
-          type: array
-          items: { type: object }
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    PaymentId:
+      in: path
+      name: paymentId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    PointAccountId:
+      in: path
+      name: accountId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SettlementItemId:
+      in: path
+      name: itemId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    Latitude:
+      in: query
+      name: latitude
+      required: true
+      schema:
+        type: number
+        format: double
+        minimum: -90
+        maximum: 90
+    Longitude:
+      in: query
+      name: longitude
+      required: true
+      schema:
+        type: number
+        format: double
+        minimum: -180
+        maximum: 180
+    RadiusMeters:
+      in: query
+      name: radiusMeters
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    Cursor:
+      in: query
+      name: cursor
+      required: false
+      description: Opaque cursor returned by the previous page
+      schema:
+        type: string
+        minLength: 1
+    Limit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
   responses:
     BadRequest:
-      description: Invalid request
+      description: Request syntax or field validation failed
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
-    Conflict:
-      description: State, resource, or idempotency conflict
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication is missing or invalid
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Role, ownership, or store membership check failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
-      description: Resource not found
+      description: Resource is not visible in the authenticated actor scope
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: State, capacity, duplicate resource, or idempotency payload conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    OrderCreationConflict:
+      description: |
+        Order resource conflict, idempotency payload reuse, or an identical
+        idempotent request that is still processing. The latter returns code
+        IDEMPOTENCY_REQUEST_IN_PROGRESS and a Retry-After header.
+      headers:
+        Retry-After:
+          required: false
+          description: |
+            Delay before retrying the same Idempotency-Key. Present for
+            IDEMPOTENCY_REQUEST_IN_PROGRESS.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: Provider explicitly declined a syntactically valid command
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     DependencyUnavailable:
-      description: Required dependency unavailable
+      description: A required dependency is unavailable; no fallback result was used
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Identifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+    DateTime:
+      type: string
+      format: date-time
+    MoneyKrw:
+      type: integer
+      format: int64
+      minimum: 0
+      description: Integer Korean won
+    SignedMoneyKrw:
+      type: integer
+      format: int64
+      description: Signed integer Korean won
+    Currency:
+      type: string
+      enum: [KRW]
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, correlationId, details]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        message:
+          type: string
+          minLength: 1
+        correlationId:
+          type: string
+          minLength: 1
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+          minLength: 1
+    PageInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        nextCursor:
+          type: string
+          minLength: 1
+    NearbyStorePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearbyStore"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    NearbyStore:
+      type: object
+      additionalProperties: false
+      required:
+        [storeId, name, distanceMeters, open, pickupAvailable]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+        distanceMeters:
+          type: integer
+          minimum: 0
+        open:
+          type: boolean
+        pickupAvailable:
+          type: boolean
+    MenuList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Menu"
+    Menu:
+      type: object
+      additionalProperties: false
+      required: [menuId, name, basePriceKrw, currency, available, options]
+      properties:
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+        basePriceKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        available:
+          type: boolean
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuOption"
+    MenuOption:
+      type: object
+      additionalProperties: false
+      required: [optionId, name, additionalPriceKrw, available]
+      properties:
+        optionId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+        additionalPriceKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        available:
+          type: boolean
+    PickupSlotList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PickupSlot"
+    PickupSlot:
+      type: object
+      additionalProperties: false
+      required: [pickupSlotId, startsAt, endsAt, remainingCapacity]
+      properties:
+        pickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        startsAt:
+          $ref: "#/components/schemas/DateTime"
+        endsAt:
+          $ref: "#/components/schemas/DateTime"
+        remainingCapacity:
+          type: integer
+          minimum: 0
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        pickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateOrderLineRequest"
+        couponIssuanceId:
+          $ref: "#/components/schemas/Identifier"
+        pointsToUseKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    CreateOrderLineRequest:
+      type: object
+      additionalProperties: false
+      required: [menuId, optionIds, quantity]
+      properties:
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        optionIds:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Identifier"
+        quantity:
+          type: integer
+          minimum: 1
+    CreateOrderResult:
+      oneOf:
+        - $ref: "#/components/schemas/PendingPaymentOrderCreation"
+        - $ref: "#/components/schemas/BenefitOnlyOrderCreation"
+    PendingPaymentOrderCreation:
+      type: object
+      additionalProperties: false
+      required: [order]
+      properties:
+        order:
+          $ref: "#/components/schemas/PendingPaymentOrder"
+    BenefitOnlyOrderCreation:
+      type: object
+      additionalProperties: false
+      required: [order, payment]
+      properties:
+        order:
+          $ref: "#/components/schemas/BenefitOnlyPaidOrder"
+        payment:
+          $ref: "#/components/schemas/BenefitOnlyPayment"
+    PendingPaymentOrder:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          required: [reservationExpiresAt]
+          properties:
+            state:
+              const: PENDING_PAYMENT
+            reservationExpiresAt:
+              $ref: "#/components/schemas/DateTime"
+            payableKrw:
+              type: integer
+              format: int64
+              minimum: 1
+    BenefitOnlyPaidOrder:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          not:
+            required: [reservationExpiresAt]
+          properties:
+            state:
+              const: PAID
+            payableKrw:
+              const: 0
+    Order:
+      type: object
+      additionalProperties: false
+      required:
+        - orderId
+        - storeId
+        - state
+        - lines
+        - subtotalKrw
+        - couponDiscountKrw
+        - pointsAppliedKrw
+        - payableKrw
+        - currency
+        - createdAt
+        - updatedAt
+      properties:
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          $ref: "#/components/schemas/OrderState"
+        reservationExpiresAt:
+          $ref: "#/components/schemas/DateTime"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OrderLine"
+        subtotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        couponDiscountKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        pointsAppliedKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        payableKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        paymentRecovery:
+          $ref: "#/components/schemas/PaymentRecoverySummary"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+    OrderState:
+      type: string
+      enum:
+        - PENDING_PAYMENT
+        - PAID
+        - ACCEPTED
+        - PREPARING
+        - READY
+        - COMPLETED
+        - EXPIRED
+        - CANCELLED
+        - REJECTED
+    OrderLine:
+      type: object
+      additionalProperties: false
+      required:
+        - orderLineId
+        - menuId
+        - menuName
+        - optionNames
+        - unitPriceKrw
+        - quantity
+        - couponDiscountKrw
+        - pointsAppliedKrw
+        - cashPaidKrw
+      properties:
+        orderLineId:
+          $ref: "#/components/schemas/Identifier"
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        menuName:
+          type: string
+          minLength: 1
+        optionNames:
+          type: array
+          items:
+            type: string
+        unitPriceKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        quantity:
+          type: integer
+          minimum: 1
+        couponDiscountKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        pointsAppliedKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        cashPaidKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    CancellationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    Cancellation:
+      type: object
+      additionalProperties: false
+      required:
+        [cancellationId, orderId, orderState, paymentRecovery, createdAt, correlationId]
+      properties:
+        cancellationId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        orderState:
+          $ref: "#/components/schemas/OrderState"
+        paymentRecovery:
+          $ref: "#/components/schemas/PaymentRecoverySummary"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+    PaymentConfirmationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        paymentMethodId:
+          $ref: "#/components/schemas/Identifier"
+    PaymentConfirmation:
+      type: object
+      additionalProperties: false
+      required:
+        - paymentId
+        - orderId
+        - type
+        - approvalState
+        - approvedAmountKrw
+        - currency
+        - updatedAt
+        - correlationId
+      properties:
+        paymentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        type:
+          type: string
+          enum: [EXTERNAL, BENEFIT_ONLY]
+        approvalState:
+          $ref: "#/components/schemas/PaymentApprovalState"
+        approvedAmountKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        recovery:
+          $ref: "#/components/schemas/PaymentRecoverySummary"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+    BenefitOnlyPayment:
+      allOf:
+        - $ref: "#/components/schemas/PaymentConfirmation"
+        - type: object
+          properties:
+            type:
+              const: BENEFIT_ONLY
+            approvalState:
+              const: APPROVED
+            approvedAmountKrw:
+              const: 0
+    PaymentApprovalState:
+      type: string
+      enum: [APPROVED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+    PaymentRecoverySummary:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum:
+            - NOT_REQUIRED
+            - REQUESTED
+            - PROCESSING
+            - SUCCEEDED
+            - FAILED
+            - UNKNOWN
+            - RECONCILING
+            - MANUAL_REVIEW
+        lastUpdatedAt:
+          $ref: "#/components/schemas/DateTime"
+    CreateRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        lineItems:
+          type: array
+          minItems: 1
+          description: Omit to request a full refund of the remaining refundable amount
+          items:
+            $ref: "#/components/schemas/RefundLineRequest"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    RefundLineRequest:
+      type: object
+      additionalProperties: false
+      required: [orderLineId, quantity]
+      properties:
+        orderLineId:
+          $ref: "#/components/schemas/Identifier"
+        quantity:
+          type: integer
+          minimum: 1
+    Refund:
+      type: object
+      additionalProperties: false
+      required:
+        - refundId
+        - paymentId
+        - state
+        - cashRefundedKrw
+        - pointsRestoredKrw
+        - currency
+        - createdAt
+        - updatedAt
+        - correlationId
+      properties:
+        refundId:
+          $ref: "#/components/schemas/Identifier"
+        paymentId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          enum:
+            [REQUESTED, PROCESSING, SUCCEEDED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+        cashRefundedKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        pointsRestoredKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+    StoreOrderTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [targetState]
+      properties:
+        targetState:
+          type: string
+          enum: [ACCEPTED, PREPARING, READY, COMPLETED, REJECTED]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    PointAccount:
+      type: object
+      additionalProperties: false
+      required:
+        [accountId, availablePointsKrw, recoveryPendingKrw, currency, updatedAt]
+      properties:
+        accountId:
+          $ref: "#/components/schemas/Identifier"
+        availablePointsKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        recoveryPendingKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+    PointTransactionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PointTransaction"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    PointTransaction:
+      type: object
+      additionalProperties: false
+      required:
+        [transactionId, type, amountKrw, occurredAt, sourceReference]
+      properties:
+        transactionId:
+          $ref: "#/components/schemas/Identifier"
+        type:
+          type: string
+          enum: [ACCRUAL, USE, EXPIRATION, RESTORE, RECOVERY, ADJUSTMENT]
+        amountKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        occurredAt:
+          $ref: "#/components/schemas/DateTime"
+        sourceReference:
+          type: string
+          minLength: 1
+    SettlementBatchPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SettlementBatch"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    SettlementBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - settlementBatchId
+        - storeId
+        - settlementDate
+        - state
+        - grossPaidKrw
+        - feeKrw
+        - benefitCostKrw
+        - adjustmentKrw
+        - netSettlementKrw
+        - currency
+      properties:
+        settlementBatchId:
+          $ref: "#/components/schemas/Identifier"
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        settlementDate:
+          type: string
+          format: date
+          description: Completion date in Asia/Seoul
+        state:
+          type: string
+          enum: [OPEN, CALCULATED, CONFIRMED]
+        grossPaidKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        feeKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        benefitCostKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        adjustmentKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        netSettlementKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        confirmedAt:
+          $ref: "#/components/schemas/DateTime"
+    CreateDisputeRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedAdjustmentKrw, reason, evidenceReferences]
+      properties:
+        expectedAdjustmentKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        evidenceReferences:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            maxLength: 500
+        previousDisputeId:
+          $ref: "#/components/schemas/Identifier"
+    SettlementDispute:
+      type: object
+      additionalProperties: false
+      required:
+        - disputeId
+        - settlementItemId
+        - state
+        - heldAmountKrw
+        - currency
+        - filedAt
+      properties:
+        disputeId:
+          $ref: "#/components/schemas/Identifier"
+        settlementItemId:
+          $ref: "#/components/schemas/Identifier"
+        previousDisputeId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN]
+        heldAmountKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        filedAt:
+          $ref: "#/components/schemas/DateTime"

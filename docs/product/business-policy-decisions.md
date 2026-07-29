@@ -55,15 +55,24 @@
 ## BR-03 결제 전 예약 lease
 
 - **Status:** Accepted for MVP
-- **Decision:** 주문 생성 후 픽업 슬롯, 판매 재고, 쿠폰, 포인트 예약은 5분간 유지한다. 5분 안에 결제가 승인되지 않으면 예약을 만료하고 모든 자원을 해제한다.
+- **Decision:** 주문 생성 후 픽업 슬롯, 판매 재고, 쿠폰, 포인트 예약은 5분간 유지한다. 5분 안에 결제가 승인되지 않으면 Payment가 `UNKNOWN`이더라도 주문을 `EXPIRED`로 전환하고 모든 예약 자원을 해제한다. 이후 reconciliation에서 Provider 승인이 확인돼도 만료 주문을 `PAID`로 되살리거나 예약을 다시 확정하지 않는다. Payment가 자동 void 또는 전액 환불을 시작하고, 외부 결과가 확정될 때까지 `RECONCILING` 또는 `MANUAL_REVIEW`와 운영 case를 남긴다.
 - **Expiration:** 예약 만료 시각은 주문 생성 트랜잭션에서 고정하며, 연장 API는 MVP에서 제공하지 않는다.
+- **Amendment (2026-07-28):** 결제 결과 불명 상태에서 자원이 무기한 점유되는 것을 막고 뒤늦은 승인 주문이 이미 해제된 자원을 다시 확정하지 않도록 만료 우선과 명시적 환불 복구를 확정했다.
+- **Point Reservation Amendment (2026-07-28):** 주문 생성 시점에 유효한 PointLot에서 예약한 allocation은 주문 lease가 끝날 때까지 확정 가능성을 보장한다. lease 도중 원 PointLot 만료 시각이 지나도 예약분은 결제 승인에 사용할 수 있다. 예약을 해제할 때 이미 만료된 allocation은 가용 포인트로 복원하지 않고 만료 원장으로 처리한다.
+- **Materialization Amendment (2026-07-28):** `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회·결제 명령은 worker를 기다리지 않고 먼저 Order 만료와 네 자원 해제를 같은 transaction으로 시도한다. 성공하면 `EXPIRED`를 반환하거나 만료 오류로 결제를 거부한다. 해제 실패 시 stale `PENDING_PAYMENT`나 부분 성공을 반환하지 않고 503으로 실패하며 worker 또는 다음 요청이 재시도한다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
 - **Required Tests:**
   - 5분 이전 결제 성공 시 예약 확정
+  - PointLot 만료가 lease 중간에 있는 주문의 승인과 해제
+  - 해제 시 이미 만료된 point allocation의 비복원·만료 원장
   - 5분 경계와 이후 결제 요청 거부
+  - Payment `UNKNOWN`과 만료 작업의 동시 실행
+  - 만료 후 뒤늦은 승인 확인 시 주문 비복구와 void/refund reconciliation
   - 만료 작업 재실행 시 중복 해제 방지
+  - worker 전후 조회가 같은 `EXPIRED` representation을 반환
+  - 조회 중 만료 해제 실패 시 503과 전체 rollback
   - 결제와 만료 작업의 동시 실행 테스트
 - **ADR Required:** Yes — 예약 lease와 자원 확정 시점
 - **Revisit Conditions:** 실제 결제 소요시간 p95, 결제 이탈률 또는 자원 점유율 측정 후 조정
@@ -167,15 +176,19 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 원금에 쿠폰 할인을 먼저 적용한 뒤, 남은 금액에 포인트를 사용한다.
+- **Amendment (2026-07-28):** 쿠폰 Campaign은 `FIXED_KRW` 또는 `RATE_BPS`이며 대상 메뉴가 제한되면 대상 OrderLine의 할인 전 합계만 minimum과 할인 계산에 사용한다. 정액 할인은 대상 합계를 넘지 않고, 정률은 basis point로 계산해 원 미만을 버린 뒤 선택적 최대 할인액을 적용한다. 대상 메뉴가 아닌 품목은 minimum을 채우거나 쿠폰 할인을 받지 않는다.
 - **Rationale:** 쿠폰 정책의 최소 주문금액과 최대 할인액을 먼저 확정하고 포인트가 실제 남은 결제액을 차감하도록 한다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Settlement
 - **Affected Aggregates:** Order, CouponIssuance, PointAccount, SettlementItem
 - **Required Tests:**
   - 쿠폰 적용 후 포인트 한도 계산
+  - 정액 할인과 대상 합계 상한
+  - 정률 basis point 버림과 최대 할인 상한
+  - 대상·비대상 품목 혼합 주문의 minimum 기준
   - 쿠폰 미적용·포인트만 적용
   - 0원 주문 경계
   - 환불 시 쿠폰·포인트 배분 재현
-- **ADR Required:** Yes — 할인·혜택 계산 순서
+- **ADR Required:** Yes — 할인·혜택 계산 순서와 Campaign 계산 모델
 - **Revisit Conditions:** 쿠폰 정책에서 포인트 사용 전 금액을 기준으로 해야 하는 요구가 생길 때
 
 ## BR-09 쿠폰 중복 사용
@@ -212,6 +225,7 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 적용 후 남은 결제 예정액 전부까지 사용할 수 있다. 포인트로 전액 결제되어 최종 결제액이 0원이면 외부 PG를 호출하지 않고 `BENEFIT_ONLY` 결제 기록을 생성하여 주문을 결제 완료로 처리한다.
+- **Amendment (2026-07-28):** 0원 주문은 주문 생성 Feature에 포함한다. 주문 생성 로컬 트랜잭션 안에서 임시 예약을 획득한 뒤 `BENEFIT_ONLY Payment(APPROVED)`를 생성하고 슬롯·재고·쿠폰·포인트 예약을 확정하며 Order를 `PAID`로 커밋한다. 이 주문에는 active 결제 전 lease가 남지 않고 외부 PG 호출도 발생하지 않는다.
 - **Rationale:** 포인트 전액 사용을 지원하면서도 0원 결제를 외부 PG에 전송하는 불필요한 의존을 제거한다.
 - **Affected Contexts:** Ordering, Loyalty, Payment
 - **Affected Aggregates:** Order, PointAccount, Payment
@@ -219,6 +233,7 @@
   - 포인트 전액 결제
   - 결제 예정액 초과 포인트 사용 거부
   - `BENEFIT_ONLY` 중복 처리 방지
+  - 0원 주문 생성 시 Order·Payment·예약 확정의 원자성
   - 취소·환불 시 포인트 전액 복원
 - **ADR Required:** Yes
 - **Revisit Conditions:** PG 최소 승인 금액이나 포인트 사용 비율 제한이 비즈니스 정책으로 도입될 때
@@ -227,11 +242,14 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 확정 시 쿠폰 할인액, 사용 포인트, 현금 결제액을 주문 항목별로 배분해 스냅샷으로 저장한다. 배분은 각 항목의 할인 전 금액 비율을 기준으로 하고, 원 미만 버림 후 남는 차액은 금액이 큰 항목, 동일하면 주문 항목 순서가 빠른 항목부터 1원씩 배분한다. 품목 부분 환불 시 해당 항목에 저장된 현금 결제액을 환불하고, 사용 포인트를 복원하며, 쿠폰 할인액은 현금으로 환급하지 않는다.
+- **Sequential Allocation Amendment (2026-07-28):** 대상 메뉴가 제한된 쿠폰은 대상 OrderLine의 할인 전 금액만 기준으로 대상 품목에 배분한다. 포인트는 쿠폰 적용 뒤 각 OrderLine에 남은 금액 비율로 모든 품목에 배분하고, 현금 결제액은 품목별 `gross - coupon - points` 잔액이다. 각 배분 단계에서 원 미만을 버린 뒤 남는 차액은 해당 단계 기준 금액이 큰 품목, 동일하면 주문 항목 순서가 빠른 품목부터 1원씩 배분한다. 이 amendment가 앞 문장의 공통 할인 전 금액 기준보다 우선한다.
 - **Rationale:** 환불 시점에 정책을 다시 계산하지 않고 주문 당시 결과를 재현하기 위함이다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Payment, Settlement
 - **Affected Aggregates:** Order, OrderLine, Payment, PointAccount, SettlementAdjustment
 - **Required Tests:**
   - 여러 품목의 할인·포인트 배분 합계 일치
+  - 대상·비대상 혼합 주문에서 비대상 품목의 쿠폰 배분 0
+  - 쿠폰 적용 후 품목별 잔액 기준 포인트 배분
   - 나머지 1원 배분의 결정성
   - 같은 품목 반복 환불 방지
   - 환불 후 승인액·포인트·정산액 tie-out
@@ -241,10 +259,10 @@
 ## BR-13 환불 주문의 적립 포인트 회수
 
 - **Status:** Accepted for MVP
-- **Decision:** 환불 금액에 대응하는 적립 포인트를 먼저 미사용 PointLot에서 회수한다. 이미 사용되어 전부 회수할 수 없으면 포인트 잔액을 음수로 만들지 않고 부족액을 `POINT_RECOVERY_PENDING` 조정 원장에 기록한다. 이후 발생하는 포인트 적립은 부족액 상계에 우선 사용한다.
+- **Decision:** 환불 금액에 대응하는 적립 포인트를 먼저 미사용 PointLot에서 회수한다. 이미 사용되어 전부 회수할 수 없으면 포인트 잔액을 음수로 만들지 않고 부족액을 Loyalty의 `POINT_RECOVERY_PENDING` 원장 항목으로 기록한다. 이후 발생하는 포인트 적립은 부족액 상계에 우선 사용한다. 정산 금액 보정이 필요하면 별도 SettlementAdjustment가 원천 refund reference를 사용하며, 포인트 회수 대기 잔액 자체를 소유하지 않는다.
 - **Rationale:** 환불을 막지 않으면서 포인트 비용의 정합성을 유지하고 음수 잔액을 피한다.
 - **Affected Contexts:** Loyalty, Payment, Settlement, Operations
-- **Affected Aggregates:** PointAccount, PointLot, PointTransaction, SettlementAdjustment
+- **Affected Aggregates:** PointAccount, PointLot, PointTransaction
 - **Required Tests:**
   - 미사용 적립 포인트 전액 회수
   - 일부 사용 후 부족액 기록
@@ -350,7 +368,8 @@
 ## BR-22 정산 이의제기 가능 기간
 
 - **Status:** Accepted for MVP
-- **Decision:** 점주는 SettlementItem이 포함된 정산 배치가 확정된 다음 날부터 14일 이내에 이의제기를 제출할 수 있다.
+- **Decision:** 점주는 SettlementItem이 포함된 정산 배치가 확정된 `Asia/Seoul` 날짜를 D라고 할 때 `[D+1 00:00, D+15 00:00)` 범위에서 이의제기를 제출할 수 있다. 즉 다음 날부터 14개 달력 날짜를 포함하고 D+15 시작 시각부터는 거부한다.
+- **Clarification (2026-07-28):** “다음 날부터 14일 이내”의 inclusive/exclusive 경계를 달력 날짜와 half-open interval로 명확히 했다.
 - **Rationale:** 검토 가능한 기간을 제공하면서 무기한 분쟁 가능성을 제한한다.
 - **Affected Contexts:** Settlement, Dispute, Notification
 - **Affected Aggregates:** SettlementBatch, SettlementItem, SettlementDispute
@@ -400,6 +419,7 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 멱등성 키의 유효 범위는 `actorId + API operation + Idempotency-Key`다. 서버는 정규화한 요청 payload hash와 처리 상태·응답을 저장한다. 동일 범위의 같은 키와 같은 payload는 기존 결과를 반환하고, 같은 키에 다른 payload가 들어오면 `409 Conflict`를 반환한다.
+- **Order Creation Amendment (2026-07-28):** 주문 생성의 같은 key·같은 payload 재요청은 저장된 최초 HTTP status와 body를 그대로 반환한다. 아직 `PROCESSING`이면 새 실행이나 202 성공 표현 없이 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다. 확정된 실패도 최초 4xx/503을 저장·재생하며 다시 실행하려면 새 key를 사용한다.
 - **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다.
 - **Affected Contexts:** Ordering, Payment, Settlement, Operations
 - **Affected Aggregates:** IdempotencyRecord, Order, Payment, SettlementAdjustment
@@ -407,6 +427,8 @@
   - 같은 키·같은 payload 재요청
   - 같은 키·다른 payload 409
   - 처리 중 요청의 동시 재시도
+  - 주문 생성 최초 201·4xx·503 response 재생
+  - 주문 생성 PROCESSING의 409와 Retry-After
   - 실패·UNKNOWN 상태 재요청
 - **ADR Required:** Yes — 결제 멱등성과 reconciliation
 - **Revisit Conditions:** 다중 채널 또는 외부 파트너가 자체 멱등성 범위를 요구할 때
@@ -475,16 +497,23 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 금액, 포인트, 재고, 픽업 슬롯, 주문 terminal 상태, 정산, 이의제기 판정, 권한 변경과 수동 재처리는 감사 로그를 남긴다. 감사 로그에는 actorId, actorType, action, targetType, targetId, occurredAt, reason, before summary, after summary, correlationId를 포함한다. 감사 로그는 일반 비즈니스 Entity와 분리하고 애플리케이션 API로 수정·삭제하지 않는다.
+- **Order Lease Amendment (2026-07-28):** 주문 생성·BENEFIT_ONLY 승인·예약·확정·만료·해제는 변경된 Aggregate target마다 별도 AuditRecord를 남기고 같은 correlationId와 source reference로 묶는다. 고객 주문 생성은 Customer actor와 표준 reason code, 시간에 의한 만료는 SYSTEM actor와 `LEASE_DEADLINE_REACHED`를 사용한다. 자유 입력 reason은 수동·운영자 명령에서만 필수다.
+- **Retention Amendment (2026-07-28):** AuditRecord는 `occurredAt`을 `Asia/Seoul`로 변환한 같은 현지 시각의 5주년까지 보존하고 그 시각부터 retention worker의 삭제 대상이 된다. 윤년은 달력 `plusYears(5)` 규칙을 따른다. 애플리케이션 API 삭제는 계속 금지하고 내부 worker만 chunk 단위로 재실행 가능하게 삭제한다.
 - **Rationale:** 금전성·운영성 변경의 책임과 재현 가능성을 확보한다.
 - **Affected Contexts:** 전체 거래 Context, Operations
-- **Affected Aggregates:** AuditLog 또는 AuditRecord
+- **Affected Aggregates:** AuditRecord
 - **Required Tests:**
   - 필수 사유 없는 수동 변경 거부
   - 정상 변경과 감사 로그 원자적 기록
+  - 주문 생성·만료의 target별 record와 correlation
+  - 조회가 materialize한 만료의 SYSTEM actor/reason
   - 감사 로그 수정·삭제 API 부재
+  - 서울 달력 5주년 직전·경계·이후 cleanup
+  - 2월 29일 occurredAt의 5주년 경계
+  - cleanup 중단·재실행과 due 이전 record 보존
   - 민감 정보 마스킹
 - **ADR Required:** Yes
-- **Revisit Conditions:** 별도 감사 저장소, 보존 기간 또는 규제 요구가 생길 때
+- **Revisit Conditions:** 별도 감사 저장소, 계약·규제 보존 기간 또는 legal hold 요구가 생길 때
 
 ---
 
@@ -539,23 +568,26 @@
 
 # 별도 ADR이 필요한 정책 목록
 
-1. 금액 표현·반올림·항목별 배분
-2. 예약 lease와 재고·슬롯 확정 시점
-3. 매장 수락 timeout과 보상 흐름
-4. 주문 가격·할인·포인트 스냅샷
-5. 0원 혜택 결제
-6. 부분 환불 배분
-7. PointLot·포인트 회수·복원
-8. 정산 기준일·주기·수수료 기준
-9. 쿠폰·포인트 비용 부담
-10. 확정 정산 Adjustment와 음수 이월
-11. 이의제기 hold 정책
-12. 멱등성 키와 보존 기간
-13. 알림 retry·수동 복구
-14. 위치정보 최소 보존
-15. 결제수단 tokenization
-16. 감사 로그
-17. 매출 지표와 late event 재집계
+| Topic | Related ADR |
+|---|---|
+| 금액 표현·반올림·항목별 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
+| 예약 lease와 재고·슬롯 확정 시점 | [ADR-005](../adr/ADR-005-reservation-transaction-strategy.md), [ADR-013](../adr/ADR-013-payment-unknown-reservation-expiry.md) |
+| 매장 수락 timeout과 보상 흐름 | [ADR-015](../adr/ADR-015-store-acceptance-timeout-compensation.md) |
+| 주문 가격·할인·포인트 스냅샷 | [ADR-004](../adr/ADR-004-order-price-snapshot.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
+| 쿠폰 Campaign 계산 모델 | [ADR-024](../adr/ADR-024-coupon-calculation-model.md) |
+| 0원 혜택 결제 | [ADR-016](../adr/ADR-016-benefit-only-payment.md) |
+| 부분 환불 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
+| PointLot·포인트 회수·복원 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
+| 정산 기준일·주기·수수료 기준 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
+| 쿠폰·포인트 비용 부담 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
+| 확정 정산 Adjustment와 음수 이월 | [ADR-008](../adr/ADR-008-settlement-adjustment-ledger.md), [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
+| 이의제기 hold 정책 | [ADR-018](../adr/ADR-018-settlement-dispute-hold-and-refile.md) |
+| 멱등성 키와 보존 기간 | [ADR-007](../adr/ADR-007-payment-idempotency-reconciliation.md), [ADR-025](../adr/ADR-025-order-creation-idempotency-transaction.md) |
+| 알림 retry·수동 복구 | [ADR-019](../adr/ADR-019-notification-retry-and-manual-recovery.md) |
+| 위치정보 최소 보존 | [ADR-020](../adr/ADR-020-nearby-location-privacy.md) |
+| 결제수단 tokenization | [ADR-021](../adr/ADR-021-payment-method-tokenization.md) |
+| 감사 로그 | [ADR-022](../adr/ADR-022-audit-record.md) |
+| 매출 지표와 late event 재집계 | [ADR-023](../adr/ADR-023-analytics-refund-and-late-events.md) |
 
 ---
 

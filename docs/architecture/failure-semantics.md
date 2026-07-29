@@ -84,6 +84,8 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 |---|---|---|
 | PG timeout | `Payment.UNKNOWN`, reconciliation | 실패 확정 또는 성공 반환 |
 | PG success, DB write fail | 운영 복구 case와 Provider 조회 | 새 결제 자동 승인 |
+| Lease expiry, late PG approval | Order `EXPIRED` 유지, idempotent void/refund reconciliation | Order·예약 복구 또는 승인 성공 은폐 |
+| Refund timeout | Refund `UNKNOWN`, reconciliation | 환불 성공액에 포함 또는 새 환불 중복 호출 |
 | Notification provider fail | Order `READY`, Delivery retry state | Delivery 성공 처리 |
 | DB unavailable | request/readiness failure | local DB 전환 |
 | Redis unavailable | Accepted ADR에 정의된 동작 | local Map 전환 |

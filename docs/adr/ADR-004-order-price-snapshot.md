@@ -41,4 +41,6 @@ OrderLine에 menuId와 함께 주문 당시 메뉴명, 옵션명, 단가, 수량
 
 ## Related Decisions
 
-BR-02, BR-12, ADR-003
+- BR-02, BR-08, BR-12, BR-15
+- [ADR-003](ADR-003-aggregate-reference-by-id.md)
+- [ADR-014](ADR-014-money-allocation-and-partial-refund.md)

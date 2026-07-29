@@ -25,6 +25,9 @@
 - 같은 Idempotency-Key 100개 동시 요청 → 승인 부작용 한 번
 - 남은 재고 1개에 동시 예약 → 성공 1개, oversell 0
 - PG 성공 후 DB write 실패 → UNKNOWN/복구 case, 재승인 없음
+- Payment UNKNOWN과 5분 만료 동시 실행 → 한 guarded transition만 승리
+- 만료 후 Provider 승인 확인 → Order 비복구, void/refund 한 번, 실패 시 명시적 recovery
+- refund timeout → 성공 환불액 미반영, UNKNOWN/reconciliation
 - OrderCompleted 중복 전달 → 포인트·SettlementItem 한 번
 - 알림 timeout 후 Provider는 성공 → ACK 유실 중복 발송 제어
 - 정산 batch 중단 후 재실행 → 중복 Item 0

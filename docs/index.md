@@ -13,6 +13,7 @@
 - [Architecture Overview](architecture/architecture-overview.md)
 - [Ubiquitous Language](architecture/ubiquitous-language.md)
 - [Context Map](architecture/context-map.md)
+- [Business Policy Traceability](architecture/policy-traceability.md)
 - [Aggregate Invariants](architecture/aggregate-invariants.md)
 - [Transaction Boundaries](architecture/transaction-boundaries.md)
 - [State Machines](architecture/state-machines.md)

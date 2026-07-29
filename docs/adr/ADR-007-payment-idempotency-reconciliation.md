@@ -43,4 +43,6 @@ Provider의 idempotency 보장과 보존 정책이 확정될 때
 
 ## Related Decisions
 
-BR-25, BR-26, ADR-006
+- BR-25, BR-26
+- [ADR-006](ADR-006-external-payment-transaction-boundary.md)
+- [ADR-013](ADR-013-payment-unknown-reservation-expiry.md)
