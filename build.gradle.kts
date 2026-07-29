@@ -4,6 +4,7 @@ plugins {
 	id("org.springframework.boot") version "4.1.0"
 	id("io.spring.dependency-management") version "1.1.7"
 	id("org.asciidoctor.jvm.convert") version "4.0.5"
+	id("com.diffplug.spotless") version "8.8.0"
 	kotlin("plugin.jpa") version "2.3.21"
 }
 
@@ -74,6 +75,14 @@ allOpen {
 	annotation("jakarta.persistence.Entity")
 	annotation("jakarta.persistence.MappedSuperclass")
 	annotation("jakarta.persistence.Embeddable")
+}
+
+spotless {
+	ratchetFrom("origin/main")
+	kotlin {
+		target("src/**/*.kt")
+		ktlint("1.8.0")
+	}
 }
 
 tasks.withType<Test> {

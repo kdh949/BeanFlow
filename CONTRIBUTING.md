@@ -51,9 +51,17 @@ fix: 결제 승인 재조회 시 완료 상태를 복원한다
 PR을 열기 전에 다음을 확인합니다.
 
 ```bash
+./gradlew spotlessCheck
 ./gradlew clean build --stacktrace
 bash scripts/verify-docs.sh
 git diff --check
+```
+
+Kotlin 포맷 위반은 다음 명령으로 수정합니다. Spotless는 `origin/main` 이후 추가되거나
+변경된 `src/**/*.kt` 파일만 검사하며 기존 소스를 일괄 재포맷하지 않습니다.
+
+```bash
+./gradlew spotlessApply
 ```
 
 PR은 다음 기준을 충족해야 병합할 수 있습니다.
