@@ -73,17 +73,21 @@ internal class StockReservationService(
 
 	@Transactional(propagation = Propagation.MANDATORY)
 	override fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport =
-		transition(orderId, sourceReference, null, confirm = true)
+		transition(orderId, sourceReference, null, StockTransition.CONFIRM)
+
+	@Transactional(propagation = Propagation.MANDATORY)
+	override fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport =
+		transition(orderId, sourceReference, now, StockTransition.RELEASE)
 
 	@Transactional(propagation = Propagation.MANDATORY)
 	override fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport =
-		transition(orderId, sourceReference, now, confirm = false)
+		transition(orderId, sourceReference, now, StockTransition.EXPIRE)
 
 	private fun transition(
 		orderId: UUID,
 		sourceReference: String,
 		now: Instant?,
-		confirm: Boolean,
+		transition: StockTransition,
 	): ReservationTransitionReport {
 		val current = reservationRepository.findByOrderIdOrderBySellableUnitId(orderId)
 		if (current.isEmpty()) return report(ReservationTransitionResult.NOT_ELIGIBLE)
@@ -97,12 +101,15 @@ internal class StockReservationService(
 		if (reservations.any { it.sourceReference != sourceReference }) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Stock transition source does not match")
 		}
-		if (!confirm && reservations.any { now!!.isBefore(it.expiresAt) }) {
+		if (transition == StockTransition.EXPIRE && reservations.any { now!!.isBefore(it.expiresAt) }) {
 			return report(ReservationTransitionResult.NOT_ELIGIBLE, reservations)
 		}
-		if (reservations.all {
-				it.state == if (confirm) StockReservationState.CONFIRMED else StockReservationState.EXPIRED
-			}) {
+		val terminal = when (transition) {
+			StockTransition.CONFIRM -> StockReservationState.CONFIRMED
+			StockTransition.EXPIRE -> StockReservationState.EXPIRED
+			StockTransition.RELEASE -> StockReservationState.RELEASED
+		}
+		if (reservations.all { it.state == terminal }) {
 			return report(ReservationTransitionResult.ALREADY_APPLIED, reservations)
 		}
 		if (reservations.any { it.state != StockReservationState.RESERVED }) {
@@ -110,15 +117,13 @@ internal class StockReservationService(
 		}
 		reservations.forEach { reservation ->
 			val stock = stocks.getValue(reservation.sellableUnitId)
-			if (confirm) {
+			if (transition == StockTransition.CONFIRM) {
 				stock.confirm(reservation.quantity)
-				reservation.state = StockReservationState.CONFIRMED
-				reservation.updatedAt = clock.instant()
 			} else {
 				stock.release(reservation.quantity)
-				reservation.state = StockReservationState.EXPIRED
-				reservation.updatedAt = now!!
 			}
+			reservation.state = terminal
+			reservation.updatedAt = now ?: clock.instant()
 		}
 		return report(ReservationTransitionResult.APPLIED, reservations)
 	}
@@ -146,4 +151,10 @@ internal class StockReservationService(
 			.sortedBy(StockRequirement::sellableUnitId)
 
 	private fun fail(code: FailureCode, message: String): Nothing = throw DomainFailure(code, message)
+
+	private enum class StockTransition {
+		CONFIRM,
+		EXPIRE,
+		RELEASE,
+	}
 }

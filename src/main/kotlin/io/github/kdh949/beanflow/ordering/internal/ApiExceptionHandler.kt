@@ -52,6 +52,7 @@ internal class ApiExceptionHandler(
 			FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
 			FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
 			FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
+			FailureCode.PAYMENT_DECLINED -> HttpStatus.UNPROCESSABLE_ENTITY
 			FailureCode.DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
 			else -> HttpStatus.CONFLICT
 		}

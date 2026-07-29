@@ -15,5 +15,6 @@ data class ReservePickupCommand(
 interface PickupReservationOperations {
 	fun reserve(command: ReservePickupCommand): UUID
 	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport
+	fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 	fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 }

@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow
 
+import io.github.kdh949.beanflow.payment.internal.PaymentGateway
+import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
@@ -21,5 +23,8 @@ class TestcontainersConfiguration {
 	fun testJwtDecoder(): JwtDecoder = JwtDecoder {
 		throw JwtException("JWT decoding is not used outside explicit security tests")
 	}
+
+	@Bean
+	internal fun testPaymentGateway(): ScriptedTestPaymentGateway = ScriptedTestPaymentGateway()
 
 }

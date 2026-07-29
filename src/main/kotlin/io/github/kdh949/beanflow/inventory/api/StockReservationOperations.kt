@@ -20,5 +20,6 @@ data class ReserveStockCommand(
 interface StockReservationOperations {
 	fun reserve(command: ReserveStockCommand): List<UUID>
 	fun confirm(orderId: UUID, sourceReference: String): ReservationTransitionReport
+	fun release(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 	fun expire(orderId: UUID, now: Instant, sourceReference: String): ReservationTransitionReport
 }
