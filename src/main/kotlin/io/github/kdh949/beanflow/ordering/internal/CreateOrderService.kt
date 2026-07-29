@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
@@ -19,11 +21,34 @@ internal class CreateOrderService(
 	private val identifierSource: IdentifierSource,
 	private val correlationIdSource: CorrelationIdSource,
 	private val objectMapper: ObjectMapper,
+	private val meterRegistry: MeterRegistry,
 	@Value("\${beanflow.idempotency.retry-after-seconds:2}")
 	private val retryAfterSeconds: Long,
 ) : CreateOrderUseCase {
 
 	override fun create(idempotencyKey: String, command: CreateOrderCommand): StoredHttpResponse {
+		val sample = Timer.start(meterRegistry)
+		return try {
+			val response = execute(idempotencyKey, command)
+			val outcome = when {
+				response.replay -> "replay"
+				response.status in 200..299 -> "success"
+				else -> "failure"
+			}
+			meterRegistry.counter("beanflow.order.creation.attempts", "outcome", outcome).increment()
+			if (response.replay) {
+				meterRegistry.counter("beanflow.order.idempotency.events", "outcome", "replay").increment()
+			}
+			response
+		} catch (failure: RuntimeException) {
+			meterRegistry.counter("beanflow.order.creation.attempts", "outcome", "failure").increment()
+			throw failure
+		} finally {
+			sample.stop(meterRegistry.timer("beanflow.order.creation.duration"))
+		}
+	}
+
+	private fun execute(idempotencyKey: String, command: CreateOrderCommand): StoredHttpResponse {
 		val correlationId = correlationIdSource.currentOrCreate()
 		if (idempotencyKey.length !in 8..128) {
 			return errorResponse(
@@ -104,8 +129,9 @@ internal class CreateOrderService(
 			)
 		}
 
-	private fun errorResponse(failure: DomainFailure, correlationId: String): StoredHttpResponse =
-		StoredHttpResponse(
+	private fun errorResponse(failure: DomainFailure, correlationId: String): StoredHttpResponse {
+		recordFailureMetric(failure.code)
+		return StoredHttpResponse(
 			status = statusOf(failure.code),
 			body = objectMapper.writeValueAsString(
 				ErrorResponse(
@@ -116,6 +142,28 @@ internal class CreateOrderService(
 			),
 			retryAfterSeconds = failure.retryAfterSeconds,
 		)
+	}
+
+	private fun recordFailureMetric(code: FailureCode) {
+		val resource = when (code) {
+			FailureCode.PICKUP_SLOT_FULL -> "pickup"
+			FailureCode.STOCK_NOT_AVAILABLE -> "stock"
+			FailureCode.COUPON_NOT_AVAILABLE -> "coupon"
+			FailureCode.POINT_BALANCE_INSUFFICIENT -> "points"
+			else -> null
+		}
+		resource?.let {
+			meterRegistry.counter("beanflow.order.reservation.conflicts", "resource", it).increment()
+		}
+		val idempotencyOutcome = when (code) {
+			FailureCode.IDEMPOTENCY_KEY_REUSED -> "key_reused"
+			FailureCode.IDEMPOTENCY_REQUEST_IN_PROGRESS -> "in_progress"
+			else -> null
+		}
+		idempotencyOutcome?.let {
+			meterRegistry.counter("beanflow.order.idempotency.events", "outcome", it).increment()
+		}
+	}
 
 	private fun statusOf(code: FailureCode): Int =
 		when (code) {

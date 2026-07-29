@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -16,6 +17,7 @@ import java.util.UUID
 internal class CreateOrderServiceTest @Autowired constructor(
 	private val createOrderUseCase: CreateOrderUseCase,
 	private val jdbcTemplate: JdbcTemplate,
+	private val meterRegistry: MeterRegistry,
 ) {
 
 	@BeforeEach
@@ -107,6 +109,43 @@ internal class CreateOrderServiceTest @Autowired constructor(
 	}
 
 	@Test
+	fun `creation and idempotency outcomes are recorded without identifier tags`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+		val successBefore = counter("beanflow.order.creation.attempts", "outcome", "success")
+		val replayBefore = counter("beanflow.order.creation.attempts", "outcome", "replay")
+		val idempotencyBefore = counter("beanflow.order.idempotency.events", "outcome", "replay")
+
+		createOrderUseCase.create("metric-replay-01", fixture.command())
+		createOrderUseCase.create("metric-replay-01", fixture.command())
+
+		assertThat(counter("beanflow.order.creation.attempts", "outcome", "success") - successBefore)
+			.isEqualTo(1.0)
+		assertThat(counter("beanflow.order.creation.attempts", "outcome", "replay") - replayBefore)
+			.isEqualTo(1.0)
+		assertThat(counter("beanflow.order.idempotency.events", "outcome", "replay") - idempotencyBefore)
+			.isEqualTo(1.0)
+		assertThat(
+			meterRegistry.find("beanflow.order.creation.attempts").meters()
+				.flatMap { it.id.tags }
+				.map { it.key }
+				.distinct(),
+		).containsOnly("outcome")
+	}
+
+	@Test
+	fun `reservation conflict identifies the owner without order identifiers`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
+		val before = counter("beanflow.order.reservation.conflicts", "resource", "stock")
+
+		createOrderUseCase.create("metric-stock-001", fixture.command())
+
+		assertThat(counter("beanflow.order.reservation.conflicts", "resource", "stock") - before)
+			.isEqualTo(1.0)
+	}
+
+	@Test
 	fun `same key with different payload is rejected without another owner reservation`() {
 		val fixture = OrderCreationFixture()
 		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -126,4 +165,7 @@ internal class CreateOrderServiceTest @Autowired constructor(
 		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
 		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
 	}
+
+	private fun counter(name: String, tag: String, value: String): Double =
+		meterRegistry.find(name).tag(tag, value).counter()?.count() ?: 0.0
 }
