@@ -1,0 +1,36 @@
+name: Bootstrap GitHub roadmap
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan은 정의만 검증하고, apply는 GitHub 이슈·라벨·마일스톤을 생성/갱신합니다.
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  roadmap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate roadmap definition
+        run: node --test scripts/github-roadmap/roadmap.test.mjs
+
+      - name: Plan or apply roadmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          node scripts/bootstrap-github-roadmap.mjs
+          --mode "${{ inputs.mode }}"
+          --repo "${{ github.repository }}"
