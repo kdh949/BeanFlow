@@ -15,70 +15,72 @@ import java.time.Instant
 import java.util.UUID
 
 internal enum class ReprocessingCaseType {
-	PAYMENT_RECONCILIATION,
+    PAYMENT_RECONCILIATION,
+    NOTIFICATION_DELIVERY,
 }
 
 internal enum class ReprocessingCaseStatus {
-	OPEN,
-	RUNNING,
-	RESOLVED,
-	MANUAL_REVIEW,
+    OPEN,
+    RUNNING,
+    RESOLVED,
+    MANUAL_REVIEW,
 }
 
 @Entity
 @Table(name = "operations_reprocessing_case")
 internal class ReprocessingCaseEntity(
-	@Id
-	val id: UUID,
-	@Enumerated(EnumType.STRING)
-	@Column(name = "case_type", nullable = false)
-	val caseType: ReprocessingCaseType,
-	@Column(name = "owner_reference", nullable = false)
-	val ownerReference: String,
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	var status: ReprocessingCaseStatus,
-	@Column(nullable = false)
-	val reason: String,
-	@Column(name = "correlation_id", nullable = false)
-	val correlationId: String,
-	@Column(name = "created_at", nullable = false)
-	val createdAt: Instant,
-	@Column(name = "updated_at", nullable = false)
-	var updatedAt: Instant,
+    @Id
+    val id: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "case_type", nullable = false)
+    val caseType: ReprocessingCaseType,
+    @Column(name = "owner_reference", nullable = false)
+    val ownerReference: String,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status: ReprocessingCaseStatus,
+    @Column(nullable = false)
+    val reason: String,
+    @Column(name = "correlation_id", nullable = false)
+    val correlationId: String,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant,
 )
 
 internal interface ReprocessingCaseJpaRepository : JpaRepository<ReprocessingCaseEntity, UUID> {
-	fun findByCaseTypeAndOwnerReference(
-		caseType: ReprocessingCaseType,
-		ownerReference: String,
-	): ReprocessingCaseEntity?
+    fun findByCaseTypeAndOwnerReference(
+        caseType: ReprocessingCaseType,
+        ownerReference: String,
+    ): ReprocessingCaseEntity?
 }
 
 @Service
 internal class ReprocessingCaseService(
-	private val repository: ReprocessingCaseJpaRepository,
-	private val identifierSource: IdentifierSource,
+    private val repository: ReprocessingCaseJpaRepository,
+    private val identifierSource: IdentifierSource,
 ) : ReprocessingCaseOperations {
-
-	override fun openPaymentCase(command: OpenReprocessingCaseCommand): UUID {
-		require(command.ownerReference.isNotBlank())
-		require(command.reason.isNotBlank())
-		require(command.correlationId.isNotBlank())
-		repository.findByCaseTypeAndOwnerReference(
-			ReprocessingCaseType.PAYMENT_RECONCILIATION,
-			command.ownerReference,
-		)?.let { return it.id }
-		val entity = ReprocessingCaseEntity(
-			id = identifierSource.next(),
-			caseType = ReprocessingCaseType.PAYMENT_RECONCILIATION,
-			ownerReference = command.ownerReference,
-			status = ReprocessingCaseStatus.MANUAL_REVIEW,
-			reason = command.reason,
-			correlationId = command.correlationId,
-			createdAt = command.now,
-			updatedAt = command.now,
-		)
-		return repository.save(entity).id
-	}
+    override fun openPaymentCase(command: OpenReprocessingCaseCommand): UUID {
+        require(command.ownerReference.isNotBlank())
+        require(command.reason.isNotBlank())
+        require(command.correlationId.isNotBlank())
+        repository
+            .findByCaseTypeAndOwnerReference(
+                ReprocessingCaseType.PAYMENT_RECONCILIATION,
+                command.ownerReference,
+            )?.let { return it.id }
+        val entity =
+            ReprocessingCaseEntity(
+                id = identifierSource.next(),
+                caseType = ReprocessingCaseType.PAYMENT_RECONCILIATION,
+                ownerReference = command.ownerReference,
+                status = ReprocessingCaseStatus.MANUAL_REVIEW,
+                reason = command.reason,
+                correlationId = command.correlationId,
+                createdAt = command.now,
+                updatedAt = command.now,
+            )
+        return repository.save(entity).id
+    }
 }

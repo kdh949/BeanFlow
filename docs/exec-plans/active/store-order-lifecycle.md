@@ -200,7 +200,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - [x] Identity와 Order lifecycle
 - [x] persistent publication과 compensation case
 - [x] owner별 자원 복원
-- [ ] Refund와 Notification (Refund 완료, Notification 미완료)
+- [x] Refund와 Notification
 - [ ] end-to-end 검증
 
 ## Surprises & Discoveries
@@ -216,6 +216,9 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - 일반 Refund는 첫 claim에서 `provider_request_started_at`을 함께 커밋해야 worker가
   Provider 호출 뒤 결과 저장 전에 종료되어도 새 환불 요청 대신 조회만 수행할 수 있다.
   attempt count도 claim 시점에 증가시켜 반복 crash가 최대 시도 횟수를 우회하지 않게 했다.
+- Refund와 Notification 모두 마지막 claim 직후 프로세스가 종료될 수 있으므로, 최종
+  lease 만료를 별도 guarded transition으로 `MANUAL_REVIEW`에 종결해야 진행 상태가
+  `PROCESSING`에 고착되지 않는다.
 
 ## Decision Log
 
@@ -232,28 +235,29 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 
 - 완료: 문서/OpenAPI, Identity membership, Order lifecycle, Store API,
   warning/timeout, 정책 snapshot, compensation case, JPA publication recovery,
-  Pickup/Stock/Coupon/Points 복원 consumer.
-- 미완료: 일반 Refund와 Provider worker, NotificationDelivery와 scripted adapter,
-  owner 통합 E2E/동시성/재시작 테스트, runbook과 최종 전체 빌드.
-- 현재 PAYMENT와 CUSTOMER_NOTIFICATION step은 외부 작업이 구현될 때까지
-  `PROCESSING`(BENEFIT_ONLY Payment는 `NOT_REQUIRED`)으로 남는다. 이를 성공으로
-  바꾸는 placeholder나 fake fallback은 없다.
-- Docker daemon이 없어 V7~V9 migration과 추가한 PostgreSQL 복원 테스트는 작성 및
+  Pickup/Stock/Coupon/Points 복원 consumer, 일반 Refund와 Provider 조회 복구,
+  NotificationDelivery와 local scripted adapter.
+- 미완료: owner 통합 E2E/동시성/재시작 테스트, 운영 runbook과 최종 전체 빌드.
+- PAYMENT와 CUSTOMER_NOTIFICATION step은 각 외부 작업의 실제 결과로만
+  `SUCCEEDED`, `UNKNOWN`, `RETRY_SCHEDULED`, `MANUAL_REVIEW`가 되며 Order 거절과
+  독립적으로 남는다.
+- Docker daemon이 없어 V7~V11 migration과 추가한 PostgreSQL 통합 테스트는 작성 및
   test source compile까지만 확인했다.
-- Docker가 필요 없는 도메인·worker·Payment·Modulith 회귀 21개는 통과했고
-  `spotlessCheck`, 문서/OpenAPI 검증과 `git diff --check`도 통과했다.
+- 이번 재개 구간의 Docker 불필요 Refund·Notification·운영 profile·Modulith
+  targeted test 13개와 `spotlessCheck`는 통과했다.
 
 ## Resume Point
 
-다음 작업은 이 브랜치에서 `NotificationDelivery`부터 시작한다.
+다음 작업은 이 브랜치에서 최종 통합 검증과 운영 문서부터 시작한다.
 
-1. 완료된 Refund는 `V10`, 별도 Aggregate, rejection listener와 worker로 구성되어 있다.
-2. 첫 Provider 환불 요청 뒤에는 ACK가 불명하거나 claim lease가 만료되어도 조회만 하며,
-   다섯 번째 불명 결과에서 `MANUAL_REVIEW`로 전환한다.
-3. `V11` NotificationDelivery와 warning/rejected/ready listener를 구현한다.
-4. local 전용 scripted adapter와 운영 profile fake 선택 거부 검증을 추가한다.
-5. Docker를 시작한 뒤 resource 및 Refund repository test와 전체 `./gradlew test`를 먼저
-   실행해 V7~V10 migration 및 Event Publication Registry를 검증한다.
+1. Docker daemon을 시작한다.
+2. `./gradlew test`로 V7~V11 migration, Event Publication Registry, 네 resource,
+   Refund와 Notification repository test를 함께 검증한다.
+3. 수락 대 timeout, 수동 거절 대 timeout, 중복 event, owner 성공 후 step 갱신 실패,
+   worker 재시작 E2E의 누락분을 추가한다.
+4. store lifecycle, rejection recovery, Refund와 Notification 운영 runbook을 작성한다.
+5. `./gradlew clean build --stacktrace`, `spotlessCheck`, `verify-docs.sh`,
+   `git diff --check`를 실행하고 이 ExecPlan의 Outcomes를 최종 완료 상태로 갱신한다.
 
 재개 전 `git status --short`에서 사용자 `README.md` 변경만 남아 있어야 하며, 해당
 파일은 이 Feature commit에 포함하지 않는다.
@@ -268,3 +272,6 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
   owner consumer 통합 뒤 Docker 환경에서 검증 예정.
 - 2026-07-30: 네 owner의 멱등 복원 consumer와 V9 migration 추가. Eventing 계약
   모듈로 cycle 제거. 사용자 요청에 따라 Refund/Notification 이전에서 중간 인계.
+- 2026-07-30: V10 Refund 조회 복구와 V11 NotificationDelivery bounded retry 추가.
+  Docker 불가로 repository test는 컴파일까지만 확인하고 최종 통합 검증을 재개 지점으로
+  남김.
