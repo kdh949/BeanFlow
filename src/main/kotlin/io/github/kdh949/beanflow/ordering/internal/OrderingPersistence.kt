@@ -283,6 +283,29 @@ internal class IdempotencyRecordEntity(
     var version: Long = 0,
 )
 
+@Entity
+@Table(name = "ordering_store_command_idempotency")
+internal class StoreCommandIdempotencyEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "actor_id", nullable = false)
+    val actorId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(nullable = false, length = 80)
+    val operation: String,
+    @Column(name = "idempotency_key", nullable = false, length = 128)
+    val idempotencyKey: String,
+    @Column(name = "payload_hash", nullable = false, length = 64)
+    val payloadHash: String,
+    @Column(name = "response_status", nullable = false)
+    val responseStatus: Int,
+    @Column(name = "response_body", nullable = false, columnDefinition = "text")
+    val responseBody: String,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+)
+
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select beanOrder from OrderEntity beanOrder where beanOrder.id = :id")
@@ -297,6 +320,29 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
             "order by beanOrder.reservationExpiresAt, beanOrder.id",
     )
     fun findDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    @Query(
+        "select beanOrder.id from OrderEntity beanOrder " +
+            "where beanOrder.state = io.github.kdh949.beanflow.ordering.internal.domain.OrderState.PAID " +
+            "and beanOrder.acceptanceWarningAt <= :now " +
+            "and beanOrder.acceptanceWarningRequestedAt is null " +
+            "order by beanOrder.acceptanceWarningAt, beanOrder.id",
+    )
+    fun findAcceptanceWarningDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    @Query(
+        "select beanOrder.id from OrderEntity beanOrder " +
+            "where beanOrder.state = io.github.kdh949.beanflow.ordering.internal.domain.OrderState.PAID " +
+            "and beanOrder.acceptanceDeadlineAt <= :now " +
+            "order by beanOrder.acceptanceDeadlineAt, beanOrder.id",
+    )
+    fun findAcceptanceTimeoutDueIds(
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<UUID>
@@ -323,4 +369,12 @@ internal interface IdempotencyRecordJpaRepository : JpaRepository<IdempotencyRec
         status: IdempotencyStatus,
         startedAt: Instant,
     ): Long
+}
+
+internal interface StoreCommandIdempotencyJpaRepository : JpaRepository<StoreCommandIdempotencyEntity, UUID> {
+    fun findByActorIdAndOperationAndIdempotencyKey(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+    ): StoreCommandIdempotencyEntity?
 }
