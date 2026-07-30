@@ -50,3 +50,4 @@
 
 - [Order Reservation Lease Runbook](operations/order-reservation-lease-runbook.md)
 - [Payment Approval and Reconciliation Runbook](operations/payment-reconciliation-runbook.md)
+- [Store Order Lifecycle and Rejection Recovery Runbook](operations/store-order-lifecycle-runbook.md)
