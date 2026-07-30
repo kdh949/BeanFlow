@@ -13,6 +13,7 @@ Ordering ── reserve/confirm/release ──> Fulfillment / Inventory
 Ordering ── validate/reserve/use ─────> Promotion
 Ordering ── reserve/use/restore ──────> Loyalty
 Ordering ── approval command ─────────> Payment
+Ordering ── Eventing contract ────────> owner module listeners
 
 Payment ── approval/refund facts ─────> Ordering
 Ordering ── OrderReady ───────────────> Notification
@@ -31,6 +32,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Upstream | Downstream | Data owner | Interaction | Consistency |
 |---|---|---|---|---|
 | Identity | API/Application Services | Identity | 인증 actor와 membership 조회 | 요청 시 동기 |
+| Eventing | Ordering과 event consumers | 원본 Context | 중립적인 versioned event 계약 | producer/consumer compile-time 분리 |
 | Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement 공개 동기 조회 | 주문 생성 시 현재 값 필요 |
 | Merchant | Discovery | Merchant / Discovery Read Model | 동기 조회 또는 영속 projection | 검색 응답은 source freshness를 명시 |
 | Ordering | Fulfillment | Fulfillment | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
@@ -53,6 +55,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Context | Owned write data | Published or public surface |
 |---|---|---|
 | Identity | actor, role, store membership | actor identity, membership check |
+| Eventing | write data 없음 | versioned integration event 계약 |
 | Merchant | Store, Menu, MenuConfiguration, business hours, fee contract | menu/price/status와 sellable requirement lookup |
 | Discovery | 위치 검색용 Read Model만 소유; 사용자 정밀 좌표는 저장하지 않음 | nearby store query |
 | Ordering | Order, OrderLine, 주문 명령 IdempotencyRecord | order facts, customer/store order API |

@@ -1,12 +1,12 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
+import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OpenRejectionCompensationCaseCommand
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.ordering.api.EventEnvelope
-import io.github.kdh949.beanflow.ordering.api.OrderRejectedV1
-import io.github.kdh949.beanflow.ordering.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -76,6 +76,9 @@ internal class OrderRejectionCoordinator(
                 policyVersion = policy.policyVersion,
                 policyMode = policy.mode.name,
                 policyValidityDays = policy.compensationValidityDays,
+                paymentRequired = order.payableKrw > 0,
+                couponRequired = order.couponDiscountKrw > 0,
+                pointsRequired = order.pointsAppliedKrw > 0,
             ),
         )
         return recovery

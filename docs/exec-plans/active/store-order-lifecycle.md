@@ -199,7 +199,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - [x] 문서·계약 반영
 - [x] Identity와 Order lifecycle
 - [x] persistent publication과 compensation case
-- [ ] owner별 자원 복원
+- [x] owner별 자원 복원
 - [ ] Refund와 Notification
 - [ ] end-to-end 검증
 
@@ -210,6 +210,9 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
   Docker가 필요 없는 순수 단위·구조 테스트는 통과했다.
 - Kotlin formatter가 이번에 수정한 기존 파일 전체를 현재 ktlint 규칙으로 정규화한다.
   기능 diff 검토 시 whitespace 제외 diff도 함께 확인한다.
+- owner listener가 Ordering event 계약을 직접 참조하자 기존 동기 의존의 역방향이 되어
+  Modulith cycle 검증이 실패했다. 계약 타입을 write data가 없는 `Eventing :: api`
+  모듈로 분리한 뒤 검증이 통과했다.
 
 ## Decision Log
 
@@ -222,7 +225,35 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 
 ## Outcomes & Retrospective
 
-구현 완료 후 실제 테스트 수, 실패·복구 결과와 남은 위험을 기록한다.
+2026-07-30 중간 인계 상태:
+
+- 완료: 문서/OpenAPI, Identity membership, Order lifecycle, Store API,
+  warning/timeout, 정책 snapshot, compensation case, JPA publication recovery,
+  Pickup/Stock/Coupon/Points 복원 consumer.
+- 미완료: 일반 Refund와 Provider worker, NotificationDelivery와 scripted adapter,
+  owner 통합 E2E/동시성/재시작 테스트, runbook과 최종 전체 빌드.
+- 현재 PAYMENT와 CUSTOMER_NOTIFICATION step은 외부 작업이 구현될 때까지
+  `PROCESSING`(BENEFIT_ONLY Payment는 `NOT_REQUIRED`)으로 남는다. 이를 성공으로
+  바꾸는 placeholder나 fake fallback은 없다.
+- Docker daemon이 없어 V7~V9 migration과 추가한 PostgreSQL 복원 테스트는 작성 및
+  test source compile까지만 확인했다.
+- Docker가 필요 없는 도메인·worker·Payment·Modulith 회귀 21개는 통과했고
+  `spotlessCheck`, 문서/OpenAPI 검증과 `git diff --check`도 통과했다.
+
+## Resume Point
+
+다음 작업은 이 브랜치에서 `Refund` Aggregate와 rejection consumer부터 시작한다.
+
+1. `V10__create_rejection_refund.sql`과 Payment의 Refund command/work API를 추가한다.
+2. listener는 Refund `REQUESTED`만 영속화하고 PAYMENT step을 유지한다.
+3. worker는 claim Tx1, Provider 호출(트랜잭션 밖), 결과 Tx2로 처리한다.
+4. `UNKNOWN`은 lookup만 수행하고 다섯 번 후 `MANUAL_REVIEW`로 보낸다.
+5. 그 다음 `V11` NotificationDelivery와 warning/rejected/ready listener를 구현한다.
+6. Docker를 시작한 뒤 네 resource repository test와 전체 `./gradlew test`를 먼저
+   실행해 V7~V9 migration 및 Event Publication Registry를 검증한다.
+
+재개 전 `git status --short`에서 사용자 `README.md` 변경만 남아 있어야 하며, 해당
+파일은 이 Feature commit에 포함하지 않는다.
 
 ## Revision Notes
 
@@ -232,3 +263,5 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - 2026-07-30: Store API, 2분 경고·3분 timeout, 정책 snapshot, compensation case와
   JPA publication bounded recovery 구현. V8 migration과 실제 listener 재시작 복구는
   owner consumer 통합 뒤 Docker 환경에서 검증 예정.
+- 2026-07-30: 네 owner의 멱등 복원 consumer와 V9 migration 추가. Eventing 계약
+  모듈로 cycle 제거. 사용자 요청에 따라 Refund/Notification 이전에서 중간 인계.

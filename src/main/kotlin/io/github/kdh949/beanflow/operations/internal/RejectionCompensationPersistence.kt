@@ -139,4 +139,14 @@ internal interface RejectionCompensationCaseJpaRepository : JpaRepository<Reject
 
 internal interface RejectionCompensationStepJpaRepository : JpaRepository<RejectionCompensationStepEntity, UUID> {
     fun findAllByCaseIdOrderByStepType(caseId: UUID): List<RejectionCompensationStepEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select step from RejectionCompensationStepEntity step " +
+            "where step.caseId = :caseId and step.stepType = :stepType",
+    )
+    fun findLocked(
+        @Param("caseId") caseId: UUID,
+        @Param("stepType") stepType: RejectionCompensationStepType,
+    ): RejectionCompensationStepEntity?
 }

@@ -19,6 +19,9 @@
 - 실패 publication은 10초, 30초, 2분, 5분, 15분의 bounded schedule로 최대 다섯 번
   resubmit한 뒤 Operations `MANUAL_REVIEW` case로 전환한다.
 - Kafka와 별도 broker는 추가하지 않는다.
+- Ordering이 event 의미와 발행을 소유하되 Java/Kotlin 계약 타입은 독립
+  `Eventing :: api` 모듈에 둔다. Ordering이 동기 예약 API로 의존하는 owner 모듈이
+  Ordering의 package를 역참조해 Modulith cycle을 만드는 것을 방지한다.
 
 ## Alternatives Considered
 
