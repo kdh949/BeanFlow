@@ -15,6 +15,7 @@
 | 이의제기 판정 | No | No | No | No by default | Explicit permission |
 | 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
 | 권한 변경 | No | Limited | No | Audited | No |
+| 만료 혜택 복원 정책 조회·변경 | No | No | No | Explicit permission + reason | No |
 
 ## Enforcement layers
 
@@ -25,3 +26,6 @@
 - Audit: 금액·권한·수동 재처리
 
 인가 실패를 리소스가 없다는 것과 혼동하지 않도록 API 노출 정책을 별도로 정한다.
+
+매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
+role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.

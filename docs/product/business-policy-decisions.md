@@ -121,6 +121,14 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 재고·슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
+- **Expired Benefit Restoration Amendment (2026-07-30):** 매장 거절 시 원 쿠폰 또는
+  PointLot이 아직 유효하면 원 혜택으로 복원한다. 이미 만료됐으면 기본적으로 같은
+  가치와 원 발급 reference를 보존한 새 CouponIssuance 또는 PointLot을 거절 시각부터
+  30일 유효하게 발급한다. 플랫폼 운영자는 감사 가능한 정책 API로 새 발급 유효일수와
+  `COMPENSATE_WITH_NEW_ISSUANCE` 또는 `PRESERVE_ORIGINAL_EXPIRY` mode를 변경할 수
+  있다. 변경은 다음 거절부터 적용하고 거절 event에 policy version과 값을 snapshot한다.
+  `PRESERVE_ORIGINAL_EXPIRY`에서는 복원 disposition을 원장에 남기되 이미 만료된
+  금액을 사용 가능하게 되살리지 않는다.
 - **Rationale:** 결제 후 무기한 대기하는 고객 경험을 방지하고 예외 흐름을 명확하게 만든다.
 - **Affected Contexts:** Ordering, Fulfillment, Payment, Inventory, Promotion, Loyalty, Notification, Operations
 - **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation, CouponIssuance, PointAccount, NotificationDelivery
@@ -130,6 +138,8 @@
   - 자동 거절 작업 재실행 멱등성
   - 수락과 timeout 작업의 동시 실행
   - 자동 환불 실패 시 reconciliation
+  - 거절 시 원 혜택 만료 전·경계·이후 복원
+  - 정책 변경 직전·직후 거절과 event snapshot
 - **ADR Required:** Yes — 매장 수락 timeout과 보상 흐름
 - **Revisit Conditions:** 실제 매장 수락시간 분포와 자동 거절률을 측정한 뒤 조정
 

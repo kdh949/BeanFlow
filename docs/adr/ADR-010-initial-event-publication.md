@@ -11,6 +11,15 @@
 
 모듈 내부는 Spring application event 또는 Spring Modulith event로 시작한다. 재시작 복구가 필요한 이벤트는 영속 publication/outbox를 사용한다. Kafka는 독립 소비자·replay·서비스 분리 요구가 생기면 재검토한다.
 
+2026-07-30 store-order lifecycle amendment:
+
+- 첫 event-driven Feature는 Spring Modulith 2.1 JPA Event Publication Registry와
+  `@ApplicationModuleListener`를 사용한다.
+- Flyway가 PostgreSQL publication schema를 생성하고 Hibernate는 `validate`만 수행한다.
+- 실패 publication은 10초, 30초, 2분, 5분, 15분의 bounded schedule로 최대 다섯 번
+  resubmit한 뒤 Operations `MANUAL_REVIEW` case로 전환한다.
+- Kafka와 별도 broker는 추가하지 않는다.
+
 ## Alternatives Considered
 
 - 동기 호출만 사용

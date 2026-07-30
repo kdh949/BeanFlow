@@ -28,3 +28,5 @@
 | [ADR-024](ADR-024-coupon-calculation-model.md) | Accepted | 대상 품목 합계 기반 쿠폰 계산 모델 |
 | [ADR-025](ADR-025-order-creation-idempotency-transaction.md) | Accepted | 주문 생성 멱등 레코드의 선행 등록과 최초 응답 재생 |
 | [ADR-026](ADR-026-menu-configuration-sellable-unit-mapping.md) | Accepted | MenuConfiguration의 sellable unit 요구량 번역 |
+| [ADR-027](ADR-027-store-membership-authorization.md) | Accepted | 매장 membership 기반 객체 수준 인가 |
+| [ADR-028](ADR-028-expired-benefit-restoration-policy.md) | Accepted | 버전형 만료 혜택 복원 정책 |

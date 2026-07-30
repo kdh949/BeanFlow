@@ -16,11 +16,11 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 | BR-03 | Order와 네 자원 Reservation | 주문 생성, PointLot 예약 시점 보장, `UNKNOWN`이어도 5분 만료; late approval은 void/refund | 한 로컬 tx, active source unique, guarded expiry/approval | ADR-005, ADR-011, ADR-013 | Ready |
 | BR-04 | MenuConfiguration, SellableStock, StockReservation | menu/options → sellable requirements, reserve → confirm/release | normalized option set, conditional update/lock, source unique | ADR-005, ADR-026 | Ready |
 | BR-05 | PickupSlot, PickupReservation | reserve → confirm/release | capacity guard, active order unique | ADR-005 | Ready |
-| BR-06 | Order, Refund, 네 자원 Reservation, NotificationDelivery | 수락 경고·timeout·거절 보상 | guarded Order transition, idempotent compensation | ADR-015 | Ready except BR-03 gate |
+| BR-06 | Order, Refund, 네 자원 Reservation, NotificationDelivery, BenefitRestorationPolicy | 수락 경고·timeout·거절 보상·만료 혜택 disposition | guarded Order transition, policy snapshot, idempotent compensation | ADR-015, ADR-028 | Ready except BR-03 gate |
 | BR-07 | Order | `PAID → REJECTED`, `ACCEPTED` 이후 단순 거절 금지 | optimistic version/guarded transition | Policy, ADR-015 | Ready |
 | BR-08 | Campaign, OrderLine benefit allocation | 대상 품목 coupon 계산 후 point 적용 | integer KRW/bps, immutable snapshot | ADR-004, ADR-014, ADR-024 | Ready |
-| BR-09 | Campaign, CouponIssuance | order당 coupon 하나, available/reserved/used/restored | active issuance unique | ADR-024 | Ready |
-| BR-10 | PointAccount, PointLot/Reservation/Transaction | 예약·사용과 OrderCompleted 적립 | source order/allocation unique | ADR-011 | Ready |
+| BR-09 | Campaign, CouponIssuance | order당 coupon 하나, available/reserved/used/restored, 만료 보상 발급 | active issuance와 restoration source unique | ADR-024, ADR-028 | Ready |
+| BR-10 | PointAccount, PointLot/Reservation/Transaction | 예약·사용·거절 복원과 OrderCompleted 적립 | source order/allocation/restoration unique | ADR-011, ADR-028 | Ready |
 | BR-11 | Payment(type=BENEFIT_ONLY), Order와 네 자원 Reservation | 주문 생성 tx 안의 PG 없는 승인·예약 확정 | order/payment source unique, create tx 원자성 | ADR-016 | Ready |
 | BR-12 | OrderLine, Refund, PointTransaction | 품목별 부분 환불 | snapshot allocation, refund source unique | ADR-014 | Ready |
 | BR-13 | PointAccount, PointLot/Transaction, PointRecoveryPending | 환불 회수와 이후 적립 상계 | refund reference unique, non-negative account | ADR-011, ADR-014 | Ready |

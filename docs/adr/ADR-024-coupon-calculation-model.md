@@ -37,6 +37,18 @@ Order의 할인 snapshot을 재현할 수 없다.
 - 계산된 coupon 총액은 ADR-014의 순차 배분 clarification에 따라 eligible
   OrderLine에만 배분한다. 이후 point 배분 기준은 각 line의 coupon 적용 후 잔액이다.
 
+### 매장 거절 복원 보완 (2026-07-30)
+
+- 결제 후 매장 거절은 CouponReservation을 `USED -> RESTORED`로 전이한다.
+- 원 CouponIssuance가 거절 시각에 유효하면 같은 issuance를 다시 사용할 수 있게
+  복원한다. 활성 예약만 제한하는 partial unique constraint로 동시 사용을 방지한다.
+- 원 issuance가 만료됐고 거절 시점 정책이
+  `COMPENSATE_WITH_NEW_ISSUANCE`이면 같은 Campaign과 할인 가치를 가진 새 issuance를
+  발급한다. 새 issuance는 원 issuance와 거절 event reference를 보존한다.
+- `PRESERVE_ORIGINAL_EXPIRY`이면 만료된 issuance를 사용 가능 상태로 되살리거나 새로
+  발급하지 않고 `RESTORE_SKIPPED_EXPIRED` disposition을 기록한다.
+- 동일 거절 event가 중복 전달돼도 restoration source reference당 한 번만 적용한다.
+
 ## Alternatives Considered
 
 ### 대상 품목 합계로 최소금액과 할인 계산
@@ -68,6 +80,8 @@ snapshot이 일치하고, 비대상 품목으로 최소금액만 채우는 예�
 - Campaign schema는 type별 필드 조합, rate 범위, 대상 목록과 비용 분담률을
   CHECK 또는 Aggregate invariant로 검증해야 한다.
 - 자동 기간 할인은 별도 정책이 정해질 때까지 주문 생성 계산에 포함하지 않는다.
+- 만료 혜택 보상 발급은 Campaign의 마케팅 발급과 구분되는 시스템 보상 issuance이며,
+  거절 event에 snapshot된 정책을 사용한다.
 
 ## Verification
 
@@ -77,6 +91,8 @@ snapshot이 일치하고, 비대상 품목으로 최소금액만 채우는 예�
 - 대상·비대상 line 혼합 주문의 minimum과 할인 기준
 - minimum 미충족과 할인 0원 시 `COUPON_NOT_AVAILABLE`
 - Campaign 변경 후 과거 Order snapshot 재현
+- 사용 쿠폰 복원 후 재예약과 중복 거절 event의 단일 적용
+- 만료 전·정확한 만료 시각·만료 후 두 정책 mode의 복원 disposition
 
 ## Metrics
 
@@ -92,3 +108,5 @@ Campaign이 도입될 때
 - BR-02, BR-08, BR-09, BR-12, BR-19
 - [ADR-004](ADR-004-order-price-snapshot.md)
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
+- [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
+- [ADR-028](ADR-028-expired-benefit-restoration-policy.md)
