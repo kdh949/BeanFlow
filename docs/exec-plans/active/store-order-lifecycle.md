@@ -198,7 +198,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - [x] 계획과 제품 정책 선택 확정
 - [x] 문서·계약 반영
 - [x] Identity와 Order lifecycle
-- [ ] persistent publication과 compensation case
+- [x] persistent publication과 compensation case
 - [ ] owner별 자원 복원
 - [ ] Refund와 Notification
 - [ ] end-to-end 검증
@@ -229,3 +229,6 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - 2026-07-30: 최초 작성.
 - 2026-07-30: 문서 계약과 Identity/Order Aggregate 기반 구현 완료. Docker 미탐지로
   V7 PostgreSQL migration 실행 검증은 최종 Docker 검증 항목으로 유지.
+- 2026-07-30: Store API, 2분 경고·3분 timeout, 정책 snapshot, compensation case와
+  JPA publication bounded recovery 구현. V8 migration과 실제 listener 재시작 복구는
+  owner consumer 통합 뒤 Docker 환경에서 검증 예정.
