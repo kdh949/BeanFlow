@@ -200,7 +200,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - [x] Identity와 Order lifecycle
 - [x] persistent publication과 compensation case
 - [x] owner별 자원 복원
-- [ ] Refund와 Notification
+- [ ] Refund와 Notification (Refund 완료, Notification 미완료)
 - [ ] end-to-end 검증
 
 ## Surprises & Discoveries
@@ -213,6 +213,9 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - owner listener가 Ordering event 계약을 직접 참조하자 기존 동기 의존의 역방향이 되어
   Modulith cycle 검증이 실패했다. 계약 타입을 write data가 없는 `Eventing :: api`
   모듈로 분리한 뒤 검증이 통과했다.
+- 일반 Refund는 첫 claim에서 `provider_request_started_at`을 함께 커밋해야 worker가
+  Provider 호출 뒤 결과 저장 전에 종료되어도 새 환불 요청 대신 조회만 수행할 수 있다.
+  attempt count도 claim 시점에 증가시켜 반복 crash가 최대 시도 횟수를 우회하지 않게 했다.
 
 ## Decision Log
 
@@ -242,15 +245,15 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 
 ## Resume Point
 
-다음 작업은 이 브랜치에서 `Refund` Aggregate와 rejection consumer부터 시작한다.
+다음 작업은 이 브랜치에서 `NotificationDelivery`부터 시작한다.
 
-1. `V10__create_rejection_refund.sql`과 Payment의 Refund command/work API를 추가한다.
-2. listener는 Refund `REQUESTED`만 영속화하고 PAYMENT step을 유지한다.
-3. worker는 claim Tx1, Provider 호출(트랜잭션 밖), 결과 Tx2로 처리한다.
-4. `UNKNOWN`은 lookup만 수행하고 다섯 번 후 `MANUAL_REVIEW`로 보낸다.
-5. 그 다음 `V11` NotificationDelivery와 warning/rejected/ready listener를 구현한다.
-6. Docker를 시작한 뒤 네 resource repository test와 전체 `./gradlew test`를 먼저
-   실행해 V7~V9 migration 및 Event Publication Registry를 검증한다.
+1. 완료된 Refund는 `V10`, 별도 Aggregate, rejection listener와 worker로 구성되어 있다.
+2. 첫 Provider 환불 요청 뒤에는 ACK가 불명하거나 claim lease가 만료되어도 조회만 하며,
+   다섯 번째 불명 결과에서 `MANUAL_REVIEW`로 전환한다.
+3. `V11` NotificationDelivery와 warning/rejected/ready listener를 구현한다.
+4. local 전용 scripted adapter와 운영 profile fake 선택 거부 검증을 추가한다.
+5. Docker를 시작한 뒤 resource 및 Refund repository test와 전체 `./gradlew test`를 먼저
+   실행해 V7~V10 migration 및 Event Publication Registry를 검증한다.
 
 재개 전 `git status --short`에서 사용자 `README.md` 변경만 남아 있어야 하며, 해당
 파일은 이 Feature commit에 포함하지 않는다.
