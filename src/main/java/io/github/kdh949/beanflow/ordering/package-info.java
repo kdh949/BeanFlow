@@ -8,7 +8,8 @@
         "promotion :: api",
         "loyalty :: api",
         "payment :: api",
-        "operations :: api"
+        "operations :: api",
+        "identity :: api"
     }
 )
 package io.github.kdh949.beanflow.ordering;

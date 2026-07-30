@@ -36,6 +36,16 @@
 이 clarification은 2026-07-28 주문 생성과 예약 lease Feature의 결정 게이트에서
 확정했다.
 
+2026-07-30 store rejection amendment:
+
+- 사용 확정된 PointReservation은 매장 거절 시 `USED -> RESTORED`로 전환한다.
+- 원 PointLot이 유효하면 원 Lot의 available balance와 `RESTORE` 원장을 복원한다.
+- 이미 만료됐고 활성 정책이 `COMPENSATE_WITH_NEW_ISSUANCE`면 allocation별 원 Lot
+  reference를 보존한 새 PointLot과 `COMPENSATION` 원장을 생성한다.
+- `PRESERVE_ORIGINAL_EXPIRY`면 가용 balance를 늘리지 않고
+  `RESTORE_SKIPPED_EXPIRED` 원장을 기록한다.
+- event source와 allocation reference의 Unique Constraint가 이중 복원을 막는다.
+
 ## Alternatives Considered
 
 - balance만 저장

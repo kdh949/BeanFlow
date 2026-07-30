@@ -18,6 +18,7 @@ tags:
   - name: Ordering
   - name: Payment
   - name: Store Orders
+  - name: Operations
   - name: Loyalty
   - name: Settlement
 paths:
@@ -280,6 +281,28 @@ paths:
           $ref: "#/components/responses/UnprocessableEntity"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /store-orders/{orderId}:
+    get:
+      tags: [Store Orders]
+      operationId: getStoreOrder
+      summary: Get an order and its rejection compensation status
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Store order visible to an authorized active member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreOrderResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /store-orders/{orderId}/status:
     patch:
       tags: [Store Orders]
@@ -299,11 +322,19 @@ paths:
               $ref: "#/components/schemas/StoreOrderTransitionRequest"
       responses:
         "200":
-          description: Updated Order state
+          description: Synchronous ACCEPTED, PREPARING, READY, or COMPLETED transition
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Order"
+                $ref: "#/components/schemas/StoreOrderTransitionResult"
+        "202":
+          description: |
+            REJECTED is committed and compensation is still tracked separately.
+            This response does not mean refund or resource restoration succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreOrderTransitionResult"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -314,6 +345,55 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/expired-benefit-restoration:
+    get:
+      tags: [Operations]
+      operationId: getExpiredBenefitRestorationPolicy
+      summary: Get the policy used by the next order rejection
+      responses:
+        "200":
+          description: Current append-only policy head
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    patch:
+      tags: [Operations]
+      operationId: updateExpiredBenefitRestorationPolicy
+      summary: Create a new policy version for future rejections
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExpiredBenefitRestorationPolicyRequest"
+      responses:
+        "200":
+          description: New policy head or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
     get:
       tags: [Loyalty]
@@ -827,6 +907,28 @@ components:
           $ref: "#/components/schemas/Currency"
         paymentRecovery:
           $ref: "#/components/schemas/PaymentRecoverySummary"
+        paidAt:
+          $ref: "#/components/schemas/DateTime"
+        acceptanceWarningAt:
+          $ref: "#/components/schemas/DateTime"
+        acceptanceWarningRequestedAt:
+          $ref: "#/components/schemas/DateTime"
+        acceptanceDeadlineAt:
+          $ref: "#/components/schemas/DateTime"
+        acceptedAt:
+          $ref: "#/components/schemas/DateTime"
+        rejectedAt:
+          $ref: "#/components/schemas/DateTime"
+        preparingAt:
+          $ref: "#/components/schemas/DateTime"
+        readyAt:
+          $ref: "#/components/schemas/DateTime"
+        completedAt:
+          $ref: "#/components/schemas/DateTime"
+        rejectionReason:
+          type: string
+          minLength: 1
+          maxLength: 500
         createdAt:
           $ref: "#/components/schemas/DateTime"
         updatedAt:
@@ -883,6 +985,108 @@ components:
       type: object
       additionalProperties: false
       properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Required only when targetState is REJECTED
+    StoreOrderResult:
+      type: object
+      additionalProperties: false
+      required: [order]
+      properties:
+        order:
+          $ref: "#/components/schemas/Order"
+        rejectionRecovery:
+          $ref: "#/components/schemas/RejectionRecoverySummary"
+    StoreOrderTransitionResult:
+      allOf:
+        - $ref: "#/components/schemas/StoreOrderResult"
+        - type: object
+          required: [replayed]
+          properties:
+            replayed:
+              type: boolean
+    RejectionRecoverySummary:
+      type: object
+      additionalProperties: false
+      required: [caseId, policyVersion, state, steps, updatedAt]
+      properties:
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        policyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          type: string
+          enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, MANUAL_REVIEW]
+        steps:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/RejectionRecoveryStep"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+    RejectionRecoveryStep:
+      type: object
+      additionalProperties: false
+      required: [type, state, attemptCount]
+      properties:
+        type:
+          type: string
+          enum: [PAYMENT, PICKUP, STOCK, COUPON, POINTS, CUSTOMER_NOTIFICATION]
+        state:
+          type: string
+          enum:
+            [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, NOT_REQUIRED, MANUAL_REVIEW]
+        attemptCount:
+          type: integer
+          minimum: 0
+        lastErrorCode:
+          type: string
+    ExpiredBenefitRestorationPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        [policyVersion, mode, compensationValidityDays, effectiveAt, updatedBy, reason]
+      properties:
+        policyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        mode:
+          type: string
+          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
+        compensationValidityDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        effectiveAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedBy:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    UpdateExpiredBenefitRestorationPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedPolicyVersion, mode, compensationValidityDays, reason]
+      properties:
+        expectedPolicyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        mode:
+          type: string
+          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
+        compensationValidityDays:
+          type: integer
+          minimum: 1
+          maximum: 365
         reason:
           type: string
           minLength: 1

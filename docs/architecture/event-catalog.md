@@ -24,11 +24,11 @@
 | PaymentApprovalUnknown | Payment | Operations | reconciliation case unique | Payment |
 | PaymentApprovalReconciled | Payment | Ordering, Operations, Analytics | provider transaction unique | Payment |
 | OrderPaid | Ordering | Fulfillment, Inventory, Promotion, Loyalty | order version per consumer | Order |
-| OrderRejected | Ordering | Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification | order version | Order |
-| StoreAcceptanceWarningRequested | Ordering | Notification | order/deadline unique | Order |
-| OrderAccepted | Ordering | Analytics | order version | Order |
-| OrderReady | Ordering | Notification | event+recipient+channel unique | Order |
-| OrderCompleted | Ordering | Loyalty, Settlement, Analytics | source order unique per consumer | Order |
+| OrderRejectedV1 | Ordering | Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification, Operations | event ID + owner source reference | Order |
+| StoreAcceptanceWarningRequestedV1 | Ordering | Notification | order/deadline unique | Order |
+| OrderAcceptedV1 | Ordering | Analytics | order version | Order |
+| OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
+| OrderCompletedV1 | Ordering | Loyalty, Settlement, Analytics | source order unique per consumer | Order |
 | PaymentRefundUnknown | Payment | Operations | refund/provider request unique | Refund |
 | PaymentRefunded | Payment | Ordering, Loyalty, Settlement, Analytics | refund ID unique | Refund |
 | PointsAccrued | Loyalty | Analytics | source order unique | PointTransaction |
@@ -49,8 +49,11 @@
   event는 원본 트랜잭션과 함께 영속 publication을 기록한다.
 - 단순한 동일 요청 내부 orchestration은 동기 Application API를 사용할 수 있지만,
   이미 확정된 사실의 후속 처리를 in-memory event만으로 완료했다고 간주하지 않는다.
-- 영속 전달과 재시작 복구는 Outbox 또는 Spring Modulith Event Publication Registry를
-  사용하며 구체 선택은 첫 event-driven Feature ExecPlan에서 검증한다.
+- 영속 전달과 재시작 복구는 Spring Modulith JPA Event Publication Registry를
+  사용한다. listener별 publication은 원 fact transaction에 함께 저장되고
+  `@ApplicationModuleListener` consumer가 성공한 뒤 완료 처리한다.
+- 미완료 publication은 10초, 30초, 2분, 5분, 15분 간격으로 최대 다섯 번
+  재발행한다. 이후 Operations case를 `MANUAL_REVIEW`로 남긴다.
 - Kafka는 독립 소비자, replay, 분리 배포 요구가 확인되기 전에는 필수가 아니다.
 - 메시지 broker의 exactly-once 표현에 의존하지 않고 소비자 부작용을 멱등하게 만든다.
 - Settlement는 `PaymentApproved`만으로 SettlementItem을 만들지 않는다. Item 생성

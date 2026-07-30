@@ -19,6 +19,15 @@ BR-06, BR-07과 BR-14는 결제 승인 후 2분 경고, 3분 수락 제한과 �
   남긴다. Order `REJECTED`를 보상 완료로 해석하지 않는다.
 - `ACCEPTED` 이후 단순 거절은 허용하지 않는다.
 
+2026-07-30 implementation amendment:
+
+- 수동 거절 HTTP 응답은 Order `REJECTED`와 보상 case 생성이 commit되면 `202`다.
+  환불·복원 완료를 뜻하지 않는다.
+- owner별 보상 진행은 Operations의 RejectionCompensationCase/Step으로 조회한다.
+- 만료 혜택 복원 정책은 거절 transaction에서 조회하고 event에 immutable snapshot한다.
+- 외부 Refund와 Notification은 durable work 생성까지만 event listener에서 수행하며
+  Provider 호출은 claim transaction 밖의 worker가 실행한다.
+
 ## Alternatives Considered
 
 - 모든 보상을 한 장기 트랜잭션에서 처리

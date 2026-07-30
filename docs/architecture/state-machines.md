@@ -110,6 +110,7 @@ PointReservation은 다음 상태를 사용한다.
 ```text
 RESERVED -> USED
 RESERVED -> RELEASED
+USED -> RESTORED
 ```
 
 - `RESERVED` allocation은 예약 시점에 유효했다면 주문 lease 동안 원 Lot 만료와
@@ -117,6 +118,9 @@ RESERVED -> RELEASED
 - `RELEASED` 시 아직 유효한 allocation은 available로 복원하고 이미 만료된
   allocation은 EXPIRATION 원장으로 확정한다.
 - 한 Reservation의 allocation마다 restore/expiration disposition을 한 번만 기록한다.
+- 거절 복원 시 유효한 원 allocation은 가용 잔액으로 돌아간다. 만료 allocation은
+  거절 event의 정책 snapshot에 따라 새 PointLot으로 보상하거나
+  `RESTORE_SKIPPED_EXPIRED` 원장만 기록한다.
 
 ## Notification Delivery
 
