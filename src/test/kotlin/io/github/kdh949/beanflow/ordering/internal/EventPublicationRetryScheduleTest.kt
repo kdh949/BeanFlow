@@ -11,10 +11,11 @@ class EventPublicationRetryScheduleTest {
     fun `retry becomes due at each exact schedule boundary`() {
         val delays = listOf(10L, 30L, 120L, 300L, 900L)
 
-        delays.forEachIndexed { attempt, seconds ->
+        delays.forEachIndexed { attemptIndex, seconds ->
+            val completionAttempts = attemptIndex + 1
             assertThat(
                 EventPublicationRetrySchedule.isDue(
-                    attempt,
+                    completionAttempts,
                     publishedAt,
                     null,
                     publishedAt.plusSeconds(seconds - 1),
@@ -22,7 +23,7 @@ class EventPublicationRetryScheduleTest {
             ).isFalse()
             assertThat(
                 EventPublicationRetrySchedule.isDue(
-                    attempt,
+                    completionAttempts,
                     publishedAt,
                     null,
                     publishedAt.plusSeconds(seconds),
@@ -32,9 +33,29 @@ class EventPublicationRetryScheduleTest {
     }
 
     @Test
-    fun `sixth completion attempt is exhausted`() {
-        assertThat(EventPublicationRetrySchedule.exhausted(4)).isFalse()
-        assertThat(EventPublicationRetrySchedule.exhausted(5)).isTrue()
+    fun `publication is exhausted after five resubmission failures`() {
+        assertThat(EventPublicationRetrySchedule.exhausted(5)).isFalse()
+        assertThat(EventPublicationRetrySchedule.exhausted(6)).isTrue()
+    }
+
+    @Test
+    fun `publication left incomplete before initial listener invocation uses first delay`() {
+        assertThat(
+            EventPublicationRetrySchedule.isDue(
+                0,
+                publishedAt,
+                null,
+                publishedAt.plusSeconds(9),
+            ),
+        ).isFalse()
+        assertThat(
+            EventPublicationRetrySchedule.isDue(
+                0,
+                publishedAt,
+                null,
+                publishedAt.plusSeconds(10),
+            ),
+        ).isTrue()
     }
 
     @Test
@@ -43,7 +64,7 @@ class EventPublicationRetryScheduleTest {
 
         assertThat(
             EventPublicationRetrySchedule.isDue(
-                1,
+                2,
                 publishedAt,
                 lastAttempt,
                 lastAttempt.plusSeconds(29),
@@ -51,7 +72,7 @@ class EventPublicationRetryScheduleTest {
         ).isFalse()
         assertThat(
             EventPublicationRetrySchedule.isDue(
-                1,
+                2,
                 publishedAt,
                 lastAttempt,
                 lastAttempt.plusSeconds(30),
