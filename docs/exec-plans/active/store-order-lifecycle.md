@@ -196,8 +196,8 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 ## Progress
 
 - [x] 계획과 제품 정책 선택 확정
-- [ ] 문서·계약 반영
-- [ ] Identity와 Order lifecycle
+- [x] 문서·계약 반영
+- [x] Identity와 Order lifecycle
 - [ ] persistent publication과 compensation case
 - [ ] owner별 자원 복원
 - [ ] Refund와 Notification
@@ -208,6 +208,8 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - 기존 `README.md`에 사용자 작업이 있어 이 Feature의 commit에서 제외한다.
 - 전체 Testcontainers 테스트는 현재 Docker daemon 미탐지로 기준선을 재현하지 못했다.
   Docker가 필요 없는 순수 단위·구조 테스트는 통과했다.
+- Kotlin formatter가 이번에 수정한 기존 파일 전체를 현재 ktlint 규칙으로 정규화한다.
+  기능 diff 검토 시 whitespace 제외 diff도 함께 확인한다.
 
 ## Decision Log
 
@@ -225,3 +227,5 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 ## Revision Notes
 
 - 2026-07-30: 최초 작성.
+- 2026-07-30: 문서 계약과 Identity/Order Aggregate 기반 구현 완료. Docker 미탐지로
+  V7 PostgreSQL migration 실행 검증은 최종 Docker 검증 항목으로 유지.

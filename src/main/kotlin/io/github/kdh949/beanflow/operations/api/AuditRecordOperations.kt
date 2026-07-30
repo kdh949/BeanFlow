@@ -4,24 +4,27 @@ import java.time.Instant
 import java.util.UUID
 
 enum class AuditActorType {
-	CUSTOMER,
-	SYSTEM,
+    CUSTOMER,
+    STORE_OWNER,
+    STORE_STAFF,
+    PLATFORM_OPERATOR,
+    SYSTEM,
 }
 
 data class AppendAuditRecordCommand(
-	val actorId: String,
-	val actorType: AuditActorType,
-	val action: String,
-	val targetType: String,
-	val targetId: UUID,
-	val occurredAt: Instant,
-	val reason: String,
-	val beforeSummary: Map<String, String> = emptyMap(),
-	val afterSummary: Map<String, String> = emptyMap(),
-	val correlationId: String,
-	val sourceReference: String,
+    val actorId: String,
+    val actorType: AuditActorType,
+    val action: String,
+    val targetType: String,
+    val targetId: UUID,
+    val occurredAt: Instant,
+    val reason: String,
+    val beforeSummary: Map<String, String> = emptyMap(),
+    val afterSummary: Map<String, String> = emptyMap(),
+    val correlationId: String,
+    val sourceReference: String,
 )
 
 interface AuditRecordOperations {
-	fun appendAll(commands: List<AppendAuditRecordCommand>): List<UUID>
+    fun appendAll(commands: List<AppendAuditRecordCommand>): List<UUID>
 }
