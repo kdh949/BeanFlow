@@ -83,6 +83,25 @@ internal class RefundStateTest {
         assertThat(refund.nextAttemptAt).isNull()
     }
 
+    @Test
+    fun `expired final claim becomes manual review instead of remaining processing`() {
+        val refund = refund()
+        var now = NOW
+        repeat(MAX_ATTEMPTS - 1) {
+            refund.claim(UUID.randomUUID(), now, LEASE, MAX_ATTEMPTS)
+            refund.recordUnknown("ack_lost", now, RETRY_DELAYS, MAX_ATTEMPTS)
+            now = requireNotNull(refund.nextAttemptAt)
+        }
+        refund.claim(UUID.randomUUID(), now, LEASE, MAX_ATTEMPTS)
+
+        refund.markManualReviewAfterExpiredClaim(now.plus(LEASE), MAX_ATTEMPTS)
+
+        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
+        assertThat(refund.lastFailureCode).isEqualTo("CLAIM_LEASE_EXPIRED")
+        assertThat(refund.claimToken).isNull()
+        assertThat(refund.claimUntil).isNull()
+    }
+
     private fun refund(): Refund =
         Refund.request(
             id = UUID.randomUUID(),

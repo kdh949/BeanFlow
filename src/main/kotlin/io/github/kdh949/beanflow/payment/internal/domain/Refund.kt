@@ -139,6 +139,22 @@ internal class Refund private constructor(
         }
     }
 
+    fun markManualReviewAfterExpiredClaim(
+        now: Instant,
+        maxAttempts: Int,
+    ) {
+        check(state == RefundState.PROCESSING || state == RefundState.RECONCILING) {
+            "Only a processing refund can exhaust its claim"
+        }
+        check(attemptCount >= maxAttempts) { "Refund attempts are not exhausted" }
+        check(claimUntil?.let { !now.isBefore(it) } == true) { "Refund claim lease has not expired" }
+        state = RefundState.MANUAL_REVIEW
+        nextAttemptAt = null
+        lastFailureCode = "CLAIM_LEASE_EXPIRED"
+        clearClaim()
+        updatedAt = now
+    }
+
     private fun requireOwnedClaim() {
         check(
             (state == RefundState.PROCESSING || state == RefundState.RECONCILING) &&

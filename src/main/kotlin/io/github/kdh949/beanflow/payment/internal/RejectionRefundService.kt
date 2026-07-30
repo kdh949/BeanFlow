@@ -109,6 +109,16 @@ internal class RejectionRefundService(
                 try {
                     refund.claim(token, now, claimLease, MAX_ATTEMPTS)
                 } catch (_: IllegalStateException) {
+                    if (entity.attemptCount >= MAX_ATTEMPTS) {
+                        refund.markManualReviewAfterExpiredClaim(now, MAX_ATTEMPTS)
+                        entity.apply(refund)
+                        recordStep(
+                            entity.orderId,
+                            RejectionCompensationStepState.MANUAL_REVIEW,
+                            "CLAIM_LEASE_EXPIRED",
+                            now,
+                        )
+                    }
                     return@mapNotNull null
                 }
             entity.apply(refund)
