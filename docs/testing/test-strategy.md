@@ -33,6 +33,38 @@
 - 정산 batch 중단 후 재실행 → 중복 Item 0
 - DB 장애 → 빈 목록 또는 local repository fallback 없음
 
+## Customer cancellation release suite
+
+고객 취소 구현은 다음 묶음을 release-blocking suite로 실행한다.
+
+- Domain: 허용/비허용 Order 상태, 정확한 두 deadline 경계, cancellation field CHECK,
+  reason code/detail 정규화
+- Transaction: Tx C0/C1의 Order·멱등 응답·Case·snapshot·Refund·Delivery·target별
+  Audit·event publication 전부 commit 또는 전부 rollback
+- Concurrency: 고객 취소 대 수락·timeout·부분 Refund, 같은/different
+  Idempotency-Key와 Order→Payment lock 순서
+- Refund: 선행 line allocation, request 3회·lookup 5회 독립 상한, Unknown 뒤
+  REQUEST 0회, missing Refund 복구 뒤 LOOKUP 우선
+- Owner compensation: Pickup·Stock·Coupon·Points의 source/trigger/policy 일치,
+  duplicate와 conflict, 한 publication 소진 시 한 step만 manual review
+- Benefit policy: trigger×benefit 네 head, 두 immutable Case FK/event snapshot,
+  expired coupon terms·cost snapshot과 future settlement tie-out
+- Notification: 두 상태의 접수 Delivery commit gate, 환불 성공·지연 terminal event,
+  기본 step 단조성, 보상 전체 완료 알림 부재
+- Settlement: 미완료 고객 취소 Refund의 Item/Adjustment 0건, source당 exclusion
+  Audit 한 건과 운영 파생 조회
+- Operations: setup immediate detector+batch 100 scanner, unique case/Audit, 제한 복구
+  guard와 서로 다른 operator 2인 승인·30분 만료
+- Retention: cancellation/store idempotency table별 90일 chunk와 timeout work
+  nonterminal 보존
+- API/Privacy: 200/202/409/503, customer setup 지연 projection과 조건부 금액,
+  `replayed` 부재, event/log/Audit의 detail·customer/store/reason/provider key 금지
+- Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
+  하나라도 있으면 clean cutover 차단
+
+성능 수치는 구현 후 같은 PostgreSQL fixture, 동일 batch와 동시성 조건에서 기준선과
+함께 측정한다. 측정 없이 scanner, lock 또는 payload 성능 개선을 주장하지 않는다.
+
 ## Query tests
 
 N+1은 FetchType 이름만으로 판단하지 않는다.

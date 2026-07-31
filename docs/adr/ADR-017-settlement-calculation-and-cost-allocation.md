@@ -17,6 +17,12 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   가져온다.
 - `CONFIRMED` Batch와 Item은 수정하지 않는다. 이후 환불·이의 판정은
   SettlementAdjustment로 기록하고 음수 잔액은 다음 Batch로 이월한다.
+- ADR-048에 따라 `COMPLETED`된 적 없는 매장 수락 전 고객 취소와 그 성공 Refund는
+  SettlementItem·SettlementAdjustment를 만들지 않는다. Settlement consumer는
+  source당 append-only AuditRecord를 남기고 `NOT_APPLICABLE`로 완료한다.
+- ADR-049에 따라 만료 원 쿠폰 대신 발급한 보상 쿠폰은 원 Campaign의 비용 부담
+  snapshot을 승계하고, 보상 발급 시점이 아니라 미래 완료 주문에서 실제 사용될 때
+  그 SettlementItem에 비용을 반영한다.
 
 ## Alternatives Considered
 

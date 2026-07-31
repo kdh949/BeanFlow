@@ -95,6 +95,97 @@ Tx E3: SUCCEEDED | UNKNOWN | RECONCILING | MANUAL_REVIEW 기록
 - 원 Order의 취소·거절 상태를 환불 성공으로 간주하지 않는다.
 - 성공한 환불 fact를 Loyalty와 Settlement가 각자의 원장에 멱등 반영한다.
 
+### Customer cancellation
+
+`PAID` acceptance deadline branch:
+
+```text
+Tx CT: Order lock + deadline/state revalidation
+     + deduplicated AcceptanceTimeoutWork
+     + ACCEPTANCE_TIMEOUT_WORK_REQUESTED AuditRecord
+commit
+HTTP 409 ORDER_STATE_CONFLICT
+After commit: wake existing timeout worker
+```
+
+- Tx CT는 고객 취소 field, cancellation IdempotencyRecord, Refund, compensation
+  Case와 customer-cancellation event를 만들지 않는다.
+- work 또는 Audit 저장 실패는 rollback과 `503 DEPENDENCY_UNAVAILABLE`이며, periodic
+  timeout scan이 나중에 처리할 수 있다는 이유로 409를 반환하지 않는다.
+
+`PENDING_PAYMENT`:
+
+```text
+Tx C0: Order lock + ownership/deadline/idempotency 검증
+     + Order CANCELLED + 네 예약 해제 + target별 AuditRecords
+     + ORDER_CANCELLATION_ACCEPTED NotificationDelivery PENDING
+     + 최초 200 response와 cancellation command idempotency 저장
+commit
+Notification worker: claim transaction -> external Provider -> result transaction
+```
+
+- 취소 event, OrderCompensationCase, Refund와 event publication을 만들지 않는다.
+- NotificationDelivery 저장 실패는 Tx C0 전체를 rollback한다. `200`은 Provider
+  발송 성공이 아니라 delivery work의 내구 저장 완료를 뜻한다.
+
+미수락 `PAID`:
+
+```text
+Tx C1: Order lock + ownership/deadline/idempotency 검증
+     + Order CANCELLED와 cancellation fields
+     + OrderCompensationCase와 여섯 steps
+     + Payment cancellation recovery snapshot
+     + 남은 refundable cash가 양수이면 그 금액의 Refund REQUESTED
+     + ORDER_CANCELLATION_ACCEPTED NotificationDelivery PENDING
+     + 변경·생성 target별 AuditRecords
+     + OrderCancelledV1과 Pickup, Stock, Coupon, Points persistent publications
+     + 최초 202 response와 cancellation command idempotency 저장
+commit
+After commit: Pickup, Stock, Coupon, Points owner listeners
+Refund worker: claim transaction -> external Provider -> result transaction
+Notification worker: claim transaction -> external Provider -> result transaction
+```
+
+- Tx C1 항목 중 하나라도 저장되지 않으면 전체 rollback하고 `202`를 반환하지 않는다.
+- `202`는 외부 환불, 자원 복원 또는 알림 성공을 뜻하지 않는다.
+- 외부 Provider 호출과 픽업·재고·쿠폰·포인트 복원은 Tx C1에 포함하지 않는다.
+  NotificationDelivery 생성은 포함하되 Provider 호출은 포함하지 않는다.
+- Tx C1은 Payment와 성공 refund allocation을 잠가
+  `approvedAmountKrw - succeededRefundAmountKrw`를 계산한다. 선행 성공 부분 환불이
+  있어도 취소를 거부하지 않으며 새 Refund와 성공 누적액의 합이 승인액을 넘지 않게
+  DB 제약과 guarded write로 보호한다.
+- 선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`, `RECONCILING`,
+  `MANUAL_REVIEW`이면 Tx C1의 Order 전이 전에
+  `409 PAYMENT_REFUND_UNRESOLVED`로 rollback한다. `FAILED`는 합계에서 제외하고
+  `SUCCEEDED`만 snapshot에 포함한다.
+- refund 관련 전역 잠금 순서는 `Order → Payment → 정렬된 Refund allocation`이다.
+  Order가 필요 없는 Refund 작업은 Payment부터 시작하되 Payment 뒤에 Order를 잠그지
+  않는다.
+- Payment cancellation recovery snapshot은 승인액, 취소 전 성공 환불액, 이번 취소
+  요청액과 고객 취소 Refund ID를 보존한다. `remainingRefundableAmountKrw`는 저장하지
+  않고 조회 시점의 성공 Refund 합계에서 계산한다.
+- `BENEFIT_ONLY`는 snapshot 0/0/0과 null Refund ID, PAYMENT step
+  `NOT_REQUIRED`를 Tx C1에 저장한다. Refund와 Provider 호출은 만들지 않으며 다른
+  다섯 보상 step은 일반 `PAID` 취소와 같다. NotificationDelivery는 직접 저장하고
+  네 자원 publication만 생성한다.
+- 매장 거절과 고객 취소의 원 transaction은 해당 trigger의 COUPON, POINTS policy
+  head를 이 순서로 잠그고 두 immutable version을 선택한다. Case의 두 benefit
+  policy FK row와 event의 두 전체 snapshot을 같은 transaction에서 저장한다.
+  정책 변경과 경쟁하면 두 snapshot이 모두 변경 전 또는 모두 변경 후여야 하며
+  혼합 version은 허용하지 않는다.
+- Tx C1이 생성하는 고객 취소 Refund는 reason
+  `CUSTOMER_ORDER_CANCELLED`, 별도 `customer_reason_code`, source reference
+  `order:{orderId}:customer-cancellation:{aggregateVersion}:payment`와 Provider key
+  `refund:customer-cancellation:{orderId}:{aggregateVersion}`를 함께 저장한다.
+- Refund worker는 adapter allowlist의 명시적 무부수효과 실패에만 동일 key
+  `REQUEST`를 10초·30초 뒤 최대 두 번 재실행한다. 어느 REQUEST든 결과가 불명확하면
+  REQUEST를 중단하고 동일 key `LOOKUP`을 10초, 30초, 2분, 5분, 15분 뒤 최대 다섯
+  번 수행한다. request와 lookup count는 별도 transaction 상태로 보존한다.
+- owner listener 실패는 publication과 OrderCompensationStep에 남고 Order
+  `CANCELLED`를 되돌리지 않는다.
+- 같은 key·payload의 응답 재생은 저장된 최초 `202` body만 반환하며 Tx C1이나
+  event를 다시 실행하지 않는다.
+
 ## Order completion
 
 - Order를 `COMPLETED`로 전환하는 트랜잭션은 원본 사실을 확정한다.
@@ -131,12 +222,35 @@ Tx E3: SUCCEEDED | UNKNOWN | RECONCILING | MANUAL_REVIEW 기록
 
 ## Idempotent commands
 
+멱등 명령은 두 모델 중 하나를 사용한다. 선택 기준은 **명령 트랜잭션 안에 외부 호출이
+있거나 새 Aggregate를 만드는가**다.
+
+- **사전등록 모델:** 주문 생성과 결제 승인처럼 새 Aggregate를 만들거나 외부 Provider를
+  호출하는 명령. `PROCESSING` 레코드를 먼저 커밋해 arbitration하고 확정 실패까지
+  저장·재생하며 stuck 레코드를 reconciliation한다.
+- **명령 트랜잭션 모델:** 매장 주문 상태 전이와 고객 주문 취소처럼 기존 Aggregate를
+  잠그고 전이만 확정하는 명령. 단일 로컬 트랜잭션이 Aggregate row 잠금, 멱등 레코드
+  조회, 전이와 최초 응답 저장을 함께 커밋한다. `PROCESSING` 상태가 없고 롤백된 요청은
+  레코드를 남기지 않는다.
+
 - `actorId + operation + Idempotency-Key` Unique Constraint의 insert가 동시 요청의
   승자를 정한다.
+- 특정 Aggregate를 대상으로 하는 명령은 그 식별자를 canonical payload에 포함하고,
+  조회한 레코드의 대상 식별자 일치도 함께 검증한다. 고객 취소와 매장 주문 상태 전이가
+  모두 `orderId`를 포함한다.
+- canonical payload 구성을 바꾸면 저장된 구 레코드가 새 hash와 일치할 수 없으므로
+  `operation` 값을 함께 승격해 scope를 분리한다.
 - payload hash가 다르면 도메인 작업 전에 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
 - 같은 payload의 후속 요청은 저장된 상태와 응답을 반환하며 작업을 다시 실행하지 않는다.
 - 주문 생성 `COMPLETED`/`FAILED`는 최초 HTTP status/body를 그대로 재생한다.
   `PROCESSING`은 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다.
+- 고객 취소는 명령 트랜잭션 모델이므로 `IDEMPOTENCY_REQUEST_IN_PROGRESS`를 쓰지 않고
+  Order row lock으로 동시 요청을 직렬화한다. canonical payload에 `orderId`를 포함해
+  교차 주문 키 재사용을 `409 IDEMPOTENCY_KEY_REUSED`로 거부하고, 커밋 시점 unique
+  위반도 같은 코드로 번역한다. 롤백된 요청은 레코드를 남기지 않는다.
+- 고객 취소 멱등 레코드는 저장 시점에 terminal이므로 `retention_expires_at` 기준
+  `(retention_expires_at, id)` 순서의 chunk worker가 정리하며 일반 비즈니스
+  트랜잭션과 분리한다.
 - Provider 결과가 불명확한 레코드는 정리하거나 신규 요청으로 재승인하지 않는다.
 
 ## Audit

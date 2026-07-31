@@ -158,25 +158,56 @@ paths:
       description: |
         PENDING_PAYMENT and PAID orders not yet ACCEPTED may be cancelled by the
         owning customer. Order cancellation and payment refund recovery are
-        represented separately.
+        represented separately. Cancellation is not a separate aggregate, so the
+        order itself is the cancellation resource and no new resource is created.
+
+        Idempotency scope is actor ID, operation, and Idempotency-Key. The hashed
+        payload covers orderId, reasonCode, and the normalized detail, so reusing
+        one key across different orders returns 409 IDEMPOTENCY_KEY_REUSED and
+        never replays another order's result. A repeated request with the same key
+        and payload returns the originally stored 200 or 202 body unchanged; its
+        paymentRecovery is a snapshot taken at cancellation time, so current
+        progress must be read from GET /orders/{orderId}. This operation never
+        returns IDEMPOTENCY_REQUEST_IN_PROGRESS because concurrent requests are
+        serialized by the order row lock. A rolled back request stores no record,
+        so retrying the same key re-executes and the order state guard returns
+        409 ORDER_STATE_CONFLICT for an already cancelled order.
+
+        If an earlier Refund is REQUESTED, PROCESSING, UNKNOWN, RECONCILING, or
+        MANUAL_REVIEW, cancellation returns 409 PAYMENT_REFUND_UNRESOLVED before
+        changing the order. Retry the same key after that Refund reaches SUCCEEDED
+        or definitive FAILED. Payment lock timeouts and database failures return
+        503 instead of this business conflict.
+
+        If a PAID order has reached acceptanceDeadlineAt, this command does not
+        perform customer cancellation. It durably requests deduplicated store
+        timeout work and returns 409 ORDER_STATE_CONFLICT. Failure to persist that
+        work returns 503. The order may remain PAID briefly until the timeout
+        worker commits REJECTED.
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/CancellationRequest"
       responses:
-        "201":
-          description: Cancellation recorded
+        "200":
+          description: |
+            Cancellation completed synchronously. Used for PENDING_PAYMENT orders
+            where reservation release is committed in the same transaction and no
+            external refund exists.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Cancellation"
         "202":
-          description: Order cancellation is recorded but payment recovery is unresolved
+          description: |
+            Cancellation is recorded but compensation is still in progress. Used
+            for PAID orders. Does not mean the refund or resource restoration
+            succeeded.
           content:
             application/json:
               schema:
@@ -311,6 +342,11 @@ paths:
       description: |
         store-orders is a store-facing view of the Ordering-owned Order, not a
         separate Aggregate. Cancellation after ACCEPTED is not an allowed target.
+
+        Idempotency scope is actor ID, operation, and Idempotency-Key. The hashed
+        payload covers orderId, targetState, and the normalized reason, so reusing
+        one key across different orders returns 409 IDEMPOTENCY_KEY_REUSED and
+        never replays another order's result.
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -326,7 +362,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StoreOrderTransitionResult"
+                $ref: "#/components/schemas/StoreOrderResult"
         "202":
           description: |
             REJECTED is committed and compensation is still tracked separately.
@@ -334,7 +370,117 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StoreOrderTransitionResult"
+                $ref: "#/components/schemas/StoreOrderResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/orders/{orderId}/compensation:
+    get:
+      tags: [Operations]
+      operationId: getOrderCompensation
+      summary: Read owner compensation progress for a rejected or cancelled order
+      description: |
+        Platform operator view of the order compensation case. Step level state,
+        attempt counts and internal error codes are operator-only and are never
+        returned to customers or store members.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Compensation case for the order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorCompensationView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/reprocessing-cases/{caseId}/repair-proposals:
+    post:
+      tags: [Operations]
+      operationId: proposeCustomerCancellationSetupRepair
+      summary: Propose the safe recreation of a missing customer-cancellation Refund
+      description: |
+        Creates a 30-minute repair proposal after validating that the durable
+        recovery snapshot is complete and only the Refund row is missing. Requires
+        an active PLATFORM_OPERATOR. Financial values and provider keys are
+        server-derived and cannot be supplied by the caller.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRepairProposalRequest"
+      responses:
+        "201":
+          description: Pending proposal or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/reprocessing-repair-proposals/{proposalId}/decisions:
+    post:
+      tags: [Operations]
+      operationId: decideCustomerCancellationSetupRepair
+      summary: Approve or reject a missing-Refund repair proposal
+      description: |
+        Requires a different active PLATFORM_OPERATOR from the proposer. Approval
+        revalidates every safety guard under Order and Payment locks. A successful
+        approval recreates the Refund for same-key LOOKUP; it never calls the
+        provider inside the HTTP transaction.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepairProposalDecisionRequest"
+      responses:
+        "200":
+          description: Terminal proposal or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairProposal"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -350,27 +496,44 @@ paths:
   /operations/policies/expired-benefit-restoration:
     get:
       tags: [Operations]
-      operationId: getExpiredBenefitRestorationPolicy
-      summary: Get the policy used by the next order rejection
+      operationId: listExpiredBenefitRestorationPolicies
+      summary: List the four current trigger and benefit policy heads
       responses:
         "200":
-          description: Current append-only policy head
+          description: Current policy heads ordered by trigger and benefit type
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
+                type: array
+                minItems: 4
+                maxItems: 4
+                items:
+                  $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/expired-benefit-restoration/{trigger}/{benefitType}:
     patch:
       tags: [Operations]
       operationId: updateExpiredBenefitRestorationPolicy
-      summary: Create a new policy version for future rejections
+      summary: Create a new version for one trigger and benefit policy
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - name: trigger
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+        - name: benefitType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [COUPON, POINTS]
       requestBody:
         required: true
         content:
@@ -984,12 +1147,28 @@ components:
     CancellationRequest:
       type: object
       additionalProperties: false
+      required: [reasonCode]
       properties:
-        reason:
+        reasonCode:
+          $ref: "#/components/schemas/CancellationReasonCode"
+        detail:
           type: string
           minLength: 1
-          maxLength: 500
-          description: Required only when targetState is REJECTED
+          maxLength: 200
+          description: |
+            Optional free-text detail supplied by the customer. Stored on the
+            order only. Never included in events, audit records, provider
+            requests, application logs or any API response.
+    CancellationReasonCode:
+      type: string
+      description: Customer-declared cancellation reason, independent of the system-determined cause
+      enum:
+        - CHANGED_MIND
+        - ORDER_MISTAKE
+        - WAIT_TOO_LONG
+        - PICKUP_TIME_CONFLICT
+        - PAYMENT_ISSUE
+        - OTHER
     StoreOrderResult:
       type: object
       additionalProperties: false
@@ -997,27 +1176,29 @@ components:
       properties:
         order:
           $ref: "#/components/schemas/Order"
-        rejectionRecovery:
-          $ref: "#/components/schemas/RejectionRecoverySummary"
-    StoreOrderTransitionResult:
-      allOf:
-        - $ref: "#/components/schemas/StoreOrderResult"
-        - type: object
-          required: [replayed]
-          properties:
-            replayed:
-              type: boolean
-    RejectionRecoverySummary:
+        compensationRecovery:
+          $ref: "#/components/schemas/CompensationSummary"
+    CompensationSummary:
       type: object
       additionalProperties: false
-      required: [caseId, policyVersion, state, steps, updatedAt]
+      description: |
+        Owner compensation progress for a terminated order. The same shape covers
+        store rejection and customer cancellation; the trigger field distinguishes
+        the origin. Order termination does not imply compensation success.
+      required: [caseId, trigger, benefitPolicies, state, steps, updatedAt]
       properties:
         caseId:
           $ref: "#/components/schemas/Identifier"
-        policyVersion:
-          type: integer
-          format: int64
-          minimum: 1
+        trigger:
+          type: string
+          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+        benefitPolicies:
+          type: array
+          minItems: 2
+          maxItems: 2
+          description: Immutable COUPON and POINTS policy version references selected with the case
+          items:
+            $ref: "#/components/schemas/CompensationBenefitPolicyReference"
         state:
           type: string
           enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, MANUAL_REVIEW]
@@ -1026,10 +1207,63 @@ components:
           minItems: 6
           maxItems: 6
           items:
-            $ref: "#/components/schemas/RejectionRecoveryStep"
+            $ref: "#/components/schemas/CompensationStep"
         updatedAt:
           $ref: "#/components/schemas/DateTime"
-    RejectionRecoveryStep:
+    OperatorCompensationView:
+      type: object
+      additionalProperties: false
+      description: Platform-operator-only compensation and payment setup integrity view
+      required: [compensation]
+      properties:
+        compensation:
+          $ref: "#/components/schemas/CompensationSummary"
+        paymentSetupIssue:
+          $ref: "#/components/schemas/PaymentSetupIssue"
+        setupReprocessingCaseId:
+          $ref: "#/components/schemas/Identifier"
+    PaymentSetupIssue:
+      type: object
+      additionalProperties: false
+      description: Operator-only integrity issue; never returned in customer or store representations
+      required: [state, detectedAt, lastErrorCode]
+      anyOf:
+        - required: [missingArtifacts]
+        - required: [invariantViolations]
+      properties:
+        state:
+          const: SETUP_INCOMPLETE
+        missingArtifacts:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [CANCELLATION_REFUND, PAYMENT_RECOVERY_SNAPSHOT]
+        invariantViolations:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [SOURCE_MISMATCH, AMOUNT_TIE_OUT_MISMATCH]
+        detectedAt:
+          $ref: "#/components/schemas/DateTime"
+        lastErrorCode:
+          type: string
+    CompensationBenefitPolicyReference:
+      type: object
+      additionalProperties: false
+      required: [benefitType, policyVersionId]
+      properties:
+        benefitType:
+          type: string
+          enum: [COUPON, POINTS]
+        policyVersionId:
+          type: integer
+          format: int64
+          minimum: 1
+    CompensationStep:
       type: object
       additionalProperties: false
       required: [type, state, attemptCount]
@@ -1046,16 +1280,70 @@ components:
           minimum: 0
         lastErrorCode:
           type: string
+    CreateRepairProposalRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    RepairProposalDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, reason]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    RepairProposal:
+      type: object
+      additionalProperties: false
+      required:
+        [proposalId, caseId, action, state, proposedBy, createdAt, expiresAt, correlationId]
+      properties:
+        proposalId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        action:
+          const: RECREATE_MISSING_CANCELLATION_REFUND
+        state:
+          type: string
+          enum: [PENDING_APPROVAL, EXECUTED, REJECTED, EXPIRED, STALE]
+        proposedBy:
+          $ref: "#/components/schemas/Identifier"
+        decidedBy:
+          $ref: "#/components/schemas/Identifier"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        decidedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
     ExpiredBenefitRestorationPolicy:
       type: object
       additionalProperties: false
       required:
-        [policyVersion, mode, compensationValidityDays, effectiveAt, updatedBy, reason]
+        [policyVersionId, trigger, benefitType, mode, compensationValidityDays, effectiveAt, updatedBy, reason]
       properties:
-        policyVersion:
+        policyVersionId:
           type: integer
           format: int64
           minimum: 1
+        trigger:
+          type: string
+          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+        benefitType:
+          type: string
+          enum: [COUPON, POINTS]
         mode:
           type: string
           enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
@@ -1074,9 +1362,9 @@ components:
     UpdateExpiredBenefitRestorationPolicyRequest:
       type: object
       additionalProperties: false
-      required: [expectedPolicyVersion, mode, compensationValidityDays, reason]
+      required: [expectedPolicyVersionId, mode, compensationValidityDays, reason]
       properties:
-        expectedPolicyVersion:
+        expectedPolicyVersionId:
           type: integer
           format: int64
           minimum: 1
@@ -1094,18 +1382,22 @@ components:
     Cancellation:
       type: object
       additionalProperties: false
+      description: |
+        Cancellation result for an order. The order is identified by orderId; no
+        separate cancellation identifier exists because cancellation is not a
+        separate aggregate and an order can be cancelled at most once.
       required:
-        [cancellationId, orderId, orderState, paymentRecovery, createdAt, correlationId]
+        [orderId, orderState, reasonCode, paymentRecovery, cancelledAt, correlationId]
       properties:
-        cancellationId:
-          $ref: "#/components/schemas/Identifier"
         orderId:
           $ref: "#/components/schemas/Identifier"
         orderState:
           $ref: "#/components/schemas/OrderState"
+        reasonCode:
+          $ref: "#/components/schemas/CancellationReasonCode"
         paymentRecovery:
           $ref: "#/components/schemas/PaymentRecoverySummary"
-        createdAt:
+        cancelledAt:
           $ref: "#/components/schemas/DateTime"
         correlationId:
           type: string
@@ -1164,19 +1456,80 @@ components:
     PaymentRecoverySummary:
       type: object
       additionalProperties: false
-      required: [state]
+      required:
+        - state
+      oneOf:
+        - required:
+            - approvedAmountKrw
+            - succeededRefundAmountBeforeCancellationKrw
+            - cancellationRequestedRefundAmountKrw
+            - remainingRefundableAmountKrw
+        - required: [state, noticeCode]
+          properties:
+            state:
+              const: PROCESSING
+            noticeCode:
+              const: REFUND_DELAYED
+          not:
+            anyOf:
+              - required: [approvedAmountKrw]
+              - required: [succeededRefundAmountBeforeCancellationKrw]
+              - required: [cancellationRequestedRefundAmountKrw]
+              - required: [remainingRefundableAmountKrw]
       properties:
         state:
           type: string
+          description: |
+            Customer-facing projection of the Refund created for this cancellation
+            only. Internal PROCESSING, RETRY_SCHEDULED, UNKNOWN and RECONCILING are
+            exposed as PROCESSING. Internal FAILED and MANUAL_REVIEW are also exposed
+            as PROCESSING with noticeCode REFUND_DELAYED. Other Refunds and the
+            compensation PAYMENT step are not combined. NOT_REQUIRED is used only
+            when the cancellation requested refund amount is zero, including a
+            BENEFIT_ONLY cancellation with no Refund or Provider call.
+            Internal setup damage is exposed as PROCESSING with REFUND_DELAYED;
+            SETUP_INCOMPLETE and missing artifact details are operator-only.
           enum:
             - NOT_REQUIRED
             - REQUESTED
             - PROCESSING
             - SUCCEEDED
-            - FAILED
-            - UNKNOWN
-            - RECONCILING
-            - MANUAL_REVIEW
+        noticeCode:
+          type: string
+          description: |
+            Present as REFUND_DELAYED only after automatic processing is exhausted.
+            Clients show an information icon and localized delay/apology copy.
+            Retry mode, attempt count, failure code and manual-review status are
+            never exposed to customers.
+          enum: [REFUND_DELAYED]
+        approvedAmountKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: |
+            Immutable Provider-approved amount snapshotted by the cancellation
+            transaction. Present for a complete setup and omitted rather than
+            inferred when the durable snapshot is unavailable.
+        succeededRefundAmountBeforeCancellationKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: |
+            Sum of SUCCEEDED Refund amounts committed before the cancellation
+            transaction. Present for a complete setup and omitted when the durable
+            snapshot is unavailable.
+        cancellationRequestedRefundAmountKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: |
+            Refund amount requested by this customer cancellation. Present for a
+            complete setup and omitted when the durable snapshot is unavailable.
+        remainingRefundableAmountKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: |
+            Current actual refundable balance at representation time: approved
+            amount minus all SUCCEEDED Refund amounts. REQUESTED, PROCESSING,
+            RETRY_SCHEDULED, UNKNOWN, RECONCILING, FAILED and MANUAL_REVIEW Refunds
+            do not reduce this value until they succeed.
         lastUpdatedAt:
           $ref: "#/components/schemas/DateTime"
     CreateRefundRequest:
@@ -1225,7 +1578,7 @@ components:
         state:
           type: string
           enum:
-            [REQUESTED, PROCESSING, SUCCEEDED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+            [REQUESTED, PROCESSING, RETRY_SCHEDULED, SUCCEEDED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
         cashRefundedKrw:
           $ref: "#/components/schemas/MoneyKrw"
         pointsRestoredKrw:
