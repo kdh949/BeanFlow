@@ -1,4 +1,4 @@
-package io.github.kdh949.beanflow.ordering.api
+package io.github.kdh949.beanflow.eventing.api
 
 import java.time.Instant
 import java.util.UUID
@@ -32,6 +32,9 @@ data class OrderRejectedV1(
     val policyVersion: Long,
     val policyMode: String,
     val policyValidityDays: Int,
+    val paymentRequired: Boolean,
+    val couponRequired: Boolean,
+    val pointsRequired: Boolean,
 )
 
 data class StoreAcceptanceWarningRequestedV1(

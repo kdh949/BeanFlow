@@ -1,0 +1,3 @@
+beanflow:
+  notification:
+    provider: scripted

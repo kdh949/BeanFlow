@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow
 
+import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
 import io.github.kdh949.beanflow.payment.internal.PaymentGateway
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import org.springframework.boot.test.context.TestConfiguration
@@ -12,19 +13,19 @@ import org.testcontainers.utility.DockerImageName
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
+    @Bean
+    @ServiceConnection
+    fun postgresContainer(): PostgreSQLContainer = PostgreSQLContainer(DockerImageName.parse("postgres:17.6"))
 
-	@Bean
-	@ServiceConnection
-	fun postgresContainer(): PostgreSQLContainer {
-		return PostgreSQLContainer(DockerImageName.parse("postgres:17.6"))
-	}
+    @Bean
+    fun testJwtDecoder(): JwtDecoder =
+        JwtDecoder {
+            throw JwtException("JWT decoding is not used outside explicit security tests")
+        }
 
-	@Bean
-	fun testJwtDecoder(): JwtDecoder = JwtDecoder {
-		throw JwtException("JWT decoding is not used outside explicit security tests")
-	}
+    @Bean
+    internal fun testPaymentGateway(): ScriptedTestPaymentGateway = ScriptedTestPaymentGateway()
 
-	@Bean
-	internal fun testPaymentGateway(): ScriptedTestPaymentGateway = ScriptedTestPaymentGateway()
-
+    @Bean
+    internal fun testNotificationProvider(): ScriptedTestNotificationProvider = ScriptedTestNotificationProvider()
 }

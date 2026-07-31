@@ -70,4 +70,12 @@ interface RejectionCompensationOperations {
         errorCode: String,
         now: Instant,
     ): RejectionCompensationCaseView
+
+    fun recordStep(
+        orderId: UUID,
+        stepType: RejectionCompensationStepType,
+        stepState: RejectionCompensationStepState,
+        errorCode: String?,
+        now: Instant,
+    ): RejectionCompensationCaseView
 }

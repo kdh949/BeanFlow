@@ -1,0 +1,37 @@
+package io.github.kdh949.beanflow.operations.internal
+
+import io.github.kdh949.beanflow.operations.api.NotificationReprocessingCaseOperations
+import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
+import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import org.springframework.stereotype.Service
+import java.util.UUID
+
+@Service
+internal class NotificationReprocessingCaseService(
+    private val repository: ReprocessingCaseJpaRepository,
+    private val identifierSource: IdentifierSource,
+) : NotificationReprocessingCaseOperations {
+    override fun openNotificationCase(command: OpenReprocessingCaseCommand): UUID {
+        require(command.ownerReference.isNotBlank())
+        require(command.reason.isNotBlank())
+        require(command.correlationId.isNotBlank())
+        repository
+            .findByCaseTypeAndOwnerReference(
+                ReprocessingCaseType.NOTIFICATION_DELIVERY,
+                command.ownerReference,
+            )?.let { return it.id }
+        return repository
+            .save(
+                ReprocessingCaseEntity(
+                    id = identifierSource.next(),
+                    caseType = ReprocessingCaseType.NOTIFICATION_DELIVERY,
+                    ownerReference = command.ownerReference,
+                    status = ReprocessingCaseStatus.MANUAL_REVIEW,
+                    reason = command.reason,
+                    correlationId = command.correlationId,
+                    createdAt = command.now,
+                    updatedAt = command.now,
+                ),
+            ).id
+    }
+}

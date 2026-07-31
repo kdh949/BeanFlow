@@ -19,128 +19,141 @@ import java.util.UUID
 @Entity
 @Table(name = "promotion_campaign")
 internal class CampaignEntity(
-	@Id
-	val id: UUID,
-	@Column(name = "store_id", nullable = false)
-	val storeId: UUID,
-	@Column(nullable = false)
-	val active: Boolean,
-	@Enumerated(EnumType.STRING)
-	@Column(name = "discount_type", nullable = false)
-	val discountType: CouponDiscountType,
-	@Column(name = "fixed_amount_krw")
-	val fixedAmountKrw: Long?,
-	@Column(name = "rate_bps")
-	val rateBps: Int?,
-	@Column(name = "minimum_eligible_subtotal_krw", nullable = false)
-	val minimumEligibleSubtotalKrw: Long,
-	@Column(name = "maximum_discount_krw")
-	val maximumDiscountKrw: Long?,
-	@Column(name = "all_menus_eligible", nullable = false)
-	val allMenusEligible: Boolean,
-	@Version
-	var version: Long = 0,
+    @Id
+    val id: UUID,
+    @Column(name = "store_id", nullable = false)
+    val storeId: UUID,
+    @Column(nullable = false)
+    val active: Boolean,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "discount_type", nullable = false)
+    val discountType: CouponDiscountType,
+    @Column(name = "fixed_amount_krw")
+    val fixedAmountKrw: Long?,
+    @Column(name = "rate_bps")
+    val rateBps: Int?,
+    @Column(name = "minimum_eligible_subtotal_krw", nullable = false)
+    val minimumEligibleSubtotalKrw: Long,
+    @Column(name = "maximum_discount_krw")
+    val maximumDiscountKrw: Long?,
+    @Column(name = "all_menus_eligible", nullable = false)
+    val allMenusEligible: Boolean,
+    @Version
+    var version: Long = 0,
 )
 
 @Entity
 @Table(name = "promotion_campaign_eligible_menu")
 internal class CampaignEligibleMenuEntity(
-	@Id
-	val id: UUID,
-	@Column(name = "campaign_id", nullable = false)
-	val campaignId: UUID,
-	@Column(name = "menu_id", nullable = false)
-	val menuId: UUID,
+    @Id
+    val id: UUID,
+    @Column(name = "campaign_id", nullable = false)
+    val campaignId: UUID,
+    @Column(name = "menu_id", nullable = false)
+    val menuId: UUID,
 )
 
 internal enum class CouponIssuanceState {
-	AVAILABLE,
-	RESERVED,
-	USED,
+    AVAILABLE,
+    RESERVED,
+    USED,
+    RESTORED,
 }
 
 @Entity
 @Table(name = "promotion_coupon_issuance")
 internal class CouponIssuanceEntity(
-	@Id
-	val id: UUID,
-	@Column(name = "campaign_id", nullable = false)
-	val campaignId: UUID,
-	@Column(name = "customer_id", nullable = false)
-	val customerId: UUID,
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	var state: CouponIssuanceState,
-	@Column(name = "coupon_expires_at", nullable = false)
-	val couponExpiresAt: Instant,
-	@Column(name = "reserved_order_id")
-	var reservedOrderId: UUID? = null,
-	@Version
-	var version: Long = 0,
+    @Id
+    val id: UUID,
+    @Column(name = "campaign_id", nullable = false)
+    val campaignId: UUID,
+    @Column(name = "customer_id", nullable = false)
+    val customerId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var state: CouponIssuanceState,
+    @Column(name = "coupon_expires_at", nullable = false)
+    val couponExpiresAt: Instant,
+    @Column(name = "reserved_order_id")
+    var reservedOrderId: UUID? = null,
+    @Column(name = "original_issuance_id")
+    val originalIssuanceId: UUID? = null,
+    @Column(name = "restoration_source_reference", length = 200)
+    val restorationSourceReference: String? = null,
+    @Version
+    var version: Long = 0,
 )
 
 internal enum class CouponReservationState {
-	RESERVED,
-	USED,
-	RELEASED,
+    RESERVED,
+    USED,
+    RELEASED,
+    RESTORED,
 }
 
 @Entity
 @Table(name = "promotion_coupon_reservation")
 internal class CouponReservationEntity(
-	@Id
-	val id: UUID,
-	@Column(name = "order_id", nullable = false)
-	val orderId: UUID,
-	@Column(name = "coupon_issuance_id", nullable = false)
-	val couponIssuanceId: UUID,
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	var state: CouponReservationState,
-	@Column(name = "discount_krw", nullable = false)
-	val discountKrw: Long,
-	@Column(name = "eligible_line_sequences", nullable = false)
-	val eligibleLineSequences: String,
-	@Enumerated(EnumType.STRING)
-	@Column(name = "discount_type", nullable = false)
-	val discountType: CouponDiscountType,
-	@Column(name = "fixed_amount_krw")
-	val fixedAmountKrw: Long?,
-	@Column(name = "rate_bps")
-	val rateBps: Int?,
-	@Column(name = "minimum_eligible_subtotal_krw", nullable = false)
-	val minimumEligibleSubtotalKrw: Long,
-	@Column(name = "maximum_discount_krw")
-	val maximumDiscountKrw: Long?,
-	@Column(name = "reservation_expires_at", nullable = false)
-	val reservationExpiresAt: Instant,
-	@Column(name = "source_reference", nullable = false)
-	val sourceReference: String,
-	@Column(name = "created_at", nullable = false)
-	val createdAt: Instant,
-	@Column(name = "updated_at", nullable = false)
-	var updatedAt: Instant,
-	@Version
-	var version: Long = 0,
+    @Id
+    val id: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "coupon_issuance_id", nullable = false)
+    val couponIssuanceId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var state: CouponReservationState,
+    @Column(name = "discount_krw", nullable = false)
+    val discountKrw: Long,
+    @Column(name = "eligible_line_sequences", nullable = false)
+    val eligibleLineSequences: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "discount_type", nullable = false)
+    val discountType: CouponDiscountType,
+    @Column(name = "fixed_amount_krw")
+    val fixedAmountKrw: Long?,
+    @Column(name = "rate_bps")
+    val rateBps: Int?,
+    @Column(name = "minimum_eligible_subtotal_krw", nullable = false)
+    val minimumEligibleSubtotalKrw: Long,
+    @Column(name = "maximum_discount_krw")
+    val maximumDiscountKrw: Long?,
+    @Column(name = "reservation_expires_at", nullable = false)
+    val reservationExpiresAt: Instant,
+    @Column(name = "source_reference", nullable = false)
+    val sourceReference: String,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant,
+    @Column(name = "restoration_source_reference", length = 200)
+    var restorationSourceReference: String? = null,
+    @Version
+    var version: Long = 0,
 )
 
 internal interface CampaignJpaRepository : JpaRepository<CampaignEntity, UUID>
 
 internal interface CampaignEligibleMenuJpaRepository : JpaRepository<CampaignEligibleMenuEntity, UUID> {
-	fun findAllByCampaignId(campaignId: UUID): List<CampaignEligibleMenuEntity>
+    fun findAllByCampaignId(campaignId: UUID): List<CampaignEligibleMenuEntity>
 }
 
 internal interface CouponIssuanceJpaRepository : JpaRepository<CouponIssuanceEntity, UUID> {
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select issuance from CouponIssuanceEntity issuance where issuance.id = :id")
-	fun findLockedById(@Param("id") id: UUID): CouponIssuanceEntity?
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select issuance from CouponIssuanceEntity issuance where issuance.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): CouponIssuanceEntity?
 }
 
 internal interface CouponReservationJpaRepository : JpaRepository<CouponReservationEntity, UUID> {
-	fun findBySourceReference(sourceReference: String): CouponReservationEntity?
-	fun findByOrderId(orderId: UUID): CouponReservationEntity?
+    fun findBySourceReference(sourceReference: String): CouponReservationEntity?
 
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select reservation from CouponReservationEntity reservation where reservation.orderId = :orderId")
-	fun findLockedByOrderId(@Param("orderId") orderId: UUID): CouponReservationEntity?
+    fun findByOrderId(orderId: UUID): CouponReservationEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select reservation from CouponReservationEntity reservation where reservation.orderId = :orderId")
+    fun findLockedByOrderId(
+        @Param("orderId") orderId: UUID,
+    ): CouponReservationEntity?
 }

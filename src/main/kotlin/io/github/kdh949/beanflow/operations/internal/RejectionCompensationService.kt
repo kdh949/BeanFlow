@@ -94,6 +94,51 @@ internal class RejectionCompensationService(
         return view(beanCase)
     }
 
+    @Transactional
+    override fun recordStep(
+        orderId: UUID,
+        stepType: RejectionCompensationStepType,
+        stepState: RejectionCompensationStepState,
+        errorCode: String?,
+        now: java.time.Instant,
+    ): RejectionCompensationCaseView {
+        val found =
+            caseRepository.findByOrderId(orderId)
+                ?: throw DomainFailure(
+                    FailureCode.RESOURCE_NOT_FOUND,
+                    "Rejection compensation case was not found",
+                )
+        val beanCase =
+            caseRepository.findLockedById(found.id)
+                ?: throw DomainFailure(
+                    FailureCode.RESOURCE_NOT_FOUND,
+                    "Rejection compensation case was not found",
+                )
+        val step =
+            stepRepository.findLocked(beanCase.id, stepType)
+                ?: throw DomainFailure(
+                    FailureCode.DEPENDENCY_UNAVAILABLE,
+                    "Rejection compensation step is missing",
+                )
+        if (step.state == RejectionCompensationStepState.SUCCEEDED ||
+            step.state == RejectionCompensationStepState.NOT_REQUIRED
+        ) {
+            return view(beanCase)
+        }
+        step.state = stepState
+        step.attemptCount++
+        step.lastErrorCode = errorCode
+        step.updatedAt = now
+        beanCase.updatedAt = now
+        beanCase.state =
+            deriveState(
+                stepRepository
+                    .findAllByCaseIdOrderByStepType(beanCase.id)
+                    .associate { it.stepType to if (it.id == step.id) stepState else it.state },
+            )
+        return view(beanCase)
+    }
+
     private fun initialState(
         type: RejectionCompensationStepType,
         command: OpenRejectionCompensationCaseCommand,
@@ -121,6 +166,32 @@ internal class RejectionCompensationService(
             RejectionCompensationStepState.PROCESSING
         } else {
             RejectionCompensationStepState.NOT_REQUIRED
+        }
+
+    private fun deriveState(states: Map<RejectionCompensationStepType, RejectionCompensationStepState>): RejectionCompensationState =
+        when {
+            states.values.any { it == RejectionCompensationStepState.MANUAL_REVIEW } -> {
+                RejectionCompensationState.MANUAL_REVIEW
+            }
+
+            states.values.any { it == RejectionCompensationStepState.UNKNOWN } -> {
+                RejectionCompensationState.UNKNOWN
+            }
+
+            states.values.any { it == RejectionCompensationStepState.RETRY_SCHEDULED } -> {
+                RejectionCompensationState.RETRY_SCHEDULED
+            }
+
+            states.values.all {
+                it == RejectionCompensationStepState.SUCCEEDED ||
+                    it == RejectionCompensationStepState.NOT_REQUIRED
+            } -> {
+                RejectionCompensationState.SUCCEEDED
+            }
+
+            else -> {
+                RejectionCompensationState.PROCESSING
+            }
         }
 
     private fun view(beanCase: RejectionCompensationCaseEntity): RejectionCompensationCaseView =
