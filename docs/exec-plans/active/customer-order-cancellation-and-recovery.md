@@ -57,7 +57,9 @@
 ## Business Rules and Invariants
 
 - 고객 취소는 `PENDING_PAYMENT`와 acceptance deadline 전 `PAID`만 허용한다.
-- 선행 성공 부분 환불은 고객 취소를 막지 않고 잔액과 미복원 allocation만 처리한다.
+- 선행 성공 부분 환불은 고객 취소를 막지 않고 남은 현금과 아직 복원되지 않은 point
+  allocation만 처리한다. 부분 환불은 쿠폰을 복원하지 않고 전체 종료가 원 쿠폰을 한
+  번 복원한다.
 - Order `CANCELLED`는 Refund·자원 복원·Notification 성공을 뜻하지 않는다.
 - 외부 결과 불명은 성공이나 확정 실패로 바꾸지 않는다.
 - `200/202` 전에 해당 경로의 내구 commit gate가 완성돼 있어야 한다.

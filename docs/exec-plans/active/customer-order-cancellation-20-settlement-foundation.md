@@ -33,6 +33,7 @@
 - 고객 취소 Refund fact의 엄격한 `NOT_APPLICABLE` 판정과 target Audit
 - 중복 event, 재시작, source 불일치와 missing dependency 실패
 - 운영 조회와 runbook에 필요한 최소 상태
+- ADR-062의 store+batch 범위 SettlementItem cursor 조회와 `itemId` discovery
 
 ### Non-goals
 
@@ -57,6 +58,8 @@
 - 고객 취소 Refund consumer transaction은 Order/Refund source를 읽고 Item 부재를
   확인한 뒤 NOT_APPLICABLE Audit과 publication completion을 연결한다.
 - 다른 Aggregate는 ID와 공개 Query/Application API로 참조하고 JPA 관계를 추가하지 않는다.
+- Batch Item 목록은 별도 Query Repository/DTO projection으로 읽고 Batch 쓰기 Aggregate에
+  Items 객체 연관관계를 추가하지 않는다.
 
 ## Alternatives Considered
 
@@ -82,6 +85,9 @@ forward migration을 만든다. 기존 환경 적용 전략은 00 plan 결과를
 - `PaymentApproved`만으로 Item을 만들지 않는다.
 - 일반 `PaymentRefunded`에서 customer-cancellation source를 식별해 ADR-048 분기로
   처리한다. 고객 알림 event를 정산 근거로 사용하지 않는다.
+- `GET /stores/{storeId}/settlements/{settlementBatchId}/items`는
+  `(completedAt ASC, settlementItemId ASC)` cursor page로 이의제기용 Item ID와 금액
+  snapshot을 제공한다.
 
 ## Milestones
 
@@ -98,6 +104,9 @@ forward migration을 만든다. 기존 환경 적용 전략은 00 plan 결과를
 - cause/refund/source mismatch의 비완료 처리
 - 기존 Item 존재 시 비덮어쓰기
 - duplicate publication과 restart
+- Batch별 Item empty/single/multi-page와 동률 cursor 경계
+- store membership, Batch-store mismatch와 다른 Batch cursor 거부
+- 조회한 `settlementItemId`와 dispute path contract 연결
 - PostgreSQL constraint, Modulith 경계와 API contract
 
 ## Validation Commands
@@ -138,6 +147,7 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | 미수락 고객 취소는 정산 원장 없이 NOT_APPLICABLE Audit | 미완료 거래의 수익·조정 위장 방지 | BR-16, ADR-048 |
+| 2026-08-01 | Accepted | 점주는 Batch별 cursor Item 목록에서 dispute용 itemId를 얻음 | 대량 Batch 응답을 피하면서 조회→이의제기 흐름 완결 | ADR-062 |
 
 ## Outcomes & Retrospective
 
@@ -146,3 +156,4 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
+- 2026-08-01: Batch별 SettlementItem 조회와 이의제기 식별 경로를 추가.

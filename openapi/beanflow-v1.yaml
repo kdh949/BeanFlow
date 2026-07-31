@@ -288,13 +288,20 @@ paths:
               $ref: "#/components/schemas/CreateRefundRequest"
       responses:
         "201":
-          description: Refund result is confirmed
+          description: |
+            Refund resource creation and the synchronous result are confirmed.
+            Requested amount snapshots and pointsRestorationState are always
+            present. Each confirmed amount follows its owner-specific state.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Refund"
         "202":
-          description: Refund result is unknown or reconciliation is in progress
+          description: |
+            Refund result is unknown or reconciliation is in progress. Requested
+            amount snapshots and pointsRestorationState are present. A confirmed
+            points amount may exist only if its asynchronous Loyalty work already
+            succeeded; HTTP 202 alone does not determine either confirmed amount.
           content:
             application/json:
               schema:
@@ -504,7 +511,7 @@ paths:
     get:
       tags: [Operations]
       operationId: listExpiredBenefitRestorationPolicies
-      summary: List the four current trigger and benefit policy heads
+      summary: List the five current trigger and benefit policy heads
       responses:
         "200":
           description: Current policy heads ordered by trigger and benefit type
@@ -512,8 +519,8 @@ paths:
             application/json:
               schema:
                 type: array
-                minItems: 4
-                maxItems: 4
+                minItems: 5
+                maxItems: 5
                 items:
                   $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
         "401":
@@ -534,7 +541,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+            enum: [STORE_REJECTION, CUSTOMER_CANCELLATION, PARTIAL_REFUND]
         - name: benefitType
           in: path
           required: true
@@ -562,6 +569,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+        "404":
+          description: |
+            The policy key does not exist. PARTIAL_REFUND is valid only with
+            POINTS; PARTIAL_REFUND/COUPON never creates a head.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
@@ -622,6 +637,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementBatchPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/settlements/{settlementBatchId}/items:
+    get:
+      tags: [Settlement]
+      operationId: listStoreSettlementItems
+      summary: List settlement items in an owned store batch
+      description: |
+        Returns the item identifiers and immutable amount snapshots needed to
+        inspect a settlement batch and file an item dispute. Items are ordered by
+        completedAt and settlementItemId ascending. The cursor is scoped to this
+        store and batch and cannot be reused for another batch.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/SettlementBatchId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Settlement items in stable ledger order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementItemPage"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -704,6 +749,12 @@ components:
     SettlementItemId:
       in: path
       name: itemId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SettlementBatchId:
+      in: path
+      name: settlementBatchId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -1419,7 +1470,7 @@ components:
           minimum: 1
         trigger:
           type: string
-          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION, PARTIAL_REFUND]
         benefitType:
           type: string
           enum: [COUPON, POINTS]
@@ -1438,6 +1489,16 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+      allOf:
+        - if:
+            properties:
+              trigger:
+                const: PARTIAL_REFUND
+            required: [trigger]
+          then:
+            properties:
+              benefitType:
+                const: POINTS
     UpdateExpiredBenefitRestorationPolicyRequest:
       type: object
       additionalProperties: false
@@ -1717,12 +1778,18 @@ components:
     Refund:
       type: object
       additionalProperties: false
+      description: |
+        Requested amounts are immutable snapshots present in every state.
+        state describes the Payment-owned cash refund. pointsRestorationState
+        independently describes Loyalty restoration. Each confirmed amount exists
+        only when its owner state is SUCCEEDED. Absence never means zero.
       required:
         - refundId
         - paymentId
         - state
-        - cashRefundedKrw
-        - pointsRestoredKrw
+        - cashRefundRequestedKrw
+        - pointsRestorationRequestedKrw
+        - pointsRestorationState
         - currency
         - createdAt
         - updatedAt
@@ -1736,10 +1803,31 @@ components:
           type: string
           enum:
             [REQUESTED, PROCESSING, RETRY_SCHEDULED, SUCCEEDED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+        cashRefundRequestedKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: Immutable cash refund amount requested for this Refund
+        pointsRestorationRequestedKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: Immutable points restoration amount requested for this Refund
+        pointsRestorationState:
+          type: string
+          description: |
+            Public state of the asynchronous Loyalty restoration. PROCESSING
+            includes durable publication pending and bounded retry. MANUAL_REVIEW
+            means automatic convergence stopped; it is not success.
+          enum: [NOT_REQUIRED, REQUESTED, PROCESSING, SUCCEEDED, MANUAL_REVIEW]
         cashRefundedKrw:
-          $ref: "#/components/schemas/MoneyKrw"
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: Confirmed cash refund amount; present only in SUCCEEDED
         pointsRestoredKrw:
-          $ref: "#/components/schemas/MoneyKrw"
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: |
+            Confirmed Loyalty restoration amount; present only when
+            pointsRestorationState is SUCCEEDED
         currency:
           $ref: "#/components/schemas/Currency"
         createdAt:
@@ -1748,6 +1836,49 @@ components:
           $ref: "#/components/schemas/DateTime"
         correlationId:
           type: string
+      allOf:
+        - if:
+            properties:
+              state:
+                const: SUCCEEDED
+            required: [state]
+          then:
+            required: [cashRefundedKrw]
+          else:
+            not:
+              required: [cashRefundedKrw]
+        - if:
+            properties:
+              pointsRestorationState:
+                const: SUCCEEDED
+            required: [pointsRestorationState]
+          then:
+            required: [pointsRestoredKrw]
+          else:
+            not:
+              required: [pointsRestoredKrw]
+        - if:
+            properties:
+              pointsRestorationState:
+                const: NOT_REQUIRED
+            required: [pointsRestorationState]
+          then:
+            properties:
+              pointsRestorationRequestedKrw:
+                const: 0
+          else:
+            properties:
+              pointsRestorationRequestedKrw:
+                minimum: 1
+        - if:
+            properties:
+              pointsRestorationState:
+                enum: [PROCESSING, SUCCEEDED, MANUAL_REVIEW]
+            required: [pointsRestorationState]
+          then:
+            properties:
+              state:
+                const: SUCCEEDED
     StoreOrderTransitionRequest:
       type: object
       additionalProperties: false
@@ -1856,6 +1987,49 @@ components:
           $ref: "#/components/schemas/Currency"
         confirmedAt:
           $ref: "#/components/schemas/DateTime"
+    SettlementItemPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SettlementItem"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    SettlementItem:
+      type: object
+      additionalProperties: false
+      required:
+        - settlementItemId
+        - settlementBatchId
+        - orderId
+        - completedAt
+        - grossPaidKrw
+        - feeKrw
+        - benefitCostKrw
+        - netSettlementKrw
+        - currency
+      properties:
+        settlementItemId:
+          $ref: "#/components/schemas/Identifier"
+        settlementBatchId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        completedAt:
+          $ref: "#/components/schemas/DateTime"
+        grossPaidKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        feeKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        benefitCostKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        netSettlementKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
     CreateDisputeRequest:
       type: object
       additionalProperties: false

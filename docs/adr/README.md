@@ -62,3 +62,6 @@
 | [ADR-058](ADR-058-paid-cancellation-deadline-timeout-work.md) | Accepted | 기한 후 PAID 고객 취소의 즉시 timeout work |
 | [ADR-059](ADR-059-pre-release-compensation-clean-cutover.md) | Accepted | OrderCompensation의 pre-release clean cutover |
 | [ADR-060](ADR-060-customer-cancellation-implementation-scope.md) | Accepted | 고객 취소 구현의 MVP 범위와 비목표 |
+| [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md) | Accepted | Refund 요청 금액과 성공 확정 금액 분리 |
+| [ADR-062](ADR-062-settlement-batch-item-discovery.md) | Accepted | 정산 Batch별 Item 조회와 이의제기 식별 경로 |
+| [ADR-063](ADR-063-partial-refund-expired-point-restoration.md) | Accepted | 부분 환불의 만료 포인트 30일 보상 복원 |

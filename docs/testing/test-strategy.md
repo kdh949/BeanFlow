@@ -47,7 +47,8 @@
   Unknown 뒤 REQUEST 0회, missing Refund 복구 뒤 LOOKUP 우선
 - Owner compensation: Pickup·Stock·Coupon·Points의 source/trigger/policy 일치,
   duplicate와 conflict, 한 publication 소진 시 한 step만 manual review
-- Benefit policy: trigger×benefit 네 head, 두 immutable Case FK/event snapshot,
+- Benefit policy: 종료용 trigger×benefit 네 head와 PARTIAL_REFUND×POINTS 한 head,
+  종료 Case의 두 immutable FK/event snapshot, 부분 환불 Refund의 POINTS policy FK,
   expired coupon terms·cost snapshot과 future settlement tie-out
 - Notification: 두 상태의 접수 Delivery commit gate, 환불 성공·지연 terminal event,
   기본 step 단조성, 보상 전체 완료 알림 부재

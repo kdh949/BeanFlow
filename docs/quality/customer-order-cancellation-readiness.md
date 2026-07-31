@@ -67,7 +67,8 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 - C1: Order·Payment snapshot·필요한 Refund·Case/6 step·두 benefit policy·accepted
   Delivery·target Audit·네 owner publication·멱등 응답을 commit하고 202
 - deadline 이후 PAID: timeout work와 Audit 저장 성공 뒤 409, 저장 실패는 503
-- 선행 성공 부분 환불 허용, 남은 cash와 미복원 benefit allocation만 처리
+- 선행 성공 부분 환불 허용, 남은 cash와 아직 복원되지 않은 point allocation만 처리;
+  부분 환불은 쿠폰을 복원하지 않고 전체 종료가 원 쿠폰을 한 번 복원
 - request retry 최대 3회, UNKNOWN 이후 request 중단과 lookup 최대 5회
 - 고객 projection: 내부 processing/unknown/reconciling은 `PROCESSING`,
   failed/manual review/setup incomplete은 `PROCESSING + REFUND_DELAYED`
@@ -213,9 +214,10 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 
 ### Partial refund allocation
 
-현금 총액만으로는 선행 부분 환불이 어느 line 혜택을 복원했는지 알 수 없다. 현재
-OrderLine snapshot은 최초 배분만 보존하며 성공 Refund allocation 원장이 없다. plan 10이
-line 상한, source unique, 성공 시점 원장과 remaining query를 먼저 구현한다.
+현금 총액만으로는 선행 부분 환불이 어느 line 포인트를 복원했고 coupon 할인액이 어느
+line에 귀속됐는지 알 수 없다. 현재 OrderLine snapshot은 최초 배분만 보존하며 성공
+Refund allocation 원장이 없다. plan 10이 line 상한, source unique, 성공 시점의
+cash/point 원장, 비복원 coupon attribution과 remaining query를 먼저 구현한다.
 
 ### Settlement
 
@@ -231,7 +233,7 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 ## Correct implementation order
 
 1. `00-contract-baseline`: 외부 운영 사실 0 확인과 ADR-059 clean-cutover 전략 확정
-2. `10-partial-refund-allocation-foundation`: line-level cash/benefit 원장
+2. `10-partial-refund-allocation-foundation`: line-level cash/point restoration과 coupon attribution 원장
 3. `20-settlement-foundation`: 완료 정산 원천과 취소 NOT_APPLICABLE 증적
 4. `30-order-compensation-foundation`: trigger-aware Case, policy, owner convergence
 5. `40-command`: Order 취소 모델, C0/C1/CT, API와 commit gate

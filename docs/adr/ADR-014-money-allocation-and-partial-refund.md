@@ -16,6 +16,11 @@ BR-02, BR-08, BR-12와 BR-15는 주문 당시 금액을 정수 KRW로 재현하�
 - 버림 후 잔여 원은 금액이 큰 항목, 동률이면 주문 항목 순서가 빠른 항목부터 배분한다.
 - 부분 환불은 저장된 현금 배분액을 환불하고 사용 포인트를 복원한다. 쿠폰 할인액은
   현금으로 환급하지 않는다.
+- **Partial refund coupon clarification (2026-08-01):** 부분 환불의 coupon
+  allocation은 환불·정산 tie-out과 감사용 귀속 원장이다. 부분 환불 성공은 원
+  CouponIssuance를 복원하거나 보상 CouponIssuance를 만들지 않고 Promotion owner
+  복원 작업도 시작하지 않는다. 원 쿠폰은 주문 전체가 고객 취소 또는 매장 거절로
+  종료될 때 기존 종료 정책에 따라 최대 한 번 복원한다.
 - 성공한 누적 환불액은 승인액을 초과할 수 없으며 refund source reference로 중복을
   방지한다.
 
@@ -58,6 +63,8 @@ BR-02, BR-08, BR-12와 BR-15는 주문 당시 금액을 정수 KRW로 재현하�
 - coupon 적용 후 잔액 기준 point 배분
 - 잔여 1원이 여러 개 생기는 동률 항목
 - 반복 품목 환불과 누적 환불 상한
+- 부분 환불 성공 시 CouponIssuance 상태 불변과 Promotion 복원 호출 부재
+- 선행 부분 환불 뒤 주문 전체 종료 시 원 쿠폰의 단일 복원
 - 현금, 포인트, 쿠폰, 환불, 정산 tie-out
 
 ## Metrics

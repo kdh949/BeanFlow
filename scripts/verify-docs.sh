@@ -367,6 +367,7 @@ else:
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
         '/stores/{storeId}/settlements',
+        '/stores/{storeId}/settlements/{settlementBatchId}/items',
         '/settlement-items/{itemId}/disputes',
     }
     actual_paths = set(spec.get('paths', {}))
@@ -586,6 +587,208 @@ else:
     if schemas['StoreOrderResult']['properties']['order'].get('$ref') != '#/components/schemas/StoreOrder':
         print('StoreOrderResult must return the StoreOrder projection.', file=sys.stderr)
         sys.exit(1)
+
+    refund = schemas['Refund']
+    refund_properties = set(refund.get('properties', {}))
+    requested_refund_amounts = {
+        'cashRefundRequestedKrw',
+        'pointsRestorationRequestedKrw',
+    }
+    confirmed_refund_amounts = {'cashRefundedKrw', 'pointsRestoredKrw'}
+    if not requested_refund_amounts | confirmed_refund_amounts | {'pointsRestorationState'} <= refund_properties:
+        print('Refund requested/confirmed amount fields are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    refund_required = set(refund.get('required', []))
+    if not requested_refund_amounts | {'pointsRestorationState'} <= refund_required:
+        print('Refund requested amount snapshots and points state must exist in every state.', file=sys.stderr)
+        sys.exit(1)
+    if confirmed_refund_amounts & refund_required:
+        print('Refund confirmed amounts must not be unconditionally required.', file=sys.stderr)
+        sys.exit(1)
+    refund_success_branches = [
+        branch for branch in refund.get('allOf', [])
+        if branch.get('if', {}).get('properties', {}).get('state', {}).get('const') == 'SUCCEEDED'
+    ]
+    if len(refund_success_branches) != 1:
+        print('Refund must have exactly one SUCCEEDED amount rule.', file=sys.stderr)
+        sys.exit(1)
+    refund_success = refund_success_branches[0]
+    if refund_success.get('then', {}).get('required') != ['cashRefundedKrw']:
+        print('SUCCEEDED cash Refund must require cashRefundedKrw.', file=sys.stderr)
+        sys.exit(1)
+    if refund_success.get('else', {}).get('not', {}).get('required') != ['cashRefundedKrw']:
+        print('Non-SUCCEEDED cash Refund must forbid cashRefundedKrw.', file=sys.stderr)
+        sys.exit(1)
+    expected_points_states = {
+        'NOT_REQUIRED', 'REQUESTED', 'PROCESSING', 'SUCCEEDED', 'MANUAL_REVIEW'
+    }
+    actual_points_states = set(
+        refund['properties']['pointsRestorationState'].get('enum', [])
+    )
+    if actual_points_states != expected_points_states:
+        print('Refund points restoration states are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    points_success_branches = [
+        branch for branch in refund.get('allOf', [])
+        if branch.get('if', {}).get('properties', {}).get('pointsRestorationState', {}).get('const')
+        == 'SUCCEEDED'
+    ]
+    if len(points_success_branches) != 1:
+        print('Refund must have exactly one points SUCCEEDED amount rule.', file=sys.stderr)
+        sys.exit(1)
+    points_success = points_success_branches[0]
+    if points_success.get('then', {}).get('required') != ['pointsRestoredKrw']:
+        print('SUCCEEDED points restoration must require pointsRestoredKrw.', file=sys.stderr)
+        sys.exit(1)
+    if points_success.get('else', {}).get('not', {}).get('required') != ['pointsRestoredKrw']:
+        print('Non-SUCCEEDED points restoration must forbid pointsRestoredKrw.', file=sys.stderr)
+        sys.exit(1)
+    points_not_required_branches = [
+        branch for branch in refund.get('allOf', [])
+        if branch.get('if', {}).get('properties', {}).get('pointsRestorationState', {}).get('const')
+        == 'NOT_REQUIRED'
+    ]
+    if len(points_not_required_branches) != 1:
+        print('Refund must have exactly one points NOT_REQUIRED amount rule.', file=sys.stderr)
+        sys.exit(1)
+    points_not_required = points_not_required_branches[0]
+    if (
+        points_not_required.get('then', {}).get('properties', {})
+        .get('pointsRestorationRequestedKrw', {}).get('const')
+        != 0
+    ):
+        print('NOT_REQUIRED points restoration must pin requested points to zero.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        points_not_required.get('else', {}).get('properties', {})
+        .get('pointsRestorationRequestedKrw', {}).get('minimum')
+        != 1
+    ):
+        print('Required points restoration must have a positive requested amount.', file=sys.stderr)
+        sys.exit(1)
+    points_after_cash_branches = [
+        branch for branch in refund.get('allOf', [])
+        if set(
+            branch.get('if', {}).get('properties', {})
+            .get('pointsRestorationState', {}).get('enum', [])
+        ) == {'PROCESSING', 'SUCCEEDED', 'MANUAL_REVIEW'}
+    ]
+    if len(points_after_cash_branches) != 1:
+        print('Refund must constrain active points restoration to cash success.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        points_after_cash_branches[0].get('then', {}).get('properties', {})
+        .get('state', {}).get('const')
+        != 'SUCCEEDED'
+    ):
+        print('Active points restoration requires a SUCCEEDED cash Refund.', file=sys.stderr)
+        sys.exit(1)
+
+    settlement_items_path = spec['paths'][
+        '/stores/{storeId}/settlements/{settlementBatchId}/items'
+    ]['get']
+    settlement_item_parameter_refs = {
+        item.get('$ref')
+        for item in settlement_items_path.get('parameters', [])
+        if isinstance(item, dict)
+    }
+    expected_settlement_item_parameter_refs = {
+        '#/components/parameters/StoreId',
+        '#/components/parameters/SettlementBatchId',
+        '#/components/parameters/Cursor',
+        '#/components/parameters/Limit',
+    }
+    if settlement_item_parameter_refs != expected_settlement_item_parameter_refs:
+        print('SettlementItem list scope/pagination parameters are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    settlement_item_page_ref = (
+        settlement_items_path['responses']['200']['content']['application/json']['schema'].get('$ref')
+    )
+    if settlement_item_page_ref != '#/components/schemas/SettlementItemPage':
+        print('SettlementItem list must return SettlementItemPage.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        schemas['SettlementItemPage']['properties']['items']['items'].get('$ref')
+        != '#/components/schemas/SettlementItem'
+    ):
+        print('SettlementItemPage items must use the SettlementItem projection.', file=sys.stderr)
+        sys.exit(1)
+    expected_settlement_item_fields = {
+        'settlementItemId',
+        'settlementBatchId',
+        'orderId',
+        'completedAt',
+        'grossPaidKrw',
+        'feeKrw',
+        'benefitCostKrw',
+        'netSettlementKrw',
+        'currency',
+    }
+    settlement_item = schemas['SettlementItem']
+    if set(settlement_item.get('properties', {})) != expected_settlement_item_fields:
+        print('SettlementItem projection fields are incomplete or excessive.', file=sys.stderr)
+        sys.exit(1)
+    if set(settlement_item.get('required', [])) != expected_settlement_item_fields:
+        print('SettlementItem projection fields must all be required snapshots.', file=sys.stderr)
+        sys.exit(1)
+
+    policy_list_schema = (
+        spec['paths']['/operations/policies/expired-benefit-restoration']['get']
+        ['responses']['200']['content']['application/json']['schema']
+    )
+    if policy_list_schema.get('minItems') != 5 or policy_list_schema.get('maxItems') != 5:
+        print('Expired benefit policy list must return exactly five heads.', file=sys.stderr)
+        sys.exit(1)
+
+    policy_patch = spec['paths'][
+        '/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}'
+    ]['patch']
+    policy_patch_parameters = {
+        parameter.get('name'): parameter
+        for parameter in policy_patch.get('parameters', [])
+        if isinstance(parameter, dict) and parameter.get('name')
+    }
+    expected_policy_triggers = {
+        'STORE_REJECTION', 'CUSTOMER_CANCELLATION', 'PARTIAL_REFUND'
+    }
+    if set(policy_patch_parameters['trigger']['schema'].get('enum', [])) != expected_policy_triggers:
+        print('Expired benefit policy PATCH trigger enum is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if '404' not in policy_patch.get('responses', {}):
+        print('Expired benefit policy PATCH must reject the absent partial-refund coupon key.', file=sys.stderr)
+        sys.exit(1)
+
+    policy_schema = schemas['ExpiredBenefitRestorationPolicy']
+    if set(policy_schema['properties']['trigger'].get('enum', [])) != expected_policy_triggers:
+        print('ExpiredBenefitRestorationPolicy trigger enum is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    partial_refund_policy_rules = [
+        branch for branch in policy_schema.get('allOf', [])
+        if branch.get('if', {}).get('properties', {}).get('trigger', {}).get('const')
+        == 'PARTIAL_REFUND'
+    ]
+    if len(partial_refund_policy_rules) != 1:
+        print('ExpiredBenefitRestorationPolicy must have one PARTIAL_REFUND key rule.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        partial_refund_policy_rules[0].get('then', {}).get('properties', {})
+        .get('benefitType', {}).get('const')
+        != 'POINTS'
+    ):
+        print('PARTIAL_REFUND policy must be restricted to POINTS.', file=sys.stderr)
+        sys.exit(1)
+
+    expected_termination_triggers = {'STORE_REJECTION', 'CUSTOMER_CANCELLATION'}
+    for schema_name in ('StoreCompensationSummary', 'CompensationSummary'):
+        actual_triggers = set(
+            schemas[schema_name]['properties']['trigger'].get('enum', [])
+        )
+        if actual_triggers != expected_termination_triggers:
+            print(
+                f'{schema_name} must remain restricted to order-termination triggers.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     unresolved_states = (
         '`REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, '

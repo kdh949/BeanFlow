@@ -13,7 +13,9 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 현재 거절 전용 `RejectionRefundService`는 `succeededRefundAmountKrw != 0`이면 자동
 환불을 거부하고 승인액 전체만 요청한다. 반면 일반 환불 OpenAPI는 full refund를 남은
 환불 가능 금액으로 정의한다. 어느 의미를 고객 취소에 적용할지와 이미 복원된 line
-혜택을 어떻게 중복 방지할지 결정해야 한다.
+포인트를 어떻게 중복 방지할지 결정해야 한다. BR-12와 ADR-014의 2026-08-01
+clarification에 따라 부분 환불의 coupon allocation은 귀속 원장일 뿐 쿠폰 복원이
+아니다.
 
 ## Decision
 
@@ -21,8 +23,11 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 - 새 고객 취소 Refund의 현금 요청액은
   `approvedAmountKrw - succeededRefundAmountKrw`다.
 - 성공 누적 환불액과 새 고객 취소 Refund의 성공 금액 합은 승인액을 초과할 수 없다.
-- 고객 취소의 쿠폰·포인트 보상은 선행 부분 환불에서 이미 복원된 line allocation을
-  제외하고 아직 복원되지 않은 잔여 allocation만 대상으로 한다.
+- 고객 취소의 포인트 보상은 선행 부분 환불에서 이미 복원된 line allocation을 제외하고
+  아직 복원되지 않은 잔여 allocation만 대상으로 한다.
+- 부분 환불은 쿠폰을 복원하지 않는다. 고객 취소의 COUPON step은 선행 부분 환불의
+  coupon 귀속 allocation을 차감하지 않고 원 CouponIssuance를 기존 고객 취소 정책으로
+  한 번만 복원한다.
 - Tx C1은 Order를 취소하고 Refund를 만들기 전에 Payment와 성공 refund allocation을
   잠가 남은 금액을 계산한다.
 - 현재 V10 `payment_refund`에는 line별 현금 환불·포인트 복원·쿠폰 처리 allocation이
@@ -125,17 +130,18 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 ## Rationale
 
 부분 환불이 이미 성공했다는 사실은 승인액 중 일부가 반환됐다는 뜻이지 남은 주문을
-취소할 수 없다는 뜻은 아니다. 승인액 상한과 line별 복원 원장을 함께 보호하면 남은
-현금과 혜택만 정확히 정리할 수 있다. 단순 잔액 계산만 하고 혜택 원장을 두지 않으면
-현금은 맞아도 포인트·쿠폰이 이중 복원될 수 있으므로 두 요구를 하나의 결정으로
-묶는다.
+취소할 수 없다는 뜻은 아니다. 승인액 상한과 line별 포인트 복원 원장을 함께 보호하면
+남은 현금과 포인트를 정확히 정리할 수 있다. coupon 귀속 원장은 금액 재현에 사용하되
+복원 사실로 취급하지 않아, 주문 전체 종료 전 쿠폰 재사용과 종료 시 쿠폰 복원 누락을
+모두 막는다.
 
 ## Consequences
 
 - Payment Context에 한 Payment의 여러 Refund와 line allocation을 조회·잠그는 public
   Application API가 필요하다.
 - Refund 또는 별도 refund allocation table이 line별 cash, restored points와 coupon
-  disposition의 성공 사실을 보존해야 한다.
+  attribution을 구분해 보존해야 한다. coupon attribution은 restoration disposition이
+  아니다.
 - 기존 `uq_payment_rejection_refund` 같은 reason별 단일 index만으로는 일반 부분
   환불과 고객 취소 합성을 보호할 수 없다.
 - ADR-033의 단일 Refund 원천 규칙은 여러 Refund가 공존하는 경우를 다루도록 이번
@@ -159,6 +165,9 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
   있는 금액을 다시 요청할 수 있다.
 - line-level 복원 원장이 없으면 부분 환불에서 복원한 포인트를 전체 취소가 다시
   복원할 수 있다.
+- coupon 귀속 allocation을 복원 성공으로 차감하면 전체 취소에서 원 쿠폰이 복원되지
+  않고, 부분 환불에서 쿠폰 owner를 변경하면 잔여 할인 품목과 재사용 쿠폰의 가치가
+  중복된다.
 - 남은 금액 계산과 Refund insert 사이에 다른 Refund가 commit되면 stale 잔액이
   저장될 수 있다.
 - 요청액이 양수인데 Refund/snapshot 누락을 `NOT_REQUIRED`로 반환하면 commit gate
@@ -178,7 +187,8 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 
 - 성공 부분 환불 뒤 고객 취소 Refund가 정확한 현금 잔액만 요청한다.
 - 모든 성공 Refund 합계가 승인액을 넘지 않는다.
-- 이미 복원된 line 혜택은 고객 취소에서 다시 복원되지 않는다.
+- 이미 복원된 line 포인트는 고객 취소에서 다시 복원되지 않는다.
+- 부분 환불은 쿠폰을 복원하지 않고 후속 고객 취소가 원 쿠폰을 한 번만 복원한다.
 - 부분 환불과 고객 취소 경쟁이 Payment lock과 DB 제약으로 직렬화된다.
 - summary state가 고객 취소 Refund와 일치하고 선행 Refund state와 독립적이다.
 - snapshot 세 금액과 동적 잔액이 각 기준 시점을 지킨다.
@@ -190,8 +200,9 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 - 부분 환불과 고객 취소 동시 실행의 승인액 상한
 - 부분 환불 직후 고객 취소 lock ordering과 deadlock 회귀
 - line별 현금 allocation 합계와 Payment 누적 성공 환불액 일치
-- 부분 환불에서 복원된 포인트·쿠폰 allocation의 이중 복원 부재
-- 잔여 line 혜택만 복원되고 원 주문 snapshot과 tie-out
+- 부분 환불에서 복원된 포인트 allocation의 이중 복원 부재
+- 부분 환불 coupon 귀속 원장의 비복원 처리와 Promotion 호출 부재
+- 후속 고객 취소에서 원 쿠폰 한 번 복원과 잔여 line 포인트만 복원
 - DB Check/Unique 위반의 전체 Tx C1 rollback
 - snapshot 승인액 = 취소 전 성공액 + 취소 요청액 CHECK
 - 요청액 양수의 Refund FK 필수와 요청액 0의 NULL CHECK

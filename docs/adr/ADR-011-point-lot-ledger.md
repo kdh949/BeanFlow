@@ -46,6 +46,20 @@
   `RESTORE_SKIPPED_EXPIRED` 원장을 기록한다.
 - event source와 allocation reference의 Unique Constraint가 이중 복원을 막는다.
 
+2026-08-01 partial refund amendment (ADR-063):
+
+- 부분 환불은 `PARTIAL_REFUND × POINTS` policy version을 Refund 요청 시 snapshot한다.
+- 원 PointLot이 `refundSucceededAt`에 유효하면 원 lot과 `RESTORE` 원장을 복원한다.
+- 이미 만료됐고 snapshot mode가 `COMPENSATE_WITH_NEW_ISSUANCE`면 original lot과
+  issuer/cost lineage를 보존한 새 PointLot을 `refundSucceededAt`부터 snapshot validity
+  days 동안 발급하고 `COMPENSATION` 원장을 기록한다. 초기 유효일수는 30일이다.
+- `PRESERVE_ORIGINAL_EXPIRY`면 가용 balance를 늘리지 않고
+  `RESTORE_SKIPPED_EXPIRED`를 기록한다.
+- 부분 환불은 PointReservation의 `USED` 상태와 reservation-level 종료 metadata를
+  바꾸지 않는다. Refund line/point allocation과 PointTransaction이 부분 복원 원천이다.
+- 후속 주문 종료는 이미 부분 환불로 복원된 allocation을 제외하고 잔여 allocation만
+  처리한다.
+
 ## Alternatives Considered
 
 - balance만 저장
@@ -63,6 +77,8 @@
 - PointLot 만료 worker는 active reservation을 삭제하지 않고 available과 reserved를
   구분해야 한다.
 - 주문 해제 결과가 Lot 만료 전후에 따라 restore 또는 expiration으로 나뉜다.
+- 부분 환불 보상 lot은 원 issuer/cost owner를 승계하고 Refund policy snapshot으로
+  재현된다.
 
 ## Verification
 
@@ -73,6 +89,8 @@
 - 유효·만료 allocation이 섞인 예약 해제
 - 같은 Order의 동시 포인트 예약
 - 환불 복원·회수
+- 부분 환불 시 만료 lot의 30일 보상과 정책 version 재현
+- 부분 환불 뒤 reservation USED 유지와 후속 종료의 잔여 allocation 복원
 - 원장과 balance tie-out
 
 ## Metrics
