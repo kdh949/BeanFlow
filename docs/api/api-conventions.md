@@ -83,6 +83,9 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - `BENEFIT_ONLY` 취소는 snapshot과 네 금액이 모두 0이고 Refund가 없으며
   `state = NOT_REQUIRED`, `noticeCode` 부재다. 나머지 비동기 보상 때문에 `PAID`
   취소 응답은 계속 `202`다.
+- `PENDING_PAYMENT` 취소는 외부 승인과 recovery snapshot 자체가 없으므로
+  `state = NOT_REQUIRED`이면서 네 금액을 0으로 표현하지 않고 함께 생략한다. 네
+  금액이 모두 0인 것은 `BENEFIT_ONLY` 취소뿐이다.
 - 정상 setup의 `paymentRecovery`는 `approvedAmountKrw`,
   `succeededRefundAmountBeforeCancellationKrw`,
   `cancellationRequestedRefundAmountKrw`, `remainingRefundableAmountKrw`를 필수로
@@ -96,9 +99,14 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - 취소 POST의 `paymentRecovery`는 commit 시점 snapshot이고 멱등 재생에서도 그대로다.
   최신 state와 `remainingRefundableAmountKrw`는 Order GET으로 조회한다.
 - 보상 step 상세는 운영자 전용 `GET /api/v1/operations/orders/{orderId}/compensation`
-  에서만 조회한다. 매장 거절과 고객 취소가 같은 `CompensationSummary`를 사용하고
-  `trigger`로 구분하되, 운영 endpoint는 이를 `OperatorCompensationView`로 감싸
-  setup issue와 ReprocessingCase를 추가한다. 이 운영자 필드는 매장 응답에 없다.
+  에서만 조회한다. 이 endpoint는 여섯 step, `attemptCount`, `lastErrorCode`,
+  `caseId`와 두 benefit policy version을 담은 `CompensationSummary`를
+  `OperatorCompensationView`로 감싸 setup issue와 ReprocessingCase reference를
+  추가한다.
+- 매장 응답 `StoreOrderResult.compensationRecovery`는 `trigger`, case `state`와
+  `updatedAt`만 담은 축약 `StoreCompensationSummary`다. 매장은 거절과 고객 취소를
+  구분하고 보상이 진행 중인지 확인하되 step 배열, 시도 횟수, 내부 오류 code, case
+  식별자와 정책 version은 보지 않는다(ADR-030, ADR-033).
 - 취소 사실은 취소 POST 응답뿐 아니라 Order 표현에도 노출하며 역할별 projection을
   분리한다. 고객용 `Order`는 `rejectedAt`·`rejectionReason`과 대칭으로
   `cancelledAt`, `cancellationCause`(`CUSTOMER_REQUEST`, `PAYMENT_DECLINED`)와

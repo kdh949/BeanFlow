@@ -41,6 +41,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   | OpenAPI | `RejectionRecoverySummary` | `CompensationSummary` |
   | OpenAPI | `RejectionRecoveryStep` | `CompensationStep` |
   | 매장 응답 | `StoreOrderResult.rejectionRecovery` | `StoreOrderResult.compensationRecovery` |
+  | OpenAPI | 매장용 축약 schema 없음 | `StoreCompensationSummary` |
 
 - Case에 `trigger` 컬럼을 추가한다. 초기 값 집합은 `STORE_REJECTION`과
   `CUSTOMER_CANCELLATION`이며 CHECK로 강제하고 `CompensationSummary.trigger`로
@@ -52,9 +53,18 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 - `order_id` UNIQUE를 유지한다. 한 주문은 `REJECTED`와 `CANCELLED` 중 하나에만
   도달하므로 두 trigger의 Case가 같은 주문에 공존하지 않는다.
 - 운영자 조회 endpoint는 `GET /api/v1/operations/orders/{orderId}/compensation`이며
-  `OperatorCompensationView`를 반환한다. 공용 `CompensationSummary`와 operator-only
+  `OperatorCompensationView`를 반환한다. `CompensationSummary`와 operator-only
   setup issue/ReprocessingCase reference를 감싸며 step 상태, `attemptCount`,
   `lastErrorCode`와 setup detail은 이 경로에서만 노출한다.
+- **Store projection amendment (2026-08-01):** `CompensationSummary`는 공용
+  schema가 아니라 `OperatorCompensationView` 전용이다. 매장 응답
+  `StoreOrderResult.compensationRecovery`는 `trigger`, case `state`와
+  `updatedAt`만 담은 별도 `StoreCompensationSummary`를 사용한다. 기존 거절
+  응답이 여섯 step과 `attemptCount`·`lastErrorCode`·`caseId`를 매장에 노출하던
+  것은 authorization matrix의 "주문 보상 case step 상세 조회 = 매장 No"와 이
+  ADR의 Verification을 위반하는 구현이므로 clean cutover에서 함께 축약한다.
+  매장은 거절과 고객 취소를 `trigger`로 구분하고 보상이 진행 중인지 확인할 수
+  있으며, 내부 보상 구조와 오류 code는 공개 계약이 되지 않는다.
 - 고객에게 반환하는 `CancellationRefundRecoverySummary.state`는 **이번 고객 취소 source의
   Refund 한 건에서만** 파생한다. 선행 부분 환불을 포함한 다른 Refund의 상태나 보상
   case PAYMENT step을 합성하지 않는다.
@@ -115,6 +125,8 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 
 - clean cutover와 함께 `StoreOrderResult`, OpenAPI 스키마, 모듈 API 타입명이
   바뀐다. 기존 거절 회귀 테스트를 새 schema에서 함께 갱신해야 한다.
+- 매장 응답에서 step 배열·`attemptCount`·`lastErrorCode`·`caseId`·policy version이
+  사라지므로 매장 화면은 진행 여부만 표시하고 상세 문의는 운영자 경로로 넘긴다.
 - 운영자 조회 endpoint가 신설되어 `PLATFORM_OPERATOR` 인가가 추가된다.
 - `CompensationSummary.trigger`가 노출되므로 매장·운영자 화면이 거절과 취소를
   구분해 표시할 수 있다.
@@ -159,6 +171,8 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 - `trigger` 미허용 값 CHECK 위반 거부
 - 같은 주문에 두 trigger Case 생성 시도 시 UNIQUE 위반
 - 운영자 endpoint의 `PLATFORM_OPERATOR` 인가와 타 role `403`
+- 매장 응답에 step 배열·`attemptCount`·`lastErrorCode`·`caseId`·policy version 부재
+- 매장 응답의 `trigger`·case `state`·`updatedAt` 존재와 거절·취소 구분
 - 존재하지 않는 주문 보상 조회 `404`
 - 환불 필요액 0인 취소의 요약 `NOT_REQUIRED`
 - 환불 필요액 양수인데 Refund/snapshot이 없는 취소의 고객 지연 projection과 운영

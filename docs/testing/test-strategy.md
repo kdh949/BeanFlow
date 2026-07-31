@@ -43,8 +43,8 @@
   Audit·event publication 전부 commit 또는 전부 rollback
 - Concurrency: 고객 취소 대 수락·timeout·부분 Refund, 같은/different
   Idempotency-Key와 Order→Payment lock 순서
-- Refund: 선행 line allocation, request 3회·lookup 5회 독립 상한, Unknown 뒤
-  REQUEST 0회, missing Refund 복구 뒤 LOOKUP 우선
+- Refund: 선행 line allocation, request 3회·lookup 5회 독립 상한과 전체 8회,
+  Unknown 뒤 REQUEST 0회, missing Refund 복구 뒤 LOOKUP 우선
 - Owner compensation: Pickup·Stock·Coupon·Points의 source/trigger/policy 일치,
   duplicate와 conflict, 한 publication 소진 시 한 step만 manual review
 - Benefit policy: trigger×benefit 네 head, 두 immutable Case FK/event snapshot,
@@ -63,10 +63,14 @@
   (`REQUESTED`/`PROCESSING`/`RETRY_SCHEDULED`/`UNKNOWN`/`RECONCILING`/`MANUAL_REVIEW`)
   각각의 `409 PAYMENT_REFUND_UNRESOLVED`와 `SUCCEEDED`/`FAILED`의 허용
 - Recovery summary: 선행 전액 환불로 요청액이 0이 된 취소의 `NOT_REQUIRED`와 양수
-  `approvedAmountKrw`, `BENEFIT_ONLY`의 네 금액 0, 네 금액 all-or-nothing
+  `approvedAmountKrw`, `BENEFIT_ONLY`의 네 금액 0, `PENDING_PAYMENT`의 네 금액
+  생략, 네 금액 all-or-nothing
 - Order projection: 고객 `Order`의 `cancelledAt`·`cancellationCause`·
   `cancellationReasonCode` 노출, 매장 `StoreOrder`의 `cancellationReasonCode`·
   `paymentRecovery` 부재, 두 projection의 `detail` 부재
+- Compensation projection: 매장 응답의 step 배열·`attemptCount`·`lastErrorCode`·
+  `caseId`·policy version 부재와 `trigger`·case `state` 존재, 운영자 응답의 여섯
+  step 존재
 - Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
   하나라도 있으면 clean cutover 차단
 

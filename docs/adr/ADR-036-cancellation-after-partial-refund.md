@@ -55,7 +55,9 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
   뜻이 아니다. 선행 환불이 승인액을 모두 반환해 요청액이 0이 된 미수락 `PAID`
   취소는 `NOT_REQUIRED`이면서 `approvedAmountKrw`와
   `succeededRefundAmountBeforeCancellationKrw`가 양수다. 네 금액이 모두 0인 것은
-  ADR-039의 `BENEFIT_ONLY`와 승인 자체가 없는 `PENDING_PAYMENT` 취소뿐이다. API
+  ADR-039의 `BENEFIT_ONLY` 취소뿐이다. 외부 승인과 recovery snapshot 자체가 없는
+  `PENDING_PAYMENT` 취소는 검증할 원천이 없으므로 네 금액을 0으로 표현하지 않고
+  ADR-031·ADR-050의 all-or-nothing 규칙에 따라 함께 생략한다(2026-08-01 확정). API
   schema는 `NOT_REQUIRED`에 대해 요청액 0과 `noticeCode` 부재만 강제하고 나머지
   금액을 0으로 고정하지 않는다.
 - 선행 Refund가 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
@@ -82,9 +84,15 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 - Provider idempotency key는
   `refund:customer-cancellation:{orderId}:{aggregateVersion}`다. 최초 요청과 모든
   lookup·reconciliation에서 같은 key를 사용한다.
-- ADR-037에 따라 Provider 작업은 최초 요청 1회와 결과 불명 시 조회 최대 5회다.
-  조회는 10초, 30초, 2분, 5분, 15분 간격으로 수행하며 최초 요청을 포함한
-  `attempt_count` 상한은 6이다.
+- **Refund attempt budget clarification (2026-08-01):** Provider 예산은 ADR-038이
+  개정한 `REQUEST` 3회와 ADR-037의 `LOOKUP` 5회이며 두 예산은 서로 독립적이다.
+  따라서 최악의 Provider 상호작용은 8회이고 전체 `attempt_count`에 6 상한을 두지
+  않는다. 최초 `REQUEST` 뒤에는 adapter allowlist가 무부수효과와 같은 key 재실행
+  안전을 보장한 명시 실패에만 10초·30초에 같은 key로 최대 두 번 재요청한다. 어느
+  `REQUEST`에서든 결과가 불명해지면 `REQUEST` 경로를 영구 종료하고 같은 key로
+  10초, 30초, 2분, 5분, 15분 뒤 최대 다섯 번 조회한다. 결과 불명 경로만 보면 최초
+  `REQUEST` 1회와 `LOOKUP` 5회로 상호작용이 6회다. `request_attempt_count`와
+  `lookup_attempt_count`는 별도로 보존한다.
 - event ID·event version, client `Idempotency-Key`, customer ID와 자유 입력
   `detail`은 Refund 또는 Provider key, Provider 요청과 log에 넣지 않는다. Provider
   reason에는 `customer_reason_code`만 전달한다.
@@ -199,7 +207,8 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
 - 같은 Payment의 고객 취소 Refund partial unique
 - source reference와 Provider key의 Order terminal version 일치
 - REQUEST 후 UNKNOWN·RECONCILING lookup까지 Provider key 불변
-- 최초 REQUEST 1회와 LOOKUP 5회의 attempt 상한·전체 delay 도달
+- REQUEST 3회와 LOOKUP 5회의 독립 예산, 전체 상호작용 8회 상한
+- 결과 불명 경로의 최초 REQUEST 1회와 LOOKUP 5회 전체 delay 도달
 - event ID가 다른 같은 Order version 재처리의 Provider 요청 한 번
 - Refund row·Provider payload·structured log에 자유 `detail`, client key와 customer
   ID 부재

@@ -75,9 +75,12 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 - Settlement: 미완료 고객 취소에 Item/Adjustment 없이 source-unique NOT_APPLICABLE Audit
 - 선행 Refund 차단 상태: `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
   `RECONCILING`, `MANUAL_REVIEW` 여섯 개. `SUCCEEDED`와 명시 `FAILED`만 허용
-- `NOT_REQUIRED`는 취소 요청액 0만 뜻하고 네 금액은 all-or-nothing으로 반환·생략
+- `NOT_REQUIRED`는 취소 요청액 0만 뜻하고 네 금액은 all-or-nothing으로 반환·생략.
+  네 금액 0은 `BENEFIT_ONLY`뿐이고 `PENDING_PAYMENT`는 네 금액을 생략한다
 - Order projection 분리: 고객 `Order`는 cancelledAt/cancellationCause/
   cancellationReasonCode, 매장 `StoreOrder`는 cancelledAt/cancellationCause만
+- Compensation projection 분리: 매장은 trigger/state/updatedAt만 담은
+  `StoreCompensationSummary`, 운영자만 여섯 step·attempt·error·caseId·policy version
 
 ## Conflict matrix
 
@@ -99,6 +102,9 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | 선행 Refund unresolved 상태 | OpenAPI·closure는 RETRY_SCHEDULED 포함, BR-14·ADR-031·ADR-036·error catalog·transaction boundaries는 누락 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 product owner 확정에 따라 여섯 상태로 통일; ADR-036 clarification과 정책·계약 문서 갱신 |
 | `NOT_REQUIRED` 금액 계약 | OpenAPI는 네 금액 `const: 0` 강제, ADR-036은 요청액 0만 정의(선행 전액 환불 시 승인액 양수) | `CONTRACT_CONFLICT` | 2026-08-01 확정: OpenAPI는 요청액 0과 notice 부재만 강제하고 네 금액을 all-or-nothing으로 계약 |
 | Order 표현의 취소 필드 | ADR-050/030은 취소 시각·원인·reason code 조회를 전제, OpenAPI `Order`(additionalProperties:false)에는 필드 없음 | `CONTRACT_CONFLICT` | 2026-08-01 확정: 고객 `Order`에 세 필드 추가, 매장은 `StoreOrder` projection으로 reason code·`paymentRecovery` 제외 |
+| Refund attempt 상한 | ADR-036은 총 `attempt_count` 상한 6, ADR-038·aggregate invariants·payment runbook은 REQUEST 3 + LOOKUP 5 = 8 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 두 예산은 독립이고 전체 상한은 8; ADR-036 문구를 clarification으로 교정하고 6은 결과 불명 경로 한정으로 남김 |
+| `PENDING_PAYMENT` 네 금액 | ADR-036은 네 금액 모두 0, ADR-031·api conventions·ADR-050은 검증 불가 금액 생략 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 생략이 canonical이고 네 금액 0은 `BENEFIT_ONLY`뿐; ADR-036과 OpenAPI description 교정 |
+| 매장 보상 step 노출 | authorization matrix·ADR-030·ADR-033 Verification·api conventions는 운영자 전용, OpenAPI·plan 30·runbook·현재 `StoreOrderContracts.kt`는 매장에 여섯 step 노출 | `CONTRACT_CONFLICT` + `IMPLEMENTATION_DRIFT` | 2026-08-01 확정: 매장은 축약 `StoreCompensationSummary`; OpenAPI에 schema 신설하고 plan 30 clean cutover에서 store DTO 축약 |
 | 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 `RejectionRefundService` | `IMPLEMENTATION_DRIFT` + `MISSING_FOUNDATION` | allocation foundation plan 10 선행 |
 | Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 코드·migration에 Settlement 없음 | `MISSING_FOUNDATION` | Settlement foundation plan 20 선행 |
 | trigger×benefit 정책과 singleton 구현 | ADR-041 대 V8/Operations singleton policy | `IMPLEMENTATION_DRIFT` | compensation foundation plan 30 |
@@ -191,6 +197,7 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 | Refund recovery | REQUEST 1 + LOOKUP 4 합산 5 | REQUEST 3 + LOOKUP 5 분리 | `Refund.kt`, `RejectionRefundService.kt` |
 | Provider failure | 모든 explicit failure terminal | allowlist만 safe request retry | Payment gateway/service |
 | Compensation | rejection 전용, 단일 policy | trigger-aware Case와 두 policy | Operations API/service/persistence, V8 |
+| Store compensation projection | 매장 응답이 여섯 step·attemptCount·lastErrorCode·caseId·policyVersion 노출 | trigger·state·updatedAt만 담은 축약 요약 | `StoreOrderContracts.kt`, `StoreOrderTransitionService.kt` |
 | Publication failure | 모든 미완료 step manual review | 실패 listener step만 manual review | `RejectionCompensationService.kt`, recovery worker |
 | Events | reason/customer/store와 단일 policy | 최소 payload/두 policy 또는 호환 version | `StoreOrderEvents.kt`, producer/listeners |
 | Owner restore | `RELEASED_BY_REJECTION`, event-ID source | common termination state, stable owner source | four owner APIs/listeners, V9 |
@@ -269,10 +276,12 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 
 ## Current contract reconciliation validation
 
-- `bash scripts/verify-docs.sh`: **Passed**. 19 OpenAPI paths와 56 schemas의 YAML/local
-  reference/targeted semantic 검사, 32 policies, 60 ADRs와 109 Markdown files 검사를
-  통과했다. recovery schema 참조 분리, 고객 projection enum, reason data boundary,
-  release-gate 조건부 test path와 clean-cutover 운영 상태 evidence 검사를 포함한다.
+- `bash scripts/verify-docs.sh`: **Passed**. 2026-08-01 모순 해소 반영 후 재실행에서
+  19 OpenAPI paths와 59 schemas의 YAML/local reference/targeted semantic 검사, 32
+  policies, 60 ADRs와 109 Markdown files 검사를 통과했다. recovery schema 참조 분리,
+  고객 projection enum, reason data boundary, release-gate 조건부 test path와
+  clean-cutover 운영 상태 evidence 검사를 포함한다. 이 실행은 refund attempt 예산,
+  `PENDING_PAYMENT` 금액 표현과 매장 보상 projection 교정을 포함한 상태다.
 - `git diff --check`: **Passed**.
 - full OpenAPI semantic validator: **Not configured**.
   `openapi_spec_validator`와 별도 `spectral`/`redocly`/`swagger-cli` executable이 현재

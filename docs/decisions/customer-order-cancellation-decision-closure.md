@@ -3,7 +3,7 @@
 이 표는 고객 취소 구현에 필요한 제품·구조 결정을 canonical source에 연결한다.
 `Canonical documents aligned=Yes`는 최신 Accepted amendment까지 문서가 일치한다는
 뜻이다. `Product owner confirmed=Yes`는 2026-07-31 product owner가 이 표의 모든 최종
-결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했고, 2026-08-01 자 세 행은
+결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했고, 2026-08-01 자 여섯 행은
 같은 product owner가 문서 간 모순 검토 결과를 보고 추가로 확정했다는 뜻이다. 문서
 정합성 판정과 승인 증거는 서로 다른 열로 유지한다.
 
@@ -42,6 +42,9 @@
 | NOT_REQUIRED 금액 | 요청액 0만 뜻하며 나머지 세 금액 0을 강제하지 않음; 네 금액은 all-or-nothing | ADR-036, ADR-031, OpenAPI | Yes | Yes | 2026-08-01 | recovery snapshot |
 | Order 취소 필드 projection | 고객 `Order`는 cancelledAt·cancellationCause·cancellationReasonCode; 매장 `StoreOrder`는 cancelledAt·cancellationCause만 | ADR-030, ADR-031, OpenAPI | Yes | Yes | 2026-08-01 | Order cancellation 컬럼 |
 | Cancellation detail 노출 | 어떤 projection·event·Audit·Provider 요청·log에도 없음 | BR-14, ADR-029, ADR-055 | Yes | Yes | 2026-08-01 | redaction test |
+| Refund attempt 예산 | REQUEST 3과 LOOKUP 5는 독립 예산이고 전체 상호작용 상한은 8; 전체 `attempt_count`에 6 상한 없음 | ADR-038, ADR-037, ADR-036 | Yes | Yes | 2026-08-01 | 분리 attempt schema |
+| PENDING_PAYMENT 금액 | `NOT_REQUIRED`이면서 네 금액을 0으로 표현하지 않고 함께 생략; 네 금액 0은 BENEFIT_ONLY뿐 | ADR-031, ADR-036, ADR-050, OpenAPI | Yes | Yes | 2026-08-01 | 조건부 금액 계약 |
+| 매장 보상 projection | 매장은 `trigger`·case `state`·`updatedAt`만 담은 `StoreCompensationSummary`; step·attempt·error·caseId·policy version은 운영자 전용 | ADR-030, ADR-033, authorization matrix, OpenAPI | Yes | Yes | 2026-08-01 | 공통 compensation foundation |
 
 ## Open items
 
