@@ -24,6 +24,7 @@
 
 - [Decision Recording Rules](decisions/README.md)
 - [Minor Decisions](decisions/minor-decisions.md)
+- [Customer Order Cancellation Decision Closure](decisions/customer-order-cancellation-decision-closure.md)
 - [ADR Index](adr/README.md)
 
 ## API and Security
@@ -38,10 +39,18 @@
 - [Definition of Done](testing/definition-of-done.md)
 - [Measurement Plan](performance/measurement-plan.md)
 - [Quality Evidence Map](quality/quality-evidence-map.md)
+- [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
 - [Code Review Guide](review/code-review.md)
 
 ## Execution Plans
 
+- [Customer Order Cancellation Master](exec-plans/active/customer-order-cancellation-and-recovery.md)
+- [Cancellation 00 Contract Baseline](exec-plans/active/customer-order-cancellation-00-contract-baseline.md)
+- [Cancellation 10 Partial Refund Allocation Foundation](exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md)
+- [Cancellation 20 Settlement Foundation](exec-plans/active/customer-order-cancellation-20-settlement-foundation.md)
+- [Cancellation 30 Order Compensation Foundation](exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md)
+- [Cancellation 40 Command](exec-plans/active/customer-order-cancellation-40-command.md)
+- [Cancellation 50 Recovery](exec-plans/active/customer-order-cancellation-50-recovery.md)
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)
 - [Completed Order Creation and Reservation Lease](exec-plans/completed/order-creation-and-reservation-lease.md)

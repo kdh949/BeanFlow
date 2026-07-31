@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-044, ADR-055, ADR-059
 
 ## Context
 
@@ -127,10 +128,11 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
   대체한다.
 - `OrderCancelledV1`과 개정된 `OrderRejectedV1` payload는 최초 production
   publication이 저장되는 시점부터 동결한다.
-- 현재 `OrderRejectedV1`은 production 배포·외부 사용·보존 publication이 없는
-  pre-release 상태이므로 단일 정책 세 필드를 혜택별 두 snapshot으로 제자리
-  변경한다. V2, 구 payload 호환 계층과 이중 발행은 만들지 않고 producer·모든
-  consumer·fixture를 같은 변경에서 갱신한다.
+- ADR-059 release gate가 production 배포·외부 사용·완료 및 미완료 publication과
+  rollback 대상이 모두 없음을 증거로 확인한 경우에만 `OrderRejectedV1`의 단일 정책
+  세 필드를 혜택별 두 snapshot으로 제자리 변경한다. gate가 실패하면 V1을 변경하지
+  않고 forward migration과 compatibility를 다루는 별도 Accepted ADR/ExecPlan을 먼저
+  만든다.
 - 첫 운영 발행 후 필수 필드 제거, 필드 이름·타입 변경과 기존 필드 의미 변경은
   V1에 적용하지 않는다. breaking change는 payloadVersion 2와
   `OrderCancelledV2`로 이행한다.

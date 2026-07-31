@@ -33,6 +33,15 @@ required=(
   "docs/testing/definition-of-done.md"
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
+  "docs/quality/customer-order-cancellation-readiness.md"
+  "docs/decisions/customer-order-cancellation-decision-closure.md"
+  "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
+  "docs/exec-plans/active/customer-order-cancellation-00-contract-baseline.md"
+  "docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-40-command.md"
+  "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
@@ -56,6 +65,22 @@ expected = [f'BR-{i:02d}' for i in range(1, 33)]
 if set(ids) != set(expected) or any(count != 1 for count in Counter(ids).values()):
     print('Business policy IDs are missing, duplicated, or out of range.', file=sys.stderr)
     print('Found:', ids, file=sys.stderr)
+    sys.exit(1)
+
+traceability = (root / 'docs/architecture/policy-traceability.md').read_text(encoding='utf-8')
+br14_row = next((line for line in traceability.splitlines() if line.startswith('| BR-14 |')), '')
+if 'Blocked by' not in br14_row:
+    print('BR-14 traceability must expose its implementation prerequisites.', file=sys.stderr)
+    sys.exit(1)
+
+readiness = (root / 'docs/quality/customer-order-cancellation-readiness.md').read_text(encoding='utf-8')
+if 'CLEAN_CUTOVER_GATE = FAILED' not in readiness:
+    print('Customer cancellation readiness must record the failed clean-cutover gate.', file=sys.stderr)
+    sys.exit(1)
+
+closure = (root / 'docs/decisions/customer-order-cancellation-decision-closure.md').read_text(encoding='utf-8')
+if '| Clean cutover eligibility |' not in closure or '| No |' not in closure:
+    print('Decision closure must not confirm clean-cutover eligibility without evidence.', file=sys.stderr)
     sys.exit(1)
 
 headings = list(re.finditer(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE))
@@ -203,6 +228,26 @@ else:
     error_required = set(spec['components']['schemas']['Error'].get('required', []))
     if error_required != {'code', 'message', 'correlationId', 'details'}:
         print('OpenAPI Error envelope does not match API conventions.', file=sys.stderr)
+        sys.exit(1)
+
+    cancellation = spec['components']['schemas']['Cancellation']
+    if cancellation['properties']['orderState'].get('const') != 'CANCELLED':
+        print('Cancellation success must expose orderState=CANCELLED.', file=sys.stderr)
+        sys.exit(1)
+
+    cancellation_detail = spec['components']['schemas']['CancellationRequest']['properties']['detail']
+    if 'Control characters are rejected' not in cancellation_detail.get('description', ''):
+        print('Cancellation detail normalization/control-character contract is missing.', file=sys.stderr)
+        sys.exit(1)
+
+    cancellation_description = spec['paths']['/orders/{orderId}/cancellations']['post'].get('description', '')
+    if 'RETRY_SCHEDULED' not in cancellation_description:
+        print('Cancellation unresolved-refund states are incomplete.', file=sys.stderr)
+        sys.exit(1)
+
+    payment_recovery = spec['components']['schemas']['PaymentRecoverySummary']
+    if not payment_recovery.get('allOf'):
+        print('PaymentRecoverySummary conditional customer contract is missing.', file=sys.stderr)
         sys.exit(1)
 
     print(

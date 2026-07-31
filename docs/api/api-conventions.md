@@ -108,7 +108,10 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - 외부 결과가 non-terminal `UNKNOWN`인 Payment 승인·환불은 새 Provider 호출 없이
   현재 durable representation을 반환하는 예외다. 이 경우에도 replay indicator는
   없다.
-- 처리 중인 키는 부작용을 다시 실행하지 않고 저장된 현재 representation을 반환한다.
+- 처리 중인 키는 부작용을 다시 실행하지 않는다. Payment처럼 현재 durable
+  representation 계약이 있는 명령만 그 representation을 반환하고, 주문 생성은 아래의
+  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`, 고객 취소는 Order row lock 직렬화 규칙을
+  따른다.
 - 주문 생성은 같은 key/payload의 `COMPLETED` 또는 `FAILED` record에 저장된 최초
   HTTP status와 body를 그대로 재생한다. 따라서 성공 replay도 최초 `201 Created`를
   유지하고 확정 실패 replay도 최초 4xx/503을 유지한다.

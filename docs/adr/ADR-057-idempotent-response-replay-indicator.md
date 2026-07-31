@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amends:** ADR-032와 기존 매장 전이 응답의 replay 표시 계약
 
 ## Context
 

@@ -17,6 +17,7 @@ Ordering ── Eventing contract ────────> owner module listene
 
 Payment ── approval/refund facts ─────> Ordering
 Ordering ── OrderReady ───────────────> Notification
+Ordering ── cancellation Delivery command in Tx C0/C1 ──> Notification
 Ordering ── OrderCompleted ───────────> Loyalty / Settlement / Analytics
 Payment ── refund facts ──────────────> Loyalty / Settlement / Analytics
 
@@ -41,7 +42,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Ordering | Loyalty | Loyalty | 포인트 예약 API | 주문 금액 확정 전 필요 |
 | Ordering | Payment | Ordering / Payment | Payment command와 Tx2 결과 적용 | 외부 호출과 DB tx 분리, 승인 내부 반영은 로컬 원자성 |
 | Payment | Ordering | Payment | 승인·거절·불명·환불 fact | Tx2 후 후속 소비자용 after-commit, consumer idempotent |
-| Ordering | Notification | Ordering fact | after-commit event | eventual |
+| Ordering | Notification | Ordering fact or cancellation Delivery command | 일반 알림은 after-commit event; 취소 접수는 Tx C0/C1의 동기 Application API | provider 발송은 eventual |
 | Ordering | Loyalty | Ordering fact | `OrderCompleted` idempotent event | eventual |
 | Ordering | Settlement | Ordering fact | `OrderCompleted` idempotent event | eventual |
 | Payment | Settlement | Payment fact | 환불·승인 금액 입력 | eventual, Item 생성 기준은 완료 주문 |

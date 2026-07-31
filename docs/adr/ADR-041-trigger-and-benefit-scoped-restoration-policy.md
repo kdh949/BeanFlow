@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-059의 release gate
 
 ## Context
 
@@ -84,15 +85,16 @@ mode와 유효기간을 선택할 수 있어야 한다.
 
 ### Pre-release `OrderRejectedV1` contract update
 
-- 현재 `OrderRejectedV1`은 production에 배포되거나 외부 계약으로 사용되지 않았고
-  보존해야 할 영속 publication도 없다는 출시 상태를 근거로 V1 payload를 제자리
-  변경한다.
+- ADR-059 release gate가 `OrderRejectedV1`이 production에 배포·외부 소비되지 않았고
+  완료·미완료 publication과 rollback 대상도 없음을 증거로 확인한 경우에만 V1
+  payload를 제자리 변경한다.
 - 단일 `policyVersion/policyMode/policyValidityDays`를 제거하고
   `couponPolicy/pointsPolicy`로 교체한다.
 - producer, 모든 V1 consumer, serialization fixture, contract·통합 테스트와 문서를
   같은 변경에서 함께 갱신한다.
-- 구 payload runtime compatibility layer, V1/V2 이중 발행과 `OrderRejectedV2`는
-  만들지 않는다.
+- gate가 통과한 경로에서는 구 payload runtime compatibility layer, V1/V2 이중 발행과
+  `OrderRejectedV2`를 만들지 않는다. gate 실패 시에는 제자리 변경을 중단하고 별도
+  forward migration/version ADR을 먼저 만든다.
 - 이 변경은 ADR-034의 “첫 production publication부터 V1 동결” 원칙을 위반하지
   않는다. 동결 기준점 전에 계약을 확정하는 pre-release 변경이며, 이 구현이 production
   publication을 만들면 이후 V1은 동결한다.

@@ -173,8 +173,9 @@ paths:
         so retrying the same key re-executes and the order state guard returns
         409 ORDER_STATE_CONFLICT for an already cancelled order.
 
-        If an earlier Refund is REQUESTED, PROCESSING, UNKNOWN, RECONCILING, or
-        MANUAL_REVIEW, cancellation returns 409 PAYMENT_REFUND_UNRESOLVED before
+        If an earlier Refund is REQUESTED, PROCESSING, RETRY_SCHEDULED, UNKNOWN,
+        RECONCILING, or MANUAL_REVIEW, cancellation returns 409
+        PAYMENT_REFUND_UNRESOLVED before
         changing the order. Retry the same key after that Refund reaches SUCCEEDED
         or definitive FAILED. Payment lock timeouts and database failures return
         503 instead of this business conflict.
@@ -316,7 +317,7 @@ paths:
     get:
       tags: [Store Orders]
       operationId: getStoreOrder
-      summary: Get an order and its rejection compensation status
+      summary: Get an order and its compensation status
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
@@ -1153,12 +1154,14 @@ components:
           $ref: "#/components/schemas/CancellationReasonCode"
         detail:
           type: string
-          minLength: 1
-          maxLength: 200
+          pattern: '^[^\u0000-\u001F\u007F]*$'
           description: |
-            Optional free-text detail supplied by the customer. Stored on the
-            order only. Never included in events, audit records, provider
-            requests, application logs or any API response.
+            Optional free-text detail supplied by the customer. The server trims
+            it before validation; an empty normalized value is treated as absent
+            and a present normalized value must contain 1 to 200 characters.
+            Control characters are rejected. Stored on the order only. Never
+            included in events, audit records, provider requests, application
+            logs or any API response.
     CancellationReasonCode:
       type: string
       description: Customer-declared cancellation reason, independent of the system-determined cause
@@ -1392,7 +1395,7 @@ components:
         orderId:
           $ref: "#/components/schemas/Identifier"
         orderState:
-          $ref: "#/components/schemas/OrderState"
+          const: CANCELLED
         reasonCode:
           $ref: "#/components/schemas/CancellationReasonCode"
         paymentRecovery:
@@ -1497,10 +1500,11 @@ components:
         noticeCode:
           type: string
           description: |
-            Present as REFUND_DELAYED only after automatic processing is exhausted.
-            Clients show an information icon and localized delay/apology copy.
-            Retry mode, attempt count, failure code and manual-review status are
-            never exposed to customers.
+            Present as REFUND_DELAYED after automatic processing is exhausted or
+            when required cancellation refund setup is incomplete. Clients show
+            an information icon and localized delay/apology copy. Retry mode,
+            attempt count, failure code, setup artifact details and manual-review
+            status are never exposed to customers.
           enum: [REFUND_DELAYED]
         approvedAmountKrw:
           allOf:
@@ -1532,6 +1536,35 @@ components:
             do not reduce this value until they succeed.
         lastUpdatedAt:
           $ref: "#/components/schemas/DateTime"
+      allOf:
+        - if:
+            required: [noticeCode]
+          then:
+            properties:
+              state:
+                const: PROCESSING
+        - if:
+            properties:
+              state:
+                const: NOT_REQUIRED
+            required: [state]
+          then:
+            required:
+              - approvedAmountKrw
+              - succeededRefundAmountBeforeCancellationKrw
+              - cancellationRequestedRefundAmountKrw
+              - remainingRefundableAmountKrw
+            not:
+              required: [noticeCode]
+            properties:
+              approvedAmountKrw:
+                const: 0
+              succeededRefundAmountBeforeCancellationKrw:
+                const: 0
+              cancellationRequestedRefundAmountKrw:
+                const: 0
+              remainingRefundableAmountKrw:
+                const: 0
     CreateRefundRequest:
       type: object
       additionalProperties: false

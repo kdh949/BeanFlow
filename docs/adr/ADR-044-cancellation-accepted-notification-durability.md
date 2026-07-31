@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amends:** ADR-034의 고객 취소 Notification consumer와 접수 Delivery 경계
 
 ## Context
 

@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amends:** ADR-033의 고객 환불 상태 투영과 ADR-037의 REQUEST 예산
 
 ## Context
 

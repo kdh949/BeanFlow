@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amends:** ADR-034의 `OrderCancelledV1` payload
+- **Amended by:** ADR-059의 release gate
 
 ## Context
 
@@ -16,8 +18,9 @@ ADR-034의 초기 `OrderCancelledV1` payload에는 `customerId`, `storeId`와
 결정 입력이 아니며 persistent publication에 불필요한 고객·매장·행동 사유를
 복제한다.
 
-두 termination V1은 아직 production 발행, 외부 소비와 보존 publication이 없는
-pre-release 상태다.
+두 termination V1은 production 발행, 외부 소비와 보존 publication이 없는 pre-release
+상태로 제안됐다. 제자리 변경 가능 여부는 저장소 문구가 아니라 ADR-059 release gate의
+외부 증거로 확인한다.
 
 ## Decision
 
@@ -45,9 +48,9 @@ pre-release 상태다.
 - `cancelledAt`은 compensation validity 계산의 원 fact 시각이므로 유지한다.
 - 고객 reason code는 Order와 허용된 AuditRecord/Refund 내부 필드에만 남고 event,
   publication JSON과 consumer log에는 복제하지 않는다.
-- pre-release V1을 제자리 수정하고 V2, compatibility DTO와 이중 발행을 만들지 않는다.
-  producer, 네 consumer, fixture, contract test와 Event Catalog를 한 변경에서
-  갱신한다.
+- ADR-059 gate가 통과한 경우에만 pre-release V1을 제자리 수정하고 V2,
+  compatibility DTO와 이중 발행을 만들지 않는다. producer, 네 consumer, fixture,
+  contract test와 Event Catalog를 한 변경에서 갱신한다.
 - 배포 전 `OrderCancelledV1` 미완료·완료 publication 0건과 외부 consumer 0개를
   재확인한다. 하나라도 존재하면 이 pre-release 결정을 적용하지 않고 별도 version
   이행 ADR을 만든다.
