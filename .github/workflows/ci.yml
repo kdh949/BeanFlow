@@ -26,28 +26,110 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Determine validation scope
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-artifacts
+
+          case "$EVENT_NAME" in
+            pull_request)
+              base_sha="$PR_BASE_SHA"
+              head_sha="$PR_HEAD_SHA"
+              scope="$(scripts/ci/classify-changes.sh "$base_sha" "$head_sha")"
+              ;;
+            push)
+              base_sha="$PUSH_BASE_SHA"
+              head_sha="$EVENT_HEAD_SHA"
+              scope="full"
+              ;;
+            workflow_dispatch)
+              head_sha="$EVENT_HEAD_SHA"
+              base_sha="$(git rev-parse "${head_sha}^" 2>/dev/null || printf '%s' "$head_sha")"
+              scope="full"
+              ;;
+            *)
+              echo "Unsupported event '$EVENT_NAME'." >&2
+              exit 1
+              ;;
+          esac
+
+          if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null ||
+            ! git cat-file -e "${head_sha}^{commit}" 2>/dev/null; then
+            echo "The compare range is unavailable." >&2
+            exit 1
+          fi
+
+          git diff --name-status --find-renames --find-copies-harder "$base_sha" "$head_sha" \
+            > .ci-artifacts/changed-files.txt
+          changed_path_count="$(git diff --name-only "$base_sha" "$head_sha" | awk 'END { print NR + 0 }')"
+
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "changed_path_count=$changed_path_count" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### CI validation scope"
+            echo "- Event: \`$EVENT_NAME\`"
+            echo "- Scope: \`$scope\`"
+            echo "- Compare: \`$base_sha..$head_sha\`"
+            echo "- Changed paths: \`$changed_path_count\`"
+            echo "- Gradle full build: \`$([[ "$scope" == "full" ]] && echo yes || echo no)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify CI scripts
+        run: scripts/ci/run-and-capture.sh .ci-artifacts/ci-script-tests.log bash scripts/ci/test-ci-scripts.sh
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: scripts/ci/requirements-docs.txt
+
+      - name: Install documentation validation dependencies
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/python-dependencies.log
+          python -m pip install --requirement scripts/ci/requirements-docs.txt
+
+      - name: Verify documentation and OpenAPI
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/document-verification.log
+          bash scripts/verify-docs.sh
+
+      - name: Check whitespace errors
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/diff-check.log
+          git diff --check
+          ${{ steps.changes.outputs.base_sha }}
+          ${{ steps.changes.outputs.head_sha }}
+
       - name: Set up Java 21
+        if: steps.changes.outputs.scope == 'full'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
+        if: steps.changes.outputs.scope == 'full'
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
-        run: |
-          mkdir -p .ci-artifacts
-          ./gradlew clean build --stacktrace --console=plain 2>&1 | tee .ci-artifacts/gradle-build.log
-
-      - name: Verify documentation
-        run: bash scripts/verify-docs.sh 2>&1 | tee .ci-artifacts/document-verification.log
-
-      - name: Check whitespace errors
-        run: git diff --check 2>&1 | tee .ci-artifacts/diff-check.log
+        if: steps.changes.outputs.scope == 'full'
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/gradle-build.log
+          ./gradlew build --stacktrace --console=plain
 
       - name: Capture Docker diagnostics
-        if: failure()
+        if: failure() && steps.changes.outputs.scope == 'full'
         run: |
           docker info > "${RUNNER_TEMP}/docker-info.txt" 2>&1 || true
           docker ps -a > "${RUNNER_TEMP}/docker-containers.txt" 2>&1 || true

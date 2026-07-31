@@ -1,6 +1,8 @@
 HELP.md
 .DS_Store
 .gradle
+.ci-artifacts/
+.venv/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/

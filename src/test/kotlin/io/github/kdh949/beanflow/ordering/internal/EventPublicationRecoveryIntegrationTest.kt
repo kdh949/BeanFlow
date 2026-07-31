@@ -110,6 +110,7 @@ internal class EventPublicationRecoveryIntegrationTest
                 failingListener.callCount() == 1 &&
                     incompletePublicationCount() == 1L &&
                     incompletePublicationAttemptCount() == 1 &&
+                    incompletePublicationStatus() == "FAILED" &&
                     notificationCount(event.envelope.eventId) == 1L
             }
             failingListener.allowSuccess()
@@ -149,14 +150,18 @@ internal class EventPublicationRecoveryIntegrationTest
             }
 
             await("initial publication failure") {
-                incompletePublicationAttemptCount() == 1 &&
+                failingListener.callCount() == 1 &&
+                    incompletePublicationAttemptCount() == 1 &&
+                    incompletePublicationStatus() == "FAILED" &&
                     notificationCount(event.envelope.eventId) == 1L
             }
             listOf(12L, 31L, 121L, 301L, 901L).forEachIndexed { index, seconds ->
                 clock.advance(Duration.ofSeconds(seconds))
                 recoveryWorker.runOnce()
                 await("publication resubmission failure ${index + 1}") {
-                    incompletePublicationAttemptCount() == index + 2
+                    failingListener.callCount() == index + 2 &&
+                        incompletePublicationAttemptCount() == index + 2 &&
+                        incompletePublicationStatus() == "FAILED"
                 }
             }
 
@@ -181,6 +186,14 @@ internal class EventPublicationRecoveryIntegrationTest
                 jdbcTemplate.queryForObject(
                     "SELECT completion_attempts FROM event_publication WHERE completion_date IS NULL",
                     Int::class.java,
+                ),
+            )
+
+        private fun incompletePublicationStatus(): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT status FROM event_publication WHERE completion_date IS NULL",
+                    String::class.java,
                 ),
             )
 

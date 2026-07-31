@@ -195,16 +195,20 @@ docker stop beanflow-postgres
 PR 전 로컬 검증은 CI와 같은 순서로 실행한다.
 
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r scripts/ci/requirements-docs.txt
+bash scripts/ci/test-ci-scripts.sh
+PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
+git diff --check origin/main HEAD
 ./gradlew spotlessCheck
-./gradlew clean build --stacktrace
-bash scripts/verify-docs.sh
-git diff --check
+./gradlew build --stacktrace
 ```
 
 | 명령 | 검증 내용 |
 | --- | --- |
 | `./gradlew test` | 단위·Application·Repository·API 계약·구조·동시성 테스트 |
 | `./gradlew spotlessCheck` | 변경된 Kotlin 소스의 ktlint/Spotless 규칙 |
-| `./gradlew clean build --stacktrace` | 컴파일, 전체 테스트와 빌드 |
+| `./gradlew build --stacktrace` | 컴파일, 전체 테스트와 빌드 |
+| `bash scripts/ci/test-ci-scripts.sh` | CI log capture와 PR 변경 분류 |
 | `bash scripts/verify-docs.sh` | 필수 문서, 내부 링크, 정책·ADR·OpenAPI 일관성 |
-| `git diff --check` | trailing whitespace 등 diff 형식 오류 |
+| `git diff --check origin/main HEAD` | PR compare 범위의 trailing whitespace 등 diff 형식 오류 |
