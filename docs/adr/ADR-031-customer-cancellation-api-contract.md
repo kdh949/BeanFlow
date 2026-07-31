@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-038의 고객 환불 projection, ADR-050의 조건부 금액 계약
 
 ## Context
 
@@ -33,12 +34,14 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - `Cancellation` 필수 필드는 `orderId`, `orderState`, `reasonCode`,
   `paymentRecovery`, `cancelledAt`, `correlationId`다. `createdAt` 대신 취소 확정
   시각인 `cancelledAt`을 사용한다.
-- `PaymentRecoverySummary`는 state와 함께 `approvedAmountKrw`,
+- `CancellationRefundRecoverySummary`는 state와 함께 `approvedAmountKrw`,
   `succeededRefundAmountBeforeCancellationKrw`,
-  `cancellationRequestedRefundAmountKrw`, `remainingRefundableAmountKrw`를 필수로
-  반환한다. state는 이번 고객 취소 Refund만 원천으로 삼고 선행 Refund state를
-  합성하지 않는다. ADR-038의 customer projection에 따라 내부 재시도·불명·수동 검토
-  상태는 고객용 `PROCESSING`으로 축약한다.
+  `cancellationRequestedRefundAmountKrw`, `remainingRefundableAmountKrw`를 정상
+  setup에서 모두 반환한다. ADR-050에 따라 `state`만 항상 required이고 검증할 수 없는
+  금액과 시각은 추정하지 않고 생략하는 조건부 계약이다. state는 이번 고객 취소
+  Refund만 원천으로 삼고 선행 Refund state를 합성하지 않는다. ADR-038의 customer
+  projection에 따라 내부 재시도·불명·수동 검토 상태는 고객용 `PROCESSING`으로
+  축약한다.
 - 자동 처리가 소진된 내부 `FAILED`·`MANUAL_REVIEW`도 고객 state는 `PROCESSING`이며
   nullable `noticeCode = REFUND_DELAYED`로만 지연 안내를 활성화한다. attempt,
   실패 code와 내부 상태는 응답에 포함하지 않는다.
@@ -54,6 +57,10 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - 취소 이후 보상 진행은 새 endpoint 없이 `GET /api/v1/orders/{orderId}`의 기존
   `Order.paymentRecovery` 필드로 조회한다. `GET /orders/{orderId}/cancellations`
   같은 sub-resource를 만들지 않는다.
+- `Cancellation.paymentRecovery`와 고객 취소 이후 `Order.paymentRecovery`는
+  `CancellationRefundRecoverySummary`를 사용한다. 결제 승인 결과 불명과 Provider
+  조회 복구를 나타내는 `PaymentConfirmation.recovery`는 상태와 시각만 가진
+  `PaymentApprovalRecoverySummary`를 사용하며 두 recovery schema를 공유하지 않는다.
 - 비허용 상태는 `409 ORDER_STATE_CONFLICT`, lease 만료는 `409 RESERVATION_EXPIRED`로
   BR-14 Contention Amendment를 따른다.
 - ADR-036 amendment: 선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`,
@@ -95,8 +102,10 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 ## Consequences
 
 - 클라이언트는 `200`과 `202`를 분기해야 한다. `202`를 받으면 주문 조회로 폴링한다.
-- `Cancellation`과 `Order` 두 표현이 같은 `PaymentRecoverySummary`를 공유하므로
+- `Cancellation`과 `Order` 두 표현이 같은 `CancellationRefundRecoverySummary`를 공유하므로
   요약 파생 로직을 한 곳에 둔다.
+- Payment 승인 recovery와 고객 취소 환불 recovery가 별도 schema이므로 각 enum과
+  필수 필드를 독립적으로 진화시킨다.
 - POST 응답과 멱등 재생의 금액은 취소 commit 시점 snapshot이다.
   `remainingRefundableAmountKrw`의 최신 실제 잔액은 Order GET에서 갱신된다.
 - OpenAPI 계약이 축소·변경되므로 `/api/v1` 안에서의 호환성 영향을 확인해야 한다.
@@ -136,6 +145,8 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - lease 만료 취소 `409 RESERVATION_EXPIRED`
 - 미확정 선행 Refund의 `409 PAYMENT_REFUND_UNRESOLVED`와 상태 확정 후 재시도
 - 취소 후 `GET /orders/{orderId}`의 `paymentRecovery` 반영
+- `PaymentConfirmation.recovery`와 Cancellation/Order `paymentRecovery`의 schema
+  참조 분리
 - 자원 해제 실패 시 `200`이 아닌 `503 DEPENDENCY_UNAVAILABLE`
 
 ## Metrics

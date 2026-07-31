@@ -3,10 +3,12 @@
 ## Audit identity
 
 - **Audited at:** 2026-07-31 Asia/Seoul
-- **Branch:** `feature/customer-order-cancellation-docs`
-- **HEAD:** `04e2b4819a66966952c5436342a05149fd7ac6ee`
-- **Related merge:** PR #17, merge commit
+- **Historical audit branch:** `feature/customer-order-cancellation-docs`
+- **Historical audit source SHA:** `04e2b4819a66966952c5436342a05149fd7ac6ee`
+- **Historical audit merge:** PR #17, merge commit
   `443fe8ff4d41776f1754e5a5c17ab8566e68398d`, merged 2026-07-31
+- **Current reconciliation baseline:** `main`, PR #18 merge commit
+  `783298a9c1b349f7b444d49d25c8b3d4099a5576`
 - **Scope:** 고객 주문 취소·환불 정책, ADR, 아키텍처, API/OpenAPI, migration,
   Ordering/Payment/Operations/owner/Notification/Settlement 코드, 테스트, active/completed
   ExecPlan과 관련 Git/PR 이력
@@ -15,17 +17,27 @@
 
 감사 시작 시 working tree에는 사용자 변경인 `README.md` 실행 안내 확장과 기존 master
 plan의 ADR-059 release gate 완료 체크가 있었다. 실행 안내는 보존했고, evidence가 없는
-release gate 완료 표시는 아래 판정에 따라 제거했다.
+release gate 완료 표시는 아래 역사적 판정에 따라 제거했다. 이후 product owner 확인에서
+non-local 환경과 관련 artifact가 모두 없음을 확인해 별도 release evidence로 기록했다.
 
 ## Final readiness
 
-**NOT READY FOR IMPLEMENTATION.** 제품 정책과 목표 API 의미는 결정돼 있지만 다음
-선행조건이 닫히지 않았다.
+```text
+READY FOR CONTRACT-BASELINE AND FOUNDATION WORK
+BLOCKED FOR CUSTOMER-CANCELLATION COMMAND
+```
 
-1. ADR-059 clean-cutover 운영 사실 evidence 부재
-2. 부분 환불 line-level cash/benefit allocation foundation 부재
-3. Settlement Context와 consumer 구현 부재
-4. rejection 전용 compensation을 공통 모델로 바꾸는 migration/event 전략 미확정
+canonical 문서와 목표 OpenAPI의 취소·환불 의미는 정합화됐고 ADR-059 fact gate도
+명시적 0 증거로 닫혔다. 독립 foundation 작업은 clean-cutover 경로로 진행할 수 있다.
+고객 취소 command 구현은 다음 선행조건이 닫힐 때까지 시작할 수 없다.
+
+1. 부분 환불 line-level cash/benefit allocation foundation 부재
+2. Settlement Context와 consumer 구현 부재
+3. trigger-aware 공통 compensation foundation 부재
+
+현재 release evidence와 판정은
+[customer-order-cancellation-release-evidence.md](customer-order-cancellation-release-evidence.md)에
+기록한다.
 
 고객 취소 Controller/Service를 먼저 구현하면 Accepted 부분 환불, 정산 제외와 202 내구
 의미를 만족할 수 없다.
@@ -66,11 +78,13 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 
 | Topic | Evidence | Classification | Resolution / blocker |
 |---|---|---|---|
-| release gate 완료 체크와 evidence 부재 | 기존 master plan은 완료 체크, ADR-059/PR #17에는 외부 증거 없음 | `NEEDS_FACT_VERIFICATION` | 체크 제거, `CLEAN_CUTOVER_GATE = FAILED` |
+| release gate 완료 체크와 evidence 부재 | 기존 master plan은 완료 체크, ADR-059/PR #17에는 외부 증거 없음 | `NEEDS_FACT_VERIFICATION` | 역사적 체크 제거·gate 실패 기록 후 운영 상태 evidence를 추가해 현재 `CLEAN_CUTOVER_GATE = PASSED` |
+| 결제 승인 recovery와 고객 취소 환불 recovery schema 공유 | `PaymentConfirmation.recovery`, `Cancellation.paymentRecovery`, `Order.paymentRecovery`가 `PaymentRecoverySummary` 하나를 참조 | `CONTRACT_CONFLICT` | `PaymentApprovalRecoverySummary`와 `CancellationRefundRecoverySummary`로 분리 |
 | ADR-033 forward rename과 ADR-059 clean cutover | ADR-059가 rename/backfill 부분만 명시적으로 대체 | `RESOLVABLE_BY_RECENCY` | ADR-059를 explicit amendment로 기록; gate 전에는 둘 다 실행 금지 |
 | `OrderRejectedV1` 제자리 변경 단정 | BR-14, ADR-034, event catalog가 publication 0을 사실로 단정 | `RESOLVABLE_BY_RECENCY` | ADR-059 조건부 gate에 맞춰 모두 수정 |
-| 내부 Refund 상태의 고객 노출 | ADR-033 초기 원천과 ADR-038/050 projection | `RESOLVABLE_BY_RECENCY` | ADR-038/050과 OpenAPI projection을 canonical로 확정 |
-| `OrderCancelledV1` reason/customer/store 포함 여부 | ADR-034 초기 payload와 ADR-055 | `RESOLVABLE_BY_RECENCY` | ADR-055 최소 payload, four-owner consumer로 확정 |
+| 내부 Refund 상태의 고객 노출 | ADR-030/033 초기 원천과 ADR-038/050 projection | `RESOLVED_BY_AMENDMENT` | ADR-030/031/033의 reciprocal amendment와 OpenAPI customer enum 교정 |
+| `OrderCancelledV1` reason/customer/store 포함 여부 | BR-14 과거 전달 문구, ADR-034 초기 payload와 ADR-055 | `RESOLVED_BY_AMENDMENT` | Order/Audit/Refund·Provider/event/log 범위와 최소 payload를 일치시킴 |
+| clean-cutover와 legacy compatibility test 범위 | BR-14의 unconditional legacy test와 ADR-059 조건부 gate | `RESOLVED_BY_GATE_PATH` | clean-cutover와 forward-migration Required Tests를 gate 결과별로 분리 |
 | 접수 Notification event consumer 여부 | ADR-034 초기 구조와 ADR-044 | `RESOLVABLE_BY_RECENCY` | C0/C1 직접 Delivery, Notification은 event consumer 아님 |
 | `OrderRejectedV1` Operations consumer 표기 | Event Catalog 표와 실제/목표 Case 직접 생성 경계 | `RESOLVABLE_BY_RECENCY` | Operations를 event consumer에서 제거; Case는 원 transaction에서 생성 |
 | Context Map의 Notification 경계 | 일반 after-commit 서술과 ADR-044의 C0/C1 직접 Delivery | `RESOLVABLE_BY_RECENCY` | 일반 event와 취소 접수 동기 API를 구분 |
@@ -89,11 +103,11 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 
 | Candidate | Verdict | Current evidence and action |
 |---|---|---|
-| compensation clean-cutover release gate 미검증 | `CONFIRMED` | repository/PR에 external evidence 없음; gate failed |
-| 결제 승인 recovery와 취소 환불 recovery schema 혼합 | `NOT_PRESENT` | 현재 approval은 `payment_reconciliation`, Refund는 `payment_refund`; cancellation snapshot schema 자체가 아직 없음 |
-| 고객 환불 상태를 내부 상태 그대로 노출하는 과거 ADR과 최신 projection 충돌 | `ALREADY_FIXED` | ADR-038/050과 OpenAPI가 고객 projection을 확정; amendment metadata 보강 |
-| 취소 reason code의 persistent event 포함 여부 충돌 | `ALREADY_FIXED` | ADR-055와 event catalog가 event에서 reasonCode 제거 |
-| clean cutover와 legacy event compatibility 요구 충돌 | `NEEDS_FACT_VERIFICATION` | 모두 gate 조건으로 양립; 현재 unknown이므로 기존 V1 유지 |
+| compensation clean-cutover release gate 미검증 | `CONFIRMED, THEN CLOSED` | 역사적 repository/PR에는 external evidence가 없었으나 이후 product owner 운영 상태 확인으로 전 항목 0을 기록해 gate passed |
+| 결제 승인 recovery와 취소 환불 recovery schema 혼합 | `FIXED` | 실제로 세 응답이 한 schema를 공유하고 있었으며 OpenAPI schema와 참조를 두 의미로 분리 |
+| 고객 환불 상태를 내부 상태 그대로 노출하는 과거 ADR과 최신 projection 충돌 | `FIXED` | ADR-030/033에 ADR-038/050 amendment 관계와 최신 Decision·Consequences·Required Tests 반영 |
+| 취소 reason code의 persistent event 포함 여부 충돌 | `FIXED` | BR-14/ADR-055에 Order·Audit·Refund/Provider·event·log별 범위를 단일 계약으로 정리 |
+| clean cutover와 legacy event compatibility 요구 충돌 | `FIXED; CLEAN PATH SELECTED` | Required Tests를 조건부 경로로 분리하고 운영 상태 evidence의 전 항목 0에 따라 clean-cutover 경로 선택 |
 | 선행 부분 환불 허용, allocation foundation 부재 | `CONFIRMED` | V10/Refund code에 line allocation 없음 |
 | Settlement `NOT_APPLICABLE` 정책, 구현 부재 | `CONFIRMED` | Settlement package/table/test 없음 |
 | store transition hash, operation version, replay body drift | `CONFIRMED` | hash는 state/reason만, operation V1, response replay 시 body 변경 |
@@ -128,34 +142,37 @@ commit이다. commit 내부 순서는 explicit amendment 문구로 판단했다.
 - trigger×benefit 정책과 두 snapshot
 - C0 200/C1 202, 별도 Cancellation Aggregate 없음
 
-clean cutover는 정책 선택이 아니라 운영 사실 gate다. 증거가 없을 때 실패하라는 규칙도
-ADR-059와 이번 감사 요청에 명시돼 있으므로 사용자 선택으로 대체하지 않는다.
+clean cutover는 제품 정책 선택이 아니라 운영 사실 gate다. 증거가 없었던 역사적 감사
+시점에는 실패로 처리했고, product owner의 현재 운영 상태 확인을 별도 evidence로
+기록해 전 항목 0을 확인했다.
 
 ### Future decision condition
 
 gate가 nonzero evidence를 확인하면 실제 legacy schema/publication/consumer를 바탕으로
-forward migration·compatibility 범위를 정하는 새 Accepted ADR이 필요하다. 현재는 사실
-입력이 없으므로 구체 호환 전략을 임의로 기록하지 않는다.
+forward migration·compatibility 범위를 정하는 새 Accepted ADR이 필요하다. 현재 확인은
+point-in-time evidence이므로 compensation schema 변경과 최초 non-local 배포 직전에
+inventory를 다시 확인한다.
 
 ## Fact-verification gate
 
-| Required fact | Repository evidence | Status |
+| Required fact | Attested evidence | Status |
 |---|---|---|
-| shared/production DB와 compensation table 존재 | 없음 | Unknown |
-| table row 수 | 없음 | Unknown |
-| completed `OrderRejectedV1`/`OrderCancelledV1` publication | 없음 | Unknown |
-| incomplete publication | 없음 | Unknown |
-| 외부·독립 consumer | 없음 | Unknown |
-| rollback 대상 binary/data | 없음 | Unknown |
-| migration V8 적용 환경 | 없음 | Unknown |
+| shared/production DB와 compensation table 존재 | non-local 환경과 DB 없음 | Confirmed absent (0) |
+| table row 수 | 대상 DB 없음 | Confirmed absent (0) |
+| completed `OrderRejectedV1`/`OrderCancelledV1` publication | 외부 publication registry 없음 | Confirmed absent (0) |
+| incomplete publication | 외부 publication registry 없음 | Confirmed absent (0) |
+| 외부·독립 consumer | 독립 배포 없음 | Confirmed absent (0) |
+| rollback 대상 binary/data | production 배포·data 없음 | Confirmed absent (0) |
+| migration V8 적용 환경 | 적용 대상 non-local 환경 없음 | Confirmed absent (0) |
 
 ```text
-CLEAN_CUTOVER_GATE = FAILED
+CLEAN_CUTOVER_GATE = PASSED
 ```
 
-PR #17에는 review/comment/evidence attachment가 없고, commit message도 gate 통과가 아닌
-“통과를 전제로 명시”라고 기록한다. 저장소의 local migration과 test fixture는 외부
-운영 사실 증거가 아니다.
+PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감사에서는 gate를
+실패로 판정했다. 이후 product owner 확인의 범위와 항목별 0 결과는
+[release-gate evidence](customer-order-cancellation-release-evidence.md)에 기록했다.
+저장소의 local migration과 test fixture는 이 외부 운영 사실 증거로 계산하지 않는다.
 
 ## Implementation drift
 
@@ -199,7 +216,7 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 
 ## Correct implementation order
 
-1. `00-contract-baseline`: 외부 운영 사실과 migration/event 전략 확정
+1. `00-contract-baseline`: 외부 운영 사실 0 확인과 ADR-059 clean-cutover 전략 확정
 2. `10-partial-refund-allocation-foundation`: line-level cash/benefit 원장
 3. `20-settlement-foundation`: 완료 정산 원천과 취소 NOT_APPLICABLE 증적
 4. `30-order-compensation-foundation`: trigger-aware Case, policy, owner convergence
@@ -212,20 +229,20 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 
 ## Implementation start checklist
 
-- [ ] environment inventory가 완전함
-- [ ] DB/table/row evidence가 있음
-- [ ] completed/incomplete publication evidence가 있음
-- [ ] external consumer와 rollback binary evidence가 있음
-- [ ] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
+- [x] environment inventory가 완전함
+- [x] DB/table/row evidence가 있음
+- [x] completed/incomplete publication evidence가 있음
+- [x] external consumer와 rollback binary evidence가 있음
+- [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
 - [ ] partial refund allocation plan이 통과함
 - [ ] Settlement foundation plan이 통과함
 - [ ] common compensation plan이 통과함
-- [ ] OpenAPI semantic/local contract 검사가 통과함
+- [x] OpenAPI semantic/local contract 검사가 통과함
 - [ ] 기능 branch에서 기존 사용자 변경을 분리·보존함
 
-위 체크가 모두 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
+남은 foundation 체크가 모두 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
 
-## Audit validation
+## Historical audit validation
 
 - `bash scripts/verify-docs.sh`: **Passed**. OpenAPI 3.1 YAML parse, local `$ref`,
   mutation Idempotency-Key, Error envelope, cancellation semantic assertions,
@@ -243,8 +260,23 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 
 이전 CI 결과는 이번 감사 결과로 사용하지 않았다.
 
+## Current contract reconciliation validation
+
+- `bash scripts/verify-docs.sh`: **Passed**. 19 OpenAPI paths와 56 schemas의 YAML/local
+  reference/targeted semantic 검사, 32 policies, 60 ADRs와 109 Markdown files 검사를
+  통과했다. recovery schema 참조 분리, 고객 projection enum, reason data boundary,
+  release-gate 조건부 test path와 clean-cutover 운영 상태 evidence 검사를 포함한다.
+- `git diff --check`: **Passed**.
+- full OpenAPI semantic validator: **Not configured**.
+  `openapi_spec_validator`와 별도 `spectral`/`redocly`/`swagger-cli` executable이 현재
+  환경에 없다. 저장소 검증 스크립트의 PyYAML parse, local `$ref`와 targeted semantic
+  assertions는 통과했다.
+- Gradle/application tests: **Not run**. 이번 변경은 문서, OpenAPI와 문서 검증
+  스크립트에만 한정됐고 Kotlin/test/migration 파일을 변경하지 않았다.
+
 ## Revisit conditions
 
+- compensation schema 변경 또는 최초 non-local 배포 직전 gate inventory 재확인
 - external/independent consumer 또는 applied production migration이 발견될 때
 - rollback binary 보존 기간이 확정될 때
 - Settlement 범위를 변경하려는 제품 결정이 생길 때

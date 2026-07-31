@@ -16,7 +16,8 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 - `OrderRejectedV1`은 customer/store/actor/reason과 단일 policy를 담는다.
 - publication retry 소진은 모든 미완료 step을 MANUAL_REVIEW로 바꾼다.
 - ADR-033/034/040~043/055/059는 목표 공통 모델을 정의한다.
-- ADR-059 gate가 실패했으므로 현재 V8과 V1을 제자리 변경할 수 없다.
+- 00 plan에서 모든 non-local 환경·artifact가 0으로 확인돼 ADR-059 gate가 통과했다.
+  이 계획은 clean-cutover migration/event 전략을 입력으로 사용할 수 있다.
 
 ## Definitions
 
@@ -68,16 +69,18 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 
 ## Failure Semantics
 
-- gate가 실패한 채 migration 전략이 없으면 구현을 시작하지 않는다.
+- 구현·배포 전 gate 재확인에서 PASS가 무효화되면 migration/event 전환을 중단하고
+  forward-migration ADR/ExecPlan을 먼저 확정한다.
 - owner source conflict는 덮어쓰지 않고 bounded retry 후 해당 step manual review다.
 - policy head/version 누락은 시작 또는 transaction 실패이며 default 정책으로 대체하지 않는다.
 
 ## Data and Migration
 
-00 plan이 clean cutover를 명시적으로 통과하면 ADR-059 shape를 사용한다. 그 외에는
-새 Accepted forward-migration ADR/ExecPlan의 rename/backfill/publication drain/
-compatibility 순서를 따른다. 어떤 경우에도 적용된 migration checksum을 repair해
-혼합 schema를 만들지 않는다.
+00 plan이 clean cutover를 명시적으로 통과했으므로 ADR-059 shape를 사용한다. producer,
+consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility layer와 version 이중
+발행은 추가하지 않는다. 재확인 결과가 nonzero/unknown이면 새 Accepted
+forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibility 순서를
+따른다. 어떤 경우에도 적용된 migration checksum을 repair해 혼합 schema를 만들지 않는다.
 
 ## API and Event Contracts
 
@@ -127,7 +130,7 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 
 ## Progress
 
-- [ ] migration/event strategy gate
+- [x] 2026-07-31 migration/event strategy gate — ADR-059 clean cutover
 - [ ] common case/schema
 - [ ] policy heads
 - [ ] owner restoration
@@ -145,11 +148,14 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | trigger-aware 공통 Case와 두 benefit snapshot | 거절/취소 공통 불변식 | ADR-033/041 |
 | 2026-07-31 | Blocked | migration 전략은 00 fact gate 뒤 확정 | 운영 상태 추측 금지 | ADR-059 |
+| 2026-07-31 | Unblocked | ADR-059 clean-cutover 전략 사용 | 운영 상태 evidence에서 모든 외부 항목 0 | release-gate evidence |
 
 ## Outcomes & Retrospective
 
-미구현이며 00 gate 또는 대체 forward strategy 없이는 시작하지 않는다.
+미구현이다. 00 fact gate가 통과해 foundation 구현을 시작할 수 있지만, 이 계획 자체의
+domain/schema/owner migration과 검증은 아직 완료되지 않았다.
 
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
+- 2026-07-31: owner release evidence로 00 gate가 통과해 clean-cutover 전략을 확정.

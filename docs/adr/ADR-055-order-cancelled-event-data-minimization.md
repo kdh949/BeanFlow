@@ -46,8 +46,11 @@ ADR-034의 초기 `OrderCancelledV1` payload에는 `customerId`, `storeId`와
 - required flag와 benefit policy snapshot은 계속 event에서만 사용하며 consumer가
   현재 Order 금액이나 policy head를 다시 조회하지 않는다.
 - `cancelledAt`은 compensation validity 계산의 원 fact 시각이므로 유지한다.
-- 고객 reason code는 Order와 허용된 AuditRecord/Refund 내부 필드에만 남고 event,
-  publication JSON과 consumer log에는 복제하지 않는다.
+- 고객 reason code와 허용된 detail은 Order row에 저장한다. AuditRecord에는 reason
+  code만 저장하고 detail은 복제하지 않는다. Refund 내부 기록과 외부 결제 취소
+  요청에는 계약상 필요한 정규화된 reason만 사용한다.
+- `OrderCancelledV1`, publication JSON과 모든 애플리케이션 log에는 reason code와
+  detail을 복제하지 않는다.
 - ADR-059 gate가 통과한 경우에만 pre-release V1을 제자리 수정하고 V2,
   compatibility DTO와 이중 발행을 만들지 않는다. producer, 네 consumer, fixture,
   contract test와 Event Catalog를 한 변경에서 갱신한다.
@@ -99,7 +102,7 @@ pre-release 시점에 제거하면 호환성 비용 없이 데이터 보존 범�
 - 최종 event JSON의 정확한 허용 필드 집합
 - 네 consumer의 order-linked owner lookup과 타 Context identity 조회 0회
 - owner record 부재·모순의 명시적 conflict
-- publication·log에 customer/store/reason 부재
+- publication과 애플리케이션 log에 customer/store/reason code/detail 부재
 - 배포 전 V1 publication/external consumer 0 gate
 
 ## Required Tests
@@ -107,7 +110,8 @@ pre-release 시점에 제거하면 호환성 비용 없이 데이터 보존 범�
 - producer serialization golden contract
 - 네 consumer fixture compile/contract 갱신
 - payload 추가 필드 거부 또는 absence assertion
-- customerId/storeId/reasonCode의 publication JSON·structured log 부재
+- customerId/storeId/reasonCode/detail의 publication JSON·애플리케이션 log 부재
+- Order·AuditRecord·Refund/Provider별 reason code와 detail 저장·전달 범위 검증
 - owner reservation 없음, 다른 trigger/version의 conflict
 - false required flag와 policy snapshot 동작 회귀
 - pre-release deployment gate 실패 주입

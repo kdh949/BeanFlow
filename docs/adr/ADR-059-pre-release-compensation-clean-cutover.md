@@ -54,11 +54,24 @@ shape를 이행하는 migration과 불완전 row 복구 scanner는 존재하지 
 - 저장소, commit `04e2b4819a66966952c5436342a05149fd7ac6ee`, 병합 PR #17에는
   production DB/table/row, 완료·미완료 publication, 외부 consumer, rollback binary와
   적용 환경을 입증하는 release evidence가 없다.
-- 확인할 수 없는 항목은 0으로 간주하지 않으므로 현재
+- 확인할 수 없는 항목은 0으로 간주하지 않으므로 해당 감사 시점의 결과는
   `CLEAN_CUTOVER_GATE = FAILED`다.
 - 기존 V8 migration과 V1 event 계약을 수정하지 않는다. 구현 전 외부 운영 사실을
   검증해 전부 0임을 입증하거나, forward migration·publication drain·compatibility·
   rollback을 다루는 새 Accepted ADR/ExecPlan을 먼저 만든다.
+
+### 2026-07-31 operational-state evidence update
+
+- product owner의 운영 상태 확인에 따라 현재 local/test 밖의 shared, staging 또는
+  production 환경이 없다.
+- production/shared database와 compensation schema·row, 완료·미완료
+  `OrderRejectedV1`/`OrderCancelledV1` publication, 외부·독립 consumer, rollback 대상
+  binary/data와 적용 migration이 모두 명시적 0으로 확인됐다.
+- 확인 시점, 범위, 항목별 결과와 무효화 조건은
+  [release-gate evidence](../quality/customer-order-cancellation-release-evidence.md)에
+  기록한다.
+- 따라서 현재 `CLEAN_CUTOVER_GATE = PASSED`이며 이 ADR의 pre-release clean-cutover
+  경로를 사용할 수 있다. 구현·배포 직전 inventory 재확인은 계속 필요하다.
 
 ## Alternatives Considered
 

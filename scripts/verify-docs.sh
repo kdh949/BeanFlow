@@ -34,6 +34,7 @@ required=(
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
   "docs/quality/customer-order-cancellation-readiness.md"
+  "docs/quality/customer-order-cancellation-release-evidence.md"
   "docs/decisions/customer-order-cancellation-decision-closure.md"
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
   "docs/exec-plans/active/customer-order-cancellation-00-contract-baseline.md"
@@ -74,13 +75,127 @@ if 'Blocked by' not in br14_row:
     sys.exit(1)
 
 readiness = (root / 'docs/quality/customer-order-cancellation-readiness.md').read_text(encoding='utf-8')
-if 'CLEAN_CUTOVER_GATE = FAILED' not in readiness:
-    print('Customer cancellation readiness must record the failed clean-cutover gate.', file=sys.stderr)
+if 'CLEAN_CUTOVER_GATE = PASSED' not in readiness:
+    print('Customer cancellation readiness must record the evidenced clean-cutover gate result.', file=sys.stderr)
+    sys.exit(1)
+
+release_evidence = (
+    root / 'docs/quality/customer-order-cancellation-release-evidence.md'
+).read_text(encoding='utf-8')
+normalized_release_evidence = re.sub(r'\s+', ' ', release_evidence)
+required_release_evidence = [
+    '**Evidence source:** product-owner operational-state attestation',
+    '**Attestor role:** product owner',
+    '| shared/production deployment environment | 0 |',
+    '| production/shared compensation schema, table와 row | 0 |',
+    '| completed `OrderRejectedV1`/`OrderCancelledV1` publication | 0 |',
+    '| incomplete `OrderRejectedV1`/`OrderCancelledV1` publication | 0 |',
+    '| external 또는 independently deployed consumer | 0 |',
+    '| rollback 대상 production binary/data | 0 |',
+    '| production/shared 환경에 적용된 migration | 0 |',
+    'CLEAN_CUTOVER_GATE = PASSED',
+    'compensation schema 변경 또는 최초 production/shared 배포 직전에 같은 inventory를 다시 확인',
+]
+for statement in required_release_evidence:
+    if statement not in normalized_release_evidence:
+        print(f'Clean-cutover release evidence is incomplete: {statement}', file=sys.stderr)
+        sys.exit(1)
+if '이 PASS는 migration/event 전략만 허용한다.' not in normalized_release_evidence:
+    print('Clean-cutover PASS must not imply that customer cancellation is implemented.', file=sys.stderr)
     sys.exit(1)
 
 closure = (root / 'docs/decisions/customer-order-cancellation-decision-closure.md').read_text(encoding='utf-8')
-if '| Clean cutover eligibility |' not in closure or '| No |' not in closure:
-    print('Decision closure must not confirm clean-cutover eligibility without evidence.', file=sys.stderr)
+if (
+    '| Clean cutover gate result |' not in closure
+    or '`PASSED`; 모든 운영 항목이 명시적 0' not in closure
+):
+    print('Decision closure must record the evidenced clean-cutover PASS.', file=sys.stderr)
+    sys.exit(1)
+if 'Canonical documents aligned' not in closure or 'Product owner confirmed' not in closure:
+    print('Decision closure must distinguish document alignment from product-owner confirmation.', file=sys.stderr)
+    sys.exit(1)
+closure_rows = [
+    line for line in closure.splitlines()
+    if line.startswith('| ') and not line.startswith('| Topic |') and not line.startswith('| -----')
+]
+if not closure_rows:
+    print('Decision closure decision rows are missing.', file=sys.stderr)
+    sys.exit(1)
+for row in closure_rows:
+    cells = [cell.strip() for cell in row.split('|')]
+    if len(cells) < 8 or cells[4] != 'Yes' or cells[5] != 'Yes':
+        print(f'Decision closure must keep document alignment and product-owner confirmation explicit: {row}', file=sys.stderr)
+        sys.exit(1)
+
+br14_start = policy.index('## BR-14 ')
+br15_start = policy.index('## BR-15 ')
+br14 = policy[br14_start:br15_start]
+normalized_br14 = re.sub(r'\s+', ' ', br14)
+
+reason_contract = [
+    '`Order` row에는 reason code와 허용된 detail을 저장한다.',
+    '`AuditRecord`에는 정규화된 reason code만 저장하고 detail은 복제하지 않는다.',
+    'Refund 내부 기록과 외부 결제 취소 요청에는 처리에 필요한 정규화된 reason만 사용하며 detail은 전달하지 않는다.',
+    '`OrderCancelledV1` persistent payload에는 reason code와 detail을 모두 포함하지 않는다.',
+    '애플리케이션 로그에도 reason code와 detail을 복제하지 않는다.',
+]
+for statement in reason_contract:
+    if statement not in normalized_br14:
+        print(f'BR-14 cancellation reason data boundary is incomplete: {statement}', file=sys.stderr)
+        sys.exit(1)
+if '이벤트, 감사 기록과 외부 결제 Provider에는 reason code만 전달' in normalized_br14:
+    print('BR-14 still says persistent events receive cancellation reasonCode.', file=sys.stderr)
+    sys.exit(1)
+
+required_tests = br14.split('- **Required Tests:**', 1)[1].split('- **ADR Required:**', 1)[0]
+normalized_tests = re.sub(r'\s+', ' ', required_tests)
+clean_marker = '**Clean-cutover path (release gate 전체 0):**'
+forward_marker = '**Forward-migration path (release gate nonzero 또는 unknown):**'
+if clean_marker not in normalized_tests or forward_marker not in normalized_tests:
+    print('BR-14 Required Tests must separate clean-cutover and forward-migration paths.', file=sys.stderr)
+    sys.exit(1)
+if normalized_tests.index(clean_marker) > normalized_tests.index(forward_marker):
+    print('BR-14 release-gate test paths are out of order.', file=sys.stderr)
+    sys.exit(1)
+clean_tests, forward_tests = normalized_tests.split(forward_marker, 1)
+if 'legacy compatibility layer와 version 이중 발행 없음' not in clean_tests:
+    print('Clean-cutover tests must assert no legacy compatibility or dual publication.', file=sys.stderr)
+    sys.exit(1)
+forward_requirements = [
+    '기존 migration과 V1 계약 유지',
+    '구 publication 역직렬화',
+    'legacy listener routing',
+    'publication drain',
+    'rollback compatibility',
+    '별도 version 또는 compatibility bridge',
+]
+for requirement in forward_requirements:
+    if requirement not in forward_tests:
+        print(f'Forward-migration tests are incomplete: {requirement}', file=sys.stderr)
+        sys.exit(1)
+if 'legacy listener target mapping 유지와 미완료 V1 publication 소진 검증' in normalized_tests:
+    print('Legacy compatibility test is still unconditional in BR-14.', file=sys.stderr)
+    sys.exit(1)
+
+adr030 = re.sub(
+    r'\s+',
+    ' ',
+    (root / 'docs/adr/ADR-030-customer-cancellation-authorization.md').read_text(encoding='utf-8'),
+)
+if (
+    '**Amended by:** ADR-038' not in adr030
+    or '| `FAILED`, `MANUAL_REVIEW` | `PROCESSING` | `REFUND_DELAYED` |' not in adr030
+):
+    print('ADR-030 does not record the accepted customer-refund projection amendment.', file=sys.stderr)
+    sys.exit(1)
+
+openapi_text = (root / 'openapi/beanflow-v1.yaml').read_text(encoding='utf-8')
+for schema_name in ('PaymentApprovalRecoverySummary', 'CancellationRefundRecoverySummary'):
+    if f'    {schema_name}:' not in openapi_text:
+        print(f'OpenAPI recovery schema is missing: {schema_name}', file=sys.stderr)
+        sys.exit(1)
+if '    PaymentRecoverySummary:' in openapi_text:
+    print('OpenAPI reintroduced the shared PaymentRecoverySummary schema.', file=sys.stderr)
     sys.exit(1)
 
 headings = list(re.finditer(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE))
@@ -245,9 +360,63 @@ else:
         print('Cancellation unresolved-refund states are incomplete.', file=sys.stderr)
         sys.exit(1)
 
-    payment_recovery = spec['components']['schemas']['PaymentRecoverySummary']
-    if not payment_recovery.get('allOf'):
-        print('PaymentRecoverySummary conditional customer contract is missing.', file=sys.stderr)
+    schemas = spec['components']['schemas']
+    approval_recovery_ref = schemas['PaymentConfirmation']['properties']['recovery'].get('$ref')
+    cancellation_recovery_ref = schemas['Cancellation']['properties']['paymentRecovery'].get('$ref')
+    order_recovery_ref = schemas['Order']['properties']['paymentRecovery'].get('$ref')
+    expected_approval_ref = '#/components/schemas/PaymentApprovalRecoverySummary'
+    expected_cancellation_ref = '#/components/schemas/CancellationRefundRecoverySummary'
+    if approval_recovery_ref != expected_approval_ref:
+        print('PaymentConfirmation.recovery must use PaymentApprovalRecoverySummary.', file=sys.stderr)
+        sys.exit(1)
+    if cancellation_recovery_ref != expected_cancellation_ref or order_recovery_ref != expected_cancellation_ref:
+        print('Cancellation and Order paymentRecovery must use CancellationRefundRecoverySummary.', file=sys.stderr)
+        sys.exit(1)
+    if approval_recovery_ref == cancellation_recovery_ref:
+        print('Payment approval and cancellation refund recovery schemas must not be shared.', file=sys.stderr)
+        sys.exit(1)
+
+    approval_recovery = schemas['PaymentApprovalRecoverySummary']
+    approval_properties = set(approval_recovery.get('properties', {}))
+    if approval_properties != {'state', 'lastUpdatedAt'}:
+        print('PaymentApprovalRecoverySummary must contain only state and lastUpdatedAt.', file=sys.stderr)
+        sys.exit(1)
+    if set(approval_recovery.get('required', [])) != {'state', 'lastUpdatedAt'}:
+        print('PaymentApprovalRecoverySummary required fields are incorrect.', file=sys.stderr)
+        sys.exit(1)
+    expected_approval_states = {'REQUESTED', 'PROCESSING', 'RECONCILING', 'SUCCEEDED', 'MANUAL_REVIEW'}
+    actual_approval_states = set(approval_recovery['properties']['state'].get('enum', []))
+    if actual_approval_states != expected_approval_states:
+        print('PaymentApprovalRecoverySummary states are incomplete or mixed with Refund states.', file=sys.stderr)
+        sys.exit(1)
+
+    cancellation_recovery = schemas['CancellationRefundRecoverySummary']
+    if not cancellation_recovery.get('allOf'):
+        print('CancellationRefundRecoverySummary conditional customer contract is missing.', file=sys.stderr)
+        sys.exit(1)
+    expected_customer_states = {'NOT_REQUIRED', 'REQUESTED', 'PROCESSING', 'SUCCEEDED'}
+    actual_customer_states = set(cancellation_recovery['properties']['state'].get('enum', []))
+    if actual_customer_states != expected_customer_states:
+        print('Cancellation refund customer projection enum is incorrect.', file=sys.stderr)
+        sys.exit(1)
+    forbidden_customer_states = {
+        'RETRY_SCHEDULED', 'FAILED', 'UNKNOWN', 'RECONCILING', 'MANUAL_REVIEW', 'SETUP_INCOMPLETE'
+    }
+    if actual_customer_states & forbidden_customer_states:
+        print('Internal Refund states reappeared in the customer projection enum.', file=sys.stderr)
+        sys.exit(1)
+    cancellation_properties = set(cancellation_recovery.get('properties', {}))
+    required_cancellation_properties = {
+        'state',
+        'noticeCode',
+        'approvedAmountKrw',
+        'succeededRefundAmountBeforeCancellationKrw',
+        'cancellationRequestedRefundAmountKrw',
+        'remainingRefundableAmountKrw',
+        'lastUpdatedAt',
+    }
+    if cancellation_properties != required_cancellation_properties:
+        print('CancellationRefundRecoverySummary notice/allocation contract is incomplete.', file=sys.stderr)
         sys.exit(1)
 
     print(

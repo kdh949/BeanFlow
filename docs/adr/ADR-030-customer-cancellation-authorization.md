@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-038의 고객 환불 projection, ADR-050의 setup 손상 projection
 
 ## Context
 
@@ -33,10 +34,21 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 - 운영자와 매장 구성원의 고객 주문 취소 실행은 이번 범위의 Non-goal이다. 고객 취소
   endpoint는 `CUSTOMER` 역할만 허용하고 운영자·매장 role의 호출은 `403`이다.
   `authorization-matrix.md`의 `Approved operation`은 후속 Feature로 유지한다.
-- 취소한 고객은 자기 주문의 취소 결과와 **보상 진행 요약**을 조회한다. 요약은
-  `PaymentRecoverySummary`(`state`, `lastUpdatedAt`)이며 `state`는
-  `NOT_REQUIRED`, `REQUESTED`, `PROCESSING`, `SUCCEEDED`, `FAILED`, `UNKNOWN`,
-  `RECONCILING`, `MANUAL_REVIEW`를 구분한다.
+- 취소한 고객은 자기 주문의 취소 결과와 **환불 진행 요약**을 조회한다. 요약은
+  `CancellationRefundRecoverySummary`이며 내부 Refund enum을 직접 노출하지 않는다.
+  고객 `state`는 `NOT_REQUIRED`, `REQUESTED`, `PROCESSING`, `SUCCEEDED`만 사용하고
+  `noticeCode`는 지연 안내가 필요할 때 `REFUND_DELAYED`만 반환한다.
+- ADR-038과 ADR-050이 이 ADR의 초기 내부 상태 직접 노출 결정을 개정한다.
+
+  | 내부 Refund 상태 | 고객 `state` | 고객 `noticeCode` |
+  |---|---|---|
+  | `REQUESTED` | `REQUESTED` | 없음 |
+  | `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING` | `PROCESSING` | 없음 |
+  | `FAILED`, `MANUAL_REVIEW` | `PROCESSING` | `REFUND_DELAYED` |
+  | `SUCCEEDED` | `SUCCEEDED` | 없음 |
+
+  내부 `SETUP_INCOMPLETE`도 고객에게는 `PROCESSING + REFUND_DELAYED`이고 운영자에게만
+  실제 손상 상태를 노출한다.
 - `PENDING_PAYMENT` 취소의 요약 `state`는 항상 `NOT_REQUIRED`다. 외부 환불이
   존재하지 않는다는 사실을 고객 응답에서 명시적으로 표현하며 `SUCCEEDED`로 위장하지
   않는다.
@@ -91,7 +103,8 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 
 ## Consequences
 
-- 고객 앱은 `paymentRecovery.state` 하나로 환불 진행 표시를 구성할 수 있다.
+- 고객 앱은 `paymentRecovery.state`와 optional `noticeCode`로 환불 진행과 지연 안내를
+  구성한다. 내부 retry·unknown·manual-review 상태명은 고객 계약에 의존하지 않는다.
 - 보상 step 상세를 노출하는 운영자 조회 경로가 필요하다. 그 endpoint 계약은 후속
   API ADR이 소유한다.
 - 매장 조회 응답에 결제 환불 진행이 포함되지 않으므로 매장 문의는 운영자 경로로
@@ -105,8 +118,9 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 - 소유권 검증을 Controller나 Repository 조회 조건에만 두면 다른 고객의 주문이
   `404`로 새어나가 operation 간 응답이 갈린다. Application Service 단일 지점에서
   검증한다.
-- 보상 요약을 Order 상태에서 파생하면 `CANCELLED`를 환불 성공으로 오인해 표시한다.
-  요약은 Refund와 보상 case의 실제 상태에서만 파생한다.
+- 환불 요약을 Order 상태에서 파생하면 `CANCELLED`를 환불 성공으로 오인해 표시한다.
+  고객 요약은 이번 고객 취소 Refund를 원천으로 하는 Payment Context의 단일
+  projection에서만 파생한다.
 - `PENDING_PAYMENT` 취소에 `SUCCEEDED`를 반환하면 존재하지 않는 환불이 완료된 것으로
   보인다. `NOT_REQUIRED`로 구분한다.
 - 운영자 전용 필드가 고객 응답 DTO에 실수로 포함되면 내부 오류 코드가 유출된다.
@@ -120,6 +134,7 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 - 고객 응답 필드 집합에 step 배열, `lastErrorCode`, `caseId`, `policyVersion`과
   `cancellation_detail`이 존재하지 않는다.
 - `PENDING_PAYMENT` 취소 응답의 `paymentRecovery.state`가 `NOT_REQUIRED`다.
+- 내부 Refund 상태별 고객 `state`와 `noticeCode`가 ADR-038/050 projection과 일치한다.
 
 ## Required Tests
 
@@ -130,6 +145,10 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 - 인증 없는 취소 요청 `401`
 - `PENDING_PAYMENT` 취소 응답 `paymentRecovery.state = NOT_REQUIRED`
 - `PAID` 취소 응답이 환불 진행 요약을 반환하고 step 배열을 반환하지 않음
+- 내부 `PROCESSING`·`RETRY_SCHEDULED`·`UNKNOWN`·`RECONCILING`의 고객 `PROCESSING`
+- 내부 `FAILED`·`MANUAL_REVIEW`·`SETUP_INCOMPLETE`의 고객
+  `PROCESSING + REFUND_DELAYED`
+- 고객 enum에 내부 Refund 상태와 `SETUP_INCOMPLETE`가 없음
 - 고객 응답 DTO에 `cancellation_detail`과 운영자 전용 필드 부재
 - 운영자 조회가 6개 step, `attemptCount`와 `lastErrorCode`를 반환
 - 매장 조회 응답에 결제 환불 진행이 포함되지 않음

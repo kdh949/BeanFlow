@@ -1070,7 +1070,7 @@ components:
         currency:
           $ref: "#/components/schemas/Currency"
         paymentRecovery:
-          $ref: "#/components/schemas/PaymentRecoverySummary"
+          $ref: "#/components/schemas/CancellationRefundRecoverySummary"
         paidAt:
           $ref: "#/components/schemas/DateTime"
         acceptanceWarningAt:
@@ -1399,7 +1399,7 @@ components:
         reasonCode:
           $ref: "#/components/schemas/CancellationReasonCode"
         paymentRecovery:
-          $ref: "#/components/schemas/PaymentRecoverySummary"
+          $ref: "#/components/schemas/CancellationRefundRecoverySummary"
         cancelledAt:
           $ref: "#/components/schemas/DateTime"
         correlationId:
@@ -1437,7 +1437,7 @@ components:
         currency:
           $ref: "#/components/schemas/Currency"
         recovery:
-          $ref: "#/components/schemas/PaymentRecoverySummary"
+          $ref: "#/components/schemas/PaymentApprovalRecoverySummary"
         updatedAt:
           $ref: "#/components/schemas/DateTime"
         correlationId:
@@ -1456,9 +1456,29 @@ components:
     PaymentApprovalState:
       type: string
       enum: [APPROVED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
-    PaymentRecoverySummary:
+    PaymentApprovalRecoverySummary:
       type: object
       additionalProperties: false
+      description: |
+        Recovery progress for an unknown payment approval result or its bounded
+        Provider lookup/late-approval recovery. This schema deliberately contains
+        only recovery state and time; cancellation refund notice and allocation
+        amounts belong to CancellationRefundRecoverySummary.
+      required: [state, lastUpdatedAt]
+      properties:
+        state:
+          type: string
+          enum: [REQUESTED, PROCESSING, RECONCILING, SUCCEEDED, MANUAL_REVIEW]
+        lastUpdatedAt:
+          $ref: "#/components/schemas/DateTime"
+    CancellationRefundRecoverySummary:
+      type: object
+      additionalProperties: false
+      description: |
+        Customer-facing recovery projection for the Refund created by a customer
+        cancellation. Internal Refund states are projected to the public state
+        and optional notice below; verified cancellation allocation amounts are
+        included only when their durable sources are complete.
       required:
         - state
       oneOf:

@@ -208,9 +208,11 @@
   `PAYMENT_ISSUE`는 결제수단을 바꾸고 싶거나 결제 금액을 잘못 선택했다고 고객이
   판단해 직접 취소한 경우를 뜻하며, Provider 승인 거절로 시스템이 취소한
   `cancellation_cause = PAYMENT_DECLINED`와 다른 사건이다.
-  이벤트, 감사 기록과 외부 결제 Provider에는 reason code만 전달하고 자유 입력 상세는
-  Order row에만 보관한다. 상세 사유를 event payload, AuditRecord, 외부 요청과
-  애플리케이션 로그에 복제하지 않는다.
+  `Order` row에는 reason code와 허용된 detail을 저장한다. `AuditRecord`에는 정규화된
+  reason code만 저장하고 detail은 복제하지 않는다. Refund 내부 기록과 외부 결제
+  취소 요청에는 처리에 필요한 정규화된 reason만 사용하며 detail은 전달하지 않는다.
+  `OrderCancelledV1` persistent payload에는 reason code와 detail을 모두 포함하지 않는다.
+  애플리케이션 로그에도 reason code와 detail을 복제하지 않는다.
 - **Authorization Amendment (2026-07-31):** 고객 취소는 주문을 소유한 고객만 실행할
   수 있다. 운영자와 매장 구성원의 고객 주문 취소 실행은 이번 범위의 Non-goal이며
   Authorization Matrix의 `Approved operation`은 후속 Feature로 남는다. 취소한 고객은
@@ -264,9 +266,13 @@
   V1 payload는 남은 정책 snapshot을 구현 전에 완성한 뒤 최초 운영 publication부터
   동결한다. 이후 필수 필드 제거·이름·타입·필드 의미 변경은 `OrderCancelledV2`로
   이행하고, 구 consumer가 무시할 수 있으며 역직렬화 기본값이 있는 선택 필드만 V1에
-  추가할 수 있다. V1 listener와 legacy listener-target-to-step mapping은 미완료 V1
-  publication이 0이고 승인된 rollback 기간이 끝날 때까지 유지한다. version 이중
-  발행은 기본 전략이 아니며 별도 ADR 없이는 사용하지 않는다.
+  추가할 수 있다. ADR-059 release gate가 모든 대상을 명시적으로 0으로 입증한
+  clean-cutover 경로에서는 producer, consumer와 fixture를 같은 변경에서 전환하고
+  legacy listener mapping, compatibility layer와 version 이중 발행을 만들지 않는다.
+  하나라도 nonzero 또는 unknown인 forward-migration 경로에서만 기존 migration과 V1
+  계약, 구 publication 역직렬화와 legacy listener-target-to-step mapping을 유지하며
+  publication drain, rollback compatibility와 version/bridge 종료 조건을 별도
+  ADR/ExecPlan으로 확정한다.
   Tx C1이 Refund `REQUESTED`를 이미 내구 저장하므로 Payment는 `OrderCancelledV1`
   consumer가 아니고 `paymentRequired`도 event payload에 포함하지 않는다. PAYMENT
   보상 step은 Refund worker가 직접 갱신한다. Refund source reference는
@@ -371,7 +377,9 @@
   `refund:customer-cancellation:{orderId}:{aggregateVersion}`다. 최초 Provider
   요청과 모든 lookup·reconciliation은 같은 key를 사용한다. event ID·event version,
   client `Idempotency-Key`, customer ID와 자유 입력 `detail`은 Refund 또는 Provider
-  식별자·요청·로그에 넣지 않는다. Provider에는 `customer_reason_code`만 전달한다.
+  식별자·요청에 넣지 않는다. Provider 취소 요청에는 계약상 필요한 정규화된
+  `customer_reason_code`만 전달한다. 애플리케이션 로그에는 `customer_reason_code`와
+  자유 입력 `detail`을 모두 기록하지 않는다.
 - **Cancellation Refund Reconciliation Budget Amendment (2026-07-31):** 고객 취소
   Refund 요청 결과가 불명확해지면 같은 Provider idempotency key로 10초, 30초, 2분,
   5분, 15분 뒤 최대 다섯 번 조회하고 REQUEST를 다시 보내지 않는다. 다섯 번째 조회도
@@ -387,7 +395,7 @@
   `MANUAL_REVIEW`다.
 - **Customer Refund Status Projection Amendment (2026-07-31):** 고객은 내부
   `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`을 모두
-  `PaymentRecoverySummary.state = PROCESSING`으로 본다. 내부 `FAILED`와
+  `CancellationRefundRecoverySummary.state = PROCESSING`으로 본다. 내부 `FAILED`와
   `MANUAL_REVIEW`도 고객 state는 `PROCESSING`이지만
   `noticeCode = REFUND_DELAYED`를 함께 반환한다. 클라이언트는 이 code에 정보 아이콘과
   “환불 처리가 지연되고 있습니다. 불편을 드려 죄송합니다. 최대한 빠르게
@@ -448,7 +456,10 @@
   - 상세 사유 200자 경계와 초과 거부
   - 제어문자 포함 상세 사유 거부
   - 공백만 있는 상세 사유의 부재 정규화
-  - 상세 사유가 event payload, AuditRecord, Provider 요청과 로그에 없음
+  - Order row의 reason code와 허용된 detail 저장
+  - AuditRecord의 reason code 저장과 detail 부재
+  - Refund 내부 기록·Provider 취소 요청의 필요한 정규화 reason과 detail 부재
+  - `OrderCancelledV1` persistent payload와 애플리케이션 log의 reason code·detail 부재
   - `PAYMENT_ISSUE` 취소가 `CUSTOMER_REQUEST` cause로 기록됨
   - `PAYMENT_DECLINED` 취소에 reason code가 없음
   - 타 고객 주문 취소 거부와 조회·취소의 응답 코드 일치
@@ -469,9 +480,17 @@
   - 다른 source·오래된 version·모순 상태의 비덮어쓰기와 manual review 전환
   - 한 listener 재시도 소진 시 해당 step만 manual review이고 다른 step은 계속 완료
   - publication completion attempt와 owner business attempt의 분리
-  - 구 V1 publication의 신·구 binary 역직렬화와 listener routing
-  - legacy listener target mapping 유지와 미완료 V1 publication 소진 검증
-  - breaking payload 변경이 V1 제자리 변경 없이 V2 계약으로 분리됨
+  - release gate의 production·공유 schema/row, 완료·미완료 publication, 외부 consumer,
+    rollback binary inventory와 unknown/nonzero 차단
+  - **Clean-cutover path (release gate 전체 0):** production·공유 schema와 row 없음,
+    완료·미완료 persistent publication 없음, 외부 consumer 없음, rollback 대상 binary
+    없음, producer·consumer·fixture의 동일 변경 전환, legacy compatibility layer와
+    version 이중 발행 없음
+  - **Forward-migration path (release gate nonzero 또는 unknown):** 기존 migration과 V1
+    계약 유지, 구 publication 역직렬화, legacy listener routing, publication drain,
+    rollback compatibility, 별도 version 또는 compatibility bridge 검증
+  - forward-migration의 breaking payload 변경이 기존 V1 제자리 변경 없이 새 version
+    또는 compatibility bridge로 분리됨
   - `OrderCancelledV1`에 Payment publication과 `paymentRequired` 필드가 없음
   - Tx C1 Refund source reference와 Refund worker의 PAYMENT step 갱신
   - `PAID` 취소 `202` 시 필수 내구 묶음의 전부 존재 또는 전부 rollback
