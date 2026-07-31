@@ -43,9 +43,14 @@ required=(
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
+  "docs/exec-plans/active/ci-pr-validation.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
+  "scripts/ci/classify-changes.sh"
+  "scripts/ci/run-and-capture.sh"
+  "scripts/ci/requirements-docs.txt"
+  "scripts/ci/test-ci-scripts.sh"
 )
 
 for file in "${required[@]}"; do
@@ -323,11 +328,28 @@ if broken_links:
 
 try:
     import yaml
-except ImportError:
-    print('OpenAPI YAML parse: Not configured (PyYAML is not installed).')
+    from openapi_spec_validator import validate
+    from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
+    from referencing.exceptions import Unresolvable
+except ImportError as exc:
+    print(
+        'OpenAPI validation dependencies are missing. '
+        'Install scripts/ci/requirements-docs.txt.',
+        file=sys.stderr,
+    )
+    print(f'Missing dependency: {exc}', file=sys.stderr)
+    sys.exit(1)
 else:
-    with (root / 'openapi/beanflow-v1.yaml').open(encoding='utf-8') as f:
-        spec = yaml.safe_load(f)
+    try:
+        with (root / 'openapi/beanflow-v1.yaml').open(encoding='utf-8') as f:
+            spec = yaml.safe_load(f)
+        validate(spec)
+    except Unresolvable as exc:
+        print(f'OpenAPI 3.1 validation failed: unresolved reference {exc.ref}', file=sys.stderr)
+        sys.exit(1)
+    except (yaml.YAMLError, OpenAPIValidationError, TypeError, ValueError) as exc:
+        print(f'OpenAPI 3.1 validation failed: {exc}', file=sys.stderr)
+        sys.exit(1)
     if spec.get('openapi') != '3.1.0':
         print('OpenAPI version must be 3.1.0.', file=sys.stderr)
         sys.exit(1)
@@ -422,6 +444,32 @@ else:
         sys.exit(1)
 
     schemas = spec['components']['schemas']
+    create_order_refs = {
+        branch.get('$ref')
+        for branch in schemas['CreateOrderResult'].get('oneOf', [])
+        if isinstance(branch, dict)
+    }
+    expected_create_order_refs = {
+        '#/components/schemas/PendingPaymentOrderCreation',
+        '#/components/schemas/BenefitOnlyOrderCreation',
+    }
+    if create_order_refs != expected_create_order_refs:
+        print('CreateOrderResult must keep the pending-payment and benefit-only variants.', file=sys.stderr)
+        sys.exit(1)
+    pending_payment_requirements = {
+        required
+        for branch in schemas['PendingPaymentOrder'].get('allOf', [])
+        if isinstance(branch, dict)
+        for required in branch.get('required', [])
+    }
+    if 'reservationExpiresAt' not in pending_payment_requirements:
+        print('PendingPaymentOrder must require reservationExpiresAt.', file=sys.stderr)
+        sys.exit(1)
+    order_conflict_description = spec['components']['responses']['OrderCreationConflict'].get('description', '')
+    if 'IDEMPOTENCY_REQUEST_IN_PROGRESS' not in order_conflict_description:
+        print('Order creation conflict must document IDEMPOTENCY_REQUEST_IN_PROGRESS.', file=sys.stderr)
+        sys.exit(1)
+
     approval_recovery_ref = schemas['PaymentConfirmation']['properties']['recovery'].get('$ref')
     cancellation_recovery_ref = schemas['Cancellation']['properties']['paymentRecovery'].get('$ref')
     order_recovery_ref = schemas['Order']['properties']['paymentRecovery'].get('$ref')
