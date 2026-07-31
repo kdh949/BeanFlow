@@ -94,7 +94,10 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 
 ## API and Event Contracts
 
-- Store/Operations response는 `CompensationSummary`/`OperatorCompensationView`를 쓴다.
+- 매장 response는 축약 `StoreCompensationSummary`(trigger·state·updatedAt),
+  운영자 response는 여섯 step을 담은 `CompensationSummary`를 감싼
+  `OperatorCompensationView`를 쓴다. 매장 응답에는 step 배열, `attemptCount`,
+  `lastErrorCode`, `caseId`와 policy version이 없다.
 - business response에 `replayed`를 넣지 않는다.
 - 고객 취소 event는 네 owner만 소비하며 Payment/Notification은 소비하지 않는다.
 - V1 변경 가능 여부와 payload version은 00 gate 결과를 따른다.
@@ -113,6 +116,8 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 - trigger 두 값, 여섯 step, policy child 정확히 두 개
 - 같은/different source·trigger·version 중복
 - store rejection 기존 정상·timeout·refund·notification 회귀
+- 매장 응답의 step 배열·attemptCount·lastErrorCode·caseId·policy version 부재
+- 매장 응답의 trigger·case state·updatedAt 존재와 운영자 응답의 여섯 step 존재
 - 단일 listener exhaustion 시 해당 step만 manual review
 - 다른 publication 계속 완료와 attempt 분리
 - store idempotency hash에 orderId 포함, V2 operation, replay body 불변

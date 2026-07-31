@@ -90,8 +90,10 @@ backlog를 먼저 확인한다. worker는 같은 guarded transaction을 재실�
 
 ## Rejection compensation
 
-Store order 조회 API는 Order와 compensation 전체 상태를 함께 반환한다. DB 진단은
-case와 owner별 step을 함께 조회한다.
+Store order 조회 API는 Order와 함께 `trigger`, case `state`, `updatedAt`만 담은
+축약 보상 요약을 반환한다. step 상세, `attemptCount`, `lastErrorCode`, `caseId`와
+policy version은 운영자 전용 `GET /api/v1/operations/orders/{orderId}/compensation`과
+아래 DB 진단에서만 확인한다. DB 진단은 case와 owner별 step을 함께 조회한다.
 
 ```sql
 SELECT c.order_id, c.trigger, c.state AS case_state,

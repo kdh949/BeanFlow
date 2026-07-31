@@ -7,6 +7,7 @@
 | 고객 주문 취소 | Own and allowed state | No | No | Approved operation — 후속 Feature, 현재 미구현 | No |
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
 | 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
+| 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
@@ -38,7 +39,9 @@ role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
 endpoint는 `CUSTOMER` 역할만 허용하고 매장·운영자 role의 호출은 `403`이다.
 
-취소 보상의 step 상태, 시도 횟수와 내부 오류 코드는 운영자 전용이다. 고객에게는
+취소 보상의 step 상태, 시도 횟수와 내부 오류 코드는 운영자 전용이다. 매장에는
+`trigger`, case 상태와 갱신 시각만 담은 축약 보상 요약을 반환하고 step 배열,
+시도 횟수, 내부 오류 코드, case 식별자와 정책 version은 제외한다. 고객에게는
 축약한 환불 진행 상태만 반환한다. 내부 재시도·불명 상태는 `PROCESSING`, 자동 처리
 소진은 `PROCESSING + REFUND_DELAYED`로 표현하고 실제 실패 code와
 `MANUAL_REVIEW`는 노출하지 않는다. 고객이 입력한 자유 서술 취소 상세는 어떤

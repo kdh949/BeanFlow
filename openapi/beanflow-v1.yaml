@@ -317,7 +317,13 @@ paths:
     get:
       tags: [Store Orders]
       operationId: getStoreOrder
-      summary: Get an order and its compensation status
+      summary: Get an order and its abbreviated compensation status
+      description: |
+        Returns the store projection of the order plus a compensation summary
+        limited to trigger, case state and updatedAt. Step detail, attempt
+        counts, internal error codes, the case identifier and benefit policy
+        versions are operator-only and available from
+        GET /operations/orders/{orderId}/compensation.
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
@@ -1225,14 +1231,39 @@ components:
         order:
           $ref: "#/components/schemas/StoreOrder"
         compensationRecovery:
-          $ref: "#/components/schemas/CompensationSummary"
+          $ref: "#/components/schemas/StoreCompensationSummary"
+    StoreCompensationSummary:
+      type: object
+      additionalProperties: false
+      description: |
+        Store-facing compensation projection for a terminated order. Store
+        members see what terminated the order and whether owner compensation is
+        still running, but never the step breakdown, attempt counts, internal
+        error codes, case identifier or benefit policy versions. Those are
+        operator-only and returned by OperatorCompensationView (ADR-030,
+        ADR-033). Order termination does not imply compensation success.
+      required: [trigger, state, updatedAt]
+      properties:
+        trigger:
+          type: string
+          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
+        state:
+          type: string
+          enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, MANUAL_REVIEW]
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
     CompensationSummary:
       type: object
       additionalProperties: false
       description: |
-        Owner compensation progress for a terminated order. The same shape covers
-        store rejection and customer cancellation; the trigger field distinguishes
-        the origin. Order termination does not imply compensation success.
+        Full owner compensation progress for a terminated order. The same shape
+        covers store rejection and customer cancellation; the trigger field
+        distinguishes the origin. Step detail, attempt counts, internal error
+        codes, the case identifier and the benefit policy versions are
+        operator-only, so this schema is returned only inside
+        OperatorCompensationView; store members receive the abbreviated
+        StoreCompensationSummary. Order termination does not imply compensation
+        success.
       required: [caseId, trigger, benefitPolicies, state, steps, updatedAt]
       properties:
         caseId:
@@ -1536,11 +1567,13 @@ components:
             as PROCESSING with noticeCode REFUND_DELAYED. Other Refunds and the
             compensation PAYMENT step are not combined. NOT_REQUIRED is used
             exactly when the cancellation requested refund amount is zero. That
-            covers a BENEFIT_ONLY cancellation and a PENDING_PAYMENT
-            cancellation, where every amount is zero or absent, and also a PAID
-            cancellation whose approved amount was already fully returned by an
-            earlier refund, where approvedAmountKrw and
-            succeededRefundAmountBeforeCancellationKrw stay positive.
+            covers a BENEFIT_ONLY cancellation, where all four amounts are zero;
+            a PENDING_PAYMENT cancellation, which has no approval and no durable
+            snapshot to verify and therefore omits all four amounts rather than
+            reporting them as zero; and a PAID cancellation whose approved
+            amount was already fully returned by an earlier refund, where
+            approvedAmountKrw and succeededRefundAmountBeforeCancellationKrw
+            stay positive.
             Internal setup damage is exposed as PROCESSING with REFUND_DELAYED;
             SETUP_INCOMPLETE and missing artifact details are operator-only.
           enum:
