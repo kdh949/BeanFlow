@@ -37,13 +37,14 @@ required=(
   "docs/quality/customer-order-cancellation-release-evidence.md"
   "docs/decisions/customer-order-cancellation-decision-closure.md"
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
-  "docs/exec-plans/active/customer-order-cancellation-00-contract-baseline.md"
+  "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
   "docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
-  "docs/exec-plans/active/ci-pr-validation.md"
+  "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
+  "docs/exec-plans/completed/ci-pr-validation.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
@@ -65,6 +66,8 @@ import sys
 
 root = Path('.')
 policy = (root / 'docs/product/business-policy-decisions.md').read_text(encoding='utf-8')
+api_conventions = (root / 'docs/api/api-conventions.md').read_text(encoding='utf-8')
+normalized_api_conventions = re.sub(r'\s+', ' ', api_conventions)
 ids = re.findall(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE)
 expected = [f'BR-{i:02d}' for i in range(1, 33)]
 
@@ -366,6 +369,7 @@ else:
         '/store-orders/{orderId}/status',
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
+        '/operations/point-accounts/{accountId}/adjustments',
         '/stores/{storeId}/settlements',
         '/stores/{storeId}/settlements/{settlementBatchId}/items',
         '/settlement-items/{itemId}/disputes',
@@ -408,6 +412,7 @@ else:
         ('/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
+        ('/operations/point-accounts/{accountId}/adjustments', 'post'),
     ]
     idempotency_ref = '#/components/parameters/IdempotencyKey'
     for path, method in mutation_operations:
@@ -435,8 +440,19 @@ else:
         sys.exit(1)
 
     cancellation_detail = spec['components']['schemas']['CancellationRequest']['properties']['detail']
-    if 'Control characters are rejected' not in cancellation_detail.get('description', ''):
+    cancellation_detail_description = cancellation_detail.get('description', '')
+    normalized_cancellation_detail_description = re.sub(r'\s+', ' ', cancellation_detail_description)
+    required_cancellation_detail_fragments = (
+        'The server trims it before validation',
+        'empty normalized value is treated as absent',
+        'present normalized value must contain 1 to 200 characters',
+        'Control characters are rejected',
+    )
+    if not all(fragment in normalized_cancellation_detail_description for fragment in required_cancellation_detail_fragments):
         print('Cancellation detail normalization/control-character contract is missing.', file=sys.stderr)
+        sys.exit(1)
+    if {'minLength', 'maxLength'} & set(cancellation_detail):
+        print('Cancellation detail length must be validated after normalization, not by a raw schema length.', file=sys.stderr)
         sys.exit(1)
 
     cancellation_description = spec['paths']['/orders/{orderId}/cancellations']['post'].get('description', '')
@@ -683,6 +699,21 @@ else:
     ):
         print('Active points restoration requires a SUCCEEDED cash Refund.', file=sys.stderr)
         sys.exit(1)
+    points_before_cash_branches = [
+        branch for branch in refund.get('allOf', [])
+        if branch.get('if', {}).get('properties', {})
+        .get('pointsRestorationState', {}).get('const') == 'REQUESTED'
+    ]
+    if len(points_before_cash_branches) != 1:
+        print('Refund must have exactly one REQUESTED-before-cash-success rule.', file=sys.stderr)
+        sys.exit(1)
+    requested_cash_state_rule = (
+        points_before_cash_branches[0].get('then', {}).get('properties', {})
+        .get('state', {}).get('not', {})
+    )
+    if requested_cash_state_rule.get('const') != 'SUCCEEDED':
+        print('REQUESTED points restoration must forbid a SUCCEEDED cash Refund.', file=sys.stderr)
+        sys.exit(1)
 
     settlement_items_path = spec['paths'][
         '/stores/{storeId}/settlements/{settlementBatchId}/items'
@@ -738,6 +769,189 @@ else:
     )
     if policy_list_schema.get('minItems') != 5 or policy_list_schema.get('maxItems') != 5:
         print('Expired benefit policy list must return exactly five heads.', file=sys.stderr)
+        sys.exit(1)
+    if 'base GET은 다섯 현재 head를' not in normalized_api_conventions:
+        print('API conventions must describe the same five expired-benefit policy heads as OpenAPI.', file=sys.stderr)
+        sys.exit(1)
+    if '전체 공개 endpoint와 request/response 계약의 원본은 `openapi/beanflow-v1.yaml`' not in normalized_api_conventions:
+        print('API conventions must identify OpenAPI as the complete endpoint contract source.', file=sys.stderr)
+        sys.exit(1)
+
+    point_transaction = schemas['PointTransaction']
+    point_transaction_types = set(point_transaction['properties']['type'].get('enum', []))
+    expected_point_transaction_types = {
+        'ACCRUAL',
+        'USE',
+        'EXPIRATION',
+        'RESTORE',
+        'COMPENSATION',
+        'RESTORE_SKIPPED_EXPIRED',
+        'RECOVERY',
+        'ADJUSTMENT',
+    }
+    if point_transaction_types != expected_point_transaction_types:
+        print('PointTransaction contract types are incomplete or excessive.', file=sys.stderr)
+        print('Found:', sorted(point_transaction_types), file=sys.stderr)
+        sys.exit(1)
+    point_transaction_type_description = point_transaction['properties']['type'].get('description', '')
+    point_transaction_amount_description = point_transaction['properties']['amountKrw'].get('description', '')
+    if 'RECOVERY is an actual debit' not in point_transaction_type_description:
+        print('PointTransaction must distinguish RECOVERY debit from PointRecoveryPending.', file=sys.stderr)
+        sys.exit(1)
+    if 'RECOVERY are negative' not in point_transaction_amount_description:
+        print('PointTransaction amount must define the signed RECOVERY effect.', file=sys.stderr)
+        sys.exit(1)
+    if 'RESTORE_SKIPPED_EXPIRED is zero' not in point_transaction_amount_description:
+        print('PointTransaction amount must define the zero skipped-restoration effect.', file=sys.stderr)
+        sys.exit(1)
+    if 'ADJUSTMENT follows its stored CREDIT or DEBIT balance effect' not in point_transaction_amount_description:
+        print('PointTransaction amount must define the signed ADJUSTMENT effect.', file=sys.stderr)
+        sys.exit(1)
+    point_account_pending_description = schemas['PointAccount']['properties']['recoveryPendingKrw'].get('description', '')
+    if 'PointRecoveryPending remaining amounts' not in point_account_pending_description:
+        print('PointAccount recoveryPendingKrw must be defined as a pending summary.', file=sys.stderr)
+        sys.exit(1)
+
+    recovery_adr = (root / 'docs/adr/ADR-065-refund-earned-point-recovery-ledger.md').read_text(encoding='utf-8')
+    required_recovery_adr_fragments = (
+        'PointTransaction(type=RECOVERY)',
+        'PointRecoveryPending',
+        'loyalty_point_recovery_pending',
+        'recovery_pending_krw',
+        'PENDING -> SETTLED',
+    )
+    if not all(fragment in recovery_adr for fragment in required_recovery_adr_fragments):
+        print('ADR-065 recovery ownership, state or DB contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    event_catalog = (root / 'docs/architecture/event-catalog.md').read_text(encoding='utf-8')
+    recovery_event_row = next(
+        (line for line in event_catalog.splitlines() if line.startswith('| PointRecoveryPendingRecorded |')),
+        '',
+    )
+    if not recovery_event_row.endswith('| PointRecoveryPending |'):
+        print('PointRecoveryPendingRecorded must use PointRecoveryPending as its source of truth.', file=sys.stderr)
+        sys.exit(1)
+    plan10 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md'
+    ).read_text(encoding='utf-8')
+    if 'refund earned-point recovery와 later-accrual offset' not in plan10:
+        print('Plan 10 must own the accepted refund earned-point recovery foundation.', file=sys.stderr)
+        sys.exit(1)
+    required_plan10_issuer_fragments = (
+        'issuer_type',
+        '`issuer_reference`',
+        'reconstructible issuer source',
+        '추정 backfill은 금지한다.',
+    )
+    if not all(fragment in plan10 for fragment in required_plan10_issuer_fragments):
+        print('Plan 10 must own the issuer snapshot migration and non-guessing precheck gate.', file=sys.stderr)
+        sys.exit(1)
+
+    adjustment_adr = (root / 'docs/adr/ADR-066-audited-loyalty-point-adjustment.md').read_text(encoding='utf-8')
+    required_adjustment_adr_fragments = (
+        '`POINT_ADJUSTMENT` permission',
+        'issuer { issuerType, issuerReference }',
+        'balance_effect',
+        'POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE',
+        'PointsAdjusted',
+        'loyalty_point_adjustment_command_idempotency',
+        'LoyaltyPointAdjustmentIdempotencyRetentionWorker',
+    )
+    if not all(fragment in adjustment_adr for fragment in required_adjustment_adr_fragments):
+        print('ADR-066 audited point-adjustment contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+
+    adjustment_path = spec['paths']['/operations/point-accounts/{accountId}/adjustments']['post']
+    adjustment_parameter_refs = {
+        item.get('$ref')
+        for item in adjustment_path.get('parameters', [])
+        if isinstance(item, dict)
+    }
+    expected_adjustment_parameter_refs = {
+        '#/components/parameters/PointAccountId',
+        '#/components/parameters/IdempotencyKey',
+    }
+    if adjustment_parameter_refs != expected_adjustment_parameter_refs:
+        print('Point adjustment must require account scope and Idempotency-Key.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_request_ref = (
+        adjustment_path['requestBody']['content']['application/json']['schema'].get('$ref')
+    )
+    if adjustment_request_ref != '#/components/schemas/PointAdjustmentRequest':
+        print('Point adjustment request schema is incorrect.', file=sys.stderr)
+        sys.exit(1)
+    if set(adjustment_path.get('responses', {})) != {'201', '400', '401', '403', '404', '409', '503'}:
+        print('Point adjustment response contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        adjustment_path['responses']['201']['content']['application/json']['schema'].get('$ref')
+        != '#/components/schemas/PointAdjustmentResult'
+    ):
+        print('Point adjustment success response schema is incorrect.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_request = schemas['PointAdjustmentRequest']
+    if set(adjustment_request.get('required', [])) != {'amountKrw', 'reason', 'evidenceReferences'}:
+        print('Point adjustment required fields are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    expected_nonblank_pattern = r'.*\S.*'
+    adjustment_nonblank_fields = {
+        'issuerReference': schemas['PointIssuer']['properties']['issuerReference'],
+        'reason': adjustment_request['properties']['reason'],
+        'evidence reference': adjustment_request['properties']['evidenceReferences']['items'],
+    }
+    if any(field.get('pattern') != expected_nonblank_pattern for field in adjustment_nonblank_fields.values()):
+        print('Point adjustment issuer, reason and evidence references must reject blank values.', file=sys.stderr)
+        sys.exit(1)
+    if adjustment_request['properties']['amountKrw'].get('not', {}).get('const') != 0:
+        print('Point adjustment amount must reject zero.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_branches = adjustment_request.get('allOf', [])
+    if len(adjustment_branches) != 1:
+        print('Point adjustment must have exactly one positive/negative conditional branch.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_branch = adjustment_branches[0]
+    if set(adjustment_branch.get('then', {}).get('required', [])) != {'issuer', 'expiresAt'}:
+        print('Positive point adjustment must require issuer and expiresAt.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_negative_forbidden = {
+        tuple(branch.get('required', []))
+        for branch in adjustment_branch.get('else', {}).get('not', {}).get('anyOf', [])
+    }
+    if adjustment_negative_forbidden != {('issuer',), ('expiresAt',)}:
+        print('Negative point adjustment must forbid issuer and expiresAt.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_issuer_types = set(schemas['PointIssuer']['properties']['issuerType'].get('enum', []))
+    if adjustment_issuer_types != {'PLATFORM', 'BRAND', 'STORE'}:
+        print('Point adjustment issuer types are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_result = schemas['PointAdjustmentResult']
+    if set(adjustment_result.get('required', [])) != {'account', 'transactions'}:
+        print('Point adjustment result fields are incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if adjustment_result['properties']['account'].get('$ref') != '#/components/schemas/PointAccount':
+        print('Point adjustment result must return the changed PointAccount.', file=sys.stderr)
+        sys.exit(1)
+    if adjustment_result['properties']['transactions']['items'].get('$ref') != '#/components/schemas/PointTransaction':
+        print('Point adjustment result must return PointTransaction entries.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_plan = (
+        root / 'docs/exec-plans/active/loyalty-point-adjustment-foundation.md'
+    ).read_text(encoding='utf-8')
+    adjustment_plan_requirements = (
+        'Plan 10 issuer precheck evidence',
+        'PointsAdjusted',
+        'loyalty_point_adjustment_command_idempotency',
+        'LoyaltyPointAdjustmentIdempotencyRetentionWorker',
+    )
+    if not all(fragment in adjustment_plan for fragment in adjustment_plan_requirements):
+        print('Point adjustment active ExecPlan is missing migration, retention or event completion criteria.', file=sys.stderr)
+        sys.exit(1)
+    adjustment_event_row = next(
+        (line for line in event_catalog.splitlines() if line.startswith('| PointsAdjusted |')),
+        '',
+    )
+    if not adjustment_event_row.endswith('| PointTransaction |'):
+        print('PointsAdjusted must use PointTransaction as its source of truth.', file=sys.stderr)
         sys.exit(1)
 
     policy_patch = spec['paths'][

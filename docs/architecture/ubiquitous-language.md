@@ -19,8 +19,13 @@
 | PointLot | 발급 주체, 잔여 금액과 만료일을 가진 포인트 발급분 | Loyalty |
 | PointReservation | 주문 lease 동안 PointLot별 포인트 allocation을 점유하고 사용 또는 해제 결과를 추적하는 기록 | Loyalty |
 | PointReservationAllocation | PointReservation이 특정 PointLot에서 점유한 금액과 release disposition을 고정한 하위 Entity | Loyalty |
-| PointTransaction | 적립·사용·소멸·복원·조정을 기록한 원장 | Loyalty |
-| Point Recovery Pending | 환불 대상 적립 포인트를 전부 회수하지 못했을 때 Loyalty가 보유하는 상계 대기 금액과 상태 | Loyalty |
+| PointTransaction | 적립·사용·소멸·복원·조정과 실제 환불 적립 포인트 차감을 기록하는 append-only 원장. 공개 `amountKrw`는 잔액 signed effect다. | Loyalty |
+| RECOVERY | 환불에 대응해 실제 가용 PointLot과 PointAccount에서 차감한 PointTransaction type. 미회수 부족액 자체를 뜻하지 않는다. | Loyalty |
+| Point Recovery Pending | 환불 대상 적립 포인트를 전부 회수하지 못했을 때 Loyalty가 보유하는 상계 대기 잔액 Aggregate. `PENDING`은 양수 잔액, `SETTLED`는 0이다. | Loyalty |
+| Point Adjustment | explicit `POINT_ADJUSTMENT` permission을 가진 Platform Operator의 reason/evidence에 근거한 signed `ADJUSTMENT` correction. CREDIT은 입력 issuer/expiry의 새 Lot, DEBIT은 available Lot 차감으로 표현한다. | Loyalty |
+| Adjustment Command Source | 조정 command 하나의 immutable identity. Audit/outbox는 command source를, Lot별 PointTransaction은 command source와 Lot을 묶은 opaque child source를 사용한다. | Loyalty |
+| Point Adjustment Command Idempotency | actor·operation·key scope의 terminal point-adjustment response를 90일 보존하는 Loyalty record. account/hash가 같은 요청만 최초 201을 재생한다. | Loyalty |
+| Balance Effect | PointTransaction 저장 magnitude와 별도로 balance에 미치는 `CREDIT`, `DEBIT`, `NONE` 방향을 보존하는 값. | Loyalty |
 | Payment | 한 주문의 승인, 결과 불명과 환불 상태 | Payment |
 | Benefit-only Payment | 최종 결제액이 0원일 때 외부 PG 호출 없이 생성하는 `BENEFIT_ONLY` 유형의 Payment | Payment |
 | UNKNOWN | 외부 처리 결과를 성공 또는 실패로 확정할 수 없는 상태 | Payment 등 |

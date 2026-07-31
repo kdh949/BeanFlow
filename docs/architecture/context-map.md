@@ -47,7 +47,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Payment | Ordering | Payment | 승인·거절·불명·환불 fact | Tx2 후 후속 소비자용 after-commit, consumer idempotent |
 | Ordering | Notification | Ordering fact or cancellation Delivery command | 일반 알림은 after-commit event; 취소 접수는 Tx C0/C1의 동기 Application API | provider 발송은 eventual |
 | Ordering | Payment | Payment | 고객 취소 Refund `REQUESTED`와 cancellation recovery snapshot 생성 Application API | Tx C1 내 강한 일관성, Provider 호출은 밖 |
-| Ordering | Operations | Operations | Tx C0/C1의 OrderCompensationCase·step·benefit policy snapshot과 target AuditRecord 생성 Application API | 취소 transaction 내 강한 일관성 |
+| Ordering | Operations | Operations | Tx C0의 target AuditRecord와 Tx C1의 OrderCompensationCase·step·benefit policy snapshot·target AuditRecord 생성 Application API | 취소 transaction 내 강한 일관성 |
 | Ordering | Loyalty | Ordering fact | `OrderCompleted` idempotent event | eventual |
 | Ordering | Settlement | Ordering fact | `OrderCompleted` idempotent event | eventual |
 | Payment | Settlement | Payment fact | 환불·승인 금액 입력 | eventual, Item 생성 기준은 완료 주문 |
@@ -75,13 +75,13 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 | Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API |
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
 | Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API |
-| Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending | reserve/use/release, accrual facts |
+| Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, accrual·refund recovery facts, audited point-adjustment command, pending summary query |
 | Payment | Payment, Refund와 line allocation, PaymentCancellationRecoverySnapshot, PaymentMethod, 결제 명령 IdempotencyRecord | approval/refund command and facts |
 | Settlement | SettlementItem, SettlementBatch, SettlementAdjustment | settlement query, adjustment command |
 | Dispute | SettlementDispute와 Held Amount | dispute workflow and decision fact |
 | Notification | NotificationDelivery | delivery status/failure fact |
 | Analytics | Analytics Read Model | named metric queries |
-| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, 누락 Refund 복구 제안·결정 |
+| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, 누락 Refund 복구 제안·결정, point adjustment permission evaluation |
 
 ## Translation boundaries
 

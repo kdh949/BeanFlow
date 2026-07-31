@@ -15,7 +15,7 @@
 | Recovery schemas | 승인 조회 `PaymentApprovalRecoverySummary`, 취소 환불 `CancellationRefundRecoverySummary` 분리 | ADR-031, OpenAPI | Yes | Yes | 2026-07-31 | contract reference check |
 | Authorization | CUSTOMER가 자기 Order만 취소; GET과 같은 403 | ADR-030 | Yes | Yes | 2026-07-31 | ownership contract test |
 | Reason | Order reason/detail, Audit reason, Refund/Provider normalized reason; event/log에는 reason/detail 없음 | BR-14, ADR-055 | Yes | Yes | 2026-07-31 | validation/redaction test |
-| Idempotency | Order lock transaction, stored 200/202 body, replay 표시 없음 | ADR-032, ADR-057 | Yes | Yes | 2026-07-31 | cancellation idempotency schema |
+| Idempotency | Order lock transaction, stored 200/202 body, replay 표시 없음 | ADR-032, ADR-057, ADR-064 | Yes | Yes | 2026-08-01 | cancellation idempotency schema와 위험 기반 모델 선택 |
 | Prior partial refund | 취소 허용, remaining cash와 미복원 allocation만 처리 | ADR-036 | Yes | Yes | 2026-07-31 | allocation foundation |
 | Unresolved refund | REQUESTED/PROCESSING/RETRY_SCHEDULED/UNKNOWN/RECONCILING/MANUAL_REVIEW는 409; FAILED 허용 | BR-14, ADR-031, ADR-036, ADR-038 | Yes | Yes | 2026-08-01 | Order→Payment lock order |
 | Refund request budget | 안전 allowlist 실패만 최초 포함 3 REQUEST | ADR-038 | Yes | Yes | 2026-07-31 | Provider code contract |
@@ -49,6 +49,7 @@
 | Refund 비동기 projection | 요청 금액은 항상 반환하고 현금·포인트 상태와 확정 금액은 owner별로 분리 | ADR-061, OpenAPI | Yes | Yes | 2026-08-01 | Payment/Loyalty query composition |
 | 부분 환불 만료 포인트 | PARTIAL_REFUND×POINTS 기본 COMPENSATE_WITH_NEW_ISSUANCE/30일; PointReservation은 USED 유지 | ADR-063 | Yes | Yes | 2026-08-01 | policy snapshot과 allocation 원장 |
 | Policy foundation 소유권 | 최종 다섯 head 저장소·seed·운영 API는 Plan 10이 단독 구현; Plan 30은 종료용 네 head 소비 | ADR-063, Plan 10, Plan 30 | Yes | Yes | 2026-08-01 | migration 중복 부재 |
+| 환불 적립 포인트 회수 | 실제 차감은 음수 `RECOVERY` PointTransaction, 미회수 잔액은 별도 PointRecoveryPending으로 보존하고 이후 적립이 먼저 상계 | BR-13, ADR-065, OpenAPI | Yes | Yes | 2026-08-01 | Plan 10 recovery ledger foundation |
 | Order 취소 migration 소유권 | ADR-029의 네 컬럼·세 CHECK·precheck는 Plan 40이 단독 구현 | ADR-059, Plan 30, Plan 40 | Yes | Yes | 2026-08-01 | command mapping과 동시 반영 |
 | Settlement item 발견 | batch-scoped item 목록 API로 store member가 dispute용 itemId를 조회 | ADR-062, OpenAPI | Yes | Yes | 2026-08-01 | Settlement foundation |
 

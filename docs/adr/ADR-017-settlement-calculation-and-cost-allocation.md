@@ -23,6 +23,9 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - ADR-049에 따라 만료 원 쿠폰 대신 발급한 보상 쿠폰은 원 Campaign의 비용 부담
   snapshot을 승계하고, 보상 발급 시점이 아니라 미래 완료 주문에서 실제 사용될 때
   그 SettlementItem에 비용을 반영한다.
+- ADR-066에 따라 수동 양수 `ADJUSTMENT`로 만든 PointLot도 입력 issuer snapshot을
+  보존한다. command 시점에는 SettlementItem이나 SettlementAdjustment를 만들지 않고,
+  이후 사용될 때만 해당 snapshot을 비용 배분에 사용한다.
 
 ## Alternatives Considered
 
@@ -62,3 +65,4 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - [ADR-008](ADR-008-settlement-adjustment-ledger.md)
 - [ADR-011](ADR-011-point-lot-ledger.md)
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
+- [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)

@@ -13,6 +13,7 @@
 | STOCK_NOT_AVAILABLE | 409 | Maybe | 판매 재고 부족 |
 | COUPON_NOT_AVAILABLE | 409 | No | 쿠폰 만료·사용·조건 불충족 |
 | POINT_BALANCE_INSUFFICIENT | 409 | No | 사용 가능 포인트 부족 |
+| POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE | 409 | No | 감사형 음수 포인트 조정에 필요한 미예약 available PointLot 합이 부족함. 부분 차감이나 recovery pending을 만들지 않음 |
 | RESERVATION_EXPIRED | 409 | No | 결제 전 예약 lease 만료 |
 | PAYMENT_DECLINED | 422 | Depends | Provider가 명시적으로 거절 |
 | PAYMENT_RESULT_UNKNOWN | 202 representation | Poll | 승인 결과 불명, reconciliation 중이며 확정 실패가 아님 |

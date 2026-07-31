@@ -147,8 +147,9 @@ restoration source·trigger·policy version을 함께 가진다. `SKIPPED_EXPIRE
 
 PointAccount 자체를 상태 enum으로 표현하지 않는다. 사용·복원은 append-only
 PointTransaction과 PointLot 잔액으로 표현하고, 주문별 활성 예약과 사용 reference를
-Unique Constraint로 보호한다. 환불 적립 회수 부족액은 Loyalty의
-`POINT_RECOVERY_PENDING` 원장 항목이며 SettlementAdjustment가 아니다.
+Unique Constraint로 보호한다. 환불 적립 회수의 실제 가용 잔액 차감은
+`RECOVERY` PointTransaction이며, 회수하지 못한 부족액은 별도
+`PointRecoveryPending` Aggregate다. 둘은 SettlementAdjustment가 아니다.
 
 PointReservation은 다음 상태를 사용한다.
 
@@ -168,6 +169,30 @@ USED -> RESTORED
   `RESTORE_SKIPPED_EXPIRED` 원장만 기록한다.
 - 고객 취소도 같은 결과 transaction type을 사용하고 source,
   `CUSTOMER_CANCELLATION` trigger와 POINTS policy version ID로 원인을 구분한다.
+
+## Point recovery pending
+
+```text
+PENDING -> SETTLED
+```
+
+- 성공 Refund 때 실제 회수한 Lot별 금액은 `RECOVERY` debit transaction으로 즉시
+  기록한다. 남은 금액이 있을 때만 `PointRecoveryPending(PENDING)`을 만든다.
+- `PENDING`은 `remainingAmountKrw > 0`, `SETTLED`는 `remainingAmountKrw = 0`이며
+  되돌리거나 삭제하지 않는다.
+- 이후 적립은 gross `ACCRUAL`을 기록한 뒤 오래된 PENDING부터 `RECOVERY`로 상계한다.
+  상계 후의 net amount만 PointAccount와 새 PointLot의 가용 잔액이 된다.
+- 같은 refund/Lot 또는 pending/적립 source의 재처리는 기존 동일 결과만
+  `ALREADY_APPLIED`이고, 금액·대상 불일치는 `POINT_RECOVERY_SOURCE_CONFLICT`다.
+
+## Audited point adjustment
+
+`ADJUSTMENT`는 별도 state machine이 아니라 PointAccount lock 아래 완료되는 manual
+command다. CREDIT은 입력 issuer snapshot과 future expiry의 새 Lot을 만들고, DEBIT은
+`expiresAt > now`인 available Lot을 선소멸 순서로 줄인다. storage의 `balance_effect`가 CREDIT/DEBIT을
+보존하며, AuditRecord·IdempotencyRecord·PointTransaction 중 하나라도 실패하면
+상태 전이 없이 전체 rollback한다. `ADJUSTMENT`는 PointRecoveryPending을 settle하지
+않는다.
 
 ## Notification Delivery
 
@@ -249,6 +274,11 @@ PROCESSING -> FAILED
 PROCESSING state가 없다. 같은 key/payload에는 최초 status/body를 재생하며 business
 response에 replay indicator를 넣지 않는다. 두 table은 createdAt+90일 뒤 통합
 Ordering retention worker가 table별 독립 chunk로 정리한다.
+
+감사형 포인트 조정도 terminal `201`만 저장하는 Loyalty-owned command idempotency row를
+사용한다. account/hash가 같은 요청만 재생하고, 다른 account 또는 hash는 409이다.
+`createdAt + 90일` 뒤에는 별도 Loyalty keyset retention worker가 정리하며 Ordering worker가
+그 table을 정리하지 않는다.
 
 ## Reprocessing case
 

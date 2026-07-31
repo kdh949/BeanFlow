@@ -65,3 +65,6 @@
 | [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md) | Accepted | Refund 요청 금액과 성공 확정 금액 분리 |
 | [ADR-062](ADR-062-settlement-batch-item-discovery.md) | Accepted | 정산 Batch별 Item 조회와 이의제기 식별 경로 |
 | [ADR-063](ADR-063-partial-refund-expired-point-restoration.md) | Accepted | 부분 환불의 만료 포인트 30일 보상 복원 |
+| [ADR-064](ADR-064-risk-based-idempotency-model-selection.md) | Accepted | 위험 기반 멱등성 모델 선택 |
+| [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md) | Accepted | 환불 적립 포인트 회수 원장과 `RECOVERY` transaction |
+| [ADR-066](ADR-066-audited-loyalty-point-adjustment.md) | Accepted | 감사형 Loyalty 포인트 조정 |
