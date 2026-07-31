@@ -59,6 +59,14 @@
   nonterminal 보존
 - API/Privacy: 200/202/409/503, customer setup 지연 projection과 조건부 금액,
   `replayed` 부재, event/log/Audit의 detail·customer/store/reason/provider key 금지
+- Refund contention: 선행 Refund 여섯 미확정 상태
+  (`REQUESTED`/`PROCESSING`/`RETRY_SCHEDULED`/`UNKNOWN`/`RECONCILING`/`MANUAL_REVIEW`)
+  각각의 `409 PAYMENT_REFUND_UNRESOLVED`와 `SUCCEEDED`/`FAILED`의 허용
+- Recovery summary: 선행 전액 환불로 요청액이 0이 된 취소의 `NOT_REQUIRED`와 양수
+  `approvedAmountKrw`, `BENEFIT_ONLY`의 네 금액 0, 네 금액 all-or-nothing
+- Order projection: 고객 `Order`의 `cancelledAt`·`cancellationCause`·
+  `cancellationReasonCode` 노출, 매장 `StoreOrder`의 `cancellationReasonCode`·
+  `paymentRecovery` 부재, 두 projection의 `detail` 부재
 - Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
   하나라도 있으면 clean cutover 차단
 

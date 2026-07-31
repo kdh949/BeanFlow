@@ -76,6 +76,13 @@
   policy version을 backfill한다.
 - 연결할 Case 또는 policy version이 없는 기존 row는 값을 추측하지 않고 migration
   precheck를 실패시킨다.
+- **Clean-cutover note (2026-08-01):** ADR-059 release gate가 `PASSED`인 동안
+  backfill 대상 복원 row는 0이므로 precheck는 실행되지만 후보가 없어 통과하고,
+  migration은 nullable metadata 컬럼과 CHECK만 추가한다. precheck를 생략하지
+  않는 이유는 ADR-059가 정한 대로 gate 무효화를 배포 시점에 감지하기 위해서다.
+  clean-cutover 전제에서 연결 불가 row가 하나라도 발견되면 실패시킨다. gate가
+  nonzero 또는 unknown이면 위 backfill과 precheck가 그대로 forward-migration 경로의
+  계약이다.
 - 거절 전용 owner API·command 이름은
   `restoreUsedAfterTermination` 계열로 일반화하고 trigger와 policy snapshot을
   명시적으로 받는다.

@@ -26,6 +26,10 @@
   한다.
 - 기존 `RELEASED_BY_REJECTION` row는 forward migration에서 상태를
   `RELEASED_AFTER_TERMINATION`, trigger를 `STORE_REJECTION`으로 backfill한다.
+- **Clean-cutover note (2026-08-01):** ADR-059 release gate가 `PASSED`인 동안 위
+  backfill의 대상 row는 0이므로 V9 대체 migration이 최종 상태 enum과 CHECK를 직접
+  만든다. backfill 규칙은 gate가 nonzero 또는 unknown이 될 때를 위해 그대로 남기고,
+  migration은 두 경로 모두에서 후보 row 수를 확인한다.
 - owner API는 거절 전용 이름을 다음 공통 이름으로 바꾸고 trigger를 명시적으로 받는다.
 
   | Owner | 변경 후 API |

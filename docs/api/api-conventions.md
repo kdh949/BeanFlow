@@ -76,6 +76,10 @@ POST /api/v1/settlement-items/{itemId}/disputes
   snapshot이 없으면 내부 `SETUP_INCOMPLETE`다. 고객에게는
   `PROCESSING + noticeCode: REFUND_DELAYED`로 투영하고 운영자에게만 누락 원천을
   노출한다.
+- `NOT_REQUIRED`는 요청액이 0이라는 뜻일 뿐 네 금액이 모두 0이라는 뜻이 아니다.
+  선행 환불이 승인액을 전부 반환해 요청액이 0이 된 미수락 `PAID` 취소는
+  `NOT_REQUIRED`이면서 `approvedAmountKrw`와
+  `succeededRefundAmountBeforeCancellationKrw`가 양수다.
 - `BENEFIT_ONLY` 취소는 snapshot과 네 금액이 모두 0이고 Refund가 없으며
   `state = NOT_REQUIRED`, `noticeCode` 부재다. 나머지 비동기 보상 때문에 `PAID`
   취소 응답은 계속 `202`다.
@@ -85,12 +89,23 @@ POST /api/v1/settlement-items/{itemId}/disputes
   반환한다. 앞의 세 값은 취소 Tx C1 snapshot이고, 마지막 값은 조회 시점 승인액에서
   `SUCCEEDED` Refund 성공액만 차감한 현재 실제 잔액이다. snapshot 손상으로 검증할 수
   없는 금액은 0이나 현재값으로 추정하지 않고 생략한다.
+- 네 금액은 all-or-nothing이다. `REQUESTED`, `SUCCEEDED`와 notice 없는
+  `PROCESSING`은 네 금액을 모두 반환하고, recovery snapshot이 없는
+  `PENDING_PAYMENT` 취소와 setup 손상의 `PROCESSING + REFUND_DELAYED` 투영만 네
+  금액을 함께 생략할 수 있다.
 - 취소 POST의 `paymentRecovery`는 commit 시점 snapshot이고 멱등 재생에서도 그대로다.
   최신 state와 `remainingRefundableAmountKrw`는 Order GET으로 조회한다.
 - 보상 step 상세는 운영자 전용 `GET /api/v1/operations/orders/{orderId}/compensation`
   에서만 조회한다. 매장 거절과 고객 취소가 같은 `CompensationSummary`를 사용하고
   `trigger`로 구분하되, 운영 endpoint는 이를 `OperatorCompensationView`로 감싸
   setup issue와 ReprocessingCase를 추가한다. 이 운영자 필드는 매장 응답에 없다.
+- 취소 사실은 취소 POST 응답뿐 아니라 Order 표현에도 노출하며 역할별 projection을
+  분리한다. 고객용 `Order`는 `rejectedAt`·`rejectionReason`과 대칭으로
+  `cancelledAt`, `cancellationCause`(`CUSTOMER_REQUEST`, `PAYMENT_DECLINED`)와
+  `cancellationReasonCode`를 optional로 반환하고 `CANCELLED`가 아니면 세 필드가
+  모두 부재다. 매장용 `StoreOrder`는 `Order`에서 `cancellationReasonCode`와
+  `paymentRecovery`를 제외한 projection이며 `StoreOrderResult.order`가 이를
+  참조한다. 자유 입력 `detail`은 두 projection 모두에서 계속 부재다.
 - 비허용 상태는 `409 ORDER_STATE_CONFLICT`, lease 만료는 `409 RESERVATION_EXPIRED`
   이며 자원 해제 실패는 `503 DEPENDENCY_UNAVAILABLE`다.
 - 존재하지 않는 주문은 `404`, 타 고객 주문은 `403`으로 조회와 같은 코드를 사용한다.

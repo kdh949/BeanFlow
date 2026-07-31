@@ -3,8 +3,9 @@
 이 표는 고객 취소 구현에 필요한 제품·구조 결정을 canonical source에 연결한다.
 `Canonical documents aligned=Yes`는 최신 Accepted amendment까지 문서가 일치한다는
 뜻이다. `Product owner confirmed=Yes`는 2026-07-31 product owner가 이 표의 모든 최종
-결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했다는 뜻이다. 문서 정합성 판정과
-승인 증거는 서로 다른 열로 유지한다.
+결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했고, 2026-08-01 자 세 행은
+같은 product owner가 문서 간 모순 검토 결과를 보고 추가로 확정했다는 뜻이다. 문서
+정합성 판정과 승인 증거는 서로 다른 열로 유지한다.
 
 | Topic | Final decision | Canonical source | Canonical documents aligned | Product owner confirmed | Date | Prerequisite |
 | ----- | -------------- | ---------------- | ---------------------------: | ----------------------- | ---- | ------------ |
@@ -16,7 +17,7 @@
 | Reason | Order reason/detail, Audit reason, Refund/Provider normalized reason; event/log에는 reason/detail 없음 | BR-14, ADR-055 | Yes | Yes | 2026-07-31 | validation/redaction test |
 | Idempotency | Order lock transaction, stored 200/202 body, replay 표시 없음 | ADR-032, ADR-057 | Yes | Yes | 2026-07-31 | cancellation idempotency schema |
 | Prior partial refund | 취소 허용, remaining cash와 미복원 allocation만 처리 | ADR-036 | Yes | Yes | 2026-07-31 | allocation foundation |
-| Unresolved refund | REQUESTED/PROCESSING/RETRY_SCHEDULED/UNKNOWN/RECONCILING/MANUAL_REVIEW는 409; FAILED 허용 | BR-14, ADR-038 | Yes | Yes | 2026-07-31 | Order→Payment lock order |
+| Unresolved refund | REQUESTED/PROCESSING/RETRY_SCHEDULED/UNKNOWN/RECONCILING/MANUAL_REVIEW는 409; FAILED 허용 | BR-14, ADR-031, ADR-036, ADR-038 | Yes | Yes | 2026-08-01 | Order→Payment lock order |
 | Refund request budget | 안전 allowlist 실패만 최초 포함 3 REQUEST | ADR-038 | Yes | Yes | 2026-07-31 | Provider code contract |
 | Refund lookup budget | UNKNOWN 뒤 REQUEST 중단, LOOKUP 최대 5 | ADR-037 | Yes | Yes | 2026-07-31 | 분리 attempt schema |
 | Customer projection | 내부 진행/불명은 PROCESSING, 실패/manual/setup 손상은 PROCESSING+REFUND_DELAYED | ADR-038, ADR-050 | Yes | Yes | 2026-07-31 | snapshot/setup detector |
@@ -38,6 +39,9 @@
 | Clean cutover gate result | `PASSED`; 모든 운영 항목이 명시적 0 | ADR-059, release-gate evidence | Yes | Yes | 2026-07-31 | 구현·배포 직전 inventory 재확인 |
 | Migration strategy now | ADR-059 clean cutover; producer·consumer·fixture 동시 전환, legacy compatibility/이중 발행 없음 | ADR-059, release-gate evidence | Yes | Yes | 2026-07-31 | allocation·Settlement·compensation foundation |
 | Implementation scope | allocation, Settlement, compensation, command, recovery 모두 포함 | ADR-060 | Yes | Yes | 2026-07-31 | 여섯 ExecPlan 순차 완료 |
+| NOT_REQUIRED 금액 | 요청액 0만 뜻하며 나머지 세 금액 0을 강제하지 않음; 네 금액은 all-or-nothing | ADR-036, ADR-031, OpenAPI | Yes | Yes | 2026-08-01 | recovery snapshot |
+| Order 취소 필드 projection | 고객 `Order`는 cancelledAt·cancellationCause·cancellationReasonCode; 매장 `StoreOrder`는 cancelledAt·cancellationCause만 | ADR-030, ADR-031, OpenAPI | Yes | Yes | 2026-08-01 | Order cancellation 컬럼 |
+| Cancellation detail 노출 | 어떤 projection·event·Audit·Provider 요청·log에도 없음 | BR-14, ADR-029, ADR-055 | Yes | Yes | 2026-08-01 | redaction test |
 
 ## Open items
 

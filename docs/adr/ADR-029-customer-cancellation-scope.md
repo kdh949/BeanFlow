@@ -71,6 +71,11 @@ API 상태 코드를 모두 결정하는 상류 결정이다.
   `cancellation_reason_code`와 `cancellation_detail`은 `NULL`로 둔다. 현재 유일한
   생성 경로가 결제 명시 거절이기 때문이다. production row가 존재하면 backfill 전에
   별도 운영 검증을 수행한다.
+- **Clean-cutover note (2026-08-01):** ADR-059 release gate가 `PASSED`인 동안 위
+  backfill의 대상 row는 0이므로 migration은 네 컬럼과 세 CHECK를 처음부터 만든다.
+  backfill 규칙 자체는 삭제하지 않는다. gate가 nonzero 또는 unknown이 되면 그대로
+  forward-migration 경로의 계약이 된다. migration은 어느 경로에서든 후보 row 수를
+  확인하고, clean-cutover 전제에서 row가 발견되면 조용히 통과하지 않고 실패한다.
 - 별도 `Cancellation` Aggregate와 Repository는 도입하지 않는다. Order Aggregate가
   자신의 취소 사실과 불변식을 계속 소유한다.
 - 고객 취소 사유는 닫힌 reason code를 필수로 받고 자유 입력 상세 사유는 선택으로

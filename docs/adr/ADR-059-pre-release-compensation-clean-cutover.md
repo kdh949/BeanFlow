@@ -46,8 +46,29 @@ shape를 이행하는 migration과 불완전 row 복구 scanner는 존재하지 
 - 최초 production data/publication이 생성된 뒤에는 migration history와 V1 event
   계약을 동결하고 이후 변경부터 forward-only migration과 ADR-034 호환성 정책을
   적용한다.
-- 이 결정은 ADR-033의 forward rename/backfill 부분만 대체하며 공통 Case 모델,
-  trigger, 여섯 step, owner source와 API 계약은 유지한다.
+- 이 결정은 대상 ADR의 **migration 실행 방식만** 대체하고 schema 최종 shape, 제약,
+  trigger, step, owner source와 API 계약은 그대로 유지한다.
+
+### Scope of the replaced migration mechanics (2026-08-01)
+
+release gate가 PASSED인 동안 다음 pre-release migration 서술은 모두 "적용 대상 row
+0"이라는 같은 사실 위에 있으므로 legacy 이행이 아니라 최종 shape 직접 생성으로
+수행한다. 각 ADR이 정의한 컬럼, CHECK, 존재 조건과 실패 규칙은 변하지 않는다.
+
+| ADR | 서술된 legacy 작업 | Clean-cutover 경로의 실행 |
+|---|---|---|
+| ADR-029 | 기존 `CANCELLED` row의 `cancelled_at`/`cancellation_cause` backfill | 대상 row 0. migration source가 네 컬럼과 세 CHECK를 처음부터 만든다 |
+| ADR-033 | `rejection_compensation` table rename과 `trigger` backfill | 최종 `operations_order_compensation_*` shape를 직접 생성한다 |
+| ADR-040 | `RELEASED_BY_REJECTION` → `RELEASED_AFTER_TERMINATION` rename과 trigger backfill | 대상 row 0. V9 대체 migration이 최종 상태 enum과 CHECK를 직접 만든다 |
+| ADR-042 | 기존 `STORE_REJECTION` 복원 row의 trigger·policy version backfill과 precheck 실패 | 대상 row 0. precheck는 실행되지만 후보 row가 없어 통과한다 |
+
+- 각 ADR의 backfill 규칙과 precheck 실패 조건은 삭제하지 않는다. gate가 nonzero
+  또는 unknown이 되면 그 서술이 그대로 forward-migration 경로의 계약이 된다.
+- clean-cutover 경로에서도 precheck 자체는 구현하고 실행한다. "row가 없어야 한다"는
+  전제를 migration이 스스로 확인하지 않으면 gate 무효화를 배포 시점에 감지할 수
+  없다. 후보 row가 하나라도 발견되면 migration은 조용히 통과하지 않고 실패한다.
+- 개발자 local DB에 이전 shape의 row가 남아 있으면 checksum repair나 수동 backfill로
+  섞지 않고 database를 재생성한다.
 
 ### 2026-07-31 readiness audit clarification
 
@@ -131,6 +152,9 @@ shape를 이행하는 migration과 불완전 row 복구 scanner는 존재하지 
 - legacy table이 있는 DB에 clean cutover 자동 적용 금지
 - completed/incomplete V1 publication 각각 release gate 차단
 - 외부 consumer inventory nonempty 차단
+- ADR-029/033/040/042 각 migration의 precheck가 후보 row 0에서 통과하고 row가
+  주입되면 실패함
+- 이전 shape row가 남은 DB에서 clean-cutover migration이 통과하지 않음
 
 ## Metrics
 
@@ -147,6 +171,9 @@ release gate가 기존 data/publication/consumer를 하나라도 발견할 때 �
 
 - BR-06, BR-14
 - [ADR-010](ADR-010-initial-event-publication.md)
+- [ADR-029](ADR-029-customer-cancellation-scope.md)
 - [ADR-033](ADR-033-order-compensation-case-generalization.md)
 - [ADR-034](ADR-034-customer-cancellation-event-contract.md)
+- [ADR-040](ADR-040-order-termination-resource-release.md)
 - [ADR-041](ADR-041-trigger-and-benefit-scoped-restoration-policy.md)
+- [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md)

@@ -154,8 +154,8 @@ Notification worker: claim transaction -> external Provider -> result transactio
   `approvedAmountKrw - succeededRefundAmountKrw`를 계산한다. 선행 성공 부분 환불이
   있어도 취소를 거부하지 않으며 새 Refund와 성공 누적액의 합이 승인액을 넘지 않게
   DB 제약과 guarded write로 보호한다.
-- 선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`, `RECONCILING`,
-  `MANUAL_REVIEW`이면 Tx C1의 Order 전이 전에
+- 선행 Refund가 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
+  `RECONCILING`, `MANUAL_REVIEW`이면 Tx C1의 Order 전이 전에
   `409 PAYMENT_REFUND_UNRESOLVED`로 rollback한다. `FAILED`는 합계에서 제외하고
   `SUCCEEDED`만 snapshot에 포함한다.
 - refund 관련 전역 잠금 순서는 `Order → Payment → 정렬된 Refund allocation`이다.

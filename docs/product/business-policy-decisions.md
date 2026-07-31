@@ -359,10 +359,15 @@
   아래 safe guard와 immutable fingerprint를 다시 검증한다. 만료·stale·self approval은
   실행 없이 명시적 409로 종결한다. 제안과 결정은 각각 non-blank 사유,
   Idempotency-Key와 append-only AuditRecord를 요구한다.
-- **Unresolved Refund Contention Amendment (2026-07-31):** 고객 취소 Tx C1은
+- **Unresolved Refund Contention Amendment (2026-07-31, RETRY_SCHEDULED
+  clarified 2026-08-01):** 고객 취소 Tx C1은
   Order 다음 Payment와 Refund row를 잠근다. 선행 Refund 중 `REQUESTED`,
-  `PROCESSING`, `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`가 하나라도 있으면 Order
+  `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`가
+  하나라도 있으면 Order
   전이와 취소 멱등 레코드 저장 전에 `409 PAYMENT_REFUND_UNRESOLVED`로 rollback한다.
+  `RETRY_SCHEDULED`는 이 amendment보다 뒤에 확정된 Retryable Refund Failure
+  Amendment가 도입한 상태이며, 같은 key REQUEST 재시도가 아직 due인 미확정
+  구간이므로 차단 대상이다.
   `SUCCEEDED`만 취소 전 성공 환불액에 포함하고, Provider가 부수효과 없음을 명시한
   `FAILED`는 합계에서 제외한 채 고객 취소를 허용한다. 모든 Refund 생성 경로는 Order
   lock이 필요하면 `Order → Payment`, 아니면 Payment부터 잠그며 Payment를 잠근 뒤
@@ -506,6 +511,10 @@
   - 필요한 Refund/snapshot 누락의 고객 지연 projection, 조건부 금액 생략과 운영
     `SETUP_INCOMPLETE` alert
   - 선행 Refund 상태별 취소 허용·`PAYMENT_REFUND_UNRESOLVED` 차단
+  - 선행 `RETRY_SCHEDULED` Refund의 `PAYMENT_REFUND_UNRESOLVED` 차단
+  - 선행 전액 환불로 요청액이 0인 취소의 `NOT_REQUIRED`와 양수 승인액·선행 성공액
+  - 고객 `Order`의 취소 시각·원인·reason code 노출과 매장 표현의 reason code·환불
+    진행 부재
   - 부분 환불과 고객 취소 동시 실행의 Order→Payment lock 순서
   - 409 rollback 뒤 같은 key 재시도와 terminal 멱등 레코드 부재
   - Payment lock timeout의 503과 Order·Refund 부분 상태 부재

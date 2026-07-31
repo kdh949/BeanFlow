@@ -57,6 +57,13 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
   않는다.
 - 매장 구성원은 고객 취소된 주문의 취소 사실과 상태만 조회하고 결제 환불 진행
   상태는 조회하지 않는다. 매장은 자기 매장 주문의 운영 판단에 필요한 정보만 본다.
+- **Order projection amendment (2026-08-01):** 위 두 문장을 schema 수준으로
+  분리한다. 고객용 `Order`는 `cancelledAt`, `cancellationCause`,
+  `cancellationReasonCode`를 노출한다. 매장용 `StoreOrder`는 `Order`에서
+  `cancellationReasonCode`와 `paymentRecovery`를 제외한 projection이며
+  `cancelledAt`과 `cancellationCause`만 노출한다. 매장은 취소가 고객 요청인지
+  결제 거절인지 구분할 수 있어야 하지만 고객이 신고한 사유와 환불 진행은 보지
+  않는다. 계약 구조는 ADR-031이 소유한다.
 - `cancellation_detail`은 어떤 역할에게도 API로 노출하지 않는다. 운영자는 감사·운영
   경로에서만 접근한다.
 
@@ -152,6 +159,9 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 - 고객 응답 DTO에 `cancellation_detail`과 운영자 전용 필드 부재
 - 운영자 조회가 6개 step, `attemptCount`와 `lastErrorCode`를 반환
 - 매장 조회 응답에 결제 환불 진행이 포함되지 않음
+- 고객 `Order`의 `cancelledAt`·`cancellationCause`·`cancellationReasonCode` 노출
+- 매장 `StoreOrder`의 `cancellationReasonCode`·`paymentRecovery` 부재와
+  `cancelledAt`·`cancellationCause` 존재
 
 ## Metrics
 

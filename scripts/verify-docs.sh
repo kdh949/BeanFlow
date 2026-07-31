@@ -189,6 +189,67 @@ if (
     print('ADR-030 does not record the accepted customer-refund projection amendment.', file=sys.stderr)
     sys.exit(1)
 
+context_map = (root / 'docs/architecture/context-map.md').read_text(encoding='utf-8')
+ownership_rows = {
+    line.split('|')[1].strip(): line
+    for line in context_map.splitlines()
+    if line.startswith('| ') and len(line.split('|')) > 3
+}
+owned_data_expectations = {
+    'Ordering': ['AcceptanceTimeoutWork'],
+    'Payment': ['PaymentCancellationRecoverySnapshot'],
+    'Promotion': ['CompensationCouponTermsSnapshot'],
+    'Operations': [
+        'OrderCompensationCase',
+        'OrderCompensationBenefitPolicySnapshot',
+        'BenefitRestorationPolicyVersion',
+        'RepairProposal',
+    ],
+}
+for context, aggregates in owned_data_expectations.items():
+    row = ownership_rows.get(context, '')
+    for aggregate in aggregates:
+        if aggregate not in row:
+            print(
+                f'Context Map data ownership omits {aggregate} from {context}.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+flow = (root / 'docs/product/end-to-end-flow.md').read_text(encoding='utf-8')
+flow_headings = re.findall(r'^## (\d+)\. (.+)$', flow, flags=re.MULTILINE)
+if [int(number) for number, _ in flow_headings] != list(range(1, len(flow_headings) + 1)):
+    print('End-to-end flow sections are not numbered consecutively.', file=sys.stderr)
+    sys.exit(1)
+if not any('Customer cancellation' in title for _, title in flow_headings):
+    print('End-to-end flow must cover the customer cancellation path.', file=sys.stderr)
+    sys.exit(1)
+
+clean_cutover_migrations = {
+    'docs/adr/ADR-029-customer-cancellation-scope.md',
+    'docs/adr/ADR-033-order-compensation-case-generalization.md',
+    'docs/adr/ADR-040-order-termination-resource-release.md',
+    'docs/adr/ADR-042-benefit-restoration-ledger-metadata.md',
+}
+adr059 = (root / 'docs/adr/ADR-059-pre-release-compensation-clean-cutover.md').read_text(
+    encoding='utf-8'
+)
+for source in sorted(clean_cutover_migrations):
+    adr_id = re.match(r'docs/adr/(ADR-\d{3})', source).group(1)
+    if adr_id not in adr059:
+        print(
+            f'ADR-059 must name {adr_id} in the migration mechanics it replaces.',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    body = (root / source).read_text(encoding='utf-8')
+    if 'backfill' in body and 'ADR-059' not in body:
+        print(
+            f'{source} describes a legacy backfill without pointing at the ADR-059 gate.',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
 openapi_text = (root / 'openapi/beanflow-v1.yaml').read_text(encoding='utf-8')
 for schema_name in ('PaymentApprovalRecoverySummary', 'CancellationRefundRecoverySummary'):
     if f'    {schema_name}:' not in openapi_text:
@@ -418,6 +479,86 @@ else:
     if cancellation_properties != required_cancellation_properties:
         print('CancellationRefundRecoverySummary notice/allocation contract is incomplete.', file=sys.stderr)
         sys.exit(1)
+
+    amount_fields = {
+        'approvedAmountKrw',
+        'succeededRefundAmountBeforeCancellationKrw',
+        'remainingRefundableAmountKrw',
+    }
+    not_required_branches = [
+        branch for branch in cancellation_recovery['allOf']
+        if branch.get('if', {}).get('properties', {}).get('state', {}).get('const') == 'NOT_REQUIRED'
+    ]
+    if len(not_required_branches) != 1:
+        print('CancellationRefundRecoverySummary must state exactly one NOT_REQUIRED rule.', file=sys.stderr)
+        sys.exit(1)
+    not_required_then = not_required_branches[0].get('then', {})
+    if not_required_then.get('properties', {}).get('cancellationRequestedRefundAmountKrw', {}).get('const') != 0:
+        print('NOT_REQUIRED must pin the cancellation requested refund amount to zero.', file=sys.stderr)
+        sys.exit(1)
+    if not_required_then.get('not', {}).get('required') != ['noticeCode']:
+        print('NOT_REQUIRED must not carry a delay notice.', file=sys.stderr)
+        sys.exit(1)
+    if amount_fields & set(not_required_then.get('properties', {})):
+        print(
+            'NOT_REQUIRED must not force the approved, prior-succeeded or remaining '
+            'amounts to zero; a prior full refund leaves them positive.',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if amount_fields & set(not_required_then.get('required', [])):
+        print('NOT_REQUIRED must not require amounts a missing snapshot cannot verify.', file=sys.stderr)
+        sys.exit(1)
+
+    order_schema = schemas['Order']
+    order_cancellation_fields = {'cancelledAt', 'cancellationCause', 'cancellationReasonCode'}
+    if not order_cancellation_fields <= set(order_schema.get('properties', {})):
+        print('Customer Order projection must expose the cancellation fact fields.', file=sys.stderr)
+        sys.exit(1)
+    if order_cancellation_fields & set(order_schema.get('required', [])):
+        print('Order cancellation fields are absent unless the order is CANCELLED.', file=sys.stderr)
+        sys.exit(1)
+    store_order = schemas['StoreOrder']
+    store_order_refs = {
+        branch.get('$ref') for branch in store_order.get('allOf', []) if isinstance(branch, dict)
+    }
+    if '#/components/schemas/Order' not in store_order_refs:
+        print('StoreOrder must project the Order schema.', file=sys.stderr)
+        sys.exit(1)
+    store_exclusions = {
+        tuple(item.get('required', []))
+        for branch in store_order.get('allOf', [])
+        if isinstance(branch, dict)
+        for item in branch.get('not', {}).get('anyOf', [])
+    }
+    for excluded in ('cancellationReasonCode', 'paymentRecovery'):
+        if (excluded,) not in store_exclusions:
+            print(f'StoreOrder must exclude {excluded} from the store projection.', file=sys.stderr)
+            sys.exit(1)
+    if schemas['StoreOrderResult']['properties']['order'].get('$ref') != '#/components/schemas/StoreOrder':
+        print('StoreOrderResult must return the StoreOrder projection.', file=sys.stderr)
+        sys.exit(1)
+
+    unresolved_states = (
+        '`REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, '
+        '`RECONCILING`, `MANUAL_REVIEW`'
+    )
+    unresolved_sources = [
+        'docs/product/business-policy-decisions.md',
+        'docs/adr/ADR-031-customer-cancellation-api-contract.md',
+        'docs/adr/ADR-036-cancellation-after-partial-refund.md',
+        'docs/api/error-catalog.md',
+        'docs/architecture/transaction-boundaries.md',
+    ]
+    for source in unresolved_sources:
+        text = re.sub(r'\s+', ' ', (root / source).read_text(encoding='utf-8'))
+        if unresolved_states not in text:
+            print(
+                f'{source} must list the same six unresolved prior-Refund states '
+                f'as the cancellation OpenAPI contract.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     print(
         f'OpenAPI YAML and local contract checks passed '
