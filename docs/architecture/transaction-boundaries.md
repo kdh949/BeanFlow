@@ -208,6 +208,39 @@ Notification worker: claim transaction -> external Provider -> result transactio
   allocation은 available로 복원하고 이미 만료된 allocation은 EXPIRATION 원장으로
   확정한다. 일부만 실패하면 Order와 모든 자원 해제를 함께 롤백한다.
 
+## Point refund recovery and later accrual
+
+- 성공 Refund event를 처리하는 Loyalty transaction은 PointAccount를 먼저 잠근 뒤
+  회수 가능한 available PointLot을 `(expiresAt, pointLotId)` 순서로 잠근다. 실제
+  차감 Lot, `RECOVERY` transaction, 필요하면 PointRecoveryPending과
+  `recoveryPendingKrw` summary를 함께 commit하거나 rollback한다.
+- 이후 OrderCompleted 적립 transaction은 PointAccount를 먼저 잠그고, 새 PointLot과
+  gross `ACCRUAL` transaction을 만든 뒤 오래된 PENDING 행을 `(createdAt, id)` 순서로
+  잠근다. 상계 `RECOVERY` transaction, pending state와 Account/Lot summary는 같은
+  local transaction에 속한다.
+- Payment Provider 또는 다른 외부 호출은 위 Loyalty transaction에 넣지 않는다. Refund가
+  성공했지만 Loyalty 처리에 실패하면 event publication/retry는 남고, Account를 0 또는
+  성공 상태로 추정하지 않는다.
+- Payment Refund source, Lot별 recovery source와 pending/적립 source의 UNIQUE가 중복
+  event 재처리를 막는다. 같은 source의 금액·대상 불일치는 명시적 conflict이며 덮어쓰지
+  않는다.
+
+## Audited point adjustment
+
+- `POST /operations/point-accounts/{accountId}/adjustments`는 ADR-064의 명령 transaction
+  모델을 쓴다. Application Service가 PointAccount를 먼저 잠그고 CREDIT이면 새 Lot을,
+  DEBIT이면 `expiresAt > now`인 `(expiresAt, pointLotId)` 순서의 available Lot을 잠근다.
+- Account/Lot summary, Lot별 `ADJUSTMENT` transaction과 `balance_effect`, terminal
+  IdempotencyRecord, target AuditRecord, PointsAdjusted persistent event와 최초 201
+  response는 하나의 local transaction에 속한다. 외부 Provider·issuer lookup fallback·
+  Analytics consumer 호출은 이 transaction에 넣지 않는다.
+- debit 가능한 Lot이 부족하거나 issuer/expiry/reason/evidence contract가 맞지 않으면
+  모든 local write를 rollback한다. PointRecoveryPending, 음수 Account 또는 partial
+  debit으로 성공을 대신하지 않는다.
+- terminal adjustment idempotency row는 `created_at + 90일`까지 보존한다. Loyalty-owned
+  worker가 `(retention_expires_at, id)` keyset 순서로 bounded chunk를 독립 transaction에서
+  정리하며, Ordering worker나 일반 API가 이 table을 삭제하지 않는다.
+
 ## Settlement
 
 - SettlementItem 생성은 원천 거래 reference 단위로 멱등하다.
@@ -222,16 +255,18 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 ## Idempotent commands
 
-멱등 명령은 두 모델 중 하나를 사용한다. 선택 기준은 **명령 트랜잭션 안에 외부 호출이
-있거나 새 Aggregate를 만드는가**다.
+멱등 명령은 두 모델 중 하나를 사용한다. 선택 기준은 새 Aggregate 수가 아니라 **기존
+직렬화 root, 로컬 원자성, 외부 결과 불명 위험**이다(ADR-064).
 
-- **사전등록 모델:** 주문 생성과 결제 승인처럼 새 Aggregate를 만들거나 외부 Provider를
-  호출하는 명령. `PROCESSING` 레코드를 먼저 커밋해 arbitration하고 확정 실패까지
-  저장·재생하며 stuck 레코드를 reconciliation한다.
-- **명령 트랜잭션 모델:** 매장 주문 상태 전이와 고객 주문 취소처럼 기존 Aggregate를
-  잠그고 전이만 확정하는 명령. 단일 로컬 트랜잭션이 Aggregate row 잠금, 멱등 레코드
-  조회, 전이와 최초 응답 저장을 함께 커밋한다. `PROCESSING` 상태가 없고 롤백된 요청은
-  레코드를 남기지 않는다.
+- **사전등록 모델:** 주문 생성처럼 기존 root가 없어 새 root 생성 경쟁을 먼저
+  arbitration해야 하거나, 결제 승인처럼 최초 terminal 응답 저장 전 외부 Provider 결과가
+  불명확해질 수 있는 명령. `PROCESSING` 레코드를 먼저 커밋하고 reconciliation으로
+  수렴한다.
+- **명령 트랜잭션 모델:** 매장 주문 상태 전이, 고객 주문 취소와 감사형 point adjustment처럼
+  기존 Aggregate root를 잠가 경쟁을 직렬화하고, 모든 local write와 최초 응답을 하나의
+  transaction에서 함께 commit하는 명령. 새 local Aggregate를 만들어도 외부 호출이
+  transaction 밖이고 rollback 뒤 남는 부수효과가 없으면 이 모델을 사용한다.
+  `PROCESSING` 상태가 없고 롤백된 요청은 레코드를 남기지 않는다.
 
 - `actorId + operation + Idempotency-Key` Unique Constraint의 insert가 동시 요청의
   승자를 정한다.
@@ -251,6 +286,9 @@ Notification worker: claim transaction -> external Provider -> result transactio
 - 고객 취소 멱등 레코드는 저장 시점에 terminal이므로 `retention_expires_at` 기준
   `(retention_expires_at, id)` 순서의 chunk worker가 정리하며 일반 비즈니스
   트랜잭션과 분리한다.
+- C1은 Order lock 아래 Case·step·Refund·Delivery·publication을 새로 저장하지만, 외부
+  Provider 호출은 transaction 밖이고 모든 durable work와 최초 202 response가 함께
+  rollback되므로 명령 트랜잭션 모델을 유지한다.
 - Provider 결과가 불명확한 레코드는 정리하거나 신규 요청으로 재승인하지 않는다.
 
 ## Audit

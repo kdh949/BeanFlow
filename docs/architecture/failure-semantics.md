@@ -162,6 +162,7 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 | Outbox worker down | Outbox pending과 alert | published로 간주 |
 | Required env missing | startup failure | 임의 기본값 |
 | Production profile with mock PG | startup failure | mock으로 계속 실행 |
+| 감사형 point adjustment debit 부족 | 409, Account/Lot/원장/Audit rollback | 부분 차감·음수 잔액·pending 생성 |
 
 ## Test requirements
 

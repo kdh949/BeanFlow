@@ -16,7 +16,7 @@
 - 현재 이 master plan의 merge baseline은 `main`의 PR #18 merge
   `783298a9c1b349f7b444d49d25c8b3d4099a5576`다. 역사적 감사 SHA를 현재 HEAD로
   해석하지 않는다.
-- ADR-029~060과 OpenAPI에는 목표 계약이 Accepted 상태로 기록돼 있다.
+- ADR-029~065와 OpenAPI에는 목표 계약이 Accepted 상태로 기록돼 있다.
 - 고객 취소 Controller, Application Service, Order 취소 필드와 migration은 없다.
 - 현재 Refund는 거절 전용이고 부분 환불을 차단하며 REQUEST/LOOKUP 합산 5회를 쓴다.
 - compensation은 `RejectionCompensation*`와 단일 benefit 정책으로 구현돼 있다.
@@ -44,7 +44,7 @@
 
 - 하위 ExecPlan의 순서, 완료 조건과 차단 조건 관리
 - 정책·계약 baseline과 fact-verification evidence 연결
-- allocation, Settlement, compensation, command, recovery의 범위 분리
+- allocation·적립 포인트 회수·issuer snapshot, Settlement, compensation, command, recovery의 범위 분리
 - 각 계획 결과를 다음 계획의 검증 가능한 입력으로 전달
 
 ### Non-goals
@@ -60,6 +60,11 @@
 - 선행 성공 부분 환불은 고객 취소를 막지 않고 남은 현금과 아직 복원되지 않은 point
   allocation만 처리한다. 부분 환불은 쿠폰을 복원하지 않고 전체 종료가 원 쿠폰을 한
   번 복원한다.
+- 환불 적립 포인트의 실제 가용 잔액 차감은 `RECOVERY` transaction으로 기록하고,
+  미회수 잔액만 PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
+- Plan 10의 만료 부분 환불 compensation은 original PointLot의 immutable issuer snapshot을
+  보존하며, legacy issuer source가 unresolvable이면 추정 backfill이나 issuer 없는
+  compensation으로 진행하지 않는다.
 - Order `CANCELLED`는 Refund·자원 복원·Notification 성공을 뜻하지 않는다.
 - 외부 결과 불명은 성공이나 확정 실패로 바꾸지 않는다.
 - `200/202` 전에 해당 경로의 내구 commit gate가 완성돼 있어야 한다.
@@ -119,11 +124,14 @@
 - `OrderCancelledV1`: PAID 취소에서 네 owner만 소비한다.
 - Payment와 Notification은 `OrderCancelledV1` consumer가 아니다.
 - 고객은 내부 Refund/Case 상태 대신 `CancellationRefundRecoverySummary` projection만 본다.
+- PointTransaction의 공개 금액은 signed balance effect이며 `RECOVERY`는 음수다.
+  PointRecoveryPending은 실제 debit transaction이 아니라 회수 대기 잔액의 Loyalty
+  owner Aggregate이고, `PointRecoveryPendingRecorded`의 source of truth다.
 
 ## Milestones
 
-1. [고객 취소 계약 baseline과 release gate를 닫는다](customer-order-cancellation-00-contract-baseline.md)
-2. [부분 환불 allocation foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md)
+1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md)
+2. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md)
 3. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md)
 4. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md)
 5. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md)
@@ -137,6 +145,8 @@
 - 하위 계획 링크와 의존관계가 순환하지 않음
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
 - 10/20/30 미완료 상태에서 취소 endpoint가 활성화되지 않음
+- 10 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
+  노출하지 않음
 - 40만 완료된 상태에서 production success path가 노출되지 않음
 - 각 계획의 PostgreSQL, contract, Modulith, 동시성·장애 suite 결과가 실제 기록됨
 
@@ -159,6 +169,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - `docs/quality/customer-order-cancellation-readiness.md`
 - `docs/decisions/customer-order-cancellation-decision-closure.md`
 - ADR-059 release evidence 또는 대체 forward-migration ADR
+- ADR-065 recovery ledger 구현 evidence
 - 각 하위 ExecPlan의 Progress, Decision Log와 Outcomes
 
 ## Progress
@@ -167,7 +178,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 recovery schema·projection·reason 전달 범위·release path 계약 정합화
 - [x] 2026-07-31 거대 master plan을 여섯 하위 계획으로 분리
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
-- [ ] 10 allocation foundation 완료
+- [ ] 10 allocation·point recovery foundation 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
 - [ ] 40 customer cancellation command 완료
@@ -190,6 +201,8 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-07-31 | Fact gate failed | clean cutover를 시작하지 않음 | 외부 운영 증거 없음 | ADR-059, readiness report |
 | 2026-07-31 | Fact gate passed | ADR-059 clean cutover 사용 | 운영 상태 확인으로 모든 외부 항목이 명시적 0 | release-gate evidence |
 | 2026-07-31 | Plan structure | foundation별 여섯 계획으로 분리 | 독립 검증과 선행조건 강제 | 이 master plan |
+| 2026-08-01 | Accepted | `RECOVERY` debit과 PointRecoveryPending foundation은 Plan 10이 소유 | 부분 환불과 이후 고객 취소가 같은 refund source·point recovery 불변식을 소비 | BR-13, ADR-065 |
+| 2026-08-01 | Accepted existing | PointLot issuer snapshot precheck/migration은 Plan 10이 소유 | 만료 부분 환불 compensation이 original issuer/cost lineage를 먼저 필요로 함 | BR-20, ADR-063 |
 
 ## Outcomes & Retrospective
 
@@ -203,3 +216,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
   ExecPlan을 연결했다. 근거 없는 ADR-059 release gate 완료 표시는 제거했다.
 - 2026-07-31: product owner의 non-local 환경·artifact 부재 확인을 release evidence로
   기록하고 ADR-059 clean-cutover gate를 완료했다.
+- 2026-08-01: 정의되지 않았던 `RECOVERY` enum을 ADR-065로 분리하고 Plan 10의
+  point recovery foundation으로 구현 소유권을 고정했다.
+- 2026-08-01: Plan 10이 만료 부분 환불 compensation의 PointLot issuer snapshot
+  precheck/migration도 선행 소유하도록 명확화했다.

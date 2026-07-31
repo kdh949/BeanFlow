@@ -35,7 +35,8 @@
 | CustomerCancellationRefundDelayedV1 | Payment | Notification | order ID + customer cancellation terminal version + refund-delayed | Refund |
 | PointsAccrued | Loyalty | Analytics | source order unique | PointTransaction |
 | PointsRestored | Loyalty | Analytics | refund/reference unique | PointTransaction |
-| PointRecoveryPendingRecorded | Loyalty | Operations, Analytics | refund/reference unique | PointTransaction |
+| PointsAdjusted | Loyalty | Analytics | adjustment source unique | PointTransaction |
+| PointRecoveryPendingRecorded | Loyalty | Operations, Analytics | account + refund/reference unique | PointRecoveryPending |
 | SettlementItemCreated | Settlement | Analytics | source transaction unique | SettlementItem |
 | SettlementBatchConfirmed | Settlement | Dispute/Notification | batch version | SettlementBatch |
 | SettlementAdjustmentCreated | Settlement | Analytics | adjustment ID | SettlementAdjustment |
@@ -58,6 +59,19 @@
 
 OrderCompensationCase 전체 완료는 고객 Notification event를 생산하지 않는다.
 슬롯·재고·쿠폰·포인트 복원 완료도 개별 고객 알림 event로 확장하지 않는다.
+
+`PointRecoveryPendingRecorded`는 실제 차감 `RECOVERY` transaction이 아니라 새
+`PointRecoveryPending(PENDING)`의 생성 사실이다. 해당 Aggregate가 없으면 이 event를
+발행하지 않는다. pending이 settle된 뒤 현재 잔액이 필요한 consumer는 Loyalty owner
+projection을 조회하며, 이 event 이름을 모든 recovery state 변경에 재사용하지 않는다.
+
+`PointsAdjusted`는 AuditRecord를 대신하지 않는 Analytics 전용 persistent fact다. 초기
+envelope의 `aggregateId`는 PointAccount ID, `aggregateVersion`은 commit 뒤 Account version,
+`payloadVersion`은 1이다. payload는 immutable `adjustmentSource`, `accountId`와 그 command의
+Lot별 child PointTransaction signed effect 합인 signed `amountKrw`를 포함한다. `issuerType`은 CREDIT
+event에만 포함하고 여러 기존 issuer Lot을 함께 차감할 수 있는 DEBIT event에서는 생략한다.
+operator, evidence, issuer reference와 Idempotency-Key는 포함하지 않는다. 동일 command
+source의 event 재생은 새 PointTransaction이나 analytics delta를 만들지 않는다.
 
 ### `OrderCancelledV1` base payload
 

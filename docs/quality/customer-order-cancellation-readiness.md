@@ -276,7 +276,7 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 
 이전 CI 결과는 이번 감사 결과로 사용하지 않았다.
 
-## Current contract reconciliation validation
+## Historical contract reconciliation validation (2026-08-01)
 
 - `bash scripts/verify-docs.sh`: **Passed**. 2026-08-01 모순 해소 반영 후 재실행에서
   19 OpenAPI paths와 59 schemas의 YAML/local reference/targeted semantic 검사, 32

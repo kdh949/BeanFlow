@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-28
+- **Amended by:** ADR-063의 부분 환불 만료 포인트 복원, ADR-065의 환불 적립 포인트 회수, ADR-066의 감사형 포인트 조정
 
 ## Context
 
@@ -60,6 +61,26 @@
 - 후속 주문 종료는 이미 부분 환불로 복원된 allocation을 제외하고 잔여 allocation만
   처리한다.
 
+2026-08-01 refund-earned-point recovery amendment (ADR-065):
+
+- `RECOVERY`는 환불에 대응해 실제 가용 PointLot과 PointAccount에서 차감한
+  append-only debit PointTransaction이다.
+- 회수하지 못한 잔액은 PointTransaction이 아닌
+  `PointRecoveryPending(PENDING)` Aggregate로 보존하며, 이후 적립은 이를 먼저
+  상계한다.
+- PointAccount 가용 잔액은 음수가 될 수 없고, `recoveryPendingKrw` summary는 PENDING
+  잔액 합과 같은 transaction에서 유지한다.
+
+2026-08-01 audited manual adjustment amendment (ADR-066):
+
+- `ADJUSTMENT`는 활성 Platform Operator의 명시적 권한, reason, evidence와 target
+  AuditRecord가 필요한 signed manual correction이다.
+- 양수 adjustment는 입력 issuer snapshot과 future expiry의 새 PointLot을 만들고,
+  음수 adjustment는 available Lot을 선소멸 순서로 줄인다. amount 방향은 storage
+  `balance_effect`로 보존한다.
+- 수동 adjustment는 PointRecoveryPending을 상계하지 않으며, SettlementAdjustment나
+  refund recovery type을 재사용하지 않는다.
+
 ## Alternatives Considered
 
 - balance만 저장
@@ -79,6 +100,10 @@
 - 주문 해제 결과가 Lot 만료 전후에 따라 restore 또는 expiration으로 나뉜다.
 - 부분 환불 보상 lot은 원 issuer/cost owner를 승계하고 Refund policy snapshot으로
   재현된다.
+- 환불 적립 포인트 회수와 이후 적립 상계는 실제 `RECOVERY` debit과 별도 pending
+  obligation을 함께 tie-out해야 한다.
+- 수동 adjustment도 PointLot, PointAccount, signed transaction, IdempotencyRecord와
+  AuditRecord를 같은 local transaction에서 tie-out해야 한다.
 
 ## Verification
 
@@ -91,6 +116,8 @@
 - 환불 복원·회수
 - 부분 환불 시 만료 lot의 30일 보상과 정책 version 재현
 - 부분 환불 뒤 reservation USED 유지와 후속 종료의 잔여 allocation 복원
+- 환불 적립 포인트 전액/부분 회수, 부족액 상계와 pending summary tie-out
+- 수동 양수/음수 adjustment의 issuer·expiry, balance effect와 Audit atomicity
 - 원장과 balance tie-out
 
 ## Metrics
@@ -106,3 +133,5 @@
 - BR-10, BR-11, BR-12, BR-13, BR-20
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
 - [ADR-017](ADR-017-settlement-calculation-and-cost-allocation.md)
+- [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md)
+- [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)

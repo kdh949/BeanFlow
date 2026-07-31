@@ -597,14 +597,22 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 할인과 포인트 사용을 모두 반영한 뒤 외부 결제수단 또는 혜택 전용 결제로 최종 확정된 실결제액을 기준으로 적립한다. 환불된 금액에는 포인트를 적립하지 않는다.
+- **Audited Manual Adjustment Amendment (2026-08-01):** 확인된 포인트 원장 불일치는
+  활성 `PLATFORM_OPERATOR`의 명시적 권한, non-blank 사유와 증빙 아래 signed
+  `ADJUSTMENT`로만 보정한다. 양수 보정은 operator가 입력한
+  `PLATFORM|BRAND|STORE` issuer snapshot과 미래 만료일을 가진 새 PointLot을 만들며,
+  음수 보정은 미예약 available PointLot만 선소멸 순서로 줄인다. 어느 보정도
+  PointRecoveryPending을 상계하지 않고, Account/Lot/원장/Audit/멱등 응답은 하나의
+  로컬 transaction에서 함께 저장한다.
 - **Rationale:** 고객이 실제로 지불한 가치와 적립 비용을 일치시킨다.
 - **Affected Contexts:** Loyalty, Ordering, Payment, Settlement
-- **Affected Aggregates:** PointAccount, PointLot, Order, Payment
+- **Affected Aggregates:** PointAccount, PointLot, PointTransaction, Order, Payment, AuditRecord
 - **Required Tests:**
   - 쿠폰 사용 주문 적립액
   - 포인트 사용 주문 적립액
   - 0원 주문 적립 0
   - 부분 환불에 따른 적립 포인트 회수
+  - 감사형 양수·음수 `ADJUSTMENT`의 issuer/만료, Lot/Account/Audit tie-out
 - **ADR Required:** Yes — 포인트 Lot·적립·환불 복원 정책
 - **Revisit Conditions:** 매장 또는 브랜드가 할인 전 금액 적립 정책을 요구할 때
 
@@ -671,15 +679,22 @@
 ## BR-13 환불 주문의 적립 포인트 회수
 
 - **Status:** Accepted for MVP
-- **Decision:** 환불 금액에 대응하는 적립 포인트를 먼저 미사용 PointLot에서 회수한다. 이미 사용되어 전부 회수할 수 없으면 포인트 잔액을 음수로 만들지 않고 부족액을 Loyalty의 `POINT_RECOVERY_PENDING` 원장 항목으로 기록한다. 이후 발생하는 포인트 적립은 부족액 상계에 우선 사용한다. 정산 금액 보정이 필요하면 별도 SettlementAdjustment가 원천 refund reference를 사용하며, 포인트 회수 대기 잔액 자체를 소유하지 않는다.
+- **Decision:** 환불 금액에 대응하는 적립 포인트를 먼저 미사용 PointLot에서 실제
+  `RECOVERY` PointTransaction으로 회수한다. 이미 사용되어 전부 회수할 수 없으면
+  포인트 잔액을 음수로 만들지 않고 부족액을 Loyalty의
+  `PointRecoveryPending(PENDING)` 원장 항목으로 기록한다. 이후 발생하는 포인트
+  적립은 부족액 상계에 우선 사용하며 상계분도 `RECOVERY` PointTransaction으로
+  기록한다. 정산 금액 보정이 필요하면 별도 SettlementAdjustment가 원천 refund
+  reference를 사용하며, 포인트 회수 대기 잔액 자체를 소유하지 않는다.
 - **Rationale:** 환불을 막지 않으면서 포인트 비용의 정합성을 유지하고 음수 잔액을 피한다.
 - **Affected Contexts:** Loyalty, Payment, Settlement, Operations
-- **Affected Aggregates:** PointAccount, PointLot, PointTransaction
+- **Affected Aggregates:** PointAccount, PointLot, PointTransaction, PointRecoveryPending
 - **Required Tests:**
   - 미사용 적립 포인트 전액 회수
   - 일부 사용 후 부족액 기록
   - 이후 적립 시 우선 상계
   - 중복 환불 이벤트로 이중 회수 방지
+  - 실제 `RECOVERY` debit과 `PointRecoveryPending` 부족액을 혼동하지 않는 계정 tie-out
 - **ADR Required:** Yes
 - **Revisit Conditions:** 포인트 부채를 사용자에게 청구하거나 환불을 제한하는 별도 정책이 필요할 때
 
@@ -767,14 +782,22 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트 비용은 포인트 프로그램의 발급 주체가 부담한다. 발급 주체는 `PLATFORM`, `BRAND`, `STORE` 중 하나이며, 사용 시 PointLot별 발급 주체를 기준으로 비용을 배분한다.
+- **Manual Adjustment Issuer Amendment (2026-08-01):** 양수 수동
+  `ADJUSTMENT`는 호출자가 issuer type과 immutable reference를 반드시 입력해 새
+  PointLot에 snapshot으로 저장한다. actor, customer 또는 기존 Lot에서 issuer를
+  추론하거나 PLATFORM으로 대체하지 않는다. 이 Lot이 이후 사용될 때만 snapshot의
+  발급 주체가 비용 배분 입력이 되며, adjustment command 자체는 SettlementItem이나
+  SettlementAdjustment를 만들지 않는다.
 - **Rationale:** 서로 다른 발급 주체의 포인트를 섞어 사용할 때 비용 책임을 추적하기 위함이다.
-- **Affected Contexts:** Loyalty, Settlement, Merchant
-- **Affected Aggregates:** LoyaltyProgram, PointLot, SettlementItem
+- **Affected Contexts:** Loyalty, Settlement, Merchant, Operations
+- **Affected Aggregates:** LoyaltyProgram, PointAccount, PointLot, PointTransaction,
+  PointAdjustmentCommandIdempotency, SettlementItem, AuditRecord
 - **Required Tests:**
   - 서로 다른 발급 주체 PointLot 혼합 사용
   - 선소멸 우선 사용과 비용 배분
   - 환불 시 원 발급 주체 복원
   - 원장 합계와 정산 비용 tie-out
+  - 수동 양수 adjustment의 입력 issuer snapshot 비용 귀속과 default issuer 부재
 - **ADR Required:** Yes
 - **Revisit Conditions:** 매장 간 상호 사용이나 브랜드 통합 포인트가 도입될 때
 
@@ -879,9 +902,15 @@
   여부는 IdempotencyRecord, metric과 structured log에서만 관측한다. 외부 결과가
   non-terminal `UNKNOWN`인 Payment 승인·환불은 새 Provider 호출 없이 현재 durable
   representation을 반환하는 기존 예외를 유지하되 replay 표시를 추가하지 않는다.
-- **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다. 명령 트랜잭션 안에 외부 호출이 있고 새 Aggregate를 만드는 명령만 사전등록 모델을 사용한다. 명령이 특정 Aggregate를 대상으로 하면 그 식별자를 canonical payload에 포함해 교차 대상 키 재사용을 거부한다.
-- **Affected Contexts:** Ordering, Payment, Settlement, Operations
-- **Affected Aggregates:** IdempotencyRecord, Order, Payment, SettlementAdjustment
+- **Risk-based Model Selection Amendment (2026-08-01):** 사전등록 모델은 기존
+  직렬화 Aggregate root가 없거나, 최초 terminal 응답 저장 전에 외부 Provider 결과가
+  불명확해지는 명령에 사용한다. 기존 lockable root가 경쟁을 직렬화하고 모든 local
+  write와 최초 응답을 한 transaction에서 commit하며 외부 호출이 그 안에 없으면 새
+  Aggregate를 만들어도 명령 트랜잭션 모델을 사용한다. 고객 취소 C1과 감사형 point
+  adjustment는 이 조건을 충족한다. 상세 기준과 기존 명령 분류는 ADR-064를 따른다.
+- **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다. 명령이 특정 Aggregate를 대상으로 하면 그 식별자를 canonical payload에 포함해 교차 대상 키 재사용을 거부한다.
+- **Affected Contexts:** Ordering, Payment, Loyalty, Settlement, Operations
+- **Affected Aggregates:** IdempotencyRecord, Order, Payment, PointAccount, SettlementAdjustment
 - **Required Tests:**
   - 같은 키·같은 payload 재요청
   - 같은 키·다른 payload 409
@@ -895,6 +924,7 @@
   - 고객 취소 롤백 후 같은 key 재시도의 재실행
   - 매장 전이 같은 key·다른 주문의 409와 첫 주문 응답 미재생
   - 매장 전이 같은 key·같은 주문·같은 payload의 최초 응답 재생
+  - 감사형 포인트 조정 같은 key·같은 payload의 최초 201 재생과 다른 account/payload 409
   - `operation` 승격 후 구 `STORE_ORDER_TRANSITION` 레코드 미조회
 - **ADR Required:** Yes — 결제 멱등성과 reconciliation
 - **Revisit Conditions:** 다중 채널 또는 외부 파트너가 자체 멱등성 범위를 요구할 때
@@ -914,9 +944,15 @@
   `retention_expires_at`을 backfill하고 같은 keyset index를 사용한다. 구
   `STORE_ORDER_TRANSITION` operation은 V2에서 조회되지 않아도 row별 90일 전에는
   삭제하지 않는다.
+- **Loyalty Point Adjustment Amendment (2026-08-01):** 감사형 포인트 조정은
+  `loyalty_point_adjustment_command_idempotency`에 terminal `201` response와
+  `retention_expires_at = created_at + 90일`을 함께 저장한다. Loyalty-owned worker가
+  기본 1시간마다 최대 100개 due row를 `(retention_expires_at, id)` keyset 순서의 독립
+  transaction에서 정리한다. 실패는 0건 성공으로 기록하지 않고 다음 tick에 재시도하며,
+  Ordering worker가 Loyalty table을 함께 정리하지 않는다.
 - **Rationale:** 14일 이의제기와 일반적인 환불·운영 조사 기간보다 충분히 길게 재시도 결과를 보존한다.
-- **Affected Contexts:** Ordering, Payment, Operations
-- **Affected Aggregates:** IdempotencyRecord, Payment
+- **Affected Contexts:** Ordering, Payment, Loyalty, Operations
+- **Affected Aggregates:** IdempotencyRecord, Payment, PointAdjustmentCommandIdempotency
 - **Required Tests:**
   - terminal 상태 90일 이전 보존
   - 90일 이후 정리
@@ -924,6 +960,7 @@
   - 정리 배치 중단·재실행
   - 고객 취소 멱등 레코드의 `retention_expires_at` 경계 전후 정리
   - store 기존 row의 createdAt+90일 backfill과 table별 cleanup 실패 격리
+  - Loyalty adjustment terminal 201 row의 90일 경계, chunk 100과 cleanup 중단·재실행
 - **ADR Required:** Yes
 - **Revisit Conditions:** 실제 환불·분쟁 보존 기간, 저장 비용 또는 개인정보 정책이 확정될 때
 
@@ -987,6 +1024,13 @@
   commit한다. event publication과 IdempotencyRecord는 자체 내구 원장을 사용하고,
   자동 claim/retry attempt마다 Audit를 만들지 않는다. 자유 입력 cancellation
   detail은 감사에 복제하지 않는다.
+- **Audited Point Adjustment Amendment (2026-08-01):** 감사형 포인트 조정은
+  `POINT_ADJUSTMENT_APPLIED` AuditRecord를 PointAccount target에 append한다. active
+  `PLATFORM_OPERATOR`의 non-blank reason과 evidence reference, signed requested effect,
+  before/after Account summary, 생성·차감 Lot ID, 양수 issuer/expiry snapshot만
+  whitelist summary에 남기고 raw Idempotency-Key와 불필요한 개인정보는 남기지 않는다.
+  Audit source는 adjustment command source와 하나이며, Audit 저장 실패는 Lot/Account/
+  원장/멱등 응답 성공으로 대체하지 않고 같은 local transaction을 rollback한다.
 - **Rationale:** 금전성·운영성 변경의 책임과 재현 가능성을 확보한다.
 - **Affected Contexts:** 전체 거래 Context, Operations
 - **Affected Aggregates:** AuditRecord
@@ -1000,6 +1044,7 @@
   - 2월 29일 occurredAt의 5주년 경계
   - cleanup 중단·재실행과 due 이전 record 보존
   - 민감 정보 마스킹
+  - 감사형 포인트 조정의 target action/source unique, whitelist summary와 원자적 rollback
 - **ADR Required:** Yes
 - **Revisit Conditions:** 별도 감사 저장소, 계약·규제 보존 기간 또는 legal hold 요구가 생길 때
 
@@ -1065,7 +1110,7 @@
 | 쿠폰 Campaign 계산 모델 | [ADR-024](../adr/ADR-024-coupon-calculation-model.md) |
 | 0원 혜택 결제 | [ADR-016](../adr/ADR-016-benefit-only-payment.md) |
 | 부분 환불 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
-| PointLot·포인트 회수·복원 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
+| PointLot·포인트 회수·복원·감사형 조정 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md), [ADR-065](../adr/ADR-065-refund-earned-point-recovery-ledger.md), [ADR-066](../adr/ADR-066-audited-loyalty-point-adjustment.md) |
 | 정산 기준일·주기·수수료 기준 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
 | 쿠폰·포인트 비용 부담 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
 | 확정 정산 Adjustment와 음수 이월 | [ADR-008](../adr/ADR-008-settlement-adjustment-ledger.md), [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |

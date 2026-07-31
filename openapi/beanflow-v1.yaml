@@ -621,6 +621,47 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /operations/point-accounts/{accountId}/adjustments:
+    post:
+      tags: [Operations, Loyalty]
+      operationId: createAuditedPointAdjustment
+      summary: Apply an audited signed point adjustment
+      description: |
+        Requires an active PLATFORM_OPERATOR with explicit POINT_ADJUSTMENT
+        permission, a non-blank reason, and evidence references. The command is
+        idempotent by actor, operation, Idempotency-Key, account ID and canonical
+        request payload. Positive adjustments require a caller-selected issuer
+        snapshot and future expiry; negative adjustments may consume only available
+        point lots. No provider is called and no partial debit, negative balance,
+        or recovery pending fallback is allowed.
+      parameters:
+        - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PointAdjustmentRequest"
+      responses:
+        "201":
+          description: Applied adjustment or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointAdjustmentResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /stores/{storeId}/settlements:
     get:
       tags: [Settlement]
@@ -1233,9 +1274,9 @@ components:
           type: string
           pattern: '^[^\u0000-\u001F\u007F]*$'
           description: |
-            Optional free-text detail supplied by the customer. The server trims
-            it before validation; an empty normalized value is treated as absent
-            and a present normalized value must contain 1 to 200 characters.
+            Optional free-text detail supplied by the customer. The server trims it
+            before validation. An empty normalized value is treated as absent. A
+            present normalized value must contain 1 to 200 characters.
             Control characters are rejected. Stored on the order only. Never
             included in events, audit records, provider requests, application
             logs or any API response.
@@ -1814,9 +1855,10 @@ components:
         pointsRestorationState:
           type: string
           description: |
-            Public state of the asynchronous Loyalty restoration. PROCESSING
-            includes durable publication pending and bounded retry. MANUAL_REVIEW
-            means automatic convergence stopped; it is not success.
+            Public state of the asynchronous Loyalty restoration. REQUESTED is
+            used before cash refund success. PROCESSING includes durable
+            publication pending and bounded retry after cash refund success.
+            MANUAL_REVIEW means automatic convergence stopped; it is not success.
           enum: [NOT_REQUIRED, REQUESTED, PROCESSING, SUCCEEDED, MANUAL_REVIEW]
         cashRefundedKrw:
           allOf:
@@ -1879,6 +1921,16 @@ components:
             properties:
               state:
                 const: SUCCEEDED
+        - if:
+            properties:
+              pointsRestorationState:
+                const: REQUESTED
+            required: [pointsRestorationState]
+          then:
+            properties:
+              state:
+                not:
+                  const: SUCCEEDED
     StoreOrderTransitionRequest:
       type: object
       additionalProperties: false
@@ -1903,6 +1955,7 @@ components:
           $ref: "#/components/schemas/MoneyKrw"
         recoveryPendingKrw:
           $ref: "#/components/schemas/MoneyKrw"
+          description: Sum of Loyalty PointRecoveryPending remaining amounts. It is not a negative available balance.
         currency:
           $ref: "#/components/schemas/Currency"
         updatedAt:
@@ -1928,14 +1981,97 @@ components:
           $ref: "#/components/schemas/Identifier"
         type:
           type: string
-          enum: [ACCRUAL, USE, EXPIRATION, RESTORE, RECOVERY, ADJUSTMENT]
+          description: >-
+            Ledger fact type. RECOVERY is an actual debit of available points for a
+            refund; it is distinct from PointRecoveryPending, which records an
+            amount not yet recoverable. ADJUSTMENT is an audited manual Loyalty
+            correction, not a refund or settlement adjustment.
+          enum:
+            [ACCRUAL, USE, EXPIRATION, RESTORE, COMPENSATION, RESTORE_SKIPPED_EXPIRED, RECOVERY, ADJUSTMENT]
         amountKrw:
           $ref: "#/components/schemas/SignedMoneyKrw"
+          description: >-
+            Signed effect on the visible point balance: ACCRUAL, RESTORE and
+            COMPENSATION are positive; USE, EXPIRATION and RECOVERY are negative;
+            RESTORE_SKIPPED_EXPIRED is zero. This is not the non-negative storage
+            magnitude. ADJUSTMENT follows its stored CREDIT or DEBIT balance effect.
         occurredAt:
           $ref: "#/components/schemas/DateTime"
         sourceReference:
           type: string
           minLength: 1
+          description: Opaque immutable ledger source. A multi-lot ADJUSTMENT uses a distinct child source per affected lot.
+    PointIssuer:
+      type: object
+      additionalProperties: false
+      required: [issuerType, issuerReference]
+      properties:
+        issuerType:
+          type: string
+          enum: [PLATFORM, BRAND, STORE]
+        issuerReference:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '.*\S.*'
+          description: Non-blank immutable cost-owner reference selected for a positive adjustment
+    PointAdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [amountKrw, reason, evidenceReferences]
+      properties:
+        amountKrw:
+          allOf:
+            - $ref: "#/components/schemas/SignedMoneyKrw"
+          not:
+            const: 0
+          description: Nonzero signed correction. Positive creates a new PointLot; negative consumes available lots.
+        issuer:
+          $ref: "#/components/schemas/PointIssuer"
+        expiresAt:
+          allOf:
+            - $ref: "#/components/schemas/DateTime"
+          description: Required only for a positive adjustment and must be strictly after server time.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '.*\S.*'
+          description: Non-blank operator reason for the correction
+        evidenceReferences:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            maxLength: 500
+            pattern: '.*\S.*'
+            description: Non-blank reference to correction evidence
+      allOf:
+        - if:
+            properties:
+              amountKrw:
+                exclusiveMinimum: 0
+            required: [amountKrw]
+          then:
+            required: [issuer, expiresAt]
+          else:
+            not:
+              anyOf:
+                - required: [issuer]
+                - required: [expiresAt]
+    PointAdjustmentResult:
+      type: object
+      additionalProperties: false
+      required: [account, transactions]
+      properties:
+        account:
+          $ref: "#/components/schemas/PointAccount"
+        transactions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PointTransaction"
     SettlementBatchPage:
       type: object
       additionalProperties: false

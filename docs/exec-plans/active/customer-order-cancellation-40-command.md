@@ -10,7 +10,8 @@
 
 ## Current State
 
-- OpenAPI와 ADR-029~035/039/044/054/058은 command 계약을 확정했다.
+- OpenAPI와 ADR-029~035/039/044/054/058/061/063/064는 command 계약과 선행
+  Refund·policy·멱등성 기준을 확정했다.
 - 현재 Order에는 결제 거절용 `cancelPendingPayment`만 있고 고객 취소 필드/guard가 없다.
 - `OrderController`에는 cancellations mapping이 없다.
 - 고객 취소 멱등 table, AcceptanceTimeoutWork와 cancellation Audit action이 없다.

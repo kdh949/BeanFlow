@@ -150,7 +150,8 @@ Failure behavior:
 3. 주문 당시 항목별 배분 스냅샷을 사용한다.
 4. 해당 항목의 현금 결제액을 환불하고 사용 포인트를 복원한다.
 5. 쿠폰 할인액은 현금으로 환급하지 않는다.
-6. 적립 포인트를 회수하고 부족액은 Loyalty의 `POINT_RECOVERY_PENDING` 원장에 남긴다.
+6. 적립 포인트를 실제 `RECOVERY` 원장으로 회수하고, 부족액만 Loyalty의
+   `PointRecoveryPending(PENDING)`에 남긴다. 이후 적립은 이 부족액을 먼저 상계한다.
 7. 정산 확정 전이면 원천 항목에 반영하고, 확정 후면 Adjustment를 생성한다.
 
 ## 10. Settlement dispute

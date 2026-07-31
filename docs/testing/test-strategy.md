@@ -32,6 +32,7 @@
 - 알림 timeout 후 Provider는 성공 → ACK 유실 중복 발송 제어
 - 정산 batch 중단 후 재실행 → 중복 Item 0
 - DB 장애 → 빈 목록 또는 local repository fallback 없음
+- 같은 Platform Operator point adjustment 동시 debit → 하나만 가용 Lot을 차감, 원장·Audit·응답 일치
 
 ## Customer cancellation release suite
 

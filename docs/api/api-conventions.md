@@ -2,6 +2,9 @@
 
 ## Resource style
 
+아래 목록은 resource naming style 예시다. 전체 공개 endpoint와 request/response 계약의
+원본은 `openapi/beanflow-v1.yaml`이며, 이 목록은 endpoint catalog로 사용하지 않는다.
+
 ```http
 GET  /api/v1/stores/nearby
 GET  /api/v1/stores/{storeId}/menus
@@ -17,6 +20,7 @@ POST /api/v1/payments/{paymentId}/refunds
 PATCH /api/v1/store-orders/{orderId}/status
 
 GET  /api/v1/point-accounts/{accountId}
+POST /api/v1/operations/point-accounts/{accountId}/adjustments
 GET  /api/v1/stores/{storeId}/settlements
 POST /api/v1/settlement-items/{itemId}/disputes
 ```
@@ -35,6 +39,30 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - `422 Unprocessable Entity`: 형식은 유효하지만 도메인 규칙 위반을 분리할 필요가 있을 때
 - `503 Service Unavailable`: 필수 의존성 일시 장애
 - 외부 결과 불명은 API 계약에 명시된 pending/unknown 표현 사용
+
+## Loyalty ledger projection
+
+- `GET /point-accounts/{accountId}`의 `recoveryPendingKrw`는 음수 잔액이 아니라
+  Loyalty `PointRecoveryPending(PENDING)` remaining 합계다.
+- `GET /point-accounts/{accountId}/transactions`의 `amountKrw`는 DB에 저장한 양수
+  magnitude가 아니라 공개 잔액 signed effect다. `RECOVERY`는 환불 적립 포인트의 실제
+  차감이므로 음수이고, 미회수 부족액 자체는 transaction으로 표시하지 않는다.
+- `RESTORE_SKIPPED_EXPIRED`는 정책 적용은 성공했지만 가용 잔액을 늘리지 않으므로
+  공개 amount가 0이다. client는 type과 signed amount를 조합해 PointAccount summary를
+  추측하지 않는다.
+- `ADJUSTMENT`는 `balance_effect`가 CREDIT이면 양수, DEBIT이면 음수로 반환하는
+  감사형 운영 correction이다. 공개 amount 부호를 DB의 양수 magnitude와 혼동하지
+  않는다.
+
+## Audited point adjustment
+
+`POST /operations/point-accounts/{accountId}/adjustments`는 active `PLATFORM_OPERATOR`의
+explicit `POINT_ADJUSTMENT` permission, Idempotency-Key, nonzero signed amount, non-blank
+reason과 evidence를
+요구한다. 양수 amount에는 issuer와 미래 `expiresAt`이 필수이고 음수 amount에는 두
+필드가 있으면 안 된다. 성공 `201`은 Account summary와 실제 생성·차감 transaction 목록을
+반환하며 replay 표시를 추가하지 않는다. debit 가용 Lot 부족은 409이고 부분 차감·0원
+성공·PointRecoveryPending 생성으로 대체하지 않는다.
 
 ## Order creation response
 
@@ -120,8 +148,8 @@ POST /api/v1/settlement-items/{itemId}/disputes
 
 ## Idempotency
 
-- 주문 생성, 주문 취소, 결제 승인, 환불, 매장 주문 상태 전이, 이의제기와 운영자
-  재처리는 `Idempotency-Key`를 요구한다.
+- 주문 생성, 주문 취소, 결제 승인, 환불, 매장 주문 상태 전이, 감사형 포인트 조정,
+  이의제기와 운영자 재처리는 `Idempotency-Key`를 요구한다.
 - scope: actorId + operation + key
 - 같은 key + 같은 payload: 기존 결과
 - 같은 key + 다른 payload: `409`
@@ -145,6 +173,10 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - 특정 Aggregate를 대상으로 하는 명령은 대상 식별자를 canonical payload에 포함한다.
   고객 취소와 매장 주문 상태 전이 모두 `orderId`를 포함하므로 같은 key를 다른 주문에
   재사용하면 `409 IDEMPOTENCY_KEY_REUSED`이며 다른 주문의 응답을 재생하지 않는다.
+- 감사형 포인트 조정은 `accountId`, signed amount, issuer/expiry, reason과 evidence를
+  canonical payload에 포함한다. PointAccount lock 아래의 명령 transaction이므로
+  `IDEMPOTENCY_REQUEST_IN_PROGRESS`를 사용하지 않고, 같은 key·payload는 최초 `201`
+  body를 재생한다.
 - 고객 주문 취소는 `PROCESSING` 사전등록 없이 명령 트랜잭션 하나에서 Order 잠금, 멱등
   레코드 조회, 취소와 최초 응답 저장을 함께 커밋한다. 같은 key·같은 payload 재요청은
   저장된 최초 `200` 또는 `202` body를 그대로 반환하며 `replayed` 같은 표시 필드를
@@ -227,7 +259,7 @@ POST /api/v1/settlement-items/{itemId}/disputes
 ## Expired benefit restoration policy
 
 - 정책 resource key는 `trigger × benefitType`이다.
-- base GET은 네 현재 head를 안정적으로 trigger, benefit type 순서로 반환한다.
+- base GET은 다섯 현재 head를 안정적으로 trigger, benefit type 순서로 반환한다.
 - keyed PATCH는 path의 trigger·benefit type 한 head만 새 append-only version으로
   갱신한다. `Idempotency-Key`, `expectedPolicyVersionId`, mode, validity days와
   reason이 필수다.

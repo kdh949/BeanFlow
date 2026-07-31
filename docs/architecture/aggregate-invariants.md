@@ -13,8 +13,10 @@
 | Campaign | 대상 품목 기반 정액·정률 할인 정책·수량·부담 | type별 금액 필드, rate `1..10000`, minimum/maximum, 대상 목록과 분담률 유효 | `storeId`, menu IDs |
 | CouponIssuance | 발급 쿠폰 생명주기 | 동시에 두 주문에 사용 불가, 보상 issuance의 original/source/trigger/policy와 immutable terms 일치 | `memberId`, `campaignId`, `orderId` |
 | PointAccount | 프로그램별 잔액 요약 | 가용 잔액 음수 금지 | IDs |
-| PointLot | 발급분 available/reserved 잔액·만료 | 생성 시 만료 Lot 예약 금지, 가용·예약·잔여액 음수 금지 | IDs |
+| PointLot | 발급분 available/reserved 잔액·만료·발급 비용 snapshot | 생성 시 만료 Lot 예약 금지, 가용·예약·잔여액 음수 금지, issuer type/reference 불변 | IDs |
 | PointReservation | 주문별 PointLot allocation과 lease | 주문당 active 예약 하나, allocation 합계=예약 총액, 예약 시 유효한 allocation은 주문 lease까지 확정 가능, 복원 source/trigger/policy 일치 | `orderId`, `pointAccountId`, `pointLotId` |
+| PointRecoveryPending | 환불 적립 포인트의 미회수 잔액과 후속 적립 상계 | refund source당 account별 하나, `PENDING` remaining 양수, `SETTLED` remaining 0, account summary와 tie-out | `pointAccountId`, refund source ID |
+| PointAdjustmentCommandIdempotency | 감사형 포인트 조정의 terminal response 재생 | actor/operation/key unique, account/hash match일 때만 201 replay, 90일 retention | `actorId`, `pointAccountId` |
 | Payment | 승인·불명·환불 | 동일 키 중복 승인 금지, 누적 환불 ≤ 승인액 | `orderId` |
 | Refund | 외부 환불 요청·조회·결과 | source/key 불변, request≤3, lookup≤5, Unknown 뒤 REQUEST 금지, 성공액은 요청액과 일치 | `paymentId`, `orderId` |
 | PaymentMethod | PG token reference와 표시 정보 | 원본 카드번호·CVC·전체 유효기간 금지, 사용자와 provider token 범위 중복 금지 | `memberId` |
@@ -26,7 +28,7 @@
 | NotificationDelivery | 발송·재시도 | logical source+recipient+channel 중복 금지, Provider attempt 상한 | IDs |
 | ReprocessingCase | 운영 재처리 | 대상·사유·주체 필수, 중복 실행 방지 | IDs |
 | RepairProposal | 금융 setup 복구의 2인 승인 | case당 active 하나, proposer≠decider, 30분 만료, terminal 재개 금지 | case/order/payment IDs |
-| AcceptanceTimeoutWork | 관측된 PAID deadline winner의 내구 실행 | order+deadline source unique, claim lease, nonterminal retention 금지 | `orderId` |
+| AcceptanceTimeoutWork | 관측된 PAID deadline winner의 내구 실행 | order+deadline source unique, claim lease, nonterminal 자동 정리 금지 | `orderId` |
 | OrderCompensationCase | 주문 종료 후 owner 보상 추적 | order당 하나, trigger 필수, 여섯 step과 두 benefit policy snapshot | `orderId`, event/source IDs |
 | AuditRecord | 중요 변경의 target별 감사 | 5년 보존 중 append-only, action/target/source 중복 금지, 필수 주체·사유·correlation, 민감정보 금지 | target IDs |
 | BenefitRestorationPolicyVersion | 종료 원인·혜택별 만료 복원 규칙 이력 | version ID 전역 유일, row 수정·삭제 금지, trigger/type/mode 유효 | actor ID |
@@ -60,14 +62,16 @@ event ID와 payload version으로 멱등하게 갱신하는 projection이다.
 | `CampaignRepository` | Campaign | valid period/type/value/minimum/maximum/target/share ratio | optimistic version |
 | `CouponIssuanceRepository` | CouponIssuance | one active reservation/use per issuance, compensation source unique, restoration metadata와 terms snapshot CHECK | unique/partial index + guarded transition |
 | `PointAccountRepository` | PointAccount | unique member/program, non-negative available balance | row lock/version |
-| `PointLotRepository` | PointLot | non-negative available/reserved/remaining, amount tie-out | ordered row lock |
+| `PointLotRepository` | PointLot | non-negative available/reserved/remaining, amount tie-out, issuer type/reference NOT NULL·immutable | ordered row lock |
 | `PointReservationRepository` | PointReservation | active order reservation unique, allocation source unique | unique + guarded transition |
-| `PointTransactionRepository` | PointTransaction | source order/refund/reference unique, restoration type의 trigger/policy 필수 | unique source reference |
+| `PointTransactionRepository` | PointTransaction | logical source unique, restoration type의 trigger/policy 필수, `RECOVERY`는 refund·Lot source와 deferred pending ID 일치, `ADJUSTMENT`는 CREDIT/DEBIT effect·command/Lot child source 관계와 target Audit source 필수 | unique source reference |
+| `PointRecoveryPendingRepository` | PointRecoveryPending | account+refund source unique, initial/remaining 양수 범위와 PENDING/SETTLED state·timestamp CHECK, Account pending summary tie-out | PointAccount row lock + oldest pending row lock |
 | `PaymentRepository` | Payment | provider transaction key and order/payment intent unique | unique + guarded transition |
 | `RefundRepository` | Refund | source/provider key unique, reason/state check, request·lookup·total attempt tie-out | Payment row lock + claim lease + guarded transition |
 | `PaymentCancellationRecoveryRepository` | PaymentCancellationRecoverySnapshot | order/payment당 하나, approved = prior succeeded + cancellation requested, requested 양수일 때 Refund 필수 | unique/FK/check + Payment row lock |
 | `PaymentMethodRepository` | PaymentMethod | member/provider/token reference unique | unique |
 | `IdempotencyRecordRepository` | IdempotencyRecord | actor/operation/key unique | insert-first unique arbitration |
+| `PointAdjustmentCommandIdempotencyRepository` | PointAdjustmentCommandIdempotency | actor/operation/key unique, account/hash match에만 201 replay, terminal response 90일 retention | PointAccount lock + unique-conflict rollback/re-read + keyset retention worker |
 | `SettlementItemRepository` | SettlementItem | source order/type unique | unique source reference |
 | `SettlementBatchRepository` | SettlementBatch | store/settlement date unique | unique + guarded transition |
 | `SettlementAdjustmentRepository` | SettlementAdjustment | source reason/reference unique | unique source reference |

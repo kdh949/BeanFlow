@@ -12,6 +12,7 @@
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Read with reason | No |
+| 감사형 포인트 조정 | No | No | No | Explicit `POINT_ADJUSTMENT` permission + reason + evidence | No |
 | 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
 | 이의제기 생성 | No | Owned store | No | No | No |
@@ -52,3 +53,9 @@ Order 표현은 역할별로 분리한다. 고객용 `Order`는 `cancelledAt`,
 `cancelledAt`과 `cancellationCause`만 노출하고 `cancellationReasonCode`와
 `paymentRecovery`는 제외한다. 매장은 취소가 고객 요청인지 결제 거절인지 구분할 수
 있지만 고객이 신고한 사유와 환불 진행은 보지 않는다(ADR-030, ADR-031).
+
+감사형 포인트 조정은 고객·매장·정산 역할에 노출하지 않는다. 활성
+`PLATFORM_OPERATOR`라도 explicit `POINT_ADJUSTMENT` permission, non-blank reason,
+evidence reference와 Idempotency-Key가 없으면 실행할 수 없다. issuer와 만료는
+양수 adjustment의 immutable 비용·가치 snapshot이며 actor나 customer에서 추론하지
+않는다(ADR-066).

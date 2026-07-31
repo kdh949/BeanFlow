@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
+- **Implementation owner:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md)
 
 ## Context
 
@@ -56,6 +57,10 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
   available balance를 늘리지 않고 `RESTORE_SKIPPED_EXPIRED`를 기록한다.
 - 보상 PointLot은 original lot ID, issuer/cost owner, Refund source,
   `PARTIAL_REFUND` trigger와 policy version ID를 보존한다.
+- `issuer_type`과 `issuer_reference`는 PointLot에 저장하는 immutable issuer snapshot이다.
+  Plan 10은 만료 lot 보상을 시작하기 전에 기존 Lot의 확인 가능한 issuer source를
+  precheck하고, 검증된 mapping만 backfill한다. source가 없는 기존 Lot을 PLATFORM으로
+  추정하거나 issuer/cost lineage가 없는 보상 Lot을 만들지 않는다.
 - `(refundId, orderLineId, pointAllocationId)`와 owner source를 Unique Constraint로
   보호해 같은 부분 환불·event·retry가 가치를 두 번 만들지 못하게 한다.
 
@@ -75,6 +80,9 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 
 - Operations가 정책 Aggregate를 계속 소유하지만, 구현 순서상 Plan 10이 최종 다섯
   head/version 저장소, seed와 운영 목록/PATCH API migration을 단독 구현한다.
+- Plan 10은 만료 부분 환불 보상이 먼저 필요로 하는 PointLot issuer snapshot schema와
+  legacy issuer precheck/migration gate도 단독 소유한다. 후속 감사형 point adjustment
+  계획은 이 schema와 gate evidence를 전제하고 같은 migration을 다시 만들지 않는다.
 - Plan 30은 정책 저장소/API migration을 다시 만들지 않고 기존 종료용 네 head를
   OrderCompensationCase snapshot과 event에 연결한다.
 
@@ -131,6 +139,8 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
   포인트를 종료 처리할 수 없다.
 - 종료 listener가 부분 환불 allocation을 다시 대상으로 잡으면 포인트가 이중 복원된다.
 - Plan 10과 Plan 30이 같은 policy migration을 만들면 checksum·schema 소유권이 충돌한다.
+- legacy Lot issuer source가 확인되지 않았는데 PLATFORM backfill이나 issuer 없는
+  compensation Lot으로 계속하면 BR-20 비용 귀속과 환불 lineage를 거짓으로 만든다.
 
 ## Verification
 
@@ -140,6 +150,8 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 - 정책 변경 전후 Refund가 각자 저장한 version으로 재현된다.
 - 부분 환불 뒤 PointReservation은 USED이고 allocation 원장만 증가한다.
 - 후속 고객 취소/매장 거절은 잔여 point allocation만 한 번 복원한다.
+- Plan 10의 issuer precheck는 empty/verified/unresolvable legacy fixture를 구분하고,
+  unresolvable이면 만료 보상 기능을 활성화하지 않는다.
 
 ## Required Tests
 
@@ -150,6 +162,8 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 - Refund 요청의 policy snapshot FK와 Provider 호출 전 누락 rollback
 - PointLot 만료 -1ns/at/+1ns의 RESTORE/COMPENSATION 분기
 - 보상 lot의 refundSucceededAt+30일 만료와 original issuer/cost lineage
+- PointLot issuer snapshot migration의 empty/verified/unresolvable legacy fixture와
+  PLATFORM 추정 backfill 부재
 - PRESERVE 정책 변경 뒤 새 Refund만 RESTORE_SKIPPED_EXPIRED
 - 같은 Refund/event 재생의 PointTransaction·PointLot 한 건
 - 부분 환불 후 PointReservation USED와 allocation별 복원 합계
