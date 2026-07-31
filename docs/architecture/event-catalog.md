@@ -24,7 +24,7 @@
 | PaymentApprovalUnknown | Payment | Operations | reconciliation case unique | Payment |
 | PaymentApprovalReconciled | Payment | Ordering, Operations, Analytics | provider transaction unique | Payment |
 | OrderPaid | Ordering | Fulfillment, Inventory, Promotion, Loyalty | order version per consumer | Order |
-| OrderRejectedV1 | Ordering | Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification, Operations | event ID + owner source reference | Order |
+| OrderRejectedV1 | Ordering | Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification | event ID + owner source reference | Order |
 | StoreAcceptanceWarningRequestedV1 | Ordering | Notification | order/deadline unique | Order |
 | OrderAcceptedV1 | Ordering | Analytics | order version | Order |
 | OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
@@ -77,10 +77,11 @@ ID, Provider reference, `customerId`, `storeId`와 `reasonCode`는 payload에 �
 flag와 관계없이 항상 존재하고 Case가 참조하는 immutable version과 일치한다.
 consumer는 현재 policy head를 조회하지 않는다.
 
-`OrderRejectedV1`도 production 발행 전 ADR-041에 따라 기존 단일
-`policyVersion/policyMode/policyValidityDays`를 제거하고 같은
-`couponPolicy/pointsPolicy` shape를 사용한다. 현재 보존할 구 publication이 없으므로
-V2, compatibility layer와 이중 발행을 만들지 않는다. 최초 production publication
+`OrderRejectedV1`도 ADR-041에 따라 같은 `couponPolicy/pointsPolicy` shape를 목표로
+한다. 다만 기존 단일 `policyVersion/policyMode/policyValidityDays`를 제자리에서
+제거하는 것은 ADR-059 release gate가 보존할 publication·외부 consumer·rollback
+대상이 모두 없음을 입증한 경우에만 허용한다. gate가 실패하면 V1을 변경하지 않고
+forward migration과 compatibility 계획을 먼저 확정한다. 최초 production publication
 이후에는 두 V1 계약을 동결한다.
 
 `correlationId`는 취소 HTTP 요청의 값을 전파하고 부재하면 서버가 생성한다.

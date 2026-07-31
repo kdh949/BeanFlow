@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amends:** ADR-033의 forward rename/backfill migration 전략
 
 ## Context
 
@@ -9,7 +10,8 @@ ADR-033은 거절 전용 `RejectionCompensationCase/Step`을
 `OrderCompensationCase/Step`으로 일반화하면서 기존 table rename과
 `trigger = STORE_REJECTION` backfill을 forward migration으로 수행하도록 정했다.
 이후 event·정책 설계에서 `OrderRejectedV1`과 관련 schema가 production 발행 전이고
-보존 publication·외부 consumer가 없다는 pre-release 전제가 확인됐다.
+보존 publication·외부 consumer가 없다는 pre-release 전제가 제안됐다. 이 전제는
+저장소 문구가 아니라 아래 release gate의 외부 운영 증거로 확인해야 한다.
 
 현재 production 배포와 보존해야 할 실사용 Case·step·publication이 없다면 legacy
 shape를 이행하는 migration과 불완전 row 복구 scanner는 존재하지 않는 운영 상태를
@@ -46,6 +48,17 @@ shape를 이행하는 migration과 불완전 row 복구 scanner는 존재하지 
   적용한다.
 - 이 결정은 ADR-033의 forward rename/backfill 부분만 대체하며 공통 Case 모델,
   trigger, 여섯 step, owner source와 API 계약은 유지한다.
+
+### 2026-07-31 readiness audit clarification
+
+- 저장소, commit `04e2b4819a66966952c5436342a05149fd7ac6ee`, 병합 PR #17에는
+  production DB/table/row, 완료·미완료 publication, 외부 consumer, rollback binary와
+  적용 환경을 입증하는 release evidence가 없다.
+- 확인할 수 없는 항목은 0으로 간주하지 않으므로 현재
+  `CLEAN_CUTOVER_GATE = FAILED`다.
+- 기존 V8 migration과 V1 event 계약을 수정하지 않는다. 구현 전 외부 운영 사실을
+  검증해 전부 0임을 입증하거나, forward migration·publication drain·compatibility·
+  rollback을 다루는 새 Accepted ADR/ExecPlan을 먼저 만든다.
 
 ## Alternatives Considered
 

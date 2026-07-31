@@ -7,6 +7,9 @@
 | PG 성공 후 내부 기록 실패 | Tx1/Provider/Tx2 분리, Tx1에서 due reconciliation 생성 | owner fault rollback, claim lease 재시작, Hikari pool 1 테스트 | `PaymentConfirmationIntegrationTest`, `PaymentConnectionBoundaryTest` |
 | 만료 후 뒤늦은 결제 승인 | Order lock과 guarded expiry, late-approval void/refund | 5분 경계 동시 실행, Order 비복구, void/refund 단일 실행 | BR-03, ADR-013, `PaymentConfirmationIntegrationTest` |
 | 환불 결과 불명 은폐 | Refund UNKNOWN/RECONCILING | Provider timeout·ACK 유실 | 상태·운영 case |
+| 고객 취소 clean-cutover 오판 | 외부 DB/publication/consumer/rollback fact gate | unknown/nonzero gate 차단 | ADR-059, customer cancellation readiness report |
+| 부분 환불 뒤 이중 환불·혜택 복원 | line-level cash/benefit allocation과 source unique | 선행 부분 환불 후 취소 tie-out | ADR-036, allocation foundation ExecPlan |
+| 미완료 고객 취소의 허위 정산 | SettlementItem/Adjustment 부재와 NOT_APPLICABLE Audit | source/cause/refund 일치 및 중복 event | ADR-048, Settlement foundation ExecPlan |
 | 슬롯·재고 초과 | reservation, owner row lock, DB constraint | `PickupReservationRepositoryTest`, `StockReservationRepositoryTest`, `ReservationExpiryTest` | PostgreSQL Testcontainers 결과 |
 | 쿠폰 이중 사용 | issuance state, unique constraint | two-order contention | Testcontainers test |
 | 포인트 만료·복원 오류 | PointLot, ledger, Clock | 경계·환불 테스트 | ADR, tie-out |

@@ -8,6 +8,7 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 상태 표기:
 
 - **Ready:** Accepted Policy와 ADR/아키텍처 문서가 구현 방향을 결정함
+- **Blocked by prerequisite:** 정책은 확정됐지만 구현 선행 모델 또는 검증 gate가 닫히지 않음
 - **Scope accepted, contracts in progress:** 기능 범위는 Accepted이지만 API·이벤트·
   트랜잭션 계약이 아직 결정 진행 중이며 구현에 착수하지 않음
 
@@ -18,7 +19,7 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 | BR-03 | Order와 네 자원 Reservation | 주문 생성, PointLot 예약 시점 보장, `UNKNOWN`이어도 5분 만료; late approval은 void/refund | 한 로컬 tx, active source unique, guarded expiry/approval | ADR-005, ADR-011, ADR-013 | Ready |
 | BR-04 | MenuConfiguration, SellableStock, StockReservation | menu/options → sellable requirements, reserve → confirm/release | normalized option set, conditional update/lock, source unique | ADR-005, ADR-026 | Ready |
 | BR-05 | PickupSlot, PickupReservation | reserve → confirm/release | capacity guard, active order unique | ADR-005 | Ready |
-| BR-06 | Order, Refund, 네 자원 Reservation, NotificationDelivery, BenefitRestorationPolicy, OrderCompensationCase, AcceptanceTimeoutWork | 수락 경고·timeout·거절 보상·만료 혜택 disposition | guarded Order transition, trigger×benefit policy snapshot, idempotent compensation, case trigger, durable timeout wakeup | ADR-015, ADR-028, ADR-033, ADR-041, ADR-058, ADR-059 | Ready except BR-03 gate |
+| BR-06 | Order, Refund, 네 자원 Reservation, NotificationDelivery, BenefitRestorationPolicy, OrderCompensationCase, AcceptanceTimeoutWork | 수락 경고·timeout·거절 보상·만료 혜택 disposition | guarded Order transition, trigger×benefit policy snapshot, idempotent compensation, case trigger, durable timeout wakeup | ADR-015, ADR-028, ADR-033, ADR-041, ADR-058, ADR-059 | Existing rejection flow implemented; trigger-aware generalization blocked by ADR-059 gate |
 | BR-07 | Order | `PAID → REJECTED`, `ACCEPTED` 이후 단순 거절 금지 | optimistic version/guarded transition | Policy, ADR-015 | Ready |
 | BR-08 | Campaign, OrderLine benefit allocation | 대상 품목 coupon 계산 후 point 적용 | integer KRW/bps, immutable snapshot | ADR-004, ADR-014, ADR-024 | Ready |
 | BR-09 | Campaign, CouponIssuance | order당 coupon 하나, available/reserved/used/restored, 만료 보상 발급 | active issuance와 restoration source unique, trigger×coupon policy version, restoration disposition metadata, compensation terms·cost snapshot | ADR-024, ADR-028, ADR-041, ADR-042, ADR-043, ADR-049 | Ready |
@@ -26,9 +27,9 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 | BR-11 | Payment(type=BENEFIT_ONLY), Order와 네 자원 Reservation, OrderCompensationCase | 주문 생성 tx 안의 PG 없는 승인·예약 확정, 고객 취소 시 Refund 없는 PAYMENT NOT_REQUIRED | order/payment source unique, create/cancel tx 원자성, 공통 여섯 step | ADR-016, ADR-039 | Ready |
 | BR-12 | OrderLine, Refund, PointTransaction | 품목별 부분 환불 | snapshot allocation, refund source unique | ADR-014 | Ready |
 | BR-13 | PointAccount, PointLot/Transaction, PointRecoveryPending | 환불 회수와 이후 적립 상계 | refund reference unique, non-negative account | ADR-011, ADR-014 | Ready |
-| BR-14 | Order, Refund, PaymentCancellationRecoverySnapshot, 네 자원 Reservation, OrderCompensationCase, NotificationDelivery, ReprocessingCase, AcceptanceTimeoutWork | `PENDING_PAYMENT` 해제 전용 취소와 미수락 `PAID` 보상 취소, 소유자 전용 실행과 요약 조회, 선행 부분 환불 잔액 합성, 접수·환불 후속 알림, 정산 제외와 운영 복구 | state guard, 명령 tx 멱등, timeout work, case/source unique, refund amount/snapshot tie-out, request 3·lookup 5, customer projection, benefit-only PAYMENT NOT_REQUIRED, 자원 trigger, 두 benefit policy snapshot, accepted delivery commit gate, terminal result event, primary notification step 단조성, setup detector·2인 복구, target Audit, minimal V1 payload, clean cutover release gate | Policy, ADR-029~ADR-060 | Ready for implementation |
-| BR-15 | OrderLine, Refund | 주문 불변, 품목별 환불과 고객 전체 취소 잔액 합성 | cumulative refund guard, line allocation source unique | ADR-004, ADR-014, ADR-036 | Contracts in progress |
-| BR-16 | SettlementItem/Batch, Refund, AuditRecord | OrderCompleted 이후 Item 생성, 미완료 고객 취소 환불의 NOT_APPLICABLE 제외 증적 | source order/type unique, exclusion action/target/source unique, Order·Refund·Audit 파생 정합성 | ADR-008, ADR-017, ADR-048 | Ready |
+| BR-14 | Order, Refund, PaymentCancellationRecoverySnapshot, 네 자원 Reservation, OrderCompensationCase, NotificationDelivery, ReprocessingCase, AcceptanceTimeoutWork | `PENDING_PAYMENT` 해제 전용 취소와 미수락 `PAID` 보상 취소, 소유자 전용 실행과 요약 조회, 선행 부분 환불 잔액 합성, 접수·환불 후속 알림, 정산 제외와 운영 복구 | state guard, 명령 tx 멱등, timeout work, case/source unique, refund amount/snapshot tie-out, request 3·lookup 5, customer projection, benefit-only PAYMENT NOT_REQUIRED, 자원 trigger, 두 benefit policy snapshot, accepted delivery commit gate, terminal result event, primary notification step 단조성, setup detector·2인 복구, target Audit, minimal V1 payload, clean cutover release gate | Policy, ADR-029~ADR-060 | Blocked by ADR-059 fact gate, allocation ledger, Settlement and compensation foundations |
+| BR-15 | OrderLine, Refund | 주문 불변, 품목별 환불과 고객 전체 취소 잔액 합성 | cumulative refund guard, line allocation source unique | ADR-004, ADR-014, ADR-036 | Blocked by missing refund allocation foundation |
+| BR-16 | SettlementItem/Batch, Refund, AuditRecord | OrderCompleted 이후 Item 생성, 미완료 고객 취소 환불의 NOT_APPLICABLE 제외 증적 | source order/type unique, exclusion action/target/source unique, Order·Refund·Audit 파생 정합성 | ADR-008, ADR-017, ADR-048 | Blocked by missing Settlement implementation foundation |
 | BR-17 | SettlementBatch | 일별 OPEN→CALCULATED→CONFIRMED | store/date unique, chunk restart | ADR-017 | Ready |
 | BR-18 | Order fee snapshot, SettlementItem | 완료·환불 정산 계산 | integer KRW, immutable rate snapshot | ADR-017 | Ready |
 | BR-19 | Campaign/CouponIssuance cost snapshot, SettlementItem | 일반·보상 쿠폰의 원 부담 정산 | share sum check, immutable issuance snapshot, 미래 완료 주문에서만 비용 인식 | ADR-017, ADR-043, ADR-049 | Ready |

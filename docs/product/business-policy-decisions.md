@@ -410,9 +410,11 @@
   있다. 모든 보상 Case는 혜택 사용 여부와 관계없이 두 immutable policy version을
   `(case_id, benefit_type)` UNIQUE child FK로 snapshot한다. `OrderCancelledV1`과
   pre-release `OrderRejectedV1`은 두 전체 snapshot을 항상 담고 consumer는 현재
-  head를 조회하지 않는다. 기존 `OrderRejectedV1`은 production 발행·외부 사용·보존
-  publication이 없어 V2나 호환 계층 없이 producer와 모든 consumer를 같은 변경에서
-  갱신한다.
+  head를 조회하지 않는다. 기존 `OrderRejectedV1`을 V2나 호환 계층 없이 제자리
+  변경할 수 있는지는 ADR-059 release gate가 production 발행·외부 사용·보존
+  publication과 rollback 대상이 모두 없음을 증거로 확인한 경우에만 성립한다. 하나라도
+  존재하거나 확인할 수 없으면 기존 계약을 변경하지 않고 forward migration과
+  compatibility를 다루는 별도 ADR/ExecPlan을 먼저 확정한다.
 - **Benefit Restoration Ledger Amendment (2026-07-31):** 쿠폰·포인트 owner
   원장은 복원 결과와 trigger를 분리한다. CouponReservation은 `RESTORED`와 함께
   `ORIGINAL_RESTORED`, `COMPENSATION_ISSUED`, `SKIPPED_EXPIRED` disposition,
