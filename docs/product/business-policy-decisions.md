@@ -129,6 +129,11 @@
   있다. 변경은 다음 거절부터 적용하고 거절 event에 policy version과 값을 snapshot한다.
   `PRESERVE_ORIGINAL_EXPIRY`에서는 복원 disposition을 원장에 남기되 이미 만료된
   금액을 사용 가능하게 되살리지 않는다.
+- **Trigger×Benefit Policy Amendment (2026-07-31):** 만료 혜택 정책은
+  `STORE_REJECTION | CUSTOMER_CANCELLATION`과 `COUPON | POINTS` 조합별 네 head로
+  분리한다. 기존 매장 거절 head의 설정은 거절 coupon·points head가 각각 이어받는다.
+  각 변경은 전역 고유 ID의 append-only version을 추가하고 선택한 head만 CAS로
+  갱신한다. 운영자는 네 head를 독립적으로 변경한다.
 - **Rationale:** 결제 후 무기한 대기하는 고객 경험을 방지하고 예외 흐름을 명확하게 만든다.
 - **Affected Contexts:** Ordering, Fulfillment, Payment, Inventory, Promotion, Loyalty, Notification, Operations
 - **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation, CouponIssuance, PointAccount, NotificationDelivery
@@ -162,21 +167,343 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 고객은 주문이 `PENDING_PAYMENT` 또는 `PAID`이고 매장이 아직 `ACCEPTED`하지 않은 경우에만 직접 취소할 수 있다. `ACCEPTED` 이후 취소는 고객 직접 API로 허용하지 않고 운영자 또는 매장 취소·환불 절차로 처리한다.
-- **Rationale:** 제조 시작 이후 발생한 비용과 고객 편의를 구분하고 상태 전이를 단순화한다.
-- **Affected Contexts:** Ordering, Payment, Fulfillment, Inventory, Promotion, Loyalty
+- **Scope Confirmation Amendment (2026-07-31):** 고객 취소 구현 범위를 위 두 상태로
+  확정한다. `PENDING_PAYMENT` 취소는 슬롯·재고·쿠폰·포인트 예약 해제만으로 완결하고
+  외부 환불을 만들지 않는다. `PAID` 취소는 매장 거절과 동일한 owner 보상 대상
+  (결제 환불, 슬롯·재고 복원, 쿠폰·포인트 복원, 고객 알림)을 갖는다. `ACCEPTED`
+  이후 고객 취소는 이번 범위의 Non-goal이며, 제조 비용 부담 주체와 취소 수수료
+  정책이 Accepted 되기 전에는 상태 전이로도 허용하지 않는다. 이 amendment는
+  `store-order-lifecycle` ExecPlan이 고객 취소를 Non-goal로 둔 제약을 해제한다.
+- **Implementation Scope Closure (2026-07-31):** 이번 MVP에는 확정된 취소 Tx,
+  환불·혜택·자원 복원, 접수/환불 알림, 정산 제외, 감사, setup scanner·제한 복구·2인
+  승인, idempotency retention과 timeout work를 포함한다. ACCEPTED 이후·운영자/매장
+  취소, 고객 부분취소, 새 외부 Provider 온보딩, 실제 지급·PG 수수료, 새 분산 인프라,
+  unsafe DB 복구, legacy compensation 이행과 전체 lifecycle 리팩터링은 Non-goal이다.
+  In-scope 내구 항목을 fake/no-op/placeholder로 대체하고 200/202를 반환하지 않는다.
+- **Cancellation Window Amendment (2026-07-31):** 취소 가능 여부는 Order 상태와 이미
+  존재하는 두 deadline만으로 판정한다. 별도의 취소 제한시각 필드를 두지 않고 픽업
+  예정시각도 판정에 사용하지 않는다. `PENDING_PAYMENT`은 BR-03의
+  `reservationExpiresAt` 이전, `PAID`는 BR-06의 `acceptanceDeadlineAt` 이전까지
+  취소할 수 있다. 따라서 결제 후 취소 창은 최대 3분이며 `Order`에 새 시각 컬럼을
+  추가하지 않는다.
+- **Contention Amendment (2026-07-31):** 고객 취소는 만료 worker, 매장 수락과 자동
+  timeout 거절과 같은 Order row lock 위의 guarded transition으로 경쟁하며 분산락을
+  사용하지 않는다. 하나만 성공하고 진 명령은 자원 수량을 바꾸지 않는다. 두 deadline
+  경계에서는 시간 기반 전이가 이긴다. `now >= reservationExpiresAt`인
+  `PENDING_PAYMENT` 취소 요청은 기존 만료 materialization을 먼저 커밋한 뒤
+  `409 RESERVATION_EXPIRED`를 반환한다. `now >= acceptanceDeadlineAt`인 `PAID` 취소
+  요청은 timeout 거절 전체를 직접 materialize하지 않지만 deduplicated
+  `AcceptanceTimeoutWork`와 target Audit를 내구 저장한 뒤
+  `409 ORDER_STATE_CONFLICT`를 반환한다. 저장 실패는 503이고, commit 후 즉시
+  wakeup과 기존 periodic worker가 같은 timeout service로 거절을 확정한다. 이미
+  `ACCEPTED`, `REJECTED`, `EXPIRED` 또는 다른 원인으로 `CANCELLED`가 확정된 주문의
+  취소 요청도 `409 ORDER_STATE_CONFLICT`다.
+- **Cancellation Reason Amendment (2026-07-31):** 고객 취소 요청은 닫힌 reason code를
+  필수로 받는다. 허용 값은 `CHANGED_MIND`, `ORDER_MISTAKE`, `WAIT_TOO_LONG`,
+  `PICKUP_TIME_CONFLICT`, `PAYMENT_ISSUE`, `OTHER` 여섯 가지다. 자유 입력 상세 사유는
+  선택이며 `trim` 후 최대 200자이고 제어문자를 허용하지 않는다. 빈 문자열은 저장하지
+  않고 부재로 정규화한다. reason code는 고객이 신고한 사유이고 취소 원인
+  `cancellation_cause`는 시스템이 판정한 값이므로 두 축은 독립이다. reason code는
+  `cancellation_cause`가 `CUSTOMER_REQUEST`인 취소에만 존재한다.
+  `PAYMENT_ISSUE`는 결제수단을 바꾸고 싶거나 결제 금액을 잘못 선택했다고 고객이
+  판단해 직접 취소한 경우를 뜻하며, Provider 승인 거절로 시스템이 취소한
+  `cancellation_cause = PAYMENT_DECLINED`와 다른 사건이다.
+  이벤트, 감사 기록과 외부 결제 Provider에는 reason code만 전달하고 자유 입력 상세는
+  Order row에만 보관한다. 상세 사유를 event payload, AuditRecord, 외부 요청과
+  애플리케이션 로그에 복제하지 않는다.
+- **Authorization Amendment (2026-07-31):** 고객 취소는 주문을 소유한 고객만 실행할
+  수 있다. 운영자와 매장 구성원의 고객 주문 취소 실행은 이번 범위의 Non-goal이며
+  Authorization Matrix의 `Approved operation`은 후속 Feature로 남는다. 취소한 고객은
+  자기 주문의 취소 결과와 환불 진행 요약 상태를 조회한다. 외부 결제가 없는
+  `PENDING_PAYMENT` 취소는 환불 없음을 별도 상태로 표현하고 성공한 환불로 표시하지
+  않는다. 보상 단계별 상태, 시도 횟수와 내부 오류 코드는 운영자만 조회한다. 매장
+  구성원은 고객 취소 사실과 주문 상태만 조회하고 결제 환불 진행은 조회하지 않는다.
+- **Event Taxonomy Amendment (2026-07-31):** 고객 요청 취소는 매장 거절
+  `OrderRejectedV1`을 재사용하거나 공통 종료 event로 합치지 않고 별도
+  `OrderCancelledV1` 사실로 발행한다. 공통 보상 Case와 owner별 보상 구조를 공유하더라도
+  고객 취소와 매장 거절의 책임·actor·사유·알림 의미는 event type 수준에서 구분한다.
+  `OrderCancelledV1`은 비동기 owner 보상이 필요한 미수락 `PAID` 고객 취소에서만
+  발행한다. `PENDING_PAYMENT` 취소는 주문 명령 transaction 안의 네 예약 해제와
+  `200` 응답으로 완결하며 취소 event, 주문 보상 Case와 event publication 복구를
+  만들지 않는다.
+  event의 기본 payload는 공통 envelope, `orderId`, `cancelledAt`,
+  `couponRequired`, `pointsRequired`다. ADR-044로 Notification consumer가 제거된 뒤
+  사용처가 없는 `customerId`, `storeId`, `reasonCode`는 ADR-055에 따라 persistent
+  payload에서 제거한다.
+  required flag는 취소 transaction에서 확정한 Order 금액 snapshot으로 산출하며
+  consumer가 불필요한 owner 작업을 시작하지 않게 한다. actor, `cancellationCause`,
+  취소 전 상태, 자유 입력 `detail`, 금액, 자원 ID와 Provider reference는 담지 않는다.
+  `couponPolicy`와 `pointsPolicy`는 required flag와 무관하게 항상
+  `policyVersionId`, mode, validity days 전체 snapshot을 담는다.
+  envelope의 `correlationId`는 취소 HTTP 요청의 correlation을 전파하고 부재하면
+  서버가 생성한다. `causationId`는
+  `customer-cancellation-command:{cancellationCommandId}`이며 같은 transaction에서
+  저장하는 내부 취소 멱등 레코드 UUID를 사용한다. client `Idempotency-Key`, customer
+  ID와 자유 입력 `detail`을 event lineage나 log에 복제하지 않는다. publication
+  재시도는 최초 envelope를 그대로 사용하고 새 lineage를 만들지 않는다.
+  owner consumer의 중복 기준은 event ID가 아니라
+  `order:{orderId}:customer-cancellation:{aggregateVersion}:{step}` source reference다.
+  event consumer의 `step`은 `pickup`, `stock`, `coupon`, `points` 중 하나다.
+  Tx C1이 직접 준비하는 Payment와 Notification 작업은 같은 형식의 `payment`,
+  `notification` step을 사용하지만 event consumer는 아니다.
+  같은 Order terminal version의 event가 새 event ID로 다시 생성돼도 owner 부수효과를
+  새로 만들지 않으며 event ID는 추적 정보로만 사용한다. 외부 Provider 멱등키는
+  결제 환불 정책에서 별도로 확정한다.
+  consumer는 같은 source reference가 이미 적용됐거나 같은 owner work가 진행
+  중이면 새 부수효과와 attempt를 만들지 않고 기존 결과를 반환한다. 아직 적용 가능한
+  owner 상태면 한 번만 적용한다. 다른 source·trigger·version이 상태를 이미
+  점유했거나 현재 상태가 event와 모순이면 성공으로 간주하거나 덮어쓰지 않고
+  `COMPENSATION_SOURCE_CONFLICT`로 publication을 실패시킨다. 이 실패는 bounded
+  retry와 `MANUAL_REVIEW`로 복구하며 Order의 `CANCELLED` 전이를 되돌리지 않는다.
+  특정 listener의 publication 재시도가 소진되면 그 listener에 대응하는 단일
+  보상 step만 `MANUAL_REVIEW`와 `EVENT_PUBLICATION_RETRY_EXHAUSTED`로 전환한다.
+  Case 전체 상태는 step에서 파생해 `MANUAL_REVIEW`가 되지만 다른 owner publication과
+  step은 계속 처리한다. publication completion attempt는 보상 step의 business
+  `attemptCount`에 더하지 않는다. 이 규칙은 `OrderCancelledV1`과
+  `OrderRejectedV1`에 동일하게 적용한다.
+  V1 payload는 남은 정책 snapshot을 구현 전에 완성한 뒤 최초 운영 publication부터
+  동결한다. 이후 필수 필드 제거·이름·타입·필드 의미 변경은 `OrderCancelledV2`로
+  이행하고, 구 consumer가 무시할 수 있으며 역직렬화 기본값이 있는 선택 필드만 V1에
+  추가할 수 있다. V1 listener와 legacy listener-target-to-step mapping은 미완료 V1
+  publication이 0이고 승인된 rollback 기간이 끝날 때까지 유지한다. version 이중
+  발행은 기본 전략이 아니며 별도 ADR 없이는 사용하지 않는다.
+  Tx C1이 Refund `REQUESTED`를 이미 내구 저장하므로 Payment는 `OrderCancelledV1`
+  consumer가 아니고 `paymentRequired`도 event payload에 포함하지 않는다. PAYMENT
+  보상 step은 Refund worker가 직접 갱신한다. Refund source reference는
+  `order:{orderId}:customer-cancellation:{aggregateVersion}:payment`를 사용한다.
+  Provider 명시 거절로 발생한 `cancellation_cause = PAYMENT_DECLINED`의 event 계약은
+  이 amendment의 범위가 아니다.
+- **Paid Cancellation Transaction Amendment (2026-07-31):** 미수락 `PAID` 고객
+  취소는 단일 로컬 transaction에서 Order `CANCELLED`와 원인 필드, 최초 `202`를 담은
+  취소 멱등 레코드, `CUSTOMER_CANCELLATION` 주문 보상 Case와 여섯 step, 외부 결제
+  금액이 있으면 Refund `REQUESTED`, `ORDER_CANCELLATION_ACCEPTED`
+  NotificationDelivery `PENDING`, AuditRecord, `OrderCancelledV1`과 네 owner별
+  영속 publication을 함께 commit한다. 한 항목이라도 저장에 실패하면 전체
+  rollback하고 `202`를 반환하지 않는다. 외부 Provider 호출과 픽업 슬롯·재고·쿠폰·
+  포인트 복원은 이 transaction에 넣지 않는다. 네 자원은 commit 후 owner listener가
+  각자의 transaction에서 처리하고, Notification Provider는 delivery worker가
+  transaction과 lock 밖에서 호출한다. `PENDING_PAYMENT` 취소도 Tx C0에서 같은
+  template의 NotificationDelivery를 함께 저장하며 insert 실패 시 취소를 rollback한다.
+  두 상태의 성공 응답은 알림 발송 성공이 아니라 delivery work의 내구 저장을 뜻한다.
+- **Refund Follow-up Notification Amendment (2026-07-31):** 현금 환불액이 양수인
+  고객 취소 Refund는 실제 `SUCCEEDED` 확정 시 성공 알림을 한 번 보내고, 자동
+  REQUEST·LOOKUP 처리가 끝나 `FAILED` 또는 `MANUAL_REVIEW`가 되면 고객용 지연
+  알림을 한 번 보낸다. 진행·재시도·불명·reconciliation 중에는 후속 알림을 보내지
+  않는다. 지연 뒤 운영 복구로 성공하면 성공 알림을 추가로 보낸다. 각 알림은 Order
+  terminal version과 종류별 logical source로 중복을 막는다. 지연 문구는 내부
+  실패·수동 검토를 노출하지 않으며
+  “환불 처리가 지연되고 있습니다. 불편을 드려 죄송합니다. 최대한 빠르게
+  처리하겠습니다.”를 사용한다. `PENDING_PAYMENT`와 `BENEFIT_ONLY` 취소에는 현금
+  환불 후속 알림이 없다.
+- **Refund Notification Delivery Amendment (2026-07-31):** Payment는 고객 취소
+  Refund의 실제 성공과 자동 처리 종료 지연을 각각
+  `CustomerCancellationRefundSucceededV1`,
+  `CustomerCancellationRefundDelayedV1` 영속 event로 기록한다. Refund 결과와
+  Notification listener publication을 같은 transaction에 commit하고 Notification은
+  별도 transaction에서 stable logical source의 Delivery를 만든다. 일반
+  `PaymentRefunded`를 고객 취소 알림 근거로 재사용하거나 terminal Refund polling
+  scanner를 두지 않는다. event publication 실패를 삼키지 않으며 외부 Provider가
+  이미 성공한 뒤 local result transaction이 rollback되면 새 환불이 아니라 같은 key
+  reconciliation으로 결과를 다시 확정한다.
+- **Notification Step Scope Amendment (2026-07-31):** 공통 주문 보상 Case의
+  CUSTOMER_NOTIFICATION step은 주문 종료 직후 기본 고객 알림만 추적한다. 고객 취소
+  trigger에서는 `ORDER_CANCELLATION_ACCEPTED` Delivery의 상태를 단조롭게 반영한다.
+  환불 성공·지연 후속 event, publication과 Delivery는 이 step을 다시 열거나
+  갱신하지 않고 각각의 publication, Delivery와 ReprocessingCase에서 복구한다.
+  따라서 Case 완료는 미래 환불 후속 알림 전체의 완료를 뜻하지 않는다.
+- **Compensation Completion Notification Amendment (2026-07-31):** 고객 취소
+  OrderCompensationCase 전체 성공, 슬롯·재고 복원 또는 쿠폰·포인트 복원 완료에는
+  별도 고객 알림을 보내지 않는다. 고객 알림은 취소 접수와 현금 환불 성공·지연으로
+  제한하고, 혜택 결과는 기존 보유 내역에 반영한다. Case 완료를 원인으로
+  Notification event나 Delivery를 만들지 않는다.
+- **Prior Partial Refund Amendment (2026-07-31):** 선행 성공 부분 환불이 있는
+  미수락 `PAID` 주문도 고객 취소를 허용한다. 새 고객 취소 Refund의 현금 요청액은
+  `approvedAmountKrw - succeededRefundAmountKrw`이며 성공 누적 환불과 새 요청의 합은
+  승인액을 초과할 수 없다. 쿠폰·포인트 보상은 선행 부분 환불에서 이미 복원된 line
+  allocation을 다시 복원하지 않고 아직 복원되지 않은 잔여 allocation만 대상으로
+  한다. 선행 부분 환불이 있다는 이유만으로 `409`를 반환하지 않는다. 현재 V10
+  Refund에는 line-level 현금·혜택 allocation 원장이 없으므로 구현 전에 새 데이터
+  원천과 중복 방지 제약을 확정해야 한다.
+- **Payment Recovery Summary Amendment (2026-07-31):** 고객 summary의 state는 이번
+  고객 취소 source의 Refund 한 건에서만 파생하고 선행 Refund 상태나 보상 PAYMENT
+  step을 합성하지 않는다. summary는 최초 승인액, Tx C1 전에 성공한 환불액, 이번 고객
+  취소 요청액과 조회 시점 남은 환불 가능액을 함께 반환한다. 앞의 세 금액은 Tx C1
+  snapshot이고, 남은 환불 가능액은 최초 승인액에서 조회 시점까지 `SUCCEEDED`인 모든
+  Refund 성공액만 뺀 현재 실제 잔액이다. 진행 중·불명·실패·수동 검토 Refund는 성공
+  환불액에 포함하지 않는다. 취소 요청액이 0인 경우에만 `NOT_REQUIRED`다. 양수인데
+  고객 취소 Refund 또는 필수 snapshot이 없으면 내부 `SETUP_INCOMPLETE`와 운영
+  alert이며 고객에게는 `PROCESSING + REFUND_DELAYED`로 투영한다. snapshot이 없어
+  검증할 수 없는 금액은 0이나 현재값으로 추정하지 않고 생략한다.
+- **Setup Integrity Detection Amendment (2026-07-31):** 관련 고객·운영 조회,
+  Refund worker와 settlement consumer가 setup 손상을 발견하면 즉시 source-unique
+  `PAYMENT_CANCELLATION_SETUP` ReprocessingCase와 append-only AuditRecord를
+  transaction으로 저장한다. 고객 접근이 없는 손상은 기본 1분, batch 100의
+  violation-only scanner가 보완하고 같은 case로 수렴한다. 감지 저장이 실패하면
+  조회는 503, worker/consumer는 retry로 남기며 로그만 남기고 성공하지 않는다.
+- **Safe Setup Repair Amendment (2026-07-31):** PLATFORM_OPERATOR의
+  application-level 복구는 immutable recovery snapshot이 완전하고 Refund row만
+  누락된 경우로 제한한다. snapshot의 원 Refund ID·금액·source·Provider key로 row를
+  복원하고 과거 호출 가능성 때문에 새 REQUEST가 아니라 같은 key LOOKUP부터
+  시작한다. operator는 non-blank 사유만 입력하며 금융 값은 입력·수정하지 않는다.
+  snapshot 누락, source·금액 불일치와 기존 Refund 충돌은
+  `REPROCESSING_NOT_SAFE`로 차단하고 engineering remediation으로 남긴다.
+- **Two-person Repair Approval Amendment (2026-07-31):** 누락 Refund 안전 복구는
+  서로 다른 두 활성 PLATFORM_OPERATOR가 제안·승인해야 한다. 제안은 30분
+  `[createdAt, expiresAt)` 동안 유효하고 승인 transaction이 Order→Payment 잠금
+  아래 safe guard와 immutable fingerprint를 다시 검증한다. 만료·stale·self approval은
+  실행 없이 명시적 409로 종결한다. 제안과 결정은 각각 non-blank 사유,
+  Idempotency-Key와 append-only AuditRecord를 요구한다.
+- **Unresolved Refund Contention Amendment (2026-07-31):** 고객 취소 Tx C1은
+  Order 다음 Payment와 Refund row를 잠근다. 선행 Refund 중 `REQUESTED`,
+  `PROCESSING`, `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`가 하나라도 있으면 Order
+  전이와 취소 멱등 레코드 저장 전에 `409 PAYMENT_REFUND_UNRESOLVED`로 rollback한다.
+  `SUCCEEDED`만 취소 전 성공 환불액에 포함하고, Provider가 부수효과 없음을 명시한
+  `FAILED`는 합계에서 제외한 채 고객 취소를 허용한다. 모든 Refund 생성 경로는 Order
+  lock이 필요하면 `Order → Payment`, 아니면 Payment부터 잠그며 Payment를 잠근 뒤
+  Order를 역순으로 잠그지 않는다. lock timeout과 DB 장애는 409가 아니라
+  `503 DEPENDENCY_UNAVAILABLE`다. 차단된 같은 key 요청은 terminal 멱등 레코드를 남기지
+  않아 Refund가 확정된 뒤 같은 key로 재실행할 수 있다.
+- **Cancellation Refund Identity Amendment (2026-07-31):** 고객 취소 Refund의 내부
+  `reason`은 `CUSTOMER_ORDER_CANCELLED`이고 고객 신고 사유는 별도
+  `customer_reason_code`에 BR-14의 여섯 code 중 하나로 저장한다. source reference는
+  `order:{orderId}:customer-cancellation:{aggregateVersion}:payment`, Provider
+  idempotency key는
+  `refund:customer-cancellation:{orderId}:{aggregateVersion}`다. 최초 Provider
+  요청과 모든 lookup·reconciliation은 같은 key를 사용한다. event ID·event version,
+  client `Idempotency-Key`, customer ID와 자유 입력 `detail`은 Refund 또는 Provider
+  식별자·요청·로그에 넣지 않는다. Provider에는 `customer_reason_code`만 전달한다.
+- **Cancellation Refund Reconciliation Budget Amendment (2026-07-31):** 고객 취소
+  Refund 요청 결과가 불명확해지면 같은 Provider idempotency key로 10초, 30초, 2분,
+  5분, 15분 뒤 최대 다섯 번 조회하고 REQUEST를 다시 보내지 않는다. 다섯 번째 조회도
+  불명이거나 마지막 lookup claim이 결과 저장 전 종료되면 추가 요청·조회 없이
+  `MANUAL_REVIEW`로 전환한다. 이 lookup 예산은 매장 거절 Refund에도 동일하게
+  적용한다.
+- **Retryable Refund Failure Amendment (2026-07-31):** Provider adapter가 이번
+  호출의 부수효과 없음과 같은 key 재실행 안전을 모두 보장하고 코드에 고정된
+  Provider별 allowlist에 raw code가 포함될 때만 명시 실패를 자동 재요청한다. 최초
+  REQUEST 뒤 10초와 30초에 최대 두 번 같은 key로 재요청한다. 어느 요청이든 결과가
+  불명확해지면 REQUEST를 영구 중단하고 별도 lookup 5회 예산으로 전환한다. 미등록
+  code와 세 번째 retryable failure는 Refund `FAILED`, PAYMENT step과 Case
+  `MANUAL_REVIEW`다.
+- **Customer Refund Status Projection Amendment (2026-07-31):** 고객은 내부
+  `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`을 모두
+  `PaymentRecoverySummary.state = PROCESSING`으로 본다. 내부 `FAILED`와
+  `MANUAL_REVIEW`도 고객 state는 `PROCESSING`이지만
+  `noticeCode = REFUND_DELAYED`를 함께 반환한다. 클라이언트는 이 code에 정보 아이콘과
+  “환불 처리가 지연되고 있습니다. 불편을 드려 죄송합니다. 최대한 빠르게
+  처리하겠습니다.”라는 locale별 안내를 연결한다. 고객에게 재시도 여부·attempt·실패
+  code·수동 검토 상태를 노출하지 않고 운영자에게는 모두 제공한다.
+- **Benefit-only Cancellation Amendment (2026-07-31):** `BENEFIT_ONLY`인 미수락
+  `PAID` 주문도 일반 고객 취소와 같은 OrderCompensationCase와 여섯 step을 만든다.
+  Tx C1에서 PAYMENT step을 attempt 0, error null의 `NOT_REQUIRED`로 저장하고,
+  Refund와 Provider 호출은 만들지 않는다. recovery snapshot과 고객 요약의 네
+  금액은 모두 0이고 `noticeCode`는 없다. 나머지 다섯 step은 일반 `PAID` 취소처럼
+  처리하므로 응답은 `202`다.
+- **Confirmed Resource Restoration Amendment (2026-07-31):** 매장 거절과 고객
+  취소의 PickupReservation·StockReservation은 공통 terminal 상태
+  `RELEASED_AFTER_TERMINATION`을 사용하고 별도 `restoration_trigger`로
+  `STORE_REJECTION` 또는 `CUSTOMER_CANCELLATION`을 보존한다. 동일 source·trigger
+  중복은 수량을 다시 바꾸지 않고, 다른 source 또는 trigger 충돌은 덮어쓰지 않고
+  `COMPENSATION_SOURCE_CONFLICT`로 해당 owner step만 재시도·수동 검토한다.
+- **Benefit Policy Scope Amendment (2026-07-31):** 고객 취소용 COUPON·POINTS 정책
+  head는 각각 `PRESERVE_ORIGINAL_EXPIRY`로 시작하고 운영자가 이후 독립 변경할 수
+  있다. 모든 보상 Case는 혜택 사용 여부와 관계없이 두 immutable policy version을
+  `(case_id, benefit_type)` UNIQUE child FK로 snapshot한다. `OrderCancelledV1`과
+  pre-release `OrderRejectedV1`은 두 전체 snapshot을 항상 담고 consumer는 현재
+  head를 조회하지 않는다. 기존 `OrderRejectedV1`은 production 발행·외부 사용·보존
+  publication이 없어 V2나 호환 계층 없이 producer와 모든 consumer를 같은 변경에서
+  갱신한다.
+- **Benefit Restoration Ledger Amendment (2026-07-31):** 쿠폰·포인트 owner
+  원장은 복원 결과와 trigger를 분리한다. CouponReservation은 `RESTORED`와 함께
+  `ORIGINAL_RESTORED`, `COMPENSATION_ISSUED`, `SKIPPED_EXPIRED` disposition,
+  trigger, policy version ID와 source를 저장한다. PointTransaction은 기존
+  `RESTORE`, `COMPENSATION`, `RESTORE_SKIPPED_EXPIRED` type을 결과로 유지하고
+  trigger·policy version ID를 별도 저장한다. 같은 source·trigger·policy만 멱등
+  성공이며 다른 조합은 `COMPENSATION_SOURCE_CONFLICT`다.
+- **Compensation Coupon Terms Amendment (2026-07-31):** 만료 쿠폰을 새 issuance로
+  보상할 때 원 Campaign의 store, 할인 type/value, minimum/maximum과 대상 menu
+  집합을 issuance 소유 immutable snapshot으로 복제한다. 보상 쿠폰은 원 Campaign의
+  이후 inactive·설정 변경과 무관하게 snapshot으로 계산하되 현재 판매 불가 menu를
+  주문 가능하게 만들거나 대상을 자동 확대하지 않는다. 일반 마케팅 issuance는
+  계속 live Campaign active 검증을 따른다.
+- **Rationale:** 제조 시작 이후 발생한 비용과 고객 편의를 구분하고 상태 전이를 단순화한다. `PAID` 창은 BR-06의 수락 deadline에 의해 최대 3분이므로 고객 이탈 경로를 제공하는 비용이 제한적이다.
+- **Affected Contexts:** Ordering, Eventing, Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification, Operations
 - **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation
 - **Required Tests:**
   - 허용 상태별 취소
   - `ACCEPTED` 이후 고객 취소 거부
+  - `PREPARING`, `READY`, `COMPLETED`, `EXPIRED`, `REJECTED`, `CANCELLED`의 고객 취소 거부
   - 결제 전·후 취소의 보상 차이
+  - `PENDING_PAYMENT` 취소가 외부 환불을 만들지 않음
+  - `reservationExpiresAt`, `acceptanceDeadlineAt` 직전 취소 성공
+  - 두 deadline 정확 경계와 이후 취소 거부
+  - 새 취소 전용 시각 컬럼 부재 검증
+  - 취소와 매장 수락 동시 실행의 단일 최종 상태
+  - 취소와 timeout 자동 거절 동시 실행의 단일 보상 적용
+  - 취소와 lease 만료 동시 실행의 단일 자원 해제
+  - 허용되지 않는 reason code 거부
+  - reason code 누락 요청 거부
+  - 상세 사유 200자 경계와 초과 거부
+  - 제어문자 포함 상세 사유 거부
+  - 공백만 있는 상세 사유의 부재 정규화
+  - 상세 사유가 event payload, AuditRecord, Provider 요청과 로그에 없음
+  - `PAYMENT_ISSUE` 취소가 `CUSTOMER_REQUEST` cause로 기록됨
+  - `PAYMENT_DECLINED` 취소에 reason code가 없음
+  - 타 고객 주문 취소 거부와 조회·취소의 응답 코드 일치
+  - 매장·운영자 role의 고객 취소 endpoint 호출 거부
+  - 결제 전 취소 응답의 환불 없음 표현
+  - 고객 응답에 보상 step 상세와 상세 사유 부재
+  - 고객 취소가 `OrderCancelledV1`만 발행하고 `OrderRejectedV1`을 발행하지 않음
+  - 매장 거절이 `OrderRejectedV1`만 발행하고 `OrderCancelledV1`을 발행하지 않음
+  - `PAID` 고객 취소의 `OrderCancelledV1` 단일 발행
+  - `PENDING_PAYMENT` 고객 취소의 취소 event·보상 Case·publication 부재
+  - required flag가 Order 금액 snapshot과 일치하고 불필요한 owner 작업이 없음
+  - event 직렬화 결과에 actor·detail·금액·자원 ID·Provider reference가 없음
+  - 요청부터 event·owner work까지 correlation 유지와 raw `Idempotency-Key` 부재
+  - publication 재시도에서 최초 correlation·causation 보존
+  - 같은 Order version·같은 step의 동일/다른 event ID 중복에서 owner 부수효과 한 번
+  - source reference의 trigger·version·step 구분과 다른 원인 reference 충돌 방지
+  - 같은 source의 처리 중·완료 상태 재전달에서 attempt와 부수효과 불변
+  - 다른 source·오래된 version·모순 상태의 비덮어쓰기와 manual review 전환
+  - 한 listener 재시도 소진 시 해당 step만 manual review이고 다른 step은 계속 완료
+  - publication completion attempt와 owner business attempt의 분리
+  - 구 V1 publication의 신·구 binary 역직렬화와 listener routing
+  - legacy listener target mapping 유지와 미완료 V1 publication 소진 검증
+  - breaking payload 변경이 V1 제자리 변경 없이 V2 계약으로 분리됨
+  - `OrderCancelledV1`에 Payment publication과 `paymentRequired` 필드가 없음
+  - Tx C1 Refund source reference와 Refund worker의 PAYMENT step 갱신
+  - `PAID` 취소 `202` 시 필수 내구 묶음의 전부 존재 또는 전부 rollback
+  - Refund `REQUESTED` 저장 실패와 publication·Audit 저장 실패의 전체 rollback
+  - `202` 반환 시 외부 Provider 미호출과 네 자원·알림의 처리 중 상태 허용
+  - commit 후 owner listener 실패에서 Order `CANCELLED` 유지와 step별 복구
+  - 선행 성공 부분 환불 후 고객 취소의 남은 현금만 환불
+  - 선행 부분 환불에서 이미 복원한 line 포인트·혜택의 이중 복원 부재
+  - 성공 누적 환불액과 고객 취소 Refund 합계의 승인액 상한
+  - summary state가 고객 취소 Refund만 따르고 선행 Refund state와 독립적임
+  - 세 Tx C1 snapshot 금액과 조회 시점 실제 잔액 계산
+  - 진행 중·불명·실패 Refund의 성공 환불액 제외
+  - 필요한 Refund/snapshot 누락의 고객 지연 projection, 조건부 금액 생략과 운영
+    `SETUP_INCOMPLETE` alert
+  - 선행 Refund 상태별 취소 허용·`PAYMENT_REFUND_UNRESOLVED` 차단
+  - 부분 환불과 고객 취소 동시 실행의 Order→Payment lock 순서
+  - 409 rollback 뒤 같은 key 재시도와 terminal 멱등 레코드 부재
+  - Payment lock timeout의 503과 Order·Refund 부분 상태 부재
+  - 같은 Order terminal version의 단일 고객 취소 Refund·Provider 요청
+  - Provider 요청·lookup 전 구간의 동일 idempotency key
+  - Refund/Provider payload와 log의 자유 `detail`·client key·customer ID 부재
   - 중복 취소 멱등성
-- **ADR Required:** No
+- **ADR Required:** Yes — 고객 취소 범위와 보상 경계
 - **Revisit Conditions:** 매장별 취소 가능 시간이나 제조 단계별 수수료 정책을 도입할 때
 
 ## BR-15 부분 품목 취소 범위
 
 - **Status:** Accepted for MVP
 - **Decision:** 결제 전에는 주문 항목을 변경하지 않고 주문 전체를 취소한 뒤 새 주문을 생성한다. 결제 후에는 주문 항목 변경을 금지하고, 필요한 경우 품목 단위 부분 환불로 처리한다. 부분 환불은 매장 또는 운영자만 실행할 수 있다.
+- **Customer Cancellation Composition Amendment (2026-07-31):** 미수락 `PAID`
+  주문에 성공한 부분 환불이 있어도 고객 전체 취소를 허용한다. 전체 취소는 승인액에서
+  이미 성공한 현금 환불을 뺀 잔액만 요청하고, 부분 환불이 이미 복원한 line 혜택
+  allocation을 제외한 잔여 혜택만 복원한다. line별 성공 환불·복원 원장이 이 합성을
+  재현 가능하게 보호해야 한다.
 - **Rationale:** 결제·쿠폰·포인트·정산 금액을 다시 계산하면서 주문 원본이 변하는 문제를 방지한다.
 - **Affected Contexts:** Ordering, Payment, Promotion, Loyalty, Settlement
 - **Affected Aggregates:** Order, Payment, SettlementAdjustment
@@ -184,6 +511,8 @@
   - 결제 시작 후 주문 항목 변경 거부
   - 품목 단위 부분 환불 금액 계산
   - 반복 부분 환불 누적액 검증
+  - 부분 환불 후 고객 전체 취소의 현금·포인트·쿠폰 allocation tie-out
+  - 부분 환불에서 이미 복원된 line 혜택의 이중 복원 방지
   - 정산 전·후 부분 환불 처리 차이
 - **ADR Required:** Yes — 주문 불변 스냅샷과 부분 환불
 - **Revisit Conditions:** 고객 셀프 부분 취소나 매장 제조 전 수정 요구가 커질 때
@@ -246,6 +575,9 @@
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 적용 후 남은 결제 예정액 전부까지 사용할 수 있다. 포인트로 전액 결제되어 최종 결제액이 0원이면 외부 PG를 호출하지 않고 `BENEFIT_ONLY` 결제 기록을 생성하여 주문을 결제 완료로 처리한다.
 - **Amendment (2026-07-28):** 0원 주문은 주문 생성 Feature에 포함한다. 주문 생성 로컬 트랜잭션 안에서 임시 예약을 획득한 뒤 `BENEFIT_ONLY Payment(APPROVED)`를 생성하고 슬롯·재고·쿠폰·포인트 예약을 확정하며 Order를 `PAID`로 커밋한다. 이 주문에는 active 결제 전 lease가 남지 않고 외부 PG 호출도 발생하지 않는다.
+- **Customer Cancellation Amendment (2026-07-31):** 매장 수락 전 고객 취소는
+  Refund 없이 PAYMENT 보상 step을 `NOT_REQUIRED`로 확정한다. Provider를 호출하지
+  않고 포인트·쿠폰·슬롯·재고와 알림 보상은 일반 `PAID` 취소와 동일하게 처리한다.
 - **Rationale:** 포인트 전액 사용을 지원하면서도 0원 결제를 외부 PG에 전송하는 불필요한 의존을 제거한다.
 - **Affected Contexts:** Ordering, Loyalty, Payment
 - **Affected Aggregates:** Order, PointAccount, Payment
@@ -299,6 +631,15 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문이 `COMPLETED`된 날짜를 정산 귀속일로 사용한다. 결제 승인만 되고 픽업 완료되지 않은 주문은 정산 대상에 포함하지 않는다.
+- **Pre-acceptance Customer Cancellation Amendment (2026-07-31):** 매장 수락 전
+  고객 취소와 그 성공 Refund에는 SettlementItem과 SettlementAdjustment를 만들지
+  않는다. Settlement consumer는 Order `CUSTOMER_REQUEST` 취소, 고객 취소 Refund
+  `SUCCEEDED`, source와 SettlementItem 부재가 모두 일치할 때
+  `NOT_APPLICABLE`로 멱등 완료하고 source당 하나의 append-only
+  `SETTLEMENT_REFUND_EXCLUDED` AuditRecord를 남긴다. Audit 저장 전에는 event
+  publication을 완료하지 않는다. 운영 조회는 Order·Refund·Audit 세 원천을 조합해
+  “주문 미완료로 정산 제외”를 표시하며 0원 Adjustment나 별도 제외 원장을 만들지
+  않는다.
 - **Rationale:** 매장이 실제로 상품을 인도한 거래를 정산 대상으로 삼는다.
 - **Affected Contexts:** Ordering, Fulfillment, Settlement, Analytics
 - **Affected Aggregates:** Order, SettlementItem, SettlementBatch
@@ -344,6 +685,13 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 쿠폰 비용 부담 주체는 캠페인 생성 시 `PLATFORM`, `STORE`, `SHARED` 중 하나로 명시한다. `SHARED`인 경우 플랫폼과 매장의 부담 비율 합계는 100%여야 하며 주문 확정 시 부담액을 스냅샷으로 저장한다.
+- **Compensation Coupon Amendment (2026-07-31):** 만료된 원 쿠폰을 대체하는 보상
+  CouponIssuance는 원 issuance의 Campaign 비용 부담 주체와 platform/store basis
+  point 비율을 immutable snapshot으로 그대로 승계한다. 원 Campaign 종료·변경이나
+  현재 계약을 다시 조회하지 않는다. 보상 발급만으로 정산 원장을 만들지 않고 미래
+  완료 주문에서 실제 사용될 때 그 주문의 SettlementItem에 비용을 반영한다. 미사용·
+  만료에는 비용이 없고, snapshot 누락은 플랫폼 부담이나 현재 값으로 fallback하지
+  않고 명시적 복원 실패로 처리한다.
 - **Rationale:** 할인액이 누구의 정산액에서 차감되는지 명확히 하고 과거 캠페인의 재현성을 확보한다.
 - **Affected Contexts:** Promotion, Ordering, Settlement
 - **Affected Aggregates:** Campaign, Order, SettlementItem
@@ -445,7 +793,33 @@
   15분 시점에 최대 다섯 번 조회한다. 계속 불명이면 `MANUAL_REVIEW`와 단일
   ReprocessingCase를 남기고 자동 조회를 중단한다. 같은 key·payload 재요청은
   새 부수효과 없이 Payment의 현재 202/200/422 결과를 반환한다.
-- **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다.
+- **Customer Cancellation Amendment (2026-07-31):** 고객 취소 명령은 `PROCESSING`
+  사전등록 없이 명령 트랜잭션 하나에서 Order row lock, 멱등 레코드 조회, 취소 실행과
+  최초 응답 저장을 함께 커밋한다. 취소 트랜잭션에 외부 호출이 없어 결과 불명 구간이
+  없으므로 `IDEMPOTENCY_REQUEST_IN_PROGRESS`를 사용하지 않고, 동시 같은 key 요청은
+  Order row lock으로 직렬화되어 나중 요청이 저장된 최초 응답을 재생한다. canonical
+  payload는 `orderId`, `reasonCode`, 정규화한 `detail`이며 `orderId`를 포함하므로 같은
+  key를 다른 주문에 재사용하면 `409 IDEMPOTENCY_KEY_REUSED`다. 롤백된 요청은 레코드를
+  남기지 않아 확정 실패를 재생하지 않으며, 중복 취소는 Order 상태 guard가 막는다.
+- **Store Command Scope Amendment (2026-07-31):** 매장 주문 상태 전이 명령의 canonical
+  payload는 `orderId`, `targetState`, 정규화한 `reason` 세 값이다. 기존 구현은
+  `targetState`와 `reason`만 해싱하고 멱등 레코드의 `order_id`를 비교하지 않아, 같은
+  매장 구성원이 같은 key를 다른 주문에 재사용하면 첫 주문의 응답이 재생되고 두 번째
+  주문은 전이되지 않았다. 이는 이 정책이 정한 "키 재사용으로 다른 거래가 실행되는 것을
+  막는다"를 충족하지 못하는 구현 결함이므로 개정한다. 레코드를 찾은 뒤 `order_id`가
+  다르면 payload hash 불일치와 동일하게 `409 IDEMPOTENCY_KEY_REUSED`로 거부한다.
+  canonical payload 구성이 바뀌면 저장된 구 레코드가 새 hash와 일치할 수 없으므로
+  `operation` 값을 함께 승격한다. 이 개정의 `operation`은
+  `STORE_ORDER_TRANSITION_V2`이며 구 `STORE_ORDER_TRANSITION` 레코드는 더 이상
+  조회되지 않고 BR-26 보존 기간 뒤 정리된다. 완료 ExecPlan `store-order-lifecycle`의
+  멱등성 서술보다 이 amendment가 우선하며 해당 완료 문서는 수정하지 않는다.
+- **Replay Indicator Amendment (2026-07-31):** business response에는
+  `replayed` 필드를 두지 않는다. 고객 취소, 매장 전이와 주문 생성 등 terminal
+  command는 같은 key·payload에 저장된 최초 status/body를 그대로 반환하고 replay
+  여부는 IdempotencyRecord, metric과 structured log에서만 관측한다. 외부 결과가
+  non-terminal `UNKNOWN`인 Payment 승인·환불은 새 Provider 호출 없이 현재 durable
+  representation을 반환하는 기존 예외를 유지하되 replay 표시를 추가하지 않는다.
+- **Rationale:** 사용자의 재시도는 허용하되 키 재사용으로 다른 거래가 실행되는 것을 막는다. 명령 트랜잭션 안에 외부 호출이 있고 새 Aggregate를 만드는 명령만 사전등록 모델을 사용한다. 명령이 특정 Aggregate를 대상으로 하면 그 식별자를 canonical payload에 포함해 교차 대상 키 재사용을 거부한다.
 - **Affected Contexts:** Ordering, Payment, Settlement, Operations
 - **Affected Aggregates:** IdempotencyRecord, Order, Payment, SettlementAdjustment
 - **Required Tests:**
@@ -455,6 +829,13 @@
   - 주문 생성 최초 201·4xx·503 response 재생
   - 주문 생성 PROCESSING의 409와 Retry-After
   - 실패·UNKNOWN 상태 재요청
+  - 고객 취소 같은 key·같은 payload의 200·202 response 재생과 부수효과 부재
+  - 고객 취소 같은 key·다른 주문의 409와 첫 주문 응답 미재생
+  - 고객 취소 동시 같은 key 요청의 단일 실행
+  - 고객 취소 롤백 후 같은 key 재시도의 재실행
+  - 매장 전이 같은 key·다른 주문의 409와 첫 주문 응답 미재생
+  - 매장 전이 같은 key·같은 주문·같은 payload의 최초 응답 재생
+  - `operation` 승격 후 구 `STORE_ORDER_TRANSITION` 레코드 미조회
 - **ADR Required:** Yes — 결제 멱등성과 reconciliation
 - **Revisit Conditions:** 다중 채널 또는 외부 파트너가 자체 멱등성 범위를 요구할 때
 
@@ -462,6 +843,17 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 멱등성 레코드는 거래가 terminal 상태가 된 시점부터 90일 동안 보존한다. 진행 중이거나 `UNKNOWN` 상태인 거래의 레코드는 정리하지 않는다. 정리 작업은 chunk 단위로 실행하고 재실행 가능해야 한다.
+- **Customer Cancellation Amendment (2026-07-31):** 고객 취소 멱등 레코드는 저장
+  시점에 이미 terminal이므로 보존 기준 시각은 `created_at`이다.
+  `retention_expires_at = created_at + 90일`을 컬럼으로 materialize하고
+  `(retention_expires_at, id)` 순서의 chunk 정리 worker가 삭제한다. 정리 worker는 이번
+  범위에 포함한다.
+- **Ordering Retention Worker Amendment (2026-07-31):** 하나의 Ordering worker가
+  고객 취소와 매장 전이 멱등 table을 기본 1시간마다 각각 최대 100건의 독립
+  transaction으로 정리한다. store 기존 row도 `created_at + 90일`로
+  `retention_expires_at`을 backfill하고 같은 keyset index를 사용한다. 구
+  `STORE_ORDER_TRANSITION` operation은 V2에서 조회되지 않아도 row별 90일 전에는
+  삭제하지 않는다.
 - **Rationale:** 14일 이의제기와 일반적인 환불·운영 조사 기간보다 충분히 길게 재시도 결과를 보존한다.
 - **Affected Contexts:** Ordering, Payment, Operations
 - **Affected Aggregates:** IdempotencyRecord, Payment
@@ -470,6 +862,8 @@
   - 90일 이후 정리
   - 진행 중·UNKNOWN 제외
   - 정리 배치 중단·재실행
+  - 고객 취소 멱등 레코드의 `retention_expires_at` 경계 전후 정리
+  - store 기존 row의 createdAt+90일 backfill과 table별 cleanup 실패 격리
 - **ADR Required:** Yes
 - **Revisit Conditions:** 실제 환불·분쟁 보존 기간, 저장 비용 또는 개인정보 정책이 확정될 때
 
@@ -524,6 +918,15 @@
 - **Decision:** 금액, 포인트, 재고, 픽업 슬롯, 주문 terminal 상태, 정산, 이의제기 판정, 권한 변경과 수동 재처리는 감사 로그를 남긴다. 감사 로그에는 actorId, actorType, action, targetType, targetId, occurredAt, reason, before summary, after summary, correlationId를 포함한다. 감사 로그는 일반 비즈니스 Entity와 분리하고 애플리케이션 API로 수정·삭제하지 않는다.
 - **Order Lease Amendment (2026-07-28):** 주문 생성·BENEFIT_ONLY 승인·예약·확정·만료·해제는 변경된 Aggregate target마다 별도 AuditRecord를 남기고 같은 correlationId와 source reference로 묶는다. 고객 주문 생성은 Customer actor와 표준 reason code, 시간에 의한 만료는 SYSTEM actor와 `LEASE_DEADLINE_REACHED`를 사용한다. 자유 입력 reason은 수동·운영자 명령에서만 필수다.
 - **Retention Amendment (2026-07-28):** AuditRecord는 `occurredAt`을 `Asia/Seoul`로 변환한 같은 현지 시각의 5주년까지 보존하고 그 시각부터 retention worker의 삭제 대상이 된다. 윤년은 달력 `plusYears(5)` 규칙을 따른다. 애플리케이션 API 삭제는 계속 금지하고 내부 worker만 chunk 단위로 재실행 가능하게 삭제한다.
+- **Customer Cancellation Granularity Amendment (2026-07-31):** 고객 취소와 후속
+  보상은 상태가 바뀌거나 중요한 durable work가 생성된 business target마다 별도
+  AuditRecord를 남기고 공통 correlation과 cancellation source로 묶는다. Tx C0는
+  Order·실제 네 예약 해제·접수 Delivery, Tx C1은
+  Order·CompensationCase·Payment recovery snapshot·필요한 Refund·접수 Delivery를
+  기록한다. 후속 owner는 실제 owner 상태 변경 transaction에서 target Audit를
+  commit한다. event publication과 IdempotencyRecord는 자체 내구 원장을 사용하고,
+  자동 claim/retry attempt마다 Audit를 만들지 않는다. 자유 입력 cancellation
+  detail은 감사에 복제하지 않는다.
 - **Rationale:** 금전성·운영성 변경의 책임과 재현 가능성을 확보한다.
 - **Affected Contexts:** 전체 거래 Context, Operations
 - **Affected Aggregates:** AuditRecord

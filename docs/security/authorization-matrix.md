@@ -4,7 +4,9 @@
 |---|---:|---:|---:|---:|---:|
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
-| 고객 주문 취소 | Own and allowed state | No | No | Approved operation | No |
+| 고객 주문 취소 | Own and allowed state | No | No | Approved operation — 후속 Feature, 현재 미구현 | No |
+| 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
+| 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
@@ -14,6 +16,8 @@
 | 이의제기 생성 | No | Owned store | No | No | No |
 | 이의제기 판정 | No | No | No | No by default | Explicit permission |
 | 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
+| 누락 Refund 복구 제안 | No | No | No | Explicit permission + reason | No |
+| 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
 | 권한 변경 | No | Limited | No | Audited | No |
 | 만료 혜택 복원 정책 조회·변경 | No | No | No | Explicit permission + reason | No |
 
@@ -29,3 +33,13 @@
 
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.
+
+고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
+취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
+endpoint는 `CUSTOMER` 역할만 허용하고 매장·운영자 role의 호출은 `403`이다.
+
+취소 보상의 step 상태, 시도 횟수와 내부 오류 코드는 운영자 전용이다. 고객에게는
+축약한 환불 진행 상태만 반환한다. 내부 재시도·불명 상태는 `PROCESSING`, 자동 처리
+소진은 `PROCESSING + REFUND_DELAYED`로 표현하고 실제 실패 code와
+`MANUAL_REVIEW`는 노출하지 않는다. 고객이 입력한 자유 서술 취소 상세는 어떤
+역할에게도 API로 노출하지 않는다.

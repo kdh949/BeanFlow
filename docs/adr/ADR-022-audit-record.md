@@ -51,6 +51,10 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
 이 clarification은 2026-07-28 주문 생성과 예약 lease Feature의 결정 게이트에서
 확정했다.
 
+ADR-054는 같은 target별 granularity를 고객 취소 Tx C0/C1과 후속 owner 보상에
+확장한다. cancellation detail은 감사에 복제하지 않고 reason code만 사용하며,
+자동 worker attempt 자체와 실제 business 상태 변경을 구분한다.
+
 ## Alternatives Considered
 
 - 일반 application log만 사용

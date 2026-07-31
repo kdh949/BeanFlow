@@ -59,6 +59,39 @@ ORDER BY r.updated_at, r.id;
 상태를 read-only 확인하고 incident 절차로 복구 결정을 승인받는다. Payment,
 Order, reservation, idempotency row를 직접 갱신하지 않는다.
 
+## Customer cancellation refund identity
+
+고객 취소 Refund는 `reason = CUSTOMER_ORDER_CANCELLED`이고 고객 신고 사유 code를
+별도 저장한다. source reference와 Provider idempotency key는 다음 형식이다.
+
+```text
+order:{orderId}:customer-cancellation:{aggregateVersion}:payment
+refund:customer-cancellation:{orderId}:{aggregateVersion}
+```
+
+Provider 최초 요청과 결과 불명 이후 lookup은 같은 Provider key를 사용한다. event ID,
+client `Idempotency-Key`, customer ID와 자유 입력 상세 사유로 새 key를 만들거나
+structured log에 기록하지 않는다. 같은 Payment의 고객 취소 Refund가 두 건 보이면
+Provider를 다시 호출하지 말고 Unique Constraint 위반과 migration 상태를 먼저
+조사한다.
+
+Provider adapter 코드 allowlist가 같은-key 재실행 안전을 보장한 명시 실패만 10초와
+30초 뒤 같은 key REQUEST로 최대 두 번 재시도한다. allowlist 밖 code와 세 번째
+retryable failure는 Refund `FAILED`, PAYMENT step과 Case `MANUAL_REVIEW`다.
+
+어느 REQUEST든 결과가 불명확하면 추가 REQUEST를 금지하고 10초, 30초, 2분, 5분,
+15분 뒤 같은 key로 최대 다섯 번 조회한다. request와 lookup count는 별도이며 최대
+Provider 상호작용은 3 + 5 = 8회다. 마지막 lookup도 불명이면 `MANUAL_REVIEW`로
+전환한다. 마지막 허용 claim 뒤 worker가 종료된 경우 lease 만료 후 새 Provider 호출
+없이 수동 검토로 종결한다. 현재 구현의 단일 총 상한 5, 도달 불가능한 마지막 delay와
+`provider_request_started_at` 기반 무조건 LOOKUP 분기는 ADR-037·ADR-038 구현 시 함께
+수정해야 한다.
+
+고객은 내부 `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`을 `PROCESSING`으로만
+본다. 내부 `FAILED`·`MANUAL_REVIEW`도 고객 state는 `PROCESSING`이며
+`noticeCode = REFUND_DELAYED`로 지연 정보 아이콘만 표시한다. 운영자 화면은 실제
+state, 두 attempt count와 마지막 실패 code를 표시한다.
+
 ## Metrics and logs
 
 - `beanflow.payment.approval.attempts{outcome}`

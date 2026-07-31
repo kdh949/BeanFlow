@@ -26,6 +26,18 @@
 - `PRESERVE_ORIGINAL_EXPIRY`에서는 원 복원 시도를 원장에 남기되 이미 만료된 가치를
   사용 가능 잔액으로 만들지 않는다.
 
+### Trigger×benefit amendment (2026-07-31)
+
+- ADR-041이 단일 policy head를
+  `(STORE_REJECTION | CUSTOMER_CANCELLATION) × (COUPON | POINTS)` 네 head로
+  일반화한다.
+- version은 전역 고유 ID의 append-only row이며 변경은 새 row와 해당 head CAS로만
+  수행한다.
+- 기존 head는 두 STORE_REJECTION head가 이어받고 CUSTOMER_CANCELLATION 두 head는
+  `PRESERVE_ORIGINAL_EXPIRY`로 시작한다.
+- Case는 coupon·points version FK child row를 항상 둘 저장하고, event는 두 전체
+  snapshot을 항상 담는다. consumer는 재시도 때 현재 head를 조회하지 않는다.
+
 ## Alternatives Considered
 
 ### 고정 30일
@@ -72,3 +84,4 @@
 - [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
 - [ADR-022](ADR-022-audit-record.md)
 - [ADR-024](ADR-024-coupon-calculation-model.md)
+- [ADR-041](ADR-041-trigger-and-benefit-scoped-restoration-policy.md)

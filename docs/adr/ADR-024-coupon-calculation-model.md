@@ -49,6 +49,15 @@ Order의 할인 snapshot을 재현할 수 없다.
   발급하지 않고 `RESTORE_SKIPPED_EXPIRED` disposition을 기록한다.
 - 동일 거절 event가 중복 전달돼도 restoration source reference당 한 번만 적용한다.
 
+### 보상 issuance 조건 snapshot 보완 (2026-07-31)
+
+- ADR-043에 따라 새 보상 issuance는 원 Campaign의 매장, 할인 계산, minimum/maximum,
+  대상 menu 조건을 자체 immutable snapshot으로 소유한다.
+- 보상 issuance는 원 Campaign의 이후 `active`·설정 변경과 무관하게 snapshot으로
+  계산한다. 일반 issuance의 live Campaign active 검증은 유지한다.
+- 원 대상 menu가 현재 주문 불가이면 자동으로 대상 범위를 넓히거나 포인트로
+  전환하지 않는다.
+
 ## Alternatives Considered
 
 ### 대상 품목 합계로 최소금액과 할인 계산
@@ -110,3 +119,4 @@ Campaign이 도입될 때
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
 - [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
 - [ADR-028](ADR-028-expired-benefit-restoration-policy.md)
+- [ADR-043](ADR-043-compensation-coupon-terms-snapshot.md)

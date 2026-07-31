@@ -52,6 +52,76 @@ Behavior:
 - retry count와 last failure 노출
 - 원본 거래 성공을 부수효과 성공으로 간주하지 않음
 
+#### Source-aware event convergence
+
+- 같은 owner source reference의 중복·지연 event는 기존 진행 또는 완료 상태를
+  반환하고 새 부수효과와 attempt를 만들지 않는다.
+- 아직 적용 가능한 owner 상태에는 부수효과를 한 번만 적용한다.
+- 다른 source·trigger·aggregate version이 owner 상태를 이미 점유했거나 현재 상태가
+  event와 모순이면 원하는 terminal 상태가 같더라도 성공으로 간주하지 않는다.
+- 충돌 상태를 덮어쓰지 않고 `COMPENSATION_SOURCE_CONFLICT`로 publication을
+  실패시켜 bounded retry와 `MANUAL_REVIEW`로 보낸다.
+- Pickup·Stock의 `RELEASED_AFTER_TERMINATION`도 동일 source reference와 동일
+  `restoration_trigger`일 때만 멱등 성공이다. 다른 source 또는 trigger는 terminal
+  상태가 같아도 충돌이며 수량·원인을 덮어쓰지 않는다.
+- Coupon·Points owner도 source reference, restoration trigger와 policy version ID가
+  모두 같을 때만 멱등 성공이다. 결과 disposition이 같아도 metadata가 다르면
+  `COMPENSATION_SOURCE_CONFLICT`이며 기존 issuance·lot·잔액·원장을 바꾸지 않는다.
+- 보상 CouponIssuance의 terms snapshot이 없거나 불완전하면 live Campaign 또는
+  기본값으로 fallback하지 않는다. COUPON owner transaction을 실패시켜 publication
+  retry와 해당 step `MANUAL_REVIEW`로 보낸다.
+- 비동기 owner 충돌 때문에 이미 확정된 Order terminal 상태를 되돌리지 않는다.
+- listener publication retry가 소진되면 실패 listener에 대응하는 보상 step만
+  `MANUAL_REVIEW`로 전환한다. 실패하지 않은 owner step을 함께 실패 처리하거나 자동
+  처리를 중단하지 않는다.
+- publication completion attempt와 owner business attempt를 분리해 기록한다.
+
+#### Paid customer cancellation commit gate
+
+- `202`를 반환하기 전에 Order 취소, 취소 멱등 응답, 주문 보상 Case, 필요한 Refund
+  `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 네 owner
+  영속 event publication이 한 로컬 transaction으로 commit돼야 한다.
+- `CUSTOMER_CANCELLATION × COUPON/POINTS` policy head 또는 version이 없거나 Case의
+  두 FK snapshot과 event 전체 snapshot이 일치하지 않으면 필수 설정·commit-gate
+  손상이다. fallback policy나 최신 head 추측 없이 transaction을 rollback하고
+  `503 DEPENDENCY_UNAVAILABLE`로 실패한다.
+- 위 저장 중 하나라도 실패하면 전체 rollback하고 business success를 반환하지 않는다.
+- `PENDING_PAYMENT` 취소도 접수 NotificationDelivery 저장 실패 시 Order와 네 예약
+  해제를 함께 rollback한다. 두 상태 모두 Provider 발송은 transaction 밖에서
+  수행하고 commit 후 발송 실패로 취소를 되돌리지 않는다.
+- rollback된 요청은 취소 멱등 레코드를 남기지 않으며 같은 key 재시도가 명령을 다시
+  실행한다.
+- commit 후 owner listener나 Provider가 실패해도 Order `CANCELLED`를 되돌리지 않고
+  publication, Refund와 compensation step의 retry·unknown·manual review 상태로
+  보존한다.
+- 취소 요청 환불액이 양수인데 고객 취소 Refund 또는 Payment recovery snapshot이
+  없으면 `NOT_REQUIRED`로 대체하지 않고 내부 `SETUP_INCOMPLETE`, setup
+  ReprocessingCase와 운영 alert를 남긴다. 고객에게는
+  `PROCESSING + REFUND_DELAYED`로 투영하고 검증할 수 없는 금액을 0이나 현재값으로
+  추정하지 않는다.
+- 결과 불명 또는 진행 중인 선행 Refund가 있으면 새 고객 취소 Refund를 추측해 만들지
+  않고 Order 전이 전에 `409 PAYMENT_REFUND_UNRESOLVED`로 거부한다. Provider/DB lock
+  장애는 이 business conflict로 바꾸지 않고 503으로 노출한다.
+- 고객 취소 Refund의 최초 Provider 요청 결과가 불명확하면 요청을 재전송하지 않는다.
+  같은 key로 10초, 30초, 2분, 5분, 15분 뒤 최대 다섯 번 조회하고, 최초 요청을
+  포함한 여섯 번째 Provider 상호작용 뒤에도 불명이면 `MANUAL_REVIEW`로 전환한다.
+  마지막 허용 claim이 결과 저장 전에 끊기면 lease 만료 뒤 추가 호출 없이 수동
+  검토로 종결한다.
+- Provider가 부수효과 없음과 같은 key 재실행 안전을 보장하고 adapter 코드의
+  Provider별 allowlist에 포함된 명시 실패만 10초·30초 뒤 같은 key REQUEST로
+  재시도한다. 미등록 code 또는 세 번째 retryable failure는 Refund `FAILED`,
+  PAYMENT step과 Case `MANUAL_REVIEW`다.
+- 고객에게는 내부 자동 재시도·불명·수동 검토 상태와 실패 code를 노출하지 않는다.
+  자동 처리 중에는 `PROCESSING`, 내부 `FAILED`·`MANUAL_REVIEW`에는
+  `PROCESSING + REFUND_DELAYED`를 반환한다. 운영자 조회에는 실제 상태와 원인을
+  유지한다.
+- 고객 취소 Refund의 실제 성공 또는 자동 처리 종료 지연은 Payment result
+  transaction에서 전용 영속 event와 Notification publication을 함께 commit한다.
+  publication 저장 실패를 무시하지 않는다. 외부 Provider 성공 뒤 이 result
+  transaction이 rollback되면 새 REQUEST가 아니라 동일 key reconciliation으로
+  수렴한다. commit 뒤 Notification listener 실패는 Refund를 되돌리지 않고
+  publication retry와 ReprocessingCase로 남긴다.
+
 ### Optional capability
 
 fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용한다.

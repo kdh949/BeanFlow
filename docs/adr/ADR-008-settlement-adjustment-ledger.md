@@ -11,6 +11,11 @@
 
 확정 Batch와 Item은 불변으로 유지하고 이후 변경은 SettlementAdjustment로 기록하여 다음 정산에 상계한다.
 
+ADR-048에 따라 매장 수락 전 고객 취소는 `COMPLETED`되지 않아 SettlementItem이
+없으므로 “확정 이후 변경”에 해당하지 않는다. 그 성공 Refund에는 0원 또는 음수
+SettlementAdjustment를 만들지 않고 append-only AuditRecord로
+`NOT_APPLICABLE` 판정을 증명한다.
+
 ## Alternatives Considered
 
 - 과거 정산 재계산·덮어쓰기

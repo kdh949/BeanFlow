@@ -28,10 +28,25 @@ Order의 과거 완료 사실은 부분 환불 때문에 되돌리지 않는다.
 
 - `REJECTED`는 매장 거절 또는 수락 timeout의 Order 결과다. 결제 승인취소·환불은
   Payment/Refund 상태로 별도 추적하며 실패를 `REJECTED` 성공으로 숨기지 않는다.
-- `ACCEPTED` 이후 매장 취소는 Business Policy가 아직 없으므로 상태 전이로 허용하지
-  않는다. 정책이 결정되기 전에는 승인된 운영자 환불 명령도 Order 상태를 임의로
-  변경하지 않는다.
+- `ACCEPTED` 이후 매장 취소와 고객 취소는 Business Policy가 아직 없으므로 상태
+  전이로 허용하지 않는다. 정책이 결정되기 전에는 승인된 운영자 환불 명령도 Order
+  상태를 임의로 변경하지 않는다.
+- 고객 취소는 `PENDING_PAYMENT`와 `ACCEPTED` 이전 `PAID`에서만 `CANCELLED`로
+  전이한다(BR-14, ADR-029). `PENDING_PAYMENT` 취소는 예약 해제만 수반하고
+  `PAID` 취소는 매장 거절과 같은 owner 보상 대상을 갖는다. `CANCELLED` 자체는
+  환불·복원 완료를 뜻하지 않는다.
+- 고객 취소, 매장 수락, 3분 timeout 자동 거절은 같은 Order row에서 경쟁하며 하나만
+  성공한다.
+- acceptance deadline 이후 고객 취소는 Order를 취소하지 않고 deduplicated
+  `AcceptanceTimeoutWork`를 저장한 뒤 409를 반환한다. timeout worker가 기존
+  store-timeout 거절 전이를 실행한다.
+- `CANCELLED`는 여러 원인이 공유하는 단일 상태다. 원인은 Order의
+  `cancellationCause`(`CUSTOMER_REQUEST`, `PAYMENT_DECLINED`)로 구분하며 별도
+  Cancellation Aggregate를 두지 않는다. `CANCELLED`에서 `cancelledAt`과
+  `cancellationCause`는 필수다.
 - `BENEFIT_ONLY` 결제도 외부 PG 호출만 생략할 뿐 Order는 같은 `PAID` 전이를 사용한다.
+- `BENEFIT_ONLY` 고객 취소는 Refund 없이 PAYMENT 보상 step을 `NOT_REQUIRED`로
+  확정하고 나머지 owner 보상은 일반 `PAID` 취소와 동일하게 진행한다.
 - 주문 생성 중 payable이 0이면 `DRAFT -> PENDING_PAYMENT -> PAID`를 한 로컬
   트랜잭션에서 수행하고 외부에는 `PAID`만 커밋한다. 이 주문은 active lease나
   `EXPIRED` 전이 대상이 아니다.
@@ -59,14 +74,28 @@ Payment의 표시 상태 `PARTIALLY_REFUNDED`와 `REFUNDED`는 성공한 Refund 
 
 ```text
 REQUESTED -> PROCESSING -> SUCCEEDED
+PROCESSING -> RETRY_SCHEDULED -> PROCESSING
 PROCESSING -> FAILED
 PROCESSING -> UNKNOWN -> RECONCILING
 RECONCILING -> SUCCEEDED | FAILED | MANUAL_REVIEW
 ```
 
+- `RETRY_SCHEDULED`는 Provider adapter가 부수효과 없음과 같은 key 재실행 안전을
+  보장한 allowlist 명시 실패에만 사용한다. 최초 요청 뒤 10초·30초의 최대 두
+  재요청만 허용한다.
+- 한 번 `UNKNOWN`이 되면 `RETRY_SCHEDULED`나 `PROCESSING` REQUEST 경로로 돌아가지
+  않고 같은 key `LOOKUP`만 수행한다.
 - `UNKNOWN` 또는 `RECONCILING` 환불을 성공 환불액에 포함하지 않는다.
 - 동일 refund idempotency scope와 source reference는 외부 부작용을 한 번만 만든다.
 - 누적 `SUCCEEDED` 환불액은 승인액을 초과할 수 없다.
+- 고객 `PaymentRecoverySummary`는 내부 복구 상태를 직접 노출하지 않는다.
+  `PROCESSING`·`RETRY_SCHEDULED`·`UNKNOWN`·`RECONCILING`은 고객 `PROCESSING`,
+  `FAILED`·`MANUAL_REVIEW`는 고객 `PROCESSING + REFUND_DELAYED`로 투영한다.
+- 완전한 recovery snapshot에서 누락 Refund를 2인 승인으로 복구한 경우 Refund는
+  `RECONCILING`과 next action `LOOKUP`으로 생성된다. 새 REQUEST를 보내지 않는다.
+- 내부 `SETUP_INCOMPLETE`는 Refund state가 아니라 recovery setup 무결성 상태다.
+  고객에게는 `PROCESSING + REFUND_DELAYED`, 운영자에게는 missing artifact와
+  invariant violation으로 노출한다.
 
 ## Reservation
 
@@ -74,10 +103,16 @@ RECONCILING -> SUCCEEDED | FAILED | MANUAL_REVIEW
 RESERVED -> CONFIRMED
 RESERVED -> EXPIRED
 RESERVED -> RELEASED
-CONFIRMED -> RELEASED_BY_REJECTION
+CONFIRMED -> RELEASED_AFTER_TERMINATION
 ```
 
 같은 예약에 terminal transition은 한 번만 성공한다.
+
+`RELEASED_AFTER_TERMINATION`은
+`restorationTrigger = STORE_REJECTION | CUSTOMER_CANCELLATION`과
+`restorationSourceReference`가 모두 필수이고 다른 상태에서는 둘 다 부재다. 기존
+코드·DB의 `RELEASED_BY_REJECTION`은 forward migration에서 rename하고 거절 row는
+`STORE_REJECTION`으로 backfill한다.
 
 Payment가 `UNKNOWN`인 채 5분 lease에 도달해도 Reservation은 `EXPIRED`로 전이한다.
 뒤늦은 Provider 승인이 확인되면 만료 Order나 Reservation을 되살리지 않고 Payment의
@@ -97,6 +132,10 @@ USED -> RESTORED
 ```
 
 한 CouponIssuance는 동시에 두 주문의 `RESERVED` 또는 `USED` 상태가 될 수 없다.
+CouponReservation `RESTORED`는
+`ORIGINAL_RESTORED | COMPENSATION_ISSUED | SKIPPED_EXPIRED` disposition과
+restoration source·trigger·policy version을 함께 가진다. `SKIPPED_EXPIRED`는 새
+가용 쿠폰이 없지만 정책 적용은 성공한 상태다.
 
 ## Point use
 
@@ -121,6 +160,8 @@ USED -> RESTORED
 - 거절 복원 시 유효한 원 allocation은 가용 잔액으로 돌아간다. 만료 allocation은
   거절 event의 정책 snapshot에 따라 새 PointLot으로 보상하거나
   `RESTORE_SKIPPED_EXPIRED` 원장만 기록한다.
+- 고객 취소도 같은 결과 transaction type을 사용하고 source,
+  `CUSTOMER_CANCELLATION` trigger와 POINTS policy version ID로 원인을 구분한다.
 
 ## Notification Delivery
 
@@ -134,6 +175,29 @@ PROCESSING/RETRY_SCHEDULED -> MANUAL_REVIEW
 - attempt 1 이후 1분, 5분, 30분의 세 추가 시도만 예약한다.
 - 네 번째 실패 후 자동 재시도를 더 만들지 않는다.
 - 운영자 재처리는 같은 delivery idempotency key를 재사용하고 별도 감사 기록을 남긴다.
+- 고객 취소 CUSTOMER_NOTIFICATION step은 접수 Delivery만 추적한다. 환불 성공·지연
+  후속 Delivery는 이 step을 다시 열지 않는다.
+
+## Acceptance timeout work
+
+```text
+PENDING -> CLAIMED -> COMPLETED
+CLAIMED -> PENDING | MANUAL_REVIEW
+```
+
+같은 Order와 acceptance deadline source에는 work가 하나다. in-memory wakeup은
+latency optimization이고 durable row와 periodic worker가 복구 근거다.
+`PENDING`, `CLAIMED`, `MANUAL_REVIEW`는 retention cleanup 대상이 아니다.
+
+## Repair proposal
+
+```text
+PENDING_APPROVAL -> EXECUTED | REJECTED | EXPIRED | STALE
+```
+
+제안자는 자기 proposal을 결정할 수 없다. `APPROVE`는 Order→Payment 잠금 아래
+safe-repair guard를 다시 검증해 통과할 때만 `EXECUTED`와 누락 Refund를 같은
+transaction에서 commit한다. terminal proposal은 다시 열지 않는다.
 
 ## Settlement Batch
 
@@ -174,6 +238,11 @@ PROCESSING -> FAILED
 `PROCESSING -> COMPLETED | FAILED | MANUAL_REVIEW`를 사용한다. `COMPLETED`와
 `FAILED`는 최초 HTTP status/body를 보존하고, stuck reconciliation에서 일부
 부수효과나 결과 불명이 발견될 때만 `MANUAL_REVIEW`로 전환한다.
+
+고객 취소와 매장 전이 command idempotency row는 저장 시점에 terminal이고 별도
+PROCESSING state가 없다. 같은 key/payload에는 최초 status/body를 재생하며 business
+response에 replay indicator를 넣지 않는다. 두 table은 createdAt+90일 뒤 통합
+Ordering retention worker가 table별 독립 chunk로 정리한다.
 
 ## Reprocessing case
 
