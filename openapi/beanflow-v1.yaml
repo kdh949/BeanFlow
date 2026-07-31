@@ -1093,6 +1093,26 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        cancelledAt:
+          allOf:
+            - $ref: "#/components/schemas/DateTime"
+          description: |
+            Present only when state is CANCELLED. Required together with
+            cancellationCause by the order cancellation model (ADR-029).
+        cancellationCause:
+          allOf:
+            - $ref: "#/components/schemas/CancellationCause"
+          description: |
+            System-determined cancellation origin. Present only when state is
+            CANCELLED. Independent of the customer-declared reason code.
+        cancellationReasonCode:
+          allOf:
+            - $ref: "#/components/schemas/CancellationReasonCode"
+          description: |
+            Customer-declared reason, present only when cancellationCause is
+            CUSTOMER_REQUEST. Customer projection only; the store projection
+            (StoreOrder) never carries it. The free-text cancellation detail is
+            never exposed in any representation.
         createdAt:
           $ref: "#/components/schemas/DateTime"
         updatedAt:
@@ -1172,13 +1192,38 @@ components:
         - PICKUP_TIME_CONFLICT
         - PAYMENT_ISSUE
         - OTHER
+    CancellationCause:
+      type: string
+      description: |
+        System-determined cancellation origin. CUSTOMER_REQUEST is a customer
+        cancellation command; PAYMENT_DECLINED is a cancellation caused by an
+        explicit Provider approval decline. Only CUSTOMER_REQUEST cancellations
+        carry a customer-declared reason code.
+      enum:
+        - CUSTOMER_REQUEST
+        - PAYMENT_DECLINED
+    StoreOrder:
+      description: |
+        Store-facing Order projection. Store members see the cancellation fact
+        (state, cancelledAt, cancellationCause) so they can distinguish a
+        customer cancellation from a rejection or a declined payment, but they
+        never see the customer-declared reason code or customer refund recovery
+        progress. The free-text cancellation detail is excluded from every
+        representation.
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          not:
+            anyOf:
+              - required: [cancellationReasonCode]
+              - required: [paymentRecovery]
     StoreOrderResult:
       type: object
       additionalProperties: false
       required: [order]
       properties:
         order:
-          $ref: "#/components/schemas/Order"
+          $ref: "#/components/schemas/StoreOrder"
         compensationRecovery:
           $ref: "#/components/schemas/CompensationSummary"
     CompensationSummary:
@@ -1481,24 +1526,6 @@ components:
         included only when their durable sources are complete.
       required:
         - state
-      oneOf:
-        - required:
-            - approvedAmountKrw
-            - succeededRefundAmountBeforeCancellationKrw
-            - cancellationRequestedRefundAmountKrw
-            - remainingRefundableAmountKrw
-        - required: [state, noticeCode]
-          properties:
-            state:
-              const: PROCESSING
-            noticeCode:
-              const: REFUND_DELAYED
-          not:
-            anyOf:
-              - required: [approvedAmountKrw]
-              - required: [succeededRefundAmountBeforeCancellationKrw]
-              - required: [cancellationRequestedRefundAmountKrw]
-              - required: [remainingRefundableAmountKrw]
       properties:
         state:
           type: string
@@ -1507,9 +1534,13 @@ components:
             only. Internal PROCESSING, RETRY_SCHEDULED, UNKNOWN and RECONCILING are
             exposed as PROCESSING. Internal FAILED and MANUAL_REVIEW are also exposed
             as PROCESSING with noticeCode REFUND_DELAYED. Other Refunds and the
-            compensation PAYMENT step are not combined. NOT_REQUIRED is used only
-            when the cancellation requested refund amount is zero, including a
-            BENEFIT_ONLY cancellation with no Refund or Provider call.
+            compensation PAYMENT step are not combined. NOT_REQUIRED is used
+            exactly when the cancellation requested refund amount is zero. That
+            covers a BENEFIT_ONLY cancellation and a PENDING_PAYMENT
+            cancellation, where every amount is zero or absent, and also a PAID
+            cancellation whose approved amount was already fully returned by an
+            earlier refund, where approvedAmountKrw and
+            succeededRefundAmountBeforeCancellationKrw stay positive.
             Internal setup damage is exposed as PROCESSING with REFUND_DELAYED;
             SETUP_INCOMPLETE and missing artifact details are operator-only.
           enum:
@@ -1557,33 +1588,73 @@ components:
         lastUpdatedAt:
           $ref: "#/components/schemas/DateTime"
       allOf:
+        # A delay notice is only ever attached to the PROCESSING projection.
         - if:
             required: [noticeCode]
           then:
             properties:
               state:
                 const: PROCESSING
+        # The four allocation amounts are all-or-nothing. They are omitted, never
+        # inferred, when the durable cancellation snapshot cannot verify them
+        # (setup damage, or a PENDING_PAYMENT cancellation that has no snapshot).
         - if:
-            properties:
-              state:
-                const: NOT_REQUIRED
-            required: [state]
+            required: [approvedAmountKrw]
+          then:
+            required:
+              - succeededRefundAmountBeforeCancellationKrw
+              - cancellationRequestedRefundAmountKrw
+              - remainingRefundableAmountKrw
+        - if:
+            required: [cancellationRequestedRefundAmountKrw]
+          then:
+            required:
+              - approvedAmountKrw
+              - succeededRefundAmountBeforeCancellationKrw
+              - remainingRefundableAmountKrw
+        # A verified setup always reports the amounts. Only the delayed
+        # projection may omit them.
+        - if:
+            allOf:
+              - required: [state]
+                properties:
+                  state:
+                    enum: [REQUESTED, SUCCEEDED]
           then:
             required:
               - approvedAmountKrw
               - succeededRefundAmountBeforeCancellationKrw
               - cancellationRequestedRefundAmountKrw
               - remainingRefundableAmountKrw
+        - if:
+            allOf:
+              - required: [state]
+                properties:
+                  state:
+                    const: PROCESSING
+              - not:
+                  required: [noticeCode]
+          then:
+            required:
+              - approvedAmountKrw
+              - succeededRefundAmountBeforeCancellationKrw
+              - cancellationRequestedRefundAmountKrw
+              - remainingRefundableAmountKrw
+        # NOT_REQUIRED means only that this cancellation requested no cash. The
+        # approved amount and the refunds that succeeded before the cancellation
+        # may be positive, for example when an earlier refund already returned
+        # the full approved amount. BENEFIT_ONLY is the special case where all
+        # four amounts are zero.
+        - if:
+            properties:
+              state:
+                const: NOT_REQUIRED
+            required: [state]
+          then:
             not:
               required: [noticeCode]
             properties:
-              approvedAmountKrw:
-                const: 0
-              succeededRefundAmountBeforeCancellationKrw:
-                const: 0
               cancellationRequestedRefundAmountKrw:
-                const: 0
-              remainingRefundableAmountKrw:
                 const: 0
     CreateRefundRequest:
       type: object

@@ -42,17 +42,30 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
   | `cancellationRequestedRefundAmountKrw` | 위 두 금액의 차이, Tx C1 snapshot |
   | `remainingRefundableAmountKrw` | 조회 시점 `approvedAmountKrw - 모든 SUCCEEDED Refund 성공액 합계` |
 
-- `REQUESTED`, `PROCESSING`, `UNKNOWN`, `RECONCILING`, `FAILED`,
-  `MANUAL_REVIEW` Refund는 성공 환불액 합계와
+- `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`,
+  `FAILED`, `MANUAL_REVIEW` Refund는 성공 환불액 합계와
   `succeededRefundAmountBeforeCancellationKrw`에 포함하지 않고, 성공 전까지
   `remainingRefundableAmountKrw`를 줄이지 않는다.
 - 취소 요청액이 0인 경우에만 summary state는 `NOT_REQUIRED`다. 요청액이 양수인데
   고객 취소 Refund 또는 필수 snapshot이 없으면 내부 `SETUP_INCOMPLETE`와 운영
   alert다. ADR-050에 따라 고객 summary는 `PROCESSING + REFUND_DELAYED`이고 검증할 수
   없는 snapshot 금액은 생략한다.
-- 선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`, `RECONCILING`,
-  `MANUAL_REVIEW` 중 하나이면 Order를 전이하기 전에
+- **NOT_REQUIRED amount clarification (2026-08-01):** `NOT_REQUIRED`는
+  `cancellationRequestedRefundAmountKrw = 0`만 뜻하며 나머지 세 금액이 0이라는
+  뜻이 아니다. 선행 환불이 승인액을 모두 반환해 요청액이 0이 된 미수락 `PAID`
+  취소는 `NOT_REQUIRED`이면서 `approvedAmountKrw`와
+  `succeededRefundAmountBeforeCancellationKrw`가 양수다. 네 금액이 모두 0인 것은
+  ADR-039의 `BENEFIT_ONLY`와 승인 자체가 없는 `PENDING_PAYMENT` 취소뿐이다. API
+  schema는 `NOT_REQUIRED`에 대해 요청액 0과 `noticeCode` 부재만 강제하고 나머지
+  금액을 0으로 고정하지 않는다.
+- 선행 Refund가 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
+  `RECONCILING`, `MANUAL_REVIEW` 중 하나이면 Order를 전이하기 전에
   `409 PAYMENT_REFUND_UNRESOLVED`로 고객 취소를 거부한다.
+- **RETRY_SCHEDULED clarification (2026-08-01):** `RETRY_SCHEDULED`는 이 ADR이
+  작성된 뒤 ADR-038이 추가한 내부 Refund 상태다. 다음 같은 key REQUEST가 아직
+  due인 미확정 구간이므로 차단 상태 목록과 성공 환불액 제외 목록에 모두 포함한다.
+  이 clarification으로 BR-14, ADR-031, error catalog, transaction boundaries와
+  OpenAPI가 동일한 여섯 상태를 사용한다.
 - `FAILED`는 Provider 부수효과 없음이 명시된 실패이므로 성공 합계에서 제외하고 고객
   취소를 허용한다. `SUCCEEDED`만 취소 전 성공 환불액에 포함한다.
 - 모든 Refund 생성 경로는 Payment row lock으로 직렬화한다. Order lock도 필요하면

@@ -43,3 +43,9 @@ endpoint는 `CUSTOMER` 역할만 허용하고 매장·운영자 role의 호출�
 소진은 `PROCESSING + REFUND_DELAYED`로 표현하고 실제 실패 code와
 `MANUAL_REVIEW`는 노출하지 않는다. 고객이 입력한 자유 서술 취소 상세는 어떤
 역할에게도 API로 노출하지 않는다.
+
+Order 표현은 역할별로 분리한다. 고객용 `Order`는 `cancelledAt`,
+`cancellationCause`와 `cancellationReasonCode`를 노출한다. 매장용 `StoreOrder`는
+`cancelledAt`과 `cancellationCause`만 노출하고 `cancellationReasonCode`와
+`paymentRecovery`는 제외한다. 매장은 취소가 고객 요청인지 결제 거절인지 구분할 수
+있지만 고객이 신고한 사유와 환불 진행은 보지 않는다(ADR-030, ADR-031).

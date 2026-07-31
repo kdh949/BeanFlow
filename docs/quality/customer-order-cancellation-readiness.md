@@ -73,6 +73,11 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
   failed/manual review/setup incomplete은 `PROCESSING + REFUND_DELAYED`
 - `OrderCancelledV1`: PAID 취소에서 Fulfillment/Inventory/Promotion/Loyalty 네 consumer만
 - Settlement: 미완료 고객 취소에 Item/Adjustment 없이 source-unique NOT_APPLICABLE Audit
+- 선행 Refund 차단 상태: `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
+  `RECONCILING`, `MANUAL_REVIEW` 여섯 개. `SUCCEEDED`와 명시 `FAILED`만 허용
+- `NOT_REQUIRED`는 취소 요청액 0만 뜻하고 네 금액은 all-or-nothing으로 반환·생략
+- Order projection 분리: 고객 `Order`는 cancelledAt/cancellationCause/
+  cancellationReasonCode, 매장 `StoreOrder`는 cancelledAt/cancellationCause만
 
 ## Conflict matrix
 
@@ -91,7 +96,9 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | 처리 중 idempotency의 HTTP 의미 | API convention 일반 문구와 주문 생성 409/취소 lock 직렬화 | `RESOLVABLE_BY_RECENCY` | command별 계약으로 일반 문구를 제한 |
 | Cancellation `orderState` 범위 | OpenAPI가 전체 OrderState 허용, ADR-031은 성공 시 CANCELLED | `IMPLEMENTATION_DRIFT` | OpenAPI를 `const: CANCELLED`로 교정 |
 | detail trim/empty/control 계약 | 정책은 normalize 후 검증, OpenAPI는 raw min/max만 검사 | `RESOLVABLE_BY_RECENCY` | OpenAPI에 normalize 의미와 control-char pattern 반영 |
-| 선행 Refund unresolved 상태 | OpenAPI 설명에 RETRY_SCHEDULED 누락 | `RESOLVABLE_BY_RECENCY` | OpenAPI 차단 상태 목록에 추가 |
+| 선행 Refund unresolved 상태 | OpenAPI·closure는 RETRY_SCHEDULED 포함, BR-14·ADR-031·ADR-036·error catalog·transaction boundaries는 누락 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 product owner 확정에 따라 여섯 상태로 통일; ADR-036 clarification과 정책·계약 문서 갱신 |
+| `NOT_REQUIRED` 금액 계약 | OpenAPI는 네 금액 `const: 0` 강제, ADR-036은 요청액 0만 정의(선행 전액 환불 시 승인액 양수) | `CONTRACT_CONFLICT` | 2026-08-01 확정: OpenAPI는 요청액 0과 notice 부재만 강제하고 네 금액을 all-or-nothing으로 계약 |
+| Order 표현의 취소 필드 | ADR-050/030은 취소 시각·원인·reason code 조회를 전제, OpenAPI `Order`(additionalProperties:false)에는 필드 없음 | `CONTRACT_CONFLICT` | 2026-08-01 확정: 고객 `Order`에 세 필드 추가, 매장은 `StoreOrder` projection으로 reason code·`paymentRecovery` 제외 |
 | 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 `RejectionRefundService` | `IMPLEMENTATION_DRIFT` + `MISSING_FOUNDATION` | allocation foundation plan 10 선행 |
 | Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 코드·migration에 Settlement 없음 | `MISSING_FOUNDATION` | Settlement foundation plan 20 선행 |
 | trigger×benefit 정책과 singleton 구현 | ADR-041 대 V8/Operations singleton policy | `IMPLEMENTATION_DRIFT` | compensation foundation plan 30 |

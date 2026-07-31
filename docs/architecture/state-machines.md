@@ -116,7 +116,9 @@ CONFIRMED -> RELEASED_AFTER_TERMINATION
 `restorationTrigger = STORE_REJECTION | CUSTOMER_CANCELLATION`과
 `restorationSourceReference`가 모두 필수이고 다른 상태에서는 둘 다 부재다. 기존
 코드·DB의 `RELEASED_BY_REJECTION`은 forward migration에서 rename하고 거절 row는
-`STORE_REJECTION`으로 backfill한다.
+`STORE_REJECTION`으로 backfill한다. ADR-059 release gate가 `PASSED`인 동안에는
+backfill 대상 row가 0이므로 migration이 최종 상태 enum과 CHECK를 직접 만들며, 이
+rename/backfill 규칙은 gate가 nonzero 또는 unknown이 될 때의 계약으로 남는다.
 
 Payment가 `UNKNOWN`인 채 5분 lease에 도달해도 Reservation은 `EXPIRED`로 전이한다.
 뒤늦은 Provider 승인이 확인되면 만료 Order나 Reservation을 되살리지 않고 Payment의

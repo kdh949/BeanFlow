@@ -18,7 +18,7 @@
 | PAYMENT_RESULT_UNKNOWN | 202 representation | Poll | 승인 결과 불명, reconciliation 중이며 확정 실패가 아님 |
 | PAYMENT_REFUND_UNKNOWN | 202 representation | Poll | 환불 결과 불명, reconciliation 중이며 성공 환불액에 아직 포함하지 않음 |
 | PAYMENT_REFUND_EXCEEDED | 409 | No | 누적 환불이 승인액 초과 |
-| PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
+| PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
 | REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 |
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
@@ -36,8 +36,8 @@ HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다
 `ORDER_STATE_CONFLICT`, Order 잠금 대기가 요청 timeout을 넘기면
 `DEPENDENCY_UNAVAILABLE`이다.
 
-선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`, `RECONCILING`,
-`MANUAL_REVIEW`이면 고객 취소는 Order 전이 전에
+선행 Refund가 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
+`RECONCILING`, `MANUAL_REVIEW`이면 고객 취소는 Order 전이 전에
 `PAYMENT_REFUND_UNRESOLVED`를 반환한다. 이 응답은 취소 성공이나 Refund 실패를 뜻하지
 않는다. 선행 Refund가 `SUCCEEDED` 또는 명시적 `FAILED`로 확정된 뒤 같은
 Idempotency-Key로 다시 요청할 수 있다.

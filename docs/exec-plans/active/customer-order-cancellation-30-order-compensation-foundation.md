@@ -82,6 +82,16 @@ consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility lay
 forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibility 순서를
 따른다. 어떤 경우에도 적용된 migration checksum을 repair해 혼합 schema를 만들지 않는다.
 
+ADR-059의 replaced migration mechanics 표가 이 계획이 건드리는 네 migration을
+열거한다. ADR-029 Order 취소 컬럼, ADR-033 compensation table, ADR-040 owner
+terminal 상태와 ADR-042 복원 metadata는 모두 rename/backfill이 아니라 최종 shape
+직접 생성으로 작성한다. 각 ADR의 backfill 규칙과 precheck 실패 조건은 문서에 남아
+있고 gate가 무효화될 때의 계약이므로 삭제하거나 무시하지 않는다.
+
+precheck는 clean-cutover 경로에서도 생략하지 않고 구현한다. 각 migration은 대상
+legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill을 추측 실행하지 않고
+실패한다. 이것이 배포 시점에 gate 무효화를 감지하는 유일한 자동 장치다.
+
 ## API and Event Contracts
 
 - Store/Operations response는 `CompensationSummary`/`OperatorCompensationView`를 쓴다.
@@ -107,6 +117,9 @@ forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibilit
 - 다른 publication 계속 완료와 attempt 분리
 - store idempotency hash에 orderId 포함, V2 operation, replay body 불변
 - migration strategy별 empty/existing fixture
+- ADR-029/033/040/042 네 migration의 legacy row precheck가 후보 0에서 통과
+- 각 migration에 legacy row를 주입한 fixture에서 backfill 추측 없이 실패
+- empty database full migration 뒤 최종 shape의 CHECK·FK·unique 전수 검증
 
 ## Validation Commands
 

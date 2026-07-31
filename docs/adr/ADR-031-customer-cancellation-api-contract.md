@@ -49,6 +49,12 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
   snapshot이 없으면 내부 `SETUP_INCOMPLETE`지만 ADR-050에 따라 고객에게는
   `PROCESSING + REFUND_DELAYED`로 투영한다. snapshot이 없어 검증할 수 없는 금액은
   0이나 현재값으로 추정하지 않고 생략한다.
+- `NOT_REQUIRED`는 요청액 0만 뜻하고 나머지 세 금액의 0을 뜻하지 않는다(ADR-036,
+  2026-08-01). schema는 `NOT_REQUIRED`에 대해 `cancellationRequestedRefundAmountKrw`
+  0과 `noticeCode` 부재만 강제하고, 네 금액은 all-or-nothing으로 함께 반환하거나
+  함께 생략한다. `REQUESTED`, `SUCCEEDED`와 notice 없는 `PROCESSING`은 네 금액을
+  모두 반환해야 하며, snapshot이 없는 `PENDING_PAYMENT` 취소와 setup 손상의 지연
+  투영만 금액을 생략할 수 있다.
 - `requestBody`는 필수이며 `reasonCode`가 필수, `detail`이 선택이다. `detail`은
   1~200자이고 어떤 API 응답에도 포함하지 않는다. 기존 `reason` 필드와
   `Required only when targetState is REJECTED` 설명을 제거한다.
@@ -57,16 +63,29 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - 취소 이후 보상 진행은 새 endpoint 없이 `GET /api/v1/orders/{orderId}`의 기존
   `Order.paymentRecovery` 필드로 조회한다. `GET /orders/{orderId}/cancellations`
   같은 sub-resource를 만들지 않는다.
+- **Order projection amendment (2026-08-01):** 취소 사실은 취소 POST 응답에만
+  두지 않고 Order 표현에도 노출한다. 고객용 `Order`는 `rejectedAt`,
+  `rejectionReason`과 대칭으로 `cancelledAt`, `cancellationCause`,
+  `cancellationReasonCode`를 optional 필드로 갖는다. 세 필드는 ADR-029의 Order
+  컬럼과 존재 조건이 같고, `CANCELLED`가 아니면 부재다. 이로써 ADR-050이 요구한
+  "취소 시각과 reason code 등 독립적으로 확인 가능한 필드는 정상 반환"이 성립한다.
+- 매장용 표현은 별도 `StoreOrder` projection이다. `StoreOrderResult.order`가 이를
+  참조하며 `Order`에서 `cancellationReasonCode`와 `paymentRecovery`를 제외한다.
+  매장은 고객 취소 사실과 원인을 구분하는 데 필요한 `cancelledAt`,
+  `cancellationCause`만 보고, 고객이 신고한 사유와 환불 진행은 보지 않는다
+  (ADR-030). 자유 입력 `cancellation_detail`은 두 projection 모두에서 계속
+  부재다.
 - `Cancellation.paymentRecovery`와 고객 취소 이후 `Order.paymentRecovery`는
   `CancellationRefundRecoverySummary`를 사용한다. 결제 승인 결과 불명과 Provider
   조회 복구를 나타내는 `PaymentConfirmation.recovery`는 상태와 시각만 가진
   `PaymentApprovalRecoverySummary`를 사용하며 두 recovery schema를 공유하지 않는다.
 - 비허용 상태는 `409 ORDER_STATE_CONFLICT`, lease 만료는 `409 RESERVATION_EXPIRED`로
   BR-14 Contention Amendment를 따른다.
-- ADR-036 amendment: 선행 Refund가 `REQUESTED`, `PROCESSING`, `UNKNOWN`,
-  `RECONCILING`, `MANUAL_REVIEW`이면 Order 전이 전에
+- ADR-036 amendment: 선행 Refund가 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`,
+  `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`이면 Order 전이 전에
   `409 PAYMENT_REFUND_UNRESOLVED`를 반환한다. 이 오류는 선행 Refund가 확정된 뒤 같은
-  key로 재시도 가능하다.
+  key로 재시도 가능하다. `RETRY_SCHEDULED`는 ADR-038이 추가한 상태이며
+  2026-08-01 차단 목록에 명시했다.
 
 ## Alternatives Considered
 
@@ -129,6 +148,9 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - `PENDING_PAYMENT` 취소가 `200`, `PAID` 취소가 `202`를 반환한다.
 - 성공 응답 필드 집합이 계약과 정확히 일치하고 `detail`과 `cancellationId`가 없다.
 - `GET /api/v1/orders/{orderId}`가 취소 후 `paymentRecovery`를 반환한다.
+- 고객 `Order`가 `cancelledAt`, `cancellationCause`, `cancellationReasonCode`를
+  반환하고 `StoreOrder`는 `cancellationReasonCode`와 `paymentRecovery`를 반환하지
+  않는다.
 
 ## Required Tests
 
@@ -145,6 +167,11 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 - lease 만료 취소 `409 RESERVATION_EXPIRED`
 - 미확정 선행 Refund의 `409 PAYMENT_REFUND_UNRESOLVED`와 상태 확정 후 재시도
 - 취소 후 `GET /orders/{orderId}`의 `paymentRecovery` 반영
+- 취소 후 고객 `Order`의 `cancelledAt`·`cancellationCause`·`cancellationReasonCode`
+  반환과 비`CANCELLED` 주문의 세 필드 부재
+- `StoreOrder` 응답의 `cancellationReasonCode`·`paymentRecovery` 부재와
+  `cancelledAt`·`cancellationCause` 존재
+- 두 projection 모두에서 `cancellation_detail` 부재
 - `PaymentConfirmation.recovery`와 Cancellation/Order `paymentRecovery`의 schema
   참조 분리
 - 자원 해제 실패 시 `200`이 아닌 `503 DEPENDENCY_UNAVAILABLE`
