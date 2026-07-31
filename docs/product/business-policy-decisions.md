@@ -130,10 +130,12 @@
   `PRESERVE_ORIGINAL_EXPIRY`에서는 복원 disposition을 원장에 남기되 이미 만료된
   금액을 사용 가능하게 되살리지 않는다.
 - **Trigger×Benefit Policy Amendment (2026-07-31):** 만료 혜택 정책은
-  `STORE_REJECTION | CUSTOMER_CANCELLATION`과 `COUPON | POINTS` 조합별 네 head로
-  분리한다. 기존 매장 거절 head의 설정은 거절 coupon·points head가 각각 이어받는다.
-  각 변경은 전역 고유 ID의 append-only version을 추가하고 선택한 head만 CAS로
-  갱신한다. 운영자는 네 head를 독립적으로 변경한다.
+  주문 종료 범위에서 `STORE_REJECTION | CUSTOMER_CANCELLATION`과
+  `COUPON | POINTS` 조합별 네 head로 분리한다. 기존 매장 거절 head의 설정은 거절
+  coupon·points head가 각각 이어받는다. 각 변경은 전역 고유 ID의 append-only
+  version을 추가하고 선택한 head만 CAS로 갱신한다. ADR-063이 부분 환불 포인트 전용
+  `PARTIAL_REFUND × POINTS` head를 추가하므로 운영 정책 API의 현재 head는 총 다섯
+  개다. `PARTIAL_REFUND × COUPON`은 허용하지 않는다.
 - **Rationale:** 결제 후 무기한 대기하는 고객 경험을 방지하고 예외 흐름을 명확하게 만든다.
 - **Affected Contexts:** Ordering, Fulfillment, Payment, Inventory, Promotion, Loyalty, Notification, Operations
 - **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation, CouponIssuance, PointAccount, NotificationDelivery
@@ -325,11 +327,13 @@
 - **Prior Partial Refund Amendment (2026-07-31):** 선행 성공 부분 환불이 있는
   미수락 `PAID` 주문도 고객 취소를 허용한다. 새 고객 취소 Refund의 현금 요청액은
   `approvedAmountKrw - succeededRefundAmountKrw`이며 성공 누적 환불과 새 요청의 합은
-  승인액을 초과할 수 없다. 쿠폰·포인트 보상은 선행 부분 환불에서 이미 복원된 line
+  승인액을 초과할 수 없다. 포인트 보상은 선행 부분 환불에서 이미 복원된 line
   allocation을 다시 복원하지 않고 아직 복원되지 않은 잔여 allocation만 대상으로
-  한다. 선행 부분 환불이 있다는 이유만으로 `409`를 반환하지 않는다. 현재 V10
-  Refund에는 line-level 현금·혜택 allocation 원장이 없으므로 구현 전에 새 데이터
-  원천과 중복 방지 제약을 확정해야 한다.
+  한다. 부분 환불의 coupon allocation은 귀속 원장이며 원 쿠폰을 복원하지 않으므로
+  고객 취소의 COUPON step은 원 CouponIssuance를 한 번만 복원한다. 선행 부분 환불이
+  있다는 이유만으로 `409`를 반환하지 않는다. 현재 V10 Refund에는 line-level 현금·
+  포인트 복원·coupon 귀속 allocation 원장이 없으므로 구현 전에 새 데이터 원천과
+  중복 방지 제약을 확정해야 한다.
 - **Payment Recovery Summary Amendment (2026-07-31):** 고객 summary의 state는 이번
   고객 취소 source의 Refund 한 건에서만 파생하고 선행 Refund 상태나 보상 PAYMENT
   step을 합성하지 않는다. summary는 최초 승인액, Tx C1 전에 성공한 환불액, 이번 고객
@@ -503,7 +507,8 @@
   - `202` 반환 시 외부 Provider 미호출과 네 자원·알림의 처리 중 상태 허용
   - commit 후 owner listener 실패에서 Order `CANCELLED` 유지와 step별 복구
   - 선행 성공 부분 환불 후 고객 취소의 남은 현금만 환불
-  - 선행 부분 환불에서 이미 복원한 line 포인트·혜택의 이중 복원 부재
+  - 선행 부분 환불에서 이미 복원한 line 포인트의 이중 복원 부재
+  - 부분 환불 coupon 귀속을 복원으로 오인하지 않고 전체 종료에서 원 쿠폰 한 번 복원
   - 성공 누적 환불액과 고객 취소 Refund 합계의 승인액 상한
   - summary state가 고객 취소 Refund만 따르고 선행 Refund state와 독립적임
   - 세 Tx C1 snapshot 금액과 조회 시점 실제 잔액 계산
@@ -531,9 +536,11 @@
 - **Decision:** 결제 전에는 주문 항목을 변경하지 않고 주문 전체를 취소한 뒤 새 주문을 생성한다. 결제 후에는 주문 항목 변경을 금지하고, 필요한 경우 품목 단위 부분 환불로 처리한다. 부분 환불은 매장 또는 운영자만 실행할 수 있다.
 - **Customer Cancellation Composition Amendment (2026-07-31):** 미수락 `PAID`
   주문에 성공한 부분 환불이 있어도 고객 전체 취소를 허용한다. 전체 취소는 승인액에서
-  이미 성공한 현금 환불을 뺀 잔액만 요청하고, 부분 환불이 이미 복원한 line 혜택
-  allocation을 제외한 잔여 혜택만 복원한다. line별 성공 환불·복원 원장이 이 합성을
-  재현 가능하게 보호해야 한다.
+  이미 성공한 현금 환불을 뺀 잔액만 요청하고, 부분 환불이 이미 복원한 line 포인트
+  allocation을 제외한 잔여 포인트만 복원한다. 부분 환불은 쿠폰을 복원하지 않으므로
+  이후 주문 전체 종료 시 원 CouponIssuance를 기존 종료 정책에 따라 한 번만 복원한다.
+  line별 성공 현금 환불·포인트 복원 원장과 coupon 귀속 원장이 이 합성을 재현 가능하게
+  보호해야 한다.
 - **Rationale:** 결제·쿠폰·포인트·정산 금액을 다시 계산하면서 주문 원본이 변하는 문제를 방지한다.
 - **Affected Contexts:** Ordering, Payment, Promotion, Loyalty, Settlement
 - **Affected Aggregates:** Order, Payment, SettlementAdjustment
@@ -542,7 +549,8 @@
   - 품목 단위 부분 환불 금액 계산
   - 반복 부분 환불 누적액 검증
   - 부분 환불 후 고객 전체 취소의 현금·포인트·쿠폰 allocation tie-out
-  - 부분 환불에서 이미 복원된 line 혜택의 이중 복원 방지
+  - 부분 환불에서 이미 복원된 line 포인트의 이중 복원 방지
+  - 부분 환불 성공 시 CouponIssuance 상태 불변과 이후 전체 종료 시 한 번만 복원
   - 정산 전·후 부분 환불 처리 차이
 - **ADR Required:** Yes — 주문 불변 스냅샷과 부분 환불
 - **Revisit Conditions:** 고객 셀프 부분 취소나 매장 제조 전 수정 요구가 커질 때
@@ -625,6 +633,23 @@
 - **Status:** Accepted for MVP
 - **Decision:** 주문 확정 시 쿠폰 할인액, 사용 포인트, 현금 결제액을 주문 항목별로 배분해 스냅샷으로 저장한다. 배분은 각 항목의 할인 전 금액 비율을 기준으로 하고, 원 미만 버림 후 남는 차액은 금액이 큰 항목, 동일하면 주문 항목 순서가 빠른 항목부터 1원씩 배분한다. 품목 부분 환불 시 해당 항목에 저장된 현금 결제액을 환불하고, 사용 포인트를 복원하며, 쿠폰 할인액은 현금으로 환급하지 않는다.
 - **Sequential Allocation Amendment (2026-07-28):** 대상 메뉴가 제한된 쿠폰은 대상 OrderLine의 할인 전 금액만 기준으로 대상 품목에 배분한다. 포인트는 쿠폰 적용 뒤 각 OrderLine에 남은 금액 비율로 모든 품목에 배분하고, 현금 결제액은 품목별 `gross - coupon - points` 잔액이다. 각 배분 단계에서 원 미만을 버린 뒤 남는 차액은 해당 단계 기준 금액이 큰 품목, 동일하면 주문 항목 순서가 빠른 품목부터 1원씩 배분한다. 이 amendment가 앞 문장의 공통 할인 전 금액 기준보다 우선한다.
+- **Partial Refund Coupon Clarification (2026-08-01):** 품목 부분 환불은 원
+  CouponIssuance를 복원하거나 새 보상 CouponIssuance를 발급하지 않는다. 쿠폰은
+  `USED` 상태를 유지하고 Promotion 복원 작업도 시작하지 않는다. 환불 line의 coupon
+  allocation은 환불·정산 tie-out과 감사에 사용하는 귀속 원장이지 복원 성공액이
+  아니다. 따라서 선행 부분 환불의 coupon allocation을 이후 주문 전체 종료의 쿠폰
+  복원 대상에서 차감하지 않는다. 주문 전체가 고객 취소 또는 매장 거절로 종료될 때만
+  기존 종료 정책과 source-aware 제약으로 원 쿠폰을 최대 한 번 복원한다.
+- **Expired Point Restoration Amendment (2026-08-01):** 부분 환불 포인트 복원은
+  전용 `PARTIAL_REFUND × POINTS` policy head와 Refund 요청 transaction에 고정한
+  immutable version을 사용한다. 초기 mode는 `COMPENSATE_WITH_NEW_ISSUANCE`, 유효일수는
+  30일이다. 원 PointLot이 환불 성공 시각에 유효하면 원 lot으로 복원하고 이미
+  만료됐으면 같은 가치와 original lot·issuer/cost lineage를 보존한 새 PointLot을 환불
+  성공 시각부터 30일 유효하게 발급한다. 운영자는 이후 새 version으로 mode와 유효일수를
+  변경할 수 있으며 변경 전 Refund에는 소급하지 않는다. 부분 환불은 PointReservation
+  전체 상태를 변경하지 않고 allocation별 원장만 기록하며 후속 주문 전체 종료는 이미
+  복원된 allocation을 제외한 잔여 포인트만 처리한다. `PARTIAL_REFUND × COUPON` policy
+  head는 만들지 않는다.
 - **Rationale:** 환불 시점에 정책을 다시 계산하지 않고 주문 당시 결과를 재현하기 위함이다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Payment, Settlement
 - **Affected Aggregates:** Order, OrderLine, Payment, PointAccount, SettlementAdjustment
@@ -635,6 +660,11 @@
   - 나머지 1원 배분의 결정성
   - 같은 품목 반복 환불 방지
   - 환불 후 승인액·포인트·정산액 tie-out
+  - 부분 환불 성공 시 CouponIssuance 상태 불변과 Promotion 복원 호출 부재
+  - 선행 부분 환불 후 주문 전체 종료 시 원 쿠폰의 단일 복원
+  - 부분 환불 시 PointLot 만료 -1ns/at/+1ns의 원 lot 복원·30일 보상 lot 분기
+  - 정책 변경 전후 Refund의 version snapshot 재현과 중복 보상 lot 부재
+  - 부분 환불 뒤 PointReservation USED 유지와 후속 전체 종료의 잔여 포인트만 복원
 - **ADR Required:** Yes — 부분 환불 배분 정책
 - **Revisit Conditions:** 쿠폰별 환급 가능 정책 또는 묶음 상품 환불 정책이 도입될 때
 

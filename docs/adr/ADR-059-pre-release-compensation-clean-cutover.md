@@ -62,6 +62,13 @@ release gate가 PASSED인 동안 다음 pre-release migration 서술은 모두 "
 | ADR-040 | `RELEASED_BY_REJECTION` → `RELEASED_AFTER_TERMINATION` rename과 trigger backfill | 대상 row 0. V9 대체 migration이 최종 상태 enum과 CHECK를 직접 만든다 |
 | ADR-042 | 기존 `STORE_REJECTION` 복원 row의 trigger·policy version backfill과 precheck 실패 | 대상 row 0. precheck는 실행되지만 후보 row가 없어 통과한다 |
 
+- **ExecPlan ownership clarification (2026-08-01):** 이 표는 migration 실행 방식만
+  열거하며 하위 ExecPlan의 소유 범위를 뜻하지 않는다. ADR-033/040/042 schema와
+  precheck는 `30-order-compensation-foundation`이 소유한다. ADR-029의 Order 취소
+  네 컬럼·세 CHECK와 precheck는 해당 필드를 Domain/JPA command에 연결하는
+  `40-command`가 단독 소유한다. Plan 30은 ADR-029 migration을 생성하거나 완료 조건으로
+  요구하지 않는다.
+
 - 각 ADR의 backfill 규칙과 precheck 실패 조건은 삭제하지 않는다. gate가 nonzero
   또는 unknown이 되면 그 서술이 그대로 forward-migration 경로의 계약이 된다.
 - clean-cutover 경로에서도 precheck 자체는 구현하고 실행한다. "row가 없어야 한다"는

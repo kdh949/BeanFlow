@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-30
+- **Amended by:** ADR-041의 trigger×benefit 분리, ADR-063의 부분 환불 POINTS head
 
 ## Context
 
@@ -37,6 +38,12 @@
   `PRESERVE_ORIGINAL_EXPIRY`로 시작한다.
 - Case는 coupon·points version FK child row를 항상 둘 저장하고, event는 두 전체
   snapshot을 항상 담는다. consumer는 재시도 때 현재 head를 조회하지 않는다.
+
+### Partial-refund points amendment (2026-08-01)
+
+- ADR-063이 `(PARTIAL_REFUND, POINTS)` head를 추가한다. 현재 정책 API는 종료용 네
+  head와 부분 환불용 한 head, 총 다섯 head를 반환한다.
+- `(PARTIAL_REFUND, COUPON)`은 허용하지 않는다. 부분 환불은 쿠폰을 복원하지 않는다.
 
 ## Alternatives Considered
 

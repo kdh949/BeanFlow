@@ -16,6 +16,8 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 - `OrderRejectedV1`은 customer/store/actor/reason과 단일 policy를 담는다.
 - publication retry 소진은 모든 미완료 step을 MANUAL_REVIEW로 바꾼다.
 - ADR-033/034/040~043/055/059는 목표 공통 모델을 정의한다.
+- Plan 10은 ADR-063에 따라 최종 다섯 policy head/version 저장소와 운영 API를 먼저
+  구현한다. 이 계획은 그중 종료용 네 head를 소비한다.
 - 00 plan에서 모든 non-local 환경·artifact가 0으로 확인돼 ADR-059 gate가 통과했다.
   이 계획은 clean-cutover migration/event 전략을 입력으로 사용할 수 있다.
 
@@ -31,7 +33,7 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 ### In Scope
 
 - OrderCompensationCase/Step, trigger와 두 policy child snapshot
-- trigger×COUPON/POINTS 네 policy head와 운영 API
+- 기존 종료용 네 policy head를 Case의 두 policy child snapshot에 연결
 - Pickup/Stock 공통 termination release와 source/trigger conflict
 - Coupon/Points disposition, policy metadata와 보상 coupon terms/cost snapshot
 - `OrderRejectedV1` 목표 shape와 네/기존 owner consumer migration
@@ -40,6 +42,8 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 ### Non-goals
 
 - 고객 취소 HTTP command와 Refund 생성
+- ADR-029 Order 취소 컬럼·CHECK와 해당 migration precheck
+- policy head/version table, seed와 운영 목록/PATCH API migration
 - release gate를 우회한 V8/V1 변경
 - legacy 호환 전략의 임의 선택
 - 새 broker 또는 분산 lock
@@ -82,11 +86,17 @@ consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility lay
 forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibility 순서를
 따른다. 어떤 경우에도 적용된 migration checksum을 repair해 혼합 schema를 만들지 않는다.
 
-ADR-059의 replaced migration mechanics 표가 이 계획이 건드리는 네 migration을
-열거한다. ADR-029 Order 취소 컬럼, ADR-033 compensation table, ADR-040 owner
-terminal 상태와 ADR-042 복원 metadata는 모두 rename/backfill이 아니라 최종 shape
-직접 생성으로 작성한다. 각 ADR의 backfill 규칙과 precheck 실패 조건은 문서에 남아
-있고 gate가 무효화될 때의 계약이므로 삭제하거나 무시하지 않는다.
+ADR-059의 replaced migration mechanics 표는 실행 방식을 열거하며 이 계획의 소유
+목록이 아니다. 이 계획은 ADR-033 compensation table, ADR-040 owner terminal 상태와
+ADR-042 복원 metadata의 세 migration만 최종 shape 직접 생성으로 작성한다. ADR-029
+Order 취소 컬럼·CHECK와 precheck는 실제 필드를 Domain/JPA command에 연결하는 Plan
+40이 단독 소유한다. 각 ADR의 backfill 규칙과 precheck 실패 조건은 문서에 남아 있고
+gate가 무효화될 때의 계약이므로 삭제하거나 무시하지 않는다.
+
+Policy version/head table, 다섯 seed와 운영 API는 Plan 10의 단일 소유다. 이 계획은
+같은 migration을 만들지 않고
+`(STORE_REJECTION | CUSTOMER_CANCELLATION) × (COUPON | POINTS)` 종료용 네 head를
+조회해 Case child FK snapshot을 저장한다.
 
 precheck는 clean-cutover 경로에서도 생략하지 않고 구현한다. 각 migration은 대상
 legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill을 추측 실행하지 않고
@@ -106,7 +116,7 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 
 1. 00 결과에 맞는 migration/event compatibility 전략을 확정한다.
 2. 공통 Case/step/trigger/two-policy domain과 schema를 구현한다.
-3. 네 policy head와 운영 API를 구현한다.
+3. Plan 10의 종료용 네 policy head를 Case child snapshot에 연결한다.
 4. Pickup/Stock과 Coupon/Points owner 복원을 공통 계약으로 전환한다.
 5. store rejection producer/consumer와 API를 회귀 없이 전환한다.
 6. listener별 publication exhaustion과 recovery를 구현한다.
@@ -122,9 +132,10 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 - 다른 publication 계속 완료와 attempt 분리
 - store idempotency hash에 orderId 포함, V2 operation, replay body 불변
 - migration strategy별 empty/existing fixture
-- ADR-029/033/040/042 네 migration의 legacy row precheck가 후보 0에서 통과
-- 각 migration에 legacy row를 주입한 fixture에서 backfill 추측 없이 실패
+- ADR-033/040/042 세 migration의 legacy row precheck가 후보 0에서 통과
+- 세 migration 각각에 legacy row를 주입한 fixture에서 backfill 추측 없이 실패
 - empty database full migration 뒤 최종 shape의 CHECK·FK·unique 전수 검증
+- policy head/version/API migration 중복 부재와 Plan 10 schema 소비
 
 ## Validation Commands
 
@@ -150,7 +161,7 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 
 - [x] 2026-07-31 migration/event strategy gate — ADR-059 clean cutover
 - [ ] common case/schema
-- [ ] policy heads
+- [ ] termination policy snapshot integration
 - [ ] owner restoration
 - [ ] store rejection regression
 - [ ] publication recovery
@@ -167,6 +178,8 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 | 2026-07-31 | Accepted existing | trigger-aware 공통 Case와 두 benefit snapshot | 거절/취소 공통 불변식 | ADR-033/041 |
 | 2026-07-31 | Blocked | migration 전략은 00 fact gate 뒤 확정 | 운영 상태 추측 금지 | ADR-059 |
 | 2026-07-31 | Unblocked | ADR-059 clean-cutover 전략 사용 | 운영 상태 evidence에서 모든 외부 항목 0 | release-gate evidence |
+| 2026-08-01 | Accepted | ADR-029 Order 취소 migration은 Plan 40이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 40 |
+| 2026-08-01 | Accepted | 공통 five-head policy 기반은 Plan 10이 단독 구현하고 이 계획은 종료용 네 head를 소비 | 부분 환불 선행조건과 migration 중복 방지 | ADR-063, Plan 10 |
 
 ## Outcomes & Retrospective
 
@@ -177,3 +190,4 @@ domain/schema/owner migration과 검증은 아직 완료되지 않았다.
 
 - 2026-07-31: readiness audit에서 최초 작성.
 - 2026-07-31: owner release evidence로 00 gate가 통과해 clean-cutover 전략을 확정.
+- 2026-08-01: policy head/version/API 구현 소유권을 Plan 10으로 이동.

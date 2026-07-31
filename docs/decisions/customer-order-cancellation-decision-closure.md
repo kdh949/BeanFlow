@@ -3,8 +3,8 @@
 이 표는 고객 취소 구현에 필요한 제품·구조 결정을 canonical source에 연결한다.
 `Canonical documents aligned=Yes`는 최신 Accepted amendment까지 문서가 일치한다는
 뜻이다. `Product owner confirmed=Yes`는 2026-07-31 product owner가 이 표의 모든 최종
-결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했고, 2026-08-01 자 여섯 행은
-같은 product owner가 문서 간 모순 검토 결과를 보고 추가로 확정했다는 뜻이다. 문서
+결정과 clean-cutover 운영 사실을 명시적으로 승인·확인했고, 2026-08-01 자 후속 행은
+같은 product owner가 문서 간 모순·모호성 검토 결과를 보고 추가로 확정했다는 뜻이다. 문서
 정합성 판정과 승인 증거는 서로 다른 열로 유지한다.
 
 | Topic | Final decision | Canonical source | Canonical documents aligned | Product owner confirmed | Date | Prerequisite |
@@ -23,7 +23,7 @@
 | Customer projection | 내부 진행/불명은 PROCESSING, 실패/manual/setup 손상은 PROCESSING+REFUND_DELAYED | ADR-038, ADR-050 | Yes | Yes | 2026-07-31 | snapshot/setup detector |
 | BENEFIT_ONLY | Refund 없음, PAYMENT NOT_REQUIRED, 네 금액 0, C1 202 | ADR-039 | Yes | Yes | 2026-07-31 | common Case |
 | Compensation model | trigger-aware OrderCompensationCase와 six steps | ADR-033 | Yes | Yes | 2026-07-31 | migration strategy |
-| Benefit policy | trigger×COUPON/POINTS 네 head와 Case당 두 snapshot | ADR-041 | Yes | Yes | 2026-07-31 | policy foundation |
+| Benefit policy | 종료용 trigger×COUPON/POINTS 네 head와 PARTIAL_REFUND×POINTS 한 head; 종료 Case당 두 snapshot | ADR-041, ADR-063 | Yes | Yes | 2026-08-01 | Plan 10 policy foundation |
 | Owner resource state | common RELEASED_AFTER_TERMINATION + trigger/source | ADR-040 | Yes | Yes | 2026-07-31 | owner migration |
 | Cancellation event | PAID에서 four-owner `OrderCancelledV1`; Payment/Notification 제외 | ADR-034, ADR-044 | Yes | Yes | 2026-07-31 | event compatibility strategy |
 | Event payload | customer/store/reason/payment/detail 없는 최소 payload | ADR-055 | Yes | Yes | 2026-07-31 | contract serialization test |
@@ -45,6 +45,12 @@
 | Refund attempt 예산 | REQUEST 3과 LOOKUP 5는 독립 예산이고 전체 상호작용 상한은 8; 전체 `attempt_count`에 6 상한 없음 | ADR-038, ADR-037, ADR-036 | Yes | Yes | 2026-08-01 | 분리 attempt schema |
 | PENDING_PAYMENT 금액 | `NOT_REQUIRED`이면서 네 금액을 0으로 표현하지 않고 함께 생략; 네 금액 0은 BENEFIT_ONLY뿐 | ADR-031, ADR-036, ADR-050, OpenAPI | Yes | Yes | 2026-08-01 | 조건부 금액 계약 |
 | 매장 보상 projection | 매장은 `trigger`·case `state`·`updatedAt`만 담은 `StoreCompensationSummary`; step·attempt·error·caseId·policy version은 운영자 전용 | ADR-030, ADR-033, authorization matrix, OpenAPI | Yes | Yes | 2026-08-01 | 공통 compensation foundation |
+| 부분 환불 쿠폰 | 쿠폰은 복원하지 않고 allocation은 귀속·감사 원장으로만 저장; 후속 전체 종료가 원 쿠폰을 한 번 복원 | BR-12, ADR-014, ADR-036 | Yes | Yes | 2026-08-01 | allocation foundation |
+| Refund 비동기 projection | 요청 금액은 항상 반환하고 현금·포인트 상태와 확정 금액은 owner별로 분리 | ADR-061, OpenAPI | Yes | Yes | 2026-08-01 | Payment/Loyalty query composition |
+| 부분 환불 만료 포인트 | PARTIAL_REFUND×POINTS 기본 COMPENSATE_WITH_NEW_ISSUANCE/30일; PointReservation은 USED 유지 | ADR-063 | Yes | Yes | 2026-08-01 | policy snapshot과 allocation 원장 |
+| Policy foundation 소유권 | 최종 다섯 head 저장소·seed·운영 API는 Plan 10이 단독 구현; Plan 30은 종료용 네 head 소비 | ADR-063, Plan 10, Plan 30 | Yes | Yes | 2026-08-01 | migration 중복 부재 |
+| Order 취소 migration 소유권 | ADR-029의 네 컬럼·세 CHECK·precheck는 Plan 40이 단독 구현 | ADR-059, Plan 30, Plan 40 | Yes | Yes | 2026-08-01 | command mapping과 동시 반영 |
+| Settlement item 발견 | batch-scoped item 목록 API로 store member가 dispute용 itemId를 조회 | ADR-062, OpenAPI | Yes | Yes | 2026-08-01 | Settlement foundation |
 
 ## Open items
 

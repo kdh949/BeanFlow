@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
-- **Amended by:** ADR-059의 release gate
+- **Amended by:** ADR-059의 release gate, ADR-063의 부분 환불 POINTS head
 
 ## Context
 
@@ -24,8 +24,11 @@ mode와 유효기간을 선택할 수 있어야 한다.
 ### Policy key and immutable versions
 
 - 정책 key는 `(trigger, benefitType)`이다.
-- trigger 초기 값은 `STORE_REJECTION`, `CUSTOMER_CANCELLATION`이고 benefit type은
-  `COUPON`, `POINTS`다. 따라서 초기 head는 네 개다.
+- 종료 trigger는 `STORE_REJECTION`, `CUSTOMER_CANCELLATION`이고 benefit type은
+  `COUPON`, `POINTS`다. 두 종료 trigger의 head는 네 개다.
+- ADR-063은 부분 환불 포인트 복원을 위해 `(PARTIAL_REFUND, POINTS)` head 하나를
+  추가한다. 현재 허용 key는 종료용 네 개와 부분 환불용 하나를 합친 다섯 개다.
+  `(PARTIAL_REFUND, COUPON)`은 허용하지 않는다.
 - 각 policy version row는 전역 고유 `policyVersionId`와 trigger, benefit type,
   mode, compensation validity days, effective time, updated actor, reason과 정책
   변경 멱등 정보를 저장한다.
@@ -36,13 +39,16 @@ mode와 유효기간을 선택할 수 있어야 한다.
 - 두 `CUSTOMER_CANCELLATION` 초기 head의 mode는
   `PRESERVE_ORIGINAL_EXPIRY`다. 이 mode에서 validity days는 결과에 사용되지 않지만
   schema 일관성을 위해 30을 저장한다.
+- `PARTIAL_REFUND × POINTS` 초기 head의 mode는
+  `COMPENSATE_WITH_NEW_ISSUANCE`, validity days는 30이다. 이 version은 Plan 10이
+  composite policy 저장소/API와 함께 seed한다.
 - 전역 고유 Long ID는 DB sequence를 사용하고 기존 최대 policy version보다 큰 값부터
   발급한다. head별 `currentVersionId + 1` 계산으로 ID를 만들지 않는다.
 
 ### Operator API
 
 - `PLATFORM_OPERATOR`는
-  `GET /api/v1/operations/policies/expired-benefit-restoration`으로 네 현재 head를
+  `GET /api/v1/operations/policies/expired-benefit-restoration`으로 다섯 현재 head를
   모두 조회한다.
 - 한 head 변경은
   `PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}`
@@ -52,7 +58,9 @@ mode와 유효기간을 선택할 수 있어야 한다.
 - path key와 기존 idempotency record의 key가 다르면
   `409 IDEMPOTENCY_KEY_REUSED`, expected head가 다르면 `409 ORDER_STATE_CONFLICT`와
   같은 정책 version conflict 계약을 사용한다.
-- 운영자 페이지는 네 head를 독립적으로 표시·변경하고 변경 이력은 append-only
+- `PARTIAL_REFUND/COUPON` path 조합은 존재하지 않는 policy key로 404이며 version과
+  AuditRecord를 만들지 않는다.
+- 운영자 페이지는 다섯 head를 독립적으로 표시·변경하고 변경 이력은 append-only
   version과 AuditRecord로 조회한다.
 
 ### Case snapshot references
@@ -141,7 +149,8 @@ event 전체 snapshot은 owner 처리의 시간 독립성과 재현성을 유지
   `COUPON → POINTS` 고정 순서로 잠근다.
 - `CompensationSummary`는 단일 `policyVersion` 대신 coupon·points policy version
   reference 두 개를 반환한다.
-- 기존 정책 OpenAPI의 단건 GET/PATCH 계약이 목록 GET과 keyed PATCH로 바뀐다.
+- 기존 정책 OpenAPI의 단건 GET/PATCH 계약이 다섯 head 목록 GET과 keyed PATCH로
+  바뀐다.
 - ADR-033의 고객 취소 Case `policy_version NOT NULL` 미결정은 두 child FK row로
   해소된다.
 - 정책 변경 중 종료 transaction은 잠금 순서에 따라 변경 전 또는 후의 완전한 두
@@ -161,7 +170,7 @@ event 전체 snapshot은 owner 처리의 시간 독립성과 재현성을 유지
 
 ## Verification
 
-- 네 head가 독립적으로 compare-and-set 갱신된다.
+- 다섯 head가 독립적으로 compare-and-set 갱신되고 PARTIAL_REFUND/COUPON key는 없다.
 - version row와 기존 Case snapshot은 정책 변경 후에도 변하지 않는다.
 - 종료와 정책 변경 경쟁에서 두 snapshot이 모두 변경 전 또는 모두 변경 후다.
 - 두 event가 전체 혜택 snapshot으로 외부 조회 없이 재현된다.
@@ -171,8 +180,10 @@ event 전체 snapshot은 owner 처리의 시간 독립성과 재현성을 유지
 
 - 기존 singleton policy의 STORE_REJECTION×COUPON/POINTS migration
 - 고객 취소 COUPON/POINTS 초기 PRESERVE_ORIGINAL_EXPIRY seed
+- 부분 환불 POINTS 초기 COMPENSATE_WITH_NEW_ISSUANCE/30 seed
 - 전역 sequence ID 충돌 부재와 append-only update/delete 금지
-- 네 head 목록 GET 인가와 응답 정렬
+- 다섯 head 목록 GET 인가와 응답 정렬
+- PARTIAL_REFUND/COUPON keyed PATCH 404와 version/Audit 부재
 - keyed PATCH의 path key·expected version·idempotency 충돌
 - 두 head 동시 독립 변경과 같은 head CAS 경쟁
 - Case당 COUPON/POINTS snapshot row 정확히 두 개
@@ -199,7 +210,7 @@ Order, Case, policy version, actor와 customer ID는 metric tag로 사용하지 
 
 ## Revisit Conditions
 
-새 benefit type 또는 종료 trigger가 추가되거나, 네 head 운영이 실제 비용 대비
+새 benefit type 또는 trigger가 추가되거나, 다섯 head 운영이 실제 비용 대비
 과도하거나, 정책 조건에 금액·고객 segment 같은 차원이 필요해질 때
 
 ## Related Decisions
@@ -213,3 +224,4 @@ Order, Case, policy version, actor와 customer ID는 metric tag로 사용하지 
 - [ADR-034](ADR-034-customer-cancellation-event-contract.md)
 - [ADR-035](ADR-035-paid-cancellation-transaction-boundary.md)
 - [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md)
+- [ADR-063](ADR-063-partial-refund-expired-point-restoration.md)

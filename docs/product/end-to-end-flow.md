@@ -155,12 +155,14 @@ Failure behavior:
 
 ## 10. Settlement dispute
 
-1. 점주는 확정 다음 날부터 14일 안에 SettlementItem 이의제기를 생성한다.
-2. 같은 Item에는 진행 중인 이의제기를 하나만 허용한다.
-3. 대상 예상 조정액만 `HELD`로 관리하고 전체 Batch는 보류하지 않는다.
-4. 운영자가 증빙과 계산 근거를 검토한다.
-5. 승인 시 기존 Item을 수정하지 않고 SettlementAdjustment를 생성한다.
-6. 판정 주체, 사유, 시각과 금액을 감사 로그에 기록한다.
+1. 점주는 자신이 소유한 매장의 정산 Batch를 선택하고 Batch별 cursor 목록에서
+   SettlementItem과 `itemId`를 확인한다.
+2. 확정 다음 날부터 14일 안에 해당 `itemId`로 SettlementItem 이의제기를 생성한다.
+3. 같은 Item에는 진행 중인 이의제기를 하나만 허용한다.
+4. 대상 예상 조정액만 `HELD`로 관리하고 전체 Batch는 보류하지 않는다.
+5. 운영자가 증빙과 계산 근거를 검토한다.
+6. 승인 시 기존 Item을 수정하지 않고 SettlementAdjustment를 생성한다.
+7. 판정 주체, 사유, 시각과 금액을 감사 로그에 기록한다.
 
 ## Cross-cutting guarantees
 

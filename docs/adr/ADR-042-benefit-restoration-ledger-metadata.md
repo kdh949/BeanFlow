@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-063의 부분 환불 POINTS trigger와 allocation 합성
 
 ## Context
 
@@ -21,8 +22,10 @@
 
 - 혜택 복원의 결과와 원인을 서로 다른 축으로 저장한다. trigger별 Coupon state나
   PointTransaction type을 만들지 않는다.
-- 초기 `restoration_trigger` 값은 `STORE_REJECTION`,
-  `CUSTOMER_CANCELLATION`이다.
+- 종료 복원의 `restoration_trigger` 값은 `STORE_REJECTION`,
+  `CUSTOMER_CANCELLATION`이다. ADR-063은 PointTransaction과 보상 PointLot에만
+  `PARTIAL_REFUND`를 추가한다. Coupon metadata와 reservation-level 종료 metadata에는
+  `PARTIAL_REFUND`를 허용하지 않는다.
 - CouponReservation과 PointReservation의 종료 복원에는
   `restoration_source_reference`, `restoration_trigger`,
   `restoration_policy_version_id`가 모두 필수다.
@@ -31,8 +34,10 @@
   `COMPENSATION_SOURCE_CONFLICT`다.
 - owner row의 policy version ID는 event 전체 snapshot의 ID를 보존한다.
   consumer는 최신 policy head를 조회하지 않는다.
-- Case의 policy snapshot child row가 FK 무결성 원천이며 Promotion·Loyalty owner
-  row는 Context 간 객체 연관관계 없이 policy version ID 값만 참조한다.
+- 종료 복원은 Case의 policy snapshot child row가 FK 무결성 원천이다. 부분 환불
+  포인트 복원은 Refund의 immutable POINTS policy version snapshot이 원천이다.
+  Promotion·Loyalty owner row는 Context 간 객체 연관관계 없이 policy version ID 값만
+  참조한다.
 
 ### Coupon disposition
 
@@ -63,12 +68,21 @@
   저장한다.
 - PointReservation `state = RESTORED`에도 같은 source, trigger와 policy version ID를
   저장해 reservation-level source conflict를 판정한다.
-- 각 original allocation은 정확히 하나의 restoration transaction을 가진다.
-  transaction source는 owner source와 allocation ID를 결합하고 UNIQUE로 보호한다.
+- 부분 환불은 PointReservation을 `RESTORED`로 전환하거나 reservation-level metadata를
+  쓰지 않는다. allocation별 PointTransaction과 Refund line allocation에
+  `PARTIAL_REFUND`, Refund source와 snapshot policy version을 저장한다.
+- 주문 종료의 각 remaining allocation은 정확히 하나의 restoration transaction을
+  가진다. 부분 환불은 같은 original allocation을 여러 line/refund slice로 나눌 수
+  있으므로 `(refundId, orderLineId, pointAllocationId)` source를 UNIQUE로 보호하고
+  모든 성공 slice의 누적 복원액이 original allocation을 넘지 않게 CHECK/guarded write로
+  보호한다.
 - `RESTORE_SKIPPED_EXPIRED`는 계정 가용 잔액을 늘리지 않지만 정책 적용 성공이므로
   POINTS step은 `SUCCEEDED`다.
 - `COMPENSATION`으로 생성한 PointLot은 original lot ID, source, trigger와 policy
   version ID를 보존한다.
+- 후속 주문 종료는 부분 환불 transaction이 존재하는 allocation을 대상에서 제외하고
+  남은 allocation만 종료 source/trigger/policy로 복원한다. Order→Payment→정렬된
+  allocation lock이 두 source의 대상 겹침을 직렬화한다.
 
 ### Migration and naming
 
@@ -121,8 +135,8 @@
 - compensation issuance/lot도 trigger·policy lineage를 보존해야 한다.
 - `SKIPPED_EXPIRED`는 금액을 복원하지 않아도 owner 작업 성공으로 집계한다.
 - 운영 조회와 metric은 disposition, trigger, policy mode를 별도 차원으로 사용한다.
-- 향후 부분 환불 등 새 복원 trigger가 같은 필드를 사용하려면 책임 의미와 기존
-  line-allocation 원장 관계를 별도 ADR로 확장해야 한다.
+- ADR-063의 부분 환불 POINTS 복원은 allocation transaction에만 세 번째 trigger를
+  사용하고 reservation-level 종료 metadata는 기존 두 trigger를 유지한다.
 
 ## Failure Scenarios
 
@@ -133,12 +147,14 @@
   publication 완료된다.
 - `SKIPPED_EXPIRED`에서 잔액을 늘리면 원 만료일 유지 정책을 위반한다.
 - compensation issuance/lot이 중복되면 쿠폰 또는 포인트 가치가 이중 발급된다.
+- 부분 환불이 PointReservation 전체를 RESTORED로 바꾸면 미환불 allocation의 종료
+  복원을 표현할 수 없다.
 - migration이 source 문자열만으로 trigger를 추측하면 손상 row를 정상으로
   backfill할 수 있다.
 
 ## Verification
 
-- 두 trigger가 같은 결과 type을 사용하면서 metadata로 구분된다.
+- 종료용 두 trigger와 부분 환불 POINTS trigger가 같은 결과 type을 metadata로 구분한다.
 - 각 mode·만료 여부가 정확한 disposition과 잔액 결과를 만든다.
 - 같은 source/trigger/policy duplicate는 가치와 원장을 한 번만 변경한다.
 - 다른 metadata 충돌은 기존 결과를 보존하고 owner step 복구로 이동한다.
@@ -151,6 +167,9 @@
 - Point allocation별 세 transaction type과 계정 tie-out
 - Point restoration transaction metadata CHECK
 - Point compensation lot의 original/source/trigger/policy lineage
+- PARTIAL_REFUND trigger가 PointTransaction/compensation lot에만 허용되는 CHECK
+- 반복 부분 환불 slice source unique와 original allocation 누적 상한
+- 부분 환불 후 PointReservation USED와 후속 종료의 잔여 allocation 처리
 - 같은 source·trigger·policy 중복의 원장·잔액 불변
 - source/trigger/policy 각각의 mismatch conflict
 - 기존 거절 row trigger·policy backfill
@@ -170,14 +189,16 @@ Order, customer, issuance, lot, Case와 policy version ID는 metric tag로 사�
 
 ## Revisit Conditions
 
-부분 환불, 수락 후 취소 또는 운영자 보상이 같은 복원 metadata를 사용하게 되거나,
-혜택 결과에 부분 복원 disposition이 필요해질 때
+수락 후 취소 또는 운영자 보상이 같은 복원 metadata를 사용하게 되거나,
+reservation-level에 여러 source를 직접 표현해야 할 때. 부분 환불 쿠폰 복원을 새로
+도입하려면 BR-12와 ADR-014/063을 먼저 변경한다.
 
 ## Related Decisions
 
-- BR-09, BR-10, BR-14
+- BR-09, BR-10, BR-12, BR-14
 - [ADR-011](ADR-011-point-lot-ledger.md)
 - [ADR-024](ADR-024-coupon-calculation-model.md)
 - [ADR-028](ADR-028-expired-benefit-restoration-policy.md)
 - [ADR-034](ADR-034-customer-cancellation-event-contract.md)
 - [ADR-041](ADR-041-trigger-and-benefit-scoped-restoration-policy.md)
+- [ADR-063](ADR-063-partial-refund-expired-point-restoration.md)

@@ -76,9 +76,12 @@
 
 ## Data and Migration
 
-forward migration으로 Order 취소 필드/CHECK, cancellation idempotency,
+이 계획이 ADR-029 Order 취소 네 필드·세 CHECK와 해당 clean-cutover precheck를 단독
+소유한다. 같은 forward migration 계열에서 cancellation idempotency,
 AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추가한다.
-번호와 legacy 전략은 00/10/30 결과에서 결정한다.
+ADR-029 precheck는 legacy 후보 row가 0일 때만 통과하고 하나라도 있으면 값을 추측해
+backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy 전략은 00/10/30
+결과에서 결정한다.
 
 ## API and Event Contracts
 
@@ -107,6 +110,8 @@ AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추
 - BENEFIT_ONLY 0원 branch
 - same/different key/payload/order와 100개 동시 replay
 - acceptance/timeout/expiry 경쟁의 단일 terminal 상태
+- ADR-029 migration precheck의 후보 0 통과와 legacy row 주입 시 실패
+- Plan 30 완료 schema에서 Order 취소 필드 부재, Plan 40 migration 뒤 네 필드·세 CHECK 존재
 
 ## Validation Commands
 
@@ -147,6 +152,7 @@ OpenAPI, state machine, transaction boundaries, authorization/error catalog, aud
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | C0 200, C1 202, 별도 Cancellation Aggregate 없음 | 실제 내구 완료 범위 반영 | ADR-029/031/035 |
+| 2026-08-01 | Accepted | ADR-029 Order 취소 네 필드·세 CHECK와 precheck를 이 계획이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 30 |
 
 ## Outcomes & Retrospective
 
@@ -155,3 +161,4 @@ OpenAPI, state machine, transaction boundaries, authorization/error catalog, aud
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
+- 2026-08-01: ADR-029 migration 단일 소유권을 Plan 40으로 확정.
