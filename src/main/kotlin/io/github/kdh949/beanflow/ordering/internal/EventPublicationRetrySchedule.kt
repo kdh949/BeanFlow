@@ -13,7 +13,7 @@ internal object EventPublicationRetrySchedule {
             Duration.ofMinutes(15),
         )
 
-    fun exhausted(completionAttempts: Int): Boolean = completionAttempts !in delays.indices
+    fun exhausted(completionAttempts: Int): Boolean = completionAttempts > delays.size
 
     fun isDue(
         completionAttempts: Int,
@@ -23,6 +23,7 @@ internal object EventPublicationRetrySchedule {
     ): Boolean {
         require(!exhausted(completionAttempts)) { "Retry attempts are exhausted" }
         val reference = lastResubmissionDate ?: publicationDate
-        return !now.isBefore(reference.plus(delays[completionAttempts]))
+        val delayIndex = (completionAttempts.coerceAtLeast(1) - 1)
+        return !now.isBefore(reference.plus(delays[delayIndex]))
     }
 }

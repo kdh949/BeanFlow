@@ -45,8 +45,10 @@
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)
 - [Completed Order Creation and Reservation Lease](exec-plans/completed/order-creation-and-reservation-lease.md)
+- [Completed Store Order Lifecycle](exec-plans/completed/store-order-lifecycle.md)
 
 ## Operations
 
 - [Order Reservation Lease Runbook](operations/order-reservation-lease-runbook.md)
 - [Payment Approval and Reconciliation Runbook](operations/payment-reconciliation-runbook.md)
+- [Store Order Lifecycle and Rejection Recovery Runbook](operations/store-order-lifecycle-runbook.md)

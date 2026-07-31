@@ -17,3 +17,7 @@ interface ReprocessingCaseOperations {
 interface NotificationReprocessingCaseOperations {
     fun openNotificationCase(command: OpenReprocessingCaseCommand): UUID
 }
+
+interface EventPublicationReprocessingCaseOperations {
+    fun openEventPublicationCase(command: OpenReprocessingCaseCommand): UUID
+}

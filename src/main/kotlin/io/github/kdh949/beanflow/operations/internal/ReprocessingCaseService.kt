@@ -17,6 +17,7 @@ import java.util.UUID
 internal enum class ReprocessingCaseType {
     PAYMENT_RECONCILIATION,
     NOTIFICATION_DELIVERY,
+    EVENT_PUBLICATION,
 }
 
 internal enum class ReprocessingCaseStatus {

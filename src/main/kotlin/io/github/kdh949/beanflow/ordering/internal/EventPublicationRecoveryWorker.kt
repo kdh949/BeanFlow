@@ -1,6 +1,12 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
+import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
+import io.github.kdh949.beanflow.operations.api.EventPublicationReprocessingCaseOperations
+import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -19,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong
 internal class EventPublicationRecoveryWorker(
     private val publications: IncompleteEventPublications,
     private val compensationOperations: RejectionCompensationOperations,
+    private val reprocessingCaseOperations: EventPublicationReprocessingCaseOperations,
     private val jdbcTemplate: JdbcTemplate,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
@@ -49,6 +56,14 @@ internal class EventPublicationRecoveryWorker(
                     val attempts = publication.completionAttempts
                     if (EventPublicationRetrySchedule.exhausted(attempts)) {
                         val event = publication.event
+                        reprocessingCaseOperations.openEventPublicationCase(
+                            OpenReprocessingCaseCommand(
+                                ownerReference = "event-publication:${publication.identifier}",
+                                reason = "EVENT_PUBLICATION_RETRY_EXHAUSTED",
+                                correlationId = correlationId(event, publication.identifier.toString()),
+                                now = now,
+                            ),
+                        )
                         if (event is OrderRejectedV1) {
                             compensationOperations.markPublicationManualReview(
                                 event.orderId,
@@ -100,4 +115,17 @@ internal class EventPublicationRecoveryWorker(
     }
 
     private fun gauge(name: String): AtomicLong = meterRegistry.gauge(name, AtomicLong(0))
+
+    private fun correlationId(
+        event: Any,
+        fallback: String,
+    ): String =
+        when (event) {
+            is OrderRejectedV1 -> event.envelope.correlationId
+            is StoreAcceptanceWarningRequestedV1 -> event.envelope.correlationId
+            is OrderAcceptedV1 -> event.envelope.correlationId
+            is OrderReadyV1 -> event.envelope.correlationId
+            is OrderCompletedV1 -> event.envelope.correlationId
+            else -> fallback
+        }
 }
