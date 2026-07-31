@@ -52,6 +52,17 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 주문 완료 후 포인트 적립
 - 정산, 환불, 정산 조정과 이의제기
 
+고객 주문 취소 readiness:
+
+```text
+READY FOR CONTRACT-BASELINE AND FOUNDATION WORK
+BLOCKED FOR CUSTOMER-CANCELLATION COMMAND
+```
+
+canonical 문서와 목표 계약 정합성 및 clean-cutover fact gate는 완료됐다. 고객 취소
+명령 구현은 부분 환불 allocation, Settlement와 trigger-aware 공통 compensation
+foundation이 닫힐 때까지 차단된다.
+
 아직 측정하지 않은 실제 운영 규모나 프로덕션 안정성을 주장하지 않는다.
 
 ## 실행 방법
@@ -111,15 +122,46 @@ curl http://localhost:8080/actuator/health
 `PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 결제수단 등록
 API와 초기 데이터 seed는 아직 없으므로 주문 흐름을 수동 확인하려면 매장·메뉴·슬롯·
 재고와 토큰 reference만 가진 결제수단 fixture를 별도로 준비해야 한다. PAN, CVC와 전체
-유효기간은 저장하지 않는다. 현재 구현된 API 계약은
-[OpenAPI 문서](openapi/beanflow-v1.yaml)에서 확인할 수 있다.
+유효기간은 저장하지 않는다.
 
-현재 구현된 HTTP endpoint:
+### 현재 runtime 구현 endpoint
 
 ```text
 POST /api/v1/orders
 GET  /api/v1/orders/{orderId}
 POST /api/v1/orders/{orderId}/payment-confirmations
+GET  /api/v1/store-orders/{orderId}
+PATCH /api/v1/store-orders/{orderId}/status
+GET  /api/v1/operations/policies/expired-benefit-restoration
+PATCH /api/v1/operations/policies/expired-benefit-restoration
+```
+
+### 목표 OpenAPI 계약
+
+[OpenAPI 문서](openapi/beanflow-v1.yaml)는 현재 runtime만의 목록이 아니라 Accepted 정책이
+지향하는 `/api/v1` 목표 계약이다. 문서에 endpoint가 존재한다고 runtime 구현 완료를
+뜻하지 않는다. 현재 구현 endpoint도 목표 shape와 다른 경우가 있으며, 예를 들어
+만료 혜택 정책 PATCH의 목표 계약은
+`/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}`다.
+
+### 미구현 예정 endpoint
+
+목표 OpenAPI 중 현재 runtime에 없는 주요 기능은 다음과 같다.
+
+```text
+GET  /api/v1/stores/nearby
+GET  /api/v1/stores/{storeId}/menus
+GET  /api/v1/stores/{storeId}/pickup-slots
+POST /api/v1/orders/{orderId}/cancellations
+POST /api/v1/payments/{paymentId}/refunds
+GET  /api/v1/operations/orders/{orderId}/compensation
+POST /api/v1/operations/reprocessing-cases/{caseId}/repair-proposals
+POST /api/v1/operations/reprocessing-repair-proposals/{proposalId}/decisions
+PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}
+GET  /api/v1/point-accounts/{accountId}
+GET  /api/v1/point-accounts/{accountId}/transactions
+GET  /api/v1/stores/{storeId}/settlements
+POST /api/v1/settlement-items/{itemId}/disputes
 ```
 
 로컬 PostgreSQL을 위의 일회성 컨테이너로 실행했다면 다음 명령으로 종료한다.

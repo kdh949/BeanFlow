@@ -11,7 +11,7 @@ ADR-016은 최종 결제액 0원 주문도 `BENEFIT_ONLY Payment(APPROVED)`를 �
 
 ADR-033은 매장 거절과 고객 취소가 PAYMENT를 포함한 공통 여섯 보상 step을 공유하도록
 정한다. ADR-035와 ADR-036은 취소 요청 현금액이 0인 경우 Refund 없이
-`PaymentRecoverySummary.state = NOT_REQUIRED`를 사용하도록 정한다. 공통 Case의
+`CancellationRefundRecoverySummary.state = NOT_REQUIRED`를 사용하도록 정한다. 공통 Case의
 PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필요 상태로 둘지
 확정해야 한다.
 
@@ -30,7 +30,7 @@ PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필�
   | `cancellationRequestedRefundAmountKrw` | 0 |
   | `cancellationRefundId` | null |
 
-- 고객 `PaymentRecoverySummary`는 `state = NOT_REQUIRED`, 네 금액을 모두 0으로
+- 고객 `CancellationRefundRecoverySummary`는 `state = NOT_REQUIRED`, 네 금액을 모두 0으로
   반환하고 `noticeCode`는 반환하지 않는다.
 - Order 취소, snapshot, PAYMENT `NOT_REQUIRED`, 나머지 다섯 step, AuditRecord,
   `ORDER_CANCELLATION_ACCEPTED` NotificationDelivery, `OrderCancelledV1`과 네 자원

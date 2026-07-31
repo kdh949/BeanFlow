@@ -190,9 +190,12 @@ POST /api/v1/settlement-items/{itemId}/disputes
 - `202 Accepted`는 승인 또는 환불 성공을 뜻하지 않는다.
 - Payment approval 상태는 `APPROVED`, `UNKNOWN`, `RECONCILING`,
   `MANUAL_REVIEW`를 구분한다.
+- `PaymentConfirmation.recovery`는 상태와 시각만 가진
+  `PaymentApprovalRecoverySummary`를 사용한다. 고객 취소 환불의 notice와 금액
+  allocation을 이 schema에 넣지 않는다.
 - 내부 Refund 상태는 `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `SUCCEEDED`,
   `FAILED`, `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`를 구분한다. 고객 취소
-  `PaymentRecoverySummary`는 위 customer projection을 적용한다.
+  `CancellationRefundRecoverySummary`는 위 customer projection을 적용한다.
 - Order `REJECTED` 또는 `CANCELLED`와 Payment refund 성공은 같은 상태가 아니다.
 - 5분 reservation lease가 Payment `UNKNOWN`보다 먼저 끝나면 Order는 `EXPIRED`를
   유지하며, 202 representation은 뒤늦은 승인에 대한 void/refund recovery 상태를

@@ -11,15 +11,21 @@
 
 ## Current State
 
-- branch 기준 HEAD는 `04e2b4819a66966952c5436342a05149fd7ac6ee`다.
+- 역사적 readiness 감사 source는 `04e2b4819a66966952c5436342a05149fd7ac6ee`이고
+  당시 merge 기준은 PR #17의 `443fe8ff4d41776f1754e5a5c17ab8566e68398d`다.
+- 현재 이 master plan의 merge baseline은 `main`의 PR #18 merge
+  `783298a9c1b349f7b444d49d25c8b3d4099a5576`다. 역사적 감사 SHA를 현재 HEAD로
+  해석하지 않는다.
 - ADR-029~060과 OpenAPI에는 목표 계약이 Accepted 상태로 기록돼 있다.
 - 고객 취소 Controller, Application Service, Order 취소 필드와 migration은 없다.
 - 현재 Refund는 거절 전용이고 부분 환불을 차단하며 REQUEST/LOOKUP 합산 5회를 쓴다.
 - compensation은 `RejectionCompensation*`와 단일 benefit 정책으로 구현돼 있다.
 - Settlement package, SettlementItem/Batch/Adjustment persistence와 consumer가 없다.
 - line-level cash/benefit refund allocation 원장이 없다.
-- ADR-059 운영 증거가 없으므로 `CLEAN_CUTOVER_GATE = FAILED`다. 기존 V8 migration과
-  V1 event 계약을 수정할 수 없다.
+- product owner 운영 상태 확인에서 non-local 환경과 관련 DB·publication·consumer·rollback artifact가
+  모두 없음을 확인했고 항목별 0을
+  [release evidence](../../quality/customer-order-cancellation-release-evidence.md)에
+  기록했다. 현재 `CLEAN_CUTOVER_GATE = PASSED`이며 ADR-059 clean-cutover 경로를 쓴다.
 
 ## Definitions
 
@@ -85,7 +91,8 @@
 
 ## Failure Semantics
 
-- 00의 fact gate가 닫히지 않으면 30 이후 schema 전략은 시작하지 않는다.
+- 00의 fact gate는 닫혔다. 구현·배포 전 재확인에서 PASS가 무효화되면 30 이후 schema
+  전환을 중단하고 forward-migration ADR/ExecPlan을 먼저 확정한다.
 - foundation 검증이 실패하면 후속 계획을 진행하지 않고 실패를 해당 계획에 기록한다.
 - endpoint feature flag나 profile로 미완성 경로를 성공시키지 않는다.
 - 테스트 fake는 test 또는 명시적 local profile에만 둔다.
@@ -93,7 +100,9 @@
 ## Data and Migration
 
 - 현재 감사에서는 migration을 작성하거나 수정하지 않는다.
-- ADR-059 gate가 전부 0으로 입증될 때만 별도 승인된 계획에서 clean cutover를 검토한다.
+- ADR-059 gate의 모든 항목이 0으로 입증돼 clean cutover를 선택했다.
+- producer, consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility layer와
+  version 이중 발행을 추가하지 않는다.
 - gate가 nonzero 또는 unknown이면 forward migration, publication drain,
   compatibility와 rollback을 다루는 Accepted ADR/ExecPlan이 먼저 필요하다.
 - 이후 migration 번호는 구현 직전 저장소의 최신 번호에서 다시 계산한다.
@@ -102,9 +111,12 @@
 
 - HTTP 원본은 `openapi/beanflow-v1.yaml`이다.
 - `POST /orders/{orderId}/cancellations`: C0 `200`, C1 `202`.
+- `PaymentConfirmation.recovery`는 `PaymentApprovalRecoverySummary`, 고객 취소
+  `Cancellation.paymentRecovery`와 `Order.paymentRecovery`는
+  `CancellationRefundRecoverySummary`를 사용한다.
 - `OrderCancelledV1`: PAID 취소에서 네 owner만 소비한다.
 - Payment와 Notification은 `OrderCancelledV1` consumer가 아니다.
-- 고객은 내부 Refund/Case 상태 대신 `PaymentRecoverySummary` projection만 본다.
+- 고객은 내부 Refund/Case 상태 대신 `CancellationRefundRecoverySummary` projection만 본다.
 
 ## Milestones
 
@@ -150,8 +162,9 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 ## Progress
 
 - [x] 2026-07-31 정책·ADR·OpenAPI 감사
+- [x] 2026-07-31 recovery schema·projection·reason 전달 범위·release path 계약 정합화
 - [x] 2026-07-31 거대 master plan을 여섯 하위 계획으로 분리
-- [ ] 00 fact-verification gate 완료
+- [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
 - [ ] 10 allocation foundation 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
@@ -161,6 +174,8 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 ## Surprises & Discoveries
 
 - release gate 완료 체크는 저장소·PR의 외부 운영 증거로 뒷받침되지 않았다.
+- 이후 product owner 확인으로 non-local 환경과 관련 artifact가 모두 0임을 별도
+  release evidence에 기록해 fact gate를 닫았다.
 - 최신 정책은 부분 환불을 허용하지만 현재 Refund가 부분 환불을 명시적으로 거부한다.
 - Settlement 정책은 Accepted지만 해당 모듈 구현이 전혀 없다.
 - 기존 store 전이 멱등 응답도 BR-25/ADR-057보다 오래된 계약을 구현한다.
@@ -171,14 +186,18 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | 고객 취소 범위와 C0/C1 계약 유지 | ADR-029~060이 명확함 | BR-14, ADR-029~060 |
 | 2026-07-31 | Fact gate failed | clean cutover를 시작하지 않음 | 외부 운영 증거 없음 | ADR-059, readiness report |
+| 2026-07-31 | Fact gate passed | ADR-059 clean cutover 사용 | 운영 상태 확인으로 모든 외부 항목이 명시적 0 | release-gate evidence |
 | 2026-07-31 | Plan structure | foundation별 여섯 계획으로 분리 | 독립 검증과 선행조건 강제 | 이 master plan |
 
 ## Outcomes & Retrospective
 
-아직 기능 구현을 시작하지 않았다. 이 계획의 현재 결과는 계약 정합성 감사, gate 실패
-명시와 실행 가능한 하위 계획 분리다.
+아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
+`CLEAN_CUTOVER_GATE = PASSED`다. 10/20/30 foundation은 clean-cutover 전략을 입력으로
+진행할 수 있지만, 세 foundation이 완료되기 전 고객 취소 command는 계속 차단된다.
 
 ## Revision Notes
 
 - 2026-07-31: 최초 거대 구현 계획을 master orchestration plan으로 교체하고 여섯 하위
   ExecPlan을 연결했다. 근거 없는 ADR-059 release gate 완료 표시는 제거했다.
+- 2026-07-31: product owner의 non-local 환경·artifact 부재 확인을 release evidence로
+  기록하고 ADR-059 clean-cutover gate를 완료했다.

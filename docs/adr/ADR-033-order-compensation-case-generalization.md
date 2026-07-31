@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-038의 고객 환불 projection, ADR-050의 setup 손상 projection,
+  ADR-059의 조건부 clean-cutover 전략
 
 ## Context
 
@@ -19,7 +21,8 @@ OpenAPI 스키마는 `RejectionRecoverySummary`/`RejectionRecoveryStep`이다.
 는 모듈 내부 API이고 현재 유일한 operations controller는 만료 혜택 정책뿐이다.
 
 ADR-030이 "고객은 환불 진행 요약을 본다"고 정했으나 그 요약을 무엇에서 파생하는지는
-정하지 않았다. `PaymentRecoverySummary.state`의 여덟 값은 `payment_refund.state`의
+정하지 않았다. 당시 공유 schema 이름은 `PaymentRecoverySummary`였고 그 `state`의
+여덟 값은 `payment_refund.state`의
 일곱 값에 `NOT_REQUIRED`를 더한 집합과 정확히 일치하고, 보상 step 어휘와는 다르다.
 step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 없다.
 
@@ -52,7 +55,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   `OperatorCompensationView`를 반환한다. 공용 `CompensationSummary`와 operator-only
   setup issue/ReprocessingCase reference를 감싸며 step 상태, `attemptCount`,
   `lastErrorCode`와 setup detail은 이 경로에서만 노출한다.
-- 고객에게 반환하는 `PaymentRecoverySummary.state`는 **이번 고객 취소 source의
+- 고객에게 반환하는 `CancellationRefundRecoverySummary.state`는 **이번 고객 취소 source의
   Refund 한 건에서만** 파생한다. 선행 부분 환불을 포함한 다른 Refund의 상태나 보상
   case PAYMENT step을 합성하지 않는다.
 - ADR-038에 따라 내부 Refund state를 고객에게 그대로 통과시키지 않고 Payment
@@ -65,7 +68,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   `NOT_REQUIRED`, attempt 0, error null이다. Refund는 만들지 않는다(ADR-039).
 - 파생 로직은 Payment Context가 소유하는 단일 조회 지점에 둔다. `Cancellation` 응답과
   `Order.paymentRecovery`가 같은 값을 반환한다.
-- `PaymentRecoverySummary`는 `approvedAmountKrw`,
+- `CancellationRefundRecoverySummary`는 `approvedAmountKrw`,
   `succeededRefundAmountBeforeCancellationKrw`,
   `cancellationRequestedRefundAmountKrw`, `remainingRefundableAmountKrw`를 함께
   반환한다. 앞의 세 금액은 Tx C1 snapshot이고 마지막 금액은 조회 시점의 성공 Refund
@@ -134,7 +137,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   하나가 실패한다. Order의 guarded transition이 이미 하나만 성공시키므로 정상
   경로에서는 발생하지 않지만, 실패 시 Order 상태를 신뢰하고 Case 생성을 재시도하지
   않는다.
-- 고객 응답이 PAYMENT step에서 파생되면 `RETRY_SCHEDULED`처럼 `PaymentRecoverySummary`
+- 고객 응답이 PAYMENT step에서 파생되면 `RETRY_SCHEDULED`처럼 `CancellationRefundRecoverySummary`
   enum에 없는 값이 새어나가거나 `FAILED`가 은폐된다.
 - Refund가 필요한데 record 또는 recovery snapshot이 없으면 `NOT_REQUIRED`로
   위장하지 않고 내부 `SETUP_INCOMPLETE`, setup ReprocessingCase와 운영 alert를

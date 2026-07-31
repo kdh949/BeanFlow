@@ -138,10 +138,13 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
   `OrderCancelledV2`로 이행한다.
 - 구 consumer가 알 수 없는 필드를 무시할 수 있고 신 consumer가 구 payload를 읽을
   역직렬화 기본값이 있는 선택 필드만 V1에 추가할 수 있다.
-- V1 listener target과 과거 target-to-step mapping은 미완료 V1 publication이 0이고
-  승인된 rollback 기간이 끝날 때까지 유지한다.
-- V1/V2 이중 발행은 기본 이행 방식이 아니다. 필요하면 source reference 충돌,
-  consumer 중복과 종료 조건을 정하는 별도 Accepted ADR을 먼저 만든다.
+- ADR-059 release gate가 전체 0인 clean-cutover 경로에서는 producer, consumer와
+  fixture를 같은 변경에서 전환하고 legacy listener mapping, compatibility layer와
+  V1/V2 이중 발행을 만들지 않는다.
+- release gate가 nonzero 또는 unknown인 forward-migration 경로에서만 기존 V1과
+  listener target/target-to-step mapping을 publication drain과 승인된 rollback 기간
+  종료까지 유지한다. 새 version 또는 compatibility bridge, source reference 충돌,
+  consumer 중복과 종료 조건은 별도 Accepted ADR/ExecPlan에서 정한다.
 - `OrderCancelledV1`과 listener별 persistent publication은 ADR-035의 Tx C1에서
   Order, 보상 Case, 필요한 Refund, Audit와 취소 멱등 응답과 함께 commit한다.
 - event 또는 listener publication 저장 실패는 Tx C1 전체를 rollback하며 in-memory
@@ -250,7 +253,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 ### Refund 생성을 Payment listener로 이동
 
 - 기존 거절 event 구조처럼 Payment listener가 Refund를 시작한다.
-- Tx C1 commit 시 Refund가 없어 고객 `PaymentRecoverySummary`를 Refund에서 파생할
+- Tx C1 commit 시 Refund가 없어 고객 `CancellationRefundRecoverySummary`를 Refund에서 파생할
   수 없으므로 ADR-033과 ADR-035를 개정해야 한다.
 
 ### V1 계약 제자리 변경
@@ -410,17 +413,19 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - 오래된 aggregate version event가 최신 owner 상태를 덮어쓰지 않음
 - source conflict의 bounded retry 소진과 `MANUAL_REVIEW`
 - source conflict 후 Order가 `CANCELLED`를 유지함
-- 다섯 listener 각각의 retry 소진과 정확한 단일 step 매핑
+- 네 owner listener 각각의 retry 소진과 정확한 단일 step 매핑
 - Coupon publication 소진 중 Refund·Notification worker와 Pickup·Stock·Points 계속 처리
 - Case `MANUAL_REVIEW`와 성공한 다른 step 상태의 공존
 - publication completion attempt와 step `attemptCount` 불일치가 의도대로 유지됨
 - 기존 `OrderRejectedV1`의 단일 step exhaustion 회귀 테스트
-- production 발행 전 구 `OrderRejectedV1` policy field·fixture 부재
-- 개정된 `OrderRejectedV1` producer와 모든 consumer의 혜택별 snapshot 일치
-- legacy listener target-to-step mapping과 정확한 step manual review
-- 미완료 V1 publication이 있는 배포에서 mapping 제거 방지
-- breaking fixture가 V1 contract test를 실패하고 V2에서만 허용됨
-- 별도 ADR 없는 V1/V2 이중 발행 부재
+- release gate의 schema/row, 완료·미완료 publication, 외부 consumer와 rollback binary
+  unknown/nonzero 차단
+- clean-cutover 경로의 producer·consumer·fixture 동일 변경 전환, 구 field·fixture,
+  legacy mapping, compatibility layer와 이중 발행 부재
+- forward-migration 경로의 기존 V1 역직렬화, legacy listener routing과 정확한 step
+  manual review, publication drain과 rollback compatibility
+- forward-migration의 breaking fixture가 기존 V1 제자리 변경을 실패시키고 새 version
+  또는 compatibility bridge에서만 허용됨
 - event serialization·publication insert 실패의 Tx C1 전체 rollback
 - 수동·timeout 거절 시 `OrderCancelledV1` 미발행
 - 두 이벤트 타입의 consumer routing 분리

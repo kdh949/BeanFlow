@@ -27,7 +27,7 @@ line allocation을 사용하도록 정한다. BR-15는 결제 후 부분 환불�
   잠가 남은 금액을 계산한다.
 - 현재 V10 `payment_refund`에는 line별 현금 환불·포인트 복원·쿠폰 처리 allocation이
   없으므로 구현 전에 line-level 성공 원장과 Unique/Check 제약을 추가해야 한다.
-- `PaymentRecoverySummary.state`는 이번 고객 취소 source의 Refund 한 건에서
+- `CancellationRefundRecoverySummary.state`는 이번 고객 취소 source의 Refund 한 건에서
   파생하되 ADR-038의 고객용 상태·notice projection을 적용한다. 선행 Refund 상태와
   보상 PAYMENT step을 합성하지 않는다.
 - Payment Context는 Tx C1에서 주문당 하나의

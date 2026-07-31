@@ -70,6 +70,10 @@ Order가 이미 `EXPIRED` 또는 `CANCELLED`인 뒤 승인 사실이 확인되�
 Payment의 표시 상태 `PARTIALLY_REFUNDED`와 `REFUNDED`는 성공한 Refund 합계에서
 파생한다. 승인 결과와 환불 시도 결과를 하나의 enum으로 덮어쓰지 않는다.
 
+`PaymentConfirmation.recovery`는 승인 결과 불명과 조회 복구의 상태·시각만 가진
+`PaymentApprovalRecoverySummary`를 사용한다. 고객 취소 환불 projection은 별도
+`CancellationRefundRecoverySummary`이며 두 schema와 enum을 공유하지 않는다.
+
 ## Refund
 
 ```text
@@ -88,7 +92,7 @@ RECONCILING -> SUCCEEDED | FAILED | MANUAL_REVIEW
 - `UNKNOWN` 또는 `RECONCILING` 환불을 성공 환불액에 포함하지 않는다.
 - 동일 refund idempotency scope와 source reference는 외부 부작용을 한 번만 만든다.
 - 누적 `SUCCEEDED` 환불액은 승인액을 초과할 수 없다.
-- 고객 `PaymentRecoverySummary`는 내부 복구 상태를 직접 노출하지 않는다.
+- 고객 `CancellationRefundRecoverySummary`는 내부 복구 상태를 직접 노출하지 않는다.
   `PROCESSING`·`RETRY_SCHEDULED`·`UNKNOWN`·`RECONCILING`은 고객 `PROCESSING`,
   `FAILED`·`MANUAL_REVIEW`는 고객 `PROCESSING + REFUND_DELAYED`로 투영한다.
 - 완전한 recovery snapshot에서 누락 Refund를 2인 승인으로 복구한 경우 Refund는

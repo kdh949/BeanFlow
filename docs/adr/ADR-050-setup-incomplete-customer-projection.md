@@ -9,8 +9,8 @@ Tx C1은 환불 요청액이 양수인 고객 취소에서 Payment recovery snap
 Refund를 Order 취소와 함께 원자적으로 저장한다. 둘 중 하나가 없으면 정상 business
 state가 아니라 commit-gate 또는 데이터 무결성 손상인 `SETUP_INCOMPLETE`다.
 
-기존 OpenAPI는 이 내부 용어를 고객 `PaymentRecoverySummary.state` enum에 직접
-노출한다. ADR-038은 자동 복구와 수동 검토 상세를 고객에게 숨기면서도
+기존 OpenAPI의 공유 `PaymentRecoverySummary.state` enum은 이 내부 용어를 고객에게
+직접 노출했다. ADR-038은 자동 복구와 수동 검토 상세를 고객에게 숨기면서도
 `SETUP_INCOMPLETE`의 고객 표시만 감사·운영 결정으로 보류했다. 고객 조회 전체를
 503으로 실패시키면 이미 확정된 취소 사실과 정상 주문 필드까지 볼 수 없다. 반대로
 없는 snapshot 금액을 0이나 현재 데이터의 추정값으로 채우면 손상을 정상값으로
@@ -22,7 +22,7 @@ state가 아니라 commit-gate 또는 데이터 무결성 손상인 `SETUP_INCOM
 - 고객에게는 `state = PROCESSING`, `noticeCode = REFUND_DELAYED`로 투영한다.
 - 고객 조회 전체를 `503`으로 실패시키지 않는다. Order `CANCELLED`, 취소 시각과
   reason code 등 독립적으로 확인 가능한 필드는 정상 반환한다.
-- PaymentRecoverySummary의 금액은 recovery snapshot과 Refund 원천에서 검증 가능한
+- `CancellationRefundRecoverySummary`의 금액은 recovery snapshot과 Refund 원천에서 검증 가능한
   값만 반환한다.
   - snapshot은 완전하지만 Refund만 누락된 경우에는 snapshot 금액과 검증 가능한
     현재 잔액을 반환할 수 있다.

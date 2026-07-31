@@ -16,8 +16,8 @@ ADR-037은 결과가 불명확해진 요청을 절대 재전송하지 않고 조
 종결할지는 정하지 않았다. 자동 재요청을 허용하려면 Provider key 재사용 보장, 허용
 오류 분류, 별도 요청·조회 예산과 중간 상태가 필요하다.
 
-또한 ADR-033은 고객 `PaymentRecoverySummary.state`가 내부 Refund state를 그대로
-통과한다고 정했다. 이 방식은 `UNKNOWN`, `RECONCILING`, `FAILED`,
+또한 ADR-033은 당시 공유 schema인 `PaymentRecoverySummary.state`가 내부 Refund
+state를 그대로 통과한다고 정했다. 이 방식은 `UNKNOWN`, `RECONCILING`, `FAILED`,
 `MANUAL_REVIEW`와 새 재시도 상태를 고객에게 노출한다. 고객에게는 자동 복구 구현
 상세나 내부 실패 code가 아니라 환불 진행 여부와 장기 지연 안내만 보여야 한다.
 
@@ -67,10 +67,10 @@ ADR-037은 결과가 불명확해진 요청을 절대 재전송하지 않고 조
 
 ### Customer projection
 
-- 고객 `PaymentRecoverySummary.state`는 더 이상 내부 Refund enum을 그대로 통과하지
+- 고객 `CancellationRefundRecoverySummary.state`는 더 이상 내부 Refund enum을 그대로 통과하지
   않는다. Payment Context의 단일 projection에서 다음처럼 변환한다.
 
-  | 내부 Refund 상태 | 고객 `state` | 고객 `noticeCode` |
+  | 내부 Refund 상태 | 고객 `CancellationRefundRecoverySummary.state` | 고객 `noticeCode` |
   |---|---|---|
   | `REQUESTED` | `REQUESTED` | 없음 |
   | `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING` | `PROCESSING` | 없음 |
@@ -136,8 +136,12 @@ ADR-037은 결과가 불명확해진 요청을 절대 재전송하지 않고 조
 - ADR-037의 “최초 REQUEST 1회”는 결과 불명 경로에 한정된다. 안전한 명시 실패는 이
   ADR의 예외로 최대 두 번 재요청할 수 있다.
 - ADR-033의 내부 Refund state 직접 통과 규칙은 이 ADR의 고객 projection으로
-  개정된다. 고객 state enum에서 `FAILED`, `UNKNOWN`, `RECONCILING`,
-  `MANUAL_REVIEW`를 제거하고 `noticeCode`를 추가한다.
+  개정된다. `CancellationRefundRecoverySummary.state`는 `NOT_REQUIRED`, `REQUESTED`,
+  `PROCESSING`, `SUCCEEDED`만 사용하고 `noticeCode`를 추가한다. `FAILED`, `UNKNOWN`,
+  `RECONCILING`, `MANUAL_REVIEW`, `RETRY_SCHEDULED`, `SETUP_INCOMPLETE`는 고객 enum에
+  포함하지 않는다.
+- 결제 승인 조회 복구의 `PaymentApprovalRecoverySummary`와 schema를 공유하지 않으므로
+  취소 환불 notice와 금액 allocation이 승인 recovery에 섞이지 않는다.
 - 운영자용 `CompensationSummary`와 Payment 상세 조회는 내부 상태를 축약하지 않는다.
 
 ## Failure Scenarios

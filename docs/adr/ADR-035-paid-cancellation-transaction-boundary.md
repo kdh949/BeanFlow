@@ -13,7 +13,7 @@
 
 ADR-032는 고객 취소가 Order row lock과 멱등 응답 저장을 한 명령 transaction에서
 commit하도록 정한다. ADR-010은 원 fact와 listener별 persistent publication을 같은
-transaction에 저장하도록 요구한다. ADR-033은 고객 `PaymentRecoverySummary`가 Refund
+transaction에 저장하도록 요구한다. ADR-033은 고객 `CancellationRefundRecoverySummary`가 Refund
 aggregate에서만 파생되고 `PAID` 취소는 Refund record를 commit한 뒤 `202`를
 반환하도록 정한다. ADR-006은 외부 Provider 호출을 DB transaction 밖에 둔다.
 
@@ -75,7 +75,7 @@ Tx C1은 다음 항목을 한 PostgreSQL 로컬 transaction에서 모두 commit�
 ### Refund도 after-commit Payment listener에서 생성
 
 - 기존 거절 흐름과 producer 구조를 그대로 재사용할 수 있다.
-- `202` body 생성 시 Refund가 없어 `PaymentRecoverySummary`가 `NOT_REQUIRED`로
+- `202` body 생성 시 Refund가 없어 `CancellationRefundRecoverySummary`가 `NOT_REQUIRED`로
   보일 수 있다. 이는 Refund만 source of truth로 사용하는 ADR-033과 충돌한다.
 
 ## Rationale
@@ -92,7 +92,7 @@ source of truth가 Refund라는 ADR-033의 기존 결정 때문에 필요하다.
   호출하지 않는다.
 - Payment는 Provider를 호출하지 않고 Refund `REQUESTED`를 만드는 public Application
   API를 제공해야 한다.
-- 취소 응답의 `PaymentRecoverySummary.state`는 Tx C1에서 생성한 고객 취소 Refund를
+- 취소 응답의 `CancellationRefundRecoverySummary.state`는 Tx C1에서 생성한 고객 취소 Refund를
   읽어 `REQUESTED`를 반환하거나 취소 요청 현금액이 0이면 `NOT_REQUIRED`를 반환한다.
 - ADR-039에 따라 `BENEFIT_ONLY`는 Refund 없이 recovery snapshot 0/0/0과 PAYMENT
   step `NOT_REQUIRED`를 Tx C1에 저장한다. 다른 다섯 step과 publication은 그대로
