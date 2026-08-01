@@ -20,8 +20,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -32,14 +35,18 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, StoreOrderLifecycleNanosecondClockConfiguration::class)
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
@@ -686,3 +693,18 @@ internal class StoreOrderLifecycleIntegrationTest
             vararg args: Any,
         ): T = requireNotNull(jdbcTemplate.queryForObject(sql, T::class.java, *args))
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class StoreOrderLifecycleNanosecondClockConfiguration {
+    @Bean
+    @Primary
+    fun storeOrderLifecycleClock(): Clock = StoreOrderLifecycleNanosecondClock()
+}
+
+internal class StoreOrderLifecycleNanosecondClock : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = this
+
+    override fun instant(): Instant = Instant.now().truncatedTo(ChronoUnit.MICROS).plusNanos(789)
+}
