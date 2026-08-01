@@ -3,6 +3,7 @@
 | Aggregate Root | Responsibility | Core invariants | Other aggregate references |
 |---|---|---|---|
 | Store | 영업·픽업 가능 상태 | 폐점·휴점 매장은 새 주문 불가 | IDs |
+| StoreDiscoveryProfile | 검색 가능한 공개 매장명·위치 | Store당 하나, non-blank name, SRID 4326 point, verified owner source 없이는 생성 금지 | `storeId` |
 | StoreSettlementTerms | store별 versioned 수수료 계약 | applicable version 하나, fee rate `0..10000`, immutable history와 overlap 금지 | `storeId` |
 | Menu | 메뉴·옵션·가격·판매 상태 | 음수 가격 금지, 유효 옵션만 선택 | `storeId` |
 | MenuConfiguration | 주문 가능한 메뉴·옵션 구성과 재고 요구량 | 정규화한 option ID 집합은 메뉴 안에서 유일하고 sellable unit별 필요 수량은 양수 | `menuId`, `sellableUnitId` |
@@ -38,8 +39,9 @@
 | CompensationCouponTermsSnapshot | 종료 Campaign과 독립적인 보상 쿠폰 조건·비용 부담 | 원 issuance snapshot 복사, share 합 10000, 발급 후 불변 | CouponIssuance ID |
 | OrderCompensationBenefitPolicySnapshot | Case가 확정한 혜택별 정책 참조 | Case당 COUPON·POINTS 각 하나, immutable version FK | `caseId`, `policyVersionId` |
 
-`Analytics Read Model`과 Discovery Query Model은 쓰기 Aggregate가 아니다. 원본 Context의
-event ID와 payload version으로 멱등하게 갱신하는 projection이다.
+`Analytics Read Model`은 쓰기 Aggregate가 아니며 원본 Context의 event ID와 payload version으로
+멱등하게 갱신하는 projection이다. MVP Discovery Query Model도 쓰기 Aggregate가 아니지만 영속
+복제본을 두지 않고 Merchant `StoreDiscoveryProfile`의 public DTO projection을 요청 범위에서만 쓴다.
 
 ## Aggregate size rules
 

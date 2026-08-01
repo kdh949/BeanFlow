@@ -86,14 +86,14 @@ sequence를 따른다. `Depends-On`은 active sibling branch base를 계산하�
 implementation branch는 당시 최신 `main`에서 시작한다.
 
 ```text
-00 baseline ──> 10 issuer ──> 15 settlement input ────────────────┐
-     │                                                            │
-     └──> 11 policy/grants ──> 12 allocation/restoration ─> 13 recovery ─┤
-signed cursor ────────────────────────────────────────────────────────┘
-11 policy/grants + signed cursor ──> 14 point-account read
+00 baseline ──> 10 issuer ──> 15 settlement input
+     └──> 11 policy/grants ──> 12 allocation/restoration ─> 13 recovery
 
-12 allocation/restoration + 13 recovery + 15 settlement input
-    └──> 16 immutable financial events ─> 20 Settlement ─> 30 compensation ─> 40 command (Draft) ─> 50 recovery
+11 policy/grants + 13 recovery + signed cursor ──> 14 point-account read
+
+12 allocation/restoration + 13 recovery + 15 settlement input ──> 16 immutable financial events
+15 settlement input + 16 immutable financial events + signed cursor ──> 20 Settlement
+11 policy/grants + 20 Settlement ──> 30 compensation ─> 40 command (Draft) ─> 50 recovery
 ```
 
 여기서 "다음 계획"은 milestone 표의 다음 행이 아니라 **모든 direct phase input의 actual
@@ -164,7 +164,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 4. [만료 혜택 정책과 operator grant foundation을 만든다](customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00
 5. [부분 환불 allocation과 포인트 복원을 만든다](customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11
 6. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12
-7. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, cursor
+7. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
 8. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
 9. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
 10. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
@@ -184,6 +184,8 @@ Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번
 - Plan 20이 Plan 15 immutable input evidence 없이 `OrderCompletedV2` producer 또는 SettlementItem을 만들지 않음
 - 13 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
   노출하지 않음
+- 14는 11/13/signed cursor 중 하나라도 미완료면 ready가 되지 않고 `recoveryPendingKrw`를
+  0 또는 추측 집계로 대체하지 않음
 - 40 Draft만 완료된 상태에서 main merge/deploy 또는 production success path가 노출되지 않음
 - active orchestration plan이 automatic implementation candidate가 되지 않고 migration writer가 병렬로 시작되지 않음
 - 각 계획의 PostgreSQL, contract, Modulith, 동시성·장애 suite 결과가 실제 기록됨
@@ -253,6 +255,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-08-01 | Superseded | non-consuming cursor foundation을 issuer migration의 queue predecessor로 표현 | direct phase input이 아닌 queue 순서를 dependency로 표현할 수 없음 | ADR-071, ADR-072 |
 | 2026-08-01 | Accepted | Plan 10–15 semantic cycle을 Plan 10/11/12/13/14/16 vertical slices로 분리 | Plan 15는 issuer만, Plan 16은 allocation/recovery와 snapshot을 함께 소비 | ADR-063/065/068/069/071/072 |
 | 2026-08-01 | Accepted | Plan 10은 completed Plan 00만 직접 소비하고 signed cursor는 Plan 14/20의 독립 input으로 유지 | dependency graph가 실제 phase input만 표현하고 migration-writer lease가 queue scheduling을 담당하게 함 | ADR-070, ADR-072 |
+| 2026-08-01 | Accepted | Plan 14는 Plan 11 grant, Plan 13 recovery summary와 signed cursor를 직접 소비 | 실제 `recoveryPendingKrw` 없이 조회를 조기 활성화하지 않음 | ADR-069, ADR-072 |
 | 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item 귀속을 소유하고 lifecycle 계획이 계산·Adjustment·Dispute를 확장 | Batch-scoped Item API를 선행 구현하면서 migration 중복 제거 | ADR-067 |
 
 ## Outcomes & Retrospective
@@ -260,8 +263,9 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
 `CLEAN_CUTOVER_GATE = PASSED`다. Plan 10은 Plan 00 outcome 뒤 독립적으로 시작할 수 있고 signed
 cursor는 Plan 14/20의 실제 소비 input으로만 남는다. migration-writer lease는 ready plan의 실행 순서를
-직렬화하지만 dependency를 추가하지 않는다. Plan 50이 완료되기 전 고객 취소 command의 production
-success path는 계속 차단된다.
+직렬화하지만 dependency를 추가하지 않는다. Plan 14는 Plan 11/13/cursor 세 input의 마지막
+completion commit에서만 implementation-ready로 전환한다. Plan 50이 완료되기 전 고객 취소 command의
+production success path는 계속 차단된다.
 
 ## Revision Notes
 

@@ -57,7 +57,7 @@ schema-writing plan을 한 번에 하나만 실행하게 하지만, 실제로 �
 ```text
 Plan 00 -> Plan 10 issuer -> Plan 15 snapshot
 Plan 00 -> Plan 11 grants -> Plan 12 allocation -> Plan 13 recovery
-Plan 11 grants + signed-cursor foundation -> Plan 14 read
+Plan 11 grants + Plan 13 recovery + signed-cursor foundation -> Plan 14 read
 Plan 12 + Plan 13 + Plan 15 -> Plan 16 refund/Loyalty events
 Plan 15 + Plan 16 + signed-cursor foundation -> Plan 20
 Plan 11 grants + Plan 20 -> Plan 30 -> Plan 40 -> Plan 50
@@ -72,6 +72,11 @@ Ordering producer와 Settlement consumer를 소유한다. Plan 30의 prior paral
 Plan 20 outcome 외에도 Plan 11 policy-head outcome을 직접 소비한다. Plan 40/50은 Plan 30까지의 merged
 `main`을 input으로 한다. 이 graph는 logical context ownership을 합치거나 settlement schema ownership을
 변경하지 않는다.
+
+Plan 14는 Plan 11의 grant enforcement, Plan 13의 실제 `recoveryPendingKrw` summary와 ledger type,
+signed-cursor codec을 각각 직접 소비한다. Plan 13이 Plan 11의 transitive successor여도 grant와
+recovery는 서로 다른 직접 input이므로 둘을 모두 기록한다. Plan 14는 세 dependency가 모두 completed인
+마지막 completion commit에서만 `Implementation-Ready=true`로 전환한다.
 
 ### Plan 40 production gate
 
@@ -142,6 +147,8 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   migration writers를 거부하며, successor path update가 빠지면 실패한다.
 - customer-cancellation sequence에서 Plan 20이 Plan 15 이전, Plan 30이 Plan 20 이전, Plan 50이
   Plan 40 이전에 ready가 되지 않음을 확인한다.
+- Plan 14가 Plan 11, Plan 13과 signed-cursor foundation 중 하나라도 미완료면 ready가 되지 않음을
+  확인한다.
 - Plan 10이 signed-cursor foundation을 direct dependency로 다시 추가하지 않고 Plan 00 outcome만
   소비하는지 확인한다.
 

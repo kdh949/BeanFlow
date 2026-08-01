@@ -2018,7 +2018,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        [accountId, availablePointsKrw, recoveryPendingKrw, currency, updatedAt]
+        [accountId, availablePointsKrw, recoveryPendingKrw, currency]
       properties:
         accountId:
           $ref: "#/components/schemas/Identifier"
@@ -2029,8 +2029,6 @@ components:
           description: Sum of Loyalty PointRecoveryPending remaining amounts. It is not a negative available balance.
         currency:
           $ref: "#/components/schemas/Currency"
-        updatedAt:
-          $ref: "#/components/schemas/DateTime"
     PointTransactionPage:
       type: object
       additionalProperties: false

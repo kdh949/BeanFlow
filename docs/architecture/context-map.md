@@ -38,7 +38,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Identity | API/Application Services | Identity | 인증 actor와 membership 조회 | 요청 시 동기 |
 | Eventing | Ordering과 event consumers | 원본 Context | 중립적인 versioned event 계약 | producer/consumer compile-time 분리 |
 | Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement 공개 동기 조회 | 주문 생성 시 현재 값 필요 |
-| Merchant | Discovery | Merchant / Discovery Read Model | 동기 조회 또는 영속 projection | 검색 응답은 source freshness를 명시 |
+| Merchant | Discovery | Merchant `StoreDiscoveryProfile` | public Query API의 동기 DTO projection | 검색 응답은 current owner state를 사용 |
 | Ordering | Fulfillment | Fulfillment | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Inventory | Inventory | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Promotion | Promotion | 검증·예약 API | 주문 금액 확정 전 필요 |
@@ -69,8 +69,8 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 |---|---|---|
 | Identity | actor, role, store membership | actor identity, membership check |
 | Eventing | write data 없음 | versioned integration event 계약 |
-| Merchant | Store, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, sellable requirement와 applicable settlement-terms lookup |
-| Discovery | 위치 검색용 Read Model만 소유; 사용자 정밀 좌표는 저장하지 않음 | nearby store query |
+| Merchant | Store, 1:1 `StoreDiscoveryProfile`, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, 검증된 공개 매장명·위치 query, sellable requirement와 applicable settlement-terms lookup |
+| Discovery | durable write data 없음; 사용자 정밀 좌표와 Merchant profile 복제본을 저장하지 않음 | nearby store query와 request-only projection |
 | Ordering | Order, OrderLine, `OrderSettlementInputSnapshot`, 주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
 | Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API |
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
@@ -90,7 +90,9 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
   `sellableUnitId + quantityPerLineUnit` 요구량으로 번역한다. Inventory는 메뉴와
   옵션의 의미를 해석하지 않고 sellable unit 수량만 소유한다.
 - Notification은 Provider 상태를 BeanFlow delivery 상태로 번역한다.
-- Discovery는 Merchant 쓰기 Entity를 검색 편의로 직접 확장하지 않는다.
+- Discovery는 Merchant 쓰기 Entity를 검색 편의로 직접 확장하거나 Repository를 직접 조회하지
+  않는다. Merchant는 별도 `StoreDiscoveryProfile`을 소유하고 public Query API로 DTO projection을
+  제공하며, MVP Discovery는 이를 영속 복제하거나 event로 동기화하지 않는다.
 - Analytics는 원본 거래 상태의 의미를 자체 지표 정의로 변환한다.
 - Operations는 원본 Aggregate를 직접 수정하지 않고 owner Context의 승인된 명령을 호출한다.
   setup 무결성 scanner도 read-only cross-context projection만 사용하고 owner table을
