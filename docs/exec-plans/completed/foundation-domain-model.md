@@ -1,6 +1,9 @@
 # Establish BeanFlow product and domain foundations
 
 > **Status:** `COMPLETED`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `true`
 > **Depends-On:** —
 > **Completed-At:** `2026-07-28`
 

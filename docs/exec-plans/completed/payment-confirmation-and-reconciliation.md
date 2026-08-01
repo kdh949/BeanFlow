@@ -1,6 +1,9 @@
 # Confirm external payments and reconcile unknown results
 
 > **Status:** `COMPLETED`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/order-creation-and-reservation-lease.md`
 > **Completed-At:** `2026-07-29`
 

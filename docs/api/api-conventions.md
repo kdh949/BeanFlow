@@ -245,9 +245,12 @@ reason과 evidence를
 - common cursor는 ADR-070의 `v1.<key-id>.<payload>.<signature>` HMAC-SHA-256 format을
   사용한다. endpoint, canonical filter hash, stable sort tuple과 24시간 expiry를 signature에
   bind한다.
-- 매장 거리 검색 cursor는 `(distanceMeters, storeId)`, 정산 Batch는
-  `(settlementDate, settlementBatchId)`, Batch Item은 `(completedAt, settlementItemId)`를
-  사용한다.
+- 매장 거리 검색 cursor는 `(distanceMicrometers, storeId)`를 사용하고 response의
+  `distanceMeters`는 display-only floored integer다. Point ledger는
+  `(occurredAt DESC, transactionId DESC)`, 정산 Batch는 `(settlementDate DESC,
+  settlementBatchId DESC)`, Batch Item은 `(completedAt ASC, settlementItemId ASC)`를 사용한다.
+- Nearby `radiusMeters`는 `1..10000`이다. PostGIS raw range predicate, micrometer sort/cursor
+  tuple, response meter conversion과 latitude/longitude decimal normalization은 ADR-070이 canonical이다.
 - 정렬 기준과 tie-breaker를 문서화한다.
 - cursor는 내부 값을 직접 수정할 수 없는 opaque string으로 전달한다. malformed, signature/
   version/expiry/filter scope mismatch는 query 실행 전 `400 INVALID_REQUEST`다.

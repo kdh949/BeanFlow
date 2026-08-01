@@ -85,6 +85,10 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
   계획은 이 schema와 gate evidence를 전제하고 같은 migration을 다시 만들지 않는다.
 - Plan 30은 정책 저장소/API migration을 다시 만들지 않고 기존 종료용 네 head를
   OrderCompensationCase snapshot과 event에 연결한다.
+- **Execution amendment (2026-08-01):** Plan 30은 Plan 10의 종료용 네 policy head를 직접
+  소비하므로 Plan 10 outcome을 direct dependency로 유지한다. ADR-072의 migration-writer lane에서
+  Plan 20은 별도의 serialized phase predecessor이며, Plan 30은 Plan 10·20이 모두 completed인
+  latest-main baseline에서만 시작한다. Plan 20은 이 정책 기반을 소유하거나 대체하지 않는다.
 
 ## Alternatives Considered
 
@@ -108,8 +112,9 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 ### 정책 기반을 Plan 30에서 먼저 구현
 
 - 기존 compensation 계획의 범위를 유지한다.
-- `00 → 10 → 30` 직접 의존을 뒤집어 Plan 10이 자신의 필수 정책보다 먼저 실행될 수
-  없다. Plan 20은 Plan 10과 병렬로 시작할 수 있지만 이 정책 기반을 대신 소유하지 않는다.
+- `00 → 10 → 30` 직접 정책 의존을 뒤집어 Plan 10이 자신의 필수 정책보다 먼저 실행될 수
+  없다. 과거 Plan 20 병렬 실행 대안은 ADR-072 migration-writer lane으로 supersede됐지만,
+  Plan 20은 이 정책 기반을 대신 소유하지 않는다.
 
 ## Rationale
 
@@ -197,3 +202,4 @@ Refund, Payment, Order, PointLot, policy version과 customer ID는 metric tag로
 - [ADR-041](ADR-041-trigger-and-benefit-scoped-restoration-policy.md)
 - [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md)
 - [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md)
+- [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)

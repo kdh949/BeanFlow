@@ -26,6 +26,8 @@ required=(
   "docs/decisions/README.md"
   "docs/decisions/minor-decisions.md"
   "docs/adr/README.md"
+  "docs/adr/ADR-071-settlement-input-snapshot-foundation.md"
+  "docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md"
   "docs/api/api-conventions.md"
   "docs/api/error-catalog.md"
   "docs/security/authorization-matrix.md"
@@ -39,11 +41,13 @@ required=(
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
   "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
   "docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
+  "docs/exec-plans/active/signed-cursor-foundation.md"
   "docs/exec-plans/completed/ci-pr-validation.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
@@ -81,6 +85,9 @@ plan_files = sorted((root / 'docs/exec-plans').glob('*/*.md'))
 plan_metadata_pattern = re.compile(
     r'# [^\n]+\n\n'
     r'> \*\*Status:\*\* `(ACTIVE|COMPLETED)`\n'
+    r'> \*\*Kind:\*\* `(IMPLEMENTATION|ORCHESTRATION)`\n'
+    r'> \*\*Implementation-Ready:\*\* `(true|false)`\n'
+    r'> \*\*Writes-Migration:\*\* `(true|false)`\n'
     r'> \*\*Depends-On:\*\* (.+)\n'
     r'> \*\*Completed-At:\*\* `([^`]+)`\n'
 )
@@ -92,7 +99,7 @@ for plan_file in plan_files:
     if match is None:
         metadata_errors.append(f'{relative_path}: title 바로 아래 canonical metadata가 없습니다.')
         continue
-    status, depends_on_field, completed_at = match.groups()
+    status, kind, implementation_ready, writes_migration, depends_on_field, completed_at = match.groups()
     directory = plan_file.parent.name
     expected_status = {'active': 'ACTIVE', 'completed': 'COMPLETED'}.get(directory)
     if expected_status is None or status != expected_status:
@@ -109,6 +116,12 @@ for plan_file in plan_files:
             metadata_errors.append(
                 f'{relative_path}: COMPLETED plan의 Completed-At은 ISO-8601 date여야 합니다.'
             )
+    if kind == 'ORCHESTRATION' and (
+        implementation_ready != 'false' or writes_migration != 'false'
+    ):
+        metadata_errors.append(
+            f'{relative_path}: ORCHESTRATION plan은 Implementation-Ready/Writes-Migration 모두 false여야 합니다.'
+        )
     if depends_on_field == '—':
         dependencies = []
     else:
@@ -118,7 +131,13 @@ for plan_file in plan_files:
             metadata_errors.append(
                 f'{relative_path}: Depends-On은 comma-separated repository-relative backtick path 또는 —여야 합니다.'
             )
-    plan_metadata[relative_path] = {'status': status, 'dependencies': dependencies}
+    plan_metadata[relative_path] = {
+        'status': status,
+        'kind': kind,
+        'implementation_ready': implementation_ready == 'true',
+        'writes_migration': writes_migration == 'true',
+        'dependencies': dependencies,
+    }
 
 if metadata_errors:
     print('Invalid ExecPlan canonical metadata:', file=sys.stderr)
@@ -146,6 +165,29 @@ for relative_path, metadata in plan_metadata.items():
                 file=sys.stderr,
             )
             sys.exit(1)
+    if (
+        metadata['status'] == 'ACTIVE'
+        and metadata['implementation_ready']
+        and metadata['kind'] != 'IMPLEMENTATION'
+    ):
+        print(
+            f'Only active IMPLEMENTATION ExecPlans may be Implementation-Ready: {relative_path}',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if metadata['status'] == 'ACTIVE' and metadata['implementation_ready']:
+        incomplete_dependencies = [
+            dependency
+            for dependency in metadata['dependencies']
+            if plan_metadata[dependency]['status'] != 'COMPLETED'
+        ]
+        if incomplete_dependencies:
+            print(
+                f'Implementation-Ready ExecPlan has incomplete direct dependencies: '
+                f'{relative_path} -> {", ".join(incomplete_dependencies)}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 visiting = set()
 visited = set()
@@ -167,11 +209,84 @@ def visit_exec_plan(relative_path, trail):
 for relative_path in plan_metadata:
     visit_exec_plan(relative_path, [])
 
+expected_execution_metadata = {
+    'customer-order-cancellation-and-recovery.md': ('ORCHESTRATION', False, []),
+    'signed-cursor-foundation.md': ('IMPLEMENTATION', False, []),
+    'customer-order-cancellation-10-partial-refund-allocation-foundation.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-00-contract-baseline.md',
+            'signed-cursor-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-15-settlement-input-snapshot-foundation.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-10-partial-refund-allocation-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-20-settlement-foundation.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
+            'signed-cursor-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-30-order-compensation-foundation.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-10-partial-refund-allocation-foundation.md',
+            'customer-order-cancellation-20-settlement-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-40-command.md': ('IMPLEMENTATION', True, [
+        'customer-order-cancellation-30-order-compensation-foundation.md',
+    ]),
+    'customer-order-cancellation-50-recovery.md': ('IMPLEMENTATION', True, [
+        'customer-order-cancellation-40-command.md',
+    ]),
+}
+plan_paths_by_filename = {}
+for relative_path in plan_metadata:
+    filename = Path(relative_path).name
+    if filename in plan_paths_by_filename:
+        print(f'ExecPlan filename is ambiguous: {filename}', file=sys.stderr)
+        sys.exit(1)
+    plan_paths_by_filename[filename] = relative_path
+
+for filename, expected_metadata in expected_execution_metadata.items():
+    relative_path = plan_paths_by_filename.get(filename)
+    if relative_path is None:
+        print(f'Missing execution-plan metadata target: {filename}', file=sys.stderr)
+        sys.exit(1)
+    expected_kind, expected_writes, expected_dependency_filenames = expected_metadata
+    expected_dependencies = []
+    for dependency_filename in expected_dependency_filenames:
+        dependency_path = plan_paths_by_filename.get(dependency_filename)
+        if dependency_path is None:
+            print(f'Missing execution-plan dependency target: {dependency_filename}', file=sys.stderr)
+            sys.exit(1)
+        expected_dependencies.append(dependency_path)
+    actual = plan_metadata[relative_path]
+    if (
+        actual['kind'] != expected_kind
+        or actual['writes_migration'] != expected_writes
+        or actual['dependencies'] != expected_dependencies
+    ):
+        print(f'Customer cancellation execution metadata is stale: {relative_path}', file=sys.stderr)
+        sys.exit(1)
+
 traceability = (root / 'docs/architecture/policy-traceability.md').read_text(encoding='utf-8')
 br14_row = next((line for line in traceability.splitlines() if line.startswith('| BR-14 |')), '')
 if 'Blocked by' not in br14_row:
     print('BR-14 traceability must expose its implementation prerequisites.', file=sys.stderr)
     sys.exit(1)
+for br_id, required_record in {
+    'BR-18': 'ADR-071',
+    'BR-19': 'ADR-071',
+    'BR-20': 'ADR-071',
+    'BR-28': 'ADR-070',
+}.items():
+    row = next((line for line in traceability.splitlines() if line.startswith(f'| {br_id} |')), '')
+    if required_record not in row:
+        print(f'{br_id} traceability must include {required_record}.', file=sys.stderr)
+        sys.exit(1)
 
 readiness = (root / 'docs/quality/customer-order-cancellation-readiness.md').read_text(encoding='utf-8')
 if 'CLEAN_CUTOVER_GATE = PASSED' not in readiness:
@@ -879,6 +994,20 @@ else:
     ):
         print('Common cursor must be an optional non-blank HMAC-signed query parameter.', file=sys.stderr)
         sys.exit(1)
+    radius_parameter = parameters['RadiusMeters']
+    if (
+        radius_parameter.get('in') != 'query'
+        or radius_parameter.get('required') is not True
+        or radius_parameter.get('schema', {}).get('minimum') != 1
+        or radius_parameter.get('schema', {}).get('maximum') != 10000
+    ):
+        print('Nearby radiusMeters must be a required integer in the 1..10000 range.', file=sys.stderr)
+        sys.exit(1)
+    nearby_description = spec['paths']['/stores/nearby']['get'].get('description', '')
+    nearby_distance_description = schemas['NearbyStore']['properties']['distanceMeters'].get('description', '')
+    if 'canonical micrometer distance tuple' not in nearby_description or 'display value, not the cursor tuple' not in nearby_distance_description:
+        print('Nearby distance display/cursor tuple contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
     expected_cursor_operations = {
         'GET /stores/nearby',
         'GET /point-accounts/{accountId}/transactions',
@@ -908,6 +1037,41 @@ else:
                 sys.exit(1)
     if cursor_operations != expected_cursor_operations:
         print('Cursor operation inventory is stale; update the shared pagination contract.', file=sys.stderr)
+        sys.exit(1)
+    point_account_get = spec['paths']['/point-accounts/{accountId}']['get']
+    point_account_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in point_account_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if point_account_parameter_refs != {
+        '#/components/parameters/PointAccountId',
+        '#/components/parameters/OptionalAccessReason',
+    } or set(point_account_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
+        print('Point-account summary owner/operator read contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    point_transaction_get = spec['paths']['/point-accounts/{accountId}/transactions']['get']
+    point_transaction_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in point_transaction_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if point_transaction_parameter_refs != {
+        '#/components/parameters/PointAccountId',
+        '#/components/parameters/OptionalAccessReason',
+        '#/components/parameters/Cursor',
+        '#/components/parameters/Limit',
+    } or set(point_transaction_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
+        print('Point-transaction owner/operator cursor contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    optional_access_reason = parameters['OptionalAccessReason']
+    if (
+        optional_access_reason.get('in') != 'header'
+        or optional_access_reason.get('name') != 'X-Access-Reason'
+        or optional_access_reason.get('required') is not False
+        or 'PLATFORM_OPERATOR' not in optional_access_reason.get('description', '')
+    ):
+        print('Point-account support-read optional access-reason contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     policy_get = spec['paths']['/operations/policies/expired-benefit-restoration']['get']
     policy_get_parameter_refs = {
@@ -1114,6 +1278,63 @@ else:
     )
     if not adjustment_event_row.endswith('| PointTransaction |'):
         print('PointsAdjustedV1 must use PointTransaction as its source of truth.', file=sys.stderr)
+        sys.exit(1)
+    if 'Analytics PointsAdjustedV1 consumer' in adjustment_plan:
+        print('Point-adjustment plan must not own the Analytics PointsAdjustedV1 consumer.', file=sys.stderr)
+        sys.exit(1)
+    analytics_plan = (
+        root / 'docs/exec-plans/active/analytics-refund-and-late-event-projection.md'
+    ).read_text(encoding='utf-8')
+    if 'consumer는 Analytics plan만 구현' not in analytics_plan:
+        print('Analytics plan must own the PointsAdjustedV1 consumer checkpoint.', file=sys.stderr)
+        sys.exit(1)
+
+    settlement_input_adr = (
+        root / 'docs/adr/ADR-071-settlement-input-snapshot-foundation.md'
+    ).read_text(encoding='utf-8')
+    required_settlement_input_fragments = (
+        'StoreSettlementTerms',
+        'OrderSettlementInputSnapshot',
+        'feeBaseKrw',
+        'SETTLEMENT_INPUT_UNAVAILABLE',
+        'netSettlementKrw',
+    )
+    if not all(fragment in settlement_input_adr for fragment in required_settlement_input_fragments):
+        print('Settlement-input source/materialization ADR is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    cursor_adr = (root / 'docs/adr/ADR-070-signed-cursor-and-pagination-contract.md').read_text(encoding='utf-8')
+    required_cursor_fragments = (
+        '(distanceMicrometers ASC, storeId ASC)',
+        '`1..10000`',
+        'stripTrailingZeros()',
+        'signed-cursor foundation',
+    )
+    if not all(fragment in cursor_adr for fragment in required_cursor_fragments):
+        print('Signed-cursor Nearby canonicalization/ownership contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    operator_permission_adr = (
+        root / 'docs/adr/ADR-069-operator-permission-grants-and-audited-policy-read.md'
+    ).read_text(encoding='utf-8')
+    required_operator_permission_fragments = (
+        'POINT_ACCOUNT_READ',
+        'operator-permission-bootstrap',
+        'verified release principal',
+        '`grant`, `revoke`, `regrant`',
+    )
+    if not all(fragment in operator_permission_adr for fragment in required_operator_permission_fragments):
+        print('Operator permission bootstrap/read contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    execution_adr = (
+        root / 'docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md'
+    ).read_text(encoding='utf-8')
+    required_execution_fragments = (
+        'migration-writer lease',
+        'Plan 40은 latest main base의 **Draft PR**',
+        'Plan 40→50은 하나의 Draft stack과 하나의 migration-writer lease',
+        '모든 direct successor의 `Depends-On` path를 새 completed path로 갱신',
+    )
+    if not all(fragment in execution_adr for fragment in required_execution_fragments):
+        print('Unattended execution/migration lane ADR is incomplete.', file=sys.stderr)
         sys.exit(1)
 
     policy_patch = spec['paths'][

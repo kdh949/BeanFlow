@@ -1,6 +1,9 @@
 # 결제 완료 주문의 매장 처리 생명주기 완성
 
 > **Status:** `COMPLETED`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/payment-confirmation-and-reconciliation.md`
 > **Completed-At:** `2026-07-30`
 

@@ -1,6 +1,9 @@
 # 감사형 Loyalty 포인트 조정 foundation을 만든다
 
 > **Status:** `ACTIVE`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
 > **Completed-At:** `—`
 
@@ -62,7 +65,7 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
   `ADJUSTMENT`/balance_effect persistence, target AuditRecord와 PointsAdjusted outbox event
 - 양수의 new Lot/credit transaction과 음수 FIFO Lot debit/transaction
 - Plan 10의 existing PointLot issuer data precheck와 non-guessing migration gate 검증
-- DTO projection의 signed adjustment amount와 Analytics consumer idempotency
+- DTO projection의 signed adjustment amount, `PointsAdjustedV1` producer/outbox와 producer contract test
 
 ### Non-goals
 
@@ -117,8 +120,8 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
   Provider, Analytics consumer와 notification은 transaction 밖이다.
 - lock 순서는 항상 PointAccount → ordered PointLot이다. issuer reference는 immutable
   value snapshot이므로 Merchant Aggregate를 JPA association으로 로드하지 않는다.
-- Analytics consumer는 event ID와 adjustment source로 idempotent projection하고 owner
-  transaction failure를 cache/zero/replayed success로 대체하지 않는다.
+- Analytics listener, receipt, delta/freshness projection은 Analytics plan의 단독 소유다. Loyalty는
+  producer transaction/outbox contract만 구현하며 Analytics consumer를 등록하거나 projection table을 만들지 않는다.
 
 ## Alternatives Considered
 
@@ -143,8 +146,8 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
   위장하거나 API 삭제 endpoint를 제공하지 않는다.
 - Plan 10 issuer precheck evidence가 없거나 기존 Lot issuer를 재구성할 수 없으면
   endpoint를 활성화하지 않는다. 추정 PLATFORM backfill은 금지한다.
-- Analytics consumer 실패는 PointsAdjusted publication retry로 남고, 이미 확정된
-  adjustment를 되돌리거나 customer에게 성공 알림을 보내지 않는다.
+- Analytics listener failure는 Analytics plan의 publication retry/receipt state로 남고, 이미 확정된
+  adjustment를 되돌리거나 Loyalty command의 201을 바꾸지 않는다.
 
 ## Data and Migration
 
@@ -187,7 +190,7 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
   `amountKrw` (child transaction signed effect 합)을 가진다. `issuerType`은 CREDIT에만 넣고, 여러 issuer Lot을
   차감할 수 있는 DEBIT에서는 생략한다. raw evidence, actor, Idempotency-Key와 issuer
   reference는 event에 넣지 않는다. Analytics만 소비하고 customer notification event는
-  만들지 않는다.
+  만들지 않는다. consumer listener, receipt/idempotency and projection은 Analytics plan만 구현한다.
 
 ## Milestones
 
@@ -199,8 +202,8 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
 4. Loyalty terminal idempotency persistence/retention worker와 credit/debit command
    transaction, Audit/outbox를 구현한다.
 5. Operations endpoint/DTO projection과 role+Operations grant enforcement를 구현한다.
-6. Analytics PointsAdjustedV1 consumer, concurrency/failure/migration suites와 documentation
-   evidence를 완료한다.
+6. `PointsAdjustedV1` producer/outbox contract, same logical-source conflict와 Analytics-plan
+   consumer handoff evidence를 완료한다.
 
 ## Required Tests
 
@@ -216,7 +219,8 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
   cleanup failure의 due row 보존
 - Plan 10 issuer precheck의 empty/verified/unresolvable fixture와 endpoint activation
   precondition, balance_effect/type CHECK 및 current-type deterministic backfill
-- public signed amount projection, CREDIT/DEBIT PointsAdjustedV1 payload condition/version and Analytics replay
+- public signed amount projection, CREDIT/DEBIT PointsAdjustedV1 payload condition/version, producer
+  logical-source conflict and Analytics handoff contract
 - Modulith/ArchUnit, PostgreSQL Testcontainers, OpenAPI contract and migration empty/nonempty fixtures
 
 ## Validation Commands
@@ -244,7 +248,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 - ADR-011, ADR-017, ADR-022, ADR-064, ADR-065/066/068/069 implementation evidence
 - BR-10/BR-20/BR-25/BR-26, authorization matrix, aggregate invariants, transaction boundaries,
   state machines, event catalog, OpenAPI and API conventions
-- Operations runbook, analytics contract test and migration release evidence
+- Operations runbook, producer contract handoff and migration release evidence
 
 ## Progress
 
@@ -253,7 +257,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 - [ ] persistence and migration
 - [ ] command transaction/idempotency/audit/outbox
 - [ ] endpoint and authorization
-- [ ] analytics/concurrency/failure validation
+- [ ] producer/concurrency/failure validation and Analytics handoff
 - [ ] full build and documentation evidence
 
 ## Surprises & Discoveries
@@ -274,11 +278,13 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 | 2026-08-01 | Accepted existing | PointLot issuer snapshot migration은 Plan 10의 선행 책임이고 adjustment는 evidence를 소비 | 만료 부분 환불 compensation이 같은 schema를 먼저 필요로 하며 중복 migration을 막음 | ADR-063, ADR-066 |
 | 2026-08-01 | Accepted | `POINT_ADJUSTMENT`는 Operations DB grant로 판정하고 role/JWT claim fallback을 금지 | revoke와 permission dependency failure를 명시적으로 보존 | ADR-069 |
 | 2026-08-01 | Accepted | Analytics event name/version은 `PointsAdjustedV1`/1로 고정 | event catalog 이름만으로 payload를 추측하지 않음 | ADR-068 |
+| 2026-08-01 | Accepted | Loyalty는 `PointsAdjustedV1` producer/outbox만 소유하고 Analytics listener·receipt·projection은 구현하지 않음 | 같은 consumer를 두 plan이 만들지 않게 함 | ADR-068, Analytics plan |
 
 ## Outcomes & Retrospective
 
 미구현 상태다. Plan 10의 PointTransaction base contract, issuer precheck와 ADR-069 grant
-authorization evidence가 완료되기 전에는 endpoint 또는 migration을 시작하지 않는다.
+authorization evidence가 완료되기 전에는 endpoint 또는 migration을 시작하지 않는다. Analytics
+consumer implementation은 이 plan의 completion condition이 아니라 Analytics plan의 own checkpoint다.
 
 ## Revision Notes
 

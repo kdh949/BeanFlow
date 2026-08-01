@@ -27,7 +27,7 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 - `(actor_id, permission)`는 unique다. 활성 grant가 없으면 permission은 없다. Platform Operator
   role 또는 다른 grant에서 기본 permission을 seed하거나 추론하지 않는다.
 - MVP permission vocabulary는 `EXPIRED_BENEFIT_POLICY_READ`,
-  `EXPIRED_BENEFIT_POLICY_WRITE`, `POINT_ADJUSTMENT`다. 새 privileged operation은 별도
+  `EXPIRED_BENEFIT_POLICY_WRITE`, `POINT_ACCOUNT_READ`, `POINT_ADJUSTMENT`다. 새 privileged operation은 별도
   ADR 또는 vocabulary amendment 없이 이 권한을 재사용하지 않는다.
 - JWT `sub`는 UUID actor ID여야 하고 `roles`에는 `PLATFORM_OPERATOR`가 있어야 한다.
   이 둘 중 하나가 없으면 permission lookup 전에 403이다. Authentication signature, issuer,
@@ -45,9 +45,29 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   fallback하지 않고 `503 DEPENDENCY_UNAVAILABLE`을 반환한다. active grant 부재와 role mismatch는
   `403 ACCESS_DENIED`다.
 - 권한 결과를 process cache, in-memory map 또는 long-lived JWT claim으로 cache하지 않는다.
-  따라서 grant revoke의 적용 지연은 DB commit 경합 이외에는 없다. grant 관리 API/UI는 이
-  decision의 구현 범위 밖이지만, 직접 DB 수정은 허용된 grant management workflow와 Audit 없이
-  수행하지 않는다.
+  따라서 grant revoke의 적용 지연은 DB commit 경합 이외에는 없다.
+
+### 최초 grant bootstrap과 lifecycle
+
+- default seed, role-derived grant 및 직접 SQL DML은 금지한다. `OperatorPermissionGrant`가 처음
+  비어 있는 환경도 동일하다.
+- Plan 10은 HTTP/API/UI와 분리된 offline
+  `operator-permission-bootstrap` command를 제공한다. 이 command는 controlled deployment job의
+  verified release principal로만 실행하며, application JWT/role이나 request header로 release
+  principal을 대체하지 않는다. job identity 또는 command authorization이 확인되지 않으면 시작/실행을
+  실패시킨다.
+- `grant`, `revoke`, `regrant` action은 `actorId`, closed permission, non-blank reason,
+  non-blank evidence reference, immutable release-principal reference와 correlation ID를 요구한다.
+  command는 grant row state/version과 target `AuditRecord`를 같은 local transaction에 기록한다.
+  raw job credential, secret 또는 evidence body는 저장/로그하지 않는다.
+- `grant`는 absent row만 ACTIVE로 만든다. existing ACTIVE는 idempotent success가 아니라
+  `ALREADY_ACTIVE` failure다. `revoke`는 ACTIVE만 REVOKED로 바꾸며 repeated revoke는 failure다.
+  `regrant`는 REVOKED row만 새 version/새 Audit source로 ACTIVE로 바꾼다. 모든 action의 source는
+  `operator-permission-grant:{actorId}:{permission}:{version}:{action}`이고 Audit source unique로
+  보호한다.
+- bootstrap command의 Audit/grant transaction failure는 partial state, direct DB repair 또는
+  role-only privileged access로 대체하지 않는다. first grant는 Plan 10 migration 결과가 main에
+  적용된 뒤, policy/point endpoint activation 전에 운영 runbook evidence와 함께 수행한다.
 
 ### Expired-benefit policy API reason contract
 
@@ -65,8 +85,22 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   request body reason/evidence를 요구한다. grant 검증은 PointAccount lock 뒤 같은 command
   transaction에 참여하며 Account/Lot/ledger/Audit/outbox/201과 분리되지 않는다.
 
+### Point account read contract
+
+- customer는 자신의 PointAccount와 ledger만 reason 없이 읽을 수 있다. 다른 customer ownership은
+  403이고 Store/Settlement role은 조회할 수 없다.
+- Platform Operator support read는 `POINT_ACCOUNT_READ` active grant와 `X-Access-Reason`을
+  요구한다. header는 policy GET과 같은 trim 1..200/control-character rule을 쓰며, account/ledger
+  projection과 `POINT_ACCOUNT_READ` AuditRecord가 같은 local transaction에 저장된 경우에만 200이다.
+  header is optional at the OpenAPI parameter level only because customer reads do not send it; operator
+  branch에는 required다.
+- ledger order는 `(occurredAt DESC, transactionId DESC)`이고, cursor filter hash는 endpoint와
+  account ID를 bind한다. this read does not expose issuer reference, raw evidence, idempotency key,
+  internal recovery case or grant state.
+
 Plan 10은 grant schema, Operations public authorization API, policy GET header/audit contract와
-policy PATCH enforcement을 단독 구현한다. Point adjustment plan은 Plan 10 outcome을 소비하고
+policy PATCH enforcement, offline bootstrap command와 customer/operator point-account read vertical
+slice를 단독 구현한다. Point adjustment plan은 Plan 10 outcome을 소비하고
 `POINT_ADJUSTMENT` enforcement을 구현한다. 두 계획은 같은 grant migration을 만들지 않는다.
 
 ## Alternatives Considered
@@ -96,9 +130,10 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
 
 ## Consequences
 
-- role만 가진 Platform Operator는 명시 grant가 생기기 전 policy 또는 point adjustment를
-  실행·조회할 수 없다.
+- role만 가진 Platform Operator는 명시 grant가 생기기 전 policy, point-account support read 또는
+  point adjustment를 실행·조회할 수 없다.
 - Plan 10은 Operations schema/API scope가 늘며 point-adjustment plan의 선행조건이 된다.
+- 새 환경은 audited offline command로 first grant를 만들며, unrecorded SQL seed가 필요하지 않다.
 - policy GET은 새로운 required header와 400 validation contract를 가지며, existing clients는
   header를 보내도록 변경해야 한다.
 - Operations DB 장애는 privileged API를 503으로 실패시킨다. 읽기 성공 또는 role-only access로
@@ -114,12 +149,18 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
 - 정상 GET은 five heads와 exactly one access Audit을 같이 commit한다.
 - policy PATCH 및 point adjustment가 각각 올바른 explicit permission과 body reason/evidence를
   요구하고, 다른 permission으로 통과하지 않는다.
+- release-principal missing/invalid, absent/active/revoked/regranted grant, repeated action과
+  Audit save failure가 bootstrap command에서 exact terminal result와 no partial state를 남긴다.
+- customer own/other account, operator `POINT_ACCOUNT_READ` with/without reason, cursor account scope
+  mismatch와 point-read Audit failure가 ownership/403/400/503 contract를 각각 지킨다.
 
 ## Metrics
 
 - `beanflow.operations.permission.check.count{permission,outcome}`
 - `beanflow.operations.policy.read.count{outcome}`
 - `beanflow.operations.permission.grant.revoke.count{permission,outcome}`
+- `beanflow.operations.permission.bootstrap.count{action,outcome}`
+- `beanflow.loyalty.point_account.read.count{actor_type,outcome}`
 
 actor ID, access reason, evidence, Idempotency-Key와 policy content는 metric tag나 log field에
 넣지 않는다.

@@ -3,15 +3,17 @@
 | Aggregate Root | Responsibility | Core invariants | Other aggregate references |
 |---|---|---|---|
 | Store | 영업·픽업 가능 상태 | 폐점·휴점 매장은 새 주문 불가 | IDs |
+| StoreSettlementTerms | store별 versioned 수수료 계약 | applicable version 하나, fee rate `0..10000`, immutable history와 overlap 금지 | `storeId` |
 | Menu | 메뉴·옵션·가격·판매 상태 | 음수 가격 금지, 유효 옵션만 선택 | `storeId` |
 | MenuConfiguration | 주문 가능한 메뉴·옵션 구성과 재고 요구량 | 정규화한 option ID 집합은 메뉴 안에서 유일하고 sellable unit별 필요 수량은 양수 | `menuId`, `sellableUnitId` |
-| Order | 항목 스냅샷, 금액과 상태 | 결제 시작 후 항목·금액 불변, 허용 전이만 가능, `CANCELLED`는 취소 시각·원인 필수이고 그 외 상태에서는 취소 필드 부재 | IDs |
+| Order | 항목 스냅샷, 금액과 상태 | 결제 시작 후 항목·금액 불변, settlement input snapshot exactly one/tie-out, 허용 전이만 가능, `CANCELLED`는 취소 시각·원인 필수이고 그 외 상태에서는 취소 필드 부재 | IDs |
 | PickupSlot | 시간 구간과 수용량 | 예약+확정 수량 ≤ capacity | `storeId` |
 | PickupReservation | 주문의 슬롯 점유 | 주문당 활성 예약 하나, 만료 후 확정 불가, 종료 복원 state·trigger·source 일치 | `orderId`, `slotId` |
 | SellableStock | 판매 단위 수량 | 가용·예약·확정 수량 음수 금지 | `storeId`, `menuOptionId` |
 | StockReservation | 주문별 재고 점유 | 주문·SKU별 중복 활성 예약 금지, 종료 복원 state·trigger·source 일치 | IDs |
-| Campaign | 대상 품목 기반 정액·정률 할인 정책·수량·부담 | type별 금액 필드, rate `1..10000`, minimum/maximum, 대상 목록과 분담률 유효 | `storeId`, menu IDs |
+| Campaign | 대상 품목 기반 정액·정률 할인 정책·수량·부담 | type별 금액 필드, rate `1..10000`, minimum/maximum, 대상 목록과 burden share 합 10000 유효 | `storeId`, menu IDs |
 | CouponIssuance | 발급 쿠폰 생명주기 | 동시에 두 주문에 사용 불가, 보상 issuance의 original/source/trigger/policy와 immutable terms 일치 | `memberId`, `campaignId`, `orderId` |
+| CouponReservation | 주문 쿠폰 할인·비용 부담 leg | final discount=platform+store burden legs, reservation terms immutable | `orderId`, `couponIssuanceId` |
 | PointAccount | 프로그램별 잔액 요약 | 가용 잔액 음수 금지 | IDs |
 | PointLot | 발급분 available/reserved 잔액·만료·발급 비용 snapshot | 생성 시 만료 Lot 예약 금지, 가용·예약·잔여액 음수 금지, issuer type/reference 불변 | IDs |
 | PointReservation | 주문별 PointLot allocation과 lease | 주문당 active 예약 하나, allocation 합계=예약 총액, 예약 시 유효한 allocation은 주문 lease까지 확정 가능, 복원 source/trigger/policy 일치 | `orderId`, `pointAccountId`, `pointLotId` |

@@ -31,6 +31,9 @@ ExecPlan은 복잡한 Feature 또는 시스템 변경을 다른 대화나 기억
 # <행동 중심 제목>
 
 > **Status:** `ACTIVE` 또는 `COMPLETED`
+> **Kind:** `IMPLEMENTATION` 또는 `ORCHESTRATION`
+> **Implementation-Ready:** `true` 또는 `false`
+> **Writes-Migration:** `true` 또는 `false`
 > **Depends-On:** `docs/exec-plans/.../plan.md`, ... 또는 `—`
 > **Completed-At:** `YYYY-MM-DD` 또는 `—`
 
@@ -82,19 +85,50 @@ ExecPlan은 복잡한 Feature 또는 시스템 변경을 다른 대화나 기억
 
 ## Canonical execution metadata
 
-모든 ExecPlan은 제목 바로 아래에 위 세 metadata line을 둔다. 이 세 줄과 파일의
+모든 ExecPlan은 제목 바로 아래에 위 여섯 metadata line을 둔다. 이 여섯 줄과 파일의
 `active`/`completed` 디렉터리는 실행 재개와 자동 검증에서 함께 사용하는 canonical
-status source다.
+execution source다.
 
 - `active/` 파일은 `Status: ACTIVE`, `Completed-At: —`를 사용한다.
 - `completed/` 파일은 `Status: COMPLETED`, 실제 완료일의 ISO-8601 date를 사용한다.
+- `Kind: IMPLEMENTATION`은 code/schema/API 작업 후보이고 `Kind: ORCHESTRATION`은 dependency,
+  release gate와 evidence만 관리한다. orchestration plan은 `Implementation-Ready: false`,
+  `Writes-Migration: false`여야 하며 자동 implementation Goal로 선택하지 않는다.
+- `Implementation-Ready: true`은 active implementation plan의 direct dependency가 모두
+  completed path의 actual Outcomes/validation evidence로 충족됐고, 아직 사용자 결정을 추측하지
+  않아도 됨을 뜻한다. 나머지는 false다. completed plan은 true/false가 historical metadata일 뿐
+  자동 후보가 아니다.
+- `Writes-Migration: true`은 Flyway migration을 만들거나 변경할 수 있음을 뜻한다. 해당 plan은
+  ADR-072 migration-writer lane 없이는 시작하지 않는다. common code-only plan은 false다.
 - `Depends-On`에는 현재 파일 기준이 아닌 repository-relative ExecPlan path만 적는다.
-  직접 선행 계획이 없으면 `—`를 사용한다. 간접 선행 계획을 반복하지 않는다.
+  **현재 phase를 시작하기 전에 완료되어야 하는 direct input**만 적고, branch base를 맞추기
+  위한 ancestor는 반복하지 않는다. current plan이 여러 independent producer/contract outcome을
+  직접 소비할 때만 여러 path를 적는다. 직접 선행 계획이 없으면 `—`를 사용한다.
 - dependency graph에는 self-reference와 cycle이 없어야 한다. completed plan은 completed
   plan만 직접 dependency로 둘 수 있다.
 - `scripts/verify-docs.sh`는 모든 ExecPlan의 metadata, 경로 존재 여부, status-directory
-  일치와 dependency cycle을 검증한다. checkbox나 Progress 문단은 canonical status를
+  일치와 dependency cycle을 검증한다. checkbox나 Progress 문단은 canonical metadata를
   대체하지 않는다.
+
+### Unattended execution and completion move
+
+- 자동 실행기는 `ACTIVE + IMPLEMENTATION + Implementation-Ready=true`만 candidate로 선택한다.
+  candidate branch는 항상 최신 `main`에서 만들며 active plan head 또는 여러 sibling을 통합한
+  base를 추측하지 않는다.
+- `Writes-Migration=true` candidate는 repository-wide migration-writer lease가 있을 때만 시작한다.
+  lease holder는 branch 생성 뒤 최신 main의 마지막 Flyway 번호를 읽어 새 번호를 고르고, PR merge가
+  끝나기 전 다른 migration writer를 시작하지 않는다. 번호 reservation manifest나 checksum repair로
+  병렬 DDL을 보정하지 않는다.
+- 미완성 required path를 feature flag/profile로 2xx 성공처럼 노출하지 않는다. Plan 40처럼 후속
+  recovery가 필요한 path는 ADR-072의 Draft stack/release PR 규칙을 따른다.
+- Plan 40→50 Draft stack은 하나의 migration-writer lease를 공유한다. Plan 40의 verified
+  completion commit은 parent Draft branch에서 자신의 `active → completed` 이동과 Plan 50의
+  dependency path/ready 갱신을 함께 기록하고, Plan 50은 그 head에서만 시작한다. final child PR이
+  main에 merge될 때까지 unrelated schema writer를 시작하지 않는다.
+- plan completion commit은 `(1) active → completed 이동과 status/date 변경`, `(2) 모든 direct
+  successor의 dependency path 갱신`, `(3) 이제 모든 direct dependency가 completed인 successor의
+  `Implementation-Ready=true` 갱신`, `(4) dependency graph/document validation`을 함께 수행한다.
+  path 갱신을 다음 commit으로 미루지 않는다.
 
 ## 작성 원칙
 

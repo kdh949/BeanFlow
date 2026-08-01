@@ -1,6 +1,9 @@
 # 고객 주문 취소 구현 순서를 조정한다
 
 > **Status:** `ACTIVE`
+> **Kind:** `ORCHESTRATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `false`
 > **Depends-On:** —
 > **Completed-At:** `—`
 
@@ -8,8 +11,8 @@
 
 ## Purpose / Big Picture
 
-이 문서는 고객 주문 취소 capability의 구현 계획이 아니라 여섯 하위 ExecPlan의
-의존관계와 release gate를 관리하는 master orchestration plan이다. 각 하위 계획은
+이 문서는 고객 주문 취소 capability의 구현 계획이 아니라 일곱 하위 ExecPlan과 공통
+signed-cursor foundation의 의존관계와 release gate를 관리하는 master orchestration plan이다. 각 하위 계획은
 이전 대화 없이 독립 실행할 수 있으며, 선행 기반이 완료되기 전에는 고객 취소 HTTP
 기능을 활성화하지 않는다.
 
@@ -48,7 +51,8 @@
 
 - 하위 ExecPlan의 순서, 완료 조건과 차단 조건 관리
 - 정책·계약 baseline과 fact-verification evidence 연결
-- allocation·적립 포인트 회수·issuer snapshot, Settlement, compensation, command, recovery의 범위 분리
+- allocation·적립 포인트 회수·issuer snapshot, settlement input snapshot, Settlement, compensation,
+  command, recovery의 범위 분리
 - 각 계획 결과를 다음 계획의 검증 가능한 입력으로 전달
 
 ### Non-goals
@@ -76,28 +80,47 @@
 
 ## Architecture and Transaction Boundaries
 
-하위 계획은 완전 순차가 아니라 다음 직접 선행조건 DAG를 따른다.
+무인 customer-cancellation 실행은 ADR-072의 single migration-writer lane과 다음 direct phase
+sequence를 따른다. `Depends-On`은 active sibling branch base를 계산하는 값이 아니며 모든
+implementation branch는 당시 최신 `main`에서 시작한다.
 
 ```text
-00 contract baseline and release facts
- ├─> 10 partial-refund allocation foundation
- │     └─> 30 common Order compensation foundation
- └─> 20 Settlement foundation
-
-10 + 20 + 30 ─> 40 customer cancellation command
-20 + 30 + 40 ─> 50 customer cancellation recovery
+00 contract baseline ──┐
+                       ├──> 10 partial-refund allocation/issuer foundation
+signed-cursor foundation ─┘                │
+                                            v
+                              15 settlement-input snapshot foundation
+                                            │
+                                            v
+                              20 Settlement Batch/Item foundation
+                                            │
+                                            v
+                              30 common Order compensation foundation
+                                            │
+                                            v
+                              40 customer cancellation command (Draft only)
+                                            │
+                                            v
+                              50 recovery and release verification
 ```
 
-여기서 "다음 계획"은 milestone 표의 다음 행이 아니라 **모든 직접 선행 계획의 actual
-Outcomes와 validation evidence**가 있는 계획을 뜻한다. Plan 10과 Plan 20은 Plan 00 merge
-baseline에서 병렬 branch로 시작한다. Plan 30 branch의 base는 Plan 10 head이고, Plan 40은
-10·20·30을 모두 통합한 baseline, Plan 50은 20·30·40 통합 baseline을 base로 사용한다.
-Stacked PR은 이 base/head 관계를 PR 설명에 적고, 직접 선행 계획의 migration을 다시 만들지
-않는다.
+여기서 "다음 계획"은 milestone 표의 다음 행이 아니라 **모든 direct phase input의 actual
+Outcomes와 validation evidence**가 있고 `Implementation-Ready=true`인 계획을 뜻한다. Plan 30의
+direct inputs는 Plan 20 lane outcome과 Plan 10 policy-head outcome이다. Plan 10, 15, 20, 30은 각각
+선행 input이 merge된 최신 main에서 새 PR 하나를 만든다. migration writer는
+동시에 하나만 시작하므로 V 번호를 reserved manifest나 sibling rebase로 조정하지 않는다.
 
-계획 40의 endpoint는 계획 50이 완료되기 전 production에서 성공 응답을 반환하도록
-활성화하지 않는다. 각 외부 Provider 호출은 claim transaction과 result transaction
-사이에 위치하며 장시간 DB transaction 안에서 실행하지 않는다.
+Plan 40은 latest main base의 Draft PR로만 유지하고 merge/deploy하지 않는다. Plan 50은 Plan 40
+head를 유일한 parent로 하는 Draft stack에서 검증한다. Plan 50 완료 뒤 Plan 50 head의 main-targeted
+release PR이 40+50 diff를 한 번에 병합하며 Plan 40 draft는 superseded로 닫는다. 따라서 Plan 50 전
+production success endpoint, temporary feature flag 또는 profile-based success path는 없다. 각 외부
+Provider 호출은 claim transaction과 result transaction 사이에 위치하며 장시간 DB transaction 안에
+있지 않는다.
+
+Plan 40은 Draft branch에서 verified outcome 뒤 자신의 `active → completed` completion commit과
+Plan 50의 completed dependency path/`Implementation-Ready=true` 갱신을 함께 남긴다. Plan 50은 그
+head에서만 시작하며 둘은 하나의 migration-writer lease를 final combined release PR merge까지
+공유한다. unrelated schema writer는 이 Draft stack 동안 시작하지 않는다.
 
 ## Alternatives Considered
 
@@ -124,7 +147,8 @@ Stacked PR은 이 base/head 관계를 PR 설명에 적고, 직접 선행 계획�
   version 이중 발행을 추가하지 않는다.
 - gate가 nonzero 또는 unknown이면 forward migration, publication drain,
   compatibility와 rollback을 다루는 Accepted ADR/ExecPlan이 먼저 필요하다.
-- 이후 migration 번호는 구현 직전 저장소의 최신 번호에서 다시 계산한다.
+- migration number는 ADR-072 lease를 얻어 최신 main에서 branch를 만든 뒤에만 계산한다. 다음
+  schema writer는 prior migration PR merge 전 시작하지 않는다.
 
 ## API and Event Contracts
 
@@ -143,11 +167,13 @@ Stacked PR은 이 base/head 관계를 PR 설명에 적고, 직접 선행 계획�
 ## Milestones
 
 1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md) — 선행 없음
-2. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md) — 00
-3. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 00
-4. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 10
-5. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 10, 20, 30
-6. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 20, 30, 40
+2. [공통 signed cursor foundation을 만든다](signed-cursor-foundation.md) — 선행 없음
+3. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md) — 00, cursor
+4. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
+5. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, cursor
+6. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 10 policy heads, 20 lane
+7. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
+8. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
 Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
@@ -157,11 +183,12 @@ Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번
 
 - 하위 계획 링크와 의존관계가 순환하지 않음
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
-- 10 또는 20 또는 30 미완료 상태에서 40이 시작·활성화되지 않음
-- 10 미완료 상태에서 30이 시작되지 않음. 20은 10과 병렬로 Plan 00 뒤 시작할 수 있음
+- signed cursor/10/15/20/30 중 하나라도 미완료면 다음 schema-writing phase가 ready/start 되지 않음
+- Plan 20이 Plan 15 immutable input evidence 없이 `OrderCompletedV2` producer 또는 SettlementItem을 만들지 않음
 - 10 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
   노출하지 않음
-- 40만 완료된 상태에서 production success path가 노출되지 않음
+- 40 Draft만 완료된 상태에서 main merge/deploy 또는 production success path가 노출되지 않음
+- active orchestration plan이 automatic implementation candidate가 되지 않고 migration writer가 병렬로 시작되지 않음
 - 각 계획의 PostgreSQL, contract, Modulith, 동시성·장애 suite 결과가 실제 기록됨
 
 ## Validation Commands
@@ -192,8 +219,10 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 recovery schema·projection·reason 전달 범위·release path 계약 정합화
 - [x] 2026-07-31 거대 master plan을 여섯 하위 계획으로 분리
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
-- [x] 2026-08-01 직접 선행조건 DAG와 stacked branch base를 Plan 00→10→30, Plan 00→20로 정정
+- [x] 2026-08-01 parallel DAG를 migration-writer single lane과 main-base PR strategy로 교체
+- [ ] signed cursor foundation 완료
 - [ ] 10 allocation·point recovery foundation 완료
+- [ ] 15 settlement-input snapshot foundation 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
 - [ ] 40 customer cancellation command 완료
@@ -218,14 +247,16 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-07-31 | Plan structure | foundation별 여섯 계획으로 분리 | 독립 검증과 선행조건 강제 | 이 master plan |
 | 2026-08-01 | Accepted | `RECOVERY` debit과 PointRecoveryPending foundation은 Plan 10이 소유 | 부분 환불과 이후 고객 취소가 같은 refund source·point recovery 불변식을 소비 | BR-13, ADR-065 |
 | 2026-08-01 | Accepted existing | PointLot issuer snapshot precheck/migration은 Plan 10이 소유 | 만료 부분 환불 compensation이 original issuer/cost lineage를 먼저 필요로 함 | BR-20, ADR-063 |
-| 2026-08-01 | Accepted | Plan 10과 20은 00 뒤 병렬, Plan 30은 Plan 10 뒤 | ADR-063의 policy schema 선행조건을 지키면서 독립 Settlement foundation 병렬화 | ADR-063, this master plan |
+| 2026-08-01 | Superseded | Plan 10과 20은 00 뒤 병렬, Plan 30은 Plan 10 뒤 | PR multi-head baseline과 Flyway 번호 경쟁을 자동 실행할 수 없음 | prior master graph |
+| 2026-08-01 | Accepted | signed cursor → 10 → 15 → 20 → 30 → 40 → 50 single writer lane | latest-main single-base PR, settlement input source와 Flyway ownership을 모두 결정적으로 만듦 | ADR-071, ADR-072 |
 | 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item 귀속을 소유하고 lifecycle 계획이 계산·Adjustment·Dispute를 확장 | Batch-scoped Item API를 선행 구현하면서 migration 중복 제거 | ADR-067 |
 
 ## Outcomes & Retrospective
 
 아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
-`CLEAN_CUTOVER_GATE = PASSED`다. 10/20/30 foundation은 clean-cutover 전략을 입력으로
-진행할 수 있지만, 세 foundation이 완료되기 전 고객 취소 command는 계속 차단된다.
+`CLEAN_CUTOVER_GATE = PASSED`다. signed cursor, 10, 15, 20, 30 foundation은 single writer
+sequence에서 clean-cutover 전략을 입력으로 진행할 수 있지만, 이 chain과 Plan 50이 완료되기 전
+고객 취소 command의 production success path는 계속 차단된다.
 
 ## Revision Notes
 
@@ -237,5 +268,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
   point recovery foundation으로 구현 소유권을 고정했다.
 - 2026-08-01: Plan 10이 만료 부분 환불 compensation의 PointLot issuer snapshot
   precheck/migration도 선행 소유하도록 명확화했다.
-- 2026-08-01: Plan 30의 Plan 10 직접 의존성과 Plan 10/20 병렬 branch base를 명시하고
-  Settlement 최소 Batch 소유권을 ADR-067로 분리했다.
+- 2026-08-01: **Superseded** Plan 30의 Plan 10 직접 의존성과 Plan 10/20 병렬 branch base를
+  기록했다. 이후 ADR-072가 병렬 branch base를 single writer lane으로 대체했다.
+- 2026-08-01: ADR-071 settlement-input snapshot foundation과 ADR-072 latest-main migration-writer
+  lane을 추가해 parallel branch/PR/Flyway ambiguity를 제거했다.

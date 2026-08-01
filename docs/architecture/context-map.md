@@ -69,19 +69,19 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 |---|---|---|
 | Identity | actor, role, store membership | actor identity, membership check |
 | Eventing | write data 없음 | versioned integration event 계약 |
-| Merchant | Store, Menu, MenuConfiguration, business hours, fee contract | menu/price/status와 sellable requirement lookup |
+| Merchant | Store, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, sellable requirement와 applicable settlement-terms lookup |
 | Discovery | 위치 검색용 Read Model만 소유; 사용자 정밀 좌표는 저장하지 않음 | nearby store query |
-| Ordering | Order, OrderLine, 주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, customer/store order API |
+| Ordering | Order, OrderLine, `OrderSettlementInputSnapshot`, 주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
 | Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API |
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
-| Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API |
-| Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, accrual·refund recovery facts, audited point-adjustment command, pending summary query |
+| Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API, immutable coupon burden leg lookup |
+| Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, issuer allocation lookup, accrual·refund recovery facts, audited point-adjustment command, pending summary/query |
 | Payment | Payment, Refund와 line allocation, PaymentCancellationRecoverySnapshot, PaymentMethod, 결제 명령 IdempotencyRecord | approval/refund command and facts |
 | Settlement | SettlementItem, SettlementBatch, SettlementAdjustment | settlement query, adjustment command |
 | Dispute | SettlementDispute와 Held Amount | dispute workflow and decision fact |
 | Notification | NotificationDelivery | delivery status/failure fact |
 | Analytics | Analytics Read Model | named metric queries |
-| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, OperatorPermissionGrant, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, explicit operator permission evaluation, 누락 Refund 복구 제안·결정 |
+| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, OperatorPermissionGrant, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, audited offline grant bootstrap, explicit operator permission evaluation, 누락 Refund 복구 제안·결정 |
 
 ## Translation boundaries
 
