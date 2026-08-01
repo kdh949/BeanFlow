@@ -288,7 +288,7 @@ internal class StoreOrderLifecycleIntegrationTest
             patchStatus(actorId, orderId, "out-of-order-accepted", "ACCEPTED").andExpect(status().isOk)
             patchStatus(actorId, orderId, "out-of-order-preparing", "PREPARING").andExpect(status().isOk)
             patchStatus(actorId, orderId, "out-of-order-ready", "READY").andExpect(status().isOk)
-            val completedAt = Instant.now()
+            val completedAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
             jdbcTemplate.update(
                 """
                 UPDATE ordering_order
