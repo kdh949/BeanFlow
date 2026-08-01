@@ -80,6 +80,14 @@ internal interface OperatorPermissionGrantJpaRepository : JpaRepository<Operator
 internal class DatabaseAdvisoryLock(
     private val entityManager: EntityManager,
 ) {
+    fun lockShared(key: String) {
+        entityManager
+            .createNativeQuery(
+                "select pg_advisory_xact_lock_shared(hashtextextended(cast(:lockKey as text), 0))",
+            ).setParameter("lockKey", key)
+            .singleResult
+    }
+
     fun lock(key: String) {
         entityManager
             .createNativeQuery(

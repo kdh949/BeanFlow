@@ -109,3 +109,10 @@ tasks.register<JavaExec>("operator-permission-bootstrap") {
 	classpath = sourceSets["main"].runtimeClasspath
 	mainClass.set("io.github.kdh949.beanflow.operations.internal.OperatorPermissionBootstrapCli")
 }
+
+tasks.register<JavaExec>("ordinary-accrual-policy-bootstrap") {
+	group = "application"
+	description = "Create the audited initial GLOBAL ordinary point accrual policy using OIDC workload identity"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyBootstrapCli")
+}

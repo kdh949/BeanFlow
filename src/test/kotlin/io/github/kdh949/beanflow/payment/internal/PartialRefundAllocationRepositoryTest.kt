@@ -6,6 +6,10 @@ import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointPolicyMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointSlice
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.loyalty.api.RestorePartialRefundPointsCommand
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualCalculator
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualLineInput
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSnapshotService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundActor
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundActorType
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundCommand
@@ -62,9 +66,12 @@ internal class PartialRefundAllocationRepositoryTest
         private val jdbcTemplate: JdbcTemplate,
         private val objectMapper: ObjectMapper,
         private val mockMvc: MockMvc,
+        private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyOperations,
+        private val pointAccrualSnapshotService: OrderPointAccrualSnapshotService,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
+        private val pointAccrualCalculator = OrderPointAccrualCalculator()
 
         @BeforeEach
         fun cleanDatabase() {
@@ -579,39 +586,51 @@ internal class PartialRefundAllocationRepositoryTest
                 Timestamp.from(NOW),
                 Timestamp.from(NOW),
             )
-            jdbcTemplate.update(
-                """
-                INSERT INTO ordering_order (
-                    id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
-                    coupon_discount_krw, points_applied_krw, payable_krw, currency,
-                    reservation_expires_at, created_at, updated_at, paid_at,
-                    acceptance_warning_at, acceptance_deadline_at, version
-                ) VALUES (?, ?, ?, ?, 'PAID', 10000, 2000, 3000, 5000, 'KRW',
-                          NULL, ?, ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                fixture.orderId,
-                fixture.customerId,
-                fixture.storeId,
-                UUID.randomUUID(),
-                Timestamp.from(NOW.minusSeconds(60)),
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-                Timestamp.from(NOW.plusSeconds(120)),
-                Timestamp.from(NOW.plusSeconds(180)),
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO ordering_order_line VALUES
-                    (?, ?, 0, ?, 'line-1', '[]', '[]', 1000, 3, 3000, 1, 1000, 1999),
-                    (?, ?, 1, ?, 'line-2', '[]', '[]', 3500, 2, 7000, 1999, 2000, 3001)
-                """.trimIndent(),
-                fixture.firstLineId,
-                fixture.orderId,
-                UUID.randomUUID(),
-                fixture.secondLineId,
-                fixture.orderId,
-                UUID.randomUUID(),
-            )
+            transactions.executeWithoutResult {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                        coupon_discount_krw, points_applied_krw, payable_krw, currency,
+                        reservation_expires_at, created_at, updated_at, paid_at,
+                        acceptance_warning_at, acceptance_deadline_at, version
+                    ) VALUES (?, ?, ?, ?, 'PAID', 10000, 2000, 3000, 5000, 'KRW',
+                              NULL, ?, ?, ?, ?, ?, 0)
+                    """.trimIndent(),
+                    fixture.orderId,
+                    fixture.customerId,
+                    fixture.storeId,
+                    UUID.randomUUID(),
+                    Timestamp.from(NOW.minusSeconds(60)),
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW.plusSeconds(120)),
+                    Timestamp.from(NOW.plusSeconds(180)),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order_line VALUES
+                        (?, ?, 0, ?, 'line-1', '[]', '[]', 1000, 3, 3000, 1, 1000, 1999),
+                        (?, ?, 1, ?, 'line-2', '[]', '[]', 3500, 2, 7000, 1999, 2000, 3001)
+                    """.trimIndent(),
+                    fixture.firstLineId,
+                    fixture.orderId,
+                    UUID.randomUUID(),
+                    fixture.secondLineId,
+                    fixture.orderId,
+                    UUID.randomUUID(),
+                )
+                savePointAccrualSnapshot(
+                    orderId = fixture.orderId,
+                    storeId = fixture.storeId,
+                    payableKrw = 5_000,
+                    lines =
+                        listOf(
+                            OrderPointAccrualLineInput(fixture.firstLineId, 0, 1_000, 3, 3_000, 1, 1_000, 1_999),
+                            OrderPointAccrualLineInput(fixture.secondLineId, 1, 3_500, 2, 7_000, 1_999, 2_000, 3_001),
+                        ),
+                )
+            }
             jdbcTemplate.update(
                 "insert into loyalty_point_account values (?, ?, 0, 0, 0)",
                 accountId,
@@ -750,40 +769,52 @@ internal class PartialRefundAllocationRepositoryTest
         private fun boundaryFixture(): BoundaryFixture {
             val orderId = UUID.randomUUID()
             val customerId = UUID.randomUUID()
+            val storeId = UUID.randomUUID()
             val accountId = UUID.randomUUID()
             val reservationId = UUID.randomUUID()
             val lineIds = (1..3).map { UUID.randomUUID() }.sorted()
             val lotIds = (1..3).map { UUID.randomUUID() }.sorted()
-            jdbcTemplate.update(
-                """
-                INSERT INTO ordering_order (
-                    id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
-                    coupon_discount_krw, points_applied_krw, payable_krw, currency,
-                    reservation_expires_at, created_at, updated_at, paid_at,
-                    acceptance_warning_at, acceptance_deadline_at, version
-                ) VALUES (?, ?, ?, ?, 'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                orderId,
-                customerId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                Timestamp.from(NOW.minusSeconds(60)),
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-                Timestamp.from(NOW.plusSeconds(120)),
-                Timestamp.from(NOW.plusSeconds(180)),
-            )
-            lineIds.forEachIndexed { index, lineId ->
+            transactions.executeWithoutResult {
                 jdbcTemplate.update(
                     """
-                    INSERT INTO ordering_order_line VALUES
-                        (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0)
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                        coupon_discount_krw, points_applied_krw, payable_krw, currency,
+                        reservation_expires_at, created_at, updated_at, paid_at,
+                        acceptance_warning_at, acceptance_deadline_at, version
+                    ) VALUES (?, ?, ?, ?, 'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
                     """.trimIndent(),
-                    lineId,
                     orderId,
-                    index,
+                    customerId,
+                    storeId,
                     UUID.randomUUID(),
-                    "boundary-$index",
+                    Timestamp.from(NOW.minusSeconds(60)),
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW.plusSeconds(120)),
+                    Timestamp.from(NOW.plusSeconds(180)),
+                )
+                lineIds.forEachIndexed { index, lineId ->
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO ordering_order_line VALUES
+                            (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0)
+                        """.trimIndent(),
+                        lineId,
+                        orderId,
+                        index,
+                        UUID.randomUUID(),
+                        "boundary-$index",
+                    )
+                }
+                savePointAccrualSnapshot(
+                    orderId = orderId,
+                    storeId = storeId,
+                    payableKrw = 0,
+                    lines =
+                        lineIds.mapIndexed { index, lineId ->
+                            OrderPointAccrualLineInput(lineId, index, 1, 1, 1, 0, 1, 0)
+                        },
                 )
             }
             jdbcTemplate.update(
@@ -840,6 +871,22 @@ internal class PartialRefundAllocationRepositoryTest
                     )
                 }
             return BoundaryFixture(orderId, slices)
+        }
+
+        private fun savePointAccrualSnapshot(
+            orderId: UUID,
+            storeId: UUID,
+            payableKrw: Long,
+            lines: List<OrderPointAccrualLineInput>,
+        ) {
+            val selected = pointAccrualPolicyOperations.selectForOrder(storeId)
+            pointAccrualSnapshotService.save(
+                orderId = orderId,
+                orderPayableKrw = payableKrw,
+                selected = selected,
+                calculation = pointAccrualCalculator.calculate(selected.policy, lines),
+                createdAt = NOW,
+            )
         }
 
         private fun singleLong(sql: String): Long = requireNotNull(jdbcTemplate.queryForObject(sql, Long::class.java))

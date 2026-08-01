@@ -45,4 +45,18 @@ internal class OrderSnapshotAssembler(
                 cashPayableKrw = line.cashPayableKrw,
             )
         }
+
+    fun pointAccrualLines(order: Order): List<OrderPointAccrualLineInput> =
+        order.lines.map { line ->
+            OrderPointAccrualLineInput(
+                orderLineId = line.id,
+                lineSequence = line.lineSequence,
+                unitPriceKrw = line.unitPriceKrw,
+                quantity = line.quantity,
+                grossKrw = line.grossKrw,
+                couponDiscountKrw = line.couponDiscountKrw,
+                pointsAppliedKrw = line.pointsAppliedKrw,
+                cashPayableKrw = line.cashPayableKrw,
+            )
+        }
 }
