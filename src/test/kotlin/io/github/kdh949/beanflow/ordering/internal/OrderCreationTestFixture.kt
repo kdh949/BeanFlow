@@ -36,6 +36,8 @@ internal object OrderCreationDatabaseFixture {
             TRUNCATE TABLE
                 operations_audit_record,
                 operations_reprocessing_case,
+                payment_refund_point_recovery_work,
+                payment_order_point_accrual_outcome,
                 payment_reconciliation,
                 payment_idempotency_record,
                 payment_payment,
@@ -43,6 +45,9 @@ internal object OrderCreationDatabaseFixture {
                 ordering_idempotency_record,
                 ordering_order_line,
                 ordering_order,
+                loyalty_point_accrual_result,
+                loyalty_point_recovery_result,
+                loyalty_point_recovery_pending,
                 loyalty_point_transaction,
                 loyalty_point_reservation_allocation,
                 loyalty_point_reservation,

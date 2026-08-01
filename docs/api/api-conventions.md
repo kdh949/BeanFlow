@@ -58,6 +58,8 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 
 ## Loyalty ledger projection
 
+- Plan 13 V17/owner transaction이 `recoveryPendingKrw`, `ACCRUAL`과 `RECOVERY` storage contract를
+  구현했다. Plan 14 read API는 이 값을 그대로 projection하며 0이나 ledger 합으로 대체하지 않는다.
 - `GET /point-accounts/{accountId}`의 `recoveryPendingKrw`는 음수 잔액이 아니라
   Loyalty `PointRecoveryPending(PENDING)` remaining 합계다.
 - `GET /point-accounts/{accountId}/transactions`의 `amountKrw`는 DB에 저장한 양수

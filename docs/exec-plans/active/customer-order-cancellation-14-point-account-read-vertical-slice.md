@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -25,8 +25,8 @@ transaction에서 commit된 경우에만 body를 반환한다.
 ## Current State
 
 - target OpenAPI에는 두 GET 계약이 있지만 deployed OpenAPI, Loyalty controller와 query owner는 없다.
-- `loyalty_point_account`에는 현재 `recoveryPendingKrw`가 없으며 Plan 13이 summary와
-  `ACCRUAL`/`RECOVERY` ledger contract를 소유한다.
+- V17의 `loyalty_point_account.recovery_pending_krw`, `PointRecoveryPending`, `ACCRUAL`/
+  `RECOVERY` owner transaction과 PostgreSQL tie-out 제약이 completed Plan 13 outcome으로 존재한다.
 - `loyalty_point_transaction`에는 account별 최신순 keyset query를 뒷받침하는
   `(point_account_id, occurred_at DESC, id DESC)` index가 없다.
 - Plan 11이 `POINT_ACCOUNT_READ` permission vocabulary, grant persistence와 authorization API를
@@ -236,6 +236,8 @@ error code만 노출한다.
   migration/query 시각 fallback 대신 계약에서 제거했다.
 - 2026-08-01: permission migration은 Plan 11이 소유하지만 ledger keyset index는 어디에도 owner가
   없어 Plan 14의 `Writes-Migration=true` 근거로 확정했다.
+- 2026-08-02: Plan 13 V17/owner flow와 205-test outcome이 completed path로 이동해 마지막 direct
+  dependency가 닫혔다. 구현 시작 시 새 ADR-072 migration-writer lease를 별도로 획득해야 한다.
 
 ## Decision Log
 
@@ -248,13 +250,14 @@ error code만 노출한다.
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 문서와 계약은 구현 판단이 필요 없도록 닫혔고 Plan 11 grant input은 verified completed다.
-Plan 13과 signed-cursor foundation이 아직 active이므로 `Implementation-Ready=false`다. 남은 dependency 중 마지막 plan의
-completion commit이 completed path와 readiness를 원자적으로 갱신한 뒤에만 implementation candidate가
-된다.
+미구현 상태지만 Plan 11 grant, Plan 13 실제 pending/ledger와 signed-cursor가 모두 verified completed
+path에 있어 `Implementation-Ready=true`다. Plan 13의 actual source는 Account summary,
+PointRecoveryPending과 PointTransaction `ACCRUAL|RECOVERY`이며 Plan 14는 이를 변경하지 않고 query
+projection/index만 소유한다. 구현 시작 전 latest main과 단일 migration-writer lease를 다시 확인한다.
 
 ## Revision Notes
 
 - 2026-08-01: 기존 Plan 10의 point-account read scope를 분리했다.
 - 2026-08-01: Plan 13 dependency, target `updatedAt` 제거, ledger index ownership과 전체
   architecture/failure/test contract를 확정해 self-contained ExecPlan으로 승격했다.
+- 2026-08-02: completed Plan 13 V17/owner outcome을 반영해 direct dependency와 readiness를 갱신했다.

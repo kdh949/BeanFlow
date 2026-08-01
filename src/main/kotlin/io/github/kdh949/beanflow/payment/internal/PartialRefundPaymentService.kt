@@ -613,6 +613,7 @@ internal class PartialRefundSuccessLedger(
     private val identifierSource: IdentifierSource,
     private val jdbcTemplate: JdbcTemplate,
     private val audit: AuditRecordOperations,
+    private val pointRecoveryService: RefundPointRecoveryService,
 ) {
     @Transactional(propagation = Propagation.MANDATORY)
     fun record(
@@ -687,6 +688,7 @@ internal class PartialRefundSuccessLedger(
                 Timestamp.from(now),
             )
         }
+        pointRecoveryService.createWork(refund, now)
         audit.appendAll(
             listOf(
                 AppendAuditRecordCommand(

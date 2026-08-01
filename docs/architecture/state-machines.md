@@ -183,7 +183,8 @@ PENDING -> SETTLED
 - 이후 적립은 gross `ACCRUAL`을 기록한 뒤 오래된 PENDING부터 `RECOVERY`로 상계한다.
   상계 후의 net amount만 PointAccount와 새 PointLot의 가용 잔액이 된다.
 - 같은 refund/Lot 또는 pending/적립 source의 재처리는 기존 동일 결과만
-  `ALREADY_APPLIED`이고, 금액·대상 불일치는 `POINT_RECOVERY_SOURCE_CONFLICT`다.
+  `ALREADY_APPLIED`이고, 금액·대상 불일치는 공통 source replay 충돌 코드인
+  `IDEMPOTENCY_KEY_REUSED`다.
 
 ## Audited point adjustment
 

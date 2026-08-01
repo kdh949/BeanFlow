@@ -18,6 +18,11 @@ import io.github.kdh949.beanflow.ordering.internal.PartialRefundLineInput
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundRestorationService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundRestorationWorker
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
+import io.github.kdh949.beanflow.payment.api.PreparePointAccrualCompletionCommand
+import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSnapshotSource
+import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSourceState
+import io.github.kdh949.beanflow.payment.api.RefundPointAccrualUnit
+import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
@@ -68,6 +73,7 @@ internal class PartialRefundAllocationRepositoryTest
         private val mockMvc: MockMvc,
         private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyOperations,
         private val pointAccrualSnapshotService: OrderPointAccrualSnapshotService,
+        private val refundPointRecoveryOperations: RefundPointRecoveryOperations,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -78,12 +84,17 @@ internal class PartialRefundAllocationRepositoryTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    payment_refund_point_recovery_work,
+                    payment_order_point_accrual_outcome,
                     payment_refund_restoration_work,
                     payment_refund_point_allocation,
                     payment_refund_line_allocation,
                     payment_refund_point_request,
                     payment_refund_line_request,
                     loyalty_partial_refund_restoration,
+                    loyalty_point_accrual_result,
+                    loyalty_point_recovery_result,
+                    loyalty_point_recovery_pending,
                     loyalty_point_transaction,
                     loyalty_point_reservation_allocation,
                     loyalty_point_reservation,
@@ -158,6 +169,114 @@ internal class PartialRefundAllocationRepositoryTest
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
             assertThat(singleLong("select count(*) from payment_refund_line_allocation")).isEqualTo(1)
             assertThat(singleLong("select count(*) from loyalty_partial_refund_restoration")).isEqualTo(1)
+        }
+
+        @Test
+        fun `completion preparation excludes equal-time refunded units and rejects changed snapshot replay`() {
+            val fixture = fixture()
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-exclusion"))
+            service.create(command(fixture, "refund-recovery-key-0001", fixture.firstLineId, 1))
+            val snapshot = requireNotNull(pointAccrualSnapshotService.read(fixture.orderId).snapshot)
+            val refundSucceededAt =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "select refund_succeeded_at from payment_refund_point_recovery_work where order_id = ?",
+                        Instant::class.java,
+                        fixture.orderId,
+                    ),
+                )
+            val completion =
+                PreparePointAccrualCompletionCommand(
+                    orderId = fixture.orderId,
+                    completedAt = refundSucceededAt,
+                    completionSourceReference = "order:${fixture.orderId}:completed:1",
+                    aggregateVersion = 1,
+                    snapshotSchemaVersion = snapshot.snapshotSchemaVersion,
+                    snapshotHash = snapshot.canonicalSnapshotHash,
+                    units =
+                        snapshot.units.map {
+                            RefundPointAccrualUnit(it.orderLineId, it.unitPosition, it.accruedAmountKrw)
+                        },
+                    processedAt = NOW.plusSeconds(1),
+                )
+
+            val first = refundPointRecoveryOperations.prepareCompletion(completion)
+            val replay = refundPointRecoveryOperations.prepareCompletion(completion)
+
+            assertThat(first).isEqualTo(replay)
+            assertThat(first.excludedUnits)
+                .containsExactly(
+                    io.github.kdh949.beanflow.payment.api
+                        .RefundPointUnitKey(fixture.firstLineId, 0),
+                )
+            assertThat(singleString("select state from payment_refund_point_recovery_work"))
+                .isEqualTo("EXCLUDED_BEFORE_ACCRUAL")
+            assertThatThrownBy {
+                refundPointRecoveryOperations.prepareCompletion(
+                    completion.copy(snapshotHash = "b".repeat(64)),
+                )
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.IDEMPOTENCY_KEY_REUSED)
+            }
+        }
+
+        @Test
+        fun `post-completion recovery work retries to manual review without losing its target`() {
+            val fixture = fixture()
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-recovery"))
+            service.create(command(fixture, "refund-recovery-key-0002", fixture.firstLineId, 1))
+            val snapshot = requireNotNull(pointAccrualSnapshotService.read(fixture.orderId).snapshot)
+            val completedAt = NOW.minusSeconds(1)
+            val source =
+                RefundPointAccrualSnapshotSource(
+                    orderId = fixture.orderId,
+                    orderState = "COMPLETED",
+                    pointAccrualSourceState = RefundPointAccrualSourceState.SNAPSHOTTED,
+                    outcomeAt = completedAt,
+                    outcomeSourceReference = "order:${fixture.orderId}:completed:1",
+                    aggregateVersion = 1,
+                    snapshotSchemaVersion = snapshot.snapshotSchemaVersion,
+                    snapshotHash = snapshot.canonicalSnapshotHash,
+                    units =
+                        snapshot.units.map {
+                            RefundPointAccrualUnit(it.orderLineId, it.unitPosition, it.accruedAmountKrw)
+                        },
+                )
+            refundPointRecoveryOperations.prepareCompletion(
+                PreparePointAccrualCompletionCommand(
+                    fixture.orderId,
+                    completedAt,
+                    requireNotNull(source.outcomeSourceReference),
+                    requireNotNull(source.aggregateVersion),
+                    snapshot.snapshotSchemaVersion,
+                    snapshot.canonicalSnapshotHash,
+                    source.units,
+                    NOW.plusSeconds(1),
+                ),
+            )
+            var due = NOW.plusSeconds(2)
+            repeat(5) {
+                val claim = refundPointRecoveryOperations.claimDue(due, 1).single()
+                val prepared = refundPointRecoveryOperations.prepareRecovery(claim, source, due)
+                assertThat(prepared?.targetAmountKrw)
+                    .isEqualTo(
+                        snapshot.units
+                            .single { unit ->
+                                unit.orderLineId == fixture.firstLineId && unit.unitPosition == 0
+                            }.accruedAmountKrw,
+                    )
+                refundPointRecoveryOperations.recordFailure(
+                    claim,
+                    DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "simulated Loyalty recovery failure"),
+                    due,
+                )
+                due = due.plusSeconds(10_000)
+            }
+
+            assertThat(singleString("select state from payment_refund_point_recovery_work"))
+                .isEqualTo("MANUAL_REVIEW")
+            assertThat(singleLong("select count(*) from payment_refund_point_recovery_work"))
+                .isEqualTo(1)
         }
 
         @Test
@@ -632,7 +751,11 @@ internal class PartialRefundAllocationRepositoryTest
                 )
             }
             jdbcTemplate.update(
-                "insert into loyalty_point_account values (?, ?, 0, 0, 0)",
+                """
+                INSERT INTO loyalty_point_account (
+                    id, customer_id, available_points_krw, reserved_points_krw, version
+                ) VALUES (?, ?, 0, 0, 0)
+                """.trimIndent(),
                 accountId,
                 fixture.customerId,
             )
@@ -818,7 +941,11 @@ internal class PartialRefundAllocationRepositoryTest
                 )
             }
             jdbcTemplate.update(
-                "insert into loyalty_point_account values (?, ?, 0, 0, 0)",
+                """
+                INSERT INTO loyalty_point_account (
+                    id, customer_id, available_points_krw, reserved_points_krw, version
+                ) VALUES (?, ?, 0, 0, 0)
+                """.trimIndent(),
                 accountId,
                 customerId,
             )

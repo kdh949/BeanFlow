@@ -164,7 +164,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 4. [만료 혜택 정책과 operator grant foundation을 만든다](../completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00, completed
 5. [부분 환불 allocation과 포인트 복원을 만든다](../completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11, completed
 6. [일반 포인트 적립 policy와 Order snapshot을 만든다](../completed/ordinary-point-accrual-policy-management.md) — 11, 12, completed
-7. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12, ordinary-accrual policy/snapshot
+7. [환불 적립 포인트 회수를 만든다](../completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12, ordinary-accrual policy/snapshot, completed
 8. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
 9. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
 10. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
@@ -184,8 +184,8 @@ Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
 - Plan 16은 12/13/15 중 하나라도 미완료면 ready/start 되지 않음
 - Plan 20이 Plan 15 immutable input evidence 없이 `OrderCompletedV2` producer 또는 SettlementItem을 만들지 않음
-- 13 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
-  노출하지 않음
+- completed Plan 13의 실제 `RECOVERY`/PointRecoveryPending owner contract만 후속 plan이 소비하고
+  public read/event는 각 Plan 14/16 전까지 조기 활성화하지 않음
 - 14는 11/13/signed cursor 중 하나라도 미완료면 ready가 되지 않고 `recoveryPendingKrw`를
   0 또는 추측 집계로 대체하지 않음
 - 40 Draft만 완료된 상태에서 main merge/deploy 또는 production success path가 노출되지 않음
@@ -225,7 +225,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 10 issuer provenance foundation 완료
 - [x] 11 policy/grant foundation 완료 — 다섯 immutable policy head, persistent grant, audited GET/PATCH와 fail-closed OIDC bootstrap 검증
 - [x] 12 allocation/restoration foundation 완료
-- [ ] 13 recovery foundation 완료
+- [x] 13 recovery foundation 완료 — V17 Payment eligibility, Loyalty recovery/pending과 frozen V1 accrual offset, 205-test build
 - [x] ordinary-accrual policy/snapshot foundation 완료 — V16, operator API/bootstrap, atomic Order snapshot
 - [ ] 14 point-account read foundation 완료
 - [ ] 15 settlement-input snapshot foundation 완료
@@ -267,9 +267,9 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
 `CLEAN_CUTOVER_GATE = PASSED`다. Plan 10은 Plan 00 outcome 뒤 독립적으로 시작할 수 있고 signed
 cursor는 Plan 14/20의 실제 소비 input으로만 남는다. migration-writer lease는 ready plan의 실행 순서를
-직렬화하지만 dependency를 추가하지 않는다. Plan 14는 Plan 11/13/cursor 세 input의 마지막
-completion commit에서만 implementation-ready로 전환한다. Plan 50이 완료되기 전 고객 취소 command의
-production success path는 계속 차단된다.
+직렬화하지만 dependency를 추가하지 않는다. Plan 13 completion으로 Plan 14와 Loyalty adjustment는
+implementation-ready가 됐고 Plan 16은 Plan 15만 remaining blocker다. Plan 50이 완료되기 전 고객 취소
+command의 production success path는 계속 차단된다.
 
 ## Revision Notes
 
@@ -287,3 +287,5 @@ production success path는 계속 차단된다.
   lane을 추가해 parallel branch/PR/Flyway ambiguity를 제거했다.
 - 2026-08-01: Plan 10의 signed-cursor dependency와 이를 강제하던 milestone 표현을 제거했다. queue
   priority는 migration-writer lease/Goal Router가 관리하며 `Depends-On`은 실제 phase input만 기록한다.
+- 2026-08-02: Plan 13 V17/owner flow와 205-test outcome을 completed path에 반영하고 Plan 14,
+  Loyalty adjustment와 Plan 16 readiness를 갱신했다.

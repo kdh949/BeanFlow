@@ -444,7 +444,7 @@ IDs, rate, validity, issuer reference, actor, reason, token/evidence and idempot
   - Verify: plan의 전체 Validation Commands와 `git diff --stat`, `git diff --check`
   - Files:
     - `docs/exec-plans/active/ordinary-point-accrual-policy-management.md` → completed path
-    - `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
+    - `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
     - `docs/exec-plans/active/customer-order-cancellation-and-recovery.md`
     - `docs/quality/customer-order-cancellation-readiness.md`
     - `scripts/verify-docs.sh`

@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.NotificationDeliveryWorker
 import io.github.kdh949.beanflow.notification.internal.NotificationProviderResult
@@ -18,8 +20,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -30,14 +35,18 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, StoreOrderLifecycleNanosecondClockConfiguration::class)
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
@@ -45,6 +54,7 @@ import java.util.concurrent.TimeUnit
         "beanflow.event-publication.initial-delay-ms=3600000",
         "beanflow.notification.initial-delay-ms=3600000",
         "beanflow.payment.refund.initial-delay-ms=3600000",
+        "beanflow.payment.point-recovery.initial-delay-ms=3600000",
         "beanflow.payment.reconciliation.initial-delay-ms=3600000",
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
@@ -56,6 +66,9 @@ internal class StoreOrderLifecycleIntegrationTest
         private val createOrderUseCase: CreateOrderUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val transitionService: StoreOrderTransitionService,
+        private val partialRefundService: PartialRefundService,
+        private val pointRecoveryWorker: RefundEarnedPointRecoveryWorker,
+        private val pointRecoveryCoordinator: RefundEarnedPointRecoveryCoordinator,
         private val deadlineService: StoreAcceptanceDeadlineService,
         private val orderRepository: OrderJpaRepository,
         private val refundWorker: RejectionRefundWorker,
@@ -186,7 +199,151 @@ internal class StoreOrderLifecycleIntegrationTest
             }
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId))
                 .isEqualTo("COMPLETED")
+            await("completion point accrual") {
+                count("SELECT count(*) FROM loyalty_point_accrual_result WHERE order_id = ?", orderId) == 1L
+            }
+            assertThat(
+                value<Long>(
+                    "SELECT accrued_amount_krw FROM loyalty_point_accrual_result WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo(10)
+            assertThat(
+                value<Long>(
+                    "SELECT amount_krw FROM loyalty_point_transaction WHERE type = 'ACCRUAL'",
+                ),
+            ).isEqualTo(10)
+            val completedOrder = orderRepository.findById(orderId).orElseThrow()
+            val replayEvent =
+                OrderCompletedV1(
+                    EventEnvelope(
+                        UUID.randomUUID(),
+                        "OrderCompletedV1",
+                        orderId,
+                        completedOrder.version,
+                        requireNotNull(completedOrder.completedAt),
+                        1,
+                        "store-lifecycle-replay",
+                        "test:store-lifecycle-replay",
+                    ),
+                    orderId,
+                    fixture.customerId,
+                    fixture.storeId,
+                    requireNotNull(completedOrder.completedAt),
+                )
+            pointRecoveryCoordinator.completeAccrual(replayEvent, Instant.now())
+            pointRecoveryCoordinator.completeAccrual(replayEvent, Instant.now())
+            assertThat(
+                count("SELECT count(*) FROM loyalty_point_accrual_result WHERE order_id = ?", orderId),
+            ).isEqualTo(1)
+            assertThat(count("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'ACCRUAL'")).isEqualTo(1)
             awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `refund completed before pickup completion is excluded from future accrual`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "pre-completion-refund-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-pre-completion-refund"))
+            assertThat(partialRefund(orderId, actorId, "pre-completion-refund-key").status).isEqualTo(201)
+
+            patchStatus(actorId, orderId, "pre-refund-accepted", "ACCEPTED").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "pre-refund-preparing", "PREPARING").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "pre-refund-ready", "READY").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "pre-refund-completed", "COMPLETED").andExpect(status().isOk)
+
+            await("pre-completion Refund exclusion accrual") {
+                count("SELECT count(*) FROM loyalty_point_accrual_result WHERE order_id = ?", orderId) == 1L
+            }
+            assertThat(
+                value<String>(
+                    "SELECT source_state FROM loyalty_point_accrual_result WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo("NO_ACCRUAL")
+            assertThat(
+                value<Long>(
+                    "SELECT excluded_amount_krw FROM loyalty_point_accrual_result WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo(10)
+            assertThat(
+                value<String>(
+                    "SELECT state FROM payment_refund_point_recovery_work WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo("EXCLUDED_BEFORE_ACCRUAL")
+            assertThat(count("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'ACCRUAL'")).isZero()
+            awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `out of order refund recovery becomes pending then completion accrual offsets it`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "out-of-order-point-recovery")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            patchStatus(actorId, orderId, "out-of-order-accepted", "ACCEPTED").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "out-of-order-preparing", "PREPARING").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "out-of-order-ready", "READY").andExpect(status().isOk)
+            val completedAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+            jdbcTemplate.update(
+                """
+                UPDATE ordering_order
+                   SET state = 'COMPLETED', completed_at = ?, updated_at = ?, version = version + 1
+                 WHERE id = ?
+                """.trimIndent(),
+                Timestamp.from(completedAt),
+                Timestamp.from(completedAt),
+                orderId,
+            )
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-out-of-order-refund"))
+            assertThat(partialRefund(orderId, actorId, "out-of-order-refund-key").status).isEqualTo(201)
+
+            assertThat(pointRecoveryWorker.runOnce()).isEqualTo(1)
+            assertThat(
+                value<Long>(
+                    "SELECT pending_amount_krw FROM loyalty_point_recovery_result WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo(10)
+            assertThat(value<Long>("SELECT recovery_pending_krw FROM loyalty_point_account")).isEqualTo(10)
+
+            val order = orderRepository.findById(orderId).orElseThrow()
+            pointRecoveryCoordinator.completeAccrual(
+                OrderCompletedV1(
+                    envelope =
+                        EventEnvelope(
+                            eventId = UUID.randomUUID(),
+                            eventType = "OrderCompletedV1",
+                            aggregateId = orderId,
+                            aggregateVersion = order.version,
+                            occurredAt = completedAt,
+                            payloadVersion = 1,
+                            correlationId = "out-of-order-point-recovery",
+                            causationId = "test:out-of-order-point-recovery",
+                        ),
+                    orderId = orderId,
+                    customerId = fixture.customerId,
+                    storeId = fixture.storeId,
+                    completedAt = completedAt,
+                ),
+                Instant.now(),
+            )
+
+            assertThat(value<Long>("SELECT recovery_pending_krw FROM loyalty_point_account")).isZero()
+            assertThat(value<String>("SELECT state FROM loyalty_point_recovery_pending")).isEqualTo("SETTLED")
+            assertThat(
+                value<Long>(
+                    "SELECT offset_amount_krw FROM loyalty_point_accrual_result WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo(10)
+            assertThat(value<Long>("SELECT available_points_krw FROM loyalty_point_account")).isZero()
+            assertThat(count("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'ACCRUAL'")).isEqualTo(1)
+            assertThat(count("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'RECOVERY'")).isEqualTo(1)
         }
 
         @Test
@@ -410,6 +567,27 @@ internal class StoreOrderLifecycleIntegrationTest
             return orderId
         }
 
+        private fun partialRefund(
+            orderId: UUID,
+            actorId: UUID,
+            idempotencyKey: String,
+        ): PartialRefundHttpResult =
+            partialRefundService.create(
+                PartialRefundCommand(
+                    paymentId = value("SELECT id FROM payment_payment WHERE order_id = ?", orderId),
+                    actor = PartialRefundActor(actorId, setOf(PartialRefundActorType.STORE_STAFF)),
+                    idempotencyKey = idempotencyKey,
+                    lines =
+                        listOf(
+                            PartialRefundLineInput(
+                                value("SELECT id FROM ordering_order_line WHERE order_id = ?", orderId),
+                                1,
+                            ),
+                        ),
+                    reason = "CUSTOMER_REQUESTED_ITEM_ADJUSTMENT",
+                ),
+            )
+
         private fun insertPaymentMethod(customerId: UUID): UUID {
             val id = UUID.randomUUID()
             val now = Timestamp.from(Instant.now())
@@ -515,3 +693,18 @@ internal class StoreOrderLifecycleIntegrationTest
             vararg args: Any,
         ): T = requireNotNull(jdbcTemplate.queryForObject(sql, T::class.java, *args))
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class StoreOrderLifecycleNanosecondClockConfiguration {
+    @Bean
+    @Primary
+    fun storeOrderLifecycleClock(): Clock = StoreOrderLifecycleNanosecondClock()
+}
+
+internal class StoreOrderLifecycleNanosecondClock : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = this
+
+    override fun instant(): Instant = Instant.now().truncatedTo(ChronoUnit.MICROS).plusNanos(789)
+}

@@ -16,7 +16,10 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.HexFormat
 import java.util.UUID
 
 @Service
@@ -128,6 +131,7 @@ internal class OrderPointAccrualSnapshotService(
                     )
                 }
             validate(header, unitSnapshots)
+            val snapshotHash = canonicalSnapshotHash(header, unitSnapshots)
             metric(source.sourceState, "READ")
             OrderPointAccrualSource(
                 orderId,
@@ -139,6 +143,7 @@ internal class OrderPointAccrualSnapshotService(
                     header.orderPayableKrw,
                     header.grossAccrualAmountKrw,
                     header.snapshotSchemaVersion,
+                    snapshotHash,
                     header.createdAt,
                     unitSnapshots,
                 ),
@@ -171,6 +176,48 @@ internal class OrderPointAccrualSnapshotService(
         } catch (failure: ArithmeticException) {
             dependency("Order point accrual snapshot amount overflowed", failure)
         }
+
+    private fun canonicalSnapshotHash(
+        header: OrderPointAccrualSnapshotEntity,
+        units: List<OrderPointAccrualUnitSnapshot>,
+    ): String {
+        val canonical = StringBuilder()
+
+        fun field(value: Any?) {
+            val text = value?.toString() ?: "<null>"
+            canonical.append(text.length).append(':').append(text)
+        }
+        field(header.snapshotSchemaVersion)
+        field(header.orderId)
+        field(header.policyVersionId)
+        field(header.selectedScopeType)
+        field(header.selectedScopeReference)
+        field(header.selectionSource)
+        field(header.accrualRateBps)
+        field(header.roundingMode)
+        field(header.issuerType)
+        field(header.issuerReference)
+        field(header.expiryRule)
+        field(header.validityDays)
+        field(header.canonicalPolicyHash)
+        field(header.orderPayableKrw)
+        field(header.grossAccrualAmountKrw)
+        field(header.createdAt)
+        units.forEach { unit ->
+            field(unit.orderLineId)
+            field(unit.lineSequence)
+            field(unit.unitPosition)
+            field(unit.cashPayableKrw)
+            field(unit.accruedAmountKrw)
+        }
+        return HexFormat
+            .of()
+            .formatHex(
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(canonical.toString().toByteArray(StandardCharsets.UTF_8)),
+            )
+    }
 
     private fun metric(
         sourceState: OrderPointAccrualSourceState,

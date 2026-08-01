@@ -44,7 +44,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
   "docs/exec-plans/completed/ordinary-point-accrual-policy-management.md"
-  "docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
@@ -342,11 +342,14 @@ if plan_metadata[plan12_path]['status'] != 'COMPLETED':
 if plan_metadata[ordinary_accrual_path]['status'] != 'COMPLETED':
     print('Ordinary-accrual policy/snapshot predecessor must remain completed after validation.', file=sys.stderr)
     sys.exit(1)
-if not plan_metadata[plan13_path]['implementation_ready']:
-    print('Plan 13 must be ready after both direct dependencies and product decisions are complete.', file=sys.stderr)
+if (
+    plan_metadata[plan13_path]['status'] != 'COMPLETED'
+    or not plan_metadata[plan13_path]['implementation_ready']
+):
+    print('Plan 13 must remain completed after both direct dependencies and product decisions are complete.', file=sys.stderr)
     sys.exit(1)
 if plan_metadata[plan16_path]['implementation_ready']:
-    print('Plan 16 must remain blocked while Plan 13 and Plan 15 are active.', file=sys.stderr)
+    print('Plan 16 must remain blocked while Plan 15 is active.', file=sys.stderr)
     sys.exit(1)
 
 master_plan = (
@@ -1377,7 +1380,7 @@ else:
         print('PointRecoveryPendingRecorded must use PointRecoveryPending as its source of truth.', file=sys.stderr)
         sys.exit(1)
     plan13 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md'
     ).read_text(encoding='utf-8')
     if 'later-accrual offset' not in plan13:
         print('Plan 13 must own the accepted refund earned-point recovery foundation.', file=sys.stderr)
@@ -1687,7 +1690,7 @@ else:
         'point_account_id, occurred_at DESC, id DESC',
         'Account `updated_at` column 또는 임의 timestamp backfill',
         '`recoveryPendingKrw`는 Plan 13 Account summary의 실제 non-negative 값',
-        '> **Implementation-Ready:** `false`',
+        '> **Implementation-Ready:** `true`',
         '> **Writes-Migration:** `true`',
     )
     if not all(fragment in plan14 for fragment in required_plan14_decisions):

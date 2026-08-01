@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 internal data class StoreTransitionActor(
@@ -71,7 +72,7 @@ internal class StoreOrderTransitionService(
         request: StoreOrderTransitionRequest,
     ): StoreTransitionHttpResult {
         validate(request)
-        val now = clock.instant()
+        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         val order =
             orderRepository.findLockedById(orderId)
                 ?: notFound()

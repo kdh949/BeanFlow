@@ -1,11 +1,11 @@
 # 환불 적립 포인트 회수 foundation을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/completed/ordinary-point-accrual-policy-management.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-02`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -16,14 +16,14 @@ PointRecoveryPending으로 보존하여 이후 적립에서 oldest-first로 정�
 
 ## Current State
 
-- `RECOVERY` enum/type CHECK와 PointRecoveryPending persistence가 없다.
-- 환불 적립 포인트 회수와 이후 적립 상계의 durable owner flow가 없다.
-- completed ordinary-accrual policy plan이 Operations policy, verified bootstrap, legacy activation,
-  Order 생성 immutable snapshot과 typed Ordering boundary를 V16으로 구현했다.
-- 현재 부분 환불은 `PAID`부터 `COMPLETED`까지 가능하고 Provider success는 비동기다.
-  Refund 성공이 완료 전이면 future accrual exclusion만 남겨야 하며, 완료 후이면 recovery/pending이
-  필요하다. BR-10은 `refundSucceededAt <= completedAt`에 Refund 우선 exclusion과 Payment-owned
-  eligibility work를 확정했다.
+- V17은 Payment completion outcome/refund eligibility work와 Loyalty pending/result receipt,
+  Account summary, `ACCRUAL|RECOVERY` ledger 제약을 구현했다.
+- 성공 Refund와 같은 Payment transaction이 work를 만들고 immutable snapshot unit/timing으로
+  exclusion 또는 recovery target을 분류한다.
+- Loyalty owner transaction은 실제 available Lot만 회수하고 부족액만 pending으로 남기며,
+  completion accrual은 gross credit 뒤 oldest-first pending debit을 같은 transaction에 기록한다.
+- frozen `OrderCompletedV1` listener와 recovery worker가 owner API를 조정하고 source/version/hash
+  replay, retry와 manual-review를 보존한다.
 
 ## Definitions
 
@@ -91,9 +91,14 @@ public signed transaction amount와 `recoveryPendingKrw` projection semantics는
 
 ## Milestones
 
-1. recovery/pending schema와 constraints를 구현한다.
-2. refund recovery consumer를 구현한다.
-3. later-accrual offset과 failure/retry tests를 구현한다.
+1. Payment-owned refund eligibility work/completion fact와 recovery/pending schema constraints를
+   하나의 V17 forward migration에 구현한다.
+2. Ordering coordinator가 immutable snapshot/timing source를 검증하고 Payment work를 claim해
+   Loyalty recovery owner transaction으로 전달하는 flow를 구현한다.
+3. frozen `OrderCompletedV1` trigger에서 완료 전 Refund unit을 제외하고 gross `ACCRUAL` 뒤
+   oldest-first pending `RECOVERY` offset을 같은 Loyalty transaction에 구현한다.
+4. source/version/hash replay, concurrent Refund, out-of-order completion/refund와 rollback/retry/manual-review
+   검증을 완료한다.
 
 ## Required Tests
 
@@ -124,21 +129,88 @@ BR-10 parameter amendment, ADR-011/065/068/073, point ledger documentation과 Pl
 evidence를 갱신한다.
 일반 적립 policy와 Ordering snapshot 선행 범위는
 [`ordinary-point-accrual-policy-management` spec](../../specs/ordinary-point-accrual-policy-management.md)을
-따르는 [completed ExecPlan](../completed/ordinary-point-accrual-policy-management.md)의 typed outcome을 소비한다.
+따르는 [completed ExecPlan](ordinary-point-accrual-policy-management.md)의 typed outcome을 소비한다.
 
 ## Progress
 
 - [x] ordinary-accrual policy/snapshot predecessor completion — V16, typed read와 193-test full build
-- [ ] recovery/pending schema and constraints
+- [x] 2026-08-02 implementation preflight and migration-writer lease
+  - latest `origin/main`과 local `main`은 `0d28acf`로 일치하고 Plan 12와 ordinary-accrual
+    predecessor merge를 모두 포함한다. 현재 branch는 이 commit에서 만든
+    `feature/refund-earned-point-recovery`다.
+  - Codex task/worktree inventory에 다른 active BeanFlow schema-writing task가 없고 남아 있는
+    worktree는 completed Plan 10/11과 signed-cursor branch뿐이다. Plan 13이 ADR-072의 유일한
+    migration-writer lease holder이며 최신 Flyway `V16` 다음 `V17`을 사용한다.
+  - Payment는 Refund 성공과 immutable timing eligibility work/completion fact를 소유하고,
+    Ordering coordinator는 기존 `Ordering -> Payment/Loyalty` 방향으로 owner API만 호출한다.
+    Loyalty는 Account를 먼저, Lot과 pending을 정렬 잠금해 actual recovery 또는 accrual/offset을
+    각각 하나의 local transaction에 commit한다.
+  - `OrderPointAccrualSnapshotOperations`의 complete `SNAPSHOTTED` source만 금액·issuer·expiry·unit
+    원천으로 사용한다. source/schema/hash conflict, unresolved Refund, DB/owner ack 실패는
+    0·legacy·live policy fallback이 아니라 rollback, retry 또는 manual review다.
+  - 실제 PostgreSQL migration/owner/concurrency tests, application event replay, Modulith와 full build,
+    docs verifier와 diff check를 milestone checkpoint마다 실행한다.
+- [x] 2026-08-02 later-accrual ledger representation clarification
+  - BR-13/ADR-065의 gross `ACCRUAL` PointLot/transaction을 먼저 기록한 뒤 같은 transaction에서
+    pending 상계분을 그 Lot의 `RECOVERY`로 debit하는 표현을 유지한다. commit 뒤 available에는
+    net만 남지만 append-only ledger에는 gross와 offset이 모두 남는다.
+- [x] 2026-08-02 recovery/pending schema and constraints
+  - V17은 `payment_order_point_accrual_outcome`과 durable refund recovery work를 만들고
+    Loyalty Account pending summary, `PointRecoveryPending`, recovery/accrual result receipt,
+    `ACCRUAL|RECOVERY` transaction과 pending FK를 추가했다.
+  - deferred constraint trigger가 Account pending summary와 PENDING row 합을 commit 시점에
+    검증하고 pending identity/remaining/state는 단조롭게만 바뀐다. outcome과 result receipt는
+    DB trigger로 append-only다.
+  - verified pre-release clean activation과 달리 이미 `SNAPSHOTTED` completion 또는 성공 Refund가
+    있으면 V17은 owner source를 추측 backfill하지 않고 migration을 실패시킨다.
+  - `./gradlew test --tests '*PointRecoveryMigrationTest' --rerun-tasks`: PASS, 3 PostgreSQL tests.
+- [x] 2026-08-02 Payment-owned completion eligibility and recovery work state machine
+  - successful partial Refund 기록과 같은 Payment transaction에서 recovery work를 생성하고,
+    immutable Ordering snapshot의 canonical SHA-256 hash와 unit range만으로 target을 확정한다.
+  - `refundSucceededAt <= completedAt`은 `EXCLUDED_BEFORE_ACCRUAL`, 이후 Refund는 `READY`로
+    분류한다. unresolved Refund와 missing work/source는 completion을 실패시키며 live policy,
+    0원 또는 legacy 추측으로 대체하지 않는다.
+  - claim lease, bounded retry와 `MANUAL_REVIEW`, exact source/version/hash replay 및 terminal
+    not-applicable outcome을 PostgreSQL 상태 제약과 함께 구현했다.
+  - `*PointRecoveryMigrationTest`, `*OrderCreationPointAccrualSnapshotIntegrationTest`,
+    `*PartialRefundAllocationRepositoryTest`: PASS. Payment integration 14 tests와 Spotless PASS.
+- [x] 2026-08-02 Loyalty recovery and pending owner transaction
+  - Account를 먼저 잠그고 실제 available Lot을 `(expiresAt, id)`로 잠가 즉시 `RECOVERY`하며,
+    부족액만 하나의 `PointRecoveryPending`과 Account summary에 원자적으로 기록한다.
+  - completion accrual은 immutable snapshot gross의 새 PointLot/`ACCRUAL`을 먼저 기록한 뒤
+    `(createdAt, id)` oldest-first pending에 `RECOVERY` debit하고 net available만 남긴다.
+  - refund/completion source, aggregate version, snapshot hash와 excluded-unit-set hash receipt가
+    exact replay를 허용하고 다른 payload를 거부한다. 같은 customer의 최초 Account 생성도
+    PostgreSQL unique/row lock 아래에서 직렬화된다.
+  - `*PointRecoveryServiceTest`: PASS, 5 PostgreSQL owner/concurrency/rollback tests. 관련 V17
+    migration, 기존 Point reservation과 partial-refund restoration 회귀 테스트도 PASS.
+- [x] 2026-08-02 Ordering completion trigger and recovery coordinator
+  - frozen `OrderCompletedV1`의 persisted Order state/time/version과 immutable snapshot source를
+    검증한 뒤 Payment eligibility와 Loyalty accrual owner transaction을 연결한다. explicit
+    rollout-era `LEGACY_NOT_APPLICABLE`만 terminal no-accrual receipt로 기록하며 missing source를
+    legacy 또는 0원으로 합성하지 않는다.
+  - scheduled coordinator는 Payment claim lease를 가져와 현재 Ordering terminal/completion fact와
+    immutable snapshot을 제공하고, Loyalty recovery가 commit된 뒤 Payment work를 ack한다. owner
+    호출 또는 ack 실패는 retry 후 `MANUAL_REVIEW`로 남는다.
+  - 정상 completion accrual, pre-completion Refund exclusion, recovery가 completion trigger보다 먼저
+    도착해 pending 후 gross accrual로 상계되는 out-of-order flow, frozen V1 replay를
+    `*StoreOrderLifecycleIntegrationTest`에서 검증했다.
+  - migration/Payment/Loyalty/Ordering focused suite와 `*ModularityTests`: PASS, 32 tests.
+- [x] 2026-08-02 full validation and successor handoff
+  - `./gradlew clean build`: PASS, 205 tests, 0 failures/errors/skips. Spotless, application,
+    PostgreSQL Testcontainers, concurrency와 Modulith 검증을 포함한다.
+  - `bash scripts/verify-docs.sh`: PASS. OpenAPI/local contract, 32 policies, 74 ADRs와 Markdown/
+    ExecPlan 검증을 통과했다.
+  - `git diff --check`: PASS.
 - [x] 2026-08-01 BR-10 ordinary-accrual policy vocabulary decision
 - [x] 2026-08-01 GLOBAL default + STORE override precedence decision
 - [x] 2026-08-01 append-only INHERIT_GLOBAL override lifecycle decision
 - [x] 2026-08-01 verified offline initial GLOBAL policy bootstrap decision
 - [x] 2026-08-01 legacy Order forward-only activation decision
 - [x] 2026-08-01 BR-10 completion/refund timing decision
-- [ ] refund recovery
-- [ ] later-accrual offset
-- [ ] validation evidence
+- [x] refund recovery
+- [x] later-accrual offset
+- [x] validation evidence
 
 ## Surprises & Discoveries
 
@@ -169,14 +241,20 @@ evidence를 갱신한다.
 | 2026-08-01 | Accepted | 일반 적립 closed policy vocabulary | 운영자가 바꿀 수 있는 계산·issuer·만료 범위를 DB/API/snapshot에서 동일하게 제한한다 | BR-10, ADR-074 |
 | 2026-08-01 | Accepted | verified offline 최초 GLOBAL bootstrap | 임의 migration seed와 초기화 전 HTTP 성공 없이 완전한 정책을 배포 gate로 만든다 | BR-10, ADR-069, ADR-074 |
 | 2026-08-01 | Accepted | migration 이전 Order의 LEGACY_NOT_APPLICABLE marker | initial policy 소급 적용 없이 기존 결과와 신규 snapshot 의무를 구분한다 | BR-10, ADR-073, ADR-074 |
+| 2026-08-02 | Accepted | 이후 적립은 gross ACCRUAL과 pending RECOVERY를 모두 기록하고 available만 net으로 남김 | 감사 가능한 gross credit과 실제 offset debit을 분리하고 PointLot 연결·signed ledger tie-out을 유지한다 | BR-13, ADR-065 |
 
 ## Outcomes & Retrospective
 
-recovery/pending 자체는 미구현 상태다. 그러나 Plan 12의 successful Refund unit allocation과 V16의
-completed `OrderPointAccrualSnapshotOperations`가 모두 actual outcome과 PostgreSQL/full-build evidence를
-남겼다. 일반 적립률·반올림·issuer·만료, legacy 처리와 refund/completion timing 결정도 닫혀 있어
-`Implementation-Ready=true`다. 구현 branch는 predecessor가 main에 병합된 뒤 최신 main에서 ADR-072
-migration-writer lease를 새로 확인하고 시작한다.
+Plan 13은 latest main의 V16 다음 V17 migration-writer lease에서 완료됐다. Payment는 성공 Refund
+allocation과 completion timing을 durable work/outcome으로 소유하고, Ordering은 frozen V1과 persisted
+Order/snapshot을 검증해 Payment와 Loyalty owner API만 조정한다. Loyalty는 actual available debit,
+residual pending, gross accrual과 oldest-first offset을 각각 local transaction에서 원자적으로 기록한다.
+
+equal-time exclusion, completed-after recovery, completion/refund out-of-order delivery, exact replay/conflict,
+concurrent Refund, summary mismatch rollback, retry/manual-review가 PostgreSQL과 application tests로
+검증됐다. Plan 14와 Loyalty adjustment는 이제 모든 direct dependency가 completed라 implementation-ready고,
+Plan 16은 Plan 13 blocker가 닫혔지만 Plan 15가 남아 readiness false다. public financial event producer는
+의도대로 Plan 16에 남겼다.
 
 ## Revision Notes
 
@@ -196,3 +274,8 @@ migration-writer lease를 새로 확인하고 시작한다.
   이 plan은 completed typed boundary를 소비하는 Loyalty/Payment recovery scope로 되돌렸다.
 - 2026-08-01: predecessor의 V16/API/bootstrap/Order atomic snapshot과 193-test full build가 완료되어
   dependency를 completed path로 바꾸고 implementation-ready로 전환했다.
+- 2026-08-02: latest main과 migration lease를 확인하고 milestone을 Payment eligibility work,
+  Loyalty recovery와 completion accrual offset의 실제 owner 순서로 구체화했다. later-accrual은
+  ADR-065에 따라 gross credit과 offset debit을 모두 원장에 남기는 것으로 명확히 했다.
+- 2026-08-02: V17, Payment/Loyalty owner flow, Ordering frozen-V1 coordinator와 205-test full build를
+  완료하고 successor dependency/readiness를 actual outcome으로 갱신했다.
