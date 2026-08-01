@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-01
 - **Clarifies:** BR-13과 ADR-011의 환불 적립 포인트 회수 표현
-- **Implementation owner:** [Plan 13](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
+- **Implementation owner:** [completed Plan 13](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
 
 ## Context
 
@@ -71,14 +71,13 @@ snapshot이 없거나 completion source/version과 맞지 않으면 신규 Lot, 
 `RECOVERY`를 만들지 않고 source 처리를 재시도 또는 수동 검토 대상으로 남긴다.
 
 동일 Refund source의 같은 회수 결과는 멱등 재생한다. 같은 source에 회수 대상·금액·Lot
-mapping이 다르면 덮어쓰거나 추가 차감하지 않고 `POINT_RECOVERY_SOURCE_CONFLICT`로
-실패를 보존해 재처리 대상으로 남긴다.
+mapping이 다르면 덮어쓰거나 추가 차감하지 않고 공통 source replay 충돌 코드인
+`IDEMPOTENCY_KEY_REUSED`로 실패를 보존해 재처리 대상으로 남긴다.
 
 ### DB 표현
 
-Plan 13은 구현 직전 최신 migration 번호를 다시 계산한 forward-only migration으로
-다음을 구현한다. 이 ADR은 현재 migration이나 Kotlin enum이 이미 구현됐다는 뜻이
-아니다.
+Plan 13은 latest main의 V16 다음 migration-writer lease에서 V17 forward migration으로
+다음을 구현했다.
 
 - `loyalty_point_account`에 `recovery_pending_krw bigint NOT NULL DEFAULT 0 CHECK
   (recovery_pending_krw >= 0)`를 추가한다. 값은 해당 account의 `PENDING`
@@ -156,11 +155,10 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
 
 ## Consequences
 
-- Plan 13은 Plan 12 부분 환불 allocation outcome 뒤 Refund 성공 적립 포인트 회수와
-  PointRecoveryPending/후속 적립 상계 foundation을 구현해야 한다.
-- 현재 source의 PointTransaction enum, type CHECK, PointAccount persistence와
-  PointRecoveryPending persistence는 이 target contract보다 뒤에 있다. 계획 완료 전에는
-  OpenAPI enum이 구현되었다고 주장하지 않는다.
+- Plan 13의 Payment eligibility work, Loyalty PointRecoveryPending/Account summary와
+  PointTransaction `ACCRUAL|RECOVERY` enum/type CHECK가 V17/Kotlin owner flow로 구현됐다.
+- Plan 14는 이 실제 summary/ledger를 read projection으로 소비하며 0 또는 transaction 합으로
+  추측하지 않는다.
 - PointTransaction public projection은 storage magnitude와 signed effect를 명시적으로
   변환해야 한다. raw JPA Entity를 API에 노출하지 않는다.
 - Plan 13은 ADR-073 boundary가 반환한 gross/unit snapshot으로 refund recovery target과
@@ -168,6 +166,10 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
   완료 후 Refund unit의 recovery를 서로 대체하지 않는다.
 - later-accrual offset은 gross `ACCRUAL`과 상계 `RECOVERY` 두 append-only effect를 남기므로
   공개 signed transaction 합과 최종 Lot/Account available net이 서로 tie-out해야 한다.
+
+2026-08-02 implementation evidence: focused migration/Payment/Loyalty/Ordering/Modulith suite 32건과
+전체 clean build 205건이 통과했다. concurrent Refund, pre-completion exclusion, out-of-order
+recovery→pending→completion offset과 source/version/hash replay를 포함한다.
 
 ## Required Tests
 

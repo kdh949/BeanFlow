@@ -70,6 +70,9 @@
   상계한다.
 - PointAccount 가용 잔액은 음수가 될 수 없고, `recoveryPendingKrw` summary는 PENDING
   잔액 합과 같은 transaction에서 유지한다.
+- 2026-08-02 Plan 13 V17과 owner service가 이 contract를 구현했다. completion 적립은 gross
+  `ACCRUAL` PointLot/transaction을 먼저 만들고 같은 transaction의 pending별 `RECOVERY`로
+  새 Lot을 debit하므로 append-only effect 합과 net available이 함께 보존된다.
 
 2026-08-01 ordinary accrual snapshot amendment (ADR-073):
 

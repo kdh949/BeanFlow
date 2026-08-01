@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -30,9 +30,9 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 - Loyalty에는 이 terminal command의 최초 `201` body를 90일 보존할 idempotency table이나
   Context-owned retention worker가 없다. Ordering의 retention worker를 다른 Context table에
   재사용할 수 없다.
-- ADR-065의 Plan 13은 `ACCRUAL`/`RECOVERY`와 PointRecoveryPending foundation을 먼저
-  구현한다. 이 계획은 Plan 13의 PointTransaction base migration과 contract test가
-  완료되기 전 type CHECK를 경쟁적으로 수정하지 않는다.
+- completed Plan 13 V17은 `ACCRUAL`/`RECOVERY`, PointRecoveryPending과 PointTransaction base
+  contract를 구현했다. 이 계획은 해당 CHECK를 재구현하지 않고 후속 `ADJUSTMENT` vocabulary만
+  단일 migration-writer lease에서 확장한다.
 - current JWT role은 인증의 coarse gate일 뿐 `POINT_ADJUSTMENT` permission source가 아니다.
   Plan 11이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
   구현해야 한다.
@@ -284,9 +284,9 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 11 ADR-069 grant는 verified completed input이다. Plan 10 issuer precheck와 Plan 13
-PointTransaction base contract authorization evidence가 아직 active이므로 `Implementation-Ready=false`를
-유지하고 endpoint 또는 migration을 시작하지 않는다. Analytics
+미구현 상태지만 Plan 10 issuer precheck, Plan 11 ADR-069 grant와 Plan 13 PointTransaction base가
+모두 verified completed input이므로 `Implementation-Ready=true`다. 구현 시작 전 latest main과
+ADR-072 migration-writer lease를 다시 확인하며 Plan 13 CHECK/owner flow를 수정하지 않는다. Analytics
 consumer implementation은 이 plan의 completion condition이 아니라 Analytics plan의 own checkpoint다.
 
 ## Revision Notes
@@ -297,3 +297,5 @@ consumer implementation은 이 plan의 completion condition이 아니라 Analyti
   구현하는 Plan 10이 소유하고, 이 계획은 precheck evidence를 소비하도록 명확화했다.
 - 2026-08-01: ADR-069 Operations grant와 ADR-068 `PointsAdjustedV1` contract를 activation
   prerequisite로 추가했다.
+- 2026-08-02: completed Plan 13 V17/PointTransaction owner outcome을 반영해 마지막 direct
+  dependency와 implementation readiness를 닫았다.

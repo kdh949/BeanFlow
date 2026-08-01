@@ -223,9 +223,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Ordinary-accrual policy/snapshot](../exec-plans/completed/ordinary-point-accrual-policy-management.md):
   V16 GLOBAL/STORE immutable version, verified initial bootstrap, fail-fast startup과 신규 Order의 complete
   policy/unit snapshot이 구현됐다. policy change 뒤 기존 typed snapshot이 불변인 통합 증거가 있다.
-- [Plan 13 recovery](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
-  Plan 12 allocation과 completed ordinary-accrual snapshot을 소비해 실제 `RECOVERY` debit과
-  PointRecoveryPending 상계를 구현해야 한다.
+- [Plan 13 recovery](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
+  V17 Payment eligibility work, Loyalty actual `RECOVERY`/PointRecoveryPending과 gross accrual
+  oldest-first offset이 completed owner outcome과 205-test evidence로 구현됐다.
 - [Plan 15 settlement input](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
   완료 시점 live 조회 없이 immutable 정산 입력을 제공해야 한다.
 - [Plan 16 financial events](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
@@ -273,7 +273,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] Plan 11 policy/grants가 통과함
 - [x] Plan 12 allocation/restoration이 통과함
 - [x] ordinary-accrual policy/snapshot foundation이 통과함
-- [ ] Plan 13 recovery/pending이 통과함
+- [x] Plan 13 recovery/pending이 통과함
 - [ ] Plan 15 settlement input이 통과함
 - [ ] Plan 16 immutable events가 통과함
 - [ ] Plan 20 Settlement foundation이 통과함
@@ -308,7 +308,22 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
   orchestration을 소유하고 Payment/Loyalty는 typed API 뒤 owner state만 변경한다.
 - `./gradlew spotlessApply clean build`: **Passed**. 전체 test/check가 통과했다.
 - Plan 13: sole dependency completed, `Implementation-Ready=true`.
-- Plan 16: Plan 12는 completed이나 Plan 13/15가 active라 `Implementation-Ready=false`.
+- Plan 16: 이 2026-08-01 checkpoint 당시 Plan 12는 completed이나 Plan 13/15가 active라
+  `Implementation-Ready=false`였다.
+
+## Plan 13 foundation validation (2026-08-02)
+
+- V17 clean activation/precheck, Payment completion/refund eligibility work와 retry/manual-review:
+  **Passed**.
+- Loyalty full/partial actual recovery, residual pending, oldest-first gross accrual offset와 concurrent
+  non-negative balance: **Passed**.
+- frozen `OrderCompletedV1` normal/pre-completion/out-of-order/replay와 immutable source/version/hash:
+  **Passed**.
+- focused migration/Payment/Loyalty/Ordering/Modulith suite: **Passed**, 32 tests.
+- `./gradlew clean build`: **Passed**, 205 tests, 0 failures/errors/skips.
+- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
+- Plan 14와 Loyalty adjustment: all direct dependencies completed, `Implementation-Ready=true`.
+- Plan 16: Plan 13 blocker는 completed이고 Plan 15만 active라 `Implementation-Ready=false`.
 
 ## Historical audit validation
 

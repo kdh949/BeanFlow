@@ -106,6 +106,11 @@ boundary 실패는 Loyalty source 처리의 retry/manual-review failure이며, p
 새로 추가하거나 `OrderCompletedV1` field를 확장하지 않는다. Plan 20의 V2 producer/cutover
 소유권도 바꾸지 않는다.
 
+2026-08-02 Plan 13 implementation은 이 예외를 frozen `OrderCompletedV1` listener로 활성화했다.
+listener는 persisted Order completion version과 V16 snapshot hash를 검증하고 Payment eligibility와
+Loyalty accrual owner transaction을 호출한다. `PointsAccruedV1` publication은 추가하지 않았으며
+여전히 Plan 16이 소유한다.
+
 All new producer transactions persist the original fact and Spring Modulith publication atomically.
 External Provider calls remain outside those transactions. A missing required snapshot, source, version
 or publication row rolls back the producer result transaction when that fact is being committed; a

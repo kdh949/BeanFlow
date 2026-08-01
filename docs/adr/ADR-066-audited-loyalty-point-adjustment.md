@@ -4,7 +4,7 @@
 - **Date:** 2026-08-01
 - **Amends:** ADR-011의 PointTransaction 조정 표현
 - **Implementation owner:** `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
-- **Schema prerequisite owners:** [Plan 10](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)의 PointLot issuer snapshot precheck/migration, [Plan 11](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)의 grant, [Plan 13](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)의 PointTransaction base
+- **Schema prerequisite owners:** [Plan 10](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)의 PointLot issuer snapshot precheck/migration, [Plan 11](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)의 grant, [completed Plan 13](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)의 PointTransaction base
 
 ## Context
 

@@ -24,6 +24,9 @@
 - 고객 취소 멱등 table, AcceptanceTimeoutWork와 cancellation Audit action이 없다.
 - direct phase predecessor는 Plan 30이다. Plan 30 completion baseline에는 Plan 10/15/20 outcomes가
   이미 merge돼 있으며 이 plan은 latest main에서 Draft-only로 시작한다.
+- Plan 13 recovery/pending은 V17 owner outcome과 205-test evidence로 completed지만, 이는
+  Plan 16→20→30을 통해 간접 소비되는 upstream input이다. Plan 40의 direct readiness는 여전히
+  active Plan 30 때문에 false다.
 
 ## Definitions
 
@@ -171,7 +174,8 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 30 completion 뒤 Draft PR에서만 구현한다. verified outcome 뒤 completion
+미구현 상태다. completed Plan 13은 upstream recovery input을 제공하지만 Plan 30 completion 뒤
+Draft PR에서만 구현한다. verified outcome 뒤 completion
 commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual recovery/release evidence가
 없는 동안 main merge, deployment와 production success path를 활성화하지 않는다.
 
@@ -179,3 +183,5 @@ commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual re
 
 - 2026-07-31: readiness audit에서 최초 작성.
 - 2026-08-01: ADR-029 migration 단일 소유권을 Plan 40으로 확정.
+- 2026-08-02: completed Plan 13 recovery outcome은 upstream evidence로 기록하되 Plan 30 direct
+  dependency와 Draft-only readiness gate는 변경하지 않았다.

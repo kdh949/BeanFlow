@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-01
 - **Amends:** ADR-011, ADR-065, ADR-068
-- **Implementation owners:** [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 13 consumer](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
+- **Implementation owners:** [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [completed Plan 13 consumer](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
 
 ## Context
 
@@ -118,6 +118,10 @@ Order가 가격·결제 예정액과 unit allocation을 확정하는 시점에 a
 - snapshot schema가 포함된 migration은 ADR-072 migration-writer lease 아래에서만 추가한다.
 - snapshot의 raw issuer reference, policy value, order/customer ID는 metric tag나 public
   event payload에 넣지 않는다.
+
+2026-08-02 implementation outcome: Plan 13은 canonical snapshot SHA-256, Payment completion
+outcome/refund work와 Loyalty immutable result receipt를 추가했다. normal/pre-completion/out-of-order
+flow와 V1 replay가 PostgreSQL/application tests에서 같은 source/version/hash 결과를 냈다.
 
 ## Verification
 
