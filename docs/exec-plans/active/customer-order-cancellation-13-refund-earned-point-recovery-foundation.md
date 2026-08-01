@@ -154,7 +154,16 @@ evidence를 갱신한다.
   - BR-13/ADR-065의 gross `ACCRUAL` PointLot/transaction을 먼저 기록한 뒤 같은 transaction에서
     pending 상계분을 그 Lot의 `RECOVERY`로 debit하는 표현을 유지한다. commit 뒤 available에는
     net만 남지만 append-only ledger에는 gross와 offset이 모두 남는다.
-- [ ] recovery/pending schema and constraints
+- [x] 2026-08-02 recovery/pending schema and constraints
+  - V17은 `payment_order_point_accrual_outcome`과 durable refund recovery work를 만들고
+    Loyalty Account pending summary, `PointRecoveryPending`, recovery/accrual result receipt,
+    `ACCRUAL|RECOVERY` transaction과 pending FK를 추가했다.
+  - deferred constraint trigger가 Account pending summary와 PENDING row 합을 commit 시점에
+    검증하고 pending identity/remaining/state는 단조롭게만 바뀐다. outcome과 result receipt는
+    DB trigger로 append-only다.
+  - verified pre-release clean activation과 달리 이미 `SNAPSHOTTED` completion 또는 성공 Refund가
+    있으면 V17은 owner source를 추측 backfill하지 않고 migration을 실패시킨다.
+  - `./gradlew test --tests '*PointRecoveryMigrationTest' --rerun-tasks`: PASS, 3 PostgreSQL tests.
 - [x] 2026-08-01 BR-10 ordinary-accrual policy vocabulary decision
 - [x] 2026-08-01 GLOBAL default + STORE override precedence decision
 - [x] 2026-08-01 append-only INHERIT_GLOBAL override lifecycle decision
