@@ -775,6 +775,13 @@
   적립은 부족액 상계에 우선 사용하며 상계분도 `RECOVERY` PointTransaction으로
   기록한다. 정산 금액 보정이 필요하면 별도 SettlementAdjustment가 원천 refund
   reference를 사용하며, 포인트 회수 대기 잔액 자체를 소유하지 않는다.
+- **Gross Accrual Ledger Clarification (2026-08-02):** 이후 적립으로 pending을 상계할 때
+  Order snapshot의 gross 전액을 `ACCRUAL` PointTransaction과 새 PointLot으로 먼저
+  기록하고, 같은 Loyalty transaction에서 oldest-first pending에 적용한 금액을 해당 새
+  Lot의 `RECOVERY` PointTransaction으로 기록한다. 따라서 gross 적립과 상계 debit은 모두
+  append-only 원장에 남고, transaction 종료 시 PointLot과 PointAccount의 available에는
+  상계 후 net 금액만 남는다. net 금액만 `ACCRUAL`로 기록하거나 상계분을 원장 없이
+  pending에서 직접 차감하지 않는다.
 - **Rationale:** 환불을 막지 않으면서 포인트 비용의 정합성을 유지하고 음수 잔액을 피한다.
 - **Affected Contexts:** Loyalty, Payment, Settlement, Operations
 - **Affected Aggregates:** PointAccount, PointLot, PointTransaction, PointRecoveryPending

@@ -53,6 +53,12 @@ type도, SettlementAdjustment도 아니다. Payment는 성공 Refund 사실과 s
    전이한다. `PENDING`은 항상 양수 잔액, `SETTLED`는 항상 0 잔액을 가진다. 가용
    PointAccount 잔액이나 PointLot 잔액은 음수가 될 수 없다.
 
+2026-08-02 clarification: 위 4단계의 표현이 canonical이다. 이후 적립은 gross 전액의
+`ACCRUAL` PointTransaction과 PointLot을 먼저 만들고, 같은 transaction에서 pending 상계분의
+`RECOVERY` PointTransaction으로 그 새 Lot을 debit한다. commit 뒤 Lot과 Account available에는
+net만 남지만 append-only 원장에는 gross credit과 offset debit이 모두 남는다. net만
+`ACCRUAL`로 기록하거나 Lot과 연결되지 않은 pending 감소로 상계를 표현하지 않는다.
+
 일반 적립의 gross amount, issuer와 만료 입력, 그리고 부분 환불의 후보 회수 unit
 allocation은 ADR-073의 주문 생성 immutable snapshot에서만 가져온다. Refund 시점이나
 `OrderCompletedV1` consumer는 현재 적립 정책을 다시 계산하지 않는다. 완료 전에 성공한
@@ -160,6 +166,8 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
 - Plan 13은 ADR-073 boundary가 반환한 gross/unit snapshot으로 refund recovery target과
   later-accrual offset을 같은 규칙으로 재현해야 한다. 완료 전 Refund unit의 accrual exclusion과
   완료 후 Refund unit의 recovery를 서로 대체하지 않는다.
+- later-accrual offset은 gross `ACCRUAL`과 상계 `RECOVERY` 두 append-only effect를 남기므로
+  공개 signed transaction 합과 최종 Lot/Account available net이 서로 tie-out해야 한다.
 
 ## Required Tests
 
