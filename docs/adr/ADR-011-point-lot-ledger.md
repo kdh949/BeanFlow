@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-28
-- **Amended by:** ADR-063의 부분 환불 만료 포인트 복원, ADR-065의 환불 적립 포인트 회수, ADR-066의 감사형 포인트 조정
+- **Amended by:** ADR-063의 부분 환불 만료 포인트 복원, ADR-065의 환불 적립 포인트 회수, ADR-066의 감사형 포인트 조정, ADR-073의 주문 시점 일반 적립 snapshot
 
 ## Context
 
@@ -71,6 +71,19 @@
 - PointAccount 가용 잔액은 음수가 될 수 없고, `recoveryPendingKrw` summary는 PENDING
   잔액 합과 같은 transaction에서 유지한다.
 
+2026-08-01 ordinary accrual snapshot amendment (ADR-073):
+
+- 일반 적립의 적용 정책과 unit별 적립 결과는 Order 생성 시 immutable
+  `OrderPointAccrualSnapshot`으로 고정한다. 새 PointLot은 완료 시 이 snapshot이 정한
+  issuer와 만료 결과를 저장하며 현재 적립 정책을 다시 읽지 않는다.
+- `OrderCompletedV1`은 frozen trigger로 유지한다. Loyalty는 version/source를 검증하는
+  typed Ordering boundary로 immutable snapshot을 읽고, snapshot 누락·불일치에는 0원 Lot,
+  기본 issuer 또는 기본 만료를 만들지 않는다.
+- 완료 전에 성공한 부분 Refund의 unit은 이후 일반 적립에서 제외하며, 아직 발생하지 않은
+  credit에 `RECOVERY` 또는 PointRecoveryPending을 만들지 않는다. BR-10은
+  `refundSucceededAt <= completedAt`에 Refund 우선으로 `EXCLUDED_BEFORE_ACCRUAL`을
+  적용하고, 그보다 늦은 성공분만 recovery 대상으로 정한다.
+
 2026-08-01 audited manual adjustment amendment (ADR-066):
 
 - `ADJUSTMENT`는 활성 Platform Operator의 명시적 권한, reason, evidence와 target
@@ -102,6 +115,7 @@
   재현된다.
 - 환불 적립 포인트 회수와 이후 적립 상계는 실제 `RECOVERY` debit과 별도 pending
   obligation을 함께 tie-out해야 한다.
+- 일반 적립은 주문 생성 snapshot의 gross amount와 unit별 allocation으로만 재현한다.
 - 수동 adjustment도 PointLot, PointAccount, signed transaction, IdempotencyRecord와
   AuditRecord를 같은 local transaction에서 tie-out해야 한다.
 
@@ -117,6 +131,7 @@
 - 부분 환불 시 만료 lot의 30일 보상과 정책 version 재현
 - 부분 환불 뒤 reservation USED 유지와 후속 종료의 잔여 allocation 복원
 - 환불 적립 포인트 전액/부분 회수, 부족액 상계와 pending summary tie-out
+- 주문 생성 뒤 적립 정책 변경, 성공 부분 환불 unit과 일반 적립 snapshot의 allocation tie-out
 - 수동 양수/음수 adjustment의 issuer·expiry, balance effect와 Audit atomicity
 - 원장과 balance tie-out
 
@@ -135,3 +150,4 @@
 - [ADR-017](ADR-017-settlement-calculation-and-cost-allocation.md)
 - [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
+- [ADR-073](ADR-073-order-point-accrual-snapshot.md)

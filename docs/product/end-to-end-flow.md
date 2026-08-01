@@ -21,11 +21,20 @@ Failure behavior:
 5. Promotion이 쿠폰을 검증·예약한다.
 6. Loyalty가 포인트 사용분을 예약한다.
 7. 쿠폰을 먼저 적용하고 남은 금액에 포인트를 적용한다.
-8. Order를 `PENDING_PAYMENT`로 확정한다.
+8. Operations의 STORE override/GLOBAL 정책 version을 선택하고 실결제액 기준 적립 결과를
+   conceptual unit마다 계산한다.
+9. Order, `OrderLine`, 선택된 정책 값·hash·source와 unit별 계산 결과를 하나의 immutable
+   `OrderPointAccrualSnapshot`으로 같은 transaction에 저장한다.
+10. 실결제액이 양수면 Order를 `PENDING_PAYMENT`로, 포인트/쿠폰으로 전액 결제되면 외부 Provider
+    호출 없이 benefit-only Payment와 Order `PAID`를 같은 transaction으로 확정한다.
 
 Invariants:
 
 - 일부 예약만 성공한 주문을 생성하지 않는다.
+- 모든 신규 주문은 complete `SNAPSHOTTED` 적립 source를 가진다. 정책 조회·snapshot 저장 실패를
+  0원 적립, legacy 또는 current-policy fallback으로 바꾸지 않고 주문과 모든 owner effect를 rollback한다.
+- 정책 변경 뒤 생성된 주문만 새 version을 선택한다. 기존 주문의 policy와 unit 계산 결과는 다시
+  계산하거나 갱신하지 않는다.
 - 주문 항목과 결제 예정 금액은 결제 시작 후 변경하지 않는다.
 - 마지막 슬롯·재고·쿠폰 수량을 초과할 수 없다.
 - Payment가 `UNKNOWN`이어도 5분 lease를 자동 연장하지 않는다.
@@ -130,10 +139,16 @@ Failure behavior:
 
 ## 7. Point accrual
 
-1. Loyalty가 중복되지 않은 `OrderCompleted` 사실을 처리한다.
-2. 실결제액을 기준으로 PointLot과 적립 원장을 생성한다.
-3. 발급 당시 만료일과 발급 주체를 고정한다.
-4. 동일 주문 완료 사실로 두 번 적립할 수 없다.
+1. Ordering은 주문 생성 시 일반 적립 정책과 unit별 적립 결과를 immutable
+   `OrderPointAccrualSnapshot`으로 고정한다.
+2. Loyalty는 중복되지 않은 `OrderCompletedV1` 사실을 trigger로만 처리하고 typed
+   Ordering boundary로 snapshot을 읽는다.
+3. snapshot의 실결제액 기준 결과로 PointLot과 적립 원장을 생성하고 발급 당시 만료일과
+   발급 주체를 고정한다.
+4. 완료 전 성공한 부분 Refund unit은 이후 적립에서 제외하고, 완료 후 성공분만 실제
+   `RECOVERY`/pending 대상으로 처리한다.
+5. snapshot 누락·불일치에는 0원 적립이나 현재 정책 재조회 대신 retry/manual-review를 남긴다.
+6. 동일 주문 완료 사실로 두 번 적립할 수 없다.
 
 ## 8. Settlement
 
@@ -150,8 +165,9 @@ Failure behavior:
 3. 주문 당시 항목별 배분 스냅샷을 사용한다.
 4. 해당 항목의 현금 결제액을 환불하고 사용 포인트를 복원한다.
 5. 쿠폰 할인액은 현금으로 환급하지 않는다.
-6. 적립 포인트를 실제 `RECOVERY` 원장으로 회수하고, 부족액만 Loyalty의
-   `PointRecoveryPending(PENDING)`에 남긴다. 이후 적립은 이 부족액을 먼저 상계한다.
+6. 완료 후 성공한 Refund의 적립 포인트만 실제 `RECOVERY` 원장으로 회수하고, 부족액만
+   Loyalty의 `PointRecoveryPending(PENDING)`에 남긴다. 완료 전 성공 unit은 후속 적립에서
+   제외하며 pending을 만들지 않는다. 이후 적립은 남은 부족액을 먼저 상계한다.
 7. 정산 확정 전이면 원천 항목에 반영하고, 확정 후면 Adjustment를 생성한다.
 
 ## 10. Settlement dispute

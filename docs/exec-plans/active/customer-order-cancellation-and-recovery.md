@@ -163,14 +163,15 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 3. [PointLot issuer provenance foundation을 만든다](../completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00
 4. [만료 혜택 정책과 operator grant foundation을 만든다](../completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00, completed
 5. [부분 환불 allocation과 포인트 복원을 만든다](../completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11, completed
-6. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12
-7. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
-8. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
-9. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
-10. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
-11. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
-12. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
-13. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
+6. [일반 포인트 적립 policy와 Order snapshot을 만든다](../completed/ordinary-point-accrual-policy-management.md) — 11, 12, completed
+7. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12, ordinary-accrual policy/snapshot
+8. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
+9. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
+10. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
+11. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
+12. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
+13. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
+14. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
 Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
@@ -179,6 +180,7 @@ Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번
 ## Required Tests
 
 - 하위 계획 링크와 의존관계가 순환하지 않음
+- completed ordinary-accrual policy/snapshot 없이 Plan 13이 live policy/default로 적립을 시작하지 않음
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
 - Plan 16은 12/13/15 중 하나라도 미완료면 ready/start 되지 않음
 - Plan 20이 Plan 15 immutable input evidence 없이 `OrderCompletedV2` producer 또는 SettlementItem을 만들지 않음
@@ -220,10 +222,11 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
 - [x] 2026-08-01 parallel DAG를 migration-writer single lane과 main-base PR strategy로 교체
 - [x] signed cursor foundation 완료 — v1 codec, required key-ring/startup validation, rotation과 no-secret observability 검증
-- [ ] 10 issuer provenance foundation 완료
+- [x] 10 issuer provenance foundation 완료
 - [x] 11 policy/grant foundation 완료 — 다섯 immutable policy head, persistent grant, audited GET/PATCH와 fail-closed OIDC bootstrap 검증
-- [ ] 12 allocation/restoration foundation 완료
+- [x] 12 allocation/restoration foundation 완료
 - [ ] 13 recovery foundation 완료
+- [x] ordinary-accrual policy/snapshot foundation 완료 — V16, operator API/bootstrap, atomic Order snapshot
 - [ ] 14 point-account read foundation 완료
 - [ ] 15 settlement-input snapshot foundation 완료
 - [ ] 16 immutable financial event producer 완료
@@ -256,6 +259,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-08-01 | Accepted | Plan 10–15 semantic cycle을 Plan 10/11/12/13/14/16 vertical slices로 분리 | Plan 15는 issuer만, Plan 16은 allocation/recovery와 snapshot을 함께 소비 | ADR-063/065/068/069/071/072 |
 | 2026-08-01 | Accepted | Plan 10은 completed Plan 00만 직접 소비하고 signed cursor는 Plan 14/20의 독립 input으로 유지 | dependency graph가 실제 phase input만 표현하고 migration-writer lease가 queue scheduling을 담당하게 함 | ADR-070, ADR-072 |
 | 2026-08-01 | Accepted | Plan 14는 Plan 11 grant, Plan 13 recovery summary와 signed cursor를 직접 소비 | 실제 `recoveryPendingKrw` 없이 조회를 조기 활성화하지 않음 | ADR-069, ADR-072 |
+| 2026-08-01 | Accepted | 일반 적립 policy/snapshot을 Plan 13의 별도 predecessor로 분리 | 운영자 policy와 Ordering boundary를 recovery ledger 전에 독립 검증 | ADR-073, ADR-074 |
 | 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item 귀속을 소유하고 lifecycle 계획이 계산·Adjustment·Dispute를 확장 | Batch-scoped Item API를 선행 구현하면서 migration 중복 제거 | ADR-067 |
 
 ## Outcomes & Retrospective

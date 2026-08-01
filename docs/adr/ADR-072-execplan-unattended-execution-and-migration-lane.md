@@ -56,7 +56,9 @@ schema-writing plan을 한 번에 하나만 실행하게 하지만, 실제로 �
 
 ```text
 Plan 00 -> Plan 10 issuer -> Plan 15 snapshot
-Plan 00 -> Plan 11 grants -> Plan 12 allocation -> Plan 13 recovery
+Plan 00 -> Plan 11 grants -> Plan 12 allocation
+Plan 11 grants + Plan 12 allocation -> ordinary-accrual policy/snapshot
+Plan 12 allocation + ordinary-accrual policy/snapshot -> Plan 13 recovery
 Plan 11 grants + Plan 13 recovery + signed-cursor foundation -> Plan 14 read
 Plan 12 + Plan 13 + Plan 15 -> Plan 16 refund/Loyalty events
 Plan 15 + Plan 16 + signed-cursor foundation -> Plan 20
@@ -65,7 +67,10 @@ Plan 11 grants + Plan 20 -> Plan 30 -> Plan 40 -> Plan 50
 
 Plan 10은 completed Plan 00만 직접 소비한다. signed-cursor foundation은 Plan 10의 migration, issuer
 precheck 또는 DTO contract에 input을 주지 않는다. Plan 15는 Plan 10 issuer output만 직접 소비하는
-settlement input snapshot foundation이다. Plan 16은 Plan 12/13/15 output을 함께 소비해
+settlement input snapshot foundation이다. ordinary-accrual policy/snapshot plan은 Plan 11의
+permission/Audit/bootstrap foundation과 Plan 12의 conceptual-unit allocation을 직접 소비해 Operations
+policy와 immutable Ordering boundary를 만든다. Plan 13은 Plan 12 refund allocation과 이 completed
+boundary를 직접 소비하는 recovery owner다. Plan 16은 Plan 12/13/15 output을 함께 소비해
 `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1`만 producer로 만든다. Plan 20은 Plan 15
 snapshot, Plan 16 outcome과 signed-cursor foundation을 직접 소비해 `OrderCompletedV1 -> V2` cutover,
 Ordering producer와 Settlement consumer를 소유한다. Plan 30의 prior parallel branch는 없으며, Plan 30은

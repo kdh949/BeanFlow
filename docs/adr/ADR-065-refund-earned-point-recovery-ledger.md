@@ -53,6 +53,17 @@ type도, SettlementAdjustment도 아니다. Payment는 성공 Refund 사실과 s
    전이한다. `PENDING`은 항상 양수 잔액, `SETTLED`는 항상 0 잔액을 가진다. 가용
    PointAccount 잔액이나 PointLot 잔액은 음수가 될 수 없다.
 
+일반 적립의 gross amount, issuer와 만료 입력, 그리고 부분 환불의 후보 회수 unit
+allocation은 ADR-073의 주문 생성 immutable snapshot에서만 가져온다. Refund 시점이나
+`OrderCompletedV1` consumer는 현재 적립 정책을 다시 계산하지 않는다. 완료 전에 성공한
+Refund unit은 후속 gross accrual에서 제외할 뿐 아직 존재하지 않은 credit에 `RECOVERY`나
+PointRecoveryPending을 만들지 않는다. 완료 후 성공한 Refund만 실제 recovery 대상이 된다.
+BR-10은 Payment `refundSucceededAt <=` Ordering `completedAt`이면 Refund 우선 exclusion,
+그 뒤면 recovery로 정한다. 완료 여부가 아직 없으면 Payment-owned eligibility work가 대기하고,
+완료 없이 terminal이면 `NOT_APPLICABLE`로 끝난다.
+snapshot이 없거나 completion source/version과 맞지 않으면 신규 Lot, `ACCRUAL`, deferred
+`RECOVERY`를 만들지 않고 source 처리를 재시도 또는 수동 검토 대상으로 남긴다.
+
 동일 Refund source의 같은 회수 결과는 멱등 재생한다. 같은 source에 회수 대상·금액·Lot
 mapping이 다르면 덮어쓰거나 추가 차감하지 않고 `POINT_RECOVERY_SOURCE_CONFLICT`로
 실패를 보존해 재처리 대상으로 남긴다.
@@ -115,6 +126,8 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
   호출은 이 transaction에 넣지 않는다.
 - source conflict, summary mismatch, 존재해야 할 PointLot/Pending 누락은 stale·cache·0
   fallback으로 숨기지 않고 실패로 남긴다.
+- 일반 적립 snapshot의 누락, immutable payload hash/source 불일치, typed Ordering boundary
+  실패도 적립 0원 또는 현재 정책 재조회로 대체하지 않는다.
 
 ## Alternatives Considered
 
@@ -144,6 +157,9 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
   OpenAPI enum이 구현되었다고 주장하지 않는다.
 - PointTransaction public projection은 storage magnitude와 signed effect를 명시적으로
   변환해야 한다. raw JPA Entity를 API에 노출하지 않는다.
+- Plan 13은 ADR-073 boundary가 반환한 gross/unit snapshot으로 refund recovery target과
+  later-accrual offset을 같은 규칙으로 재현해야 한다. 완료 전 Refund unit의 accrual exclusion과
+  완료 후 Refund unit의 recovery를 서로 대체하지 않는다.
 
 ## Required Tests
 
@@ -181,3 +197,4 @@ account, refund, lot, order ID와 source reference는 metric tag로 사용하지
 - [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md)
 - [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
+- [ADR-073](ADR-073-order-point-accrual-snapshot.md)

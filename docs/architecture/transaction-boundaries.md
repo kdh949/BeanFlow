@@ -16,6 +16,17 @@ Initial decision:
   PointReservation issuer allocations이 모두 검증된 뒤 같은 transaction에
   `OrderSettlementInputSnapshot`을 저장한다. source/snapshot tie-out failure는 Order·예약의
   부분 성공이나 default fee/cost로 대체하지 않고 전체 rollback한다.
+- Order와 OrderLine을 저장한 뒤 같은 transaction에서 Operations의 typed selector로
+  STORE override 또는 현재 GLOBAL version을 선택한다. Ordering은 선택된 immutable policy values,
+  canonical hash, selection source, 주문 실결제액과 conceptual-unit별 현금·적립 배분을
+  `OrderPointAccrualSnapshot`으로 저장한다.
+- policy 선택은 STORE scope shared advisory lock 뒤 명시적 STORE head를 shared lock으로 읽고,
+  fallback이 필요할 때만 GLOBAL head를 shared lock으로 읽는다. STORE policy write는 같은 advisory
+  key의 exclusive lock과 head write lock을 사용한다. 따라서 동시 Order 선택은 허용하면서 정책 변경과
+  선형화된 Order는 변경 전 또는 변경 후 version 중 하나만 사용하며 두 version의 값을 섞지 않는다.
+- Order/OrderLine flush, policy selection 또는 point accrual source/header/unit flush가 실패하면
+  Order, 모든 owner 예약·benefit-only 승인, Audit와 성공 idempotency response를 함께 rollback한다.
+  missing policy를 0 bps, current cache 또는 legacy marker로 대체하지 않는다.
 - 일부 실패 시 주문과 모든 예약을 롤백한다.
 - Merchant는 정규화한 메뉴·옵션 구성을 sellable unit 요구량으로 번역하고,
   Ordering은 같은 unit 요구량을 주문 전체에서 합산하여 Inventory 공개 API에
@@ -25,7 +36,7 @@ Initial decision:
   커밋한다. 중간 `PENDING_PAYMENT`와 `RESERVED` 상태는 외부에 커밋하지 않으며
   외부 Provider를 호출하지 않는다.
 - 성공 Tx O는 Order, 예약, AuditRecord와 IdempotencyRecord의
-  `COMPLETED + 최초 201 response`를 함께 커밋한다.
+  `COMPLETED + 최초 201 response`, complete `OrderPointAccrualSnapshot`을 함께 커밋한다.
 - 확정 실패로 Tx O가 rollback되면 별도 Tx I2가 `FAILED + 최초 error response`를
   저장한다. Tx I1 뒤 멈춘 PROCESSING은 intended Order와 owner source를
   reconciliation하며 새 주문을 자동 실행하지 않는다.
