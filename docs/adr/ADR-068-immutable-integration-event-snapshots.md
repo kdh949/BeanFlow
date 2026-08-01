@@ -132,6 +132,11 @@ unimplemented event shape to consume.
 
 ## Verification
 
+**Plan 12 boundary evidence (2026-08-01):** V15 and the Payment result transaction now provide the
+immutable Refund line/point allocation, succeeded-at and policy lineage that Plan 16 may serialize. Plan 12
+does not define or publish `PaymentRefundedV1`/`PointsRestoredV1`, does not add a public event class, and does
+not treat the Payment-owned restoration worker handoff as the Plan 16 integration-event producer.
+
 - contract tests reject a payload with a missing required snapshot or a payload version/type mismatch;
 - fee/coupon/point cost and `netSettlementKrw` in `OrderCompletedV2` tie out to immutable Order snapshots;
 - Plan 15 fixture/validator failure blocks the Plan 20 cutover, while a Plan 20 outbox save failure does not

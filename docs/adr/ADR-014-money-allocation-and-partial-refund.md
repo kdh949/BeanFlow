@@ -37,6 +37,21 @@ BR-02, BR-08, BR-12와 BR-15는 주문 당시 금액을 정수 KRW로 재현하�
   동률이면 line sequence가 작은 line부터 적용한다.
 - 이 순서로 각 line의 benefit이 gross를 초과하지 않고 Order 합계와 정확히 tie-out한다.
 
+부분 수량 환불에는 2026-08-01의 다음 within-line 규칙을 적용한다.
+
+- 한 OrderLine의 conceptual unit position은 원 주문 순서 안에서 `0..quantity-1`로
+  고정한다. unit gross는 immutable unit price다.
+- line coupon allocation은 unit gross 비율로 배분하고 원 미만 버림 뒤 remainder는
+  unit position이 작은 순서로 1원씩 배분한다.
+- line points allocation은 unit별 coupon 차감 후 잔액 비율로 배분한다. 원 미만 버림
+  뒤 remainder는 해당 잔액이 큰 unit, 같으면 unit position이 작은 unit부터 1원씩
+  배분한다.
+- unit cash는 `gross - coupon - points`로 계산한다. unit 및 line 합계가 모두
+  immutable OrderLine snapshot과 tie-out한다.
+- 성공한 부분 환불만 아직 소비되지 않은 가장 작은 unit position부터 요청 수량만큼
+  확정한다. 실패·불명 Refund는 position을 소비하지 않는다. full refund는 line
+  sequence 순서로 모든 남은 unit position을 소비한다.
+
 이 clarification은 2026-07-28 구현 전 정책 대조에서 BR-08/ADR-024의 대상 제한과
 기존 공통 배분 문장이 충돌해 확정했다.
 
@@ -58,11 +73,19 @@ BR-02, BR-08, BR-12와 BR-15는 주문 당시 금액을 정수 KRW로 재현하�
 
 ## Verification
 
+**Plan 12 implementation evidence (2026-08-01):** V15 stores immutable request and success
+line/point allocation ledgers. Payment serializes successful unit consumption from the lowest remaining
+position and PostgreSQL deferred constraint triggers reject request mismatch, overlapping unit ranges,
+OrderLine cash/point/coupon/quantity excess, original point-allocation excess and Payment approved-amount
+excess. Testcontainers covers the `1/333/666` then `0/334/666` within-line remainder example, full and
+successive partial Refunds, failed-unit reuse, coupon state non-restoration and a forced overlap commit.
+
 - 원 미만이 발생하는 다품목 정률 할인
 - 대상·비대상 혼합 주문의 coupon 대상 제한
 - coupon 적용 후 잔액 기준 point 배분
 - 잔여 1원이 여러 개 생기는 동률 항목
 - 반복 품목 환불과 누적 환불 상한
+- 같은 line의 부분 수량 반복 환불에서 앞 unit remainder 순서와 unit/line tie-out
 - 부분 환불 성공 시 CouponIssuance 상태 불변과 Promotion 복원 호출 부재
 - 선행 부분 환불 뒤 주문 전체 종료 시 원 쿠폰의 단일 복원
 - 현금, 포인트, 쿠폰, 환불, 정산 tie-out

@@ -284,6 +284,13 @@ paths:
       tags: [Payment]
       operationId: createPaymentRefund
       summary: Create a full or item-based partial refund
+      description: |
+        This is a store/platform transaction adjustment, not a customer self-service
+        command. STORE_OWNER and STORE_STAFF require active membership in the Order
+        store; PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes all
+        remaining units. Explicit quantities consume the lowest unrefunded conceptual
+        unit positions. Within each line, coupon then points are allocated deterministically
+        and cash is the residual; coupon attribution never restores the coupon.
       parameters:
         - $ref: "#/components/parameters/PaymentId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1872,7 +1879,9 @@ components:
         lineItems:
           type: array
           minItems: 1
-          description: Omit to request a full refund of the remaining refundable amount
+          description: |
+            Omit to request a full refund of every remaining refundable unit. Each
+            successful request consumes the lowest unrefunded conceptual unit positions.
           items:
             $ref: "#/components/schemas/RefundLineRequest"
         reason:

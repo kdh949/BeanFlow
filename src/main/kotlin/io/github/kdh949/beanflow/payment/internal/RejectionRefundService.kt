@@ -25,6 +25,7 @@ internal data class ClaimedRefund(
     val refundId: UUID,
     val paymentId: UUID,
     val orderId: UUID,
+    val reason: String,
     val amountKrw: Long,
     val providerIdempotencyKey: String,
     val mode: RefundClaimMode,
@@ -40,6 +41,7 @@ internal class RejectionRefundService(
     private val requestLoader: PaymentProviderRequestLoader,
     private val paymentGateway: PaymentGateway,
     private val compensationOperations: RejectionCompensationOperations,
+    private val partialRefundSuccessLedger: PartialRefundSuccessLedger,
     private val identifierSource: IdentifierSource,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.payment.refund.claim-lease:PT1M}")
@@ -107,17 +109,23 @@ internal class RejectionRefundService(
             val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
             val mode =
                 try {
-                    refund.claim(token, now, claimLease, MAX_ATTEMPTS)
+                    refund.claim(token, now, claimLease)
                 } catch (_: IllegalStateException) {
-                    if (entity.attemptCount >= MAX_ATTEMPTS) {
-                        refund.markManualReviewAfterExpiredClaim(now, MAX_ATTEMPTS)
+                    if (entity.state == RefundState.PROCESSING || entity.state == RefundState.RECONCILING) {
+                        refund.recoverExpiredClaim(now)
                         entity.apply(refund)
-                        recordStep(
-                            entity.orderId,
-                            RejectionCompensationStepState.MANUAL_REVIEW,
-                            "CLAIM_LEASE_EXPIRED",
-                            now,
-                        )
+                        if (entity.reason == REASON) {
+                            recordStep(
+                                entity.orderId,
+                                if (refund.state == RefundState.MANUAL_REVIEW) {
+                                    RejectionCompensationStepState.MANUAL_REVIEW
+                                } else {
+                                    RejectionCompensationStepState.UNKNOWN
+                                },
+                                "CLAIM_LEASE_EXPIRED",
+                                now,
+                            )
+                        }
                     }
                     return@mapNotNull null
                 }
@@ -126,6 +134,7 @@ internal class RejectionRefundService(
                 refundId = entity.id,
                 paymentId = entity.paymentId,
                 orderId = entity.orderId,
+                reason = entity.reason,
                 amountKrw = entity.requestedAmountKrw,
                 providerIdempotencyKey = entity.providerIdempotencyKey,
                 mode = mode,
@@ -134,6 +143,38 @@ internal class RejectionRefundService(
                 dueAt = dueAt,
             )
         }
+    }
+
+    @Transactional
+    fun claimOne(
+        refundId: UUID,
+        now: Instant,
+    ): ClaimedRefund {
+        val entity =
+            refundRepository.findLockedById(refundId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Refund is missing")
+        val refund = entity.toDomain()
+        val token = identifierSource.next()
+        val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
+        val mode =
+            try {
+                refund.claim(token, now, claimLease)
+            } catch (failure: IllegalStateException) {
+                throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, failure.message ?: "Refund is not claimable")
+            }
+        entity.apply(refund)
+        return ClaimedRefund(
+            refundId = entity.id,
+            paymentId = entity.paymentId,
+            orderId = entity.orderId,
+            reason = entity.reason,
+            amountKrw = entity.requestedAmountKrw,
+            providerIdempotencyKey = entity.providerIdempotencyKey,
+            mode = mode,
+            attemptCount = entity.attemptCount,
+            claimToken = token,
+            dueAt = dueAt,
+        )
     }
 
     fun callProvider(claim: ClaimedRefund): GatewayRefundResult {
@@ -162,6 +203,11 @@ internal class RejectionRefundService(
         result: GatewayRefundResult,
         now: Instant,
     ) {
+        // Result transactions that need no Order lock always start at Payment, then lock Refund.
+        // This preserves the repository-wide Order -> Payment -> Refund/allocation order.
+        val payment =
+            paymentRepository.findLockedById(claim.paymentId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment for refund is missing")
         val entity =
             refundRepository.findLockedById(claim.refundId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Claimed refund is missing")
@@ -173,9 +219,6 @@ internal class RejectionRefundService(
         }
         when (result) {
             is GatewayRefundResult.Succeeded -> {
-                val payment =
-                    paymentRepository.findLockedById(claim.paymentId)
-                        ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment for refund is missing")
                 val approvedAmount =
                     payment.approvedAmountKrw
                         ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Approved payment amount is missing")
@@ -187,22 +230,45 @@ internal class RejectionRefundService(
                 payment.succeededRefundAmountKrw = nextRefundedAmount
                 payment.updatedAt = now
                 entity.apply(refund)
-                recordStep(claim.orderId, RejectionCompensationStepState.SUCCEEDED, null, now)
+                if (entity.reason == PARTIAL_REFUND) {
+                    partialRefundSuccessLedger.record(entity, payment, now)
+                } else {
+                    recordStep(claim.orderId, RejectionCompensationStepState.SUCCEEDED, null, now)
+                }
             }
 
             is GatewayRefundResult.Failed -> {
                 refund.fail(result.code, now)
                 entity.apply(refund)
-                recordStep(
-                    claim.orderId,
-                    RejectionCompensationStepState.MANUAL_REVIEW,
-                    normalized(result.code),
-                    now,
-                )
+                if (entity.reason == REASON) {
+                    recordStep(
+                        claim.orderId,
+                        RejectionCompensationStepState.MANUAL_REVIEW,
+                        normalized(result.code),
+                        now,
+                    )
+                }
+            }
+
+            is GatewayRefundResult.RetryableFailed -> {
+                refund.recordRetryableRequestFailure(result.code, now)
+                entity.apply(refund)
+                if (entity.reason == REASON) {
+                    recordStep(
+                        claim.orderId,
+                        if (refund.state == RefundState.MANUAL_REVIEW) {
+                            RejectionCompensationStepState.MANUAL_REVIEW
+                        } else {
+                            RejectionCompensationStepState.UNKNOWN
+                        },
+                        normalized(result.code),
+                        now,
+                    )
+                }
             }
 
             is GatewayRefundResult.Unknown -> {
-                refund.recordUnknown(result.code, now, RETRY_DELAYS, MAX_ATTEMPTS)
+                refund.recordUnknown(result.code, now)
                 entity.apply(refund)
                 val stepState =
                     if (refund.state == RefundState.MANUAL_REVIEW) {
@@ -210,7 +276,9 @@ internal class RejectionRefundService(
                     } else {
                         RejectionCompensationStepState.UNKNOWN
                     }
-                recordStep(claim.orderId, stepState, normalized(result.code), now)
+                if (entity.reason == REASON) {
+                    recordStep(claim.orderId, stepState, normalized(result.code), now)
+                }
                 meterRegistry.counter("beanflow.payment.refund.unknown.count").increment()
             }
         }
@@ -252,7 +320,9 @@ internal class RejectionRefundService(
             state = state,
             succeededAmountKrw = succeededAmountKrw,
             providerRefundReference = providerRefundReference,
-            attemptCount = attemptCount,
+            requestAttemptCount = requestAttemptCount,
+            lookupAttemptCount = lookupAttemptCount,
+            nextAction = nextAction,
             nextAttemptAt = nextAttemptAt,
             providerRequestStartedAt = providerRequestStartedAt,
             claimToken = claimToken,
@@ -274,6 +344,9 @@ internal class RejectionRefundService(
             providerIdempotencyKey = providerIdempotencyKey,
             sourceReference = sourceReference,
             attemptCount = attemptCount,
+            requestAttemptCount = requestAttemptCount,
+            lookupAttemptCount = lookupAttemptCount,
+            nextAction = nextAction,
             nextAttemptAt = nextAttemptAt,
             providerRequestStartedAt = providerRequestStartedAt,
             claimToken = claimToken,
@@ -288,6 +361,9 @@ internal class RejectionRefundService(
         succeededAmountKrw = refund.succeededAmountKrw
         providerRefundReference = refund.providerRefundReference
         attemptCount = refund.attemptCount
+        requestAttemptCount = refund.requestAttemptCount
+        lookupAttemptCount = refund.lookupAttemptCount
+        nextAction = refund.nextAction
         nextAttemptAt = refund.nextAttemptAt
         providerRequestStartedAt = refund.providerRequestStartedAt
         claimToken = refund.claimToken
@@ -300,6 +376,7 @@ internal class RejectionRefundService(
         when (this) {
             is GatewayRefundResult.Succeeded -> "succeeded"
             is GatewayRefundResult.Failed -> "failed"
+            is GatewayRefundResult.RetryableFailed -> "retryable_failed"
             is GatewayRefundResult.Unknown -> "unknown"
         }
 
@@ -320,14 +397,6 @@ internal class RejectionRefundService(
 
     private companion object {
         const val REASON = "STORE_ORDER_REJECTED"
-        const val MAX_ATTEMPTS = 5
-        val RETRY_DELAYS: List<Duration> =
-            listOf(
-                Duration.ofSeconds(10),
-                Duration.ofSeconds(30),
-                Duration.ofMinutes(2),
-                Duration.ofMinutes(5),
-                Duration.ofMinutes(15),
-            )
+        const val PARTIAL_REFUND = "PARTIAL_REFUND"
     }
 }

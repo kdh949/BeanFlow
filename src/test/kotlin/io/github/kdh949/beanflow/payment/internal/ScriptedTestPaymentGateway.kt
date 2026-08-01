@@ -23,6 +23,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
     val rejectionRefundCalls = AtomicInteger()
     val rejectionRefundLookupCalls = AtomicInteger()
     private val nextApprovalBlock = AtomicReference<ApprovalBlock?>()
+    private val nextRefundBlock = AtomicReference<ApprovalBlock?>()
 
     fun reset() {
         approvals.clear()
@@ -39,6 +40,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
         rejectionRefundCalls.set(0)
         rejectionRefundLookupCalls.set(0)
         nextApprovalBlock.set(null)
+        nextRefundBlock.set(null)
     }
 
     fun enqueueApproval(vararg results: ProviderPaymentResult) {
@@ -70,6 +72,8 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
     }
 
     fun blockNextApproval(): ApprovalBlock = ApprovalBlock().also(nextApprovalBlock::set)
+
+    fun blockNextRefund(): ApprovalBlock = ApprovalBlock().also(nextRefundBlock::set)
 
     override fun approve(request: GatewayApprovalRequest): ProviderPaymentResult {
         approvalCalls.incrementAndGet()
@@ -106,6 +110,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
         providerIdempotencyKey: String,
     ): GatewayRefundResult {
         rejectionRefundCalls.incrementAndGet()
+        nextRefundBlock.getAndSet(null)?.awaitRelease()
         return rejectionRefunds.poll() ?: GatewayRefundResult.Unknown("TEST_UNSCRIPTED")
     }
 

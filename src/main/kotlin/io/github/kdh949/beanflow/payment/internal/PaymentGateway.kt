@@ -40,6 +40,11 @@ internal sealed interface GatewayRefundResult {
         val code: String,
     ) : GatewayRefundResult
 
+    /** Adapter allowlisted a no-side-effect failure and same-key re-request as safe. */
+    data class RetryableFailed(
+        val code: String,
+    ) : GatewayRefundResult
+
     data class Unknown(
         val code: String,
     ) : GatewayRefundResult

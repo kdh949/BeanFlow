@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
+import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
 import io.github.kdh949.beanflow.payment.internal.domain.RefundState
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -196,6 +197,8 @@ internal class RefundEntity(
     val orderId: UUID,
     @Column(name = "requested_amount_krw", nullable = false)
     val requestedAmountKrw: Long,
+    @Column(name = "requested_points_krw", nullable = false)
+    val requestedPointsKrw: Long = 0,
     @Column(name = "succeeded_amount_krw")
     var succeededAmountKrw: Long? = null,
     @Column(nullable = false)
@@ -209,8 +212,33 @@ internal class RefundEntity(
     val providerIdempotencyKey: String,
     @Column(name = "source_reference", nullable = false)
     val sourceReference: String,
+    @Column(name = "actor_id")
+    val actorId: UUID? = null,
+    @Column(name = "idempotency_key")
+    val idempotencyKey: String? = null,
+    @Column(name = "payload_hash")
+    val payloadHash: String? = null,
+    @Column(name = "correlation_id")
+    val correlationId: String? = null,
+    @Column(name = "point_restoration_policy_version_id")
+    val pointRestorationPolicyVersionId: Long? = null,
+    @Column(name = "point_restoration_policy_trigger")
+    val pointRestorationPolicyTrigger: String? = null,
+    @Column(name = "point_restoration_policy_benefit_type")
+    val pointRestorationPolicyBenefitType: String? = null,
+    @Column(name = "point_restoration_policy_mode")
+    val pointRestorationPolicyMode: String? = null,
+    @Column(name = "point_restoration_policy_validity_days")
+    val pointRestorationPolicyValidityDays: Int? = null,
     @Column(name = "attempt_count", nullable = false)
     var attemptCount: Int,
+    @Column(name = "request_attempt_count", nullable = false)
+    var requestAttemptCount: Int = 0,
+    @Column(name = "lookup_attempt_count", nullable = false)
+    var lookupAttemptCount: Int = 0,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "next_action", nullable = false)
+    var nextAction: RefundClaimMode = RefundClaimMode.REQUEST,
     @Column(name = "next_attempt_at")
     var nextAttemptAt: Instant?,
     @Column(name = "provider_request_started_at")
@@ -221,6 +249,12 @@ internal class RefundEntity(
     var claimUntil: Instant? = null,
     @Column(name = "last_failure_code")
     var lastFailureCode: String? = null,
+    @Column(name = "response_status")
+    var responseStatus: Int? = null,
+    @Column(name = "response_body", columnDefinition = "text")
+    var responseBody: String? = null,
+    @Column(name = "response_recorded_at")
+    var responseRecordedAt: Instant? = null,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
@@ -301,6 +335,26 @@ internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
         reason: String,
     ): RefundEntity?
 
+    fun findByActorIdAndIdempotencyKey(
+        actorId: UUID,
+        idempotencyKey: String,
+    ): RefundEntity?
+
+    @Query(
+        "select refund from RefundEntity refund where refund.paymentId = :paymentId " +
+            "and refund.state in (" +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.REQUESTED, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.PROCESSING, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RETRY_SCHEDULED, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.UNKNOWN, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RECONCILING, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.MANUAL_REVIEW) " +
+            "order by refund.createdAt, refund.id",
+    )
+    fun findUnresolvedByPaymentId(
+        @Param("paymentId") paymentId: UUID,
+    ): List<RefundEntity>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select refund from RefundEntity refund where refund.id = :id")
     fun findLockedById(
@@ -311,6 +365,7 @@ internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
         "select refund.id from RefundEntity refund where (" +
             "(refund.state in (" +
             "io.github.kdh949.beanflow.payment.internal.domain.RefundState.REQUESTED, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RETRY_SCHEDULED, " +
             "io.github.kdh949.beanflow.payment.internal.domain.RefundState.UNKNOWN" +
             ") and refund.nextAttemptAt <= :now) or " +
             "(refund.state in (" +

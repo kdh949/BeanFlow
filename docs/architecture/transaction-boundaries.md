@@ -101,6 +101,37 @@ Tx E3: SUCCEEDED | UNKNOWN | RECONCILING | MANUAL_REVIEW 기록
 - 원 Order의 취소·거절 상태를 환불 성공으로 간주하지 않는다.
 - 성공한 환불 fact를 Loyalty와 Settlement가 각자의 원장에 멱등 반영한다.
 
+### Store/platform partial refund
+
+```text
+Tx R1: Order lock + store/platform authorization
+     + Payment lock + sorted successful line/point allocation locks
+     + USED PointReservation/original allocation snapshot
+     + PARTIAL_REFUND×POINTS policy snapshot
+     + Refund REQUESTED + immutable line/point request rows + Audit
+commit
+Provider request/lookup (cash가 0이면 생략)
+Tx R2: Payment lock + Refund SUCCEEDED/explicit failure/unknown
+     + 성공일 때 Payment 누적액 + immutable line/point success rows
+     + points가 양수이면 durable restoration work + Audit
+commit
+Loyalty Tx R3 (REQUIRES_NEW): PointAccount + USED reservation + sorted allocation/Lot locks
+     + original/compensation/skip PointTransaction + restoration ledger
+commit
+Payment Tx R4: restoration work SUCCEEDED | RETRY_SCHEDULED | MANUAL_REVIEW ack
+```
+
+- `R1`이 실패하면 Refund/request snapshot/Audit가 모두 rollback되고 Provider를 호출하지 않는다.
+- Provider latency 동안 DB transaction/connection을 유지하지 않는다. `R2` 실패는 claim lease와
+  같은 Provider key lookup으로 수렴하며 성공으로 추정하지 않는다.
+- 성공 unit은 가장 작은 미소비 conceptual position부터 고정한다. 실패·불명 Refund는 성공
+  allocation을 만들지 않아 position과 승인액을 소비하지 않는다.
+- coupon 금액은 Payment allocation 귀속 원장일 뿐 Promotion 상태 전이나 복원 호출이 아니다.
+- `R3`은 Payment Entity/Repository를 직접 변경하지 않고 `R4`와 다른 local transaction이다.
+  Loyalty commit 뒤 `R4` 실패는 같은 Refund source replay로 재확인한다.
+- 부분 복원은 PointReservation `USED`와 reservation-level restoration metadata를 변경하지 않는다.
+- R1/R2의 전역 순서는 `Order → Payment → 정렬된 Refund allocation → 정렬된 원 point allocation`이다.
+
 ### Customer cancellation
 
 `PAID` acceptance deadline branch:

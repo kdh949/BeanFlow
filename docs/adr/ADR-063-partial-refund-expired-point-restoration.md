@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 10 issuer provenance](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md), [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
+- **Implementation owners:** [Plan 10 issuer provenance](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md), [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 12 allocation/restoration](../exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
 
 ## Context
 
@@ -150,6 +150,13 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
   compensation Lot으로 계속하면 BR-20 비용 귀속과 환불 lineage를 거짓으로 만든다.
 
 ## Verification
+
+**Plan 12 implementation evidence (2026-08-01):** Refund request stores the exact five-head policy
+version/mode/validity before Provider execution. Payment success creates durable restoration work; Loyalty
+uses a separate `REQUIRES_NEW` transaction and exact Refund/OrderLine/original-allocation sources. Strict
+`refundSucceededAt < expiresAt` tests cover -1ns/at/+1ns, while PostgreSQL covers its microsecond storage
+tick, issuer-preserving compensation and `refundSucceededAt + 30 days`. Replay creates no second Lot or
+PointTransaction, write failure reaches bounded retry/manual review, and PointReservation remains `USED`.
 
 - **Plan 11 implementation evidence (2026-08-01):** Flyway `V13`이 종료용 네 key와
   `PARTIAL_REFUND×POINTS`만 허용하는 composite head/version을 만들고 정확히 다섯 head를 seed한다.

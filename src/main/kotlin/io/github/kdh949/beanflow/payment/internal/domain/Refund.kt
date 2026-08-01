@@ -7,6 +7,7 @@ import java.util.UUID
 internal enum class RefundState {
     REQUESTED,
     PROCESSING,
+    RETRY_SCHEDULED,
     SUCCEEDED,
     FAILED,
     UNKNOWN,
@@ -31,7 +32,9 @@ internal class Refund private constructor(
     state: RefundState,
     succeededAmountKrw: Long?,
     providerRefundReference: String?,
-    attemptCount: Int,
+    requestAttemptCount: Int,
+    lookupAttemptCount: Int,
+    nextAction: RefundClaimMode,
     nextAttemptAt: Instant?,
     providerRequestStartedAt: Instant?,
     claimToken: UUID?,
@@ -45,7 +48,13 @@ internal class Refund private constructor(
         private set
     var providerRefundReference: String? = providerRefundReference
         private set
-    var attemptCount: Int = attemptCount
+    var requestAttemptCount: Int = requestAttemptCount
+        private set
+    var lookupAttemptCount: Int = lookupAttemptCount
+        private set
+    val attemptCount: Int
+        get() = requestAttemptCount + lookupAttemptCount
+    var nextAction: RefundClaimMode = nextAction
         private set
     var nextAttemptAt: Instant? = nextAttemptAt
         private set
@@ -64,19 +73,25 @@ internal class Refund private constructor(
         token: UUID,
         now: Instant,
         lease: Duration,
-        maxAttempts: Int,
+        requestMaxAttempts: Int = REQUEST_MAX_ATTEMPTS,
+        lookupMaxAttempts: Int = LOOKUP_MAX_ATTEMPTS,
     ): RefundClaimMode {
         check(isClaimable(now)) { "Refund is not claimable" }
-        check(attemptCount < maxAttempts) { "Refund attempts are exhausted" }
-        val mode =
-            if (providerRequestStartedAt == null) {
-                providerRequestStartedAt = now
-                RefundClaimMode.REQUEST
-            } else {
-                RefundClaimMode.LOOKUP
+        val mode = nextAction
+        when (mode) {
+            RefundClaimMode.REQUEST -> {
+                check(requestAttemptCount < requestMaxAttempts) { "Refund request attempts are exhausted" }
+                requestAttemptCount++
+                providerRequestStartedAt = providerRequestStartedAt ?: now
+                state = RefundState.PROCESSING
             }
-        attemptCount++
-        state = if (mode == RefundClaimMode.REQUEST) RefundState.PROCESSING else RefundState.RECONCILING
+
+            RefundClaimMode.LOOKUP -> {
+                check(lookupAttemptCount < lookupMaxAttempts) { "Refund lookup attempts are exhausted" }
+                lookupAttemptCount++
+                state = RefundState.RECONCILING
+            }
+        }
         claimToken = token
         claimUntil = now.plus(lease)
         updatedAt = now
@@ -84,17 +99,29 @@ internal class Refund private constructor(
     }
 
     fun succeed(
-        providerReference: String,
+        providerReference: String?,
         now: Instant,
     ) {
         requireOwnedClaim()
-        check(providerReference.isNotBlank()) { "Provider refund reference is required" }
+        if (requestedAmountKrw > 0) {
+            check(!providerReference.isNullOrBlank()) { "Provider refund reference is required" }
+        }
         state = RefundState.SUCCEEDED
         succeededAmountKrw = requestedAmountKrw
         providerRefundReference = providerReference
         lastFailureCode = null
         nextAttemptAt = null
         clearClaim()
+        updatedAt = now
+    }
+
+    fun succeedWithoutProvider(now: Instant) {
+        check(requestedAmountKrw == 0L) { "Only a zero-cash Refund can skip Provider" }
+        check(state == RefundState.REQUESTED) { "Refund is not awaiting zero-cash completion" }
+        state = RefundState.SUCCEEDED
+        succeededAmountKrw = 0
+        providerRefundReference = null
+        nextAttemptAt = null
         updatedAt = now
     }
 
@@ -110,21 +137,43 @@ internal class Refund private constructor(
         updatedAt = now
     }
 
-    fun recordUnknown(
+    fun recordRetryableRequestFailure(
         code: String,
         now: Instant,
-        retryDelays: List<Duration>,
-        maxAttempts: Int,
+        retryDelays: List<Duration> = REQUEST_RETRY_DELAYS,
+        maxAttempts: Int = REQUEST_MAX_ATTEMPTS,
     ) {
-        requireOwnedClaim()
+        requireOwnedClaim(RefundClaimMode.REQUEST)
         lastFailureCode = normalized(code)
-        if (attemptCount >= maxAttempts) {
+        if (requestAttemptCount >= maxAttempts) {
             state = RefundState.MANUAL_REVIEW
             nextAttemptAt = null
         } else {
-            check(retryDelays.size >= maxAttempts - 1) { "Retry delay schedule is incomplete" }
+            check(retryDelays.size >= maxAttempts - 1) { "Request retry schedule is incomplete" }
+            state = RefundState.RETRY_SCHEDULED
+            nextAction = RefundClaimMode.REQUEST
+            nextAttemptAt = now.plus(retryDelays[requestAttemptCount - 1])
+        }
+        clearClaim()
+        updatedAt = now
+    }
+
+    fun recordUnknown(
+        code: String,
+        now: Instant,
+        lookupDelays: List<Duration> = LOOKUP_RETRY_DELAYS,
+        lookupMaxAttempts: Int = LOOKUP_MAX_ATTEMPTS,
+    ) {
+        requireOwnedClaim()
+        lastFailureCode = normalized(code)
+        nextAction = RefundClaimMode.LOOKUP
+        if (lookupAttemptCount >= lookupMaxAttempts) {
+            state = RefundState.MANUAL_REVIEW
+            nextAttemptAt = null
+        } else {
+            check(lookupDelays.size >= lookupMaxAttempts) { "Lookup retry schedule is incomplete" }
             state = RefundState.UNKNOWN
-            nextAttemptAt = now.plus(retryDelays[attemptCount - 1])
+            nextAttemptAt = now.plus(lookupDelays[lookupAttemptCount])
         }
         clearClaim()
         updatedAt = now
@@ -132,41 +181,42 @@ internal class Refund private constructor(
 
     fun requireClaim(token: UUID) {
         check(
-            (state == RefundState.PROCESSING || state == RefundState.RECONCILING) &&
-                claimToken == token,
-        ) {
-            "Refund claim is no longer owned"
-        }
+            (state == RefundState.PROCESSING || state == RefundState.RECONCILING) && claimToken == token,
+        ) { "Refund claim is no longer owned" }
     }
 
-    fun markManualReviewAfterExpiredClaim(
+    fun recoverExpiredClaim(
         now: Instant,
-        maxAttempts: Int,
+        lookupMaxAttempts: Int = LOOKUP_MAX_ATTEMPTS,
     ) {
         check(state == RefundState.PROCESSING || state == RefundState.RECONCILING) {
-            "Only a processing refund can exhaust its claim"
+            "Only a processing Refund can recover an expired claim"
         }
-        check(attemptCount >= maxAttempts) { "Refund attempts are not exhausted" }
         check(claimUntil?.let { !now.isBefore(it) } == true) { "Refund claim lease has not expired" }
-        state = RefundState.MANUAL_REVIEW
-        nextAttemptAt = null
+        nextAction = RefundClaimMode.LOOKUP
+        if (lookupAttemptCount >= lookupMaxAttempts) {
+            state = RefundState.MANUAL_REVIEW
+            nextAttemptAt = null
+        } else {
+            state = RefundState.UNKNOWN
+            nextAttemptAt = now
+        }
         lastFailureCode = "CLAIM_LEASE_EXPIRED"
         clearClaim()
         updatedAt = now
     }
 
-    private fun requireOwnedClaim() {
+    private fun requireOwnedClaim(expected: RefundClaimMode? = null) {
         check(
-            (state == RefundState.PROCESSING || state == RefundState.RECONCILING) &&
-                claimToken != null,
-        ) {
-            "Refund result requires an active claim"
-        }
+            (state == RefundState.PROCESSING || state == RefundState.RECONCILING) && claimToken != null,
+        ) { "Refund result requires an active claim" }
+        if (expected != null) check(nextAction == expected) { "Refund result mode does not match its claim" }
     }
 
     private fun isClaimable(now: Instant): Boolean =
         when (state) {
             RefundState.REQUESTED,
+            RefundState.RETRY_SCHEDULED,
             RefundState.UNKNOWN,
             -> nextAttemptAt?.let { !now.isBefore(it) } == true
 
@@ -191,6 +241,18 @@ internal class Refund private constructor(
             .ifBlank { "UNKNOWN" }
 
     companion object {
+        const val REQUEST_MAX_ATTEMPTS = 3
+        const val LOOKUP_MAX_ATTEMPTS = 5
+        val REQUEST_RETRY_DELAYS: List<Duration> = listOf(Duration.ofSeconds(10), Duration.ofSeconds(30))
+        val LOOKUP_RETRY_DELAYS: List<Duration> =
+            listOf(
+                Duration.ofSeconds(10),
+                Duration.ofSeconds(30),
+                Duration.ofMinutes(2),
+                Duration.ofMinutes(5),
+                Duration.ofMinutes(15),
+            )
+
         fun request(
             id: UUID,
             paymentId: UUID,
@@ -201,32 +263,35 @@ internal class Refund private constructor(
             sourceReference: String,
             now: Instant,
         ): Refund {
-            require(requestedAmountKrw > 0) { "Refund amount must be positive" }
+            require(requestedAmountKrw >= 0) { "Refund amount must not be negative" }
             require(reason.isNotBlank()) { "Refund reason is required" }
             require(providerIdempotencyKey.isNotBlank()) { "Provider idempotency key is required" }
             require(sourceReference.isNotBlank()) { "Refund source reference is required" }
             return Refund(
-                id = id,
-                paymentId = paymentId,
-                orderId = orderId,
-                requestedAmountKrw = requestedAmountKrw,
-                reason = reason,
-                providerIdempotencyKey = providerIdempotencyKey,
-                sourceReference = sourceReference,
-                createdAt = now,
-                state = RefundState.REQUESTED,
-                succeededAmountKrw = null,
-                providerRefundReference = null,
-                attemptCount = 0,
-                nextAttemptAt = now,
-                providerRequestStartedAt = null,
-                claimToken = null,
-                claimUntil = null,
-                lastFailureCode = null,
-                updatedAt = now,
+                id,
+                paymentId,
+                orderId,
+                requestedAmountKrw,
+                reason,
+                providerIdempotencyKey,
+                sourceReference,
+                now,
+                RefundState.REQUESTED,
+                null,
+                null,
+                0,
+                0,
+                RefundClaimMode.REQUEST,
+                now,
+                null,
+                null,
+                null,
+                null,
+                now,
             )
         }
 
+        @Suppress("LongParameterList")
         fun restore(
             id: UUID,
             paymentId: UUID,
@@ -239,7 +304,9 @@ internal class Refund private constructor(
             state: RefundState,
             succeededAmountKrw: Long?,
             providerRefundReference: String?,
-            attemptCount: Int,
+            requestAttemptCount: Int,
+            lookupAttemptCount: Int,
+            nextAction: RefundClaimMode,
             nextAttemptAt: Instant?,
             providerRequestStartedAt: Instant?,
             claimToken: UUID?,
@@ -259,7 +326,9 @@ internal class Refund private constructor(
                 state,
                 succeededAmountKrw,
                 providerRefundReference,
-                attemptCount,
+                requestAttemptCount,
+                lookupAttemptCount,
+                nextAction,
                 nextAttemptAt,
                 providerRequestStartedAt,
                 claimToken,

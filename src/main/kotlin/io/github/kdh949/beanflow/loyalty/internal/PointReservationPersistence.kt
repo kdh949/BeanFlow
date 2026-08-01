@@ -53,6 +53,12 @@ internal class PointLotEntity(
     val originalPointLotId: UUID? = null,
     @Column(name = "compensation_source_reference", length = 240)
     val compensationSourceReference: String? = null,
+    @Column(name = "restoration_trigger", length = 32)
+    val restorationTrigger: String? = null,
+    @Column(name = "restoration_policy_version_id")
+    val restorationPolicyVersionId: Long? = null,
+    @Column(name = "restoration_refund_id")
+    val restorationRefundId: UUID? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -135,6 +141,65 @@ internal class PointTransactionEntity(
     val sourceReference: String,
     @Column(name = "occurred_at", nullable = false)
     val occurredAt: Instant,
+    @Column(name = "refund_id")
+    val refundId: UUID? = null,
+    @Column(name = "order_line_id")
+    val orderLineId: UUID? = null,
+    @Column(name = "point_reservation_allocation_id")
+    val pointReservationAllocationId: UUID? = null,
+    @Column(name = "restoration_trigger", length = 32)
+    val restorationTrigger: String? = null,
+    @Column(name = "restoration_policy_version_id")
+    val restorationPolicyVersionId: Long? = null,
+    @Column(name = "restoration_disposition", length = 32)
+    val restorationDisposition: String? = null,
+)
+
+internal enum class PartialRefundRestorationDisposition {
+    ORIGINAL_LOT,
+    COMPENSATION_LOT,
+    SKIPPED_EXPIRED,
+}
+
+@Entity
+@Table(name = "loyalty_partial_refund_restoration")
+internal class PartialRefundRestorationEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "refund_id", nullable = false)
+    val refundId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "order_line_id", nullable = false)
+    val orderLineId: UUID,
+    @Column(name = "point_reservation_id", nullable = false)
+    val pointReservationId: UUID,
+    @Column(name = "point_reservation_allocation_id", nullable = false)
+    val pointReservationAllocationId: UUID,
+    @Column(name = "original_point_lot_id", nullable = false)
+    val originalPointLotId: UUID,
+    @Column(name = "restored_point_lot_id", nullable = false)
+    val restoredPointLotId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "issuer_type", nullable = false)
+    val issuerType: PointIssuerType,
+    @Column(name = "issuer_reference", nullable = false)
+    val issuerReference: String,
+    @Column(name = "amount_krw", nullable = false)
+    val amountKrw: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    val disposition: PartialRefundRestorationDisposition,
+    @Column(name = "policy_version_id", nullable = false)
+    val policyVersionId: Long,
+    @Column(name = "policy_mode", nullable = false)
+    val policyMode: String,
+    @Column(name = "policy_validity_days", nullable = false)
+    val policyValidityDays: Int,
+    @Column(name = "source_reference", nullable = false)
+    val sourceReference: String,
+    @Column(name = "restored_at", nullable = false)
+    val restoredAt: Instant,
 )
 
 internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity, UUID> {
@@ -177,6 +242,19 @@ internal interface PointReservationJpaRepository : JpaRepository<PointReservatio
 
 internal interface PointReservationAllocationJpaRepository : JpaRepository<PointReservationAllocationEntity, UUID> {
     fun findAllByPointReservationIdOrderByPointLotId(pointReservationId: UUID): List<PointReservationAllocationEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select allocation from PointReservationAllocationEntity allocation " +
+            "where allocation.pointReservationId = :reservationId order by allocation.pointLotId, allocation.id",
+    )
+    fun findAllLockedByReservationId(
+        @Param("reservationId") reservationId: UUID,
+    ): List<PointReservationAllocationEntity>
 }
 
 internal interface PointTransactionJpaRepository : JpaRepository<PointTransactionEntity, UUID>
+
+internal interface PartialRefundRestorationJpaRepository : JpaRepository<PartialRefundRestorationEntity, UUID> {
+    fun findAllByRefundIdOrderByOrderLineIdAscPointReservationAllocationIdAsc(refundId: UUID): List<PartialRefundRestorationEntity>
+}

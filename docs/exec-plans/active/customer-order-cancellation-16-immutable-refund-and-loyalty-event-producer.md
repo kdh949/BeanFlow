@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `false`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -114,6 +114,9 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 ## Surprises & Discoveries
 
 - `settlementRefundEffect` is the former Plan 10↔15 ownership cycle.
+- 2026-08-01: Plan 12 now provides immutable successful Refund allocation and restoration facts without
+  publishing `PaymentRefundedV1`/`PointsRestoredV1`. This preserves Plan 16's single producer ownership;
+  Plan 13 and Plan 15 remain active blockers.
 
 ## Decision Log
 
@@ -124,10 +127,13 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 12/13/15 validation evidence가 모두 completed path에 있을 때만 시작한다.
+미구현 상태다. Plan 12 validation evidence는 completed path에 있지만 Plan 13과 Plan 15가 active다.
+따라서 `Implementation-Ready=false`를 유지하며 두 remaining dependencies가 모두 completed path에
+있을 때만 시작한다.
 
 ## Revision Notes
 
 - 2026-08-01: Plan 10의 financial event producer scope를 분리해 Plan 15 semantic dependency를 제거했다.
 - 2026-08-01: `OrderCompletedV2` ownership을 Plan 20에 명시적으로 남기고 Plan 16의 refund/Loyalty
   producer boundary를 고정했다.
+- 2026-08-01: Plan 12 completion path를 반영하고 Plan 13/15가 남은 direct blockers임을 명시했다.

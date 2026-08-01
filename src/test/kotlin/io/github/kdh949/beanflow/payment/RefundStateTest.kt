@@ -12,94 +12,91 @@ import java.util.UUID
 
 internal class RefundStateTest {
     @Test
-    fun `first claim requests refund and unknown retry only looks up provider`() {
+    fun `first claim requests refund and unknown permanently switches to lookup`() {
         val refund = refund()
-        val firstToken = UUID.randomUUID()
+        assertThat(refund.claim(UUID.randomUUID(), NOW, LEASE)).isEqualTo(RefundClaimMode.REQUEST)
 
-        assertThat(refund.claim(firstToken, NOW, LEASE, MAX_ATTEMPTS)).isEqualTo(RefundClaimMode.REQUEST)
-        refund.recordUnknown("timeout", NOW, RETRY_DELAYS, MAX_ATTEMPTS)
+        refund.recordUnknown("timeout", NOW)
 
         assertThat(refund.state).isEqualTo(RefundState.UNKNOWN)
         assertThat(refund.nextAttemptAt).isEqualTo(NOW.plusSeconds(10))
-        assertThat(refund.claim(UUID.randomUUID(), NOW.plusSeconds(10), LEASE, MAX_ATTEMPTS))
+        assertThat(refund.claim(UUID.randomUUID(), NOW.plusSeconds(10), LEASE))
             .isEqualTo(RefundClaimMode.LOOKUP)
-        assertThat(refund.state).isEqualTo(RefundState.RECONCILING)
+        assertThat(refund.requestAttemptCount).isEqualTo(1)
+        assertThat(refund.lookupAttemptCount).isEqualTo(1)
     }
 
     @Test
-    fun `expired processing lease is reclaimed as lookup rather than another refund request`() {
+    fun `expired request lease switches to due lookup rather than another request`() {
         val refund = refund()
-        refund.claim(UUID.randomUUID(), NOW, LEASE, MAX_ATTEMPTS)
+        refund.claim(UUID.randomUUID(), NOW, LEASE)
 
-        assertThatThrownBy {
-            refund.claim(UUID.randomUUID(), NOW.plusSeconds(59), LEASE, MAX_ATTEMPTS)
-        }.isInstanceOf(IllegalStateException::class.java)
+        assertThatThrownBy { refund.recoverExpiredClaim(NOW.plusSeconds(59)) }
+            .isInstanceOf(IllegalStateException::class.java)
 
-        assertThat(refund.claim(UUID.randomUUID(), NOW.plusSeconds(60), LEASE, MAX_ATTEMPTS))
+        refund.recoverExpiredClaim(NOW.plusSeconds(60))
+        assertThat(refund.state).isEqualTo(RefundState.UNKNOWN)
+        assertThat(refund.claim(UUID.randomUUID(), NOW.plusSeconds(60), LEASE))
             .isEqualTo(RefundClaimMode.LOOKUP)
     }
 
     @Test
-    fun `five unknown provider results end in manual review`() {
+    fun `one unknown request and five unknown lookups end in manual review`() {
         val refund = refund()
         var now = NOW
+        refund.claim(UUID.randomUUID(), now, LEASE)
+        refund.recordUnknown("ack_lost", now)
+        now = requireNotNull(refund.nextAttemptAt)
 
-        repeat(MAX_ATTEMPTS) {
-            refund.claim(UUID.randomUUID(), now, LEASE, MAX_ATTEMPTS)
-            refund.recordUnknown("ack_lost", now, RETRY_DELAYS, MAX_ATTEMPTS)
+        repeat(Refund.LOOKUP_MAX_ATTEMPTS) {
+            refund.claim(UUID.randomUUID(), now, LEASE)
+            refund.recordUnknown("ack_lost", now)
             now = refund.nextAttemptAt ?: now
         }
 
         assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
-        assertThat(refund.attemptCount).isEqualTo(5)
-        assertThat(refund.nextAttemptAt).isNull()
+        assertThat(refund.requestAttemptCount).isEqualTo(1)
+        assertThat(refund.lookupAttemptCount).isEqualTo(5)
+        assertThat(refund.attemptCount).isEqualTo(6)
     }
 
     @Test
-    fun `successful full refund is terminal and records exact amount`() {
+    fun `explicit safe failures use the independent three request budget`() {
         val refund = refund()
-        refund.claim(UUID.randomUUID(), NOW, LEASE, MAX_ATTEMPTS)
+        var now = NOW
+        repeat(Refund.REQUEST_MAX_ATTEMPTS) {
+            assertThat(refund.claim(UUID.randomUUID(), now, LEASE)).isEqualTo(RefundClaimMode.REQUEST)
+            refund.recordRetryableRequestFailure("transport_rejected_before_send", now)
+            now = refund.nextAttemptAt ?: now
+        }
 
+        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
+        assertThat(refund.requestAttemptCount).isEqualTo(3)
+        assertThat(refund.lookupAttemptCount).isZero()
+    }
+
+    @Test
+    fun `successful refund is terminal and records exact amount`() {
+        val refund = refund()
+        refund.claim(UUID.randomUUID(), NOW, LEASE)
         refund.succeed("provider-refund", NOW)
 
         assertThat(refund.state).isEqualTo(RefundState.SUCCEEDED)
         assertThat(refund.succeededAmountKrw).isEqualTo(7_000)
         assertThat(refund.providerRefundReference).isEqualTo("provider-refund")
-        assertThat(refund.attemptCount).isEqualTo(1)
-        assertThatThrownBy {
-            refund.claim(UUID.randomUUID(), NOW.plus(LEASE), LEASE, MAX_ATTEMPTS)
-        }.isInstanceOf(IllegalStateException::class.java)
+        assertThatThrownBy { refund.claim(UUID.randomUUID(), NOW.plus(LEASE), LEASE) }
+            .isInstanceOf(IllegalStateException::class.java)
     }
 
     @Test
-    fun `explicit provider failure is terminal failed rather than unknown`() {
+    fun `explicit terminal provider failure is not retried`() {
         val refund = refund()
-        refund.claim(UUID.randomUUID(), NOW, LEASE, MAX_ATTEMPTS)
-
+        refund.claim(UUID.randomUUID(), NOW, LEASE)
         refund.fail("refund_declined", NOW)
 
         assertThat(refund.state).isEqualTo(RefundState.FAILED)
         assertThat(refund.lastFailureCode).isEqualTo("REFUND_DECLINED")
         assertThat(refund.nextAttemptAt).isNull()
-    }
-
-    @Test
-    fun `expired final claim becomes manual review instead of remaining processing`() {
-        val refund = refund()
-        var now = NOW
-        repeat(MAX_ATTEMPTS - 1) {
-            refund.claim(UUID.randomUUID(), now, LEASE, MAX_ATTEMPTS)
-            refund.recordUnknown("ack_lost", now, RETRY_DELAYS, MAX_ATTEMPTS)
-            now = requireNotNull(refund.nextAttemptAt)
-        }
-        refund.claim(UUID.randomUUID(), now, LEASE, MAX_ATTEMPTS)
-
-        refund.markManualReviewAfterExpiredClaim(now.plus(LEASE), MAX_ATTEMPTS)
-
-        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
-        assertThat(refund.lastFailureCode).isEqualTo("CLAIM_LEASE_EXPIRED")
-        assertThat(refund.claimToken).isNull()
-        assertThat(refund.claimUntil).isNull()
     }
 
     private fun refund(): Refund =
@@ -115,16 +112,7 @@ internal class RefundStateTest {
         )
 
     private companion object {
-        const val MAX_ATTEMPTS = 5
         val NOW: Instant = Instant.parse("2026-07-30T00:00:00Z")
         val LEASE: Duration = Duration.ofMinutes(1)
-        val RETRY_DELAYS: List<Duration> =
-            listOf(
-                Duration.ofSeconds(10),
-                Duration.ofSeconds(30),
-                Duration.ofMinutes(2),
-                Duration.ofMinutes(5),
-                Duration.ofMinutes(15),
-            )
     }
 }

@@ -162,7 +162,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 2. [공통 signed cursor foundation을 만든다](../completed/signed-cursor-foundation.md) — 선행 없음
 3. [PointLot issuer provenance foundation을 만든다](../completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00
 4. [만료 혜택 정책과 operator grant foundation을 만든다](../completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00, completed
-5. [부분 환불 allocation과 포인트 복원을 만든다](customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11
+5. [부분 환불 allocation과 포인트 복원을 만든다](../completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11, completed
 6. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12
 7. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
 8. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
