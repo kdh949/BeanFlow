@@ -323,9 +323,9 @@ internal class OperatorPermissionIntegrationTest
                     PrintStream(error),
                     springProperties =
                         mapOf(
-                            "BEANFLOW_DB_URL" to dataSource.jdbcUrl,
-                            "BEANFLOW_DB_USERNAME" to dataSource.username,
-                            "BEANFLOW_DB_PASSWORD" to dataSource.password,
+                            "spring.datasource.url" to dataSource.jdbcUrl,
+                            "spring.datasource.username" to dataSource.username,
+                            "spring.datasource.password" to dataSource.password,
                         ),
                 )
 

@@ -159,7 +159,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 ## Milestones
 
 1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md) — 선행 없음
-2. [공통 signed cursor foundation을 만든다](signed-cursor-foundation.md) — 선행 없음
+2. [공통 signed cursor foundation을 만든다](../completed/signed-cursor-foundation.md) — 선행 없음
 3. [PointLot issuer provenance foundation을 만든다](customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00
 4. [만료 혜택 정책과 operator grant foundation을 만든다](../completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00, completed
 5. [부분 환불 allocation과 포인트 복원을 만든다](customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11
@@ -219,9 +219,9 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 거대 master plan을 여섯 하위 계획으로 분리
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
 - [x] 2026-08-01 parallel DAG를 migration-writer single lane과 main-base PR strategy로 교체
-- [ ] signed cursor foundation 완료
+- [x] signed cursor foundation 완료 — v1 codec, required key-ring/startup validation, rotation과 no-secret observability 검증
 - [ ] 10 issuer provenance foundation 완료
-- [ ] 11 policy/grant foundation 완료
+- [x] 11 policy/grant foundation 완료 — 다섯 immutable policy head, persistent grant, audited GET/PATCH와 fail-closed OIDC bootstrap 검증
 - [ ] 12 allocation/restoration foundation 완료
 - [ ] 13 recovery foundation 완료
 - [ ] 14 point-account read foundation 완료

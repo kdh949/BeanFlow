@@ -1,0 +1,8 @@
+beanflow:
+  pagination:
+    cursor-hmac:
+      # Public deterministic test vector only; it is never a deployment or local-runtime key.
+      active-key-id: test-vector
+      keys:
+        - id: test-vector
+          secret-base64-url: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY

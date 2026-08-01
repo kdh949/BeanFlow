@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/active/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.

@@ -229,7 +229,7 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Plan 30 compensation](../exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md):
   rejection 전용 구조를 trigger-aware Case/policy/owner convergence로 일반화해야 한다.
 
-[Signed cursor foundation](../exec-plans/active/signed-cursor-foundation.md)은 Plan 14/20의 조회 input이며,
+[Signed cursor foundation](../exec-plans/completed/signed-cursor-foundation.md)은 Plan 14/20의 조회 input이며,
 [Plan 14 PointAccount read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)는
 Plan 11/13/cursor 뒤 실행되는 별도 지원 조회 vertical slice다. Plan 14는 command Plan 40의
 선행조건은 아니지만 고객 취소 프로그램의 독립 결과물이다.
@@ -261,7 +261,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] external consumer와 rollback binary evidence가 있음
 - [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
 - [ ] Plan 10 issuer provenance가 통과함
-- [ ] Plan 11 policy/grants가 통과함
+- [x] Plan 11 policy/grants가 통과함
 - [ ] Plan 12 allocation/restoration이 통과함
 - [ ] Plan 13 recovery/pending이 통과함
 - [ ] Plan 15 settlement input이 통과함
