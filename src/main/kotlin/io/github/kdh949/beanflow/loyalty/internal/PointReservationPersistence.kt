@@ -27,6 +27,8 @@ internal class PointAccountEntity(
     var availablePointsKrw: Long,
     @Column(name = "reserved_points_krw", nullable = false)
     var reservedPointsKrw: Long = 0,
+    @Column(name = "recovery_pending_krw", nullable = false)
+    var recoveryPendingKrw: Long = 0,
     @Version
     var version: Long = 0,
 )
@@ -59,6 +61,12 @@ internal class PointLotEntity(
     val restorationPolicyVersionId: Long? = null,
     @Column(name = "restoration_refund_id")
     val restorationRefundId: UUID? = null,
+    @Column(name = "accrual_order_id")
+    val accrualOrderId: UUID? = null,
+    @Column(name = "accrual_source_reference", length = 240)
+    val accrualSourceReference: String? = null,
+    @Column(name = "accrual_snapshot_hash", length = 64)
+    val accrualSnapshotHash: String? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -121,6 +129,8 @@ internal enum class PointTransactionType {
     RESTORE,
     COMPENSATION,
     RESTORE_SKIPPED_EXPIRED,
+    ACCRUAL,
+    RECOVERY,
 }
 
 @Entity
@@ -153,6 +163,8 @@ internal class PointTransactionEntity(
     val restorationPolicyVersionId: Long? = null,
     @Column(name = "restoration_disposition", length = 32)
     val restorationDisposition: String? = null,
+    @Column(name = "point_recovery_pending_id")
+    val pointRecoveryPendingId: UUID? = null,
 )
 
 internal enum class PartialRefundRestorationDisposition {
@@ -211,6 +223,15 @@ internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity,
 }
 
 internal interface PointLotJpaRepository : JpaRepository<PointLotEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select lot from PointLotEntity lot where lot.pointAccountId = :accountId " +
+            "and lot.availableAmountKrw > 0 order by lot.expiresAt, lot.id",
+    )
+    fun findRecoverableLotsLocked(
+        @Param("accountId") accountId: UUID,
+    ): List<PointLotEntity>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select lot from PointLotEntity lot where lot.pointAccountId = :accountId " +

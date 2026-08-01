@@ -174,6 +174,16 @@ evidence를 갱신한다.
     not-applicable outcome을 PostgreSQL 상태 제약과 함께 구현했다.
   - `*PointRecoveryMigrationTest`, `*OrderCreationPointAccrualSnapshotIntegrationTest`,
     `*PartialRefundAllocationRepositoryTest`: PASS. Payment integration 14 tests와 Spotless PASS.
+- [x] 2026-08-02 Loyalty recovery and pending owner transaction
+  - Account를 먼저 잠그고 실제 available Lot을 `(expiresAt, id)`로 잠가 즉시 `RECOVERY`하며,
+    부족액만 하나의 `PointRecoveryPending`과 Account summary에 원자적으로 기록한다.
+  - completion accrual은 immutable snapshot gross의 새 PointLot/`ACCRUAL`을 먼저 기록한 뒤
+    `(createdAt, id)` oldest-first pending에 `RECOVERY` debit하고 net available만 남긴다.
+  - refund/completion source, aggregate version, snapshot hash와 excluded-unit-set hash receipt가
+    exact replay를 허용하고 다른 payload를 거부한다. 같은 customer의 최초 Account 생성도
+    PostgreSQL unique/row lock 아래에서 직렬화된다.
+  - `*PointRecoveryServiceTest`: PASS, 5 PostgreSQL owner/concurrency/rollback tests. 관련 V17
+    migration, 기존 Point reservation과 partial-refund restoration 회귀 테스트도 PASS.
 - [x] 2026-08-01 BR-10 ordinary-accrual policy vocabulary decision
 - [x] 2026-08-01 GLOBAL default + STORE override precedence decision
 - [x] 2026-08-01 append-only INHERIT_GLOBAL override lifecycle decision

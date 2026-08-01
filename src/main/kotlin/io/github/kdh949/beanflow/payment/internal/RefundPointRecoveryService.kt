@@ -443,6 +443,7 @@ internal class RefundPointRecoveryService(
             work.sourceReference,
             source.completedAt,
             source.completionSourceReference,
+            source.aggregateVersion,
             source.snapshotSchemaVersion,
             source.snapshotHash,
             work.targetAmountKrw ?: dependency("Recovery target is missing"),

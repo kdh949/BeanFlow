@@ -64,6 +64,7 @@ data class PreparedRefundPointRecovery(
     val refundSourceReference: String,
     val completedAt: Instant,
     val completionSourceReference: String,
+    val completionAggregateVersion: Long,
     val snapshotSchemaVersion: Int,
     val snapshotHash: String,
     val targetAmountKrw: Long,

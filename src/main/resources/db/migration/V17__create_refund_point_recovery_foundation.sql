@@ -266,6 +266,7 @@ CREATE TABLE loyalty_point_recovery_result (
     point_account_id uuid NOT NULL REFERENCES loyalty_point_account(id),
     refund_source_reference varchar(240) NOT NULL UNIQUE,
     completion_source_reference varchar(240) NOT NULL,
+    completion_aggregate_version bigint NOT NULL CHECK (completion_aggregate_version >= 0),
     snapshot_schema_version integer NOT NULL CHECK (snapshot_schema_version > 0),
     snapshot_hash varchar(64) NOT NULL CHECK (snapshot_hash ~ '^[0-9a-f]{64}$'),
     target_amount_krw bigint NOT NULL CHECK (target_amount_krw > 0),
@@ -283,11 +284,13 @@ CREATE TABLE loyalty_point_accrual_result (
     order_id uuid NOT NULL UNIQUE,
     point_account_id uuid REFERENCES loyalty_point_account(id),
     completion_source_reference varchar(240) NOT NULL UNIQUE,
+    completion_aggregate_version bigint NOT NULL CHECK (completion_aggregate_version >= 0),
     source_state varchar(32) NOT NULL CHECK (source_state IN (
         'LEGACY_NOT_APPLICABLE', 'APPLIED', 'NO_ACCRUAL'
     )),
     snapshot_schema_version integer,
     snapshot_hash varchar(64),
+    excluded_units_hash varchar(64),
     snapshot_gross_amount_krw bigint,
     excluded_amount_krw bigint,
     accrued_amount_krw bigint,
@@ -301,6 +304,7 @@ CREATE TABLE loyalty_point_accrual_result (
             AND point_account_id IS NULL
             AND snapshot_schema_version IS NULL
             AND snapshot_hash IS NULL
+            AND excluded_units_hash IS NULL
             AND snapshot_gross_amount_krw IS NULL
             AND excluded_amount_krw IS NULL
             AND accrued_amount_krw IS NULL
@@ -312,6 +316,7 @@ CREATE TABLE loyalty_point_accrual_result (
             AND point_account_id IS NOT NULL
             AND snapshot_schema_version > 0
             AND snapshot_hash ~ '^[0-9a-f]{64}$'
+            AND excluded_units_hash ~ '^[0-9a-f]{64}$'
             AND snapshot_gross_amount_krw >= 0
             AND excluded_amount_krw BETWEEN 0 AND snapshot_gross_amount_krw
             AND accrued_amount_krw = snapshot_gross_amount_krw - excluded_amount_krw
@@ -324,6 +329,7 @@ CREATE TABLE loyalty_point_accrual_result (
             AND point_account_id IS NOT NULL
             AND snapshot_schema_version > 0
             AND snapshot_hash ~ '^[0-9a-f]{64}$'
+            AND excluded_units_hash ~ '^[0-9a-f]{64}$'
             AND snapshot_gross_amount_krw > 0
             AND excluded_amount_krw BETWEEN 0 AND snapshot_gross_amount_krw
             AND accrued_amount_krw = snapshot_gross_amount_krw - excluded_amount_krw
