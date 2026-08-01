@@ -123,6 +123,10 @@ consumer의 live read로 변질된다.
 
 ## Verification
 
+- **Plan 10 implementation evidence (2026-08-01):** the Loyalty application boundary now
+  returns `PointReservationAllocation(pointLotId, issuerType, issuerReference,
+  finalAllocationKrw)` from immutable PointLot state. V14 verifies every legacy issuer
+  mapping or fails closed before Plan 15 can use it.
 - fee terms, Campaign burden 또는 PointLot issuer 변경 뒤 기존 Order snapshot과 V2 payload가
   변하지 않는다.
 - `PLATFORM`, `STORE`, `SHARED` coupon의 two-leg sum, mixed issuer PointReservation, 0원

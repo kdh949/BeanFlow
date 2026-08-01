@@ -12,14 +12,27 @@ data class ReservePointsCommand(
     val sourceReference: String,
 )
 
-data class PointAllocation(
+enum class PointIssuerType {
+    PLATFORM,
+    BRAND,
+    STORE,
+}
+
+data class PointReservationAllocation(
     val pointLotId: UUID,
-    val amountKrw: Long,
-)
+    val issuerType: PointIssuerType,
+    val issuerReference: String,
+    val finalAllocationKrw: Long,
+) {
+    init {
+        require(issuerReference.isNotBlank()) { "Point issuer reference must not be blank" }
+        require(finalAllocationKrw > 0) { "Point allocation must be positive" }
+    }
+}
 
 data class PointReservationResult(
     val reservationId: UUID,
-    val allocations: List<PointAllocation>,
+    val allocations: List<PointReservationAllocation>,
 )
 
 enum class ExpiredPointRestorationMode {

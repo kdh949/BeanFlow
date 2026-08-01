@@ -144,6 +144,10 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
 - **Plan 11 lease evidence (2026-08-01):** repository task/worktree inventory에서 다른 active
   migration writer가 없음을 확인하고 latest `main`/`origin/main` `e9405a6`의 마지막 Flyway `V12` 다음
   번호 `V13`을 사용했다. reservation, duplicated DDL, checksum repair와 기존 migration 수정은 하지 않았다.
+- **Plan 10 lease evidence (2026-08-01):** current `main`/`origin/main` `3e1c013`의 last
+  Flyway was V13. The sole running migration-writing Goal found no other active migration
+  writer in the task/worktree inventory and used V14 without reservation, duplicate DDL,
+  checksum repair, or applied-migration rewrite.
 - documentation verifier는 metadata enum, active/completed path, graph cycle, orchestration readiness와
   migration metadata를 검증한다.
 - automation smoke test는 active orchestration plan을 candidate에서 제외하고, simultaneous

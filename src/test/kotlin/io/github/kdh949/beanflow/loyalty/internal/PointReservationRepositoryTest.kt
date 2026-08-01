@@ -2,18 +2,22 @@ package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
+import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.loyalty.api.RestorePointsByRejectionCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.DefaultApplicationArguments
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -33,6 +37,7 @@ internal class PointReservationRepositoryTest
         private val reservationRepository: PointReservationJpaRepository,
         private val allocationRepository: PointReservationAllocationJpaRepository,
         private val pointTransactionRepository: PointTransactionJpaRepository,
+        private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -70,7 +75,7 @@ internal class PointReservationRepositoryTest
                                                 sourceReference = "points-attempt-$attempt",
                                             ),
                                         ).allocations
-                                        .sumOf { it.amountKrw }
+                                        .sumOf { it.finalAllocationKrw }
                                 }
                             }
                         }
@@ -101,8 +106,22 @@ internal class PointReservationRepositoryTest
                 accountRepository.save(PointAccountEntity(accountId, customerId, availablePointsKrw = 100))
                 lotRepository.saveAll(
                     listOf(
-                        PointLotEntity(secondLotId, accountId, availableAmountKrw = 40, expiresAt = sameExpiry),
-                        PointLotEntity(firstLotId, accountId, availableAmountKrw = 60, expiresAt = sameExpiry),
+                        PointLotEntity(
+                            id = secondLotId,
+                            pointAccountId = accountId,
+                            availableAmountKrw = 40,
+                            expiresAt = sameExpiry,
+                            issuerType = PointIssuerType.BRAND,
+                            issuerReference = "brand:second",
+                        ),
+                        PointLotEntity(
+                            id = firstLotId,
+                            pointAccountId = accountId,
+                            availableAmountKrw = 60,
+                            expiresAt = sameExpiry,
+                            issuerType = PointIssuerType.STORE,
+                            issuerReference = "store:first",
+                        ),
                     ),
                 )
             }
@@ -121,7 +140,11 @@ internal class PointReservationRepositoryTest
                 }
 
             assertThat(result.allocations.map { it.pointLotId }).containsExactly(firstLotId, secondLotId)
-            assertThat(result.allocations.map { it.amountKrw }).containsExactly(60, 10)
+            assertThat(result.allocations.map { it.finalAllocationKrw }).containsExactly(60, 10)
+            assertThat(result.allocations.map { it.issuerType })
+                .containsExactly(PointIssuerType.STORE, PointIssuerType.BRAND)
+            assertThat(result.allocations.map { it.issuerReference })
+                .containsExactly("store:first", "brand:second")
             transactions.executeWithoutResult {
                 val account = accountRepository.findById(accountId).orElseThrow()
                 val lots = lotRepository.findAllById(listOf(firstLotId, secondLotId)).associateBy { it.id }
@@ -169,6 +192,50 @@ internal class PointReservationRepositoryTest
             }
         }
 
+        @Test
+        fun `expired point compensation preserves the immutable issuer snapshot`() {
+            val fixture = insertPoints(available = 100)
+            val orderId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                operations.reserve(command(fixture, orderId, 80, "points-order-$orderId"))
+                operations.confirm(orderId, "points-order-$orderId")
+            }
+
+            operations.restoreUsedByRejection(
+                RestorePointsByRejectionCommand(
+                    orderId = orderId,
+                    rejectedAt = Instant.parse("2031-01-01T00:00:00Z"),
+                    sourceReference = "rejection-points-$orderId",
+                    mode = ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
+                    compensationValidityDays = 30,
+                ),
+            )
+
+            transactions.executeWithoutResult {
+                val compensation =
+                    lotRepository.findAll().single { it.originalPointLotId == fixture.lotId }
+                assertThat(compensation.issuerType).isEqualTo(PointIssuerType.PLATFORM)
+                assertThat(compensation.issuerReference).isEqualTo("platform:test-fixture")
+            }
+        }
+
+        @Test
+        fun `issuer precheck records verified outcome for final issuer snapshots`() {
+            insertPoints(available = 100)
+            val meterRegistry = SimpleMeterRegistry()
+
+            PointLotIssuerPrecheck(jdbcTemplate, meterRegistry)
+                .run(DefaultApplicationArguments())
+
+            assertThat(
+                meterRegistry
+                    .find("beanflow.loyalty.issuer_precheck.count")
+                    .tag("outcome", "VERIFIED")
+                    .counter()
+                    ?.count(),
+            ).isEqualTo(1.0)
+        }
+
         private fun insertPoints(available: Long): PointFixture {
             val fixture =
                 PointFixture(
@@ -186,6 +253,8 @@ internal class PointReservationRepositoryTest
                         pointAccountId = fixture.accountId,
                         availableAmountKrw = available,
                         expiresAt = Instant.parse("2030-01-01T00:00:00Z"),
+                        issuerType = PointIssuerType.PLATFORM,
+                        issuerReference = "platform:test-fixture",
                     ),
                 )
             }

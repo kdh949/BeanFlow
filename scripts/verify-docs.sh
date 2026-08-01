@@ -40,7 +40,7 @@ required=(
   "docs/decisions/customer-order-cancellation-decision-closure.md"
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
   "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
-  "docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
   "docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
@@ -307,9 +307,9 @@ for filename, expected_metadata in expected_execution_metadata.items():
 plan10_path = plan_paths_by_filename[
     'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md'
 ]
-if not plan_metadata[plan10_path]['implementation_ready']:
+if plan_metadata[plan10_path]['status'] != 'COMPLETED':
     print(
-        'Plan 10 must be Implementation-Ready after its only direct Plan 00 dependency is complete.',
+        'Plan 10 must be completed after its only direct Plan 00 dependency is complete.',
         file=sys.stderr,
     )
     sys.exit(1)
@@ -318,7 +318,7 @@ master_plan = (
     root / 'docs/exec-plans/active/customer-order-cancellation-and-recovery.md'
 ).read_text(encoding='utf-8')
 if (
-    '[PointLot issuer provenance foundation을 만든다](customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00'
+    '[PointLot issuer provenance foundation을 만든다](../completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00'
     not in master_plan
     or 'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00, cursor'
     in master_plan
@@ -1341,7 +1341,7 @@ else:
         '추정하거나 PLATFORM default로 backfill하지 않는다.',
     )
     plan10 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md'
     ).read_text(encoding='utf-8')
     if not all(fragment in plan10 for fragment in required_plan10_issuer_fragments):
         print('Plan 10 must own the issuer snapshot migration and non-guessing precheck gate.', file=sys.stderr)
