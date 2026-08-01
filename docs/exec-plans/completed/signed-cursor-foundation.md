@@ -1,11 +1,11 @@
 # 공통 signed cursor foundation을 단일 소유자로 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-01`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -144,29 +144,68 @@ Only endpoint and closed outcome are tags. Cursor, key ID, filter hash and secre
 
 ## Progress
 
-- [ ] codec/configuration contract
-- [ ] startup validator and HMAC implementation
-- [ ] signature/filter/expiry tests
-- [ ] rotation/no-leak and consumer handoff
-- [ ] full validation
+- [x] 2026-08-01 계약·구현 감사와 실행 계획 기록 — `shared.api`에 typed codec/scope 계약을,
+  `shared.internal`에 key-ring binding, startup validation, HMAC implementation과 closed-vocabulary
+  metrics를 둔다. 예상 변경은 shared Kotlin source, Cursor/Pagination tests, test-source-only public
+  vector configuration, minor decision, ExecPlan dependency paths와 `scripts/verify-docs.sh`다.
+  endpoint별 codec, server-side cursor table, local/default secret은 ADR-070의 대안 배제로 유지하며,
+  DB/Flyway/Nearby/point-ledger/Settlement query는 만들지 않는다. deterministic vector, invalid
+  token/query-before rejection, key-ring startup, rotation, no-leak, Modulith, build, docs와 diff 검증을
+  실행한다.
+- [x] `shared.api.SignedCursorCodec`/typed `SignedCursorScope`와 `shared.internal` implementation을
+  추가 — endpoint adapter가 typed sort를 encode/decode하고 repository에 token text를 전달하지 않는다.
+- [x] required key-ring/startup validator와 HMAC-SHA-256 implementation 완료 — empty/duplicate/malformed/
+  short/unknown active key는 generic secret-free startup failure이며 test source만 public vector를 제공한다.
+- [x] signature/filter/expiry/2048/rotation/no-leak tests 완료 — fixed vector, canonical whitespace/property
+  order, additional/null/malformed JSON, version/key/signature/scope/sort/expiry rejection과 closed metric tag
+  검증을 `*Cursor*` selection에서 통과했다.
+- [x] rotation/no-leak and consumer handoff 완료 — previous verifier key는 unexpired token을 검증하고
+  key ring 제거 뒤 400으로 거부한다. direct successor 4개의 canonical dependency path를 completed
+  path로 원자적으로 갱신했으며, Nearby는 이 foundation만의 direct dependency가 완료되어 ready다.
+- [x] full validation 완료 — Cursor/Pagination selection, Modulith, clean build는 성공했다. completion
+  path와 documentation graph 검증은 completed path를 대상으로 실행한다.
 
 ## Surprises & Discoveries
 
 - 2026-08-01: Nearby and Settlement plans independently claimed shared codec/configuration ownership.
 - 2026-08-01: canonical payload order, key-ring decoding and the public test-vector-only exception were made
   explicit so deterministic tests do not create a production fallback path.
+- 2026-08-01: `scripts/verify-docs.sh` currently names this active path directly; plan completion therefore
+  requires its required-file and contract-reader paths to move atomically with every direct successor path.
+- 2026-08-01: existing full application tests need a test-source-only public vector so required runtime
+  configuration remains absent from main and local configuration while every test application context starts.
+- 2026-08-01: the repository uses Jackson 3 (`tools.jackson.*`), where object property traversal is
+  `propertyNames()` and array traversal uses the iterable node contract; the codec uses those APIs after a
+  compile check rather than relying on Jackson 2 method names.
 
 ## Decision Log
 
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-08-01 | Accepted | shared codec/configuration has one foundation owner | prevent duplicate HMAC/key startup implementations | ADR-070 |
+| 2026-08-01 | Local | test application contexts receive the public vector from test source only | production/local source remains keyless while integration tests exercise the real required binding | MD-2026-003 |
+| 2026-08-01 | Local | canonical payload uses a codec-private default ObjectMapper and insertion-ordered map | application ObjectMapper customizations cannot alter the locked cursor wire bytes | MD-2026-004 |
+| 2026-08-01 | Completed | shared signed cursor foundation verification complete | all fixed v1, startup, rotation and no-leak checks passed without a DB migration or endpoint query | this ExecPlan |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 이 plan의 startup and signature evidence가 없으면 Nearby, point ledger or Settlement
-endpoint는 cursor를 자체 구현하거나 unsigned cursor로 대체하지 않는다.
+완료했다. `shared.api.SignedCursorCodec`와 typed scope adapter, required key-ring binding, startup
+validation, HMAC-SHA-256 v1 codec 및 closed-vocabulary metrics를 구현했다. Invalid tokens fail before
+typed sort decoding/repository handoff with `400 INVALID_REQUEST`; runtime crypto failures map to
+`503 DEPENDENCY_UNAVAILABLE`; missing or invalid configuration fails startup without a secret-bearing
+fallback. `src/main/resources/application*.yaml`에는 cursor key가 없고 public test vector는 test source에만
+있다. SQL, Flyway migration, Nearby, point-ledger, Settlement query는 만들거나 변경하지 않았다.
+
+검증 결과:
+
+- PASS — `./gradlew test --tests '*Cursor*' --tests '*Pagination*'`
+- PASS — `./gradlew test --tests '*ModularityTests'`
+- PASS — `./gradlew clean build` (31s, exit 0)
+- PASS — `bash scripts/verify-docs.sh` (32 business policies, 72 ADRs, 132 Markdown files, 23 ExecPlans)
+- PASS — `git diff --check`
 
 ## Revision Notes
 
 - 2026-08-01: ADR-070 common cursor ownership conflict를 닫기 위해 independent foundation으로 작성했다.
+- 2026-08-01: v1 codec/key-ring foundation을 완료하고 completed path로 이동했다. Direct successors와
+  documentation verifier paths는 같은 completion diff에서 갱신했다.
