@@ -238,6 +238,7 @@ expected_execution_metadata = {
     'customer-order-cancellation-14-point-account-read-vertical-slice.md': (
         'IMPLEMENTATION', True, [
             'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
+            'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
             'signed-cursor-foundation.md',
         ],
     ),
@@ -354,6 +355,30 @@ readiness = (root / 'docs/quality/customer-order-cancellation-readiness.md').rea
 if 'CLEAN_CUTOVER_GATE = PASSED' not in readiness:
     print('Customer cancellation readiness must record the evidenced clean-cutover gate result.', file=sys.stderr)
     sys.exit(1)
+normalized_readiness = re.sub(r'\s+', ' ', readiness)
+required_current_readiness = (
+    'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md',
+    'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
+    'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
+    'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
+    'customer-order-cancellation-14-point-account-read-vertical-slice.md',
+    'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
+    'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md',
+    'customer-order-cancellation-20-settlement-foundation.md',
+    'customer-order-cancellation-30-order-compensation-foundation.md',
+    '11 policy/grants + 13 recovery + signed cursor',
+)
+if not all(fragment in normalized_readiness for fragment in required_current_readiness):
+    print('Customer cancellation readiness is missing the current foundation graph.', file=sys.stderr)
+    sys.exit(1)
+for stale_fragment in (
+    '10-partial-refund-allocation-foundation',
+    '10/20/30은 00의 계약·migration 전략을 입력으로 독립 진행',
+    'partial refund allocation plan이 통과함',
+):
+    if stale_fragment in normalized_readiness:
+        print(f'Customer cancellation readiness still contains stale plan structure: {stale_fragment}', file=sys.stderr)
+        sys.exit(1)
 
 release_evidence = (
     root / 'docs/quality/customer-order-cancellation-release-evidence.md'
@@ -1254,6 +1279,9 @@ else:
     if 'PointRecoveryPending remaining amounts' not in point_account_pending_description:
         print('PointAccount recoveryPendingKrw must be defined as a pending summary.', file=sys.stderr)
         sys.exit(1)
+    if 'updatedAt' in schemas['PointAccount'].get('required', []) or 'updatedAt' in schemas['PointAccount']['properties']:
+        print('PointAccount must not expose an ungrounded updatedAt value.', file=sys.stderr)
+        sys.exit(1)
 
     recovery_adr = (root / 'docs/adr/ADR-065-refund-earned-point-recovery-ledger.md').read_text(encoding='utf-8')
     required_recovery_adr_fragments = (
@@ -1578,6 +1606,42 @@ else:
     ).read_text(encoding='utf-8')
     if 'vocabulary constraint만 필요한 forward migration' in plan14:
         print('Plan 14 must consume Plan 11 vocabulary without another grant migration.', file=sys.stderr)
+        sys.exit(1)
+    required_plan14_decisions = (
+        'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
+        'idx_point_transaction_account_occurred_id',
+        'point_account_id, occurred_at DESC, id DESC',
+        'Account `updated_at` column 또는 임의 timestamp backfill',
+        '`recoveryPendingKrw`는 Plan 13 Account summary의 실제 non-negative 값',
+        '> **Implementation-Ready:** `false`',
+        '> **Writes-Migration:** `true`',
+    )
+    if not all(fragment in plan14 for fragment in required_plan14_decisions):
+        print('Plan 14 dependency, index, projection or readiness contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if 'permission vocabulary migration/enforcement' in plan14:
+        print('Plan 14 must not claim the Plan 11 permission vocabulary migration.', file=sys.stderr)
+        sys.exit(1)
+    nearby_plan = (
+        root / 'docs/exec-plans/active/nearby-store-discovery.md'
+    ).read_text(encoding='utf-8')
+    required_nearby_decisions = (
+        'merchant_store_discovery_profile',
+        'PostgreSQL 17/PostGIS 3.5',
+        'application startup을 실패',
+        'Discovery/Controller는 Merchant Entity나 Repository를 직접 호출하지 않는다',
+        '> **Depends-On:** `docs/exec-plans/active/signed-cursor-foundation.md`',
+    )
+    if not all(fragment in nearby_plan for fragment in required_nearby_decisions):
+        print('Nearby StoreDiscoveryProfile, PostGIS gate or cursor dependency is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    normalized_nearby_plan = re.sub(r'\s+', ' ', nearby_plan)
+    if any(fragment in normalized_nearby_plan for fragment in (
+        '`merchant_store`에 non-sensitive',
+        '`merchant_store`에 `name`',
+        '`merchant_store` table에 name',
+    )):
+        print('Nearby must not add discovery name/location directly to merchant_store.', file=sys.stderr)
         sys.exit(1)
     payment_refunded_row = next(
         (line for line in (root / 'docs/architecture/event-catalog.md').read_text(encoding='utf-8').splitlines()

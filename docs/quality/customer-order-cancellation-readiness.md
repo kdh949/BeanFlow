@@ -212,36 +212,46 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 
 ## Missing foundations
 
-### Partial refund allocation
+- [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md):
+  PointLot issuer를 추측 없이 보존해야 부분 환불 복원과 정산 비용 귀속을 계산할 수 있다.
+- [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
+  다섯 policy head와 explicit operator permission source가 필요하다.
+- [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
+  성공 Refund의 line별 cash/point allocation과 만료 복원 원장이 필요하다.
+- [Plan 13 recovery](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
+  실제 `RECOVERY` debit과 PointRecoveryPending 상계가 필요하다.
+- [Plan 15 settlement input](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
+  완료 시점 live 조회 없이 immutable 정산 입력을 제공해야 한다.
+- [Plan 16 financial events](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
+  Refund/Loyalty immutable producer가 Settlement와 recovery consumer의 입력을 제공해야 한다.
+- [Plan 20 Settlement](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md):
+  완료 정산 원천과 미완료 취소 제외 증적을 구현해야 한다.
+- [Plan 30 compensation](../exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md):
+  rejection 전용 구조를 trigger-aware Case/policy/owner convergence로 일반화해야 한다.
 
-현금 총액만으로는 선행 부분 환불이 어느 line 포인트를 복원했고 coupon 할인액이 어느
-line에 귀속됐는지 알 수 없다. 현재 OrderLine snapshot은 최초 배분만 보존하며 성공
-Refund allocation 원장이 없다. plan 10이 line 상한, source unique, 성공 시점의
-cash/point 원장, 비복원 coupon attribution과 remaining query를 먼저 구현한다.
-
-### Settlement
-
-정책과 OpenAPI만 있고 module/table/consumer가 없다. no-op consumer로 NOT_APPLICABLE을
-표현하면 정상 제외 증거와 실패 의미가 사라진다. plan 20이 Settlement owner와 최소
-consumer foundation을 먼저 구현한다.
-
-### Common compensation
-
-rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy snapshot을
-표현하지 못한다. plan 30이 gate가 허용한 migration/version 전략 위에서 일반화한다.
+[Signed cursor foundation](../exec-plans/active/signed-cursor-foundation.md)은 Plan 14/20의 조회 input이며,
+[Plan 14 PointAccount read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)는
+Plan 11/13/cursor 뒤 실행되는 별도 지원 조회 vertical slice다. Plan 14는 command Plan 40의
+선행조건은 아니지만 고객 취소 프로그램의 독립 결과물이다.
 
 ## Correct implementation order
 
-1. `00-contract-baseline`: 외부 운영 사실 0 확인과 ADR-059 clean-cutover 전략 확정
-2. `10-partial-refund-allocation-foundation`: line-level cash/point restoration과 coupon attribution 원장
-3. `20-settlement-foundation`: 완료 정산 원천과 취소 NOT_APPLICABLE 증적
-4. `30-order-compensation-foundation`: trigger-aware Case, policy, owner convergence
-5. `40-command`: Order 취소 모델, C0/C1/CT, API와 commit gate
-6. `50-recovery`: Refund budgets, result events, Notification, setup repair, release 검증
+```text
+00 baseline ──> 10 issuer ──> 15 settlement input
+     └──> 11 policy/grants ──> 12 allocation ──> 13 recovery
 
-10/20/30은 00의 계약·migration 전략을 입력으로 독립 진행할 수 있으나 40은 세 계획이
-모두 완료돼야 시작한다. 50과 전체 release가 끝나기 전 production endpoint를
-활성화하지 않는다.
+11 policy/grants + 13 recovery + signed cursor ──> 14 point-account read
+
+12 allocation + 13 recovery + 15 settlement input ──> 16 immutable events
+15 settlement input + 16 immutable events + signed cursor ──> 20 Settlement
+11 policy/grants + 20 Settlement ──> 30 compensation
+    ─> 40 command (Draft) ─> 50 recovery/release
+```
+
+각 plan은 canonical `Depends-On`의 actual outcome이 completed path에 있고
+`Implementation-Ready=true`인 경우에만 시작한다. schema-writing plan은 ADR-072의 단일
+migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan 50과 combined release가
+끝나기 전 production success endpoint를 활성화하지 않는다.
 
 ## Implementation start checklist
 
@@ -250,9 +260,15 @@ rejection 전용 schema/event/API는 customer cancellation trigger와 two-policy
 - [x] completed/incomplete publication evidence가 있음
 - [x] external consumer와 rollback binary evidence가 있음
 - [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
-- [ ] partial refund allocation plan이 통과함
-- [ ] Settlement foundation plan이 통과함
-- [ ] common compensation plan이 통과함
+- [ ] Plan 10 issuer provenance가 통과함
+- [ ] Plan 11 policy/grants가 통과함
+- [ ] Plan 12 allocation/restoration이 통과함
+- [ ] Plan 13 recovery/pending이 통과함
+- [ ] Plan 15 settlement input이 통과함
+- [ ] Plan 16 immutable events가 통과함
+- [ ] Plan 20 Settlement foundation이 통과함
+- [ ] Plan 30 common compensation이 통과함
+- [ ] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
 - [x] OpenAPI semantic/local contract 검사가 통과함
 - [ ] 기능 branch에서 기존 사용자 변경을 분리·보존함
 

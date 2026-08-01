@@ -120,6 +120,14 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 - ledger order는 `(occurredAt DESC, transactionId DESC)`이고, cursor filter hash는 endpoint와
   account ID를 bind한다. this read does not expose issuer reference, raw evidence, idempotency key,
   internal recovery case or grant state.
+- **2026-08-01 full-projection amendment:** PointAccount 응답의 `recoveryPendingKrw`는 Plan 13이
+  만든 Account pending summary의 실제 값만 사용한다. Plan 13 outcome 전 0으로 대체하거나
+  PointRecoveryPending을 실시간 추측 집계하지 않는다. 현재 PointAccount에는 진실한 변경 시각과
+  backfill source가 없으므로 target API의 `updatedAt`은 제거한다. migration 적용 시각이나 조회
+  시각을 account 변경 시각처럼 반환하지 않는다.
+- Plan 14는 Plan 11 grant, Plan 13 recovery/pending schema와 signed-cursor foundation을 직접
+  소비한다. permission vocabulary는 Plan 11만 만들고, Plan 14 migration은
+  `loyalty_point_transaction(point_account_id, occurred_at DESC, id DESC)` 조회 index만 소유한다.
 
 Plan 11은 grant schema, Operations public authorization API, policy GET header/audit contract와
 policy PATCH enforcement, offline bootstrap command를 구현한다. Plan 14는 customer/operator point-account
@@ -157,6 +165,8 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
 - role만 가진 Platform Operator는 명시 grant가 생기기 전 policy, point-account support read 또는
   point adjustment를 실행·조회할 수 없다.
 - Plan 11은 Operations schema/API scope가 늘며 Plan 14와 point-adjustment plan의 선행조건이 된다.
+- Plan 14는 Plan 13의 실제 `recoveryPendingKrw` outcome도 필요하므로 Plan 11과 cursor만으로
+  implementation-ready가 되지 않는다.
 - 새 환경은 audited offline command로 first grant를 만들며, unrecorded SQL seed가 필요하지 않다.
 - policy GET은 새로운 required header와 400 validation contract를 가지며, existing clients는
   header를 보내도록 변경해야 한다.
@@ -177,6 +187,8 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   Audit save failure가 bootstrap command에서 exact terminal result와 no partial state를 남긴다.
 - customer own/other account, operator `POINT_ACCOUNT_READ` with/without reason, cursor account scope
   mismatch와 point-read Audit failure가 ownership/403/400/503 contract를 각각 지킨다.
+- PointAccount 응답이 Plan 13 summary를 그대로 사용하고 `updatedAt` 또는 임의 0 fallback을
+  포함하지 않는지 검증한다.
 
 ## Metrics
 
