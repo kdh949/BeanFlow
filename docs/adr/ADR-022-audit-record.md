@@ -34,6 +34,10 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
   trigger였다면 correlationId로 원 요청을 추적한다.
 - 자동·고객 명령의 reason은 enum 성격의 표준 code다. 수동·운영자 명령은 표준
   action과 별도로 non-blank 자유 입력 사유를 필수로 한다.
+- OIDC verified release principal이 실행하는 offline operator permission lifecycle은 민감한 deployment
+  input을 감사 저장소에 복제하지 않는 예외다. command는 non-blank 자유 입력 사유를 검증하지만 Audit에는
+  `VERIFIED_RELEASE_OPERATOR_PERMISSION_CHANGE` 표준 code와 evidence reference만 저장한다. raw token,
+  자유 입력 reason과 evidence body는 저장하지 않는다(ADR-069).
 - `(action, targetType, targetId, sourceReference)`를 중복 방지 key로 사용한다.
 - target 변경과 해당 AuditRecord 중 하나라도 저장 실패하면 같은 local transaction을
   rollback한다.

@@ -66,6 +66,10 @@ dependencyManagement {
 	}
 }
 
+springBoot {
+	mainClass.set("io.github.kdh949.beanflow.BeanflowApplicationKt")
+}
+
 kotlin {
 	compilerOptions {
 		freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
@@ -97,4 +101,11 @@ tasks.test {
 tasks.asciidoctor {
 	inputs.dir(project.extra["snippetsDir"]!!)
 	dependsOn(tasks.test)
+}
+
+tasks.register<JavaExec>("operator-permission-bootstrap") {
+	group = "application"
+	description = "Apply an audited operator permission lifecycle action using OIDC workload identity"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.kdh949.beanflow.operations.internal.OperatorPermissionBootstrapCli")
 }

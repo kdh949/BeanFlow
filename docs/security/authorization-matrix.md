@@ -55,6 +55,11 @@ deployment job의 단기 OIDC workload identity를 required issuer·audience·al
 읽고 저장·로그하지 않으며, 누락·불일치·만료·검증 key 실패는 non-zero terminal failure와
 무변경으로 끝난다. static bootstrap secret, application JWT와 Platform Operator role은
 bootstrap authorization fallback이 아니다.
+bootstrap command는 새 grant HTTP API를 만들지 않으며, verified identity 뒤 grant state/version과
+Audit를 한 transaction으로 저장한다. 자유 입력 reason은 command validation에만 사용하고 DB/Audit에
+복제하지 않으며, Audit는 표준 lifecycle reason과 immutable evidence reference만 보존한다. 운영 절차와
+terminal exit contract는 [operator permission bootstrap runbook](../operations/operator-permission-bootstrap-runbook.md)을
+따른다.
 
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.

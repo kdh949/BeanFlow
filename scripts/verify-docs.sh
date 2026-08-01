@@ -41,7 +41,7 @@ required=(
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
   "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
   "docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
-  "docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
   "docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
@@ -674,7 +674,7 @@ else:
         ('/store-orders/{orderId}', 'get'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/operations/policies/expired-benefit-restoration', 'get'),
-        ('/operations/policies/expired-benefit-restoration', 'patch'),
+        ('/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}', 'patch'),
     }
     actual_deployed_operations = {
         (path, method)
@@ -692,9 +692,35 @@ else:
     if set(deployed_transition.get('required', [])) != {'order', 'rejectionRecovery', 'replayed'}:
         print('Deployed store transition must preserve the current legacy response wrapper.', file=sys.stderr)
         sys.exit(1)
-    deployed_policy_path = deployed_spec['paths']['/operations/policies/expired-benefit-restoration']
-    if deployed_policy_path['get'].get('parameters') or deployed_policy_path['patch'].get('parameters', [])[0].get('$ref', '').endswith('/AccessReason'):
-        print('Deployed singleton policy API must not claim the target access-reason contract.', file=sys.stderr)
+    deployed_policy_get = deployed_spec['paths']['/operations/policies/expired-benefit-restoration']['get']
+    deployed_policy_get_refs = {
+        parameter.get('$ref')
+        for parameter in deployed_policy_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if deployed_policy_get_refs != {'./beanflow-v1.yaml#/components/parameters/AccessReason'}:
+        print('Deployed policy GET must require the audited access-reason contract.', file=sys.stderr)
+        sys.exit(1)
+    deployed_policy_list = deployed_policy_get['responses']['200']['content']['application/json']['schema']
+    if deployed_policy_list.get('minItems') != 5 or deployed_policy_list.get('maxItems') != 5:
+        print('Deployed policy GET must return exactly five heads.', file=sys.stderr)
+        sys.exit(1)
+    deployed_policy_patch = deployed_spec['paths'][
+        '/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}'
+    ]['patch']
+    deployed_policy_patch_names = {
+        parameter.get('name')
+        for parameter in deployed_policy_patch.get('parameters', [])
+        if isinstance(parameter, dict) and parameter.get('name')
+    }
+    if deployed_policy_patch_names != {'trigger', 'benefitType'}:
+        print('Deployed policy PATCH must expose only the keyed policy path parameters.', file=sys.stderr)
+        sys.exit(1)
+    if {
+        'DeployedExpiredBenefitRestorationPolicy',
+        'DeployedUpdateExpiredBenefitRestorationPolicyRequest',
+    } & set(deployed_schemas):
+        print('Deployed singleton policy schemas must be removed after keyed policy deployment.', file=sys.stderr)
         sys.exit(1)
 
     required_paths = {
@@ -1585,7 +1611,7 @@ else:
         print('Operator permission bootstrap/read contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     plan11 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md'
     ).read_text(encoding='utf-8')
     normalized_plan11 = re.sub(r'\s+', ' ', plan11)
     required_plan11_decisions = (

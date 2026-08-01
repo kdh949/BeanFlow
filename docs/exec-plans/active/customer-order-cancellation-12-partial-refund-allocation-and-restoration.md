@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -118,7 +118,8 @@ ADR-014/036/061/063/068, OpenAPI/payment runbook과 Plan 13/16/40 evidence를 �
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 10 issuer와 Plan 11 policy outcome이 모두 verified되기 전 시작하지 않는다.
+미구현 상태다. Plan 11의 five-head policy outcome은 verified completed input이다. Plan 10 issuer가 아직
+active이므로 `Implementation-Ready=false`를 유지하고 issuer outcome 전에는 시작하지 않는다.
 
 ## Revision Notes
 

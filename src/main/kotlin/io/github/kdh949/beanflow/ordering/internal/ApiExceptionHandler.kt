@@ -4,56 +4,74 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.ConstraintViolationException
+import org.springframework.core.convert.ConversionFailedException
+import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 @RestControllerAdvice
 internal class ApiExceptionHandler(
-	private val correlationIdSource: CorrelationIdSource,
+    private val correlationIdSource: CorrelationIdSource,
 ) {
+    @ExceptionHandler(DomainFailure::class)
+    fun domainFailure(failure: DomainFailure): ResponseEntity<ErrorResponse> {
+        val headers = HttpHeaders()
+        failure.retryAfterSeconds?.let { headers.set(HttpHeaders.RETRY_AFTER, it.toString()) }
+        return ResponseEntity(
+            ErrorResponse(
+                code = failure.code.name,
+                message = failure.message,
+                correlationId = correlationIdSource.currentOrCreate(),
+            ),
+            headers,
+            statusOf(failure.code),
+        )
+    }
 
-	@ExceptionHandler(DomainFailure::class)
-	fun domainFailure(failure: DomainFailure): ResponseEntity<ErrorResponse> {
-		val headers = HttpHeaders()
-		failure.retryAfterSeconds?.let { headers.set(HttpHeaders.RETRY_AFTER, it.toString()) }
-		return ResponseEntity(
-			ErrorResponse(
-				code = failure.code.name,
-				message = failure.message,
-				correlationId = correlationIdSource.currentOrCreate(),
-			),
-			headers,
-			statusOf(failure.code),
-		)
-	}
+    @ExceptionHandler(
+        MethodArgumentNotValidException::class,
+        ConstraintViolationException::class,
+        MissingRequestHeaderException::class,
+        MethodArgumentTypeMismatchException::class,
+        HandlerMethodValidationException::class,
+        HttpMessageNotReadableException::class,
+        ConversionFailedException::class,
+    )
+    fun invalidRequest(failure: Exception): ResponseEntity<ErrorResponse> =
+        ResponseEntity.badRequest().body(
+            ErrorResponse(
+                code = FailureCode.INVALID_REQUEST.name,
+                message = "Request validation failed",
+                correlationId = correlationIdSource.currentOrCreate(),
+                details = listOf(ErrorDetail(reason = failure.message ?: "Invalid request")),
+            ),
+        )
 
-	@ExceptionHandler(
-		MethodArgumentNotValidException::class,
-		ConstraintViolationException::class,
-		MissingRequestHeaderException::class,
-	)
-	fun invalidRequest(failure: Exception): ResponseEntity<ErrorResponse> =
-		ResponseEntity.badRequest().body(
-			ErrorResponse(
-				code = FailureCode.INVALID_REQUEST.name,
-				message = "Request validation failed",
-				correlationId = correlationIdSource.currentOrCreate(),
-				details = listOf(ErrorDetail(reason = failure.message ?: "Invalid request")),
-			),
-		)
+    @ExceptionHandler(DataAccessException::class)
+    fun persistenceFailure(): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(
+            ErrorResponse(
+                code = FailureCode.DEPENDENCY_UNAVAILABLE.name,
+                message = "A required persistence dependency is unavailable",
+                correlationId = correlationIdSource.currentOrCreate(),
+            ),
+        )
 
-	private fun statusOf(code: FailureCode): HttpStatus =
-		when (code) {
-			FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
-			FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
-			FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
-			FailureCode.PAYMENT_DECLINED -> HttpStatus.UNPROCESSABLE_ENTITY
-			FailureCode.DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
-			else -> HttpStatus.CONFLICT
-		}
+    private fun statusOf(code: FailureCode): HttpStatus =
+        when (code) {
+            FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
+            FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
+            FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
+            FailureCode.PAYMENT_DECLINED -> HttpStatus.UNPROCESSABLE_ENTITY
+            FailureCode.DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
+            else -> HttpStatus.CONFLICT
+        }
 }
