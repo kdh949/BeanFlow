@@ -42,7 +42,7 @@ CREATE TABLE payment_order_point_accrual_outcome (
             AND snapshot_hash ~ '^[0-9a-f]{64}$')
         OR
         (outcome_state = 'NOT_APPLICABLE'
-            AND order_state IN ('REJECTED', 'CANCELLED', 'EXPIRED')
+            AND order_state IN ('COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED')
             AND snapshot_schema_version IS NULL
             AND snapshot_hash IS NULL)
     )

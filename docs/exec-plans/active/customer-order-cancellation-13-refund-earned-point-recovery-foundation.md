@@ -184,14 +184,26 @@ evidence를 갱신한다.
     PostgreSQL unique/row lock 아래에서 직렬화된다.
   - `*PointRecoveryServiceTest`: PASS, 5 PostgreSQL owner/concurrency/rollback tests. 관련 V17
     migration, 기존 Point reservation과 partial-refund restoration 회귀 테스트도 PASS.
+- [x] 2026-08-02 Ordering completion trigger and recovery coordinator
+  - frozen `OrderCompletedV1`의 persisted Order state/time/version과 immutable snapshot source를
+    검증한 뒤 Payment eligibility와 Loyalty accrual owner transaction을 연결한다. explicit
+    rollout-era `LEGACY_NOT_APPLICABLE`만 terminal no-accrual receipt로 기록하며 missing source를
+    legacy 또는 0원으로 합성하지 않는다.
+  - scheduled coordinator는 Payment claim lease를 가져와 현재 Ordering terminal/completion fact와
+    immutable snapshot을 제공하고, Loyalty recovery가 commit된 뒤 Payment work를 ack한다. owner
+    호출 또는 ack 실패는 retry 후 `MANUAL_REVIEW`로 남는다.
+  - 정상 completion accrual, pre-completion Refund exclusion, recovery가 completion trigger보다 먼저
+    도착해 pending 후 gross accrual로 상계되는 out-of-order flow, frozen V1 replay를
+    `*StoreOrderLifecycleIntegrationTest`에서 검증했다.
+  - migration/Payment/Loyalty/Ordering focused suite와 `*ModularityTests`: PASS, 32 tests.
 - [x] 2026-08-01 BR-10 ordinary-accrual policy vocabulary decision
 - [x] 2026-08-01 GLOBAL default + STORE override precedence decision
 - [x] 2026-08-01 append-only INHERIT_GLOBAL override lifecycle decision
 - [x] 2026-08-01 verified offline initial GLOBAL policy bootstrap decision
 - [x] 2026-08-01 legacy Order forward-only activation decision
 - [x] 2026-08-01 BR-10 completion/refund timing decision
-- [ ] refund recovery
-- [ ] later-accrual offset
+- [x] refund recovery
+- [x] later-accrual offset
 - [ ] validation evidence
 
 ## Surprises & Discoveries

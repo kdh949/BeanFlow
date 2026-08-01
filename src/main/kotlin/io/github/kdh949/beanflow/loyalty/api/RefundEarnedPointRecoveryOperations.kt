@@ -61,10 +61,21 @@ data class AccrueCompletedOrderPointsResult(
     val replayed: Boolean,
 )
 
+data class RecordLegacyCompletedOrderPointsCommand(
+    val orderId: UUID,
+    val completedAt: Instant,
+    val completionSourceReference: String,
+    val completionAggregateVersion: Long,
+    val processedAt: Instant,
+)
+
 interface RefundEarnedPointRecoveryOperations {
     /** Recovers actual available lots and records only the residual as pending in one Loyalty transaction. */
     fun recover(command: RecoverRefundEarnedPointsCommand): RecoverRefundEarnedPointsResult
 
     /** Records gross accrual and offsets oldest pending recovery rows in the same Loyalty transaction. */
     fun accrue(command: AccrueCompletedOrderPointsCommand): AccrueCompletedOrderPointsResult
+
+    /** Records an explicit rollout-era legacy marker without synthesizing a zero-valued snapshot. */
+    fun recordLegacyNotApplicable(command: RecordLegacyCompletedOrderPointsCommand): Boolean
 }

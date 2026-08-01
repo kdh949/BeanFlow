@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.loyalty.internal
 import io.github.kdh949.beanflow.loyalty.api.AccrualUnitKey
 import io.github.kdh949.beanflow.loyalty.api.AccrueCompletedOrderPointsCommand
 import io.github.kdh949.beanflow.loyalty.api.AccrueCompletedOrderPointsResult
+import io.github.kdh949.beanflow.loyalty.api.RecordLegacyCompletedOrderPointsCommand
 import io.github.kdh949.beanflow.loyalty.api.RecoverRefundEarnedPointsCommand
 import io.github.kdh949.beanflow.loyalty.api.RecoverRefundEarnedPointsResult
 import io.github.kdh949.beanflow.loyalty.api.RefundEarnedPointRecoveryOperations
@@ -234,6 +235,49 @@ internal class RefundEarnedPointRecoveryService(
             availableForOffset,
             replayed = false,
         )
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun recordLegacyNotApplicable(command: RecordLegacyCompletedOrderPointsCommand): Boolean {
+        if (command.orderId == ZERO_UUID || command.completionSourceReference.isBlank() ||
+            command.completionSourceReference.length > 240 || command.completionAggregateVersion < 0
+        ) {
+            fail(FailureCode.INVALID_REQUEST, "Legacy completed Order point source is invalid")
+        }
+        accrualResultRepository.findByOrderId(command.orderId)?.let { existing ->
+            if (existing.sourceState != PointAccrualResultState.LEGACY_NOT_APPLICABLE ||
+                existing.completionSourceReference != command.completionSourceReference ||
+                existing.completionAggregateVersion != command.completionAggregateVersion ||
+                existing.completedAt != command.completedAt
+            ) {
+                fail(FailureCode.IDEMPOTENCY_KEY_REUSED, "Legacy completed Order point source changed")
+            }
+            metric("completion_accrual", "legacy_replayed")
+            return true
+        }
+        accrualResultRepository.save(
+            PointAccrualResultEntity(
+                id = identifierSource.next(),
+                orderId = command.orderId,
+                pointAccountId = null,
+                completionSourceReference = command.completionSourceReference,
+                completionAggregateVersion = command.completionAggregateVersion,
+                sourceState = PointAccrualResultState.LEGACY_NOT_APPLICABLE,
+                snapshotSchemaVersion = null,
+                snapshotHash = null,
+                excludedUnitsHash = null,
+                snapshotGrossAmountKrw = null,
+                excludedAmountKrw = null,
+                accruedAmountKrw = null,
+                offsetAmountKrw = null,
+                availableAmountKrw = null,
+                pointLotId = null,
+                completedAt = command.completedAt,
+                createdAt = command.processedAt,
+            ),
+        )
+        metric("completion_accrual", "legacy_not_applicable")
+        return false
     }
 
     private fun lockOrCreateAccount(customerId: UUID): PointAccountEntity {

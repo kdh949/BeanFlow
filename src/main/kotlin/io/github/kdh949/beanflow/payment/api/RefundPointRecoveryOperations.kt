@@ -12,6 +12,7 @@ data class RefundPointAccrualUnit(
 data class RefundPointAccrualSnapshotSource(
     val orderId: UUID,
     val orderState: String,
+    val pointAccrualSourceState: RefundPointAccrualSourceState?,
     val outcomeAt: Instant?,
     val outcomeSourceReference: String?,
     val aggregateVersion: Long?,
@@ -19,6 +20,11 @@ data class RefundPointAccrualSnapshotSource(
     val snapshotHash: String?,
     val units: List<RefundPointAccrualUnit>,
 )
+
+enum class RefundPointAccrualSourceState {
+    SNAPSHOTTED,
+    LEGACY_NOT_APPLICABLE,
+}
 
 data class PreparePointAccrualCompletionCommand(
     val orderId: UUID,
@@ -46,7 +52,13 @@ data class RecordPointAccrualNotApplicableCommand(
     val outcomeAt: Instant,
     val sourceReference: String,
     val aggregateVersion: Long,
+    val reason: PointAccrualNotApplicableReason,
 )
+
+enum class PointAccrualNotApplicableReason {
+    TERMINAL_WITHOUT_COMPLETION,
+    LEGACY_COMPLETED_ORDER,
+}
 
 data class ClaimedRefundPointRecovery(
     val workId: UUID,

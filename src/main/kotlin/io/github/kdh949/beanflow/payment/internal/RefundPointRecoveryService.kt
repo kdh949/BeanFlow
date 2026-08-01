@@ -2,10 +2,12 @@ package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.payment.api.ClaimedRefundPointRecovery
 import io.github.kdh949.beanflow.payment.api.PointAccrualCompletionEligibility
+import io.github.kdh949.beanflow.payment.api.PointAccrualNotApplicableReason
 import io.github.kdh949.beanflow.payment.api.PreparePointAccrualCompletionCommand
 import io.github.kdh949.beanflow.payment.api.PreparedRefundPointRecovery
 import io.github.kdh949.beanflow.payment.api.RecordPointAccrualNotApplicableCommand
 import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSnapshotSource
+import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSourceState
 import io.github.kdh949.beanflow.payment.api.RefundPointAccrualUnit
 import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryOperations
 import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryResult
@@ -133,7 +135,16 @@ internal class RefundPointRecoveryService(
 
     @Transactional
     override fun recordNotApplicable(command: RecordPointAccrualNotApplicableCommand) {
-        if (command.orderState !in TERMINAL_STATES) {
+        val validReason =
+            (
+                command.reason == PointAccrualNotApplicableReason.LEGACY_COMPLETED_ORDER &&
+                    command.orderState == ORDER_COMPLETED
+            ) ||
+                (
+                    command.reason == PointAccrualNotApplicableReason.TERMINAL_WITHOUT_COMPLETION &&
+                        command.orderState in NONCOMPLETION_TERMINAL_STATES
+                )
+        if (!validReason) {
             dependency("Point accrual not-applicable outcome is not terminal")
         }
         storeOutcome(
@@ -218,9 +229,26 @@ internal class RefundPointRecoveryService(
                     source.outcomeAt,
                     source.outcomeSourceReference,
                     source.aggregateVersion,
+                    PointAccrualNotApplicableReason.TERMINAL_WITHOUT_COMPLETION,
                 ),
             )
             return null
+        }
+        if (source.pointAccrualSourceState == RefundPointAccrualSourceState.LEGACY_NOT_APPLICABLE) {
+            recordNotApplicable(
+                RecordPointAccrualNotApplicableCommand(
+                    source.orderId,
+                    source.orderState,
+                    source.outcomeAt,
+                    source.outcomeSourceReference,
+                    source.aggregateVersion,
+                    PointAccrualNotApplicableReason.LEGACY_COMPLETED_ORDER,
+                ),
+            )
+            return null
+        }
+        if (source.pointAccrualSourceState != RefundPointAccrualSourceState.SNAPSHOTTED) {
+            dependency("Completed Order point accrual source state is missing")
         }
         val schemaVersion = source.snapshotSchemaVersion ?: dependency("Completed Order snapshot version is missing")
         val snapshotHash = source.snapshotHash ?: dependency("Completed Order snapshot hash is missing")
@@ -800,7 +828,7 @@ internal class RefundPointRecoveryService(
         const val STATE_MANUAL_REVIEW = "MANUAL_REVIEW"
         const val MAX_ATTEMPTS = 5
         val HASH_PATTERN = Regex("^[0-9a-f]{64}$")
-        val TERMINAL_STATES = setOf("REJECTED", "CANCELLED", "EXPIRED")
+        val NONCOMPLETION_TERMINAL_STATES = setOf("REJECTED", "CANCELLED", "EXPIRED")
         val NONTERMINAL_STATES = setOf("PENDING_PAYMENT", "PAID", "ACCEPTED", "PREPARING", "READY")
         val UNCLASSIFIED_STATES = setOf(STATE_PENDING, STATE_ELIGIBILITY_PROCESSING, STATE_ELIGIBILITY_RETRY)
         val PROCESSING_STATES = setOf(STATE_ELIGIBILITY_PROCESSING, STATE_PROCESSING)

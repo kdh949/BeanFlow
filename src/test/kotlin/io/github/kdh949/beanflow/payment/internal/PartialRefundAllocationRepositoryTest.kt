@@ -20,6 +20,7 @@ import io.github.kdh949.beanflow.ordering.internal.PartialRefundRestorationWorke
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
 import io.github.kdh949.beanflow.payment.api.PreparePointAccrualCompletionCommand
 import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSnapshotSource
+import io.github.kdh949.beanflow.payment.api.RefundPointAccrualSourceState
 import io.github.kdh949.beanflow.payment.api.RefundPointAccrualUnit
 import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -230,6 +231,7 @@ internal class PartialRefundAllocationRepositoryTest
                 RefundPointAccrualSnapshotSource(
                     orderId = fixture.orderId,
                     orderState = "COMPLETED",
+                    pointAccrualSourceState = RefundPointAccrualSourceState.SNAPSHOTTED,
                     outcomeAt = completedAt,
                     outcomeSourceReference = "order:${fixture.orderId}:completed:1",
                     aggregateVersion = 1,
