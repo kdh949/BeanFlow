@@ -212,8 +212,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 
 ## Missing foundations
 
-- [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md):
-  PointLot issuer를 추측 없이 보존해야 부분 환불 복원과 정산 비용 귀속을 계산할 수 있다.
+- [Plan 10 issuer provenance](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md):
+  V14의 issuer type/reference immutable snapshot, fail-closed legacy precheck와 allocation DTO가
+  완료됐다. 부분 환불 복원과 정산 비용 귀속은 이 immutable input을 소비할 수 있다.
 - [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
   다섯 policy head와 explicit operator permission source가 V13과 PostgreSQL evidence로 완료됐다.
 - [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):

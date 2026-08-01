@@ -63,3 +63,20 @@ publication drain, compatibility와 rollback ADR/ExecPlan을 먼저 확정한다
 
 이 PASS는 migration/event 전략만 허용한다. 부분 환불 allocation, Settlement, 공통
 compensation foundation과 고객 취소 command 구현 완료를 의미하지 않는다.
+
+## Plan 10 issuer provenance execution evidence
+
+- **Recorded at:** 2026-08-01
+- **Execution inventory:** this workspace had no `BEANFLOW_DB_URL`,
+  `BEANFLOW_DB_USERNAME`, or `BEANFLOW_DB_PASSWORD`; no configured runtime database was
+  available to reclassify. Repository schema, entities, repositories, and fixtures also
+  contained no legacy PointLot issuer source.
+- **Interpretation:** this is not evidence that a non-empty future database is mappable.
+  V14 accepts the clean empty path, while any non-empty V1–V13 database must present the
+  exact one-to-one external `loyalty_point_lot_issuer_precheck` relation with valid issuer
+  type/reference, non-blank source reference, and verification timestamp. A missing,
+  partial, extra, blank, invalid, or changing mapping fails the migration and prevents
+  application activation; V14 never supplies a `PLATFORM` default.
+- **Test evidence:** PostgreSQL Testcontainers covered empty final constraints, verified
+  exact backfill, missing and invalid mappings, immutable issuer snapshots, DTO projection,
+  compensation issuer inheritance, and Spring startup failure.

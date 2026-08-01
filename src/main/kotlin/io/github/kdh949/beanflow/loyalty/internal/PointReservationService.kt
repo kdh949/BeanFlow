@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
-import io.github.kdh949.beanflow.loyalty.api.PointAllocation
+import io.github.kdh949.beanflow.loyalty.api.PointReservationAllocation
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationResult
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
@@ -167,6 +167,8 @@ internal class PointReservationService(
                                 command.rejectedAt.plusSeconds(
                                     command.compensationValidityDays.toLong() * 86_400,
                                 ),
+                            issuerType = originalLot.issuerType,
+                            issuerReference = originalLot.issuerReference,
                             originalPointLotId = originalLot.id,
                             compensationSourceReference =
                                 "${command.sourceReference}:${allocation.id}:lot",
@@ -308,7 +310,20 @@ internal class PointReservationService(
             allocations =
                 allocationRepository
                     .findAllByPointReservationIdOrderByPointLotId(reservation.id)
-                    .map { PointAllocation(it.pointLotId, it.amountKrw) },
+                    .let { allocations ->
+                        val lotsById = lotRepository.findAllById(allocations.map { it.pointLotId }).associateBy { it.id }
+                        allocations.map { allocation ->
+                            val lot =
+                                lotsById[allocation.pointLotId]
+                                    ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Allocated point lot is missing")
+                            PointReservationAllocation(
+                                pointLotId = lot.id,
+                                issuerType = lot.issuerType,
+                                issuerReference = lot.issuerReference,
+                                finalAllocationKrw = allocation.amountKrw,
+                            )
+                        }
+                    },
         )
 
     private fun fail(

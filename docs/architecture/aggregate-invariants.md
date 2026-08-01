@@ -67,7 +67,7 @@
 | `CampaignRepository` | Campaign | valid period/type/value/minimum/maximum/target/share ratio | optimistic version |
 | `CouponIssuanceRepository` | CouponIssuance | one active reservation/use per issuance, compensation source unique, restoration metadata와 terms snapshot CHECK | unique/partial index + guarded transition |
 | `PointAccountRepository` | PointAccount | unique member/program, non-negative available balance | row lock/version |
-| `PointLotRepository` | PointLot | non-negative available/reserved/remaining, amount tie-out, issuer type/reference NOT NULL·immutable | ordered row lock |
+| `PointLotRepository` | PointLot | non-negative available/reserved/remaining, amount tie-out, issuer type/reference NOT NULL·immutable; V14 non-empty legacy rows require one exact verified precheck mapping | ordered row lock |
 | `PointReservationRepository` | PointReservation | active order reservation unique, allocation source unique | unique + guarded transition |
 | `PointTransactionRepository` | PointTransaction | logical source unique, restoration type의 trigger/policy 필수, `RECOVERY`는 refund·Lot source와 deferred pending ID 일치, `ADJUSTMENT`는 CREDIT/DEBIT effect·command/Lot child source 관계와 target Audit source 필수 | unique source reference |
 | `PointRecoveryPendingRepository` | PointRecoveryPending | account+refund source unique, initial/remaining 양수 범위와 PENDING/SETTLED state·timestamp CHECK, Account pending summary tie-out | PointAccount row lock + oldest pending row lock |

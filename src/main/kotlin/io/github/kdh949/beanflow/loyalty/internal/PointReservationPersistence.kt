@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -43,13 +44,22 @@ internal class PointLotEntity(
     var reservedAmountKrw: Long = 0,
     @Column(name = "expires_at", nullable = false)
     val expiresAt: Instant,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "issuer_type", nullable = false, updatable = false)
+    val issuerType: PointIssuerType,
+    @Column(name = "issuer_reference", nullable = false, length = 240, updatable = false)
+    val issuerReference: String,
     @Column(name = "original_point_lot_id")
     val originalPointLotId: UUID? = null,
     @Column(name = "compensation_source_reference", length = 240)
     val compensationSourceReference: String? = null,
     @Version
     var version: Long = 0,
-)
+) {
+    init {
+        require(issuerReference.isNotBlank()) { "Point issuer reference must not be blank" }
+    }
+}
 
 internal enum class PointReservationState {
     RESERVED,
