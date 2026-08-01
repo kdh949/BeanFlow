@@ -52,7 +52,7 @@ required=(
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
-  "docs/exec-plans/active/signed-cursor-foundation.md"
+  "docs/exec-plans/completed/signed-cursor-foundation.md"
   "docs/exec-plans/completed/ci-pr-validation.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
@@ -1553,7 +1553,7 @@ else:
     if not all(fragment in normalized_cursor_adr for fragment in required_cursor_fragments):
         print('Signed-cursor canonical payload, key-ring or test-vector contract is incomplete.', file=sys.stderr)
         sys.exit(1)
-    cursor_plan = (root / 'docs/exec-plans/active/signed-cursor-foundation.md').read_text(encoding='utf-8')
+    cursor_plan = (root / 'docs/exec-plans/completed/signed-cursor-foundation.md').read_text(encoding='utf-8')
     required_cursor_plan_fragments = (
         '### Fixed v1 wire and key contract',
         '`endpoint`, `filterHash`, `sort`, `issuedAt`, `expiresAt`',
@@ -1630,7 +1630,7 @@ else:
         'PostgreSQL 17/PostGIS 3.5',
         'application startup을 실패',
         'Discovery/Controller는 Merchant Entity나 Repository를 직접 호출하지 않는다',
-        '> **Depends-On:** `docs/exec-plans/active/signed-cursor-foundation.md`',
+        '> **Depends-On:** `docs/exec-plans/completed/signed-cursor-foundation.md`',
     )
     if not all(fragment in nearby_plan for fragment in required_nearby_decisions):
         print('Nearby StoreDiscoveryProfile, PostGIS gate or cursor dependency is incomplete.', file=sys.stderr)

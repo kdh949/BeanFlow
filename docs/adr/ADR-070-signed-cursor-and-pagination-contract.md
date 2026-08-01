@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owner:** [Signed cursor foundation](../exec-plans/active/signed-cursor-foundation.md)
+- **Implementation owner:** [Signed cursor foundation](../exec-plans/completed/signed-cursor-foundation.md)
 
 ## Context
 
