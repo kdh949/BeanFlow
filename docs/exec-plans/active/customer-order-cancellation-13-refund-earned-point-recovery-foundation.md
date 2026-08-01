@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -104,7 +104,9 @@ ADR-065/068, point ledger documentation and Plan 16/40 successor evidence를 갱
 
 ## Surprises & Discoveries
 
-- 없음.
+- 2026-08-01: Plan 12 completed outcome은 successful Refund line/point allocation과 durable
+  restoration source를 제공하며 public event publication은 의도적으로 Plan 16에 남겼다. Plan 13은
+  event를 기다리지 않고 이 verified owner source를 typed boundary로 소비해야 한다.
 
 ## Decision Log
 
@@ -114,8 +116,13 @@ ADR-065/068, point ledger documentation and Plan 16/40 successor evidence를 갱
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 12의 successful refund source/allocation evidence를 직접 소비한다.
+미구현 상태다. 유일한 direct dependency인 Plan 12가 V15와 24개 focused test, Modulith/full-build
+evidence를 completed path에 남겼다. 이 Plan은 successful Refund source/allocation을 직접 소비할 수 있어
+`Implementation-Ready=true`다. 시작 시 ADR-072 migration-writer lease와 latest migration `V15`를 다시
+확인하고 다음 번호를 선택해야 한다.
 
 ## Revision Notes
 
 - 2026-08-01: 기존 Plan 10의 earned-point recovery slice를 분리했다.
+- 2026-08-01: Plan 12 completion path/outcome을 반영해 direct dependency를 충족하고
+  implementation-ready로 전환했다.

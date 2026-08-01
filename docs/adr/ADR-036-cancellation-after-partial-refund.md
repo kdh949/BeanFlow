@@ -185,6 +185,13 @@ clarification에 따라 부분 환불의 coupon allocation은 귀속 원장일 �
 
 ## Verification
 
+**Plan 12 implementation evidence (2026-08-01):** V15 adds successful line and original
+PointReservation-allocation ledgers plus Payment-locked remaining consumption. A second Refund is rejected
+while an earlier Refund is unresolved; a concurrent Provider-blocked test proves the external call holds no
+DB transaction and the competing request observes the durable unresolved row. Failed Refunds do not insert
+success allocation and the same front unit remains eligible. The later customer-cancellation command and
+its recovery snapshot remain Plan 13 scope.
+
 - 성공 부분 환불 뒤 고객 취소 Refund가 정확한 현금 잔액만 요청한다.
 - 모든 성공 Refund 합계가 승인액을 넘지 않는다.
 - 이미 복원된 line 포인트는 고객 취소에서 다시 복원되지 않는다.

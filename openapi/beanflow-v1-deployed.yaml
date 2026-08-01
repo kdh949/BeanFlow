@@ -111,6 +111,50 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/UnprocessableEntity"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /payments/{paymentId}/refunds:
+    post:
+      tags: [Payment]
+      operationId: createPaymentRefund
+      summary: Create a store or platform full/item partial refund
+      description: |
+        STORE_OWNER and STORE_STAFF require active membership in the Order store;
+        PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes every
+        remaining unit. Explicit quantities consume the lowest unrefunded conceptual
+        unit positions. Coupon values are attribution only and are never restored.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/PaymentId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CreateRefundRequest"
+      responses:
+        "201":
+          description: Synchronous cash result confirmed; Loyalty may still be processing
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/Refund"
+        "202":
+          description: Provider result unknown or retry/reconciliation remains durable
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/Refund"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /store-orders/{orderId}:
     get:
       tags: [Store Orders]

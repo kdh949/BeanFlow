@@ -31,7 +31,7 @@ canonical 문서와 목표 OpenAPI의 취소·환불 의미는 정합화됐고 A
 명시적 0 증거로 닫혔다. 독립 foundation 작업은 clean-cutover 경로로 진행할 수 있다.
 고객 취소 command 구현은 다음 선행조건이 닫힐 때까지 시작할 수 없다.
 
-1. 부분 환불 line-level cash/benefit allocation foundation 부재
+1. 환불 적립 포인트 recovery와 immutable financial event foundation 부재
 2. Settlement Context와 consumer 구현 부재
 3. trigger-aware 공통 compensation foundation 부재
 
@@ -106,7 +106,7 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | Refund attempt 상한 | ADR-036은 총 `attempt_count` 상한 6, ADR-038·aggregate invariants·payment runbook은 REQUEST 3 + LOOKUP 5 = 8 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 두 예산은 독립이고 전체 상한은 8; ADR-036 문구를 clarification으로 교정하고 6은 결과 불명 경로 한정으로 남김 |
 | `PENDING_PAYMENT` 네 금액 | ADR-036은 네 금액 모두 0, ADR-031·api conventions·ADR-050은 검증 불가 금액 생략 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 생략이 canonical이고 네 금액 0은 `BENEFIT_ONLY`뿐; ADR-036과 OpenAPI description 교정 |
 | 매장 보상 step 노출 | authorization matrix·ADR-030·ADR-033 Verification·api conventions는 운영자 전용, OpenAPI·plan 30·runbook·현재 `StoreOrderContracts.kt`는 매장에 여섯 step 노출 | `CONTRACT_CONFLICT` + `IMPLEMENTATION_DRIFT` | 2026-08-01 확정: 매장은 축약 `StoreCompensationSummary`; OpenAPI에 schema 신설하고 plan 30 clean cutover에서 store DTO 축약 |
-| 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 `RejectionRefundService` | `IMPLEMENTATION_DRIFT` + `MISSING_FOUNDATION` | allocation foundation plan 10 선행 |
+| 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 기존 `RejectionRefundService` | `FOUNDATION_COMPLETED` | Plan 12/V15가 full/item partial Refund, immutable line/point allocation, independent retry budgets와 Loyalty restoration work를 구현 |
 | Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 코드·migration에 Settlement 없음 | `MISSING_FOUNDATION` | Settlement foundation plan 20 선행 |
 | trigger×benefit 정책과 singleton 구현 | ADR-041 대 V8/Operations singleton policy | `IMPLEMENTATION_DRIFT` | compensation foundation plan 30 |
 | store transition hash/replay 계약 | BR-25/ADR-057 대 hash에서 orderId 누락, V1 operation, replay body mutation | `IMPLEMENTATION_DRIFT` | plan 30의 store regression 범위 |
@@ -122,7 +122,7 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | 고객 환불 상태를 내부 상태 그대로 노출하는 과거 ADR과 최신 projection 충돌 | `FIXED` | ADR-030/033에 ADR-038/050 amendment 관계와 최신 Decision·Consequences·Required Tests 반영 |
 | 취소 reason code의 persistent event 포함 여부 충돌 | `FIXED` | BR-14/ADR-055에 Order·Audit·Refund/Provider·event·log별 범위를 단일 계약으로 정리 |
 | clean cutover와 legacy event compatibility 요구 충돌 | `FIXED; CLEAN PATH SELECTED` | Required Tests를 조건부 경로로 분리하고 운영 상태 evidence의 전 항목 0에 따라 clean-cutover 경로 선택 |
-| 선행 부분 환불 허용, allocation foundation 부재 | `CONFIRMED` | V10/Refund code에 line allocation 없음 |
+| 선행 부분 환불 허용, allocation foundation 부재 | `CONFIRMED, THEN CLOSED` | Plan 12/V15가 request/success line·point allocation과 restoration owner flow를 구현하고 PostgreSQL/MockMvc evidence를 남김 |
 | Settlement `NOT_APPLICABLE` 정책, 구현 부재 | `CONFIRMED` | Settlement package/table/test 없음 |
 | store transition hash, operation version, replay body drift | `CONFIRMED` | hash는 state/reason만, operation V1, response replay 시 body 변경 |
 | trigger×benefit 정책과 단일 전역 정책 구현 차이 | `CONFIRMED` | singleton policy head와 단일 case policy |
@@ -194,9 +194,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 |---|---|---|---|
 | Customer command | endpoint/service 없음 | C0/C1/CT와 stored response | `OrderController.kt`, 신규 service/contracts |
 | Order model | CANCELLED cause/reason/time 없음 | cancellation fields와 CHECK | `Order.kt`, `OrderingPersistence.kt`, migration |
-| Refund composition | 선행 성공 환불이면 거부 | remaining cash + allocation | `RejectionRefundService.kt`, `Refund.kt`, V10 |
-| Refund recovery | REQUEST 1 + LOOKUP 4 합산 5 | REQUEST 3 + LOOKUP 5 분리 | `Refund.kt`, `RejectionRefundService.kt` |
-| Provider failure | 모든 explicit failure terminal | allowlist만 safe request retry | Payment gateway/service |
+| Refund composition | 공개 부분 Refund는 V15 immutable unit/line allocation을 사용하지만 고객 취소 C1은 미구현 | C1이 remaining cash + 아직 미복원 point allocation을 snapshot | Payment partial Refund API, 신규 cancellation service |
+| Refund recovery | 공통 Refund domain은 REQUEST 3 + LOOKUP 5 독립 예산과 irreversible LOOKUP 전환을 구현 | 고객 취소 work/source와 같은 예산을 연결 | `Refund.kt`, `RejectionRefundService.kt`, 신규 cancellation service |
+| Provider failure | adapter allowlisted `RetryableFailed`와 unknown 전환을 지원하지만 고객 취소 Provider flow는 미연결 | allowlist만 same-key safe request retry | Payment gateway/service, 신규 cancellation flow |
 | Compensation | rejection 전용, 단일 policy | trigger-aware Case와 두 policy | Operations API/service/persistence, V8 |
 | Store compensation projection | 매장 응답이 여섯 step·attemptCount·lastErrorCode·caseId·policyVersion 노출 | trigger·state·updatedAt만 담은 축약 요약 | `StoreOrderContracts.kt`, `StoreOrderTransitionService.kt` |
 | Publication failure | 모든 미완료 step manual review | 실패 listener step만 manual review | `RejectionCompensationService.kt`, recovery worker |
@@ -217,8 +217,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
   완료됐다. 부분 환불 복원과 정산 비용 귀속은 이 immutable input을 소비할 수 있다.
 - [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
   다섯 policy head와 explicit operator permission source가 V13과 PostgreSQL evidence로 완료됐다.
-- [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
-  성공 Refund의 line별 cash/point allocation과 만료 복원 원장이 필요하다.
+- [Plan 12 allocation/restoration](../exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
+  V15 immutable line/point request·success allocation, 앞 unit deterministic rounding, Provider 분리와
+  issuer-preserving Loyalty restoration/retry 원장이 완료됐다. Plan 13은 이 owner source를 소비할 수 있다.
 - [Plan 13 recovery](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
   실제 `RECOVERY` debit과 PointRecoveryPending 상계가 필요하다.
 - [Plan 15 settlement input](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
@@ -261,9 +262,9 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] completed/incomplete publication evidence가 있음
 - [x] external consumer와 rollback binary evidence가 있음
 - [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
-- [ ] Plan 10 issuer provenance가 통과함
+- [x] Plan 10 issuer provenance가 통과함
 - [x] Plan 11 policy/grants가 통과함
-- [ ] Plan 12 allocation/restoration이 통과함
+- [x] Plan 12 allocation/restoration이 통과함
 - [ ] Plan 13 recovery/pending이 통과함
 - [ ] Plan 15 settlement input이 통과함
 - [ ] Plan 16 immutable events가 통과함
@@ -271,9 +272,21 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [ ] Plan 30 common compensation이 통과함
 - [ ] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
 - [x] OpenAPI semantic/local contract 검사가 통과함
-- [ ] 기능 branch에서 기존 사용자 변경을 분리·보존함
+- [x] 기능 branch에서 기존 사용자 변경을 분리·보존함
 
 남은 foundation 체크가 모두 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
+
+## Plan 12 foundation validation (2026-08-01)
+
+- V15 empty-schema migration과 legacy Refund fail-closed precheck: **Passed**.
+- Refund/allocation/restoration focused suite: **Passed**, 24 tests. full·연속 partial·rounding,
+  exact replay/conflict, 실패 unit 재사용, Provider transaction 분리, 정책 snapshot, issuer lineage,
+  expiry boundary, Loyalty retry/manual review와 DB upper-bound/overlap을 포함한다.
+- Spring Modulith boundary: **Passed**, 1 test. Ordering coordinator가 Order-first lock과 cross-context
+  orchestration을 소유하고 Payment/Loyalty는 typed API 뒤 owner state만 변경한다.
+- `./gradlew spotlessApply clean build`: **Passed**. 전체 test/check가 통과했다.
+- Plan 13: sole dependency completed, `Implementation-Ready=true`.
+- Plan 16: Plan 12는 completed이나 Plan 13/15가 active라 `Implementation-Ready=false`.
 
 ## Historical audit validation
 

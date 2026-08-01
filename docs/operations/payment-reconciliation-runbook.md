@@ -83,14 +83,79 @@ retryable failure는 Refund `FAILED`, PAYMENT step과 Case `MANUAL_REVIEW`다.
 15분 뒤 같은 key로 최대 다섯 번 조회한다. request와 lookup count는 별도이며 최대
 Provider 상호작용은 3 + 5 = 8회다. 마지막 lookup도 불명이면 `MANUAL_REVIEW`로
 전환한다. 마지막 허용 claim 뒤 worker가 종료된 경우 lease 만료 후 새 Provider 호출
-없이 수동 검토로 종결한다. 현재 구현의 단일 총 상한 5, 도달 불가능한 마지막 delay와
-`provider_request_started_at` 기반 무조건 LOOKUP 분기는 ADR-037·ADR-038 구현 시 함께
-수정해야 한다.
+없이 수동 검토로 종결한다. V15부터 `request_attempt_count`, `lookup_attempt_count`와
+`next_action`이 독립 3/5 예산과 REQUEST→LOOKUP 비가역 전이를 보존한다.
 
 고객은 내부 `RETRY_SCHEDULED`, `UNKNOWN`, `RECONCILING`을 `PROCESSING`으로만
 본다. 내부 `FAILED`·`MANUAL_REVIEW`도 고객 state는 `PROCESSING`이며
 `noticeCode = REFUND_DELAYED`로 지연 정보 아이콘만 표시한다. 운영자 화면은 실제
 state, 두 attempt count와 마지막 실패 code를 표시한다.
+
+## Store/platform partial Refund and point restoration
+
+`POST /payments/{paymentId}/refunds`는 매장 또는 플랫폼 거래 조정이다. 고객 self-service
+명령이 아니며, 매장 역할은 Order의 활성 membership을 함께 검증한다. 요청 transaction은
+Order→Payment→성공 allocation→원 PointReservation allocation 순서로 잠그고
+`PARTIAL_REFUND×POINTS` policy version을 snapshot한 뒤 commit한다. Provider 호출 중에는
+DB transaction을 유지하지 않는다.
+
+같은 actor와 `Idempotency-Key`는 같은 canonical payload에서만 최초 response status/body를
+그대로 replay한다. 다른 payload면 `IDEMPOTENCY_KEY_REUSED`, 최초 Provider claim이 진행
+중이면 `IDEMPOTENCY_REQUEST_IN_PROGRESS`다. 운영자가 다른 key로 같은 unit을 다시 요청해
+우회하지 않는다.
+
+```sql
+SELECT r.id, r.payment_id, r.state,
+       r.requested_amount_krw AS cash_requested_krw,
+       r.requested_points_krw AS points_requested_krw,
+       r.request_attempt_count, r.lookup_attempt_count, r.next_action,
+       r.point_restoration_policy_version_id, r.point_restoration_policy_mode,
+       r.response_status, r.updated_at, r.last_failure_code
+FROM payment_refund r
+WHERE r.reason = 'PARTIAL_REFUND'
+  AND r.payment_id = :payment_id
+ORDER BY r.created_at, r.id;
+```
+
+성공 cash/coupon/point attribution은 request snapshot과 동일해야 한다. coupon은 귀속 감사
+금액일 뿐 Promotion 복원 명령이 아니다. 다음 합계가 Payment 승인액, OrderLine snapshot 또는
+원 PointReservation allocation을 넘으면 새 Provider/Loyalty 호출을 중지하고 migration과
+원장을 조사한다. V15 deferred constraint trigger도 commit을 거부한다.
+
+```sql
+SELECT l.order_line_id,
+       sum(l.cash_refunded_krw) AS cash_refunded_krw,
+       sum(l.points_restored_krw) AS points_attributed_krw,
+       sum(l.coupon_attribution_krw) AS coupon_attribution_krw,
+       sum(l.quantity) AS refunded_quantity
+FROM payment_refund_line_allocation l
+JOIN payment_refund r ON r.id = l.refund_id
+WHERE r.payment_id = :payment_id
+GROUP BY l.order_line_id
+ORDER BY l.order_line_id;
+```
+
+현금 성공 뒤 포인트 복원은 Payment의 별도 durable work와 Loyalty local transaction으로
+수행한다. Payment transaction에서 Loyalty Entity를 직접 수정하지 않는다. Loyalty commit 뒤
+Payment ack가 실패해도 같은 Refund source replay가 기존 원장을 확인하므로 가치를 두 번 만들지
+않는다. 자동 시도는 최대 5회며 source/payload conflict, 잘못된 USED 상태 또는 예산 소진은
+`MANUAL_REVIEW`다.
+
+```sql
+SELECT w.refund_id, w.state, w.requested_amount_krw, w.restored_amount_krw,
+       w.attempt_count, w.next_attempt_at, w.claim_until, w.last_failure_code,
+       r.point_restoration_policy_version_id, r.point_restoration_policy_mode
+FROM payment_refund_restoration_work w
+JOIN payment_refund r ON r.id = w.refund_id
+WHERE w.state <> 'SUCCEEDED'
+ORDER BY w.next_attempt_at NULLS FIRST, w.id;
+```
+
+`loyalty_partial_refund_restoration`과 `loyalty_point_transaction`에서 Refund/OrderLine/원
+allocation source를 함께 확인한다. 원 Lot은 `refundSucceededAt < expiresAt`일 때만 되살린다.
+같거나 지난 시각은 snapshot mode에 따라 같은 issuer의 보상 Lot 또는
+`RESTORE_SKIPPED_EXPIRED`다. 부분 환불 뒤 `loyalty_point_reservation.state`는 항상 `USED`다.
+Refund, allocation, work, PointTransaction, PointLot balance를 SQL로 직접 수정하지 않는다.
 
 ## Metrics and logs
 
@@ -103,6 +168,8 @@ state, 두 attempt count와 마지막 실패 code를 표시한다.
 - `beanflow.payment.late_approval.count`
 - `beanflow.payment.void.attempts{outcome}`
 - `beanflow.payment.refund.attempts{outcome}`
+- `beanflow.payment.refund.restoration.count{state,outcome}`
+- `beanflow.loyalty.partial_refund_restoration.count{disposition,policy_mode,outcome}`
 
 metric tag에는 customer, Order, Payment, Provider transaction과 idempotency key를
 넣지 않는다. structured log의 Payment ID와 correlation ID로 개별 흐름을 연결한다.

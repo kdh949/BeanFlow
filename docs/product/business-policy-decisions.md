@@ -658,6 +658,17 @@
   전체 상태를 변경하지 않고 allocation별 원장만 기록하며 후속 주문 전체 종료는 이미
   복원된 allocation을 제외한 잔여 포인트만 처리한다. `PARTIAL_REFUND × COUPON` policy
   head는 만들지 않는다.
+- **Within-Line Quantity Allocation Amendment (2026-08-01):** 한 OrderLine의 일부
+  수량을 여러 Refund로 나눌 때 conceptual unit position은 원 주문 안에서 `0`부터
+  `quantity - 1`까지 고정한다. 각 unit gross는 immutable unit price다. line coupon
+  allocation은 unit gross 비율로 나누고 원 미만을 버린 뒤 남는 1원은 앞 unit부터
+  배분한다. points는 unit별 `gross - coupon` 잔액 비율로 나누며, 버림 뒤 remainder는
+  그 잔액이 큰 unit, 같으면 앞 unit부터 배분한다. cash는 unit별
+  `gross - coupon - points` 잔액이다. 따라서 각 unit과 line의 세 allocation이 모두
+  tie-out한다. 부분 환불은 아직 성공 환불되지 않은 가장 앞 unit position부터 요청
+  수량만큼 소비하고, omitted line list의 full refund는 모든 line의 남은 unit을
+  line sequence 순서로 소비한다. 실패·불명 Refund는 unit을 소비하지 않으며 성공
+  result transaction만 소비 원장을 확정한다.
 - **Rationale:** 환불 시점에 정책을 다시 계산하지 않고 주문 당시 결과를 재현하기 위함이다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Payment, Settlement
 - **Affected Aggregates:** Order, OrderLine, Payment, PointAccount, SettlementAdjustment
@@ -673,6 +684,8 @@
   - 부분 환불 시 PointLot 만료 -1ns/at/+1ns의 원 lot 복원·30일 보상 lot 분기
   - 정책 변경 전후 Refund의 version snapshot 재현과 중복 보상 lot 부재
   - 부분 환불 뒤 PointReservation USED 유지와 후속 전체 종료의 잔여 포인트만 복원
+  - 같은 line의 여러 수량 분할 순서에서 unit별 coupon→points→cash tie-out과 앞 unit
+    remainder 소비 결정성
 - **ADR Required:** Yes — 부분 환불 배분 정책
 - **Revisit Conditions:** 쿠폰별 환급 가능 정책 또는 묶음 상품 환불 정책이 도입될 때
 

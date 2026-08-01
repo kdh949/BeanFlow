@@ -126,6 +126,13 @@ event producer를 소유한다. 이들 구현 전에 요청 snapshot과 실제 �
 
 ## Verification
 
+**Plan 12 implementation evidence (2026-08-01):** the deployed controller always returns immutable
+`cashRefundRequestedKrw`, `pointsRestorationRequestedKrw` and the independent owner state. A confirmed cash
+result includes only `cashRefundedKrw`; pending Loyalty work omits `pointsRestoredKrw`. The first status/body
+is stored on Refund and exact actor/key/payload replay returns it byte-for-byte. V15 CHECK constraints enforce
+request/success equality, response snapshot all-or-none, and cash-success/point-work state prerequisites.
+The API has no stale/cache fallback; a missing required work row fails with `DEPENDENCY_UNAVAILABLE`.
+
 - 모든 Refund 상태에 두 요청 snapshot이 존재한다.
 - 현금 `SUCCEEDED`에만 `cashRefundedKrw`가 존재한다.
 - 포인트 `SUCCEEDED`에만 `pointsRestoredKrw`가 존재한다.
