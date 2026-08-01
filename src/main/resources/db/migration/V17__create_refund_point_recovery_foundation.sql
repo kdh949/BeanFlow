@@ -54,7 +54,8 @@ CREATE TABLE payment_refund_point_recovery_work (
     order_id uuid NOT NULL,
     outcome_order_id uuid REFERENCES payment_order_point_accrual_outcome(order_id),
     state varchar(32) NOT NULL CHECK (state IN (
-        'PENDING', 'READY', 'PROCESSING', 'RETRY_SCHEDULED', 'SUCCEEDED',
+        'PENDING', 'ELIGIBILITY_PROCESSING', 'ELIGIBILITY_RETRY',
+        'READY', 'PROCESSING', 'RETRY_SCHEDULED', 'SUCCEEDED',
         'EXCLUDED_BEFORE_ACCRUAL', 'NOT_REQUIRED', 'NOT_APPLICABLE', 'MANUAL_REVIEW'
     )),
     refund_succeeded_at timestamptz NOT NULL,
@@ -85,6 +86,28 @@ CREATE TABLE payment_refund_point_recovery_work (
             AND snapshot_schema_version IS NULL
             AND snapshot_hash IS NULL
             AND attempt_count = 0
+            AND claim_token IS NULL
+            AND claim_until IS NULL)
+        OR
+        (state = 'ELIGIBILITY_PROCESSING'
+            AND target_amount_krw IS NULL
+            AND recovered_amount_krw IS NULL
+            AND pending_amount_krw IS NULL
+            AND snapshot_schema_version IS NULL
+            AND snapshot_hash IS NULL
+            AND attempt_count BETWEEN 1 AND 5
+            AND next_attempt_at IS NULL
+            AND claim_token IS NOT NULL
+            AND claim_until IS NOT NULL)
+        OR
+        (state = 'ELIGIBILITY_RETRY'
+            AND target_amount_krw IS NULL
+            AND recovered_amount_krw IS NULL
+            AND pending_amount_krw IS NULL
+            AND snapshot_schema_version IS NULL
+            AND snapshot_hash IS NULL
+            AND attempt_count BETWEEN 1 AND 4
+            AND next_attempt_at IS NOT NULL
             AND claim_token IS NULL
             AND claim_until IS NULL)
         OR
@@ -177,7 +200,10 @@ CREATE TABLE payment_refund_point_recovery_work (
 
 CREATE INDEX idx_payment_refund_point_recovery_due
     ON payment_refund_point_recovery_work (next_attempt_at, id)
-    WHERE state IN ('PENDING', 'READY', 'RETRY_SCHEDULED', 'PROCESSING');
+    WHERE state IN (
+        'PENDING', 'ELIGIBILITY_PROCESSING', 'ELIGIBILITY_RETRY',
+        'READY', 'PROCESSING', 'RETRY_SCHEDULED'
+    );
 
 ALTER TABLE loyalty_point_account
     ADD COLUMN recovery_pending_krw bigint NOT NULL DEFAULT 0

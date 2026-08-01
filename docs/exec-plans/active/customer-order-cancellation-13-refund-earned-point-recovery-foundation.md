@@ -164,6 +164,16 @@ evidence를 갱신한다.
   - verified pre-release clean activation과 달리 이미 `SNAPSHOTTED` completion 또는 성공 Refund가
     있으면 V17은 owner source를 추측 backfill하지 않고 migration을 실패시킨다.
   - `./gradlew test --tests '*PointRecoveryMigrationTest' --rerun-tasks`: PASS, 3 PostgreSQL tests.
+- [x] 2026-08-02 Payment-owned completion eligibility and recovery work state machine
+  - successful partial Refund 기록과 같은 Payment transaction에서 recovery work를 생성하고,
+    immutable Ordering snapshot의 canonical SHA-256 hash와 unit range만으로 target을 확정한다.
+  - `refundSucceededAt <= completedAt`은 `EXCLUDED_BEFORE_ACCRUAL`, 이후 Refund는 `READY`로
+    분류한다. unresolved Refund와 missing work/source는 completion을 실패시키며 live policy,
+    0원 또는 legacy 추측으로 대체하지 않는다.
+  - claim lease, bounded retry와 `MANUAL_REVIEW`, exact source/version/hash replay 및 terminal
+    not-applicable outcome을 PostgreSQL 상태 제약과 함께 구현했다.
+  - `*PointRecoveryMigrationTest`, `*OrderCreationPointAccrualSnapshotIntegrationTest`,
+    `*PartialRefundAllocationRepositoryTest`: PASS. Payment integration 14 tests와 Spotless PASS.
 - [x] 2026-08-01 BR-10 ordinary-accrual policy vocabulary decision
 - [x] 2026-08-01 GLOBAL default + STORE override precedence decision
 - [x] 2026-08-01 append-only INHERIT_GLOBAL override lifecycle decision

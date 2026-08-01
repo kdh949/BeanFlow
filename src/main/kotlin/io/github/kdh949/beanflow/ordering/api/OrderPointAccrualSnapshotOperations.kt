@@ -25,6 +25,7 @@ data class OrderPointAccrualSnapshot(
     val orderPayableKrw: Long,
     val grossAccrualAmountKrw: Long,
     val snapshotSchemaVersion: Int,
+    val canonicalSnapshotHash: String,
     val createdAt: Instant,
     val units: List<OrderPointAccrualUnitSnapshot>,
 )
