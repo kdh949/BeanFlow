@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
-- **Amended by:** ADR-059의 release gate, ADR-063의 부분 환불 POINTS head
+- **Amended by:** ADR-059의 release gate, ADR-063의 부분 환불 POINTS head와 2026-08-01 ExecPlan ownership amendment
 
 ## Context
 
@@ -41,7 +41,10 @@ mode와 유효기간을 선택할 수 있어야 한다.
   schema 일관성을 위해 30을 저장한다.
 - `PARTIAL_REFUND × POINTS` 초기 head의 mode는
   `COMPENSATE_WITH_NEW_ISSUANCE`, validity days는 30이다. 이 version은 Plan 10이
-  composite policy 저장소/API와 함께 seed한다.
+  담당한다는 최초 계획을 **2026-08-01 ownership amendment**로 대체한다. 현재 실행
+  소유권은 Plan 11이며, Plan 11이 composite policy 저장소/API와 다섯 head seed를
+  단독 구현한다. Plan 10은 PointLot issuer provenance만, Plan 12는 부분 환불
+  allocation/restoration flow만 소유한다.
 - 전역 고유 Long ID는 DB sequence를 사용하고 기존 최대 policy version보다 큰 값부터
   발급한다. head별 `currentVersionId + 1` 계산으로 ID를 만들지 않는다.
 

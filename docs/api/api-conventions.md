@@ -2,8 +2,20 @@
 
 ## Resource style
 
-아래 목록은 resource naming style 예시다. 전체 공개 endpoint와 request/response 계약의
-원본은 `openapi/beanflow-v1.yaml`이며, 이 목록은 endpoint catalog로 사용하지 않는다.
+아래 목록은 resource naming style 예시다. 공개 API 계약은 상태별로 분리한다.
+
+- `openapi/beanflow-v1-deployed.yaml`: 현재 source에 구현되어 배포 후보가 된 controller
+  mapping과 실제 request/response shape의 원본이다.
+- `openapi/beanflow-v1.yaml`: Accepted ADR과 Active ExecPlan이 지향하는 pre-release target
+  계약이다. 이 파일의 operation 존재만으로 현재 배포됐다고 판단하지 않는다.
+
+target operation은 구현·계약·보안·실패 테스트가 통과하고 release gate가 닫힌 변경에서만
+deployed spec으로 승격한다. controller를 제거하거나 shape를 바꾸는 변경은 deployed spec과
+계약 테스트를 같은 변경에서 갱신한다. 두 spec 모두 `x-beanflow-contract-status`와
+`x-beanflow-contract-date`를 가져야 하며, target schema를 외부 참조하는 deployed component는
+문서 검증이 참조 존재를 확인하고 target component 변경 시 deployed 계약도 함께 검토한다.
+
+이 목록은 endpoint catalog로 사용하지 않는다.
 
 ```http
 GET  /api/v1/stores/nearby
@@ -245,6 +257,10 @@ reason과 evidence를
 - common cursor는 ADR-070의 `v1.<key-id>.<payload>.<signature>` HMAC-SHA-256 format을
   사용한다. endpoint, canonical filter hash, stable sort tuple과 24시간 expiry를 signature에
   bind한다.
+- v1 payload는 whitespace-free UTF-8 JSON이며 property 순서는 `endpoint`, `filterHash`, `sort`,
+  `issuedAt`, `expiresAt`로 고정한다. 추가 property와 `null`은 허용하지 않고, `sort`는 순서를 보존하는
+  string array, 두 시각은 JSON integer epoch second, UUID sort value는 lowercase canonical UUID다.
+  payload/signature는 padding 없는 Base64URL이며 `now >= expiresAt`은 만료다.
 - 매장 거리 검색 cursor는 `(distanceMicrometers, storeId)`를 사용하고 response의
   `distanceMeters`는 display-only floored integer다. Point ledger는
   `(occurredAt DESC, transactionId DESC)`, 정산 Batch는 `(settlementDate DESC,
@@ -254,8 +270,13 @@ reason과 evidence를
 - 정렬 기준과 tie-breaker를 문서화한다.
 - cursor는 내부 값을 직접 수정할 수 없는 opaque string으로 전달한다. malformed, signature/
   version/expiry/filter scope mismatch는 query 실행 전 `400 INVALID_REQUEST`다.
+- request와 `nextCursor`의 public maximum length는 `2048`이다.
 - cursor HMAC secret/active key configuration은 required startup dependency다. key rotation은
-  이전 verifier key를 최대 24시간 유지한다.
+  이전 verifier key를 최대 24시간 유지한다. key ring은 duplicate ID를 검출하는 list이고 padding 없는
+  Base64URL decode 뒤 secret은 최소 32 bytes여야 한다. malformed key, empty ring, unknown active key,
+  short secret과 fallback secret은 startup failure다.
+- 공개 test-vector 전용 key material은 deterministic test source에만 둘 수 있고 production/local runtime
+  configuration, 실제 deployment environment variable 이름, log, test output 또는 운영 fallback에 쓸 수 없다.
 - common `limit`은 optional이며 default 20, minimum 1, maximum 100이다.
 - 응답은 `nextCursor`가 있을 때만 다음 page가 있음을 뜻한다.
 

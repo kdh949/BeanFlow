@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -23,9 +23,9 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 - `OrderRejectedV1`은 customer/store/actor/reason과 단일 policy를 담는다.
 - publication retry 소진은 모든 미완료 step을 MANUAL_REVIEW로 바꾼다.
 - ADR-033/034/040~043/055/059는 목표 공통 모델을 정의한다.
-- Plan 10은 ADR-063에 따라 최종 다섯 policy head/version 저장소와 운영 API를 먼저
+- Plan 11은 ADR-063에 따라 최종 다섯 policy head/version 저장소와 운영 API를 먼저
   구현한다. 이 계획은 그중 종료용 네 head를 소비한다.
-- Plan 10은 종료용 네 policy head의 direct source이고 Plan 20은 ADR-072 migration-writer lane의
+- Plan 11은 종료용 네 policy head의 direct source이고 Plan 20은 ADR-072 migration-writer lane의
   direct phase predecessor다. Plan 30은 두 completion evidence 뒤 latest-main baseline에서 policy
   head를 소비하며, independent parallel migration branch를 만들지 않는다.
 - 00 plan에서 모든 non-local 환경·artifact가 0으로 확인돼 ADR-059 gate가 통과했다.
@@ -37,6 +37,8 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 - **Owner source:** Order terminal version과 step으로 만든 안정적 중복 기준.
 - **Policy head:** trigger×benefitType의 현재 immutable policy version.
 - **Step-specific exhaustion:** 실패 listener의 step만 수동 검토로 바꾸는 규칙.
+- **Stable listener target:** `@ApplicationModuleListener(id = ...)`에 선언하고 중앙 registry가
+  event type·step에 연결하는 versioned persistence contract.
 
 ## Scope
 
@@ -90,7 +92,7 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 
 ## Data and Migration
 
-Plan 10/20 completion and ADR-072 migration-writer lease 뒤 latest main에서 시작한다. 00 plan이 clean cutover를 명시적으로 통과했으므로 ADR-059 shape를 사용한다. producer,
+Plan 11/20 completion and ADR-072 migration-writer lease 뒤 latest main에서 시작한다. 00 plan이 clean cutover를 명시적으로 통과했으므로 ADR-059 shape를 사용한다. producer,
 consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility layer와 version 이중
 발행은 추가하지 않는다. 재확인 결과가 nonzero/unknown이면 새 Accepted
 forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibility 순서를
@@ -103,7 +105,7 @@ Order 취소 컬럼·CHECK와 precheck는 실제 필드를 Domain/JPA command에
 40이 단독 소유한다. 각 ADR의 backfill 규칙과 precheck 실패 조건은 문서에 남아 있고
 gate가 무효화될 때의 계약이므로 삭제하거나 무시하지 않는다.
 
-Policy version/head table, 다섯 seed와 운영 API는 Plan 10의 단일 소유다. 이 계획은
+Policy version/head table, 다섯 seed와 운영 API는 Plan 11의 단일 소유다. 이 계획은
 같은 migration을 만들지 않고
 `(STORE_REJECTION | CUSTOMER_CANCELLATION) × (COUPON | POINTS)` 종료용 네 head를
 조회해 Case child FK snapshot을 저장한다.
@@ -122,11 +124,33 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 - 고객 취소 event는 네 owner만 소비하며 Payment/Notification은 소비하지 않는다.
 - V1 변경 가능 여부와 payload version은 00 gate 결과를 따른다.
 
+중앙 `CompensationPublicationTargetRegistry`는 아래 exact mapping만 허용한다.
+
+| Event type | Stable listener ID | Compensation step |
+|---|---|---|
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.payment.v1` | `PAYMENT` |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.pickup.v1` | `PICKUP` |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.stock.v1` | `STOCK` |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.coupon.v1` | `COUPON` |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.points.v1` | `POINTS` |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.customer-notification.v1` | `CUSTOMER_NOTIFICATION` |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.pickup.v1` | `PICKUP` |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.stock.v1` | `STOCK` |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.coupon.v1` | `COUPON` |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.points.v1` | `POINTS` |
+
+각 listener는 표의 ID를 annotation에 명시한다. registry duplicate는 startup을 실패시키고,
+exhausted publication의 `(eventType, listenerId)`가 없으면 `PUBLICATION_TARGET_UNMAPPED`로
+운영 case를 열되 step을 추측하거나 Case 전체를 변경하지 않는다. 기존 default listener ID가
+남은 publication이 하나라도 있거나 inventory가 unknown이면 stable ID cutover를 수행하지 않고
+ADR-059 forward-migration 경로를 먼저 확정한다. stable ID/version은 해당 event type의 incomplete
+publication이 0이고 rollback 기간이 끝나기 전까지 제거하지 않는다.
+
 ## Milestones
 
-1. 00 clean-cutover 결과와 Plan 10 policy/Plan 20 lane completion evidence를 모두 검증한다.
+1. 00 clean-cutover 결과와 Plan 11 policy/Plan 20 lane completion evidence를 모두 검증한다.
 2. 공통 Case/step/trigger/two-policy domain과 schema를 구현한다.
-3. Plan 10의 종료용 네 policy head를 Case child snapshot에 연결한다.
+3. Plan 11의 종료용 네 policy head를 Case child snapshot에 연결한다.
 4. Pickup/Stock과 Coupon/Points owner 복원을 공통 계약으로 전환한다.
 5. store rejection producer/consumer와 API를 회귀 없이 전환한다.
 6. listener별 publication exhaustion과 recovery를 구현한다.
@@ -140,12 +164,14 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 - 매장 응답의 trigger·case state·updatedAt 존재와 운영자 응답의 여섯 step 존재
 - 단일 listener exhaustion 시 해당 step만 manual review
 - 다른 publication 계속 완료와 attempt 분리
+- annotation listener ID·registry 표·실제 publication target 집합의 일치
+- duplicate registry startup failure와 unknown target의 step 불변/운영 case
 - store idempotency hash에 orderId 포함, V2 operation, replay body 불변
 - migration strategy별 empty/existing fixture
 - ADR-033/040/042 세 migration의 legacy row precheck가 후보 0에서 통과
 - 세 migration 각각에 legacy row를 주입한 fixture에서 backfill 추측 없이 실패
 - empty database full migration 뒤 최종 shape의 CHECK·FK·unique 전수 검증
-- policy head/version/API migration 중복 부재와 Plan 10 schema 소비
+- policy head/version/API migration 중복 부재와 Plan 11 schema 소비
 
 ## Validation Commands
 
@@ -189,20 +215,21 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 | 2026-07-31 | Blocked | migration 전략은 00 fact gate 뒤 확정 | 운영 상태 추측 금지 | ADR-059 |
 | 2026-07-31 | Unblocked | ADR-059 clean-cutover 전략 사용 | 운영 상태 evidence에서 모든 외부 항목 0 | release-gate evidence |
 | 2026-08-01 | Accepted | ADR-029 Order 취소 migration은 Plan 40이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 40 |
-| 2026-08-01 | Accepted | 공통 five-head policy 기반은 Plan 10이 단독 구현하고 이 계획은 종료용 네 head를 소비 | 부분 환불 선행조건과 migration 중복 방지 | ADR-063, Plan 10 |
+| 2026-08-01 | Accepted | 공통 five-head policy 기반은 Plan 11이 단독 구현하고 이 계획은 종료용 네 head를 소비 | 부분 환불 선행조건과 migration 중복 방지 | ADR-063, Plan 11 |
 | 2026-08-01 | Superseded | Plan 30은 Plan 10 branch 위에서만 시작하고 Plan 20과 병렬 실행한다 | PR base/parallel Flyway migration을 무인 실행할 수 없음 | prior master DAG |
-| 2026-08-01 | Accepted | Plan 30은 Plan 10 policy output과 Plan 20 lane completion 뒤 latest main baseline에서 시작 | policy head direct input을 보존하면서 migration writer lane을 단일화 | ADR-063, ADR-072 |
+| 2026-08-01 | Accepted | Plan 30은 Plan 11 policy output과 Plan 20 lane completion 뒤 latest main baseline에서 시작 | policy head direct input을 보존하면서 migration writer lane을 단일화 | ADR-063, ADR-072 |
+| 2026-08-01 | Accepted | versioned listener ID와 중앙 event-target-step registry를 사용 | 실패 target 하나만 정확히 수동 검토하고 method rename과 영속 계약을 분리 | ADR-010, ADR-034 |
 
 ## Outcomes & Retrospective
 
-미구현이다. 00 fact gate, Plan 10 policy output과 Plan 20 completion evidence가 모두 통과하고 migration-writer lease를
+미구현이다. 00 fact gate, Plan 11 policy output과 Plan 20 completion evidence가 모두 통과하고 migration-writer lease를
 얻기 전에는 이 계획의 domain/schema/owner migration을 시작하지 않는다.
 
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
 - 2026-07-31: owner release evidence로 00 gate가 통과해 clean-cutover 전략을 확정.
-- 2026-08-01: policy head/version/API 구현 소유권을 Plan 10으로 이동.
+- 2026-08-01: policy head/version/API 구현 소유권을 Plan 11로 이동.
 - 2026-08-01: **Superseded** Plan 10→30 직접 의존성을 명시하고 Plan 20을 sequential blocker에서
   제거했다. 이후 ADR-072가 Plan 20 lane input을 복원했다.
 - 2026-08-01: ADR-072에 따라 prior parallel branch rule을 supersede하고 Plan 20 completion 뒤

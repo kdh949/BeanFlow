@@ -11,7 +11,7 @@
 
 ## Purpose / Big Picture
 
-이 문서는 고객 주문 취소 capability의 구현 계획이 아니라 일곱 하위 ExecPlan과 공통
+이 문서는 고객 주문 취소 capability의 구현 계획이 아니라 열두 하위 ExecPlan과 공통
 signed-cursor foundation의 의존관계와 release gate를 관리하는 master orchestration plan이다. 각 하위 계획은
 이전 대화 없이 독립 실행할 수 있으며, 선행 기반이 완료되기 전에는 고객 취소 HTTP
 기능을 활성화하지 않는다.
@@ -51,7 +51,8 @@ signed-cursor foundation의 의존관계와 release gate를 관리하는 master 
 
 - 하위 ExecPlan의 순서, 완료 조건과 차단 조건 관리
 - 정책·계약 baseline과 fact-verification evidence 연결
-- allocation·적립 포인트 회수·issuer snapshot, settlement input snapshot, Settlement, compensation,
+- issuer provenance, 정책/grant, allocation/restoration, 적립 포인트 회수, point-account read,
+  settlement input, financial event producer, Settlement, compensation,
   command, recovery의 범위 분리
 - 각 계획 결과를 다음 계획의 검증 가능한 입력으로 전달
 
@@ -70,7 +71,7 @@ signed-cursor foundation의 의존관계와 release gate를 관리하는 master 
   번 복원한다.
 - 환불 적립 포인트의 실제 가용 잔액 차감은 `RECOVERY` transaction으로 기록하고,
   미회수 잔액만 PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
-- Plan 10의 만료 부분 환불 compensation은 original PointLot의 immutable issuer snapshot을
+- Plan 12의 만료 부분 환불 compensation은 Plan 10 original PointLot issuer snapshot을
   보존하며, legacy issuer source가 unresolvable이면 추정 backfill이나 issuer 없는
   compensation으로 진행하지 않는다.
 - Order `CANCELLED`는 Refund·자원 복원·Notification 성공을 뜻하지 않는다.
@@ -85,28 +86,19 @@ sequence를 따른다. `Depends-On`은 active sibling branch base를 계산하�
 implementation branch는 당시 최신 `main`에서 시작한다.
 
 ```text
-00 contract baseline ──┐
-                       ├──> 10 partial-refund allocation/issuer foundation
-signed-cursor foundation ─┘                │
-                                            v
-                              15 settlement-input snapshot foundation
-                                            │
-                                            v
-                              20 Settlement Batch/Item foundation
-                                            │
-                                            v
-                              30 common Order compensation foundation
-                                            │
-                                            v
-                              40 customer cancellation command (Draft only)
-                                            │
-                                            v
-                              50 recovery and release verification
+00 baseline ──> 10 issuer ──> 15 settlement input ────────────────┐
+     │                                                            │
+     └──> 11 policy/grants ──> 12 allocation/restoration ─> 13 recovery ─┤
+signed cursor ────────────────────────────────────────────────────────┘
+11 policy/grants + signed cursor ──> 14 point-account read
+
+12 allocation/restoration + 13 recovery + 15 settlement input
+    └──> 16 immutable financial events ─> 20 Settlement ─> 30 compensation ─> 40 command (Draft) ─> 50 recovery
 ```
 
 여기서 "다음 계획"은 milestone 표의 다음 행이 아니라 **모든 direct phase input의 actual
 Outcomes와 validation evidence**가 있고 `Implementation-Ready=true`인 계획을 뜻한다. Plan 30의
-direct inputs는 Plan 20 lane outcome과 Plan 10 policy-head outcome이다. Plan 10, 15, 20, 30은 각각
+direct inputs는 Plan 20 lane outcome과 Plan 11 policy-head outcome이다. Plan 10, 11, 12, 13, 14, 15, 16, 20, 30은 각각
 선행 input이 merge된 최신 main에서 새 PR 하나를 만든다. migration writer는
 동시에 하나만 시작하므로 V 번호를 reserved manifest나 sibling rebase로 조정하지 않는다.
 
@@ -168,12 +160,17 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 
 1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md) — 선행 없음
 2. [공통 signed cursor foundation을 만든다](signed-cursor-foundation.md) — 선행 없음
-3. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md) — 00, cursor
-4. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
-5. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, cursor
-6. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 10 policy heads, 20 lane
-7. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
-8. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
+3. [PointLot issuer provenance foundation을 만든다](customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00
+4. [만료 혜택 정책과 operator grant foundation을 만든다](customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md) — 00
+5. [부분 환불 allocation과 포인트 복원을 만든다](customer-order-cancellation-12-partial-refund-allocation-and-restoration.md) — 10, 11
+6. [환불 적립 포인트 회수를 만든다](customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12
+7. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, cursor
+8. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
+9. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
+10. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
+11. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
+12. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
+13. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
 Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
@@ -183,9 +180,9 @@ Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번
 
 - 하위 계획 링크와 의존관계가 순환하지 않음
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
-- signed cursor/10/15/20/30 중 하나라도 미완료면 다음 schema-writing phase가 ready/start 되지 않음
+- Plan 16은 12/13/15 중 하나라도 미완료면 ready/start 되지 않음
 - Plan 20이 Plan 15 immutable input evidence 없이 `OrderCompletedV2` producer 또는 SettlementItem을 만들지 않음
-- 10 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
+- 13 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
   노출하지 않음
 - 40 Draft만 완료된 상태에서 main merge/deploy 또는 production success path가 노출되지 않음
 - active orchestration plan이 automatic implementation candidate가 되지 않고 migration writer가 병렬로 시작되지 않음
@@ -221,8 +218,13 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
 - [x] 2026-08-01 parallel DAG를 migration-writer single lane과 main-base PR strategy로 교체
 - [ ] signed cursor foundation 완료
-- [ ] 10 allocation·point recovery foundation 완료
+- [ ] 10 issuer provenance foundation 완료
+- [ ] 11 policy/grant foundation 완료
+- [ ] 12 allocation/restoration foundation 완료
+- [ ] 13 recovery foundation 완료
+- [ ] 14 point-account read foundation 완료
 - [ ] 15 settlement-input snapshot foundation 완료
+- [ ] 16 immutable financial event producer 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
 - [ ] 40 customer cancellation command 완료
@@ -245,18 +247,21 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-07-31 | Fact gate failed | clean cutover를 시작하지 않음 | 외부 운영 증거 없음 | ADR-059, readiness report |
 | 2026-07-31 | Fact gate passed | ADR-059 clean cutover 사용 | 운영 상태 확인으로 모든 외부 항목이 명시적 0 | release-gate evidence |
 | 2026-07-31 | Plan structure | foundation별 여섯 계획으로 분리 | 독립 검증과 선행조건 강제 | 이 master plan |
-| 2026-08-01 | Accepted | `RECOVERY` debit과 PointRecoveryPending foundation은 Plan 10이 소유 | 부분 환불과 이후 고객 취소가 같은 refund source·point recovery 불변식을 소비 | BR-13, ADR-065 |
+| 2026-08-01 | Superseded | `RECOVERY` debit과 PointRecoveryPending foundation은 Plan 10이 소유 | Plan 13으로 recovery lifecycle을 분리 | BR-13, ADR-065 |
 | 2026-08-01 | Accepted existing | PointLot issuer snapshot precheck/migration은 Plan 10이 소유 | 만료 부분 환불 compensation이 original issuer/cost lineage를 먼저 필요로 함 | BR-20, ADR-063 |
 | 2026-08-01 | Superseded | Plan 10과 20은 00 뒤 병렬, Plan 30은 Plan 10 뒤 | PR multi-head baseline과 Flyway 번호 경쟁을 자동 실행할 수 없음 | prior master graph |
-| 2026-08-01 | Accepted | signed cursor → 10 → 15 → 20 → 30 → 40 → 50 single writer lane | latest-main single-base PR, settlement input source와 Flyway ownership을 모두 결정적으로 만듦 | ADR-071, ADR-072 |
+| 2026-08-01 | Superseded | non-consuming cursor foundation을 issuer migration의 queue predecessor로 표현 | direct phase input이 아닌 queue 순서를 dependency로 표현할 수 없음 | ADR-071, ADR-072 |
+| 2026-08-01 | Accepted | Plan 10–15 semantic cycle을 Plan 10/11/12/13/14/16 vertical slices로 분리 | Plan 15는 issuer만, Plan 16은 allocation/recovery와 snapshot을 함께 소비 | ADR-063/065/068/069/071/072 |
+| 2026-08-01 | Accepted | Plan 10은 completed Plan 00만 직접 소비하고 signed cursor는 Plan 14/20의 독립 input으로 유지 | dependency graph가 실제 phase input만 표현하고 migration-writer lease가 queue scheduling을 담당하게 함 | ADR-070, ADR-072 |
 | 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item 귀속을 소유하고 lifecycle 계획이 계산·Adjustment·Dispute를 확장 | Batch-scoped Item API를 선행 구현하면서 migration 중복 제거 | ADR-067 |
 
 ## Outcomes & Retrospective
 
 아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
-`CLEAN_CUTOVER_GATE = PASSED`다. signed cursor, 10, 15, 20, 30 foundation은 single writer
-sequence에서 clean-cutover 전략을 입력으로 진행할 수 있지만, 이 chain과 Plan 50이 완료되기 전
-고객 취소 command의 production success path는 계속 차단된다.
+`CLEAN_CUTOVER_GATE = PASSED`다. Plan 10은 Plan 00 outcome 뒤 독립적으로 시작할 수 있고 signed
+cursor는 Plan 14/20의 실제 소비 input으로만 남는다. migration-writer lease는 ready plan의 실행 순서를
+직렬화하지만 dependency를 추가하지 않는다. Plan 50이 완료되기 전 고객 취소 command의 production
+success path는 계속 차단된다.
 
 ## Revision Notes
 
@@ -272,3 +277,5 @@ sequence에서 clean-cutover 전략을 입력으로 진행할 수 있지만, 이
   기록했다. 이후 ADR-072가 병렬 branch base를 single writer lane으로 대체했다.
 - 2026-08-01: ADR-071 settlement-input snapshot foundation과 ADR-072 latest-main migration-writer
   lane을 추가해 parallel branch/PR/Flyway ambiguity를 제거했다.
+- 2026-08-01: Plan 10의 signed-cursor dependency와 이를 강제하던 milestone 표현을 제거했다. queue
+  priority는 migration-writer lease/Goal Router가 관리하며 `Depends-On`은 실제 phase input만 기록한다.

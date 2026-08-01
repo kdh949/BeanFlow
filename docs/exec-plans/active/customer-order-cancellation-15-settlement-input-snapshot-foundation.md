@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -23,8 +23,8 @@ platform default로 성공하지 않는다.
   coupon discount, points applied, payable amount만 있다.
 - Merchant Store에는 settlement terms가 없고, Campaign/CouponReservation에는 burden terms/final
   legs가 없다.
-- Plan 10은 PointLot issuer snapshot precheck/migration과 policy/partial-refund foundation을
-  소유한다. 이 plan은 그 schema를 다시 만들지 않는다.
+- Plan 10은 PointLot issuer snapshot precheck/migration을 단독 소유한다. 이 plan은 그 schema를
+  다시 만들지 않는다.
 - Plan 20은 `OrderCompletedV2` consumer와 SettlementItem을 소유하지만 required financial input을
   추측할 수 없다.
 
@@ -45,14 +45,17 @@ platform default로 성공하지 않는다.
 - Plan 10 PointLot issuer snapshot을 읽는 PointReservation allocation contract
 - Ordering `OrderSettlementInputSnapshot` domain/persistence, create-order transaction tie-out와
   immutable completion input query
-- `OrderCompletedV2` producer precondition/contract test evidence와 Plan 20 handoff
+- completion에 필요한 immutable input, `OrderCompletedV2` payload factory 또는 typed mapper,
+  payload validation과 contract fixture, Plan 20 handoff
 
 ### Non-goals
 
 - SettlementBatch/Item, Batch calculation, Adjustment 또는 payout 구현
 - Merchant 계약의 public UI, invoice/tax/PG fee model, cross-store point program
 - current contract/Campaign/Lot read를 completion consumer fallback으로 허용
-- PointLot issuer schema, partial-refund allocation 또는 Plan 10 policy migration 재구현
+- PointLot issuer schema, partial-refund allocation 또는 Plan 11 policy migration 재구현
+- actual completion transaction의 `OrderCompletedV2` outbox 저장, `OrderCompletedV1 -> V2` cutover,
+  V2 producer activation, Settlement consumer와 V1 publication drain/deployment gate
 
 ## Business Rules and Invariants
 
@@ -74,11 +77,14 @@ platform default로 성공하지 않는다.
   다른 Context repository를 직접 호출하지 않는다.
 - Order, reservation state와 `OrderSettlementInputSnapshot`은 create-order local transaction에서
   함께 commit한다. external Payment/Provider call은 그 transaction 밖에 있다.
-- completion transaction은 immutable snapshot과 approved Payment fact의 payable equality를
-  검증하고 `OrderCompletedV2` outbox를 함께 저장한다. source lookup/save failure는 completion
-  success가 아니라 retry/reconciliation or manual-review state다.
+- 이 plan은 completion transaction이 사용할 immutable snapshot, payload factory 또는 typed mapper,
+  validator와 contract fixture를 제공한다. actual outbox producer 교체와 activation은 Plan 20이
+  소유한다.
 - Merchant terms update와 create-order가 경쟁하면 versioned terms read가 하나의 applicable
   version만 선택하게 한다. no-row/overlap/expired terms는 default fee 없이 실패한다.
+- Plan 20의 Ordering guarded completion transaction은 factory가 받은 immutable snapshot과 approved
+  Payment payable equality를 다시 guard하고 V2 publication을 atomically 저장한다. Plan 15는 그
+  transaction이나 Settlement consumer transaction을 시작하지 않는다.
 
 ## Alternatives Considered
 
@@ -93,12 +99,13 @@ platform default로 성공하지 않는다.
   `SETTLEMENT_INPUT_UNAVAILABLE`로 create-order transaction을 rollback한다.
 - legacy data inventory에서 verified source가 없으면 migration/activation을 중단한다. guessed
   fee, share, issuer, `(0,0)` or null snapshot은 허용하지 않는다.
-- snapshot hash/source conflict, Payment approval/payable mismatch 또는 outbox save failure는
-  `OrderCompletedV2`를 발행하거나 SettlementItem을 만들지 않는다.
+- snapshot hash/source conflict, Payment approval/payable tie-out precondition 또는 payload validation
+  failure는 Plan 20 handoff를 막는다. 해당 input이 없거나 불일치하면 Plan 20은 V2 producer activation이나
+  SettlementItem 생성을 진행하지 않는다.
 
 ## Data and Migration
 
-Plan 10 actual outcome 후, migration writer lane을 얻은 최신 main에서 다음 object를 이 plan만
+Plan 10 issuer outcome 후, migration writer lane을 얻은 최신 main에서 다음 object를 이 plan만
 소유한다.
 
 1. Merchant `store_settlement_terms` version table: store FK, immutable version/source, effective
@@ -110,15 +117,16 @@ Plan 10 actual outcome 후, migration writer lane을 얻은 최신 main에서 �
 4. no historical Order/Campaign/terms/lot value를 추정 backfill하지 않는다. clean-cutover gate가
    요구하는 existing-row inventory와 deployment evidence를 Outcomes에 남긴다.
 
-PointLot issuer fields/legacy precheck와 refund allocation tables are Plan 10-owned and must not be
-duplicated here.
+PointLot issuer fields/legacy precheck는 Plan 10-owned이며 여기서 중복하지 않는다. refund allocation은
+Plan 12가 소유한다.
 
 ## API and Event Contracts
 
 - Merchant, Promotion, Loyalty는 Ordering이 snapshot을 materialize할 exact typed application DTO를
   제공한다. raw entity 또는 live mutable model을 노출하지 않는다.
-- `OrderCompletedV2` public payload is unchanged from ADR-068. Plan 20 owns the V1→V2 cutover;
-  this plan supplies the required immutable input and producer contract test fixture.
+- `OrderCompletedV2` public payload is unchanged from ADR-068. 이 plan은 required immutable input,
+  payload factory 또는 typed mapper, validator와 producer contract fixture를 제공한다. Plan 20은 V1→V2
+  cutover, guarded completion transaction의 outbox 저장과 producer activation을 소유한다.
 - `PaymentRefundedV1.settlementRefundEffect` uses the same snapshot plus immutable line allocation;
   no new public HTTP endpoint is added by this plan.
 
@@ -184,7 +192,8 @@ issuer reference는 tag/log field에 넣지 않는다.
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-08-01 | Accepted | settlement input is Order-owned immutable snapshot created with order/reservations | current owner data must not change completed settlement | ADR-071 |
-| 2026-08-01 | Accepted | Plan 10 issuer outcome is a direct prerequisite; Plan 20 consumes this plan | avoid PointLot migration and financial-source duplication | ADR-063, ADR-071 |
+| 2026-08-01 | Accepted | Plan 10 issuer outcome is a direct prerequisite; Plan 16 event producer와 Plan 20은 이 plan을 소비 | issuer migration과 immutable refund effect를 순환 없이 분리 | ADR-063, ADR-068, ADR-071 |
+| 2026-08-01 | Accepted | Plan 15는 completion input/factory/fixture만 제공하고 Plan 20이 V2 outbox cutover를 소유 | snapshot materialization과 actual producer activation의 transaction owner를 분리 | ADR-068, ADR-071 |
 
 ## Outcomes & Retrospective
 
@@ -196,3 +205,5 @@ verified가 되기 전에는 Plan 20의 V2 producer, SettlementItem 또는 settl
 
 - 2026-08-01: ADR-068 completion snapshot source가 current model에 없다는 발견을 닫기 위해
   Plan 20 앞의 dedicated foundation으로 작성했다.
+- 2026-08-01: Plan 15에서 V2 outbox/cutover ownership을 제거하고 immutable input, mapper, validator와
+  contract fixture handoff로 한정했다.

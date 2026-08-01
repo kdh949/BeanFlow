@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-01
 - **Clarifies:** BR-13과 ADR-011의 환불 적립 포인트 회수 표현
-- **Implementation owner:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
+- **Implementation owner:** [Plan 13](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
 
 ## Context
 
@@ -59,7 +59,7 @@ mapping이 다르면 덮어쓰거나 추가 차감하지 않고 `POINT_RECOVERY_
 
 ### DB 표현
 
-Plan 10은 구현 직전 최신 migration 번호를 다시 계산한 forward-only migration으로
+Plan 13은 구현 직전 최신 migration 번호를 다시 계산한 forward-only migration으로
 다음을 구현한다. 이 ADR은 현재 migration이나 Kotlin enum이 이미 구현됐다는 뜻이
 아니다.
 
@@ -137,7 +137,7 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
 
 ## Consequences
 
-- Plan 10은 부분 환불 allocation뿐 아니라 Refund 성공 뒤 적립 포인트 회수와
+- Plan 13은 Plan 12 부분 환불 allocation outcome 뒤 Refund 성공 적립 포인트 회수와
   PointRecoveryPending/후속 적립 상계 foundation을 구현해야 한다.
 - 현재 source의 PointTransaction enum, type CHECK, PointAccount persistence와
   PointRecoveryPending persistence는 이 target contract보다 뒤에 있다. 계획 완료 전에는

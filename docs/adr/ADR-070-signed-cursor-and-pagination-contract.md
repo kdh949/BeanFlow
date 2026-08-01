@@ -29,13 +29,20 @@ codec/configuration을 단독 구현하고 endpoint plan은 typed adapter만 소
 v1.<key-id>.<base64url(canonical-json-payload)>.<base64url(hmac-sha-256)>
 ```
 
-signature input은 `v1.<key-id>.<encoded-payload>`의 UTF-8 bytes다. canonical payload는 다음만
-포함한다.
+signature input은 정확히 `v1.<key-id>.<encoded-payload>` 문자열의 UTF-8 bytes다. canonical
+payload는 다음 wire contract를 모두 지키는 UTF-8 JSON이다.
 
-- `endpoint`: 고정 endpoint identifier
-- `filterHash`: endpoint path parameter와 query filter를 canonical JSON으로 정렬한 SHA-256 hash
-- `sort`: 문서화된 stable sort tuple의 마지막 값
-- `issuedAt`, `expiresAt`: epoch second
+- 공백·줄바꿈·들여쓰기가 없는 JSON을 사용하고 property 순서는 정확히
+  `endpoint`, `filterHash`, `sort`, `issuedAt`, `expiresAt`다.
+- 위 다섯 property 외의 property와 `null`은 허용하지 않는다.
+- `endpoint`는 고정 endpoint identifier, `filterHash`는 endpoint path parameter와 query filter의
+  canonical form을 SHA-256으로 계산한 64자리 lowercase hexadecimal string이다.
+- `sort`는 문서화한 stable sort tuple 값을 순서 그대로 담는 JSON string array다. UUID sort value는
+  lowercase canonical UUID string이다.
+- `issuedAt`과 `expiresAt`은 epoch second를 나타내는 JSON integer다. JSON number의 fraction,
+  exponent 또는 string 표현은 허용하지 않는다.
+- payload와 signature는 padding 없는 Base64URL로 인코딩한다. `=` padding, 표준 Base64 alphabet 또는
+  malformed UTF-8/JSON은 허용하지 않는다.
 
 cursor에는 raw customer coordinate, raw filter value, actor identity, request URI, Authorization data 또는
 secret을 넣지 않는다. HMAC token은 암호화 token이 아니므로 caller에게 tuple을 비밀로 약속하지 않으며,
@@ -43,22 +50,48 @@ API는 token의 내용을 계약으로 노출하거나 해석 가능하다고 �
 latitude/longitude/radius의 raw text를 넣지 않는다.
 
 검증 시 endpoint, filterHash, `expiresAt`, token version, active/retired verification key와 HMAC을 모두
-확인한다. endpoint/path/filter mismatch, malformed encoding, unknown version/key, invalid signature 또는
-expired token은 모두 `400 INVALID_REQUEST`다. 구현은 원인을 response, metric tag 또는 log에 세분화해
-노출하지 않는다. object-level authorization은 cursor 검증과 독립적으로 매 요청에 다시 수행한다.
+확인한다. `now >= expiresAt`이면 만료다. public cursor는 최대 `2048`자이며, 이를 넘는 token은 decode나
+query 전에 malformed로 거부한다. endpoint/path/filter mismatch, malformed encoding, unknown version/key,
+invalid signature 또는 expired token은 모두 `400 INVALID_REQUEST`다. 구현은 원인을 response, metric tag 또는
+log에 세분화해 노출하지 않는다. object-level authorization은 cursor 검증과 독립적으로 매 요청에 다시 수행한다.
 
 cursor lifetime은 발급 시점부터 최대 24시간이다. page limit은 cursor payload에 포함하지 않으므로
 동일 scope cursor로 `1..100` 사이의 다른 limit을 요청할 수 있다. 서버는 requested limit이 없으면 20을
 사용하며, 100 초과 또는 1 미만은 query 실행 전에 400으로 거부한다.
 
-### Key source and rotation
+### Key configuration and rotation
 
-- configuration은 `beanflow.pagination.cursor-hmac.active-key-id`와 secret-store가 주입하는
-  verification key ring을 요구한다. key ID는 `[A-Za-z0-9_-]{1,32}`이고 key material은 최소 256-bit
-  random secret이다.
+configuration은 required startup dependency이며 다음 구조를 사용한다.
+
+```yaml
+beanflow:
+  pagination:
+    cursor-hmac:
+      active-key-id: current
+      keys:
+        - id: current
+          secret-base64-url: ${BEANFLOW_CURSOR_HMAC_CURRENT_KEY}
+```
+
+- `keys`는 duplicate key ID를 검출할 수 있는 list다. key ID는 `[A-Za-z0-9_-]{1,32}`이다.
+- `secret-base64-url`은 padding 없는 Base64URL로 읽고 decode 뒤 최소 32 bytes여야 한다.
+- malformed Base64URL, duplicate key ID, empty key ring, unknown active key 또는 짧은 secret은 모두
+  application startup failure다.
+- source, 기본 설정, production 또는 local runtime configuration에 fallback secret을 넣지 않는다.
 - active key가 key ring에 없거나, key ID/key material이 malformed·duplicate이거나 key ring이 비어
-  있으면 application startup을 실패시킨다. source code, local default, test fixture 또는 fallback key를
-  production profile에서 선택하지 않는다.
+  있으면 application startup을 실패시킨다.
+
+### Public test-vector key exception
+
+실제 deployment secret은 source, fixture, 문서, log와 test output에 기록하지 않는다. 다만 암호학적
+비밀이 아닌 **공개된 test-vector 전용 key material**은 deterministic signing test를 위해 test source에서만
+사용할 수 있다.
+
+- 이름과 주석으로 test-vector 전용임을 표시한다.
+- production 또는 local runtime configuration에서 선택할 수 없고, 실제 deployment secret과 같은
+  environment variable 이름을 사용하지 않는다.
+- test result와 log에 key material을 출력하지 않으며, 운영 fallback으로 사용할 수 없다.
+
 - rotation은 새 key를 verification ring에 추가한 뒤 active key로 전환하고, 이전 key를 최소 24시간과
   배포 propagation window 동안 verifier로 유지한 뒤 제거한다. retired key로 서명된 유효 token은 그
   기간에만 검증한다.
@@ -133,8 +166,12 @@ canonical filter hash를 signature 대상에 넣으면 다른 radius, account, s
   `37.5`/`37.5000` normalization과 response-meter/cursor-tuple 분리를 검증한다.
 - radius, account, store, Batch, endpoint, sort tuple, version, key ID 및 signature 변조와 expired token이
   모두 400이며 repository query를 실행하지 않는다.
+- canonical payload field order, JSON string-array sort, integer timestamp, lowercase UUID/filter hash,
+  padding 없는 Base64URL, `now >= expiresAt` boundary와 `2048`자 maximum을 deterministic test vector로
+  검증한다.
 - previous rotation key의 unexpired cursor는 검증되고 제거 뒤에는 400이다.
-- required key configuration의 missing/malformed/duplicate cases가 startup failure다.
+- required key configuration의 missing/malformed/duplicate/short-secret/unknown-active-key cases가 startup
+  failure다. production/local runtime configuration에 fallback secret이나 test-vector key를 넣으면 안 된다.
 - omitted/1/100 limit은 허용되고 0/101은 400이다.
 - cursor가 raw coordinate, secret 또는 Authorization value를 포함하지 않으며 logs/metric tags에도 남지
   않는다.

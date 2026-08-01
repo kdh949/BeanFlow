@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md), [Settlement input snapshot foundation](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -35,8 +35,8 @@ Idempotency-Key, evidence, 자유 입력 reason/detail 또는 live policy value�
 
 | Event / envelope version | Exact immutable payload (envelope 외) | Producer transaction / logical source | Consumer checkpoint |
 |---|---|---|---|
-| `OrderCompletedV2` / 2 | `orderId`, `customerId`, `storeId`, `completedAt`, `settlementDate`, `currency`, `grossPaidKrw`, `feeRateBps`, `feeKrw`, `couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`, `completionSource` | Ordering의 `COMPLETED` guarded transition과 같은 transaction. `order:{orderId}:completed:{aggregateVersion}` | Plan 20: SettlementItem; Loyalty: accrual; Analytics: completion-date input |
-| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때만 `orderCompletedAt`, `settlementDate`, `settlementItemSource`, `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }` | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 10: Loyalty restore/recovery; Settlement: Item 반영/Adjustment; Analytics: refund-date와 completion-date delta |
+| `OrderCompletedV2` / 2 | `orderId`, `customerId`, `storeId`, `completedAt`, `settlementDate`, `currency`, `grossPaidKrw`, `feeRateBps`, `feeKrw`, `couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`, `completionSource` | Plan 20이 소유하는 Ordering `COMPLETED` guarded transition과 같은 transaction. `order:{orderId}:completed:{aggregateVersion}` | Plan 20: SettlementItem; Loyalty: accrual; Analytics: completion-date input |
+| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때만 `orderCompletedAt`, `settlementDate`, `settlementItemSource`, `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }` | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 12/13: Loyalty restore/recovery; Settlement: Item 반영/Adjustment; Analytics: refund-date와 completion-date delta |
 | `PointsAccruedV1` / 1 | `pointTransactionSource`, `orderCompletionSource`, `orderId`, `orderCompletedAt`, `amountKrw`, `currency` | Loyalty의 `ACCRUAL` ledger transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsRestoredV1` / 1 | `pointTransactionSource`, `refundSource`, `orderId`, `refundSucceededAt`, `orderCompletedAt`(없는 경우 null), `amountKrw`, `currency`, `restorationDisposition` (`RESTORE`, `COMPENSATION`, `SKIPPED`) | Loyalty의 Refund owner result transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsAdjustedV1` / 1 | `adjustmentSource`, `accountId`, signed `amountKrw`, `issuerType`(CREDIT일 때만) | Loyalty point-adjustment command transaction과 같은 transaction. `point-adjustment:{adjustmentSource}` | Analytics |
@@ -70,9 +70,9 @@ source만 보존한다.
 
 | Checkpoint | Owner plan | Required outcome before Analytics enables the consumer |
 |---|---|---|
-| immutable `OrderSettlementInputSnapshot` | Plan 15 | Merchant terms, Campaign burden, PointLot issuer and Order snapshot tie-out tests pass |
-| `OrderCompletedV2` and `SettlementItemCreatedV1` | Plan 20 | Plan 15 immutable input, Ordering producer, Settlement consumer, source unique and outbox contract tests pass |
-| `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` | Plan 10 | Payment/Loyalty producer transaction and allocation snapshot tests pass |
+| immutable `OrderSettlementInputSnapshot`, V2 payload factory/validator/fixture | Plan 15 | Merchant terms, Campaign burden, PointLot issuer and Order snapshot tie-out tests pass |
+| `OrderCompletedV2` and `SettlementItemCreatedV1` | Plan 20 | Plan 15 immutable input/factory, Ordering guarded producer/outbox cutover, separate Settlement consumer, source unique and outbox contract tests pass |
+| `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` | Plan 16 | Payment/Loyalty producer transaction and allocation/snapshot tests pass; it does not own an Order completion event |
 | `PointsAdjustedV1` | Point adjustment plan | adjustment transaction, permission gate and outbox contract tests pass |
 | `SettlementAdjustmentCreatedV1` | Settlement lifecycle plan | adjustment source/reason unique and outbox contract tests pass |
 | receipt/delta/freshness projection | Analytics plan | every enabled producer row above has actual outcome evidence |
@@ -83,6 +83,13 @@ needs the old payload. The replacement is one producer/consumer/fixture checkpoi
 dual-publish V1 and V2. If the inventory is nonzero or unknown, Plan 20 stops and records a separate
 forward-compatibility ADR before changing the producer. Existing V1 payload semantics are not silently
 extended with required fields.
+
+Plan 15 owns only the immutable input materialization, V2 payload factory or typed mapper, validation and
+contract fixture. It does not store the completion outbox row, cut over/activate the producer, drain V1
+publication or operate a Settlement consumer. Plan 20 owns all of those V2 producer/cutover steps and the
+Settlement `OrderCompletedV2` consumer. The Ordering producer transaction and Settlement consumer transaction
+are separate local transactions; sharing an event never makes them one database transaction. Plan 16 owns only
+the named Refund/Loyalty producers in the table and is not an `OrderCompletedV2` producer.
 
 All new producer transactions persist the original fact and Spring Modulith publication atomically.
 External Provider calls remain outside those transactions. A missing required snapshot, source, version
@@ -115,9 +122,10 @@ unimplemented event shape to consume.
 
 ## Consequences
 
-- Plan 15 owns settlement input source/materialization; Plan 20 owns the `OrderCompletedV1 -> V2` cutover
-  gate and cannot start it before Plan 15 outcome evidence.
-- Plan 10 must materialize Refund allocation-derived Settlement effect before the success event is stored.
+- Plan 15 owns settlement input source/materialization, payload factory/validator/fixture; Plan 20 owns the
+  `OrderCompletedV1 -> V2` cutover, guarded completion outbox producer and Settlement consumer, and cannot
+  start them before Plan 15 outcome evidence.
+- Plan 16 must materialize Refund allocation-derived Settlement effect from Plan 12 allocation and Plan 15 snapshot before the success event is stored.
 - Event catalog, Kotlin event API and producer tests must change together at each checkpoint; the catalog is
   not proof that a producer has already been implemented.
 - Analytics starts with only the producers whose exact contract and validation evidence are complete.
@@ -126,6 +134,10 @@ unimplemented event shape to consume.
 
 - contract tests reject a payload with a missing required snapshot or a payload version/type mismatch;
 - fee/coupon/point cost and `netSettlementKrw` in `OrderCompletedV2` tie out to immutable Order snapshots;
+- Plan 15 fixture/validator failure blocks the Plan 20 cutover, while a Plan 20 outbox save failure does not
+  become a successful completion publication;
+- the Ordering V2 producer and Settlement V2 consumer commit independently and the consumer does not live-read
+  Merchant, Campaign, PointLot, Order snapshot or Payment to complete an event payload;
 - `PaymentRefundedV1` for completed and pre-acceptance-cancellation sources takes the correct Settlement and
   Analytics branch without live Aggregate reads;
 - same logical source with a new event ID is idempotent, while same source with a changed payload fails;

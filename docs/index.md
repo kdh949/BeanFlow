@@ -29,6 +29,8 @@
 
 ## API and Security
 
+- [Deployed OpenAPI](../openapi/beanflow-v1-deployed.yaml)
+- [Target OpenAPI](../openapi/beanflow-v1.yaml)
 - [API Conventions](api/api-conventions.md)
 - [Error Catalog](api/error-catalog.md)
 - [Authorization Matrix](security/authorization-matrix.md)
@@ -45,7 +47,13 @@
 ## Execution Plans
 
 - [Customer Order Cancellation Master](exec-plans/active/customer-order-cancellation-and-recovery.md)
-- [Cancellation 10 Partial Refund Allocation and Point Recovery Foundation](exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md)
+- [Cancellation 10 PointLot Issuer Provenance Foundation](exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)
+- [Cancellation 11 Benefit Policy and Operator Grant Foundation](exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)
+- [Cancellation 12 Partial Refund Allocation and Restoration](exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
+- [Cancellation 13 Refund Earned-Point Recovery Foundation](exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
+- [Cancellation 14 PointAccount Read Vertical Slice](exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
+- [Cancellation 15 Settlement Input Snapshot Foundation](exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
+- [Cancellation 16 Immutable Refund and Loyalty Event Producer](exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md)
 - [Cancellation 20 Settlement Foundation](exec-plans/active/customer-order-cancellation-20-settlement-foundation.md)
 - [Settlement Batch, Adjustment, and Dispute](exec-plans/active/settlement-batch-adjustment-and-dispute.md)
 - [Cancellation 30 Order Compensation Foundation](exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md)

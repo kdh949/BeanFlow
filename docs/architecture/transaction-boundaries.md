@@ -194,9 +194,17 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 ## Order completion
 
-- Order를 `COMPLETED`로 전환하는 트랜잭션은 원본 사실을 확정한다.
-- 포인트 적립, 정산 항목, 알림과 분석은 idempotent after-commit 처리다.
-- 부수효과 실패로 완료 주문을 되돌리지 않는다.
+- Plan 15는 주문 생성 transaction에서 `OrderSettlementInputSnapshot`과 V2 payload factory/validator의
+  immutable input을 materialize한다. Plan 15는 completion outbox를 저장하지 않는다.
+- Plan 20은 V1 publication drain/deployed consumer inventory가 verified zero일 때만 existing Ordering
+  completion producer를 V2로 cut over한다. Ordering의 guarded `COMPLETED` transaction은 immutable snapshot과
+  matching Payment approval payable tie-out을 검증하고 `OrderCompletedV2` outbox를 Order transition과
+  atomically 저장한다.
+- snapshot/factory validation failure는 transition을 막고, outbox save failure는 guarded local transaction을
+  rollback해 completion publication 성공을 반환하지 않는다. external Provider와 Settlement consumer 호출은
+  이 transaction에 넣지 않는다; 외부 결과가 없는데 reconciliation success state를 추정하지 않는다.
+- 포인트 적립, 정산 항목, 알림과 분석은 idempotent after-commit 처리다. 그 부수효과 실패로 이미
+  commit된 완료 주문을 되돌리지 않는다.
 
 ## Point use
 
@@ -252,10 +260,13 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 ## Operator permission bootstrap and point-account read
 
-- offline `operator-permission-bootstrap` command는 verified deployment release principal,
-  actor/permission/reason/evidence를 검증하고 `OperatorPermissionGrant` version/state와 target
-  AuditRecord를 하나의 Operations transaction에서 저장한다. direct SQL/default grant/role fallback은
-  이 transaction을 대체하지 않는다.
+- offline `operator-permission-bootstrap` command는 read-only mounted token file의 단기 OIDC
+  workload identity를 required issuer, audience와 allowed subject로 검증한 verified deployment
+  release principal만 허용한다. identity 검증은 Operations transaction 전에 완료하며 token/trust
+  설정 누락·불일치·만료·검증 key 실패 시 transaction을 시작하지 않는다. 검증 뒤
+  actor/permission/reason/evidence를 확인하고 `OperatorPermissionGrant` version/state와 target
+  AuditRecord를 하나의 Operations transaction에서 저장한다. direct SQL/default grant/static
+  secret/application JWT/role fallback은 이 transaction을 대체하지 않는다.
 - customer point-account read는 Loyalty Query Service가 account ownership을 먼저 확인한 뒤
   read-only projection으로 실행한다. Platform Operator branch는 `POINT_ACCOUNT_READ` grant,
   normalized `X-Access-Reason`, target AuditRecord와 projection을 하나의 local transaction에서
@@ -265,11 +276,13 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 ## Settlement
 
-- `OrderCompletedV2` consumer는 ADR-071 `OrderSettlementInputSnapshot`과 matching immutable
-  Payment approval tie-out을 검증하고 `(storeId,
-  settlementDate)` `OPEN` Batch를 insert-or-read한 뒤 SettlementItem, Audit과
-  `SettlementItemCreatedV1` publication을 같은 transaction에 저장한다. Batch 또는 Item
-  저장 실패는 event completion이 아니다.
+- `OrderCompletedV2` Settlement consumer는 Ordering producer와 별도의 local transaction에서 immutable
+  event payload와 source unique를 검증하고 `(storeId, settlementDate)` `OPEN` Batch를 insert-or-read한 뒤
+  SettlementItem, Audit과 `SettlementItemCreatedV1` publication을 같은 transaction에 저장한다. Batch 또는
+  Item 저장 실패는 event completion이 아니다.
+- consumer는 Merchant, Campaign, PointLot, `OrderSettlementInputSnapshot` 또는 Payment의 current state를
+  재조회해 V2 field를 보완하거나 producer tie-out을 다시 계산하지 않는다. missing/inconsistent payload는
+  retry 또는 `MANUAL_REVIEW`로 남기며 live default로 대체하지 않는다.
 - SettlementItem 생성은 원천 거래 reference 단위로 멱등하며 `settlementBatchId` FK가 필수다.
 - Batch 집계와 상태 전환은 Item 전체를 Entity 컬렉션으로 로딩하지 않는다.
 - 확정 후 환불·판정은 별도 Adjustment 트랜잭션이다.

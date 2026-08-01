@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
+- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
 
 ## Context
 
@@ -29,6 +29,11 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 - MVP permission vocabulary는 `EXPIRED_BENEFIT_POLICY_READ`,
   `EXPIRED_BENEFIT_POLICY_WRITE`, `POINT_ACCOUNT_READ`, `POINT_ADJUSTMENT`다. 새 privileged operation은 별도
   ADR 또는 vocabulary amendment 없이 이 권한을 재사용하지 않는다.
+- **2026-08-01 migration ownership amendment:** Plan 11이
+  `operator_permission_grant` schema와 위 네 값을 허용하는 closed DB vocabulary를 한
+  migration에서 단독 생성한다. Plan 14와 point adjustment plan은 새 permission 값이나
+  grant constraint migration을 만들지 않고 각 endpoint의 enforcement만 구현한다. endpoint가
+  아직 없다는 이유로 해당 permission을 default grant하거나 seed하지 않는다.
 - JWT `sub`는 UUID actor ID여야 하고 `roles`에는 `PLATFORM_OPERATOR`가 있어야 한다.
   이 둘 중 하나가 없으면 permission lookup 전에 403이다. Authentication signature, issuer,
   audience, expiry는 resource-server의 기존 JWT validation으로 계속 검증한다.
@@ -51,11 +56,29 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 
 - default seed, role-derived grant 및 직접 SQL DML은 금지한다. `OperatorPermissionGrant`가 처음
   비어 있는 환경도 동일하다.
-- Plan 10은 HTTP/API/UI와 분리된 offline
+- Plan 11은 HTTP/API/UI와 분리된 offline
   `operator-permission-bootstrap` command를 제공한다. 이 command는 controlled deployment job의
   verified release principal로만 실행하며, application JWT/role이나 request header로 release
   principal을 대체하지 않는다. job identity 또는 command authorization이 확인되지 않으면 시작/실행을
   실패시킨다.
+- **2026-08-01 trust-model amendment:** verified release principal은 controlled deployment
+  job이 제공하는 단기 OIDC workload identity다. command는 required issuer, audience와
+  allowed subject configuration을 사용해 token signature, issuer, audience, subject,
+  `exp`와 `nbf`를 검증한다. trust configuration, token file 또는 검증 key를 읽을 수 없거나
+  어떤 claim이라도 일치하지 않으면 grant transaction을 시작하지 않는다. application JWT,
+  Platform Operator role, static bootstrap secret, local profile과 unsigned manifest는 fallback이
+  아니다.
+- workload token은 command line argument가 아니라 deployment job이 read-only로 mount한
+  token file에서만 읽고 raw token·claim 전체·file path를 DB, stdout/stderr, log 또는
+  `AuditRecord`에 남기지 않는다. immutable release-principal reference는 검증된
+  `issuer + subject + audience + deployment-run reference`의 whitelist projection이며 raw
+  credential hash를 principal reference로 사용하지 않는다.
+- command input은 `action`, target `actorId`, closed `permission`, non-blank reason,
+  non-blank evidence reference와 correlation ID다. 결과는 `APPLIED`, `INVALID_INPUT`,
+  `IDENTITY_VERIFICATION_FAILED`, `GRANT_STATE_CONFLICT`, `DEPENDENCY_UNAVAILABLE` 중 하나다.
+  `APPLIED`만 exit code 0이며 나머지는 non-zero이고 grant/Audit partial state를 남기지
+  않는다. stdout result에는 action, permission, redacted principal reference와 결과만
+  포함하고 token, reason 원문과 evidence body를 포함하지 않는다.
 - `grant`, `revoke`, `regrant` action은 `actorId`, closed permission, non-blank reason,
   non-blank evidence reference, immutable release-principal reference와 correlation ID를 요구한다.
   command는 grant row state/version과 target `AuditRecord`를 같은 local transaction에 기록한다.
@@ -66,7 +89,7 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   `operator-permission-grant:{actorId}:{permission}:{version}:{action}`이고 Audit source unique로
   보호한다.
 - bootstrap command의 Audit/grant transaction failure는 partial state, direct DB repair 또는
-  role-only privileged access로 대체하지 않는다. first grant는 Plan 10 migration 결과가 main에
+  role-only privileged access로 대체하지 않는다. first grant는 Plan 11 migration 결과가 main에
   적용된 뒤, policy/point endpoint activation 전에 운영 runbook evidence와 함께 수행한다.
 
 ### Expired-benefit policy API reason contract
@@ -98,10 +121,11 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   account ID를 bind한다. this read does not expose issuer reference, raw evidence, idempotency key,
   internal recovery case or grant state.
 
-Plan 10은 grant schema, Operations public authorization API, policy GET header/audit contract와
-policy PATCH enforcement, offline bootstrap command와 customer/operator point-account read vertical
-slice를 단독 구현한다. Point adjustment plan은 Plan 10 outcome을 소비하고
-`POINT_ADJUSTMENT` enforcement을 구현한다. 두 계획은 같은 grant migration을 만들지 않는다.
+Plan 11은 grant schema, Operations public authorization API, policy GET header/audit contract와
+policy PATCH enforcement, offline bootstrap command를 구현한다. Plan 14는 customer/operator point-account
+read vertical slice를 구현한다. Point adjustment plan은 Plan 10 issuer, Plan 11 grant와 Plan 13 ledger outcome을 소비하고
+`POINT_ADJUSTMENT` enforcement을 구현한다. Plan 11만 네 값의 closed permission vocabulary와 grant
+migration을 만들고, 두 후속 계획은 같은 grant/vocabulary migration을 만들지 않는다.
 
 ## Alternatives Considered
 
@@ -132,7 +156,7 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
 
 - role만 가진 Platform Operator는 명시 grant가 생기기 전 policy, point-account support read 또는
   point adjustment를 실행·조회할 수 없다.
-- Plan 10은 Operations schema/API scope가 늘며 point-adjustment plan의 선행조건이 된다.
+- Plan 11은 Operations schema/API scope가 늘며 Plan 14와 point-adjustment plan의 선행조건이 된다.
 - 새 환경은 audited offline command로 first grant를 만들며, unrecorded SQL seed가 필요하지 않다.
 - policy GET은 새로운 required header와 400 validation contract를 가지며, existing clients는
   header를 보내도록 변경해야 한다.

@@ -29,11 +29,29 @@ secret/fallback/key rotation policy를 다시 구현하지 않는다.
 - **Filter hash:** raw input을 저장하지 않는 canonical-filter SHA-256 digest.
 - **Key ring:** active signing key와 24-hour verifier rotation window의 required configuration.
 
+### Fixed v1 wire and key contract
+
+- payload는 UTF-8의 whitespace-free JSON이고 property 순서는 정확히 `endpoint`, `filterHash`,
+  `sort`, `issuedAt`, `expiresAt`다. 추가 property와 `null`은 거부한다.
+- `sort`는 순서를 보존하는 JSON string array이고 UUID value는 lowercase canonical UUID string이다.
+  `filterHash`는 64자리 lowercase SHA-256 hexadecimal string이며 `issuedAt`/`expiresAt`은 JSON
+  integer epoch second다.
+- payload/signature는 padding 없는 Base64URL이고 signature input은
+  `v1.<key-id>.<encoded-payload>`의 UTF-8 bytes다. `now >= expiresAt`은 만료이며 public token은
+  `2048`자를 넘을 수 없다.
+- required runtime configuration은 `beanflow.pagination.cursor-hmac.active-key-id`와 duplicate를
+  검출할 수 있는 `keys` list (`id`, `secret-base64-url`)다. secret은 padding 없는 Base64URL decode 뒤
+  최소 32 bytes여야 하며 malformed encoding, duplicate ID, empty ring, unknown active key와 short
+  secret은 startup failure다.
+- source, 기본 설정, production/local runtime configuration에는 fallback secret을 두지 않는다. 공개된
+  test-vector 전용 key material은 deterministic test source에서만 사용하고 runtime configuration,
+  실제 deployment environment variable 이름, log, test output 또는 운영 fallback에 사용하지 않는다.
+
 ## Scope
 
 ### In Scope
 
-- ADR-070 v1 canonical JSON/base64url/HMAC-SHA-256 codec and typed endpoint adapter contract
+- ADR-070 v1 canonical JSON/Base64URL/HMAC-SHA-256 codec and typed endpoint adapter contract
 - required active key/key-ring configuration binding, startup validation and rotation verification
 - shared malformed/scope/expiry failure mapping support and no-secret observability rules
 - codec unit, integration and application-startup tests
@@ -73,8 +91,9 @@ secret/fallback/key rotation policy를 다시 구현하지 않는다.
 
 ## Data and Migration
 
-No schema or Flyway migration is created. Secret material comes only from required deployment configuration
-and must not be written to source, test fixture, database, AuditRecord, log, trace or metric tag.
+No schema or Flyway migration is created. Actual deployment secret material comes only from required deployment
+configuration and must not be written to source, fixture, database, AuditRecord, log, trace, metric tag or test
+output. A clearly named public test-vector key is the sole test-source exception; it is never a runtime key.
 
 ## API and Event Contracts
 
@@ -92,12 +111,14 @@ and must not be written to source, test fixture, database, AuditRecord, log, tra
 
 ## Required Tests
 
-- deterministic v1 signing/verification test vectors and payload canonicalization
-- malformed base64/JSON, altered endpoint/filter/sort/version/key/signature, expiry boundary and no repository invocation
-- missing/empty/duplicate/malformed active key/key ring application startup failure
+- deterministic v1 signing/verification test vectors: fixed property order, string-array sort, integer epoch
+  timestamp, lowercase UUID/filter hash and padding-free Base64URL
+- malformed base64/JSON, additional/null property, altered endpoint/filter/sort/version/key/signature,
+  `now >= expiresAt`, 2048-char maximum and no repository invocation
+- missing/empty/duplicate/malformed/short active key/key ring application startup failure
 - active/retired key 24-hour verification, removal behavior and no key/payload logging
 - endpoint adapters can vary limit 1/20/100 without changing cursor scope
-- Modulith boundary and production profile has no default/local/test key
+- Modulith boundary and production/local profile has no default/fallback/test-vector key
 
 ## Validation Commands
 
@@ -132,6 +153,8 @@ Only endpoint and closed outcome are tags. Cursor, key ID, filter hash and secre
 ## Surprises & Discoveries
 
 - 2026-08-01: Nearby and Settlement plans independently claimed shared codec/configuration ownership.
+- 2026-08-01: canonical payload order, key-ring decoding and the public test-vector-only exception were made
+  explicit so deterministic tests do not create a production fallback path.
 
 ## Decision Log
 

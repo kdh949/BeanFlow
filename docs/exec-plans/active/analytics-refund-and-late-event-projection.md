@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -30,7 +30,7 @@ source conflict, 오래된 event가 0, 빈 결과 또는 stale value를 정상 �
   freshness projection, ReprocessingCase integration은 아직 없다.
 - `PointsAdjustedV1`의 listener, receipt/idempotency and metric projection은 이 plan의 단독
   consumer checkpoint다. point-adjustment plan은 producer/outbox contract만 소유한다.
-- Plan 10은 Refund allocation/Payment·Loyalty event 기반을, Plan 20은 completion/Settlement Item
+- Plan 16은 Refund allocation/recovery 결과의 Payment·Loyalty event producer를, Plan 20은 completion/Settlement Item
   event 기반을, point-adjustment 및 Settlement lifecycle 계획은 나머지 producer를 만든다. 이 계획은
   활성화할 producer row의 actual event/version contract가 모두 완료된 뒤 시작한다.
 - OpenAPI에는 public Analytics query endpoint가 없다. audience/인가/freshness contract를 추정하지 않고
@@ -133,7 +133,7 @@ existing data backfill은 approved case만 수행한다.
 
 ## Milestones
 
-1. Plan 10/20, point-adjustment, Settlement lifecycle의 ADR-068 producer payload, publication durability,
+1. Plan 16/20, point-adjustment, Settlement lifecycle의 ADR-068 producer payload, publication durability,
    source/version uniqueness와 cutover outcome을 audit한다.
 2. Analytics module, receipt/day/freshness schema, fixed-Clock date conversion, duplicate/conflict domain tests를 만든다.
 3. completion/successful Refund/adjustment/point event를 두 날짜 metric으로 projection하는 vertical slice를 완성한다.
@@ -204,7 +204,7 @@ amount, evidence는 metric tag에 넣지 않으며 log에는 closed failure reas
 
 ## Outcomes & Retrospective
 
-미구현 상태다. ADR-068에서 활성화할 Plan 10/20, point-adjustment, Settlement lifecycle producer의
+미구현 상태다. ADR-068에서 활성화할 Plan 16/20, point-adjustment, Settlement lifecycle producer의
 actual validation이 완료된 뒤 listener를 활성화한다. 완료 시 fixture tie-out, seven-day/backfill
 recovery, freshness failure, measurement 결과를 actual value로 기록한다.
 

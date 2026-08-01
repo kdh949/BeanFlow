@@ -177,6 +177,12 @@ publication row를 완료 처리하거나 삭제하지 않는다. `MANUAL_REVIEW
 listener의 owner 상태와 source reference를 read-only 확인하고, 승인된 incident
 절차로 원인을 수정한 뒤 별도 재처리 기능을 사용한다.
 
+Plan 30 이후 compensation publication의 `listener_id`는 ADR-010과 Plan 30에 정의된
+`beanflow.order-compensation.*.v1` stable ID여야 한다. `(event_type, listener_id)`가 중앙
+registry에 없으면 `PUBLICATION_TARGET_UNMAPPED` setup failure이며 가장 비슷한 step이나 Case
+전체를 수동 검토로 바꾸지 않는다. 이 경우 publication과 운영 case를 보존하고 배포 artifact,
+listener annotation, registry와 미완료 구 target inventory를 함께 조사한다.
+
 ## Rejection refund
 
 `BENEFIT_ONLY` 주문은 PAYMENT step이 `NOT_REQUIRED`다. 외부 결제 주문은

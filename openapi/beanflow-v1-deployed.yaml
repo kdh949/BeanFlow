@@ -1,0 +1,353 @@
+openapi: 3.1.0
+info:
+  title: BeanFlow API — Deployed Contract
+  version: 0.1.0
+  x-beanflow-contract-status: deployed
+  x-beanflow-contract-date: 2026-08-01
+  description: |
+    Current public controller contract represented by this repository source.
+    It contains only implemented mappings. Components shared with the target
+    contract are referenced explicitly; deployed-only legacy shapes are local.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Ordering
+  - name: Payment
+  - name: Store Orders
+  - name: Operations
+paths:
+  /orders:
+    post:
+      tags: [Ordering]
+      operationId: createOrder
+      summary: Create an order and reserve required resources
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order creation committed
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/CreateOrderResult"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/OrderCreationConflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /orders/{orderId}:
+    get:
+      tags: [Ordering]
+      operationId: getOrder
+      summary: Get an order and materialize a due reservation expiry
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Order visible to the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/Order"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /orders/{orderId}/payment-confirmations:
+    post:
+      tags: [Payment]
+      operationId: confirmOrderPayment
+      summary: Request or confirm payment for an order
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmationRequest"
+      responses:
+        "200":
+          description: External payment approval or late-approval recovery is confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmation"
+        "202":
+          description: Payment result or late-approval recovery is unresolved
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./beanflow-v1.yaml#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /store-orders/{orderId}:
+    get:
+      tags: [Store Orders]
+      operationId: getStoreOrder
+      summary: Get the current store order and legacy rejection recovery detail
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Store order visible to an authorized active member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedStoreOrderResult"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /store-orders/{orderId}/status:
+    patch:
+      tags: [Store Orders]
+      operationId: transitionStoreOrderStatus
+      summary: Transition an order using the current legacy response wrapper
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeployedStoreOrderTransitionRequest"
+      responses:
+        "200":
+          description: Synchronous store transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedStoreOrderTransitionResult"
+        "202":
+          description: REJECTED committed while legacy rejection compensation continues
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedStoreOrderTransitionResult"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/policies/expired-benefit-restoration:
+    get:
+      tags: [Operations]
+      operationId: getDeployedExpiredBenefitRestorationPolicy
+      summary: Get the current singleton expired-benefit policy
+      description: Current implementation uses a PLATFORM_OPERATOR role gate only.
+      responses:
+        "200":
+          description: Current singleton policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedExpiredBenefitRestorationPolicy"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+    patch:
+      tags: [Operations]
+      operationId: updateDeployedExpiredBenefitRestorationPolicy
+      summary: Update the current singleton expired-benefit policy
+      description: Current implementation uses a PLATFORM_OPERATOR role gate only.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeployedUpdateExpiredBenefitRestorationPolicyRequest"
+      responses:
+        "200":
+          description: Updated singleton policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedExpiredBenefitRestorationPolicy"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    DeployedStoreOrderTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [targetState]
+      properties:
+        targetState:
+          type: string
+          enum: [ACCEPTED, PREPARING, READY, COMPLETED, REJECTED]
+        reason:
+          oneOf:
+            - type: string
+              maxLength: 500
+            - type: "null"
+    DeployedStoreOrderResult:
+      type: object
+      additionalProperties: false
+      required: [order, rejectionRecovery]
+      properties:
+        order:
+          $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
+        rejectionRecovery:
+          oneOf:
+            - $ref: "#/components/schemas/DeployedRejectionRecovery"
+            - type: "null"
+    DeployedStoreOrderTransitionResult:
+      type: object
+      additionalProperties: false
+      required: [order, rejectionRecovery, replayed]
+      properties:
+        order:
+          $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
+        rejectionRecovery:
+          oneOf:
+            - $ref: "#/components/schemas/DeployedRejectionRecovery"
+            - type: "null"
+        replayed:
+          type: boolean
+    DeployedRejectionRecovery:
+      type: object
+      additionalProperties: false
+      required: [caseId, policyVersion, state, steps, updatedAt]
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        policyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          type: string
+          enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, MANUAL_REVIEW]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeployedRejectionRecoveryStep"
+        updatedAt:
+          type: string
+          format: date-time
+    DeployedRejectionRecoveryStep:
+      type: object
+      additionalProperties: false
+      required: [type, state, attemptCount, lastErrorCode]
+      properties:
+        type:
+          type: string
+          enum: [PAYMENT, PICKUP, STOCK, COUPON, POINTS, CUSTOMER_NOTIFICATION]
+        state:
+          type: string
+          enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, NOT_REQUIRED, MANUAL_REVIEW]
+        attemptCount:
+          type: integer
+          minimum: 0
+        lastErrorCode:
+          oneOf:
+            - type: string
+            - type: "null"
+    DeployedExpiredBenefitRestorationPolicy:
+      type: object
+      additionalProperties: false
+      required: [policyVersion, mode, compensationValidityDays, effectiveAt, updatedBy, reason]
+      properties:
+        policyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        mode:
+          type: string
+          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
+        compensationValidityDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        effectiveAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    DeployedUpdateExpiredBenefitRestorationPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedPolicyVersion, mode, compensationValidityDays, reason]
+      properties:
+        expectedPolicyVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        mode:
+          type: string
+          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
+        compensationValidityDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500

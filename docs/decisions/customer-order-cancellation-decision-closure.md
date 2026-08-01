@@ -23,7 +23,7 @@
 | Customer projection | 내부 진행/불명은 PROCESSING, 실패/manual/setup 손상은 PROCESSING+REFUND_DELAYED | ADR-038, ADR-050 | Yes | Yes | 2026-07-31 | snapshot/setup detector |
 | BENEFIT_ONLY | Refund 없음, PAYMENT NOT_REQUIRED, 네 금액 0, C1 202 | ADR-039 | Yes | Yes | 2026-07-31 | common Case |
 | Compensation model | trigger-aware OrderCompensationCase와 six steps | ADR-033 | Yes | Yes | 2026-07-31 | migration strategy |
-| Benefit policy | 종료용 trigger×COUPON/POINTS 네 head와 PARTIAL_REFUND×POINTS 한 head; 종료 Case당 두 snapshot | ADR-041, ADR-063 | Yes | Yes | 2026-08-01 | Plan 10 policy foundation |
+| Benefit policy | 종료용 trigger×COUPON/POINTS 네 head와 PARTIAL_REFUND×POINTS 한 head; 종료 Case당 두 snapshot | ADR-041, ADR-063 | Yes | Yes | 2026-08-01 | Plan 11 policy foundation |
 | Owner resource state | common RELEASED_AFTER_TERMINATION + trigger/source | ADR-040 | Yes | Yes | 2026-07-31 | owner migration |
 | Cancellation event | PAID에서 four-owner `OrderCancelledV1`; Payment/Notification 제외 | ADR-034, ADR-044 | Yes | Yes | 2026-07-31 | event compatibility strategy |
 | Event payload | customer/store/reason/payment/detail 없는 최소 payload | ADR-055 | Yes | Yes | 2026-07-31 | contract serialization test |
@@ -48,8 +48,8 @@
 | 부분 환불 쿠폰 | 쿠폰은 복원하지 않고 allocation은 귀속·감사 원장으로만 저장; 후속 전체 종료가 원 쿠폰을 한 번 복원 | BR-12, ADR-014, ADR-036 | Yes | Yes | 2026-08-01 | allocation foundation |
 | Refund 비동기 projection | 요청 금액은 항상 반환하고 현금·포인트 상태와 확정 금액은 owner별로 분리 | ADR-061, OpenAPI | Yes | Yes | 2026-08-01 | Payment/Loyalty query composition |
 | 부분 환불 만료 포인트 | PARTIAL_REFUND×POINTS 기본 COMPENSATE_WITH_NEW_ISSUANCE/30일; PointReservation은 USED 유지 | ADR-063 | Yes | Yes | 2026-08-01 | policy snapshot과 allocation 원장 |
-| Policy foundation 소유권 | 최종 다섯 head 저장소·seed·운영 API는 Plan 10이 단독 구현; Plan 30은 종료용 네 head 소비 | ADR-063, Plan 10, Plan 30 | Yes | Yes | 2026-08-01 | migration 중복 부재 |
-| 환불 적립 포인트 회수 | 실제 차감은 음수 `RECOVERY` PointTransaction, 미회수 잔액은 별도 PointRecoveryPending으로 보존하고 이후 적립이 먼저 상계 | BR-13, ADR-065, OpenAPI | Yes | Yes | 2026-08-01 | Plan 10 recovery ledger foundation |
+| Policy foundation 소유권 | 최종 다섯 head 저장소·seed·운영 API는 Plan 11이 단독 구현; Plan 30은 종료용 네 head 소비 | ADR-063, Plan 11, Plan 30 | Yes | Yes | 2026-08-01 | migration 중복 부재 |
+| 환불 적립 포인트 회수 | 실제 차감은 음수 `RECOVERY` PointTransaction, 미회수 잔액은 별도 PointRecoveryPending으로 보존하고 이후 적립이 먼저 상계 | BR-13, ADR-065, OpenAPI | Yes | Yes | 2026-08-01 | Plan 13 recovery ledger foundation |
 | Order 취소 migration 소유권 | ADR-029의 네 컬럼·세 CHECK·precheck는 Plan 40이 단독 구현 | ADR-059, Plan 30, Plan 40 | Yes | Yes | 2026-08-01 | command mapping과 동시 반영 |
 | Settlement item 발견 | batch-scoped item 목록 API로 store member가 dispute용 itemId를 조회 | ADR-062, OpenAPI | Yes | Yes | 2026-08-01 | Settlement foundation |
 
