@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
+- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
 
 ## Context
 
@@ -79,6 +79,9 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   `APPLIED`만 exit code 0이며 나머지는 non-zero이고 grant/Audit partial state를 남기지
   않는다. stdout result에는 action, permission, redacted principal reference와 결과만
   포함하고 token, reason 원문과 evidence body를 포함하지 않는다.
+- command의 자유 입력 reason은 validation gate이며 DB/Audit에 복제하지 않는다. Audit reason은
+  `VERIFIED_RELEASE_OPERATOR_PERMISSION_CHANGE` 표준 code이고, evidence는 body가 아닌 immutable
+  reference만 after summary에 기록한다.
 - `grant`, `revoke`, `regrant` action은 `actorId`, closed permission, non-blank reason,
   non-blank evidence reference, immutable release-principal reference와 correlation ID를 요구한다.
   command는 grant row state/version과 target `AuditRecord`를 같은 local transaction에 기록한다.
@@ -175,6 +178,11 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
 
 ## Verification
 
+- **Plan 11 implementation evidence (2026-08-01):** Flyway `V13`, audited keyed policy API와
+  offline bootstrap command가 구현됐다. PostgreSQL integration test가 role/claim-only 거부,
+  grant/revoke/regrant, revoke row-lock 경쟁, GET/PATCH Audit commit gate, grant/Audit rollback과
+  invalid signature/issuer/audience/subject/expiry/nbf/token-file의 transaction-before rejection을 검증한다.
+  운영 절차는 [bootstrap runbook](../operations/operator-permission-bootstrap-runbook.md)에 고정한다.
 - role만 있음, grant만 있음, role+active grant, revoked grant와 malformed UUID subject를 구분한다.
 - grant revoke와 policy PATCH/point adjustment의 동시 실행에서 commit 순서에 맞는 하나의 결과만
   나온다.

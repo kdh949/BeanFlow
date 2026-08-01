@@ -258,6 +258,36 @@ Notification worker: claim transaction -> external Provider -> result transactio
   worker가 `(retention_expires_at, id)` keyset 순서로 bounded chunk를 독립 transaction에서
   정리하며, Ordering worker나 일반 API가 이 table을 삭제하지 않는다.
 
+## Expired-benefit policy and operator grant
+
+policy GET은 method-security의 coarse `PLATFORM_OPERATOR` gate 뒤 Operations local transaction에서
+active `EXPIRED_BENEFIT_POLICY_READ` grant row를 `FOR UPDATE`로 잠근다. 정확히 다섯 head/version을
+읽고 access reason Audit를 flush한 뒤 transaction이 commit된 경우에만 body를 반환한다. grant가 없거나
+revoked면 403, grant/head/version/Audit persistence가 실패하면 503이며 cached/default policy를 반환하지
+않는다.
+
+keyed PATCH의 lock/write 순서는 다음과 같다.
+
+```text
+active EXPIRED_BENEFIT_POLICY_WRITE grant row
+-> actor+Idempotency-Key advisory transaction lock
+-> trigger+benefit policy head FOR UPDATE
+-> immutable version INSERT
+-> head expected-version CAS
+-> AuditRecord flush
+-> commit
+```
+
+같은 payload replay는 기존 immutable version을 반환하고 새 version/Audit를 만들지 않는다. payload가
+다르거나 expected version이 stale이면 409다. `PARTIAL_REFUND/COUPON`은 head/version을 만들지 않고
+404다.
+
+offline permission bootstrap은 mounted workload token의 signature, issuer, audience, subject, `exp`,
+`nbf`와 deployment-run claim 검증을 Spring context와 DB transaction보다 먼저 끝낸다. 검증 뒤 transaction은
+actor+permission advisory lock, existing grant row `FOR UPDATE`, state/version write, Audit flush 순서다.
+authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 commit까지 대기하고, revoke가
+먼저 commit되면 뒤의 privileged transaction은 403이다. 외부 network 호출은 어느 transaction에도 없다.
+
 ## Operator permission bootstrap and point-account read
 
 - offline `operator-permission-bootstrap` command는 read-only mounted token file의 단기 OIDC

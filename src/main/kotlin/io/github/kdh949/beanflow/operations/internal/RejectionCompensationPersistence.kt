@@ -20,43 +20,6 @@ import java.time.Instant
 import java.util.UUID
 
 @Entity
-@Table(name = "operations_expired_benefit_policy_version")
-internal class ExpiredBenefitPolicyVersionEntity(
-    @Id
-    @Column(name = "policy_version")
-    val policyVersion: Long,
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    val mode: ExpiredBenefitRestorationMode,
-    @Column(name = "compensation_validity_days", nullable = false)
-    val compensationValidityDays: Int,
-    @Column(name = "effective_at", nullable = false)
-    val effectiveAt: Instant,
-    @Column(name = "updated_by", nullable = false)
-    val updatedBy: UUID,
-    @Column(nullable = false, length = 500)
-    val reason: String,
-    @Column(name = "idempotency_actor_id")
-    val idempotencyActorId: UUID?,
-    @Column(name = "idempotency_key", length = 128)
-    val idempotencyKey: String?,
-    @Column(name = "payload_hash", length = 64)
-    val payloadHash: String?,
-)
-
-@Entity
-@Table(name = "operations_expired_benefit_policy_head")
-internal class ExpiredBenefitPolicyHeadEntity(
-    @Id
-    @Column(name = "singleton_id")
-    val singletonId: Boolean = true,
-    @Column(name = "policy_version", nullable = false)
-    var policyVersion: Long,
-    @Version
-    var version: Long = 0,
-)
-
-@Entity
 @Table(name = "operations_rejection_compensation_case")
 internal class RejectionCompensationCaseEntity(
     @Id
@@ -111,19 +74,6 @@ internal class RejectionCompensationStepEntity(
     @Version
     var version: Long = 0,
 )
-
-internal interface ExpiredBenefitPolicyVersionJpaRepository : JpaRepository<ExpiredBenefitPolicyVersionEntity, Long> {
-    fun findByIdempotencyActorIdAndIdempotencyKey(
-        idempotencyActorId: UUID,
-        idempotencyKey: String,
-    ): ExpiredBenefitPolicyVersionEntity?
-}
-
-internal interface ExpiredBenefitPolicyHeadJpaRepository : JpaRepository<ExpiredBenefitPolicyHeadEntity, Boolean> {
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select head from ExpiredBenefitPolicyHeadEntity head where head.singletonId = true")
-    fun findLocked(): ExpiredBenefitPolicyHeadEntity?
-}
 
 internal interface RejectionCompensationCaseJpaRepository : JpaRepository<RejectionCompensationCaseEntity, UUID> {
     fun findByOrderId(orderId: UUID): RejectionCompensationCaseEntity?

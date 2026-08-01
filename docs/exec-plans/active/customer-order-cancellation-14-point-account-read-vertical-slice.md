@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -248,8 +248,8 @@ error code만 노출한다.
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 문서와 계약은 구현 판단이 필요 없도록 닫혔지만 Plan 11, Plan 13과 signed-cursor
-foundation이 아직 active이므로 `Implementation-Ready=false`다. 세 dependency 중 마지막 plan의
+미구현 상태다. 문서와 계약은 구현 판단이 필요 없도록 닫혔고 Plan 11 grant input은 verified completed다.
+Plan 13과 signed-cursor foundation이 아직 active이므로 `Implementation-Ready=false`다. 남은 dependency 중 마지막 plan의
 completion commit이 completed path와 readiness를 원자적으로 갱신한 뒤에만 implementation candidate가
 된다.
 

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md), [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
+- **Implementation owners:** [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md), [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
 
 ## Context
 
@@ -151,6 +151,10 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 
 ## Verification
 
+- **Plan 11 implementation evidence (2026-08-01):** Flyway `V13`이 종료용 네 key와
+  `PARTIAL_REFUND×POINTS`만 허용하는 composite head/version을 만들고 정확히 다섯 head를 seed한다.
+  PostgreSQL integration test가 cardinality/order, immutable UPDATE/DELETE 거부,
+  `PARTIAL_REFUND/COUPON` DB constraint/API 404, CAS/idempotency replay와 Audit rollback을 검증한다.
 - 다섯 policy head와 허용 key 조합이 정확하다.
 - PARTIAL_REFUND/COUPON key는 생성·조회·변경되지 않는다.
 - 유효 lot은 원 lot, 만료 lot은 30일 보상 lot으로 복원된다.

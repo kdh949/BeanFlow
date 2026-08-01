@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -222,8 +222,9 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 
 ## Outcomes & Retrospective
 
-미구현이다. 00 fact gate, Plan 11 policy output과 Plan 20 completion evidence가 모두 통과하고 migration-writer lease를
-얻기 전에는 이 계획의 domain/schema/owner migration을 시작하지 않는다.
+미구현이다. 00 fact gate와 Plan 11 policy output은 verified completed다. Plan 20 completion evidence가
+아직 없으므로 `Implementation-Ready=false`를 유지하고 migration-writer lease를 얻기 전에는 이 계획의
+domain/schema/owner migration을 시작하지 않는다.
 
 ## Revision Notes
 

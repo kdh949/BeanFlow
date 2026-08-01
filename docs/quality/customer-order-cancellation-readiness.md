@@ -214,8 +214,8 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 
 - [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md):
   PointLot issuer를 추측 없이 보존해야 부분 환불 복원과 정산 비용 귀속을 계산할 수 있다.
-- [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
-  다섯 policy head와 explicit operator permission source가 필요하다.
+- [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
+  다섯 policy head와 explicit operator permission source가 V13과 PostgreSQL evidence로 완료됐다.
 - [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
   성공 Refund의 line별 cash/point allocation과 만료 복원 원장이 필요하다.
 - [Plan 13 recovery](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
@@ -261,7 +261,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] external consumer와 rollback binary evidence가 있음
 - [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
 - [ ] Plan 10 issuer provenance가 통과함
-- [ ] Plan 11 policy/grants가 통과함
+- [x] Plan 11 policy/grants가 통과함
 - [ ] Plan 12 allocation/restoration이 통과함
 - [ ] Plan 13 recovery/pending이 통과함
 - [ ] Plan 15 settlement input이 통과함

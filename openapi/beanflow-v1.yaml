@@ -898,6 +898,7 @@ components:
         requires 1 to 200 characters after trimming, and rejects control characters.
       schema:
         type: string
+        pattern: '^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$'
     OptionalAccessReason:
       in: header
       name: X-Access-Reason
@@ -1631,6 +1632,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+          pattern: '^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$'
     Cancellation:
       type: object
       additionalProperties: false

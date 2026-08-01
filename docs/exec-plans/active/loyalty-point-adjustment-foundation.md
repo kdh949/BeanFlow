@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -284,8 +284,9 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 10 issuer precheck, Plan 11 ADR-069 grant와 Plan 13 PointTransaction base contract
-authorization evidence가 완료되기 전에는 endpoint 또는 migration을 시작하지 않는다. Analytics
+미구현 상태다. Plan 11 ADR-069 grant는 verified completed input이다. Plan 10 issuer precheck와 Plan 13
+PointTransaction base contract authorization evidence가 아직 active이므로 `Implementation-Ready=false`를
+유지하고 endpoint 또는 migration을 시작하지 않는다. Analytics
 consumer implementation은 이 plan의 completion condition이 아니라 Analytics plan의 own checkpoint다.
 
 ## Revision Notes

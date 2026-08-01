@@ -175,48 +175,74 @@ paths:
   /operations/policies/expired-benefit-restoration:
     get:
       tags: [Operations]
-      operationId: getDeployedExpiredBenefitRestorationPolicy
-      summary: Get the current singleton expired-benefit policy
-      description: Current implementation uses a PLATFORM_OPERATOR role gate only.
-      responses:
-        "200":
-          description: Current singleton policy
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DeployedExpiredBenefitRestorationPolicy"
-        "401":
-          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
-        "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
-    patch:
-      tags: [Operations]
-      operationId: updateDeployedExpiredBenefitRestorationPolicy
-      summary: Update the current singleton expired-benefit policy
-      description: Current implementation uses a PLATFORM_OPERATOR role gate only.
+      operationId: listExpiredBenefitRestorationPolicies
+      summary: List the five current trigger and benefit policy heads
+      description: |
+        Requires an active PLATFORM_OPERATOR with the explicit
+        EXPIRED_BENEFIT_POLICY_READ grant and a non-blank X-Access-Reason.
+        The server records the read access before returning the current heads.
       parameters:
-        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeployedUpdateExpiredBenefitRestorationPolicyRequest"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/AccessReason"
       responses:
         "200":
-          description: Updated singleton policy
+          description: Current policy heads ordered by trigger and benefit type
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeployedExpiredBenefitRestorationPolicy"
+                type: array
+                minItems: 5
+                maxItems: 5
+                items:
+                  $ref: "./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy"
         "400":
           $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         "401":
           $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         "403":
           $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/policies/expired-benefit-restoration/{trigger}/{benefitType}:
+    patch:
+      tags: [Operations]
+      operationId: updateExpiredBenefitRestorationPolicy
+      summary: Create a new version for one trigger and benefit policy
+      description: Requires an active PLATFORM_OPERATOR with the explicit EXPIRED_BENEFIT_POLICY_WRITE grant.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - name: trigger
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [STORE_REJECTION, CUSTOMER_CANCELLATION, PARTIAL_REFUND]
+        - name: benefitType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [COUPON, POINTS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/UpdateExpiredBenefitRestorationPolicyRequest"
+      responses:
+        "200":
+          description: New policy head or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "409":
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
@@ -305,49 +331,3 @@ components:
           oneOf:
             - type: string
             - type: "null"
-    DeployedExpiredBenefitRestorationPolicy:
-      type: object
-      additionalProperties: false
-      required: [policyVersion, mode, compensationValidityDays, effectiveAt, updatedBy, reason]
-      properties:
-        policyVersion:
-          type: integer
-          format: int64
-          minimum: 1
-        mode:
-          type: string
-          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
-        compensationValidityDays:
-          type: integer
-          minimum: 1
-          maximum: 365
-        effectiveAt:
-          type: string
-          format: date-time
-        updatedBy:
-          type: string
-          format: uuid
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 500
-    DeployedUpdateExpiredBenefitRestorationPolicyRequest:
-      type: object
-      additionalProperties: false
-      required: [expectedPolicyVersion, mode, compensationValidityDays, reason]
-      properties:
-        expectedPolicyVersion:
-          type: integer
-          format: int64
-          minimum: 1
-        mode:
-          type: string
-          enum: [COMPENSATE_WITH_NEW_ISSUANCE, PRESERVE_ORIGINAL_EXPIRY]
-        compensationValidityDays:
-          type: integer
-          minimum: 1
-          maximum: 365
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 500

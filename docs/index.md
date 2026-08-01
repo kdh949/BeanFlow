@@ -48,7 +48,7 @@
 
 - [Customer Order Cancellation Master](exec-plans/active/customer-order-cancellation-and-recovery.md)
 - [Cancellation 10 PointLot Issuer Provenance Foundation](exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)
-- [Cancellation 11 Benefit Policy and Operator Grant Foundation](exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)
+- [Cancellation 11 Benefit Policy and Operator Grant Foundation](exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)
 - [Cancellation 12 Partial Refund Allocation and Restoration](exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
 - [Cancellation 13 Refund Earned-Point Recovery Foundation](exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
 - [Cancellation 14 PointAccount Read Vertical Slice](exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
