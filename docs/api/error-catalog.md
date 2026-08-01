@@ -2,8 +2,8 @@
 
 | Code | HTTP | Retryable | Meaning |
 |---|---:|---:|---|
-| INVALID_REQUEST | 400 | No | 요청 형식 또는 필드 검증 실패 |
-| ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속 불충족 |
+| INVALID_REQUEST | 400 | No | 요청 형식 또는 필드 검증 실패. malformed/expired/scope-mismatched cursor와 audited policy read의 invalid access reason을 포함 |
+| ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속 또는 active explicit operator grant 불충족 |
 | RESOURCE_NOT_FOUND | 404 | No | 접근 가능한 리소스 없음 |
 | ORDER_STATE_CONFLICT | 409 | No | 현재 상태에서 명령 불가 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |

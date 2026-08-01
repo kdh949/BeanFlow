@@ -25,6 +25,10 @@ GET  /api/v1/stores/{storeId}/settlements
 POST /api/v1/settlement-items/{itemId}/disputes
 ```
 
+`POST /settlement-items/{itemId}/disputes`는 Settlement Item 경로를 사용하지만 Dispute Context가
+소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
+public view를 통해 검증하며, accepted decision은 Settlement public Adjustment command로 넘긴다.
+
 ## Status codes
 
 - `200 OK`: 조회 또는 동기 처리 결과
@@ -57,7 +61,7 @@ POST /api/v1/settlement-items/{itemId}/disputes
 ## Audited point adjustment
 
 `POST /operations/point-accounts/{accountId}/adjustments`는 active `PLATFORM_OPERATOR`의
-explicit `POINT_ADJUSTMENT` permission, Idempotency-Key, nonzero signed amount, non-blank
+Operations-backed explicit `POINT_ADJUSTMENT` grant, Idempotency-Key, nonzero signed amount, non-blank
 reason과 evidence를
 요구한다. 양수 amount에는 issuer와 미래 `expiresAt`이 필수이고 음수 amount에는 두
 필드가 있으면 안 된다. 성공 `201`은 Account summary와 실제 생성·차감 transaction 목록을
@@ -219,6 +223,9 @@ reason과 evidence를
   같은 operation 안에서 일관되게 적용한다.
 - Store Owner와 Staff 요청은 `storeId` 소유권 또는 membership을 Application Service가
   검증한다.
+- privileged Platform Operator request는 role 외에 Operations-owned active explicit grant를
+  Application Service에서 검증한다. grant lookup/Audit dependency failure는 role/JWT claim
+  fallback이 아니라 `503 DEPENDENCY_UNAVAILABLE`이고, active grant 부재는 403이다.
 
 주문 생성의 menu ID가 존재하지 않거나 option ID가 해당 menu에 속하지 않거나
 정규화한 option 집합에 대응하는 MenuConfiguration이 없으면
@@ -235,9 +242,18 @@ reason과 evidence를
 ## Pagination
 
 - 목록은 안정적인 cursor를 우선 검토한다.
-- 매장 거리 검색 cursor는 `(distance, storeId)`를 사용한다.
+- common cursor는 ADR-070의 `v1.<key-id>.<payload>.<signature>` HMAC-SHA-256 format을
+  사용한다. endpoint, canonical filter hash, stable sort tuple과 24시간 expiry를 signature에
+  bind한다.
+- 매장 거리 검색 cursor는 `(distanceMeters, storeId)`, 정산 Batch는
+  `(settlementDate, settlementBatchId)`, Batch Item은 `(completedAt, settlementItemId)`를
+  사용한다.
 - 정렬 기준과 tie-breaker를 문서화한다.
-- cursor는 내부 값을 직접 수정할 수 없는 opaque string으로 전달한다.
+- cursor는 내부 값을 직접 수정할 수 없는 opaque string으로 전달한다. malformed, signature/
+  version/expiry/filter scope mismatch는 query 실행 전 `400 INVALID_REQUEST`다.
+- cursor HMAC secret/active key configuration은 required startup dependency다. key rotation은
+  이전 verifier key를 최대 24시간 유지한다.
+- common `limit`은 optional이며 default 20, minimum 1, maximum 100이다.
 - 응답은 `nextCursor`가 있을 때만 다음 page가 있음을 뜻한다.
 
 ## Payment and asynchronous recovery
@@ -259,10 +275,13 @@ reason과 evidence를
 ## Expired benefit restoration policy
 
 - 정책 resource key는 `trigger × benefitType`이다.
-- base GET은 다섯 현재 head를 안정적으로 trigger, benefit type 순서로 반환한다.
+- base GET은 다섯 현재 head를 안정적으로 trigger, benefit type 순서로 반환한다. 이 호출은
+  `EXPIRED_BENEFIT_POLICY_READ` active grant와 required `X-Access-Reason`을 요구하고,
+  reason은 trim 뒤 1..200자·control character 금지다. response와 access Audit은 같은 local
+  transaction에서 함께 저장된 경우에만 반환한다.
 - keyed PATCH는 path의 trigger·benefit type 한 head만 새 append-only version으로
-  갱신한다. `Idempotency-Key`, `expectedPolicyVersionId`, mode, validity days와
-  reason이 필수다.
+  갱신한다. `EXPIRED_BENEFIT_POLICY_WRITE` active grant, `Idempotency-Key`,
+  `expectedPolicyVersionId`, mode, validity days와 reason이 필수다.
 - version row는 수정·삭제하지 않고 과거 Case는 저장한 COUPON·POINTS version FK를
   계속 사용한다.
 

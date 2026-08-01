@@ -1,5 +1,9 @@
 # 근접 매장 Discovery 조회를 위치정보 보존 없이 제공한다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** —
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
 
@@ -30,7 +34,8 @@ cached 결과 또는 애플리케이션 Haversine 계산으로 숨기지 않고 
 - **Precise query coordinate:** 한 nearby request에만 쓰고 어떤 durable record에도 넣지 않는 입력이다.
 - **Store geography:** Merchant가 소유하고 Discovery가 읽는 `geography(Point, 4326)` 매장 위치다.
 - **Discovery profile:** Store ID/name/geography/acceptingOrders/pickupEnabled의 Merchant-owned read input이다.
-- **Distance cursor:** `(distanceMeters, storeId)` 마지막 tuple을 opaque하게 인코딩한 page token이다.
+- **Distance cursor:** ADR-070의 `v1.<key-id>.<payload>.<signature>` HMAC token에
+  `(distanceMeters, storeId)` 마지막 tuple과 nearby filter hash를 bound한 page token이다.
 - **Pickup-capable:** `open`과 `pickupAvailable`이 모두 true인 매장이다.
 
 ## Scope
@@ -39,7 +44,7 @@ cached 결과 또는 애플리케이션 Haversine 계산으로 숨기지 않고 
 
 - Discovery Modulith module, Merchant/Fulfillment read Application API와 DTO projection boundary
 - Store discovery profile migration, PostGIS extension/geography/GiST index와 existing-row safety gate
-- nearby validation, distance/store-ID cursor, radius filtering, deterministic integer-meter conversion
+- nearby validation, HMAC-signed distance/store-ID cursor, radius filtering, deterministic integer-meter conversion
 - 메뉴·픽업 슬롯 read endpoint, coordinate redaction test, PostGIS availability health
 - PostgreSQL/PostGIS Testcontainers, API contract, pagination/concurrency/failure validation
 
@@ -55,7 +60,8 @@ cached 결과 또는 애플리케이션 Haversine 계산으로 숨기지 않고 
 - raw coordinate와 원본 좌표를 복원할 cursor는 entity, DB query audit, log, trace, metric,
   `AuditRecord`, exception message에 남지 않는다.
 - result는 반경 안 pickup-capable Store만 `(distanceMeters ASC, storeId ASC)`로 반환한다.
-  cursor는 같은 filter/sort contract의 다음 page에만 쓰며 다른 radius 또는 malformed cursor는 400이다.
+  cursor는 같은 endpoint/filter/sort contract의 다음 page에만 쓰며 다른 radius, signature/scope
+  mismatch 또는 malformed/expired cursor는 400이다. `limit`은 default 20, maximum 100이다.
 - Store geometry가 없거나 invalid이면 거리 0/임의 위치로 보완하지 않는다. migration gate가
   deployment를 멈추거나 owner profile이 명시적으로 disabled여야 한다.
 - current owner availability만 투영하며 stale cache가 비활성 Store를 가능하다고 보이면 안 된다.
@@ -69,6 +75,8 @@ cached 결과 또는 애플리케이션 Haversine 계산으로 숨기지 않고 
 - coordinate는 controller binding 뒤 query value object로만 전달하고 response/correlation/log context,
   exception details에서 제외한다. 외부 map/geocode call은 없다.
 - extension/query/DB failure는 503으로 매핑한다. fallback repository, in-memory index, local Map은 없다.
+- common cursor codec은 required HMAC key ring configuration으로 생성한다. missing/malformed active
+  key는 unsigned/local default cursor로 대체하지 않고 application startup을 실패시킨다.
 
 ## Alternatives Considered
 
@@ -94,13 +102,17 @@ source의 name/location만 채운다. source 없이 남으면 placeholder name, 
 쓰지 않고 endpoint activation을 중단한다.
 
 Store geography만 저장하고 customer coordinate table/column/audit은 만들지 않는다. cursor는 DB에
-저장하지 않고 server-signed/encoded boundary tuple로 전달한다. Testcontainers는 PostGIS image/extension을
-명시해 일반 PostgreSQL test가 spatial query를 local fallback으로 통과하지 않게 한다.
+저장하지 않고 ADR-070 common HMAC codec의 filter-bound boundary tuple로 전달한다. raw coordinate와
+radius는 token payload가 아니라 filter hash input이며 old verification key는 24시간 rotation window 동안만
+허용한다. Testcontainers는 PostGIS image/extension을 명시해 일반 PostgreSQL test가 spatial query를 local
+fallback으로 통과하지 않게 한다.
 
 ## API and Event Contracts
 
 - `GET /stores/nearby`는 OpenAPI query와 `NearbyStorePage`를 그대로 구현한다. `distanceMeters`는
   DB distance를 deterministic integer meter로 변환하고 sort/cursor는 같은 raw order key를 사용한다.
+  cursor는 endpoint/filter hash/signature/24시간 expiry를 검증하고 limit omission은 20, 100 초과는
+  400으로 처리한다.
 - 메뉴와 slot endpoint는 JPA Entity가 아닌 current owner DTO projection을 반환한다. availability/capacity는
   response 시점 owner state이며 write graph를 노출하지 않는다.
 - customer location은 event payload, Analytics, Notification, Audit에 발행하지 않는다. Discovery read는
@@ -117,7 +129,8 @@ Store geography만 저장하고 customer coordinate table/column/audit은 만들
 
 ## Required Tests
 
-- coordinate/radius/cursor bounds, malformed/cross-filter cursor, empty/single/multi-page distance tie order
+- coordinate/radius/cursor bounds, HMAC tamper/unknown key/expiry/cross-filter cursor, omitted/1/100/101
+  limit, empty/single/multi-page distance tie order
 - radius boundary, same-distance store ID tie, disabled/open/pickup-disabled Store filtering
 - Store name/geography migration: empty, verified, unresolved gate; GiST execution plan capture
 - PostGIS unavailable/timeout 503, no Haversine/in-memory/cache fallback, DB error not 404
@@ -146,7 +159,7 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 
 ## Documentation Updates
 
-- BR-01/28, ADR-020 implementation evidence
+- BR-01/28, ADR-020/070 implementation evidence
 - context map, invariants, transaction boundaries, failure semantics, ubiquitous language
 - OpenAPI/API conventions/error catalog/authorization matrix, test strategy, measurement plan,
   Discovery runbook, quality evidence map and this ExecPlan
@@ -172,6 +185,7 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 | 2026-08-01 | Accepted existing | coordinate request-only, PostGIS failure 503 | 개인 위치 최소 보존과 false-success 방지 | BR-28, ADR-020 |
 | 2026-08-01 | Plan interpretation | `open=acceptingOrders`, `pickupAvailable=acceptingOrders && pickupEnabled` | 존재 owner state만 투영 | current `merchant_store`, OpenAPI |
 | 2026-08-01 | Plan boundary | menu/slot read projection을 Discovery slice에 포함 | 공개 Discovery contract 완결, write owner 불변 | OpenAPI, Context Map |
+| 2026-08-01 | Accepted | nearby cursor는 versioned HMAC, endpoint/filter binding, 24시간 expiry와 20/100 limit을 사용 | radius/scope tamper와 unbounded page 방지 | ADR-070 |
 
 ## Outcomes & Retrospective
 
@@ -182,3 +196,4 @@ query measurement를 actual value로 기록한다.
 ## Revision Notes
 
 - 2026-08-01: BR-28/ADR-020과 Discovery OpenAPI에 대응하는 누락 ExecPlan을 최초 작성.
+- 2026-08-01: HMAC cursor key rotation, failure and common page-bound contract를 ADR-070으로 고정.

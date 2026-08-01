@@ -28,18 +28,18 @@
 | StoreAcceptanceWarningRequestedV1 | Ordering | Notification | order/deadline unique | Order |
 | OrderAcceptedV1 | Ordering | Analytics | order version | Order |
 | OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
-| OrderCompletedV1 | Ordering | Loyalty, Settlement, Analytics | source order unique per consumer | Order |
+| OrderCompletedV2 | Ordering | Loyalty, Settlement, Analytics | completion source + payload version per consumer | Order |
 | PaymentRefundUnknown | Payment | Operations | refund/provider request unique | Refund |
-| PaymentRefunded | Payment | Ordering, Loyalty, Settlement, Analytics | refund ID/source unique; Settlement의 미완료 고객 취소는 Audit 후 NOT_APPLICABLE | Refund |
+| PaymentRefundedV1 | Payment | Ordering, Loyalty, Settlement, Analytics | refund success source + payload version; Settlement의 미완료 고객 취소는 Audit 후 NOT_APPLICABLE | Refund |
 | CustomerCancellationRefundSucceededV1 | Payment | Notification | order ID + customer cancellation terminal version + refund-succeeded | Refund |
 | CustomerCancellationRefundDelayedV1 | Payment | Notification | order ID + customer cancellation terminal version + refund-delayed | Refund |
-| PointsAccrued | Loyalty | Analytics | source order unique | PointTransaction |
-| PointsRestored | Loyalty | Analytics | refund/reference unique | PointTransaction |
-| PointsAdjusted | Loyalty | Analytics | adjustment source unique | PointTransaction |
+| PointsAccruedV1 | Loyalty | Analytics | point transaction source + payload version | PointTransaction |
+| PointsRestoredV1 | Loyalty | Analytics | point transaction source + payload version | PointTransaction |
+| PointsAdjustedV1 | Loyalty | Analytics | adjustment source + payload version | PointTransaction |
 | PointRecoveryPendingRecorded | Loyalty | Operations, Analytics | account + refund/reference unique | PointRecoveryPending |
-| SettlementItemCreated | Settlement | Analytics | source transaction unique | SettlementItem |
+| SettlementItemCreatedV1 | Settlement | Analytics | item source + payload version | SettlementItem |
 | SettlementBatchConfirmed | Settlement | Dispute/Notification | batch version | SettlementBatch |
-| SettlementAdjustmentCreated | Settlement | Analytics | adjustment ID | SettlementAdjustment |
+| SettlementAdjustmentCreatedV1 | Settlement | Analytics | adjustment source + payload version | SettlementAdjustment |
 | SettlementDisputeFiled | Dispute | Operations | dispute ID | SettlementDispute |
 | SettlementDisputeDecided | Dispute | Settlement, Notification, Operations | dispute ID + terminal version | SettlementDispute |
 | NotificationFailed | Notification | Operations | delivery ID | NotificationDelivery |
@@ -48,6 +48,16 @@
 `OrderCancelledV1`은 미수락 `PAID` 고객 취소의 비동기 owner 보상 fact다.
 `PENDING_PAYMENT` 고객 취소는 네 예약 해제를 주문 명령 transaction에서 완결하므로
 이 event를 발행하지 않는다.
+
+## Immutable financial event contracts
+
+`OrderCompletedV2`, `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1`,
+`PointsAdjustedV1`, `SettlementItemCreatedV1`, `SettlementAdjustmentCreatedV1`의 exact
+payload field set, version, logical source, producer transaction과 cutover checkpoint는
+[ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md)가 canonical이다. 이 catalog의
+consumer 열은 target architecture이지 Kotlin producer가 이미 구현됐다는 증거가 아니다. Analytics와
+Settlement consumer는 current Aggregate, current policy 또는 live contract를 재조회해 event의 누락
+값을 채우지 않는다.
 
 `CustomerCancellationRefundSucceededV1`과
 `CustomerCancellationRefundDelayedV1`은 고객 취소 Refund의 실제 terminal 결과만
@@ -65,7 +75,7 @@ OrderCompensationCase 전체 완료는 고객 Notification event를 생산하지
 발행하지 않는다. pending이 settle된 뒤 현재 잔액이 필요한 consumer는 Loyalty owner
 projection을 조회하며, 이 event 이름을 모든 recovery state 변경에 재사용하지 않는다.
 
-`PointsAdjusted`는 AuditRecord를 대신하지 않는 Analytics 전용 persistent fact다. 초기
+`PointsAdjustedV1`은 AuditRecord를 대신하지 않는 Analytics 전용 persistent fact다. 초기
 envelope의 `aggregateId`는 PointAccount ID, `aggregateVersion`은 commit 뒤 Account version,
 `payloadVersion`은 1이다. payload는 immutable `adjustmentSource`, `accountId`와 그 command의
 Lot별 child PointTransaction signed effect 합인 signed `amountKrw`를 포함한다. `issuerType`은 CREDIT

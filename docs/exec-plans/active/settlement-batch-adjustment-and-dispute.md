@@ -1,5 +1,9 @@
 # 일별 정산 Batch, 사후 조정과 이의제기를 수렴시킨다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
 
@@ -18,9 +22,9 @@
 ## Current State
 
 - BR-16~24 및 ADR-008, ADR-017, ADR-018은 기준일, 비용 snapshot, 불변 원장, 이월과 분쟁을 확정했다.
-- Plan 20은 SettlementItem source unique, Batch Item cursor, 미수락 고객 취소 `NOT_APPLICABLE` Audit을
-  소유하는 선행 작업이다. Plan 10은 성공 Refund allocation, Coupon attribution, PointLot issuer
-  snapshot과 `RECOVERY` ledger를 소유한다.
+- Plan 20은 최소 `OPEN` Batch, SettlementItem source unique, Batch Item cursor, 미수락 고객
+  취소 `NOT_APPLICABLE` Audit을 소유하는 선행 작업이다. Plan 10은 성공 Refund allocation,
+  Coupon attribution, PointLot issuer snapshot과 `RECOVERY` ledger를 소유한다.
 - 현재 Settlement/Dispute package와 migration은 없다. Plan 10/20 Outcomes와 migration evidence가
   실제로 통과하기 전에는 이 계획의 코드·migration을 시작하지 않는다.
 - OpenAPI에는 Batch 목록, Batch Item 조회, `POST /settlement-items/{itemId}/disputes`가 있다.
@@ -42,7 +46,8 @@
 - Plan 20 위의 Batch calculation/confirmation Application Service와 bounded date worker
 - immutable Item snapshot 합산, 서울 날짜 경계, Adjustment source unique, success refund/dispute,
   negative carry-forward
-- Settlement-owned `SettlementDispute`, idempotency, held amount, one-refile guard
+- Dispute-owned `SettlementDispute`, idempotency, held amount, one-refile guard와 Settlement
+  Adjustment command handoff
 - 기존 OpenAPI Batch/Item/Dispute contract, membership authorization, persistent publication
 - runbook, closed-outcome metric, Testcontainers/contract/동시성/장애 검증
 
@@ -69,7 +74,7 @@
 
 ## Architecture and Transaction Boundaries
 
-- Item input은 Plan 20의 `OrderCompletedV1` consumer가 소유한다. 이 계획은 Ordering, Payment,
+- Item input은 Plan 20의 `OrderCompletedV2` consumer가 소유한다. 이 계획은 Ordering, Payment,
   Promotion, Loyalty repository를 직접 호출하지 않고 Settlement Item projection만 읽는다.
 - calculation은 Batch row lock 뒤 Item을 DTO projection/keyset chunk로 읽고 summary와 carry-forward
   reference를 한 local transaction에서 저장한다. Item JPA collection은 추가하지 않는다.
@@ -77,8 +82,9 @@
   AuditRecord를 함께 commit한다. 실패는 `OPEN`/recoverable `CALCULATED`로 남긴다.
 - Payment Refund fact consumer는 confirmed Item/Batch를 조회해 Adjustment, source Audit, publication을
   한 Settlement transaction에 저장한다. unconfirmed Item에는 Adjustment를 만들지 않는다.
-- Dispute transaction은 idempotency row, Dispute, held summary, filed publication을 함께 commit한다.
-  결정 worker는 Dispute를 잠그고 Settlement 공개 Application API로 Adjustment를 요청한다.
+- Dispute Context transaction은 idempotency row, Dispute, held amount와 filed publication을 함께
+  commit한다. 결정 worker는 Dispute를 잠그고 Settlement 공개 Application API로 Adjustment를
+  요청한다. Adjustment commit 전 Dispute를 terminal success로 표시하지 않는다.
 - workers는 claim/result의 짧은 transaction으로 분리한다. 외부 evidence/file provider와 계좌 지급은
   이 계획 범위 밖이며 DB transaction에 넣지 않는다.
 
@@ -103,14 +109,17 @@
 
 ## Data and Migration
 
-Plan 20 완료 뒤 forward migration으로 다음을 DB 제약으로 만든다.
+Plan 10/20 actual outcome 뒤 forward migration으로 다음을 DB 제약으로 만든다. ADR-067의
+Plan 20-owned Batch identity/scope fields, state CHECK, Item table/FK/source unique/cursor index를
+다시 만들거나 변경하지 않는다.
 
-- `settlement_batch`: `(store_id, settlement_date)` unique, state CHECK, KRW summary,
-  carry-forward source, `confirmed_at`, keyset 목록 index
+- `settlement_batch`: Plan 20 Batch에 KRW summary, carry-forward source, `calculated_at`,
+  `confirmed_at`, Batch-list keyset index를 추가한다. `OPEN -> CALCULATED -> CONFIRMED`는
+  guarded transition code로만 수행한다.
 - `settlement_adjustment`: immutable source/reason, confirmed Item/Batch reference, signed amount,
   source/reason unique와 다음 Batch discovery index
-- `settlement_dispute`: Item/state/expected·held amount/previous ID/evidence/idempotency response,
-  active Item partial unique와 one-refile guard
+- Dispute-owned `settlement_dispute`: Item/state/expected·held amount/previous ID/evidence/
+  idempotency response, active Item partial unique와 one-refile guard
 - Batch/Adjustment/Dispute publication 및 Audit query keyset/retry index
 
 기존 행은 migration 전 read-only inventory로 검증한다. 누락 snapshot/source를 추정 backfill하지
@@ -119,19 +128,22 @@ Plan 20 완료 뒤 forward migration으로 다음을 DB 제약으로 만든다.
 
 ## API and Event Contracts
 
-- `GET /stores/{storeId}/settlements`는 `(settlementDate DESC, settlementBatchId DESC)` opaque cursor로
-  Batch summary를 반환하며 membership으로 store ownership을 확인한다.
-- Plan 20 Item endpoint의 `(completedAt ASC, settlementItemId ASC)` cursor와 item ID를 유지한다.
+- `GET /stores/{storeId}/settlements`는 `(settlementDate DESC, settlementBatchId DESC)` ADR-070
+  signed cursor와 `limit=20` default/`100` maximum으로 Batch summary를 반환하며 membership으로
+  store ownership을 확인한다.
+- Plan 20 Item endpoint의 `(completedAt ASC, settlementItemId ASC)` signed cursor와 item ID를 유지한다.
 - `POST /settlement-items/{itemId}/disputes`는 `Idempotency-Key`, signed expected amount, reason,
   evidence references, optional previous ID를 기존 contract 그대로 쓴다. 201은 `FILED` 저장 성공만 뜻한다.
-- persistent event에는 envelope, immutable source, date/state/amount만 둔다. raw evidence, actor,
-  Idempotency-Key, customer/order/payment ID와 DB error는 payload/metric에 넣지 않는다.
+- `SettlementAdjustmentCreatedV1`은 ADR-068의 envelope, immutable source, date/state/amount만
+  둔다. raw evidence, actor, Idempotency-Key, customer/order/payment ID와 DB error는 payload/
+  metric에 넣지 않는다.
 - V1 event/API 호환을 깨는 변경은 새 version 또는 ADR 없이는 하지 않는다.
 
 ## Milestones
 
 1. Plan 10/20 Outcomes, migration state, Item snapshot과 `NOT_APPLICABLE` evidence를 검증한다.
-2. Batch/Adjustment/Dispute schema, constraint, immutable transition과 carry-forward projection을 만든다.
+2. Settlement Batch/Adjustment schema와 별도 Dispute Context schema checkpoint를 분리 commit으로
+   만들고, constraint·immutable transition·carry-forward projection을 검증한다.
 3. daily calculation·confirmation worker와 Batch list API를 완성한다.
 4. confirmed Item refund adjustment, unconfirmed path, carry-forward, Audit/publication/retry를 구현한다.
 5. membership-protected filing, deadline, held, refile, decision-to-Adjustment handoff를 구현한다.
@@ -140,11 +152,14 @@ Plan 20 완료 뒤 forward migration으로 다음을 DB 제약으로 만든다.
 ## Required Tests
 
 - same store/date concurrent/restart calculation, multi-store parallel, Seoul midnight boundary
-- duplicate complete event, immutable snapshot change attempt, calculated/confirmed guard
+- duplicate complete event, immutable snapshot change attempt, calculated/confirmed guard와
+  closed-Batch late Item reprocessing handoff
 - fee/coupon/point cost/rounding tie-out, adjustment, carry-forward, source conflict
 - confirmed/non-confirmed Item Refund, non-success Refund Adjustment 0건, Plan 20 exclusion regression
 - D+1 00:00 allow/D+15 00:00 reject, active duplicate, missing evidence/second refile, handoff retry
-- Batch/Item cursor scope/order, membership and other-store access, OpenAPI contract
+- Batch/Item signed cursor scope/order/signature/expiry, membership and other-store access, OpenAPI contract
+- Dispute Context가 held amount와 `SettlementDisputeFiled/Decided` producer를 소유하고 Settlement는
+  public Adjustment command만 받는 Modulith dependency direction
 - Testcontainers CHECK/unique/index, Modulith boundary, publication/Audit failure, fixed Clock and 503 no-fallback
 
 ## Validation Commands
@@ -170,7 +185,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Documentation Updates
 
-- BR-16~24, ADR-008/017/018 implementation evidence
+- BR-16~24, ADR-008/017/018/067/068/070 implementation evidence
 - context map, invariants, transaction boundaries, state machines, event catalog
 - OpenAPI, error catalog, settlement/dispute runbook, test strategy, quality evidence, measurement plan
 - 이 ExecPlan의 Progress, Decision Log, Outcomes
@@ -187,8 +202,8 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Surprises & Discoveries
 
-- 2026-08-01: Plan 20은 Item 생성과 고객 취소 제외 증적만 소유한다. Batch 계산·확정,
-  Adjustment와 Dispute를 이 후속 계획으로 분리해 migration/consumer 소유권 중복을 막는다.
+- 2026-08-01: Plan 20은 최소 OPEN Batch, Item 생성과 고객 취소 제외 증적만 소유한다. Batch
+  계산·확정, Adjustment와 Dispute를 이 후속 계획으로 분리해 migration/consumer 소유권 중복을 막는다.
 
 ## Decision Log
 
@@ -196,7 +211,8 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 |---|---|---|---|---|
 | 2026-08-01 | Accepted existing | 완료일·snapshot Batch, 불변 원장과 다음 Batch Adjustment | 과거 정산 재현 | BR-16~21, ADR-008/017 |
 | 2026-08-01 | Accepted existing | item-level held, 14일 half-open window, one refile | 전체 hold·무기한 재이의 방지 | BR-22~24, ADR-018 |
-| 2026-08-01 | Plan boundary | Item/제외 Audit은 Plan 20, Batch/Adjustment/Dispute는 이 계획 | 소유권 중복 방지 | Plan 20 |
+| 2026-08-01 | Plan boundary | 최소 Batch/Item/제외 Audit은 Plan 20, lifecycle summary/Adjustment는 Settlement checkpoint, Dispute schema/workflow는 별도 Dispute checkpoint | 소유권·commit 경계 혼동 방지 | ADR-067, Plan 20 |
+| 2026-08-01 | Accepted existing | Dispute Context가 SettlementDispute/held amount/decision event를 소유하고 Settlement는 Adjustment command만 제공 | Context Map·용어집·ADR-018과 일치 | ADR-018, Context Map |
 
 ## Outcomes & Retrospective
 
@@ -206,3 +222,5 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 ## Revision Notes
 
 - 2026-08-01: Accepted 정산·이의제기 결정에 대응하는 누락 ExecPlan을 최초 작성.
+- 2026-08-01: ADR-067의 최소 Batch ownership, ADR-068 event contract, ADR-070 signed cursor와
+  Dispute Context ownership을 반영했다.

@@ -26,6 +26,11 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - ADR-066에 따라 수동 양수 `ADJUSTMENT`로 만든 PointLot도 입력 issuer snapshot을
   보존한다. command 시점에는 SettlementItem이나 SettlementAdjustment를 만들지 않고,
   이후 사용될 때만 해당 snapshot을 비용 배분에 사용한다.
+- **Batch foundation amendment (2026-08-01):** `SettlementItem`이 Batch별 Item 조회와
+  immutable confirmation 전에 반드시 귀속될 수 있도록, Plan 20은 완료 event consumer에서
+  `(storeId, settlementDate)`의 최소 `OPEN` Batch를 멱등 생성한다. Batch calculation,
+  confirmation, summary와 Adjustment는 이 foundation을 확장하는 후속 lifecycle의 책임이다.
+  schema object별 migration ownership과 closed-Batch late Item failure path는 ADR-067을 따른다.
 
 ## Alternatives Considered
 
@@ -65,4 +70,5 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - [ADR-008](ADR-008-settlement-adjustment-ledger.md)
 - [ADR-011](ADR-011-point-lot-ledger.md)
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
+- [ADR-067](ADR-067-settlement-batch-creation-and-schema-ownership.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)

@@ -12,7 +12,7 @@
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Read with reason | No |
-| 감사형 포인트 조정 | No | No | No | Explicit `POINT_ADJUSTMENT` permission + reason + evidence | No |
+| 감사형 포인트 조정 | No | No | No | Active explicit `POINT_ADJUSTMENT` grant + reason + evidence | No |
 | 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
 | 이의제기 생성 | No | Owned store | No | No | No |
@@ -21,17 +21,30 @@
 | 누락 Refund 복구 제안 | No | No | No | Explicit permission + reason | No |
 | 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
 | 권한 변경 | No | Limited | No | Audited | No |
-| 만료 혜택 복원 정책 조회·변경 | No | No | No | Explicit permission + reason | No |
+| 만료 혜택 복원 정책 조회·변경 | No | No | No | Active `EXPIRED_BENEFIT_POLICY_READ`/`WRITE` grant + reason | No |
 
 ## Enforcement layers
 
 - Security FilterChain: 인증 객체 구성
 - Method Security: 역할 기반 진입점
-- Application Service: 객체 소유권·매장 membership
+- Application Service: 객체 소유권·매장 membership·Operations explicit permission grant
 - Aggregate: 상태와 비즈니스 권한에 독립적인 불변식
 - Audit: 금액·권한·수동 재처리
 
 인가 실패를 리소스가 없다는 것과 혼동하지 않도록 API 노출 정책을 별도로 정한다.
+
+## Explicit operator permission
+
+`OperatorPermissionGrant`는 Operations가 소유하는 permission source of truth다. JWT `roles`는
+인증된 actor의 coarse role gate일 뿐, `permissions` claim·role·in-memory cache는 active grant
+부재 또는 조회 장애의 fallback이 아니다. privileged Application Service는 actor의
+`PLATFORM_OPERATOR` role과 active grant를 같은 local transaction에서 확인한다. revoked/missing
+grant는 403, grant/Audit persistence failure는 503이다.
+
+정책 GET은 `EXPIRED_BENEFIT_POLICY_READ`와 `X-Access-Reason` header를, PATCH는
+`EXPIRED_BENEFIT_POLICY_WRITE`와 request body reason을 요구한다. GET reason은 trim 뒤 1..200자,
+control character 금지이며 current policy heads와 access Audit이 함께 저장된 경우에만 200이다.
+포인트 조정은 `POINT_ADJUSTMENT` grant와 body reason/evidence를 요구한다. 상세는 ADR-069를 따른다.
 
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.
@@ -55,7 +68,7 @@ Order 표현은 역할별로 분리한다. 고객용 `Order`는 `cancelledAt`,
 있지만 고객이 신고한 사유와 환불 진행은 보지 않는다(ADR-030, ADR-031).
 
 감사형 포인트 조정은 고객·매장·정산 역할에 노출하지 않는다. 활성
-`PLATFORM_OPERATOR`라도 explicit `POINT_ADJUSTMENT` permission, non-blank reason,
+`PLATFORM_OPERATOR`라도 active explicit `POINT_ADJUSTMENT` grant, non-blank reason,
 evidence reference와 Idempotency-Key가 없으면 실행할 수 없다. issuer와 만료는
 양수 adjustment의 immutable 비용·가치 snapshot이며 actor나 customer에서 추론하지
 않는다(ADR-066).

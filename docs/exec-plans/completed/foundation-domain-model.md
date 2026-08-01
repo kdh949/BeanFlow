@@ -1,5 +1,9 @@
 # Establish BeanFlow product and domain foundations
 
+> **Status:** `COMPLETED`
+> **Depends-On:** —
+> **Completed-At:** `2026-07-28`
+
 Status: Completed
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. Progress, Surprises & Discoveries, Decision Log와 Outcomes & Retrospective를 작업 중 계속 갱신한다.

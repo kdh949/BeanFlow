@@ -1,5 +1,9 @@
 # 주문을 생성하고 5분 예약 lease를 원자적으로 관리한다
 
+> **Status:** `COMPLETED`
+> **Depends-On:** `docs/exec-plans/completed/foundation-domain-model.md`
+> **Completed-At:** `2026-07-28`
+
 Status: Completed
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 이 문서는 living document이며 구현 중
@@ -591,6 +595,11 @@ ADR, 아키텍처, OpenAPI에 먼저 기록한다. transcript가 아니라 결�
 `bash scripts/verify-docs.sh`는 32개 정책, 26개 ADR, 60개 Markdown 파일과 OpenAPI
 13개 path/43개 schema를 검증했다. 별도 상태별 OpenAPI assertion도 통과했다.
 
+> **Completion evidence reconciliation (2026-08-01):** 아래 Milestone 1~5의 체크는
+> Revision Notes의 2026-07-28 실제 실행 기록과 final `./gradlew clean test` 기록에
+> 대조해 완료로 정리했다. checkbox는 앞으로 실행할 작업 목록이 아니라 완료 증적의
+> index이며, canonical status는 이 문서 상단 metadata다.
+
 ### Milestone 1: 모듈 경계와 공통 테스트 기반을 만든다
 
 **Description:** owner package와 공개 API/internal 경계를 만들고 Clock, UUID,
@@ -599,16 +608,16 @@ correlation port, PostgreSQL integration test fixture와 Spring Modulith 구조 
 
 **Acceptance criteria:**
 
-- [ ] 다른 module internal package 접근과 Repository 직접 호출이 구조 테스트에서
+- [x] 다른 module internal package 접근과 Repository 직접 호출이 구조 테스트에서
       실패한다.
-- [ ] production profile은 DB 설정이 없거나 잘못되면 시작 실패하고 fake repository로
+- [x] production profile은 DB 설정이 없거나 잘못되면 시작 실패하고 fake repository로
       전환하지 않는다.
-- [ ] 모든 시간 의존 서비스가 주입된 `Clock`을 사용한다.
+- [x] 모든 시간 의존 서비스가 주입된 `Clock`을 사용한다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*ModularityTests'`
-- [ ] `./gradlew test --tests '*ApplicationContextTests'`
+- [x] `./gradlew test --tests '*ModularityTests'`
+- [x] `./gradlew test --tests '*ApplicationContextTests'`
 
 **Dependencies:** Milestone 0
 
@@ -629,14 +638,14 @@ correlation port, PostgreSQL integration test fixture와 Spring Modulith 구조 
 
 **Acceptance criteria:**
 
-- [ ] 메뉴/옵션 변경 후에도 생성된 OrderLine snapshot 값은 변하지 않는다.
-- [ ] line·Order의 coupon/points/cash 합계가 모든 rounding case에서 tie-out한다.
-- [ ] invalid option ownership, 음수·overflow와 payable 초과 points가 명시적으로
+- [x] 메뉴/옵션 변경 후에도 생성된 OrderLine snapshot 값은 변하지 않는다.
+- [x] line·Order의 coupon/points/cash 합계가 모든 rounding case에서 tie-out한다.
+- [x] invalid option ownership, 음수·overflow와 payable 초과 points가 명시적으로
       실패한다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*OrderPricing*' --tests '*OrderTest'`
+- [x] `./gradlew test --tests '*OrderPricing*' --tests '*OrderTest'`
 
 **Dependencies:** Milestone 1
 
@@ -655,16 +664,16 @@ correlation port, PostgreSQL integration test fixture와 Spring Modulith 구조 
 
 **Acceptance criteria:**
 
-- [ ] 마지막 slot capacity에 동시 주문이 와도 성공 합계가 capacity를 넘지 않는다.
-- [ ] 마지막 stock에 동시 주문이 와도 available/reserved/confirmed 합계가 깨지지
+- [x] 마지막 slot capacity에 동시 주문이 와도 성공 합계가 capacity를 넘지 않는다.
+- [x] 마지막 stock에 동시 주문이 와도 available/reserved/confirmed 합계가 깨지지
       않는다.
-- [ ] 같은 Order source를 재요청해도 예약 행과 수량 증가가 한 번뿐이다.
+- [x] 같은 Order source를 재요청해도 예약 행과 수량 증가가 한 번뿐이다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*PickupReservationRepositoryTest'`
-- [ ] `./gradlew test --tests '*StockReservationRepositoryTest'`
-- [ ] Testcontainers PostgreSQL에서 constraint와 lock 경합 확인
+- [x] `./gradlew test --tests '*PickupReservationRepositoryTest'`
+- [x] `./gradlew test --tests '*StockReservationRepositoryTest'`
+- [x] Testcontainers PostgreSQL에서 constraint와 lock 경합 확인
 
 **Dependencies:** Milestones 0, 1, 2
 
@@ -684,16 +693,16 @@ API와 실제 schema로 구현한다.
 
 **Acceptance criteria:**
 
-- [ ] 한 CouponIssuance를 두 주문이 동시에 예약할 수 없다.
-- [ ] 두 주문의 동시 point 예약 합계가 Account와 Lot의 available 금액을 넘지 않는다.
-- [ ] PointLot 선택은 `(expiresAt, pointLotId)`로 결정적이고 reservation allocation
+- [x] 한 CouponIssuance를 두 주문이 동시에 예약할 수 없다.
+- [x] 두 주문의 동시 point 예약 합계가 Account와 Lot의 available 금액을 넘지 않는다.
+- [x] PointLot 선택은 `(expiresAt, pointLotId)`로 결정적이고 reservation allocation
       합계가 요청 금액과 같다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*CouponReservationRepositoryTest'`
-- [ ] `./gradlew test --tests '*PointReservationRepositoryTest'`
-- [ ] 원장·Account·Lot reservation tie-out
+- [x] `./gradlew test --tests '*CouponReservationRepositoryTest'`
+- [x] `./gradlew test --tests '*PointReservationRepositoryTest'`
+- [x] 원장·Account·Lot reservation tie-out
 
 **Dependencies:** Milestones 0, 1, 2
 
@@ -713,17 +722,17 @@ Controller, security ownership과 API error mapping을 연결한다.
 
 **Acceptance criteria:**
 
-- [ ] 각 reservation 단계 뒤 fault injection에서 Order와 모든 owner 변경이 0건이다.
-- [ ] 같은 key/payload 순차·동시 요청은 Order 한 건과 owner reservation 한 세트만
+- [x] 각 reservation 단계 뒤 fault injection에서 Order와 모든 owner 변경이 0건이다.
+- [x] 같은 key/payload 순차·동시 요청은 Order 한 건과 owner reservation 한 세트만
       만든다.
-- [ ] 같은 key/different payload는 owner lock 전에 409를 반환한다.
-- [ ] 201 body와 OpenAPI schema가 snapshot 금액, state와 deadline을 정확히 표현한다.
+- [x] 같은 key/different payload는 owner lock 전에 409를 반환한다.
+- [x] 201 body와 OpenAPI schema가 snapshot 금액, state와 deadline을 정확히 표현한다.
 
 **Verification:**
 
-- [ ] `./gradlew test --tests '*CreateOrderServiceTest'`
-- [ ] `./gradlew test --tests '*CreateOrderConcurrencyTest'`
-- [ ] `./gradlew test --tests '*OrderControllerContractTest'`
+- [x] `./gradlew test --tests '*CreateOrderServiceTest'`
+- [x] `./gradlew test --tests '*CreateOrderConcurrencyTest'`
+- [x] `./gradlew test --tests '*OrderControllerContractTest'`
 
 **Dependencies:** Milestones 0, 2, 3, 4
 

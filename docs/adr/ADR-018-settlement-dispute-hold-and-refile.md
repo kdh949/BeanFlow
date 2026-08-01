@@ -21,6 +21,11 @@ BR-22~BR-24는 확정 SettlementItem에 대한 14일 이의 기간, 분쟁 금�
 - `REJECTED` 또는 `WITHDRAWN`은 held amount를 해제한다.
 - 종결 후 새 증빙 reference와 이전 dispute ID가 있을 때 별도 Aggregate instance로
   한 번만 재이의를 허용한다.
+- **Context boundary amendment (2026-08-01):** Dispute Context가 `SettlementDispute`, held
+  amount, filing/decision state와 `SettlementDisputeFiled/Decided` event를 소유한다.
+  Settlement Context는 SettlementItem/Batch/Adjustment를 소유하고 Dispute에 confirmed Item
+  view를 제공한다. accepted decision은 Dispute가 Settlement의 public Adjustment command를
+  호출해 전달하며, 어느 Context도 다른 Context의 Repository를 직접 호출하지 않는다.
 
 ## Alternatives Considered
 
@@ -57,3 +62,4 @@ BR-22~BR-24는 확정 SettlementItem에 대한 14일 이의 기간, 분쟁 금�
 - BR-22, BR-23, BR-24
 - [ADR-008](ADR-008-settlement-adjustment-ledger.md)
 - [ADR-009](ADR-009-explicit-failure-semantics.md)
+- [ADR-067](ADR-067-settlement-batch-creation-and-schema-ownership.md)
