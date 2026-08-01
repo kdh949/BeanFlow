@@ -22,6 +22,7 @@
 | 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
 | 권한 변경 | No | Limited | No | Audited | No |
 | 만료 혜택 복원 정책 조회·변경 | No | No | No | Active `EXPIRED_BENEFIT_POLICY_READ`/`WRITE` grant + reason | No |
+| 일반 포인트 적립 정책 조회·변경 | No | No | No | Active `POINT_ACCRUAL_POLICY_READ`/`WRITE` grant + reason | No |
 
 ## Enforcement layers
 
@@ -44,6 +45,13 @@ grant는 403, grant/Audit persistence failure는 503이다.
 정책 GET은 `EXPIRED_BENEFIT_POLICY_READ`와 `X-Access-Reason` header를, PATCH는
 `EXPIRED_BENEFIT_POLICY_WRITE`와 request body reason을 요구한다. GET reason은 trim 뒤 1..200자,
 control character 금지이며 current policy heads와 access Audit이 함께 저장된 경우에만 200이다.
+일반 적립 policy current/history GET과 version write도 별도 `POINT_ACCRUAL_POLICY_READ`/`WRITE`
+grant를 사용하며 같은 read reason, write idempotency·body reason과 Audit commit gate를 적용한다.
+모든 `/operations/policies/ordinary-point-accrual/**` endpoint는 JWT의 coarse
+`PLATFORM_OPERATOR` role도 요구한다. READ grant는 current/head/history GET에만, WRITE grant는
+GLOBAL/STORE append-only PATCH에만 유효하며 서로 대체하지 않는다. Store policy endpoint는 권한
+확인 뒤 Merchant의 authoritative Store 존재 boundary를 사용하고, 조회 실패를 존재하지 않음이나
+GLOBAL fallback으로 바꾸지 않는다.
 포인트 조정은 `POINT_ADJUSTMENT` grant와 body reason/evidence를 요구한다. 상세는 ADR-069를 따른다.
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서

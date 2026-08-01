@@ -597,6 +597,79 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 할인과 포인트 사용을 모두 반영한 뒤 외부 결제수단 또는 혜택 전용 결제로 최종 확정된 실결제액을 기준으로 적립한다. 환불된 금액에는 포인트를 적립하지 않는다.
+- **Immutable Ordinary Accrual Snapshot Amendment (2026-08-01):** 일반 적립에 적용할
+  적립률·반올림·issuer type/reference·만료 규칙과 기간·품목/수량 단위 적립 배분 결과는
+  주문 생성 transaction에서 하나의 immutable `OrderPointAccrualSnapshot`으로 확정한다.
+  `OrderCompletedV1`은 적립을 시작하는 trigger일 뿐 payload를 늘리지 않으며, Loyalty는
+  typed Ordering boundary를 통해 그 snapshot만 읽는다. 완료 시점에 현재 정책을 조회하거나
+  snapshot 누락 시 0원 적립, 기본 issuer 또는 기본 만료를 사용하지 않는다.
+  이 amendment는 결정 시점과 snapshot 구조를 확정한다. 실제 적립률·반올림, issuer
+  type/reference와 만료 기준/기간은 아래 closed vocabulary를 따르는 Operations policy
+  version data이며 소스 코드 default로 고정하지 않는다.
+- **Global Default and Store Override Scope Amendment (2026-08-01):** 일반 적립 정책은
+  필수 전역 기본 head와 선택적 매장별 override head를 append-only version으로 관리한다.
+  Order 생성 transaction은 `storeId`에 해당하는 override가 있으면 그 current version을,
+  없으면 전역 current version을 선택하고 선택한 version과 계산 결과를
+  `OrderPointAccrualSnapshot`에 고정한다. 정책 변경은 이 선형화 시점 뒤에 생성되는
+  Order에만 적용하며 이미 저장된 Order snapshot, 완료 적립, 부분 환불 회수와 pending을
+  다시 계산하지 않는다. `BRAND`별 적용 scope와 매장·브랜드에서 issuer를 추론하는 규칙은
+  이번 MVP 범위가 아니다. 각 version의 issuer type/reference는 그 version이 선택된 주문에
+  그대로 적용되는 명시적 비용 주체다.
+- **Store Override Inheritance Amendment (2026-08-01):** STORE policy head는
+  `OVERRIDE` 또는 `INHERIT_GLOBAL` append-only version을 가리킨다. `OVERRIDE`는 완전한
+  적립 정책 값을 가지며, `INHERIT_GLOBAL`은 정책 값을 복사하지 않고 미래 Order가 생성
+  transaction 시점의 GLOBAL current를 선택하게 한다. head가 한 번도 없거나 current state가
+  `INHERIT_GLOBAL`이면 같은 GLOBAL fallback을 사용한다. 전환 전 Order snapshot과 그 결과는
+  변경하지 않는다. 최초 STORE head 생성과 head 부재 조회는 같은 store-scope lock으로
+  직렬화하여 update가 commit된 뒤 시작한 Order가 이전 fallback을 선택하지 않게 한다.
+  최초 전역 version 생성 경로는 후속 결정 전까지 pending이다.
+- **Ordinary Accrual Policy Vocabulary Amendment (2026-08-01):** policy version의
+  `accrualRateBps`는 `0..10_000`이다. `0`은 장애 fallback이 아니라 운영자가 명시적으로
+  적립을 중지한 감사 가능 version이며 Order snapshot은 policy와 0 gross를 그대로 보존한다.
+  gross는 `finalPayableKrw × accrualRateBps / 10_000`에 version이 선택한 `FLOOR` 또는
+  `HALF_UP`을 정확히 한 번 적용해 계산한다. unit allocation의 별도 정수 remainder 규칙은
+  이 gross 뒤에 적용한다.
+
+  expiry rule은 `EXACT_DURATION_FROM_COMPLETION` 또는
+  `SEOUL_CALENDAR_DAYS_FROM_COMPLETION`이고 `validityDays`는 `1..3650`이다. exact는
+  `completedAt + validityDays × 24h`, 서울 달력일 rule은 완료 시각의 `Asia/Seoul`
+  현지 날짜를 첫 유효일로 세어 `completedLocalDate + validityDays`의 00:00을 exclusive
+  `expiresAt`으로 사용한다. issuer type은 기존 `PLATFORM|BRAND|STORE`, reference는 trim 뒤
+  1..240자의 literal immutable 비용 주체다. issuer registry가 없으므로 존재를 추측 검증하거나
+  scope·Order에서 자동 보정하지 않는다.
+- **Initial Global Policy Bootstrap Amendment (2026-08-01):** 최초 GLOBAL policy는
+  migration seed나 HTTP 운영자 API로 만들지 않는다. controlled deployment job이 기존 operator
+  permission bootstrap과 같은 verified short-lived OIDC workload identity를 사용해 별도 offline
+  command를 실행하고, closed vocabulary 안의 완전한 rate·rounding·issuer·expiry 값, 변경 사유,
+  immutable evidence reference와 correlation ID를 전달한다. command는 최초 GLOBAL version,
+  GLOBAL head와 AuditRecord를 하나의 transaction에 정확히 한 번 저장한다. 이미 GLOBAL head가
+  있으면 성공 replay나 overwrite가 아니라 state conflict다. 정상 HTTP 애플리케이션은 Flyway 뒤
+  GLOBAL head/version의 존재·scope·완전성을 startup gate로 검증하고 누락·불일치·DB 장애 시
+  시작을 실패시킨다. offline bootstrap context와 명시적 test profile만 최초 생성 전 이 gate를
+  우회할 수 있으며 운영 profile의 default policy나 자동 seed는 금지한다.
+- **Forward-only Initial Activation Amendment (2026-08-01):** policy/snapshot migration 전에
+  이미 존재한 Order에는 최초 GLOBAL version을 소급 적용하지 않는다. migration은 각 기존 Order에
+  `LEGACY_NOT_APPLICABLE` 일반 적립 source를 명시적으로 기록하고 rate·issuer·expiry·unit 적립액을
+  backfill하지 않는다. 이 Order의 기존 완료, 부분 환불, point recovery 결과는 그대로이며 이후에도
+  일반 `ACCRUAL`이나 그 credit에 대한 `RECOVERY`를 새로 만들지 않는다. 새 애플리케이션에서 생성되는
+  모든 Order는 같은 생성 transaction에 `SNAPSHOTTED` source와 완전한 policy/unit snapshot을 가져야
+  한다. `LEGACY_NOT_APPLICABLE` marker가 없는 snapshot 누락은 legacy로 추측하지 않고 손상으로
+  실패·재처리한다.
+- **Ordinary Accrual Allocation and Recovery Timing Amendment (2026-08-01):** 계산된
+  `grossAccrualAmountKrw`는 현금 결제 몫이 양수인 모든 OrderLine conceptual unit에
+  `cashPayableKrw` 비례로 배분한다. 각 unit 몫은 먼저 정수 나눗셈으로 버리고, 남은 1원은
+  `cashPayableKrw`가 큰 unit부터, 같으면 `lineSequence`, `unitPosition` 오름차순으로
+  하나씩 준다. unit 합계는 gross와 정확히 같아야 하며 실결제액이 0이면 gross와 모든
+  unit amount는 0이다.
+
+  Payment의 immutable `refundSucceededAt`과 Ordering의 immutable `completedAt`을 비교한다.
+  `refundSucceededAt <= completedAt`이면 해당 성공 Refund unit은
+  `EXCLUDED_BEFORE_ACCRUAL`로 보존하고 완료 적립의 gross에서 제외한다. 같은 시각에는
+  Refund가 우선한다. `refundSucceededAt > completedAt`인 unit만 실제 `RECOVERY`와
+  부족액 `PointRecoveryPending` 대상이다. 아직 완료되지 않은 주문의 성공 Refund는
+  Payment-owned durable eligibility work로 대기하며 Account/Lot/pending을 바꾸지 않는다.
+  Order가 완료 없이 terminal이면 work는 `NOT_APPLICABLE`로 끝나고 recovery debt를 만들지
+  않는다. 이 work와 결과 source는 replay·out-of-order delivery에도 동일 결과를 내야 한다.
 - **Audited Manual Adjustment Amendment (2026-08-01):** 확인된 포인트 원장 불일치는
   활성 `PLATFORM_OPERATOR`의 명시적 권한, non-blank 사유와 증빙 아래 signed
   `ADJUSTMENT`로만 보정한다. 양수 보정은 operator가 입력한
@@ -611,6 +684,9 @@
   - 쿠폰 사용 주문 적립액
   - 포인트 사용 주문 적립액
   - 0원 주문 적립 0
+  - 주문 생성 뒤 정책 변경에도 snapshot 적립 결과가 변하지 않음
+  - snapshot의 unit별 적립 배분과 성공 부분 환불의 회수 대상 tie-out
+  - 완료 전·완료 후·동시 Refund 성공의 accrual 제외/RECOVERY/pending 경계
   - 부분 환불에 따른 적립 포인트 회수
   - 감사형 양수·음수 `ADJUSTMENT`의 issuer/만료, Lot/Account/Audit tie-out
 - **ADR Required:** Yes — 포인트 Lot·적립·환불 복원 정책

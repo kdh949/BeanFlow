@@ -43,6 +43,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
+  "docs/exec-plans/completed/ordinary-point-accrual-policy-management.md"
   "docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
@@ -232,8 +233,17 @@ expected_execution_metadata = {
             'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
         ],
     ),
+    'ordinary-point-accrual-policy-management.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
+            'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
+        ],
+    ),
     'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md': (
-        'IMPLEMENTATION', True, ['customer-order-cancellation-12-partial-refund-allocation-and-restoration.md'],
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
+            'ordinary-point-accrual-policy-management.md',
+        ],
     ),
     'customer-order-cancellation-14-point-account-read-vertical-slice.md': (
         'IMPLEMENTATION', True, [
@@ -317,6 +327,9 @@ if plan_metadata[plan10_path]['status'] != 'COMPLETED':
 plan12_path = plan_paths_by_filename[
     'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md'
 ]
+ordinary_accrual_path = plan_paths_by_filename[
+    'ordinary-point-accrual-policy-management.md'
+]
 plan13_path = plan_paths_by_filename[
     'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md'
 ]
@@ -326,8 +339,11 @@ plan16_path = plan_paths_by_filename[
 if plan_metadata[plan12_path]['status'] != 'COMPLETED':
     print('Plan 12 must be completed after its Plan 10/11 dependencies and validation pass.', file=sys.stderr)
     sys.exit(1)
+if plan_metadata[ordinary_accrual_path]['status'] != 'COMPLETED':
+    print('Ordinary-accrual policy/snapshot predecessor must remain completed after validation.', file=sys.stderr)
+    sys.exit(1)
 if not plan_metadata[plan13_path]['implementation_ready']:
-    print('Plan 13 must become implementation-ready after Plan 12 completes.', file=sys.stderr)
+    print('Plan 13 must be ready after both direct dependencies and product decisions are complete.', file=sys.stderr)
     sys.exit(1)
 if plan_metadata[plan16_path]['implementation_ready']:
     print('Plan 16 must remain blocked while Plan 13 and Plan 15 are active.', file=sys.stderr)
@@ -379,12 +395,14 @@ required_current_readiness = (
     'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md',
     'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
     'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
+    'ordinary-point-accrual-policy-management.md',
     'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
     'customer-order-cancellation-14-point-account-read-vertical-slice.md',
     'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
     'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md',
     'customer-order-cancellation-20-settlement-foundation.md',
     'customer-order-cancellation-30-order-compensation-foundation.md',
+    '11 policy/grants + 12 allocation -> ordinary-accrual policy/snapshot',
     '11 policy/grants + 13 recovery + signed cursor',
 )
 if not all(fragment in normalized_readiness for fragment in required_current_readiness):
@@ -756,6 +774,11 @@ else:
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
         '/operations/point-accounts/{accountId}/adjustments',
+        '/operations/policies/ordinary-point-accrual/global',
+        '/operations/policies/ordinary-point-accrual/global/versions',
+        '/operations/policies/ordinary-point-accrual/stores',
+        '/operations/policies/ordinary-point-accrual/stores/{storeId}',
+        '/operations/policies/ordinary-point-accrual/stores/{storeId}/versions',
         '/stores/{storeId}/settlements',
         '/stores/{storeId}/settlements/{settlementBatchId}/items',
         '/settlement-items/{itemId}/disputes',
@@ -799,6 +822,8 @@ else:
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
         ('/operations/point-accounts/{accountId}/adjustments', 'post'),
+        ('/operations/policies/ordinary-point-accrual/global', 'patch'),
+        ('/operations/policies/ordinary-point-accrual/stores/{storeId}', 'patch'),
     ]
     idempotency_ref = '#/components/parameters/IdempotencyKey'
     for path, method in mutation_operations:
@@ -1197,6 +1222,9 @@ else:
         'GET /point-accounts/{accountId}/transactions',
         'GET /stores/{storeId}/settlements',
         'GET /stores/{storeId}/settlements/{settlementBatchId}/items',
+        'GET /operations/policies/ordinary-point-accrual/global/versions',
+        'GET /operations/policies/ordinary-point-accrual/stores',
+        'GET /operations/policies/ordinary-point-accrual/stores/{storeId}/versions',
     }
     cursor_operations = set()
     for path, path_item in spec['paths'].items():

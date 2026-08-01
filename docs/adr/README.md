@@ -74,3 +74,5 @@
 | [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) | Accepted | Versioned HMAC cursor와 pagination 상한 |
 | [ADR-071](ADR-071-settlement-input-snapshot-foundation.md) | Accepted | 정산 입력 snapshot의 원천과 주문 시점 물질화 |
 | [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md) | Accepted | 무인 ExecPlan 실행과 migration writer lane |
+| [ADR-073](ADR-073-order-point-accrual-snapshot.md) | Accepted | 주문 시점 일반 적립 snapshot과 frozen V1 trigger boundary |
+| [ADR-074](ADR-074-global-and-store-scoped-point-accrual-policy.md) | Accepted | 전역 기본값과 매장별 일반 적립 정책 우선순위 |

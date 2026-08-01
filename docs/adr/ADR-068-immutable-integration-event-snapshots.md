@@ -91,6 +91,21 @@ Settlement `OrderCompletedV2` consumer. The Ordering producer transaction and Se
 are separate local transactions; sharing an event never makes them one database transaction. Plan 16 owns only
 the named Refund/Loyalty producers in the table and is not an `OrderCompletedV2` producer.
 
+### Plan 13의 frozen V1 trigger-only boundary
+
+ADR-073은 Plan 13에 한해 `OrderCompletedV1`을 payload가 없는 frozen trigger로 유지하면서
+Order 생성 transaction에 저장한 immutable `OrderPointAccrualSnapshot`을 typed Ordering
+boundary로 읽는 것을 허용한다. 이것은 현재 Order Aggregate나 live policy를 조회해 event
+payload의 누락 값을 채우는 consumer가 아니다. boundary는 completion source/version과
+snapshot hash를 검증할 수 있어야 하고, gross accrual·unit allocation·issuer·만료 계산에
+필요한 immutable 입력 및 Refund 성공 시각과 완료 시각의 관계를 판정하는 durable fact만
+반환한다.
+
+snapshot은 없는 경우를 0원 적립으로 대체하지 않는다. 누락·변조·source 불일치 또는
+boundary 실패는 Loyalty source 처리의 retry/manual-review failure이며, public event를
+새로 추가하거나 `OrderCompletedV1` field를 확장하지 않는다. Plan 20의 V2 producer/cutover
+소유권도 바꾸지 않는다.
+
 All new producer transactions persist the original fact and Spring Modulith publication atomically.
 External Provider calls remain outside those transactions. A missing required snapshot, source, version
 or publication row rolls back the producer result transaction when that fact is being committed; a
@@ -106,7 +121,8 @@ ADR-017 and late-event convergence.
 ### Event carries only a locator to an immutable owner projection
 
 This can keep payloads smaller, but it requires a new immutable projection schema, versioned cross-context
-read API and availability/failure contract for every consumer. No such owner projection exists today.
+read API and availability/failure contract for every consumer. ADR-073은 Plan 13의 ordinary accrual에
+한해 이 계약을 정의한다. 그 밖의 financial consumer에 대한 일반 owner projection은 없다.
 
 ### Add fields to `OrderCompletedV1` in place
 
@@ -129,6 +145,8 @@ unimplemented event shape to consume.
 - Event catalog, Kotlin event API and producer tests must change together at each checkpoint; the catalog is
   not proof that a producer has already been implemented.
 - Analytics starts with only the producers whose exact contract and validation evidence are complete.
+- Plan 13은 frozen V1 payload를 확장하지 않고 ADR-073의 immutable snapshot boundary를 통해서만
+  ordinary accrual을 materialize한다.
 
 ## Verification
 
@@ -173,3 +191,4 @@ compatibility decision.
 - [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
 - [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)
+- [ADR-073](ADR-073-order-point-accrual-snapshot.md)

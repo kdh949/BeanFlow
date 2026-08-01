@@ -220,8 +220,12 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Plan 12 allocation/restoration](../exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
   V15 immutable line/point request·success allocation, 앞 unit deterministic rounding, Provider 분리와
   issuer-preserving Loyalty restoration/retry 원장이 완료됐다. Plan 13은 이 owner source를 소비할 수 있다.
+- [Ordinary-accrual policy/snapshot](../exec-plans/completed/ordinary-point-accrual-policy-management.md):
+  V16 GLOBAL/STORE immutable version, verified initial bootstrap, fail-fast startup과 신규 Order의 complete
+  policy/unit snapshot이 구현됐다. policy change 뒤 기존 typed snapshot이 불변인 통합 증거가 있다.
 - [Plan 13 recovery](../exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
-  실제 `RECOVERY` debit과 PointRecoveryPending 상계가 필요하다.
+  Plan 12 allocation과 completed ordinary-accrual snapshot을 소비해 실제 `RECOVERY` debit과
+  PointRecoveryPending 상계를 구현해야 한다.
 - [Plan 15 settlement input](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
   완료 시점 live 조회 없이 immutable 정산 입력을 제공해야 한다.
 - [Plan 16 financial events](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
@@ -240,7 +244,10 @@ Plan 11/13/cursor 뒤 실행되는 별도 지원 조회 vertical slice다. Plan 
 
 ```text
 00 baseline ──> 10 issuer ──> 15 settlement input
-     └──> 11 policy/grants ──> 12 allocation ──> 13 recovery
+     └──> 11 policy/grants ──> 12 allocation
+
+11 policy/grants + 12 allocation -> ordinary-accrual policy/snapshot
+12 allocation + ordinary-accrual policy/snapshot -> 13 recovery
 
 11 policy/grants + 13 recovery + signed cursor ──> 14 point-account read
 
@@ -265,6 +272,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] Plan 10 issuer provenance가 통과함
 - [x] Plan 11 policy/grants가 통과함
 - [x] Plan 12 allocation/restoration이 통과함
+- [x] ordinary-accrual policy/snapshot foundation이 통과함
 - [ ] Plan 13 recovery/pending이 통과함
 - [ ] Plan 15 settlement input이 통과함
 - [ ] Plan 16 immutable events가 통과함
@@ -275,6 +283,20 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] 기능 branch에서 기존 사용자 변경을 분리·보존함
 
 남은 foundation 체크가 모두 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
+
+## Ordinary-accrual policy/snapshot validation (2026-08-01)
+
+- V16 migration, immutable policy/head/source/header/unit constraints와 legacy marker: **Passed**.
+- verified OIDC initial bootstrap, missing/malformed GLOBAL startup fail-fast와 test-only explicit policy:
+  **Passed**.
+- GLOBAL/STORE current/history/write, READ/WRITE grant, reason/idempotency/Audit, signed cursor와 Store
+  validation: **Passed**.
+- benefit-only/external-payable atomic snapshot, forced snapshot failure rollback와 future-only policy change:
+  **Passed**.
+- `./gradlew clean build`: **Passed**, 193 tests, 0 failures/errors/skips; Spotless와 Modulith 포함.
+- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
+- Plan 13: direct dependencies completed, `Implementation-Ready=true`; predecessor merge 뒤 최신 main에서
+  migration-writer lease를 확인하고 시작한다.
 
 ## Plan 12 foundation validation (2026-08-01)
 

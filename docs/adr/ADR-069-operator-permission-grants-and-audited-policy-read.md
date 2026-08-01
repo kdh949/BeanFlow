@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
+- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
 
 ## Context
 
@@ -29,6 +29,11 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 - MVP permission vocabulary는 `EXPIRED_BENEFIT_POLICY_READ`,
   `EXPIRED_BENEFIT_POLICY_WRITE`, `POINT_ACCOUNT_READ`, `POINT_ADJUSTMENT`다. 새 privileged operation은 별도
   ADR 또는 vocabulary amendment 없이 이 권한을 재사용하지 않는다.
+- **2026-08-01 ordinary accrual policy amendment:** ordinary-accrual policy/snapshot foundation은
+  `POINT_ACCRUAL_POLICY_READ`와 `POINT_ACCRUAL_POLICY_WRITE`를 closed vocabulary에 forward
+  migration으로 추가한다. 일반 적립 policy current/history 조회와 version 변경은 이 두 grant를
+  사용하고 expired-benefit grant를 재사용하지 않는다. 기존 offline grant bootstrap은 새 enum과 DB
+  vocabulary가 적용된 뒤 두 permission의 grant/revoke/regrant에도 그대로 사용한다.
 - **2026-08-01 migration ownership amendment:** Plan 11이
   `operator_permission_grant` schema와 위 네 값을 허용하는 closed DB vocabulary를 한
   migration에서 단독 생성한다. Plan 14와 point adjustment plan은 새 permission 값이나
@@ -107,6 +112,10 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   반환하지 않는다.
 - PATCH는 `EXPIRED_BENEFIT_POLICY_WRITE` grant와 기존 request body의 non-blank `reason`을
   요구한다. read header를 PATCH의 새/중복 reason으로 사용하지 않는다.
+- 일반 적립 policy current/history GET은 `POINT_ACCRUAL_POLICY_READ` grant와 같은
+  `X-Access-Reason` validation/Audit commit gate를 사용한다. GLOBAL/STORE version 생성·변경과
+  `INHERIT_GLOBAL` 전환은 `POINT_ACCRUAL_POLICY_WRITE`, request body reason,
+  `Idempotency-Key`와 expected current version을 요구한다.
 - `POST /operations/point-accounts/{accountId}/adjustments`는 `POINT_ADJUSTMENT` grant와 기존
   request body reason/evidence를 요구한다. grant 검증은 PointAccount lock 뒤 같은 command
   transaction에 참여하며 Account/Lot/ledger/Audit/outbox/201과 분리되지 않는다.

@@ -602,6 +602,202 @@ paths:
                 $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/global:
+    get:
+      tags: [Operations]
+      operationId: getGlobalOrdinaryPointAccrualPolicy
+      summary: Get the current GLOBAL ordinary point accrual policy
+      description: Requires PLATFORM_OPERATOR, POINT_ACCRUAL_POLICY_READ and a committed access Audit.
+      parameters:
+        - $ref: "#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Current complete GLOBAL policy version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyVersion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    patch:
+      tags: [Operations]
+      operationId: changeGlobalOrdinaryPointAccrualPolicy
+      summary: Append and activate a GLOBAL ordinary point accrual policy version
+      description: Requires PLATFORM_OPERATOR and POINT_ACCRUAL_POLICY_WRITE. Same-key replay returns the first result.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeGlobalOrdinaryPointAccrualPolicyRequest"
+      responses:
+        "200":
+          description: Newly activated or replayed GLOBAL policy version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyVersion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/global/versions:
+    get:
+      tags: [Operations]
+      operationId: listGlobalOrdinaryPointAccrualPolicyVersions
+      summary: List GLOBAL ordinary point accrual policy history
+      parameters:
+        - $ref: "#/components/parameters/AccessReason"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: GLOBAL versions newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/stores:
+    get:
+      tags: [Operations]
+      operationId: listStoreOrdinaryPointAccrualPolicyHeads
+      summary: List explicit STORE policy heads
+      parameters:
+        - $ref: "#/components/parameters/AccessReason"
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OVERRIDE, INHERIT_GLOBAL]
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Explicit STORE heads including inheritance markers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/stores/{storeId}:
+    get:
+      tags: [Operations]
+      operationId: getStoreOrdinaryPointAccrualPolicy
+      summary: Get an explicit STORE head and its effective resolved policy
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Explicit head when present and complete effective policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreOrdinaryPointAccrualPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    patch:
+      tags: [Operations]
+      operationId: changeStoreOrdinaryPointAccrualPolicy
+      summary: Append a STORE override or inheritance version
+      description: First STORE version omits expectedPolicyVersionId; later versions require the exact current ID.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/ChangeStoreOrdinaryPointAccrualOverrideRequest"
+                - $ref: "#/components/schemas/ChangeStoreOrdinaryPointAccrualInheritanceRequest"
+              discriminator:
+                propertyName: state
+      responses:
+        "200":
+          description: Newly activated or replayed STORE version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyVersion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/stores/{storeId}/versions:
+    get:
+      tags: [Operations]
+      operationId: listStoreOrdinaryPointAccrualPolicyVersions
+      summary: List one STORE policy history
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/AccessReason"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: STORE versions newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdinaryPointAccrualPolicyPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
     get:
       tags: [Loyalty]
@@ -1640,6 +1836,199 @@ components:
           minLength: 1
           maxLength: 500
           pattern: '^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$'
+    OrdinaryPointAccrualPolicyVersion:
+      type: object
+      additionalProperties: false
+      required: [policyVersionId, scopeType, scopeReference, state, effectiveAt, actorType, actorReference, reason]
+      properties:
+        policyVersionId:
+          type: integer
+          format: int64
+          minimum: 1
+        scopeType:
+          type: string
+          enum: [GLOBAL, STORE]
+        scopeReference:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [OVERRIDE, INHERIT_GLOBAL]
+        accrualRateBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        roundingMode:
+          type: string
+          enum: [FLOOR, HALF_UP]
+        issuerType:
+          type: string
+          enum: [PLATFORM, BRAND, STORE]
+        issuerReference:
+          type: string
+          minLength: 1
+          maxLength: 240
+        expiryRule:
+          type: string
+          enum: [EXACT_DURATION_FROM_COMPLETION, SEOUL_CALENDAR_DAYS_FROM_COMPLETION]
+        validityDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        effectiveAt:
+          $ref: "#/components/schemas/DateTime"
+        actorType:
+          type: string
+          enum: [PLATFORM_OPERATOR, SYSTEM]
+        actorReference:
+          type: string
+          minLength: 1
+          maxLength: 500
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    OrdinaryPointAccrualPolicySnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        [policyVersionId, scopeType, scopeReference, accrualRateBps, roundingMode, issuerType,
+         issuerReference, expiryRule, validityDays, canonicalPolicyHash]
+      properties:
+        policyVersionId:
+          type: integer
+          format: int64
+          minimum: 1
+        scopeType:
+          type: string
+          enum: [GLOBAL, STORE]
+        scopeReference:
+          type: string
+          format: uuid
+        accrualRateBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        roundingMode:
+          type: string
+          enum: [FLOOR, HALF_UP]
+        issuerType:
+          type: string
+          enum: [PLATFORM, BRAND, STORE]
+        issuerReference:
+          type: string
+          minLength: 1
+          maxLength: 240
+        expiryRule:
+          type: string
+          enum: [EXACT_DURATION_FROM_COMPLETION, SEOUL_CALENDAR_DAYS_FROM_COMPLETION]
+        validityDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        canonicalPolicyHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    OrdinaryPointAccrualPolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrdinaryPointAccrualPolicyVersion"
+        page:
+          $ref: "#/components/schemas/OrdinaryPointAccrualPolicyPageInfo"
+    OrdinaryPointAccrualPolicyPageInfo:
+      type: object
+      additionalProperties: false
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 2048
+    StoreOrdinaryPointAccrualPolicy:
+      type: object
+      additionalProperties: false
+      required: [storeId, effectivePolicy, selectionSource]
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        explicitHead:
+          $ref: "#/components/schemas/OrdinaryPointAccrualPolicyVersion"
+        effectivePolicy:
+          $ref: "#/components/schemas/OrdinaryPointAccrualPolicySnapshot"
+        selectionSource:
+          type: string
+          enum: [STORE_OVERRIDE, GLOBAL_INHERITED, GLOBAL_NO_OVERRIDE]
+    ChangeGlobalOrdinaryPointAccrualPolicyRequest:
+      allOf:
+        - $ref: "#/components/schemas/OrdinaryPointAccrualOverrideFields"
+        - type: object
+          required: [expectedPolicyVersionId]
+    ChangeStoreOrdinaryPointAccrualOverrideRequest:
+      allOf:
+        - $ref: "#/components/schemas/OrdinaryPointAccrualOverrideFields"
+        - type: object
+          properties:
+            expectedPolicyVersionId:
+              type: integer
+              format: int64
+              minimum: 1
+    OrdinaryPointAccrualOverrideFields:
+      type: object
+      additionalProperties: false
+      required: [state, accrualRateBps, roundingMode, issuerType, issuerReference, expiryRule, validityDays, reason]
+      properties:
+        state:
+          const: OVERRIDE
+        accrualRateBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        roundingMode:
+          type: string
+          enum: [FLOOR, HALF_UP]
+        issuerType:
+          type: string
+          enum: [PLATFORM, BRAND, STORE]
+        issuerReference:
+          type: string
+          minLength: 1
+          maxLength: 240
+        expiryRule:
+          type: string
+          enum: [EXACT_DURATION_FROM_COMPLETION, SEOUL_CALENDAR_DAYS_FROM_COMPLETION]
+        validityDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        expectedPolicyVersionId:
+          type: integer
+          format: int64
+          minimum: 1
+    ChangeStoreOrdinaryPointAccrualInheritanceRequest:
+      type: object
+      additionalProperties: false
+      required: [state, reason]
+      properties:
+        expectedPolicyVersionId:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          const: INHERIT_GLOBAL
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
     Cancellation:
       type: object
       additionalProperties: false

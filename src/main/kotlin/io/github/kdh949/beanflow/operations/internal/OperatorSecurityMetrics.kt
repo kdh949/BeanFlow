@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationMode
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationTrigger
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitType
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyState
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
 
@@ -66,6 +68,37 @@ internal class OperatorSecurityMetrics(
                 "beanflow.operations.permission.bootstrap.count",
                 "action",
                 action.name,
+                "outcome",
+                outcome.name,
+            ).increment()
+    }
+
+    fun pointAccrualPolicyChange(
+        scopeType: OrdinaryPointAccrualPolicyScopeType,
+        state: OrdinaryPointAccrualPolicyState,
+        outcome: OperatorSecurityOutcome,
+    ) {
+        meterRegistry
+            .counter(
+                "beanflow.operations.point_accrual_policy.change.count",
+                "scope",
+                scopeType.name,
+                "state",
+                state.name,
+                "outcome",
+                outcome.name,
+            ).increment()
+    }
+
+    fun pointAccrualPolicyRead(
+        endpoint: String,
+        outcome: OperatorSecurityOutcome,
+    ) {
+        meterRegistry
+            .counter(
+                "beanflow.operations.point_accrual_policy.read.count",
+                "endpoint",
+                endpoint,
                 "outcome",
                 outcome.name,
             ).increment()

@@ -74,6 +74,11 @@ Campaign or PointLot current values; the consumer also does not re-read Ordering
 event payload. Plan 16 owns only `PaymentRefundedV1`, `PointsAccruedV1` and `PointsRestoredV1` producers; it is
 not an `OrderCompletedV2` producer.
 
+`OrderCompletedV1`은 frozen trigger로 유지한다. Plan 13의 Loyalty accrual은 이 event의 payload를
+확장하지 않고, ADR-073의 typed Ordering boundary가 반환하는 immutable
+`OrderPointAccrualSnapshot`만 사용한다. 이는 일반 financial event consumer를 위한 current Aggregate
+조회가 아니며 snapshot 누락·불일치·boundary 실패를 0원 적립 또는 live-policy fallback으로 바꾸지 않는다.
+
 `CustomerCancellationRefundSucceededV1`과
 `CustomerCancellationRefundDelayedV1`은 고객 취소 Refund의 실제 terminal 결과만
 표현한다. payload는 공통 envelope, `orderId`, `customerId`,

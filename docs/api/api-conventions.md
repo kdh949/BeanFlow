@@ -279,6 +279,20 @@ reason과 evidence를
   configuration, 실제 deployment environment variable 이름, log, test output 또는 운영 fallback에 쓸 수 없다.
 - common `limit`은 optional이며 default 20, minimum 1, maximum 100이다.
 - 응답은 `nextCursor`가 있을 때만 다음 page가 있음을 뜻한다.
+- 일반 포인트 적립 정책의 GLOBAL/STORE history와 STORE head 목록도 같은 signed cursor를 사용한다.
+  version history는 `policyVersionId DESC`, STORE head는 `(policyVersionId DESC, storeId DESC)`이며
+  cursor는 endpoint, GLOBAL/STORE scope와 optional state filter에 bind된다.
+
+## Ordinary point accrual policy operations
+
+- 모든 조회는 `PLATFORM_OPERATOR`, active `POINT_ACCRUAL_POLICY_READ`, 정규화된
+  `X-Access-Reason`과 같은 transaction에서 commit된 Audit가 필요하다.
+- GLOBAL 및 STORE 변경은 active `POINT_ACCRUAL_POLICY_WRITE`와 `Idempotency-Key`를 요구한다.
+  GLOBAL은 현재 expected version이 필수이고, 최초 STORE version은 expected version을 생략한다.
+- STORE `INHERIT_GLOBAL` body에는 policy value를 넣지 않는다. 이 version은 history를 보존하면서
+  이후 주문만 current GLOBAL을 선택하게 한다.
+- target 계약은 `openapi/beanflow-v1.yaml`에만 있고 deployment evidence 전에는
+  `openapi/beanflow-v1-deployed.yaml`에 추가하지 않는다.
 
 ## Payment and asynchronous recovery
 
