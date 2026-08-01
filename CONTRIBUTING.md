@@ -4,9 +4,12 @@ BeanFlow는 `main`을 항상 빌드와 배포가 가능한 상태로 유지하�
 
 ## 기본 원칙
 
-* 모든 작업 브랜치는 최신 `main`에서 생성합니다.
+* 모든 일반 작업 브랜치는 최신 `main`에서 생성합니다. 무인 schema-writing 작업은
+  [ADR-072](docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md)의 migration-writer
+  lease를 얻은 뒤에만 시작합니다.
 * 브랜치는 하나의 목적만 다루고, 가능하면 1~3일 안에 병합합니다.
-* 미완성 기능은 장기 브랜치 대신 기능 플래그로 격리합니다.
+* 미완성 required 기능을 feature flag/profile로 2xx 성공처럼 노출하지 않습니다. Plan 40처럼
+  recovery가 선행되어야 하는 기능은 Draft PR로 유지하고 배포하지 않습니다.
 * `main` 변경은 Pull Request를 통해 리뷰와 CI를 통과한 뒤 병합합니다.
 * 긴급 상황에서 관리자 우회를 사용했다면 즉시 사유와 후속 검증을 Issue 또는 PR에 남깁니다.
 
@@ -28,6 +31,23 @@ git switch main
 git pull --ff-only
 git switch -c feature/order-creation
 ```
+
+`Plan 40 → Plan 50`처럼 ADR-072가 명시한 Draft-only release stack만 예외로 parent head를
+base로 할 수 있습니다. Plan 50 validation 후에는 child head를 main에 target한 combined release PR만
+병합하며 parent Draft PR을 따로 merge/deploy하지 않습니다. 여러 sibling head를 통합한 branch 또는
+여러 PR base를 자동으로 추측하지 않습니다.
+
+이 Draft stack은 하나의 migration-writer lease를 공유합니다. Plan 40의 verified completion commit은
+parent Draft branch에서 plan 파일 이동과 Plan 50 dependency/ready 갱신을 함께 수행하며, Plan 50은
+그 completed parent head만 base로 삼습니다. child release PR이 main에 merge되기 전에는 unrelated
+schema writer를 시작하지 않습니다.
+
+## Migration writer lane
+
+Flyway migration을 만들거나 수정하는 ExecPlan은 `Writes-Migration: true` metadata를 가져야 합니다.
+자동 실행기는 한 번에 하나만 시작하며, lease holder가 latest main에서 branch를 만든 뒤 마지막 V 번호를
+읽습니다. 해당 PR이 merge되기 전 다음 schema writer를 시작하거나 migration 번호 reservation, checksum
+repair, sibling rebase로 충돌을 보정하지 않습니다.
 
 ## 커밋
 

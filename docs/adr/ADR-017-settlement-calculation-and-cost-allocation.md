@@ -31,6 +31,10 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   `(storeId, settlementDate)`의 최소 `OPEN` Batch를 멱등 생성한다. Batch calculation,
   confirmation, summary와 Adjustment는 이 foundation을 확장하는 후속 lifecycle의 책임이다.
   schema object별 migration ownership과 closed-Batch late Item failure path는 ADR-067을 따른다.
+- **Settlement input amendment (2026-08-01):** 수수료 계약, Coupon burden과 PointLot issuer의
+  실제 원천·주문 시점 materialization, `grossPaidKrw`/fee-base/net formula와 missing-source
+  failure는 ADR-071이 canonical이다. Plan 20은 해당 snapshot foundation outcome 없이 현재
+  Merchant/Campaign/Loyalty 값을 조회해 Item을 만들지 않는다.
 
 ## Alternatives Considered
 
@@ -72,3 +76,4 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - [ADR-014](ADR-014-money-allocation-and-partial-refund.md)
 - [ADR-067](ADR-067-settlement-batch-creation-and-schema-ownership.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
+- [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)

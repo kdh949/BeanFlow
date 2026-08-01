@@ -63,10 +63,11 @@ transition만 구현한다. summary/confirmation fields는 후속 계획이 단�
 
 ### Execution dependency
 
-Plan 20은 customer-cancellation contract baseline(Plan 00) 후 시작할 수 있다. Batch lifecycle
-계획은 Plan 10의 Refund allocation event contract와 Plan 20의 actual migration/outcome을 모두
-직접 선행조건으로 둔다. 이를 통해 Plan 20 branch와 lifecycle branch가 같은 migration을 만들지
-않는다.
+Plan 20은 Plan 15 settlement-input snapshot foundation과 signed-cursor foundation의 actual
+outcome 뒤에만 시작한다. Plan 15가 Plan 10 issuer/precheck outcome을 직접 소비하므로 Plan 20은
+그 ancestor를 다시 branch base로 나열하지 않는다. Batch lifecycle 계획의 direct phase input은
+Plan 20의 actual migration/outcome 하나다. 무인 schema execution은 ADR-072 migration-writer lane을
+따르므로 같은 Flyway 번호를 병렬 branch에서 선택하지 않는다.
 
 ## Alternatives Considered
 
@@ -132,3 +133,5 @@ state와 결합될 때 재검토한다.
 - [ADR-017](ADR-017-settlement-calculation-and-cost-allocation.md)
 - [ADR-018](ADR-018-settlement-dispute-hold-and-refile.md)
 - [ADR-062](ADR-062-settlement-batch-item-discovery.md)
+- [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)
+- [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)

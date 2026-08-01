@@ -72,3 +72,5 @@
 | [ADR-068](ADR-068-immutable-integration-event-snapshots.md) | Accepted | Immutable integration event snapshot 계약 |
 | [ADR-069](ADR-069-operator-permission-grants-and-audited-policy-read.md) | Accepted | Operator permission grant와 감사형 정책 조회 |
 | [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) | Accepted | Versioned HMAC cursor와 pagination 상한 |
+| [ADR-071](ADR-071-settlement-input-snapshot-foundation.md) | Accepted | 정산 입력 snapshot의 원천과 주문 시점 물질화 |
+| [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md) | Accepted | 무인 ExecPlan 실행과 migration writer lane |

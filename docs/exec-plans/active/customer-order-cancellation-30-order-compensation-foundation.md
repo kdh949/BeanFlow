@@ -1,7 +1,10 @@
 # 공통 Order compensation foundation을 만든다
 
 > **Status:** `ACTIVE`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -22,8 +25,9 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 - ADR-033/034/040~043/055/059는 목표 공통 모델을 정의한다.
 - Plan 10은 ADR-063에 따라 최종 다섯 policy head/version 저장소와 운영 API를 먼저
   구현한다. 이 계획은 그중 종료용 네 head를 소비한다.
-- Plan 30의 유일한 customer-cancellation foundation 직접 선행조건은 Plan 10이다. Plan 20
-  Settlement foundation은 Plan 00 뒤 병렬로 진행하며 이 계획의 migration/API base가 아니다.
+- Plan 10은 종료용 네 policy head의 direct source이고 Plan 20은 ADR-072 migration-writer lane의
+  direct phase predecessor다. Plan 30은 두 completion evidence 뒤 latest-main baseline에서 policy
+  head를 소비하며, independent parallel migration branch를 만들지 않는다.
 - 00 plan에서 모든 non-local 환경·artifact가 0으로 확인돼 ADR-059 gate가 통과했다.
   이 계획은 clean-cutover migration/event 전략을 입력으로 사용할 수 있다.
 
@@ -86,7 +90,7 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 
 ## Data and Migration
 
-00 plan이 clean cutover를 명시적으로 통과했으므로 ADR-059 shape를 사용한다. producer,
+Plan 10/20 completion and ADR-072 migration-writer lease 뒤 latest main에서 시작한다. 00 plan이 clean cutover를 명시적으로 통과했으므로 ADR-059 shape를 사용한다. producer,
 consumer와 fixture를 같은 변경에서 전환하고 legacy compatibility layer와 version 이중
 발행은 추가하지 않는다. 재확인 결과가 nonzero/unknown이면 새 Accepted
 forward-migration ADR/ExecPlan의 rename/backfill/publication drain/compatibility 순서를
@@ -120,7 +124,7 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 
 ## Milestones
 
-1. 00 clean-cutover 결과와 Plan 10 policy schema actual outcome을 검증한다.
+1. 00 clean-cutover 결과와 Plan 10 policy/Plan 20 lane completion evidence를 모두 검증한다.
 2. 공통 Case/step/trigger/two-policy domain과 schema를 구현한다.
 3. Plan 10의 종료용 네 policy head를 Case child snapshot에 연결한다.
 4. Pickup/Stock과 Coupon/Points owner 복원을 공통 계약으로 전환한다.
@@ -186,16 +190,20 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 | 2026-07-31 | Unblocked | ADR-059 clean-cutover 전략 사용 | 운영 상태 evidence에서 모든 외부 항목 0 | release-gate evidence |
 | 2026-08-01 | Accepted | ADR-029 Order 취소 migration은 Plan 40이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 40 |
 | 2026-08-01 | Accepted | 공통 five-head policy 기반은 Plan 10이 단독 구현하고 이 계획은 종료용 네 head를 소비 | 부분 환불 선행조건과 migration 중복 방지 | ADR-063, Plan 10 |
-| 2026-08-01 | Accepted | Plan 30은 Plan 10 branch 위에서만 시작하고 Plan 20과 병렬 실행한다 | policy schema 선행조건은 지키되 독립 Settlement migration을 기다리지 않음 | master DAG, ADR-063 |
+| 2026-08-01 | Superseded | Plan 30은 Plan 10 branch 위에서만 시작하고 Plan 20과 병렬 실행한다 | PR base/parallel Flyway migration을 무인 실행할 수 없음 | prior master DAG |
+| 2026-08-01 | Accepted | Plan 30은 Plan 10 policy output과 Plan 20 lane completion 뒤 latest main baseline에서 시작 | policy head direct input을 보존하면서 migration writer lane을 단일화 | ADR-063, ADR-072 |
 
 ## Outcomes & Retrospective
 
-미구현이다. 00 fact gate가 통과해 foundation 구현을 시작할 수 있지만, 이 계획 자체의
-domain/schema/owner migration과 검증은 아직 완료되지 않았다.
+미구현이다. 00 fact gate, Plan 10 policy output과 Plan 20 completion evidence가 모두 통과하고 migration-writer lease를
+얻기 전에는 이 계획의 domain/schema/owner migration을 시작하지 않는다.
 
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
 - 2026-07-31: owner release evidence로 00 gate가 통과해 clean-cutover 전략을 확정.
 - 2026-08-01: policy head/version/API 구현 소유권을 Plan 10으로 이동.
-- 2026-08-01: Plan 10→30 직접 의존성을 명시하고 Plan 20을 불필요한 sequential blocker에서 제거했다.
+- 2026-08-01: **Superseded** Plan 10→30 직접 의존성을 명시하고 Plan 20을 sequential blocker에서
+  제거했다. 이후 ADR-072가 Plan 20 lane input을 복원했다.
+- 2026-08-01: ADR-072에 따라 prior parallel branch rule을 supersede하고 Plan 20 completion 뒤
+  latest-main migration lane으로 변경했다.

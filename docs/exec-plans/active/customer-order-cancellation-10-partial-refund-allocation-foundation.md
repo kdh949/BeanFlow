@@ -1,7 +1,10 @@
 # 부분 환불 allocation과 적립 포인트 회수 foundation을 만든다
 
 > **Status:** `ACTIVE`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md`, `docs/exec-plans/active/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -27,6 +30,8 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 - 현재 `loyalty_point_lot`에는 BR-20 issuer type/reference snapshot이 없다. 만료
   부분 환불 compensation은 original issuer/cost lineage를 보존해야 하므로, legacy Lot의
   확인 가능한 issuer source를 먼저 precheck해야 한다.
+- OpenAPI에는 customer point-account summary/ledger GET가 있지만 Loyalty controller/query owner와
+  cursor tuple·operator support-read contract는 없다.
 - 만료 혜택 정책 API는 현재 role만 검사하며 explicit grant, GET reason/access Audit과
   grant revoke 경계가 없다. `PaymentRefunded`·`PointsAccrued`·`PointsRestored`도 exact
   immutable integration event contract가 없다.
@@ -61,6 +66,9 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 - 최종 다섯 expired-benefit policy head/version 저장소, seed와 운영 목록/PATCH API
 - `OperatorPermissionGrant` schema, Operations authorization API와 policy GET의
   `X-Access-Reason` access Audit
+- audited offline `operator-permission-bootstrap` lifecycle command와 first-grant runbook evidence
+- customer point-account summary/ledger read vertical slice, operator `POINT_ACCOUNT_READ` grant/reason
+  audit과 ADR-070 signed `(occurredAt DESC, transactionId DESC)` cursor
 - source/type별 unique, non-negative와 OrderLine 상한 DB 제약
 - 부분 환불 command의 결정적 allocation과 성공 시점 원장 반영
 - 성공 Refund의 적립 포인트 회수, PointRecoveryPending과 이후 적립 상계 foundation
@@ -108,6 +116,9 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 - 만료 혜택 정책 조회·변경은 Platform Operator role과 해당 active explicit grant를 모두
   요구한다. GET은 non-blank `X-Access-Reason`과 access Audit을 하나의 Operations
   transaction으로 저장하지 못하면 policy body를 반환하지 않는다.
+- PointAccount read는 customer ownership 또는 Platform Operator의 active `POINT_ACCOUNT_READ`
+  grant를 요구한다. operator branch는 non-blank `X-Access-Reason`과 target Audit이 없으면 body를
+  반환하지 않으며, customer branch에는 그 header를 요구하지 않는다.
 
 ## Architecture and Transaction Boundaries
 
@@ -130,6 +141,12 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
   두 owner 상태를 합치지 않는다.
 - Operations authorization API는 policy read/PATCH transaction에 참여해 active grant를
   잠근다. grant/Audit lookup failure는 role-only success로 대체하지 않고 503이다.
+- `operator-permission-bootstrap`은 verified deployment release principal, actor/permission/reason/
+  evidence를 받고 grant state/version과 Audit을 하나의 local transaction에 저장한다. Controller나
+  direct SQL seed는 이 boundary를 우회하지 않는다.
+- Loyalty point read Controller는 Loyalty Query Application Service만 호출한다. account ownership/
+  operator grant/audit을 먼저 검증하고 `(occurredAt DESC, transactionId DESC)` projection에
+  signed cursor를 적용한다. cursor codec/configuration은 signed-cursor foundation을 소비한다.
 - Payment와 Loyalty result transaction은 ADR-068의 source, immutable amount/date/snapshot과
   persistent publication을 함께 저장한다. Analytics/Settlement consumer는 live owner state를
   다시 읽어 payload를 보완하지 않는다.
@@ -175,7 +192,9 @@ Operations의 최종 composite policy version/head 저장소와 다섯 초기 he
 단독 migration한다. Plan 30은 같은 table/API migration을 다시 만들지 않는다.
 같은 Operations migration scope에서 `operator_permission_grant`의 actor/permission unique,
 active/revoked state, audit source와 grant lookup index를 만든다. Platform Operator role에서
-default grant를 seed하지 않는다. Point adjustment plan은 이 table을 다시 만들지 않고
+default grant를 seed하지 않는다. permission CHECK에는 `POINT_ACCOUNT_READ`도 포함한다.
+`operator-permission-bootstrap`은 migration 뒤 audited first grant를 만들며 direct DB DML을
+대체하지 않는다. Point adjustment plan은 이 table을 다시 만들지 않고
 Operations public authorization API를 소비한다.
 구 Refund backfill은 실제 row 존재와 reconstructible source를 00 evidence로 확인한 뒤
 별도 전략을 확정한다. 추정 backfill은 금지한다.
@@ -196,18 +215,28 @@ logical source와 producer transaction은 ADR-068을 따른다. 기존 event 이
 또는 Settlement consumer를 활성화하지 않는다. 정책 GET은 `X-Access-Reason` header를
 OpenAPI에 추가하고 400/403/503의 grant·Audit failure contract를 가진다.
 
+이 plan은 `GET /point-accounts/{accountId}`와
+`GET /point-accounts/{accountId}/transactions`의 단독 implementation owner다. customer는 own
+account만 reason 없이 읽고, Platform Operator support read는 `POINT_ACCOUNT_READ` grant와 optional
+OpenAPI/header branch의 required `X-Access-Reason`을 쓴다. ledger projection은
+`(occurredAt DESC, transactionId DESC)` order, account-ID-bound ADR-070 cursor와 `limit=20/100`을
+쓴다. issuer reference, evidence, raw idempotency key, internal recovery case와 grant state는 response에
+넣지 않는다.
+
 ## Milestones
 
 1. PointLot issuer precheck와 snapshot schema gate를 완료한다.
 2. 최종 다섯 policy head/version 저장소, `OperatorPermissionGrant`, seed와 audited 운영 API를 구현한다.
-3. allocation schema와 불변식을 domain/DB test로 고정한다.
-4. 부분 환불 요청의 결정적 line allocation과 policy snapshot을 구현한다.
-5. Refund 성공 transaction과 Payment 누계를 원자화한다.
-6. points owner 복원 allocation을 source-aware하게 연결하고 coupon attribution이
+3. offline bootstrap command와 first-grant/revoke/regrant Audit lifecycle을 구현한다.
+4. customer/operator point-account query, ownership/reason Audit과 signed ledger cursor를 구현한다.
+5. allocation schema와 불변식을 domain/DB test로 고정한다.
+6. 부분 환불 요청의 결정적 line allocation과 policy snapshot을 구현한다.
+7. Refund 성공 transaction과 Payment 누계를 원자화한다.
+8. points owner 복원 allocation을 source-aware하게 연결하고 coupon attribution이
    Promotion owner를 호출하지 않음을 고정한다.
-7. Refund 적립 포인트 회수, PointRecoveryPending과 이후 적립 상계를 구현한다.
-8. 고객 취소용 remaining allocation 조회·잠금 API를 제공한다.
-9. ADR-068 Payment/Loyalty immutable event producer와 contract tests를 완료한다.
+9. Refund 적립 포인트 회수, PointRecoveryPending과 이후 적립 상계를 구현한다.
+10. 고객 취소용 remaining allocation 조회·잠금 API를 제공한다.
+11. ADR-068 Payment/Loyalty immutable event producer와 contract tests를 완료한다.
 
 ## Required Tests
 
@@ -222,6 +251,10 @@ OpenAPI에 추가하고 400/403/503의 grant·Audit failure contract를 가진�
 - 다섯 policy head seed와 PARTIAL_REFUND/COUPON key 부재
 - policy GET/PATCH의 role+grant, GET access reason/Audit atomicity, revoke 경쟁과 grant
   repository/Audit failure 503
+- bootstrap release-principal/argument validation, absent/active/revoked/regrant lifecycle, Audit
+  source uniqueness and direct SQL/default-grant fallback absence
+- point account customer own/other, operator grant/reason/audit failure, `(occurredAt, transactionId)`
+  keyset cursor, account-scope mismatch and issuer/evidence non-exposure
 - Refund POINTS policy snapshot과 변경 전후 version 재현
 - 만료 PointLot의 refundSucceededAt 기준 30일 보상 lot과 issuer/cost lineage
 - PointLot issuer snapshot migration의 empty/verified/unresolvable legacy fixture,
@@ -257,7 +290,7 @@ tag로 측정한다. Order/Payment/Refund ID는 metric tag에 넣지 않는다.
 
 ## Documentation Updates
 
-ADR-014/036/063/065/068/069의 구현 evidence, aggregate invariants, transaction boundaries,
+ADR-014/036/063/065/068/069/071/072의 구현 evidence, aggregate invariants, transaction boundaries,
 authorization matrix, OpenAPI contract test, event catalog과 payment runbook을 갱신한다.
 
 ## Progress

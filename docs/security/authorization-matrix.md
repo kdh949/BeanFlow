@@ -11,7 +11,7 @@
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
-| 내 포인트 조회 | Own | No | No | Read with reason | No |
+| 내 포인트 조회 | Own | No | No | Active explicit `POINT_ACCOUNT_READ` grant + reason | No |
 | 감사형 포인트 조정 | No | No | No | Active explicit `POINT_ADJUSTMENT` grant + reason + evidence | No |
 | 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
@@ -45,6 +45,9 @@ grant는 403, grant/Audit persistence failure는 503이다.
 `EXPIRED_BENEFIT_POLICY_WRITE`와 request body reason을 요구한다. GET reason은 trim 뒤 1..200자,
 control character 금지이며 current policy heads와 access Audit이 함께 저장된 경우에만 200이다.
 포인트 조정은 `POINT_ADJUSTMENT` grant와 body reason/evidence를 요구한다. 상세는 ADR-069를 따른다.
+고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
+`POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
+header는 optional이고 operator branch에서만 required다.
 
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.

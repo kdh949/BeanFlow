@@ -1,6 +1,9 @@
 # 고객 취소 계약 baseline과 release gate를 닫는다
 
 > **Status:** `COMPLETED`
+> **Kind:** `ORCHESTRATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `false`
 > **Depends-On:** —
 > **Completed-At:** `2026-07-31`
 

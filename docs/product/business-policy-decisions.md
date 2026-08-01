@@ -1110,9 +1110,9 @@
 | 쿠폰 Campaign 계산 모델 | [ADR-024](../adr/ADR-024-coupon-calculation-model.md) |
 | 0원 혜택 결제 | [ADR-016](../adr/ADR-016-benefit-only-payment.md) |
 | 부분 환불 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
-| PointLot·포인트 회수·복원·감사형 조정 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md), [ADR-065](../adr/ADR-065-refund-earned-point-recovery-ledger.md), [ADR-066](../adr/ADR-066-audited-loyalty-point-adjustment.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md), [ADR-069](../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md) |
-| 정산 기준일·주기·수수료 기준 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md), [ADR-067](../adr/ADR-067-settlement-batch-creation-and-schema-ownership.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md) |
-| 쿠폰·포인트 비용 부담 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
+| PointLot·포인트 회수·복원·감사형 조정 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md), [ADR-065](../adr/ADR-065-refund-earned-point-recovery-ledger.md), [ADR-066](../adr/ADR-066-audited-loyalty-point-adjustment.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md), [ADR-069](../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md), [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md) |
+| 정산 기준일·주기·수수료 기준 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md), [ADR-067](../adr/ADR-067-settlement-batch-creation-and-schema-ownership.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md), [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md) |
+| 쿠폰·포인트 비용 부담 | [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md), [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md) |
 | 확정 정산 Adjustment와 음수 이월 | [ADR-008](../adr/ADR-008-settlement-adjustment-ledger.md), [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md) |
 | 이의제기 hold 정책 | [ADR-018](../adr/ADR-018-settlement-dispute-hold-and-refile.md) |
 | 멱등성 키와 보존 기간 | [ADR-007](../adr/ADR-007-payment-idempotency-reconciliation.md), [ADR-025](../adr/ADR-025-order-creation-idempotency-transaction.md) |

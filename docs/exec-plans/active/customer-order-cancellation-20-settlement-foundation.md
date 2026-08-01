@@ -1,7 +1,10 @@
 # Settlement foundation과 고객 취소 제외 증적을 만든다
 
 > **Status:** `ACTIVE`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -18,6 +21,8 @@
 - ADR-008/017/048은 SettlementItem/Batch/Adjustment와 고객 취소 `NOT_APPLICABLE`
   Audit을 Accepted로 정의한다. ADR-067은 이 계획이 최소 `OPEN` Batch와 Item 귀속만
   소유하고 lifecycle/Adjustment는 후속 계획이 소유한다고 고정한다.
+- ADR-071은 Merchant terms, Campaign burden, PointLot issuer와 net calculation을 Ordering
+  `OrderSettlementInputSnapshot`으로 materialize하는 Plan 15를 이 plan의 direct prerequisite로 고정한다.
 - OpenAPI에는 Settlement 조회 계약이 있다.
 - `src/main/kotlin`과 migration에는 Settlement package/table/consumer가 없다.
 - 현재 `OrderCompletedV1`, `PaymentRefunded` 계약은 문서에 있으나 Settlement 소비 구현이 없다.
@@ -44,7 +49,7 @@
 - 중복 event, 재시작, source 불일치와 missing dependency 실패
 - 운영 조회와 runbook에 필요한 최소 상태
 - ADR-062의 store+batch 범위 SettlementItem cursor 조회와 `itemId` discovery
-- ADR-070 common signed cursor codec/configuration을 사용하는 Batch Item query
+- signed-cursor foundation이 제공한 ADR-070 common codec/configuration을 **소비하는** Batch Item query
 
 ### Non-goals
 
@@ -91,7 +96,8 @@
 
 ## Data and Migration
 
-ADR-067 matrix에 따라 이 계획은 `settlement_batch`의 최소 identity/scope/open-state fields,
+Plan 15 snapshot and signed-cursor foundation actual outcomes가 completed path에 기록된 뒤,
+ADR-072 migration-writer lease를 얻은 latest main에서만 시작한다. ADR-067 matrix에 따라 이 계획은 `settlement_batch`의 최소 identity/scope/open-state fields,
 store/date unique·state CHECK와 `settlement_item` 전체를 단독 migration한다. Item에는
 `settlement_batch_id NOT NULL` FK, immutable financial snapshot/source unique와
 `(settlement_batch_id, completed_at, id)` cursor index를 둔다. Adjustment, Batch summary/
@@ -100,8 +106,9 @@ confirmation fields와 Dispute table은 만들지 않는다. 기존 환경 적�
 
 ## API and Event Contracts
 
-- `OrderCompletedV2`는 ADR-068의 exact immutable SettlementItem 생성 원천이다. V1 producer
-  replacement는 incomplete V1 publication/deployed consumer 0 inventory가 통과한 뒤에만 한다.
+- `OrderCompletedV2`는 ADR-068의 exact immutable SettlementItem 생성 원천이다. ADR-071의
+  `OrderSettlementInputSnapshot`/matching Payment approval tie-out 없이는 producer를 활성화하지 않는다.
+  V1 producer replacement는 incomplete V1 publication/deployed consumer 0 inventory가 통과한 뒤에만 한다.
 - `PaymentApproved`만으로 Item을 만들지 않는다.
 - 일반 `PaymentRefunded`에서 customer-cancellation source를 식별해 ADR-048 분기로
   처리한다. 고객 알림 event를 정산 근거로 사용하지 않는다.
@@ -112,7 +119,7 @@ confirmation fields와 Dispute table은 만들지 않는다. 기존 환경 적�
 
 ## Milestones
 
-1. `OrderCompletedV1 -> V2` cutover inventory와 ADR-068 event contract gate를 닫는다.
+1. Plan 15 snapshot tie-out, signed cursor foundation, `OrderCompletedV1 -> V2` cutover inventory와 ADR-068 event contract gate를 닫는다.
 2. Settlement module, minimum OPEN Batch/Item schema와 Aggregate/DB 불변식을 만든다.
 3. OrderCompletedV2 consumer, Batch unique 경쟁과 Item source unique를 구현한다.
 4. signed Batch Item query projection을 OpenAPI와 일치시킨다.
@@ -124,6 +131,7 @@ confirmation fields와 Dispute table은 만들지 않는다. 기존 환경 적�
 - Completed 주문 Item 단일 생성과 non-completed 거부
 - same store/date concurrent completion의 Batch 하나·Item source당 하나와 insert/Audit/outbox rollback
 - V1 cutover inventory nonzero/unknown blocking, V2 snapshot missing/source conflict blocking
+- Merchant terms/Campaign burden/PointLot issuer 변경 뒤 ADR-071 snapshot과 V2/Item amount가 unchanged인 tie-out
 - customer cancellation Refund의 Item/Adjustment 0건과 Audit 1건
 - cause/refund/source mismatch의 비완료 처리
 - 기존 Item 존재 시 비덮어쓰기
@@ -152,7 +160,7 @@ item creation, NOT_APPLICABLE, mismatch, retry와 manual review를 닫힌 outcom
 
 ## Documentation Updates
 
-ADR-008/017/048/062/067/068/070 구현 evidence, context map, aggregate invariants, event catalog,
+ADR-008/017/048/062/067/068/070/071/072 구현 evidence, context map, aggregate invariants, event catalog,
 transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Progress
@@ -177,10 +185,12 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 | 2026-08-01 | Accepted | 점주는 Batch별 cursor Item 목록에서 dispute용 itemId를 얻음 | 대량 Batch 응답을 피하면서 조회→이의제기 흐름 완결 | ADR-062 |
 | 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item schema를 단독 소유 | Batch-scoped API를 선행 구현하고 lifecycle migration 중복 방지 | ADR-067 |
 | 2026-08-01 | Accepted | Item input은 `OrderCompletedV2` immutable snapshot이며 V1 cutover gate를 거침 | live policy/current Aggregate 재조회와 V1 required-field drift 방지 | ADR-068 |
+| 2026-08-01 | Accepted | Plan 15 immutable settlement-input outcome 뒤에만 Plan 20을 시작 | fee/burden/issuer source가 없는 event payload 추측 방지 | ADR-071 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 완료 또는 승인된 범위 amendment 없이는 고객 취소를 release하지 않는다.
+미구현 상태다. Plan 15 snapshot and signed-cursor foundation evidence, V2 cutover inventory가 모두
+통과하기 전에는 Settlement schema, consumer 또는 public Item endpoint를 시작하지 않는다.
 
 ## Revision Notes
 

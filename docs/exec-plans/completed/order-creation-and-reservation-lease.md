@@ -1,6 +1,9 @@
 # 주문을 생성하고 5분 예약 lease를 원자적으로 관리한다
 
 > **Status:** `COMPLETED`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/foundation-domain-model.md`
 > **Completed-At:** `2026-07-28`
 

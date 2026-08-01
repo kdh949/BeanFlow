@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md), [Settlement input snapshot foundation](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -70,7 +70,8 @@ source만 보존한다.
 
 | Checkpoint | Owner plan | Required outcome before Analytics enables the consumer |
 |---|---|---|
-| `OrderCompletedV2` and `SettlementItemCreatedV1` | Plan 20 | Ordering producer, Settlement consumer, source unique and outbox contract tests pass |
+| immutable `OrderSettlementInputSnapshot` | Plan 15 | Merchant terms, Campaign burden, PointLot issuer and Order snapshot tie-out tests pass |
+| `OrderCompletedV2` and `SettlementItemCreatedV1` | Plan 20 | Plan 15 immutable input, Ordering producer, Settlement consumer, source unique and outbox contract tests pass |
 | `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` | Plan 10 | Payment/Loyalty producer transaction and allocation snapshot tests pass |
 | `PointsAdjustedV1` | Point adjustment plan | adjustment transaction, permission gate and outbox contract tests pass |
 | `SettlementAdjustmentCreatedV1` | Settlement lifecycle plan | adjustment source/reason unique and outbox contract tests pass |
@@ -114,7 +115,8 @@ unimplemented event shape to consume.
 
 ## Consequences
 
-- Plan 20 owns the `OrderCompletedV1 -> V2` cutover gate and must supply settlement input snapshots.
+- Plan 15 owns settlement input source/materialization; Plan 20 owns the `OrderCompletedV1 -> V2` cutover
+  gate and cannot start it before Plan 15 outcome evidence.
 - Plan 10 must materialize Refund allocation-derived Settlement effect before the success event is stored.
 - Event catalog, Kotlin event API and producer tests must change together at each checkpoint; the catalog is
   not proof that a producer has already been implemented.
@@ -153,3 +155,4 @@ compatibility decision.
 - [ADR-048](ADR-048-preacceptance-cancellation-settlement-exclusion.md)
 - [ADR-061](ADR-061-refund-requested-and-confirmed-amounts.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
+- [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)

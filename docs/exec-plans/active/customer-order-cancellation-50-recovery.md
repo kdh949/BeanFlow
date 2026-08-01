@@ -1,7 +1,10 @@
 # 고객 취소 recovery와 운영 수렴을 구현한다
 
 > **Status:** `ACTIVE`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-40-command.md`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-40-command.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -14,7 +17,9 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 
 ## Current State
 
-- 계획 40이 C1의 durable work를 생성하는 것을 전제로 한다.
+- direct predecessor Plan 40은 Draft-only command implementation이다. 이 plan은 Plan 40의 verified
+  completed-plan head를 유일한 parent로 하는 Draft stack에서 recovery/release evidence를 완성하고,
+  separate migration-writer lease를 얻지 않는다.
 - 현재 Refund는 REQUEST 1회 후 LOOKUP 4회인 합산 attempt 모델이다.
 - retryable explicit failure allowlist와 request 3/lookup 5 분리 예산이 없다.
 - customer cancellation terminal result event/template, setup detector/scanner/repair가 없다.
@@ -81,7 +86,7 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 
 ## Data and Migration
 
-request/lookup counts, next action, terminal result logical source, setup repair proposal/
+ADR-072의 Plan 40→50 shared migration-writer lease에서 completed Plan 40 head를 parent로 시작한 뒤 request/lookup counts, next action, terminal result logical source, setup repair proposal/
 decision, scanner index와 retention index를 forward migration으로 추가한다. 계획 00의
 migration 전략을 따른다.
 
@@ -100,7 +105,7 @@ migration 전략을 따른다.
 4. customer/operations projection과 Notification을 구현한다.
 5. Settlement exclusion 연계를 검증한다.
 6. setup inline/scanner detection과 2인 repair를 구현한다.
-7. retention, metrics, alerts, runbook과 release verification을 완료한다.
+7. retention, metrics, alerts, runbook과 release verification을 완료하고 Plan 40+50 combined main-targeted release PR을 만든다.
 
 ## Required Tests
 
@@ -114,6 +119,8 @@ migration 전략을 따른다.
 - self/stale/expired/concurrent 2인 승인과 LOOKUP-only repair
 - Settlement Item/Adjustment 부재와 Audit
 - restart, Modulith, architecture/startup failure
+- Plan 40/50 Draft stack에서는 production deployment가 없고, final combined release PR만 main base를
+  갖는지 확인
 
 ## Validation Commands
 
@@ -134,7 +141,7 @@ state, settlement exclusion, setup age/lag와 repair outcome을 닫힌 tag로 �
 
 ## Documentation Updates
 
-failure semantics, event catalog, OpenAPI, payment/store lifecycle runbook, 새 cancellation
+ADR-072, failure semantics, event catalog, OpenAPI, payment/store lifecycle runbook, 새 cancellation
 runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
 
 ## Progress
@@ -158,10 +165,12 @@ runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | request 3, unknown 후 lookup 5, 고객 지연 projection | 중복 환불 없이 bounded recovery | ADR-037/038 |
 | 2026-07-31 | Accepted existing | 제한 repair는 2인 승인과 LOOKUP-only | 금융 원천 추정·오조작 방지 | ADR-052/053 |
+| 2026-08-01 | Accepted | Plan 50은 Plan 40 Draft head의 only child이고 final release PR로 40+50을 함께 main에 병합 | incomplete cancellation endpoint의 intermediate deployment 방지 | ADR-072 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 이 계획과 00~40의 검증이 모두 끝나야 고객 취소 capability가 release 가능하다.
+미구현 상태다. Plan 40 Draft implementation의 actual outcomes를 parent로 소비하며, 이 계획의
+recovery/release verification이 끝난 combined release PR만 고객 취소 capability를 main/deploy한다.
 
 ## Revision Notes
 

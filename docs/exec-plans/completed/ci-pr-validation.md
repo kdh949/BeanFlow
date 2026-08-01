@@ -1,6 +1,9 @@
 # Make PR validation fast and trustworthy
 
 > **Status:** `COMPLETED`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `false`
 > **Depends-On:** —
 > **Completed-At:** `2026-08-01`
 

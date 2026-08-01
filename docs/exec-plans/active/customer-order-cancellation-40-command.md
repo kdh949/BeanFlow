@@ -1,7 +1,10 @@
 # 고객 취소 command와 Tx C0/C1을 구현한다
 
 > **Status:** `ACTIVE`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -19,7 +22,8 @@
 - 현재 Order에는 결제 거절용 `cancelPendingPayment`만 있고 고객 취소 필드/guard가 없다.
 - `OrderController`에는 cancellations mapping이 없다.
 - 고객 취소 멱등 table, AcceptanceTimeoutWork와 cancellation Audit action이 없다.
-- 선행 계획 10/20/30 완료가 필수다.
+- direct phase predecessor는 Plan 30이다. Plan 30 completion baseline에는 Plan 10/15/20 outcomes가
+  이미 merge돼 있으며 이 plan은 latest main에서 Draft-only로 시작한다.
 
 ## Definitions
 
@@ -45,7 +49,7 @@
 - Refund worker, owner consumer, notification result event와 setup repair 구현
 - ACCEPTED 이후 취소
 - 운영자/매장 customer cancellation
-- endpoint를 recovery 미완성 상태로 production 활성화
+- endpoint를 recovery 미완성 상태로 production 활성화하거나 feature flag/profile success path로 숨김
 
 ## Business Rules and Invariants
 
@@ -78,10 +82,13 @@
   실패하면 전체 rollback하고 202를 반환하지 않는다.
 - deadline CT 저장 실패는 503이며 work 없이 409를 반환하지 않는다.
 - rollback된 command는 terminal idempotency record를 남기지 않는다.
+- Plan 50의 recovery/release evidence가 없으면 이 branch/PR은 Draft로만 유지하고 main merge,
+  deployment 또는 production 2xx endpoint exposure를 하지 않는다.
 
 ## Data and Migration
 
-이 계획이 ADR-029 Order 취소 네 필드·세 CHECK와 해당 clean-cutover precheck를 단독
+이 plan은 ADR-072 migration-writer lease를 얻은 latest main에서 Draft-only로 시작하고, Plan 50
+combined release PR이 merge될 때까지 그 lease를 유지한다. 이 계획이 ADR-029 Order 취소 네 필드·세 CHECK와 해당 clean-cutover precheck를 단독
 소유한다. 같은 forward migration 계열에서 cancellation idempotency,
 AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추가한다.
 ADR-029 precheck는 legacy 후보 row가 0일 때만 통과하고 하나라도 있으면 값을 추측해
@@ -103,7 +110,7 @@ backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy �
 3. C0의 네 owner release/Audit/Delivery를 원자화한다.
 4. CT durable timeout work와 정확한 deadline 경계를 구현한다.
 5. C1 snapshot/Refund/Case/policy/Delivery/publication commit gate를 구현한다.
-6. Controller/OpenAPI contract와 production 비활성 release guard를 연결한다.
+6. Controller/OpenAPI contract, Draft-only no-deploy workflow gate와 Plan 50 release-PR handoff를 연결한다.
 
 ## Required Tests
 
@@ -117,6 +124,8 @@ backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy �
 - acceptance/timeout/expiry 경쟁의 단일 terminal 상태
 - ADR-029 migration precheck의 후보 0 통과와 legacy row 주입 시 실패
 - Plan 30 완료 schema에서 Order 취소 필드 부재, Plan 40 migration 뒤 네 필드·세 CHECK 존재
+- Plan 40 Draft only state에서 main/deploy/production success route 부재, Plan 50 combined release PR에서만
+  customer cancellation success exposure
 
 ## Validation Commands
 
@@ -135,7 +144,7 @@ lag를 닫힌 tag로 측정한다. detail/client key/ID는 tag와 log에 넣지 
 
 ## Documentation Updates
 
-OpenAPI, state machine, transaction boundaries, authorization/error catalog, audit/runbook과
+ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error catalog, audit/runbook과
 이 계획의 actual validation을 갱신한다.
 
 ## Progress
@@ -158,10 +167,13 @@ OpenAPI, state machine, transaction boundaries, authorization/error catalog, aud
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | C0 200, C1 202, 별도 Cancellation Aggregate 없음 | 실제 내구 완료 범위 반영 | ADR-029/031/035 |
 | 2026-08-01 | Accepted | ADR-029 Order 취소 네 필드·세 CHECK와 precheck를 이 계획이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 30 |
+| 2026-08-01 | Accepted | Plan 40은 Draft-only이고 Plan 50 head의 combined release PR로만 main에 들어감 | feature flag success와 intermediate deployment를 방지 | ADR-072 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. 계획 50 완료 전 production success path를 활성화하지 않는다.
+미구현 상태다. Plan 30 completion 뒤 Draft PR에서만 구현한다. verified outcome 뒤 completion
+commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual recovery/release evidence가
+없는 동안 main merge, deployment와 production success path를 활성화하지 않는다.
 
 ## Revision Notes
 

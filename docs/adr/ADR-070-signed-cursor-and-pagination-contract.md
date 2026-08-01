@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Nearby discovery plan](../exec-plans/active/nearby-store-discovery.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
+- **Implementation owner:** [Signed cursor foundation](../exec-plans/active/signed-cursor-foundation.md)
 
 ## Context
 
@@ -18,7 +18,8 @@ default key로 시작하면 failure semantics를 위반한다.
 ## Decision
 
 모든 public cursor endpoint는 versioned, stateless, HMAC-SHA-256 signed cursor를 쓴다. common
-`limit`은 default `20`, minimum `1`, maximum `100`이다.
+`limit`은 default `20`, minimum `1`, maximum `100`이다. signed-cursor foundation이
+codec/configuration을 단독 구현하고 endpoint plan은 typed adapter만 소비한다.
 
 ### Cursor format and validation
 
@@ -67,14 +68,29 @@ cursor lifetime은 발급 시점부터 최대 24시간이다. page limit은 curs
 
 | Endpoint | Fixed sort tuple | filterHash inputs |
 |---|---|---|
-| `GET /stores/nearby` | `(distanceMeters ASC, storeId ASC)` | latitude/longitude/radius와 endpoint |
-| `GET /point-accounts/{accountId}/transactions` | ledger order documented by its endpoint | account ID와 endpoint |
+| `GET /stores/nearby` | `(distanceMicrometers ASC, storeId ASC)` | canonical latitude/longitude/radius와 endpoint |
+| `GET /point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 endpoint |
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
 base64 parsing을 만들지 않는다.
+
+### Nearby distance와 filter canonicalization
+
+`GET /stores/nearby`의 `radiusMeters`는 integer `1..10000`이다. DB range predicate는 raw
+PostGIS geography distance로 `ST_DWithin(location, queryPoint, radiusMeters)`를 사용한다.
+pagination sort/cursor predicate는 같은 query projection에서 만든
+`distanceMicrometers = floor(ST_Distance(location, queryPoint) * 1_000_000)`와 `storeId`를
+쓴다. response `distanceMeters`는 `floor(distanceMicrometers / 1_000_000)`이다. 따라서 response
+표시값을 cursor tuple로 재사용하거나 raw double과 rounded integer를 섞지 않는다.
+
+latitude/longitude는 request binder가 finite `BigDecimal`로 파싱한 뒤, `stripTrailingZeros()`의
+`toPlainString()`으로 canonicalize하고 signed zero는 `"0"`으로 바꾼다. filter hash input은 key-order가
+고정된 canonical JSON의 `endpoint`, canonical latitude, canonical longitude와 integer radius다.
+따라서 `37.5`와 `37.5000`은 같은 filter hash를 만들며 raw coordinate text는 token, log, trace or
+metric에 남지 않는다.
 
 ## Alternatives Considered
 
@@ -103,6 +119,8 @@ canonical filter hash를 signature 대상에 넣으면 다른 radius, account, s
 ## Consequences
 
 - public pagination 구현은 common codec/configuration을 사용해야 하며 missing secret은 startup blocker다.
+- Nearby, point ledger, Plan 20 Item 및 Settlement lifecycle은 foundation outcome이 없으면 codec/key
+  configuration을 자체 구현하지 않는다.
 - existing callers가 limit을 생략하면 20개 page를 받으며 100보다 큰 값을 보낼 수 없다.
 - cursor invalidity는 retryable server failure가 아니라 client-correctable 400이다. DB/timeouts는 계속
   `503 DEPENDENCY_UNAVAILABLE`으로 구분한다.
@@ -111,6 +129,8 @@ canonical filter hash를 signature 대상에 넣으면 다른 radius, account, s
 ## Verification
 
 - same filter/sort cursor가 stable keyset page를 빠짐·중복 없이 완주한다.
+- Nearby의 `1/10000/10001` radius, raw range boundary, micrometer tie/store-ID tie,
+  `37.5`/`37.5000` normalization과 response-meter/cursor-tuple 분리를 검증한다.
 - radius, account, store, Batch, endpoint, sort tuple, version, key ID 및 signature 변조와 expired token이
   모두 400이며 repository query를 실행하지 않는다.
 - previous rotation key의 unexpired cursor는 검증되고 제거 뒤에는 400이다.
@@ -137,3 +157,4 @@ cursor payload confidentiality, user-specific page snapshot consistency, result 
 - BR-28
 - [ADR-020](ADR-020-nearby-location-privacy.md)
 - [ADR-062](ADR-062-settlement-batch-item-discovery.md)
+- [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)

@@ -1,6 +1,9 @@
 # 환불 지표와 늦은 이벤트 재집계를 명시적 Analytics Read Model로 만든다
 
 > **Status:** `ACTIVE`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `false`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
 > **Completed-At:** `—`
 
@@ -25,6 +28,8 @@ source conflict, 오래된 event가 0, 빈 결과 또는 stale value를 정상 �
   `PointsAdjustedV1`, `SettlementItemCreatedV1`, `SettlementAdjustmentCreatedV1`의 exact immutable
   payload, logical source와 producer checkpoint를 고정했다. module, migration, listener,
   freshness projection, ReprocessingCase integration은 아직 없다.
+- `PointsAdjustedV1`의 listener, receipt/idempotency and metric projection은 이 plan의 단독
+  consumer checkpoint다. point-adjustment plan은 producer/outbox contract만 소유한다.
 - Plan 10은 Refund allocation/Payment·Loyalty event 기반을, Plan 20은 completion/Settlement Item
   event 기반을, point-adjustment 및 Settlement lifecycle 계획은 나머지 producer를 만든다. 이 계획은
   활성화할 producer row의 actual event/version contract가 모두 완료된 뒤 시작한다.
@@ -50,6 +55,7 @@ source conflict, 오래된 event가 0, 빈 결과 또는 stale value를 정상 �
 - completion/refund date split, partial/full refund delta, Settlement adjustment and point event projection
 - 7-day late correction, nightly rebuild, >7-day `BACKFILL_REQUIRED`, approved chunk backfill/restart
 - producer event contract validation, source/version conflict, Operations projection, runbook/closed metrics
+- `PointsAdjustedV1` listener, receipt/idempotency, delta/freshness projection의 단독 ownership
 - Testcontainers, Modulith, duplicate/replay/late/backfill/failure tests and actual measurement
 
 ### Non-goals
@@ -194,6 +200,7 @@ amount, evidence는 metric tag에 넣지 않으며 log에는 closed failure reas
 | 2026-08-01 | Accepted existing | 7일 이내 correction, 그 외 approved backfill | 오래된 대규모 변경 통제 | BR-32, ADR-023 |
 | 2026-08-01 | Plan boundary | public endpoint 없이 Operations projection으로 시작 | 미정 audience/인가/freshness contract 추정 금지 | OpenAPI |
 | 2026-08-01 | Accepted | Analytics는 ADR-068 immutable event payload만 소비하고 latest owner state를 재조회하지 않음 | 정책 변경 뒤 과거 metric drift 방지 | ADR-068 |
+| 2026-08-01 | Accepted | `PointsAdjustedV1` consumer는 Analytics plan만 구현하고 Loyalty point-adjustment plan은 producer/outbox만 구현 | listener/receipt/projection duplicate ownership 방지 | ADR-068 |
 
 ## Outcomes & Retrospective
 

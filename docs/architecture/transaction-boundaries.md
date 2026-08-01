@@ -12,6 +12,10 @@ Initial decision:
   `IdempotencyRecord(PROCESSING)`을 짧게 먼저 커밋한다.
 - Order, 슬롯·재고·쿠폰·포인트 예약은 같은 PostgreSQL 배포 단위의 로컬 트랜잭션에서 공개 Application API를 통해 조정한다.
 - Ordering이 다른 모듈의 Repository를 직접 호출하지 않는다.
+- Merchant applicable settlement terms, Promotion CouponReservation final burden legs와 Loyalty
+  PointReservation issuer allocations이 모두 검증된 뒤 같은 transaction에
+  `OrderSettlementInputSnapshot`을 저장한다. source/snapshot tie-out failure는 Order·예약의
+  부분 성공이나 default fee/cost로 대체하지 않고 전체 rollback한다.
 - 일부 실패 시 주문과 모든 예약을 롤백한다.
 - Merchant는 정규화한 메뉴·옵션 구성을 sellable unit 요구량으로 번역하고,
   Ordering은 같은 unit 요구량을 주문 전체에서 합산하여 Inventory 공개 API에
@@ -54,6 +58,8 @@ Tx 2 unknown: Payment UNKNOWN + reconciliation schedule
   응답 유실과 해석 불가 응답은 거절로 바꾸지 않는다.
 - `BENEFIT_ONLY`는 외부 호출 없이 같은 로컬 트랜잭션에서 Payment 승인 사실을
   확정하지만, 주문별 source reference와 IdempotencyRecord를 동일하게 보호한다.
+- Payment approved amount는 immutable `OrderSettlementInputSnapshot.feeBaseKrw`와 같아야 한다.
+  mismatch는 Order completion/event success로 전이하지 않고 reconciliation/manual-review로 남긴다.
 
 ### Lease expiry while payment is unknown
 
@@ -244,9 +250,23 @@ Notification worker: claim transaction -> external Provider -> result transactio
   worker가 `(retention_expires_at, id)` keyset 순서로 bounded chunk를 독립 transaction에서
   정리하며, Ordering worker나 일반 API가 이 table을 삭제하지 않는다.
 
+## Operator permission bootstrap and point-account read
+
+- offline `operator-permission-bootstrap` command는 verified deployment release principal,
+  actor/permission/reason/evidence를 검증하고 `OperatorPermissionGrant` version/state와 target
+  AuditRecord를 하나의 Operations transaction에서 저장한다. direct SQL/default grant/role fallback은
+  이 transaction을 대체하지 않는다.
+- customer point-account read는 Loyalty Query Service가 account ownership을 먼저 확인한 뒤
+  read-only projection으로 실행한다. Platform Operator branch는 `POINT_ACCOUNT_READ` grant,
+  normalized `X-Access-Reason`, target AuditRecord와 projection을 하나의 local transaction에서
+  저장한 경우에만 body를 반환한다.
+- operator grant/Audit failure는 503이고 missing/revoked grant is 403이다. ledger cursor is
+  `(occurredAt DESC, transactionId DESC)`이며 account scope가 다른 cursor를 재사용하지 않는다.
+
 ## Settlement
 
-- `OrderCompletedV2` consumer는 immutable completion snapshot을 검증하고 `(storeId,
+- `OrderCompletedV2` consumer는 ADR-071 `OrderSettlementInputSnapshot`과 matching immutable
+  Payment approval tie-out을 검증하고 `(storeId,
   settlementDate)` `OPEN` Batch를 insert-or-read한 뒤 SettlementItem, Audit과
   `SettlementItemCreatedV1` publication을 같은 transaction에 저장한다. Batch 또는 Item
   저장 실패는 event completion이 아니다.

@@ -30,7 +30,9 @@ paths:
       summary: Search nearby pickup-capable stores
       description: |
         Precise customer coordinates are used only for this request and are not
-        persisted or written to application logs or traces.
+        persisted or written to application logs or traces. radiusMeters is 1..10000.
+        Results use a canonical micrometer distance tuple and return its floored
+        integer-meter display value.
       parameters:
         - $ref: "#/components/parameters/Latitude"
         - $ref: "#/components/parameters/Longitude"
@@ -594,8 +596,13 @@ paths:
       tags: [Loyalty]
       operationId: getPointAccount
       summary: Get a point account summary
+      description: |
+        The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
+        support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason;
+        the server records the target access audit before returning 200.
       parameters:
         - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/OptionalAccessReason"
       responses:
         "200":
           description: Point account visible to its owner or an authorized operator
@@ -605,17 +612,27 @@ paths:
                 $ref: "#/components/schemas/PointAccount"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}/transactions:
     get:
       tags: [Loyalty]
       operationId: listPointTransactions
       summary: List point ledger transactions
+      description: |
+        The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
+        support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason.
+        Results use the stable (occurredAt DESC, transactionId DESC) tuple; the cursor is
+        bound to this account and endpoint.
       parameters:
         - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/OptionalAccessReason"
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
       responses:
@@ -633,6 +650,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/point-accounts/{accountId}/adjustments:
     post:
       tags: [Operations, Loyalty]
@@ -840,6 +859,8 @@ components:
       schema:
         type: integer
         minimum: 1
+        maximum: 10000
+      description: Search radius in meters. Maximum 10000.
     Cursor:
       in: query
       name: cursor
@@ -868,6 +889,16 @@ components:
       required: true
       description: |
         Purpose for an audited privileged policy read. The server trims the value,
+        requires 1 to 200 characters after trimming, and rejects control characters.
+      schema:
+        type: string
+    OptionalAccessReason:
+      in: header
+      name: X-Access-Reason
+      required: false
+      description: |
+        Required when a PLATFORM_OPERATOR uses a point-account support read; not
+        required for the customer who owns the account. The server trims the value,
         requires 1 to 200 characters after trimming, and rejects control characters.
       schema:
         type: string
@@ -1012,6 +1043,7 @@ components:
         distanceMeters:
           type: integer
           minimum: 0
+          description: Floored integer meters from the canonical micrometer query distance. It is a display value, not the cursor tuple.
         open:
           type: boolean
         pickupAvailable:

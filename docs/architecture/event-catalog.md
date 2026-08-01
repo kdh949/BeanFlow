@@ -59,6 +59,11 @@ consumer 열은 target architecture이지 Kotlin producer가 이미 구현됐다
 Settlement consumer는 current Aggregate, current policy 또는 live contract를 재조회해 event의 누락
 값을 채우지 않는다.
 
+`OrderCompletedV2`의 fee/coupon/point/net values are produced from Ordering-owned
+`OrderSettlementInputSnapshot` and matching immutable Payment approval only. Merchant terms, Campaign burden
+or PointLot issuer source/materialization is defined by [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md);
+Plan 20 is not allowed to fabricate those values at consumer time.
+
 `CustomerCancellationRefundSucceededV1`과
 `CustomerCancellationRefundDelayedV1`은 고객 취소 Refund의 실제 terminal 결과만
 표현한다. payload는 공통 envelope, `orderId`, `customerId`,
@@ -82,6 +87,8 @@ Lot별 child PointTransaction signed effect 합인 signed `amountKrw`를 포함�
 event에만 포함하고 여러 기존 issuer Lot을 함께 차감할 수 있는 DEBIT event에서는 생략한다.
 operator, evidence, issuer reference와 Idempotency-Key는 포함하지 않는다. 동일 command
 source의 event 재생은 새 PointTransaction이나 analytics delta를 만들지 않는다.
+The point-adjustment plan owns the producer/outbox contract only; Analytics owns the listener, receipt and
+projection checkpoint.
 
 ### `OrderCancelledV1` base payload
 
