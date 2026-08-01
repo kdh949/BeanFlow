@@ -42,6 +42,7 @@
 | Outbox | 원본 DB 트랜잭션과 함께 발행할 이벤트를 영속화하는 패턴 | Cross-cutting |
 | AuditRecord | 금액·권한·상태의 수동 또는 중요 변경을 주체·사유와 함께 기록하는 append-only 기록 | Operations |
 | Operator Permission Grant | 활성 Platform Operator가 특정 privileged operation을 실행·조회할 수 있게 하는 Operations-owned explicit grant. JWT role 또는 claim의 fallback이 아니다. | Operations |
+| Verified Release Principal | controlled deployment job의 단기 OIDC workload identity를 required issuer·audience·allowed subject로 검증한 bootstrap 주체. application JWT, role 또는 static secret으로 대체하지 않는다. | Operations / Delivery |
 | ReprocessingCase | 자동 재시도 범위를 벗어난 실패 또는 승인된 backfill을 추적하는 운영 case | Operations |
 | Analytics Read Model | 원본 거래 사실을 지표 정의에 따라 멱등 집계한 조회 전용 모델 | Analytics |
 | Terminal State | 해당 Aggregate에서 더 이상 정상 상태 전이가 없는 상태. 다른 Aggregate의 후속 처리 완료를 의미하지 않는다. | Context별 |

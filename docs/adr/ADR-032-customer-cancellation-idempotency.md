@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
-- **Amended by:** ADR-064의 위험 기반 사전등록/명령 트랜잭션 선택 기준
+- **Amended by:** ADR-064의 위험 기반 사전등록/명령 트랜잭션 선택 기준, ADR-072의 migration-writer lane
 
 ## Context
 
@@ -85,9 +85,12 @@ BR-14 Contention Amendment에 따라 Order row lock 위의 guarded transition으
 
 ### 저장 구조와 보존
 
-- 신규 테이블 `ordering_cancellation_command_idempotency`를 `V13`에서 만든다. 기존
-  `ordering_store_command_idempotency`를 재사용하거나 rename하지 않는다. 매장 명령
-  자산 변경은 이번 범위 밖이다.
+- 신규 테이블 `ordering_cancellation_command_idempotency`를 만든다. 이 ADR의 최초 결정
+  당시에는 `V13`을 계획값으로 사용했지만, **2026-08-01 execution amendment**에 따라 실제
+  Flyway 번호는 ADR-072의 migration-writer lease를 획득하고 최신 `main`의 마지막 번호를
+  확인한 뒤 branch에서 정한다. `V13`을 예약 번호로 취급하거나 다른 writer와 병렬로
+  선점하지 않는다. 기존 `ordering_store_command_idempotency`를 재사용하거나 rename하지
+  않는다. 매장 명령 자산 변경은 이번 범위 밖이다.
 
   | 컬럼 | 제약 |
   |---|---|

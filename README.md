@@ -144,6 +144,10 @@ PATCH /api/v1/operations/policies/expired-benefit-restoration
 만료 혜택 정책 PATCH의 목표 계약은
 `/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}`다.
 
+현재 구현된 controller mapping과 실제 legacy shape의 기계 판독 가능한 계약은
+[Deployed OpenAPI](openapi/beanflow-v1-deployed.yaml)에 분리한다. target endpoint는 구현,
+보안·실패 계약 테스트와 release gate가 끝난 변경에서만 deployed 계약으로 승격한다.
+
 ### 미구현 예정 endpoint
 
 목표 OpenAPI 중 현재 runtime에 없는 주요 기능은 다음과 같다.

@@ -49,6 +49,13 @@ control character 금지이며 current policy heads와 access Audit이 함께 �
 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
 header는 optional이고 operator branch에서만 required다.
 
+first grant와 grant/revoke/regrant는 HTTP role로 실행하지 않는다. offline bootstrap은 controlled
+deployment job의 단기 OIDC workload identity를 required issuer·audience·allowed subject로
+검증한 Verified Release Principal만 허용한다. raw workload token은 read-only mounted file에서
+읽고 저장·로그하지 않으며, 누락·불일치·만료·검증 key 실패는 non-zero terminal failure와
+무변경으로 끝난다. static bootstrap secret, application JWT와 Platform Operator role은
+bootstrap authorization fallback이 아니다.
+
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.
 

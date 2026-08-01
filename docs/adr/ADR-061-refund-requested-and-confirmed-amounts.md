@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
+- **Amended by:** 2026-08-01 ExecPlan ownership amendment
 
 ## Context
 
@@ -13,8 +14,11 @@ reconciliation 진행 중인 `202`에서 같은 `Refund` schema를 사용한다.
 정하지 못했다.
 
 API convention과 ADR-009는 `202`와 결과 불명을 성공으로 표현하거나 확인되지 않은
-금액을 0으로 대체하는 것을 금지한다. Plan 10이 공개 부분 환불 API를 구현하기 전에
-요청 snapshot과 실제 성공 금액의 이름 및 상태별 존재 조건을 고정해야 한다.
+금액을 0으로 대체하는 것을 금지한다. 최초 문서의 “Plan 10이 공개 부분 환불 API를
+구현”한다는 표현은 2026-08-01 plan 분리로 대체됐다. Plan 12가 부분 환불 allocation과
+공개 Refund 계약을, Plan 13이 환불 적립 포인트 회수를, Plan 16이 immutable refund/Loyalty
+event producer를 소유한다. 이들 구현 전에 요청 snapshot과 실제 성공 금액의 이름 및
+상태별 존재 조건을 고정해야 한다.
 
 현금 환불은 Payment가 외부 Provider 결과를 소유하고, 성공한 `PaymentRefunded` fact를
 받은 Loyalty가 별도 transaction에서 포인트를 복원한다. 따라서 현금 환불과 포인트

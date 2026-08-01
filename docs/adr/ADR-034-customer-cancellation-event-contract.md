@@ -309,6 +309,16 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - 네 publication target과 Pickup, Stock, Coupon, Points step 사이에 검증 가능한
   일대일 매핑이 필요하다. Payment와 Notification step은 각각 Tx C1에 내구 저장한
   Refund와 NotificationDelivery 상태로 갱신한다.
+- 네 target은 Plan 30의 중앙 registry에
+  `beanflow.order-compensation.order-cancelled.pickup.v1 → PICKUP`,
+  `beanflow.order-compensation.order-cancelled.stock.v1 → STOCK`,
+  `beanflow.order-compensation.order-cancelled.coupon.v1 → COUPON`,
+  `beanflow.order-compensation.order-cancelled.points.v1 → POINTS`로 고정한다.
+  listener는 같은 값을 `@ApplicationModuleListener(id = ...)`에 명시하고 Spring의
+  기본 method-signature ID를 persistence contract로 사용하지 않는다.
+- unknown/duplicate mapping은 가장 비슷한 step이나 Case 전체로 대체하지 않는다. startup 또는
+  exhaustion handling을 `PUBLICATION_TARGET_UNMAPPED`로 실패시키고 어떤 step도 변경하지
+  않은 채 publication과 운영 case를 남긴다.
 - 운영 조회는 step의 `lastErrorCode = EVENT_PUBLICATION_RETRY_EXHAUSTED`와 별도
   `EVENT_PUBLICATION` ReprocessingCase를 함께 보여줄 수 있어야 한다.
 - 배포 전 미완료 publication을 event type과 listener target별로 확인하는 gate가

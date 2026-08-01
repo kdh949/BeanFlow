@@ -59,7 +59,7 @@
 
 - 실제 은행 송금, 세금·회계 전표, 외부 지급 hold, 현재 Merchant/Campaign 계약으로 과거 재계산
 - 미수락 고객 취소의 0원 Adjustment 또는 별도 제외 원장
-- Plan 10 line allocation/point recovery, Plan 20 Item 생성·제외 Audit schema의 재구현
+- Plan 12/13 allocation·point recovery, Plan 20 Item 생성·제외 Audit schema의 재구현
 - Dispute 판정 UI와 증빙 파일 저장소. API에는 evidence reference만 보존한다.
 
 ## Business Rules and Invariants
@@ -196,7 +196,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Progress
 
-- [ ] Plan 10/20 precondition evidence
+- [ ] Plan 16/20 precondition evidence
 - [ ] Batch/Adjustment/Dispute schema와 domain invariant
 - [ ] calculation/confirmation과 Batch query
 - [ ] refund adjustment/carry-forward
@@ -221,7 +221,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 10/20의 actual validation evidence가 통과한 뒤에만 시작한다. 완료 시
+미구현 상태다. Plan 16/20의 actual validation evidence가 통과한 뒤에만 시작한다. 완료 시
 정상·실패·중복·restart 경로와 남은 운영 제한을 실제 검증 결과로 기록한다.
 
 ## Revision Notes

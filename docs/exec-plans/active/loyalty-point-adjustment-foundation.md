@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -30,11 +30,11 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 - Loyalty에는 이 terminal command의 최초 `201` body를 90일 보존할 idempotency table이나
   Context-owned retention worker가 없다. Ordering의 retention worker를 다른 Context table에
   재사용할 수 없다.
-- ADR-065의 Plan 10은 `ACCRUAL`/`RECOVERY`와 PointRecoveryPending foundation을 먼저
-  구현한다. 이 계획은 Plan 10의 PointTransaction base migration과 contract test가
+- ADR-065의 Plan 13은 `ACCRUAL`/`RECOVERY`와 PointRecoveryPending foundation을 먼저
+  구현한다. 이 계획은 Plan 13의 PointTransaction base migration과 contract test가
   완료되기 전 type CHECK를 경쟁적으로 수정하지 않는다.
 - current JWT role은 인증의 coarse gate일 뿐 `POINT_ADJUSTMENT` permission source가 아니다.
-  Plan 10이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
+  Plan 11이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
   구현해야 한다.
 
 ## Definitions
@@ -144,14 +144,14 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 - idempotency UNIQUE 충돌 뒤 winner record를 읽지 못하면 201/409을 추측하지 않고 503이다.
   retention worker 실패는 due row를 남기고 다음 tick에 재시도하며, 삭제 0건 성공으로
   위장하거나 API 삭제 endpoint를 제공하지 않는다.
-- Plan 10 issuer precheck evidence가 없거나 기존 Lot issuer를 재구성할 수 없으면
+- Plan 10 issuer precheck 또는 Plan 11 grant/Plan 13 ledger evidence가 없으면
   endpoint를 활성화하지 않는다. 추정 PLATFORM backfill은 금지한다.
 - Analytics listener failure는 Analytics plan의 publication retry/receipt state로 남고, 이미 확정된
   adjustment를 되돌리거나 Loyalty command의 201을 바꾸지 않는다.
 
 ## Data and Migration
 
-Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
+Plan 10/11/13 완료 뒤 최신 migration 번호를 다시 계산한다.
 
 1. Plan 10이 `loyalty_point_lot.issuer_type`/`issuer_reference` final schema와 legacy
    issuer precheck gate를 이미 완료했는지 release evidence로 확인한다. missing 또는
@@ -171,10 +171,12 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
 5. Plan 10 issuer precheck evidence, command/child transaction source relation, terminal
    command idempotency retention index와 Audit source unique를 PostgreSQL Testcontainers로
    검증한다.
-6. current source가 Plan 10에서 만든 `ACCRUAL`/`RECOVERY` fields/type CHECK와 충돌하면
+6. current source가 Plan 13에서 만든 `ACCRUAL`/`RECOVERY` fields/type CHECK와 충돌하면
    migration을 작성하지 않고 ADR-065/066의 migration ownership conflict로 보고한다.
-7. `OperatorPermissionGrant` table이나 policy read Audit migration은 만들지 않는다. Plan 10의
-   ADR-069 outcome과 Operations public authorization API를 activation prerequisite로 소비한다.
+7. `OperatorPermissionGrant` table이나 policy read Audit migration은 만들지 않는다. Plan 11의
+   ADR-069 outcome, 네 값의 closed vocabulary와 Operations public authorization API를 activation
+   prerequisite로 소비한다. `POINT_ADJUSTMENT` permission 또는 grant constraint migration을
+   다시 만들지 않는다.
 
 ## API and Event Contracts
 
@@ -195,9 +197,9 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
 ## Milestones
 
 1. ADR-066/068/069, OpenAPI/API conventions/authorization/event catalog의 contract test를 고정한다.
-2. Plan 10 완료 evidence, issuer precheck와 OperatorPermissionGrant authorization outcome을 확인해 activation
+2. Plan 10/11/13 완료 evidence, issuer precheck와 OperatorPermissionGrant authorization outcome을 확인해 activation
    precondition을 닫는다.
-3. PointTransaction balance_effect/type migration·entities를 구현하고, Plan 10 snapshot을
+3. PointTransaction balance_effect/type migration·entities를 구현하고, Plan 10 issuer snapshot을
    사용하는 credit/debit flow를 구현한다.
 4. Loyalty terminal idempotency persistence/retention worker와 credit/debit command
    transaction, Audit/outbox를 구현한다.
@@ -253,7 +255,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 ## Progress
 
 - [ ] contract/ADR/OpenAPI validation
-- [ ] Plan 10 issuer precheck and operator-grant prerequisite evidence
+- [ ] Plan 10 issuer, Plan 11 grant, Plan 13 ledger prerequisite evidence
 - [ ] persistence and migration
 - [ ] command transaction/idempotency/audit/outbox
 - [ ] endpoint and authorization
@@ -282,7 +284,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 10의 PointTransaction base contract, issuer precheck와 ADR-069 grant
+미구현 상태다. Plan 10 issuer precheck, Plan 11 ADR-069 grant와 Plan 13 PointTransaction base contract
 authorization evidence가 완료되기 전에는 endpoint 또는 migration을 시작하지 않는다. Analytics
 consumer implementation은 이 plan의 completion condition이 아니라 Analytics plan의 own checkpoint다.
 

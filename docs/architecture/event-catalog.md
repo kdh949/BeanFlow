@@ -30,7 +30,7 @@
 | OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
 | OrderCompletedV2 | Ordering | Loyalty, Settlement, Analytics | completion source + payload version per consumer | Order |
 | PaymentRefundUnknown | Payment | Operations | refund/provider request unique | Refund |
-| PaymentRefundedV1 | Payment | Ordering, Loyalty, Settlement, Analytics | refund success source + payload version; Settlement의 미완료 고객 취소는 Audit 후 NOT_APPLICABLE | Refund |
+| PaymentRefundedV1 | Payment | Loyalty, Settlement, Analytics | refund success source + payload version; Settlement의 미완료 고객 취소는 Audit 후 NOT_APPLICABLE | Refund |
 | CustomerCancellationRefundSucceededV1 | Payment | Notification | order ID + customer cancellation terminal version + refund-succeeded | Refund |
 | CustomerCancellationRefundDelayedV1 | Payment | Notification | order ID + customer cancellation terminal version + refund-delayed | Refund |
 | PointsAccruedV1 | Loyalty | Analytics | point transaction source + payload version | PointTransaction |
@@ -59,10 +59,20 @@ consumer 열은 target architecture이지 Kotlin producer가 이미 구현됐다
 Settlement consumer는 current Aggregate, current policy 또는 live contract를 재조회해 event의 누락
 값을 채우지 않는다.
 
+2026-08-01 consumer clarification: `PaymentRefundedV1`은 Ordering consumer를 갖지 않는다.
+Ordering이 소유할 후속 상태 전이·checkpoint·멱등 계약이 없으므로 ADR-068과 Context Map의
+Loyalty·Settlement·Analytics consumer 집합을 따른다. 향후 Ordering 후속 동작이 확정되면 이
+event의 의미를 암묵적으로 확장하지 않고 별도 Event Contract에서 event 또는 새 version을 결정한다.
+
 `OrderCompletedV2`의 fee/coupon/point/net values are produced from Ordering-owned
-`OrderSettlementInputSnapshot` and matching immutable Payment approval only. Merchant terms, Campaign burden
-or PointLot issuer source/materialization is defined by [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md);
-Plan 20 is not allowed to fabricate those values at consumer time.
+`OrderSettlementInputSnapshot` and matching immutable Payment approval only. Plan 15 owns the Merchant terms,
+Campaign burden, PointLot issuer source/materialization plus the V2 payload factory/validator/contract fixture.
+Plan 20 owns the `OrderCompletedV1 -> V2` cutover and Ordering guarded completion outbox producer, which may read
+only the immutable snapshot and matching immutable Payment approval fact, then consumes the immutable V2 payload
+in its separate Settlement transaction. Neither producer nor consumer may fabricate or live-read Merchant,
+Campaign or PointLot current values; the consumer also does not re-read Ordering snapshot or Payment to fill an
+event payload. Plan 16 owns only `PaymentRefundedV1`, `PointsAccruedV1` and `PointsRestoredV1` producers; it is
+not an `OrderCompletedV2` producer.
 
 `CustomerCancellationRefundSucceededV1`과
 `CustomerCancellationRefundDelayedV1`은 고객 취소 Refund의 실제 terminal 결과만

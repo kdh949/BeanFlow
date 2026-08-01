@@ -50,16 +50,28 @@ canonical graph도 끊긴다.
 4. non-migration implementation은 dependency와 ownership이 충족되는 경우 병렬일 수 있지만,
    incomplete required behavior를 feature flag/profile로 2xx 성공처럼 노출하지 않는다.
 
-customer cancellation의 schema-writing implementation sequence는 아래 single lane으로 고정한다.
+customer cancellation의 direct phase dependency는 아래 graph로 고정한다. migration-writer lease는
+schema-writing plan을 한 번에 하나만 실행하게 하지만, 실제로 소비하지 않는 outcome을 queue priority
+목적으로 `Depends-On`에 추가하지 않는다.
 
 ```text
-signed-cursor foundation -> Plan 10 -> Plan 15 -> Plan 20 -> Plan 30 -> Plan 40 -> Plan 50
+Plan 00 -> Plan 10 issuer -> Plan 15 snapshot
+Plan 00 -> Plan 11 grants -> Plan 12 allocation -> Plan 13 recovery
+Plan 11 grants + signed-cursor foundation -> Plan 14 read
+Plan 12 + Plan 13 + Plan 15 -> Plan 16 refund/Loyalty events
+Plan 15 + Plan 16 + signed-cursor foundation -> Plan 20
+Plan 11 grants + Plan 20 -> Plan 30 -> Plan 40 -> Plan 50
 ```
 
-Plan 15는 settlement input snapshot foundation이다. Plan 30의 prior parallel branch는 없으며,
-Plan 30은 serialized Plan 20 predecessor 외에도 Plan 10 policy-head outcome을 직접 소비한다.
-Plan 40/50은 Plan 30까지의 merged `main`을 input으로 한다. 이 sequence는 logical context ownership을
-합치거나 settlement schema ownership을 변경하지 않는다.
+Plan 10은 completed Plan 00만 직접 소비한다. signed-cursor foundation은 Plan 10의 migration, issuer
+precheck 또는 DTO contract에 input을 주지 않는다. Plan 15는 Plan 10 issuer output만 직접 소비하는
+settlement input snapshot foundation이다. Plan 16은 Plan 12/13/15 output을 함께 소비해
+`PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1`만 producer로 만든다. Plan 20은 Plan 15
+snapshot, Plan 16 outcome과 signed-cursor foundation을 직접 소비해 `OrderCompletedV1 -> V2` cutover,
+Ordering producer와 Settlement consumer를 소유한다. Plan 30의 prior parallel branch는 없으며, Plan 30은
+Plan 20 outcome 외에도 Plan 11 policy-head outcome을 직접 소비한다. Plan 40/50은 Plan 30까지의 merged
+`main`을 input으로 한다. 이 graph는 logical context ownership을 합치거나 settlement schema ownership을
+변경하지 않는다.
 
 ### Plan 40 production gate
 
@@ -118,6 +130,8 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   main에서 결정적이다.
 - direct dependency와 execution scheduling을 혼동하지 않아 Plan 50 같은 transitive
   dependency 중복이 사라진다.
+- Plan 10은 Plan 00 outcome이 완료되면 ready가 될 수 있으며, signed-cursor implementation의 queue
+  priority는 dependency가 아니라 executor/lease policy로 관리한다.
 - Plan 40/50은 merge 전에는 production에 배포되지 않으므로 별도 runtime flag가 필요 없다.
 
 ## Verification
@@ -128,6 +142,8 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   migration writers를 거부하며, successor path update가 빠지면 실패한다.
 - customer-cancellation sequence에서 Plan 20이 Plan 15 이전, Plan 30이 Plan 20 이전, Plan 50이
   Plan 40 이전에 ready가 되지 않음을 확인한다.
+- Plan 10이 signed-cursor foundation을 direct dependency로 다시 추가하지 않고 Plan 00 outcome만
+  소비하는지 확인한다.
 
 ## Related Decisions
 

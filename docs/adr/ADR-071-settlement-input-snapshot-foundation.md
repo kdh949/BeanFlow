@@ -83,15 +83,18 @@ allocation sum mismatch는 cross-store point program을 추정하지 않고 실�
 
 ### Event와 downstream boundary
 
-Plan 20은 Plan 15의 actual migration, source and contract-test evidence를 직접 선행조건으로
-소비한다. `OrderCompletedV2` producer는 completion transaction에서 Order의 snapshot과 matching
-Payment approval fact만 사용해 ADR-068 field를 만든다. `feeRateBps`, `feeKrw`,
-`couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`를 현재 계약·Campaign·Lot에서
-새로 읽는 구현은 금지한다.
+Plan 15는 completion transaction이 사용할 immutable input, `OrderCompletedV2` payload factory 또는 typed
+mapper, validator와 contract fixture를 제공한다. Plan 20은 Plan 15의 actual migration, source and
+contract-test evidence를 직접 선행조건으로 소비하고, Ordering guarded completion transaction에서 factory가
+받은 Order snapshot과 matching Payment approval fact만 사용해 ADR-068 field와 V2 outbox를 atomically
+저장한다. `feeRateBps`, `feeKrw`, `couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`를
+현재 계약·Campaign·Lot에서 새로 읽는 구현은 금지한다. Plan 15는 outbox save, V1→V2 cutover/activation,
+V1 drain/deployment gate 또는 Settlement consumer를 소유하지 않는다.
 
 `PaymentRefundedV1.settlementRefundEffect`도 이 same snapshot과 immutable refund line allocation에서
-계산한다. Plan 20 SettlementItem과 Analytics는 V2 payload가 없는 경우 값을 추론하지 않고
-publication retry 또는 `MANUAL_REVIEW`로 남긴다.
+계산한다. Plan 20 Settlement consumer와 Analytics는 V2 payload가 없는 경우 값을 추론하지 않고
+publication retry 또는 `MANUAL_REVIEW`로 남긴다. Ordering producer와 Settlement consumer는 별도의 local
+transaction이며 consumer가 mutable source를 재조회해 producer input을 복구하지 않는다.
 
 ## Alternatives Considered
 
@@ -111,8 +114,8 @@ consumer의 live read로 변질된다.
 ## Consequences
 
 - Plan 15는 Merchant, Promotion, Loyalty, Ordering을 함께 변경하는 schema-writing foundation이다.
-- Plan 20은 snapshot foundation이 완료되기 전 `OrderCompletedV2` cutover, SettlementItem migration
-  또는 endpoint activation을 시작하지 않는다.
+- Plan 20은 snapshot foundation과 payload factory/validator/fixture가 완료되기 전 `OrderCompletedV2`
+  cutover, guarded completion outbox producer, SettlementItem migration 또는 endpoint activation을 시작하지 않는다.
 - `StoreSettlementTerms`, Campaign burden terms 또는 PointLot issuer가 없는 legacy input은
   guessed backfill 없이 migration/deployment blocker가 된다.
 - ADR-068의 `grossPaidKrw` meaning과 net formula가 명시되어 event producer/consumer contract
@@ -128,6 +131,8 @@ consumer의 live read로 변질된다.
   mismatch와 snapshot persistence failure는 success event나 SettlementItem을 만들지 않는다.
 - duplicate create/replay와 delayed completion은 같은 `order_id` snapshot 하나와 같은 event
   payload hash로 수렴한다.
+- Plan 15는 snapshot/factory validation만 제공하고 Plan 20만 V2 outbox save/cutover를 수행하며,
+  producer와 Settlement consumer는 separate local transaction으로 수렴한다.
 
 ## Related Decisions
 

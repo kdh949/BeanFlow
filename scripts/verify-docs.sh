@@ -40,8 +40,13 @@ required=(
   "docs/decisions/customer-order-cancellation-decision-closure.md"
   "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
   "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
-  "docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
+  "docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
+  "docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
@@ -52,6 +57,7 @@ required=(
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
+  "openapi/beanflow-v1-deployed.yaml"
   "scripts/ci/classify-changes.sh"
   "scripts/ci/run-and-capture.sh"
   "scripts/ci/requirements-docs.txt"
@@ -212,26 +218,51 @@ for relative_path in plan_metadata:
 expected_execution_metadata = {
     'customer-order-cancellation-and-recovery.md': ('ORCHESTRATION', False, []),
     'signed-cursor-foundation.md': ('IMPLEMENTATION', False, []),
-    'customer-order-cancellation-10-partial-refund-allocation-foundation.md': (
+    'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md': (
         'IMPLEMENTATION', True, [
             'customer-order-cancellation-00-contract-baseline.md',
+        ],
+    ),
+    'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md': (
+        'IMPLEMENTATION', True, ['customer-order-cancellation-00-contract-baseline.md'],
+    ),
+    'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md',
+            'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md': (
+        'IMPLEMENTATION', True, ['customer-order-cancellation-12-partial-refund-allocation-and-restoration.md'],
+    ),
+    'customer-order-cancellation-14-point-account-read-vertical-slice.md': (
+        'IMPLEMENTATION', True, [
+            'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
             'signed-cursor-foundation.md',
         ],
     ),
     'customer-order-cancellation-15-settlement-input-snapshot-foundation.md': (
         'IMPLEMENTATION', True, [
-            'customer-order-cancellation-10-partial-refund-allocation-foundation.md',
+            'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md',
+        ],
+    ),
+    'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md': (
+        'IMPLEMENTATION', False, [
+            'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
+            'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
+            'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
         ],
     ),
     'customer-order-cancellation-20-settlement-foundation.md': (
         'IMPLEMENTATION', True, [
             'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
+            'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md',
             'signed-cursor-foundation.md',
         ],
     ),
     'customer-order-cancellation-30-order-compensation-foundation.md': (
         'IMPLEMENTATION', True, [
-            'customer-order-cancellation-10-partial-refund-allocation-foundation.md',
+            'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
             'customer-order-cancellation-20-settlement-foundation.md',
         ],
     ),
@@ -271,6 +302,37 @@ for filename, expected_metadata in expected_execution_metadata.items():
     ):
         print(f'Customer cancellation execution metadata is stale: {relative_path}', file=sys.stderr)
         sys.exit(1)
+
+plan10_path = plan_paths_by_filename[
+    'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md'
+]
+if not plan_metadata[plan10_path]['implementation_ready']:
+    print(
+        'Plan 10 must be Implementation-Ready after its only direct Plan 00 dependency is complete.',
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+master_plan = (
+    root / 'docs/exec-plans/active/customer-order-cancellation-and-recovery.md'
+).read_text(encoding='utf-8')
+if (
+    '[PointLot issuer provenance foundation을 만든다](customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00'
+    not in master_plan
+    or 'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00, cursor'
+    in master_plan
+):
+    print('Master plan must keep Plan 10 dependent on Plan 00 only.', file=sys.stderr)
+    sys.exit(1)
+execution_dependency_adr = (
+    root / 'docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md'
+).read_text(encoding='utf-8')
+if (
+    'Plan 00 -> Plan 10 issuer -> Plan 15 snapshot' not in execution_dependency_adr
+    or re.search(r'signed[- ]cursor foundation\s*(?:->|→)\s*Plan 10', execution_dependency_adr)
+):
+    print('ADR-072 must not use signed cursor as a Plan 10 queue dependency.', file=sys.stderr)
+    sys.exit(1)
 
 traceability = (root / 'docs/architecture/policy-traceability.md').read_text(encoding='utf-8')
 br14_row = next((line for line in traceability.splitlines() if line.startswith('| BR-14 |')), '')
@@ -550,9 +612,14 @@ except ImportError as exc:
     sys.exit(1)
 else:
     try:
-        with (root / 'openapi/beanflow-v1.yaml').open(encoding='utf-8') as f:
+        target_openapi_path = root / 'openapi/beanflow-v1.yaml'
+        deployed_openapi_path = root / 'openapi/beanflow-v1-deployed.yaml'
+        with target_openapi_path.open(encoding='utf-8') as f:
             spec = yaml.safe_load(f)
-        validate(spec)
+        validate(spec, base_uri=target_openapi_path.resolve().as_uri())
+        with deployed_openapi_path.open(encoding='utf-8') as f:
+            deployed_spec = yaml.safe_load(f)
+        validate(deployed_spec, base_uri=deployed_openapi_path.resolve().as_uri())
     except Unresolvable as exc:
         print(f'OpenAPI 3.1 validation failed: unresolved reference {exc.ref}', file=sys.stderr)
         sys.exit(1)
@@ -561,6 +628,48 @@ else:
         sys.exit(1)
     if spec.get('openapi') != '3.1.0':
         print('OpenAPI version must be 3.1.0.', file=sys.stderr)
+        sys.exit(1)
+    if deployed_spec.get('openapi') != '3.1.0':
+        print('Deployed OpenAPI version must be 3.1.0.', file=sys.stderr)
+        sys.exit(1)
+    if spec.get('info', {}).get('x-beanflow-contract-status') != 'target':
+        print('Target OpenAPI must declare x-beanflow-contract-status: target.', file=sys.stderr)
+        sys.exit(1)
+    if deployed_spec.get('info', {}).get('x-beanflow-contract-status') != 'deployed':
+        print('Deployed OpenAPI must declare x-beanflow-contract-status: deployed.', file=sys.stderr)
+        sys.exit(1)
+    if not spec.get('info', {}).get('x-beanflow-contract-date') or not deployed_spec.get('info', {}).get('x-beanflow-contract-date'):
+        print('Both OpenAPI contracts must declare x-beanflow-contract-date.', file=sys.stderr)
+        sys.exit(1)
+
+    expected_deployed_operations = {
+        ('/orders', 'post'),
+        ('/orders/{orderId}', 'get'),
+        ('/orders/{orderId}/payment-confirmations', 'post'),
+        ('/store-orders/{orderId}', 'get'),
+        ('/store-orders/{orderId}/status', 'patch'),
+        ('/operations/policies/expired-benefit-restoration', 'get'),
+        ('/operations/policies/expired-benefit-restoration', 'patch'),
+    }
+    actual_deployed_operations = {
+        (path, method)
+        for path, path_item in deployed_spec.get('paths', {}).items()
+        for method in path_item
+        if method in {'get', 'post', 'put', 'patch', 'delete'}
+    }
+    if actual_deployed_operations != expected_deployed_operations:
+        print('Deployed OpenAPI operations do not match the current controller allowlist.', file=sys.stderr)
+        print('Missing:', sorted(expected_deployed_operations - actual_deployed_operations), file=sys.stderr)
+        print('Unexpected:', sorted(actual_deployed_operations - expected_deployed_operations), file=sys.stderr)
+        sys.exit(1)
+    deployed_schemas = deployed_spec.get('components', {}).get('schemas', {})
+    deployed_transition = deployed_schemas.get('DeployedStoreOrderTransitionResult', {})
+    if set(deployed_transition.get('required', [])) != {'order', 'rejectionRecovery', 'replayed'}:
+        print('Deployed store transition must preserve the current legacy response wrapper.', file=sys.stderr)
+        sys.exit(1)
+    deployed_policy_path = deployed_spec['paths']['/operations/policies/expired-benefit-restoration']
+    if deployed_policy_path['get'].get('parameters') or deployed_policy_path['patch'].get('parameters', [])[0].get('$ref', '').endswith('/AccessReason'):
+        print('Deployed singleton policy API must not claim the target access-reason contract.', file=sys.stderr)
         sys.exit(1)
 
     required_paths = {
@@ -990,9 +1099,13 @@ else:
         cursor_parameter.get('in') != 'query'
         or cursor_parameter.get('required') is not False
         or cursor_parameter.get('schema', {}).get('minLength') != 1
+        or cursor_parameter.get('schema', {}).get('maxLength') != 2048
         or 'HMAC-signed' not in cursor_parameter.get('description', '')
     ):
-        print('Common cursor must be an optional non-blank HMAC-signed query parameter.', file=sys.stderr)
+        print('Common cursor must be an optional 1..2048-char HMAC-signed query parameter.', file=sys.stderr)
+        sys.exit(1)
+    if schemas['PageInfo']['properties']['nextCursor'].get('maxLength') != 2048:
+        print('PageInfo nextCursor must match the public 2048-character cursor maximum.', file=sys.stderr)
         sys.exit(1)
     radius_parameter = parameters['RadiusMeters']
     if (
@@ -1099,8 +1212,12 @@ else:
     if 'base GET은 다섯 현재 head를' not in normalized_api_conventions:
         print('API conventions must describe the same five expired-benefit policy heads as OpenAPI.', file=sys.stderr)
         sys.exit(1)
-    if '전체 공개 endpoint와 request/response 계약의 원본은 `openapi/beanflow-v1.yaml`' not in normalized_api_conventions:
-        print('API conventions must identify OpenAPI as the complete endpoint contract source.', file=sys.stderr)
+    if (
+        '`openapi/beanflow-v1-deployed.yaml`' not in normalized_api_conventions
+        or '`openapi/beanflow-v1.yaml`' not in normalized_api_conventions
+        or 'pre-release target' not in normalized_api_conventions
+    ):
+        print('API conventions must distinguish deployed and target OpenAPI sources.', file=sys.stderr)
         sys.exit(1)
 
     point_transaction = schemas['PointTransaction']
@@ -1157,18 +1274,21 @@ else:
     if not recovery_event_row.endswith('| PointRecoveryPending |'):
         print('PointRecoveryPendingRecorded must use PointRecoveryPending as its source of truth.', file=sys.stderr)
         sys.exit(1)
-    plan10 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md'
+    plan13 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md'
     ).read_text(encoding='utf-8')
-    if 'refund earned-point recovery와 later-accrual offset' not in plan10:
-        print('Plan 10 must own the accepted refund earned-point recovery foundation.', file=sys.stderr)
+    if 'later-accrual offset' not in plan13:
+        print('Plan 13 must own the accepted refund earned-point recovery foundation.', file=sys.stderr)
         sys.exit(1)
     required_plan10_issuer_fragments = (
         'issuer_type',
         '`issuer_reference`',
-        'reconstructible issuer source',
-        '추정 backfill은 금지한다.',
+        'Verified precheck',
+        '추정하거나 PLATFORM default로 backfill하지 않는다.',
     )
+    plan10 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md'
+    ).read_text(encoding='utf-8')
     if not all(fragment in plan10 for fragment in required_plan10_issuer_fragments):
         print('Plan 10 must own the issuer snapshot migration and non-guessing precheck gate.', file=sys.stderr)
         sys.exit(1)
@@ -1302,15 +1422,125 @@ else:
     if not all(fragment in settlement_input_adr for fragment in required_settlement_input_fragments):
         print('Settlement-input source/materialization ADR is incomplete.', file=sys.stderr)
         sys.exit(1)
+    plan15 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md'
+    ).read_text(encoding='utf-8')
+    plan20 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md'
+    ).read_text(encoding='utf-8')
+    plan16 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md'
+    ).read_text(encoding='utf-8')
+    normalized_plan15 = re.sub(r'\s+', ' ', plan15)
+    normalized_plan20 = re.sub(r'\s+', ' ', plan20)
+    normalized_plan16 = re.sub(r'\s+', ' ', plan16)
+    required_plan15_ownership = (
+        'payload factory 또는 typed mapper',
+        'validator와 contract fixture',
+        'actual outbox producer 교체와 activation은 Plan 20이 소유한다.',
+        'V2 producer activation, Settlement consumer와 V1 publication drain/deployment gate',
+    )
+    if not all(fragment in normalized_plan15 for fragment in required_plan15_ownership):
+        print('Plan 15 must own only immutable V2 input/factory/validator/fixture handoff.', file=sys.stderr)
+        sys.exit(1)
+    if '`OrderCompletedV2` outbox를 함께 저장한다' in normalized_plan15:
+        print('Plan 15 must not reclaim the V2 completion outbox transaction.', file=sys.stderr)
+        sys.exit(1)
+    required_plan20_ownership = (
+        'incomplete `OrderCompletedV1` publication/deployed V1 consumer gate',
+        '`OrderCompletedV1 -> OrderCompletedV2` cutover',
+        'Ordering guarded completion transaction의 V2 outbox 저장/activation',
+        'Ordering producer transaction과 Settlement consumer transaction은 같은 event를 다루더라도 별도의 local transaction이다.',
+        'Plan 15의 snapshot materialization, payload input 재계산 또는 Merchant/Campaign/PointLot 최신 state 조회',
+    )
+    if not all(fragment in normalized_plan20 for fragment in required_plan20_ownership):
+        print('Plan 20 must own V2 cutover/outbox/consumer and reject snapshot re-materialization.', file=sys.stderr)
+        sys.exit(1)
+    required_plan16_boundary = (
+        '`OrderCompletedV2`의 Ordering completion producer/cutover와 Settlement consumer는 Plan 20 소유다.',
+        '이 plan은 refund/Loyalty result event만 생산하며 Order completion event를 생산하거나 그 outbox를 저장하지 않는다.',
+    )
+    if not all(fragment in normalized_plan16 for fragment in required_plan16_boundary):
+        print('Plan 16 must be limited to Refund/Loyalty producers, not OrderCompletedV2.', file=sys.stderr)
+        sys.exit(1)
+    event_catalog_contract = re.sub(
+        r'\s+', ' ', (root / 'docs/architecture/event-catalog.md').read_text(encoding='utf-8')
+    )
+    transaction_boundaries_contract = re.sub(
+        r'\s+', ' ', (root / 'docs/architecture/transaction-boundaries.md').read_text(encoding='utf-8')
+    )
+    normalized_adr068 = re.sub(
+        r'\s+', ' ', (root / 'docs/adr/ADR-068-immutable-integration-event-snapshots.md').read_text(encoding='utf-8')
+    )
+    normalized_adr071 = re.sub(r'\s+', ' ', settlement_input_adr)
+    ownership_contract_fragments = (
+        'Plan 15 owns the Merchant terms, Campaign burden, PointLot issuer source/materialization plus the V2 payload factory/validator/contract fixture.',
+        '`OrderCompletedV1 -> OrderCompletedV2` cutover와 Ordering guarded completion transaction의 V2 outbox 저장/activation',
+        'The Ordering producer transaction and Settlement consumer transaction are separate local transactions;',
+        'Plan 15는 completion transaction이 사용할 immutable input, `OrderCompletedV2` payload factory 또는 typed mapper, validator와 contract fixture를 제공한다.',
+        'Settlement consumer는 Ordering producer와 별도의 local transaction에서 immutable event payload와 source unique를 검증하고',
+    )
+    ownership_contract_sources = (
+        event_catalog_contract,
+        normalized_plan20,
+        normalized_adr068,
+        normalized_adr071,
+        transaction_boundaries_contract,
+    )
+    if not all(
+        fragment in source
+        for fragment, source in zip(ownership_contract_fragments, ownership_contract_sources)
+    ):
+        print('ADR, architecture and ExecPlan OrderCompletedV2 ownership contracts are inconsistent.', file=sys.stderr)
+        sys.exit(1)
     cursor_adr = (root / 'docs/adr/ADR-070-signed-cursor-and-pagination-contract.md').read_text(encoding='utf-8')
     required_cursor_fragments = (
         '(distanceMicrometers ASC, storeId ASC)',
         '`1..10000`',
         'stripTrailingZeros()',
         'signed-cursor foundation',
+        '`endpoint`, `filterHash`, `sort`, `issuedAt`, `expiresAt`',
+        '위 다섯 property 외의 property와 `null`은 허용하지 않는다.',
+        'JSON string array',
+        'lowercase canonical UUID string',
+        '64자리 lowercase hexadecimal string',
+        'JSON integer',
+        'padding 없는 Base64URL',
+        '`v1.<key-id>.<encoded-payload>` 문자열의 UTF-8 bytes',
+        '`now >= expiresAt`',
+        '최대 `2048`자',
+        'active-key-id: current',
+        '`keys`는 duplicate key ID를 검출할 수 있는 list다.',
+        'secret-base64-url: ${BEANFLOW_CURSOR_HMAC_CURRENT_KEY}',
+        '최소 32 bytes',
+        'source, 기본 설정, production 또는 local runtime configuration에 fallback secret을 넣지 않는다.',
+        '공개된 test-vector 전용 key material',
+        '이름과 주석으로 test-vector 전용임을 표시한다.',
+        'production 또는 local runtime configuration에서 선택할 수 없고',
+        '실제 deployment secret과 같은 environment variable 이름을 사용하지 않는다',
+        'test result와 log에 key material을 출력하지 않으며',
+        '운영 fallback으로 사용할 수 없다',
     )
-    if not all(fragment in cursor_adr for fragment in required_cursor_fragments):
-        print('Signed-cursor Nearby canonicalization/ownership contract is incomplete.', file=sys.stderr)
+    normalized_cursor_adr = re.sub(r'\s+', ' ', cursor_adr)
+    if not all(fragment in normalized_cursor_adr for fragment in required_cursor_fragments):
+        print('Signed-cursor canonical payload, key-ring or test-vector contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    cursor_plan = (root / 'docs/exec-plans/active/signed-cursor-foundation.md').read_text(encoding='utf-8')
+    required_cursor_plan_fragments = (
+        '### Fixed v1 wire and key contract',
+        '`endpoint`, `filterHash`, `sort`, `issuedAt`, `expiresAt`',
+        'JSON string array',
+        'padding 없는 Base64URL',
+        '`now >= expiresAt`',
+        '`2048`자를 넘을 수 없다',
+        '`secret-base64-url`',
+        '최소 32 bytes',
+        'public test-vector key',
+        'never a runtime key',
+    )
+    normalized_cursor_plan = re.sub(r'\s+', ' ', cursor_plan)
+    if not all(fragment in normalized_cursor_plan for fragment in required_cursor_plan_fragments):
+        print('Signed-cursor ExecPlan is missing the locked v1 wire/key/test-vector handoff.', file=sys.stderr)
         sys.exit(1)
     operator_permission_adr = (
         root / 'docs/adr/ADR-069-operator-permission-grants-and-audited-policy-read.md'
@@ -1319,11 +1549,83 @@ else:
         'POINT_ACCOUNT_READ',
         'operator-permission-bootstrap',
         'verified release principal',
+        '단기 OIDC workload identity',
+        'Plan 11만 네 값의 closed permission vocabulary와 grant',
         '`grant`, `revoke`, `regrant`',
     )
     if not all(fragment in operator_permission_adr for fragment in required_operator_permission_fragments):
         print('Operator permission bootstrap/read contract is incomplete.', file=sys.stderr)
         sys.exit(1)
+    plan11 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md'
+    ).read_text(encoding='utf-8')
+    normalized_plan11 = re.sub(r'\s+', ' ', plan11)
+    required_plan11_decisions = (
+        '`POINT_ACCOUNT_READ`',
+        '`POINT_ADJUSTMENT`',
+        'PATCH는 existing body의 non-blank `reason`만 적용한다.',
+        'OIDC workload identity',
+        '> **Implementation-Ready:** `true`',
+    )
+    if not all(fragment in normalized_plan11 for fragment in required_plan11_decisions):
+        print('Plan 11 permission, PATCH reason or workload-identity contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if 'PATCH는 existing reason/evidence contract' in normalized_plan11:
+        print('Plan 11 must not require evidence in the expired-benefit policy PATCH body.', file=sys.stderr)
+        sys.exit(1)
+    plan14 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md'
+    ).read_text(encoding='utf-8')
+    if 'vocabulary constraint만 필요한 forward migration' in plan14:
+        print('Plan 14 must consume Plan 11 vocabulary without another grant migration.', file=sys.stderr)
+        sys.exit(1)
+    payment_refunded_row = next(
+        (line for line in (root / 'docs/architecture/event-catalog.md').read_text(encoding='utf-8').splitlines()
+         if line.startswith('| PaymentRefundedV1 |')),
+        '',
+    )
+    if '| Loyalty, Settlement, Analytics |' not in payment_refunded_row or 'Ordering' in payment_refunded_row:
+        print('PaymentRefundedV1 must not declare Ordering as a consumer.', file=sys.stderr)
+        sys.exit(1)
+    idempotency_adr = (
+        root / 'docs/adr/ADR-032-customer-cancellation-idempotency.md'
+    ).read_text(encoding='utf-8')
+    if '실제 Flyway 번호는 ADR-072의 migration-writer lease' not in re.sub(r'\s+', ' ', idempotency_adr):
+        print('ADR-032 must use ADR-072 branch-time migration numbering.', file=sys.stderr)
+        sys.exit(1)
+    plan30 = (
+        root / 'docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md'
+    ).read_text(encoding='utf-8')
+    stable_listener_ids = (
+        'beanflow.order-compensation.order-rejected.payment.v1',
+        'beanflow.order-compensation.order-rejected.pickup.v1',
+        'beanflow.order-compensation.order-rejected.stock.v1',
+        'beanflow.order-compensation.order-rejected.coupon.v1',
+        'beanflow.order-compensation.order-rejected.points.v1',
+        'beanflow.order-compensation.order-rejected.customer-notification.v1',
+        'beanflow.order-compensation.order-cancelled.pickup.v1',
+        'beanflow.order-compensation.order-cancelled.stock.v1',
+        'beanflow.order-compensation.order-cancelled.coupon.v1',
+        'beanflow.order-compensation.order-cancelled.points.v1',
+    )
+    if not all(listener_id in plan30 for listener_id in stable_listener_ids):
+        print('Plan 30 stable listener-target-to-step registry is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if 'PUBLICATION_TARGET_UNMAPPED' not in plan30:
+        print('Plan 30 must fail closed for an unknown publication target.', file=sys.stderr)
+        sys.exit(1)
+    ownership_amendment_sources = (
+        root / 'docs/adr/ADR-041-trigger-and-benefit-scoped-restoration-policy.md',
+        root / 'docs/adr/ADR-061-refund-requested-and-confirmed-amounts.md',
+    )
+    ownership_amendment_fragments = (
+        'Plan 11이 composite policy 저장소/API와 다섯 head seed를 단독 구현한다.',
+        'Plan 12가 부분 환불 allocation과 공개 Refund 계약을',
+    )
+    for source, fragment in zip(ownership_amendment_sources, ownership_amendment_fragments):
+        if fragment not in re.sub(r'\s+', ' ', source.read_text(encoding='utf-8')):
+            print(f'ExecPlan ownership amendment is missing from {source}.', file=sys.stderr)
+            sys.exit(1)
     execution_adr = (
         root / 'docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md'
     ).read_text(encoding='utf-8')
@@ -1410,7 +1712,7 @@ else:
 
     print(
         f'OpenAPI YAML and local contract checks passed '
-        f'({len(actual_paths)} paths, '
+        f'(target {len(actual_paths)} paths, deployed {len(deployed_spec["paths"])} paths, '
         f'{len(spec["components"]["schemas"])} schemas).'
     )
 

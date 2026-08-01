@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owner:** [Plan 10](../exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md)
+- **Implementation owners:** [Plan 10 issuer provenance](../exec-plans/active/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md), [Plan 11 policy/grants](../exec-plans/active/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [Plan 12 allocation/restoration](../exec-plans/active/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
 
 ## Context
 
@@ -17,7 +17,7 @@ PointLot으로 보상할지, 복원을 생략할지 결정되지 않았다. ADR-
 정책 lineage가 거짓이 되고, policy version 없이 복원하면 재시도 결과가 현재 설정에
 따라 달라진다.
 
-Plan 10은 Plan 30보다 먼저 실행되므로 부분 환불이 필요로 하는 composite policy
+Plan 11은 Plan 30보다 먼저 실행되므로 부분 환불이 필요로 하는 composite policy
 head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해야 한다.
 
 ## Decision
@@ -78,16 +78,17 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 
 ### ExecPlan ownership
 
-- Operations가 정책 Aggregate를 계속 소유하지만, 구현 순서상 Plan 10이 최종 다섯
+- Operations가 정책 Aggregate를 계속 소유하지만, 구현 순서상 Plan 11이 최종 다섯
   head/version 저장소, seed와 운영 목록/PATCH API migration을 단독 구현한다.
 - Plan 10은 만료 부분 환불 보상이 먼저 필요로 하는 PointLot issuer snapshot schema와
   legacy issuer precheck/migration gate도 단독 소유한다. 후속 감사형 point adjustment
   계획은 이 schema와 gate evidence를 전제하고 같은 migration을 다시 만들지 않는다.
 - Plan 30은 정책 저장소/API migration을 다시 만들지 않고 기존 종료용 네 head를
   OrderCompensationCase snapshot과 event에 연결한다.
-- **Execution amendment (2026-08-01):** Plan 30은 Plan 10의 종료용 네 policy head를 직접
-  소비하므로 Plan 10 outcome을 direct dependency로 유지한다. ADR-072의 migration-writer lane에서
-  Plan 20은 별도의 serialized phase predecessor이며, Plan 30은 Plan 10·20이 모두 completed인
+- **Execution amendment (2026-08-01):** Plan 30은 Plan 11의 종료용 네 policy head를 직접
+  소비하므로 Plan 11 outcome을 direct dependency로 유지한다. Plan 12는 Plan 10 issuer와 Plan 11
+  policy outcome을 직접 소비한다. ADR-072 migration lane에서 Plan 20은 별도 phase predecessor이며,
+  Plan 30은 Plan 11·20이 모두 completed인
   latest-main baseline에서만 시작한다. Plan 20은 이 정책 기반을 소유하거나 대체하지 않는다.
 
 ## Alternatives Considered
@@ -112,7 +113,7 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 ### 정책 기반을 Plan 30에서 먼저 구현
 
 - 기존 compensation 계획의 범위를 유지한다.
-- `00 → 10 → 30` 직접 정책 의존을 뒤집어 Plan 10이 자신의 필수 정책보다 먼저 실행될 수
+- `00 → 11 → 30` 직접 정책 의존을 뒤집어 Plan 12가 자신의 필수 정책보다 먼저 실행될 수
   없다. 과거 Plan 20 병렬 실행 대안은 ADR-072 migration-writer lane으로 supersede됐지만,
   Plan 20은 이 정책 기반을 대신 소유하지 않는다.
 
@@ -127,7 +128,7 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 ## Consequences
 
 - 정책 head가 네 개에서 다섯 개로 늘고 OpenAPI 목록 cardinality가 바뀐다.
-- Plan 10이 Operations 정책 저장소/API 기반까지 구현하는 다중 Context 계획이 된다.
+- Plan 11이 Operations 정책 저장소/API 기반을, Plan 12가 partial-refund Payment/Loyalty flow를 구현한다.
 - Refund에 POINTS policy version FK가 추가되고 line allocation·PointTransaction이 같은
   lineage를 보존한다.
 - 만료 부분 환불은 보상 포인트 비용을 만들며 원 issuer/cost owner가 이를 승계한다.
@@ -144,7 +145,7 @@ head/version 저장소와 운영 API의 구현 계획 소유권도 명확히 해
 - 부분 환불이 PointReservation 전체를 RESTORED로 바꾸면 아직 환불되지 않은 line의
   포인트를 종료 처리할 수 없다.
 - 종료 listener가 부분 환불 allocation을 다시 대상으로 잡으면 포인트가 이중 복원된다.
-- Plan 10과 Plan 30이 같은 policy migration을 만들면 checksum·schema 소유권이 충돌한다.
+- Plan 11과 Plan 30이 같은 policy migration을 만들면 checksum·schema 소유권이 충돌한다.
 - legacy Lot issuer source가 확인되지 않았는데 PLATFORM backfill이나 issuer 없는
   compensation Lot으로 계속하면 BR-20 비용 귀속과 환불 lineage를 거짓으로 만든다.
 
