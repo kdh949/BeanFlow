@@ -1,5 +1,9 @@
 # Confirm external payments and reconcile unknown results
 
+> **Status:** `COMPLETED`
+> **Depends-On:** `docs/exec-plans/completed/order-creation-and-reservation-lease.md`
+> **Completed-At:** `2026-07-29`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture

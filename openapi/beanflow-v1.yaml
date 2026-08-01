@@ -21,6 +21,7 @@ tags:
   - name: Operations
   - name: Loyalty
   - name: Settlement
+  - name: Dispute
 paths:
   /stores/nearby:
     get:
@@ -512,6 +513,12 @@ paths:
       tags: [Operations]
       operationId: listExpiredBenefitRestorationPolicies
       summary: List the five current trigger and benefit policy heads
+      description: |
+        Requires an active PLATFORM_OPERATOR with the explicit
+        EXPIRED_BENEFIT_POLICY_READ grant and a non-blank X-Access-Reason.
+        The server records the read access before returning the current heads.
+      parameters:
+        - $ref: "#/components/parameters/AccessReason"
       responses:
         "200":
           description: Current policy heads ordered by trigger and benefit type
@@ -523,6 +530,8 @@ paths:
                 maxItems: 5
                 items:
                   $ref: "#/components/schemas/ExpiredBenefitRestorationPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -534,6 +543,7 @@ paths:
       tags: [Operations]
       operationId: updateExpiredBenefitRestorationPolicy
       summary: Create a new version for one trigger and benefit policy
+      description: Requires an active PLATFORM_OPERATOR with the explicit EXPIRED_BENEFIT_POLICY_WRITE grant.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - name: trigger
@@ -615,6 +625,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PointTransactionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -627,8 +639,8 @@ paths:
       operationId: createAuditedPointAdjustment
       summary: Apply an audited signed point adjustment
       description: |
-        Requires an active PLATFORM_OPERATOR with explicit POINT_ADJUSTMENT
-        permission, a non-blank reason, and evidence references. The command is
+        Requires an active PLATFORM_OPERATOR with an explicit POINT_ADJUSTMENT
+        grant, a non-blank reason, and evidence references. The command is
         idempotent by actor, operation, Idempotency-Key, account ID and canonical
         request payload. Positive adjustments require a caller-selected issuer
         snapshot and future expiry; negative adjustments may consume only available
@@ -678,6 +690,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementBatchPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -708,6 +722,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementItemPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -718,7 +734,7 @@ paths:
           $ref: "#/components/responses/DependencyUnavailable"
   /settlement-items/{itemId}/disputes:
     post:
-      tags: [Settlement]
+      tags: [Dispute]
       operationId: createSettlementDispute
       summary: File a dispute for a confirmed settlement item
       parameters:
@@ -828,7 +844,11 @@ components:
       in: query
       name: cursor
       required: false
-      description: Opaque cursor returned by the previous page
+      description: |
+        Opaque versioned HMAC-signed cursor returned by the previous page. It is
+        bound to this endpoint, its filters and stable sort tuple, expires within
+        24 hours, and cannot be reused for another scope. Malformed, expired or
+        scope-mismatched cursors return 400 INVALID_REQUEST.
       schema:
         type: string
         minLength: 1
@@ -836,9 +856,21 @@ components:
       in: query
       name: limit
       required: false
+      description: Maximum items to return. Defaults to 20 and may not exceed 100.
       schema:
         type: integer
         minimum: 1
+        maximum: 100
+        default: 20
+    AccessReason:
+      in: header
+      name: X-Access-Reason
+      required: true
+      description: |
+        Purpose for an audited privileged policy read. The server trims the value,
+        requires 1 to 200 characters after trimming, and rejects control characters.
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Request syntax or field validation failed

@@ -31,7 +31,7 @@
 | UNKNOWN | 외부 처리 결과를 성공 또는 실패로 확정할 수 없는 상태 | Payment 등 |
 | Reconciliation | 외부 원본과 내부 상태를 비교하여 불명·누락·차이를 복구하는 과정 | Operations / Owner Context |
 | SettlementItem | 주문 단위의 매출, 혜택 부담, 수수료와 환불 명세 | Settlement |
-| SettlementBatch | 매장·기간 단위 SettlementItem 집계와 확정 상태 | Settlement |
+| SettlementBatch | 매장·서울 완료일 단위 SettlementItem 귀속과 이후 집계·확정 상태. Item 생성 시 최소 `OPEN` Batch가 먼저 존재한다. | Settlement |
 | SettlementAdjustment | 확정 정산을 수정하지 않고 이후 차이를 보정하는 불변 원장 | Settlement |
 | SettlementDispute | 점주의 정산 이의제기와 판정 Workflow | Dispute |
 | Held Amount | 이의제기 대상 예상 조정액. 확정 Batch를 변경하지 않고 SettlementDispute가 참조하며 판정 결과에 따라 Adjustment로 확정되거나 해제된다. | Dispute |
@@ -41,6 +41,7 @@
 | Idempotency | 같은 의도의 중복 요청 또는 이벤트가 부작용을 한 번만 만들게 하는 성질 | Cross-cutting |
 | Outbox | 원본 DB 트랜잭션과 함께 발행할 이벤트를 영속화하는 패턴 | Cross-cutting |
 | AuditRecord | 금액·권한·상태의 수동 또는 중요 변경을 주체·사유와 함께 기록하는 append-only 기록 | Operations |
+| Operator Permission Grant | 활성 Platform Operator가 특정 privileged operation을 실행·조회할 수 있게 하는 Operations-owned explicit grant. JWT role 또는 claim의 fallback이 아니다. | Operations |
 | ReprocessingCase | 자동 재시도 범위를 벗어난 실패 또는 승인된 backfill을 추적하는 운영 case | Operations |
 | Analytics Read Model | 원본 거래 사실을 지표 정의에 따라 멱등 집계한 조회 전용 모델 | Analytics |
 | Terminal State | 해당 Aggregate에서 더 이상 정상 상태 전이가 없는 상태. 다른 Aggregate의 후속 처리 완료를 의미하지 않는다. | Context별 |

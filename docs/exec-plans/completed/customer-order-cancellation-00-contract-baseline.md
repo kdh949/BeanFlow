@@ -1,5 +1,9 @@
 # 고객 취소 계약 baseline과 release gate를 닫는다
 
+> **Status:** `COMPLETED`
+> **Depends-On:** —
+> **Completed-At:** `2026-07-31`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture

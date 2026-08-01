@@ -68,3 +68,7 @@
 | [ADR-064](ADR-064-risk-based-idempotency-model-selection.md) | Accepted | 위험 기반 멱등성 모델 선택 |
 | [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md) | Accepted | 환불 적립 포인트 회수 원장과 `RECOVERY` transaction |
 | [ADR-066](ADR-066-audited-loyalty-point-adjustment.md) | Accepted | 감사형 Loyalty 포인트 조정 |
+| [ADR-067](ADR-067-settlement-batch-creation-and-schema-ownership.md) | Accepted | Settlement Batch 최소 생성과 스키마 소유권 |
+| [ADR-068](ADR-068-immutable-integration-event-snapshots.md) | Accepted | Immutable integration event snapshot 계약 |
+| [ADR-069](ADR-069-operator-permission-grants-and-audited-policy-read.md) | Accepted | Operator permission grant와 감사형 정책 조회 |
+| [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) | Accepted | Versioned HMAC cursor와 pagination 상한 |

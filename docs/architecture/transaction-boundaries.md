@@ -231,9 +231,12 @@ Notification worker: claim transaction -> external Provider -> result transactio
   모델을 쓴다. Application Service가 PointAccount를 먼저 잠그고 CREDIT이면 새 Lot을,
   DEBIT이면 `expiresAt > now`인 `(expiresAt, pointLotId)` 순서의 available Lot을 잠근다.
 - Account/Lot summary, Lot별 `ADJUSTMENT` transaction과 `balance_effect`, terminal
-  IdempotencyRecord, target AuditRecord, PointsAdjusted persistent event와 최초 201
+  IdempotencyRecord, target AuditRecord, PointsAdjustedV1 persistent event와 최초 201
   response는 하나의 local transaction에 속한다. 외부 Provider·issuer lookup fallback·
   Analytics consumer 호출은 이 transaction에 넣지 않는다.
+- Operations public authorization API가 같은 transaction에서 active `POINT_ADJUSTMENT`
+  grant를 잠근다. role/JWT claim은 coarse gate일 뿐 grant lookup failure/absence의 fallback이
+  아니며, grant/Audit failure는 전체 rollback과 503이다.
 - debit 가능한 Lot이 부족하거나 issuer/expiry/reason/evidence contract가 맞지 않으면
   모든 local write를 rollback한다. PointRecoveryPending, 음수 Account 또는 partial
   debit으로 성공을 대신하지 않는다.
@@ -243,15 +246,29 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 ## Settlement
 
-- SettlementItem 생성은 원천 거래 reference 단위로 멱등하다.
+- `OrderCompletedV2` consumer는 immutable completion snapshot을 검증하고 `(storeId,
+  settlementDate)` `OPEN` Batch를 insert-or-read한 뒤 SettlementItem, Audit과
+  `SettlementItemCreatedV1` publication을 같은 transaction에 저장한다. Batch 또는 Item
+  저장 실패는 event completion이 아니다.
+- SettlementItem 생성은 원천 거래 reference 단위로 멱등하며 `settlementBatchId` FK가 필수다.
 - Batch 집계와 상태 전환은 Item 전체를 Entity 컬렉션으로 로딩하지 않는다.
 - 확정 후 환불·판정은 별도 Adjustment 트랜잭션이다.
-- `SettlementItem` 생성의 기준 fact는 `OrderCompleted`다. `PaymentApproved`만으로
+- `SettlementItem` 생성의 기준 fact는 `OrderCompletedV2`다. `PaymentApproved`만으로
   Item을 생성하지 않는다.
 - Payment 환불 fact는 미확정 Item 반영 또는 확정 후 Adjustment 생성의 입력이며,
   원천 refund reference를 Unique Constraint로 보호한다.
-- Dispute 판정과 SettlementAdjustment 생성은 Context 간 별도 트랜잭션이다. 명령
-  실패 시 Dispute가 Adjustment 완료로 가장하지 않고 재시도 가능한 상태를 유지한다.
+- `CALCULATED` 또는 `CONFIRMED` Batch로 닫힌 뒤 늦게 도착한 Item source는 Batch를
+  바꾸거나 0원 Adjustment를 만들지 않고 source-unique ReprocessingCase로 남긴다.
+- Dispute Context의 판정과 SettlementAdjustment 생성은 Context 간 별도 트랜잭션이다.
+  명령 실패 시 Dispute가 Adjustment 완료로 가장하지 않고 재시도 가능한 상태를 유지한다.
+
+## Audited expired-benefit policy read
+
+- policy GET은 Operations transaction에서 Platform Operator role, active
+  `EXPIRED_BENEFIT_POLICY_READ` grant, current policy heads와 `X-Access-Reason` access
+  AuditRecord를 함께 검증·저장한다.
+- grant, head query 또는 Audit 저장 실패는 policy body를 반환하지 않고 503이다. missing/
+  revoked grant는 403, missing/malformed reason은 400이다.
 
 ## Idempotent commands
 

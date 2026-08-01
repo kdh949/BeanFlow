@@ -22,15 +22,16 @@
 | PaymentMethod | PG token reference와 표시 정보 | 원본 카드번호·CVC·전체 유효기간 금지, 사용자와 provider token 범위 중복 금지 | `memberId` |
 | IdempotencyRecord | 명령 중복 실행 방지와 응답 재사용 | 같은 scope·key에 payload hash 하나, 처리 중/UNKNOWN은 정리 금지 | `actorId`, target ID |
 | SettlementItem | 주문 단위 정산 명세 | 원천 거래·유형 중복 금지 | IDs |
-| SettlementBatch | 기간·매장 집계·확정 | 확정 후 직접 수정 금지 | `storeId` |
+| SettlementBatch | 서울 완료일·매장별 Item 귀속, 집계·확정 | store/date당 하나, Item은 OPEN Batch에만 귀속, 확정 후 직접 수정 금지 | `storeId` |
 | SettlementAdjustment | 확정 후 보정 | 대상·원인·금액·행위 주체 필수, 원천 사유별 중복 금지, 미완료 고객 취소 환불 제외 증적으로 사용 금지 | IDs |
-| SettlementDispute | 이의제기 Workflow와 held 예상액 | Item당 진행 중 하나, 재이의는 이전 ID와 새 증빙 필수 | IDs |
+| SettlementDispute | Dispute Context의 이의제기 Workflow와 held 예상액 | Item당 진행 중 하나, 재이의는 이전 ID와 새 증빙 필수, Adjustment commit 전 terminal success 금지 | Settlement Item ID |
 | NotificationDelivery | 발송·재시도 | logical source+recipient+channel 중복 금지, Provider attempt 상한 | IDs |
 | ReprocessingCase | 운영 재처리 | 대상·사유·주체 필수, 중복 실행 방지 | IDs |
 | RepairProposal | 금융 setup 복구의 2인 승인 | case당 active 하나, proposer≠decider, 30분 만료, terminal 재개 금지 | case/order/payment IDs |
 | AcceptanceTimeoutWork | 관측된 PAID deadline winner의 내구 실행 | order+deadline source unique, claim lease, nonterminal 자동 정리 금지 | `orderId` |
 | OrderCompensationCase | 주문 종료 후 owner 보상 추적 | order당 하나, trigger 필수, 여섯 step과 두 benefit policy snapshot | `orderId`, event/source IDs |
 | AuditRecord | 중요 변경의 target별 감사 | 5년 보존 중 append-only, action/target/source 중복 금지, 필수 주체·사유·correlation, 민감정보 금지 | target IDs |
+| OperatorPermissionGrant | privileged operator permission source | actor/permission unique, ACTIVE/REVOKED lifecycle, role/JWT fallback 금지 | `actorId` |
 | BenefitRestorationPolicyVersion | 종료 원인·혜택별 만료 복원 규칙 이력 | version ID 전역 유일, row 수정·삭제 금지, trigger/type/mode 유효 | actor ID |
 | CompensationCouponTermsSnapshot | 종료 Campaign과 독립적인 보상 쿠폰 조건·비용 부담 | 원 issuance snapshot 복사, share 합 10000, 발급 후 불변 | CouponIssuance ID |
 | OrderCompensationBenefitPolicySnapshot | Case가 확정한 혜택별 정책 참조 | Case당 COUPON·POINTS 각 하나, immutable version FK | `caseId`, `policyVersionId` |
@@ -73,15 +74,16 @@ event ID와 payload version으로 멱등하게 갱신하는 projection이다.
 | `IdempotencyRecordRepository` | IdempotencyRecord | actor/operation/key unique | insert-first unique arbitration |
 | `PointAdjustmentCommandIdempotencyRepository` | PointAdjustmentCommandIdempotency | actor/operation/key unique, account/hash match에만 201 replay, terminal response 90일 retention | PointAccount lock + unique-conflict rollback/re-read + keyset retention worker |
 | `SettlementItemRepository` | SettlementItem | source order/type unique | unique source reference |
-| `SettlementBatchRepository` | SettlementBatch | store/settlement date unique | unique + guarded transition |
+| `SettlementBatchRepository` | SettlementBatch | store/settlement date unique, Item은 Batch FK와 Item 생성 시 OPEN state guard를 모두 통과해야 함 | unique + insert-or-read + guarded transition |
 | `SettlementAdjustmentRepository` | SettlementAdjustment | source reason/reference unique | unique source reference |
-| `SettlementDisputeRepository` | SettlementDispute | one active dispute per Item, refile count ≤ 1 | partial unique + guarded transition |
+| `SettlementDisputeRepository` (Dispute Context) | SettlementDispute | one active dispute per Item, refile count ≤ 1 | partial unique + guarded transition |
 | `NotificationDeliveryRepository` | NotificationDelivery | logical source/recipient/channel unique | unique + guarded attempt count |
 | `ReprocessingCaseRepository` | ReprocessingCase | open case type/target unique where required | partial unique |
 | `RepairProposalRepository` | RepairProposal | case당 active proposal 하나, actor 분리, guarded terminal transition | partial unique + row lock |
 | `AcceptanceTimeoutWorkRepository` | AcceptanceTimeoutWork | order/deadline source unique, claim lease와 terminal retention guard | unique + skip-locked claim |
 | `OrderCompensationCaseRepository` | OrderCompensationCase | order unique, trigger/step CHECK, case+step unique | unique + guarded step transition |
 | `AuditRecordRepository` | AuditRecord | action/target/source unique, occurred-at/correlation/retention-expiry index | append-only permissions + retention worker role |
+| `OperatorPermissionGrantRepository` | OperatorPermissionGrant | actor/permission unique, active/revoked state and audit source | same transaction grant lock + guarded revoke |
 | `BenefitRestorationPolicyRepository` | BenefitRestorationPolicyVersion/Head | global version PK, trigger+benefit head PK, append-only version | COUPON→POINTS head row lock + CAS |
 | `OrderCompensationBenefitPolicySnapshotRepository` | OrderCompensationBenefitPolicySnapshot | case+benefit unique, policy version FK, Case당 두 row | Case 생성 transaction |
 

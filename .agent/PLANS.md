@@ -30,6 +30,10 @@ ExecPlan은 복잡한 Feature 또는 시스템 변경을 다른 대화나 기억
 ```markdown
 # <행동 중심 제목>
 
+> **Status:** `ACTIVE` 또는 `COMPLETED`
+> **Depends-On:** `docs/exec-plans/.../plan.md`, ... 또는 `—`
+> **Completed-At:** `YYYY-MM-DD` 또는 `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture
@@ -75,6 +79,22 @@ ExecPlan은 복잡한 Feature 또는 시스템 변경을 다른 대화나 기억
 
 ## Revision Notes
 ```
+
+## Canonical execution metadata
+
+모든 ExecPlan은 제목 바로 아래에 위 세 metadata line을 둔다. 이 세 줄과 파일의
+`active`/`completed` 디렉터리는 실행 재개와 자동 검증에서 함께 사용하는 canonical
+status source다.
+
+- `active/` 파일은 `Status: ACTIVE`, `Completed-At: —`를 사용한다.
+- `completed/` 파일은 `Status: COMPLETED`, 실제 완료일의 ISO-8601 date를 사용한다.
+- `Depends-On`에는 현재 파일 기준이 아닌 repository-relative ExecPlan path만 적는다.
+  직접 선행 계획이 없으면 `—`를 사용한다. 간접 선행 계획을 반복하지 않는다.
+- dependency graph에는 self-reference와 cycle이 없어야 한다. completed plan은 completed
+  plan만 직접 dependency로 둘 수 있다.
+- `scripts/verify-docs.sh`는 모든 ExecPlan의 metadata, 경로 존재 여부, status-directory
+  일치와 dependency cycle을 검증한다. checkbox나 Progress 문단은 canonical status를
+  대체하지 않는다.
 
 ## 작성 원칙
 

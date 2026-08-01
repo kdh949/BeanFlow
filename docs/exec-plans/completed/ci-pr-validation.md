@@ -1,5 +1,9 @@
 # Make PR validation fast and trustworthy
 
+> **Status:** `COMPLETED`
+> **Depends-On:** —
+> **Completed-At:** `2026-08-01`
+
 Status: Complete
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. Progress, Surprises & Discoveries,

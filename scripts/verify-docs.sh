@@ -60,6 +60,7 @@ done
 
 python3 - <<'PY'
 from collections import Counter
+from datetime import date
 from pathlib import Path
 import re
 import sys
@@ -75,6 +76,96 @@ if set(ids) != set(expected) or any(count != 1 for count in Counter(ids).values(
     print('Business policy IDs are missing, duplicated, or out of range.', file=sys.stderr)
     print('Found:', ids, file=sys.stderr)
     sys.exit(1)
+
+plan_files = sorted((root / 'docs/exec-plans').glob('*/*.md'))
+plan_metadata_pattern = re.compile(
+    r'# [^\n]+\n\n'
+    r'> \*\*Status:\*\* `(ACTIVE|COMPLETED)`\n'
+    r'> \*\*Depends-On:\*\* (.+)\n'
+    r'> \*\*Completed-At:\*\* `([^`]+)`\n'
+)
+plan_metadata = {}
+metadata_errors = []
+for plan_file in plan_files:
+    relative_path = plan_file.as_posix()
+    match = plan_metadata_pattern.match(plan_file.read_text(encoding='utf-8'))
+    if match is None:
+        metadata_errors.append(f'{relative_path}: title 바로 아래 canonical metadata가 없습니다.')
+        continue
+    status, depends_on_field, completed_at = match.groups()
+    directory = plan_file.parent.name
+    expected_status = {'active': 'ACTIVE', 'completed': 'COMPLETED'}.get(directory)
+    if expected_status is None or status != expected_status:
+        metadata_errors.append(
+            f'{relative_path}: directory {directory!r}와 Status {status!r}가 일치하지 않습니다.'
+        )
+    if status == 'ACTIVE':
+        if completed_at != '—':
+            metadata_errors.append(f'{relative_path}: ACTIVE plan의 Completed-At은 —여야 합니다.')
+    else:
+        try:
+            date.fromisoformat(completed_at)
+        except ValueError:
+            metadata_errors.append(
+                f'{relative_path}: COMPLETED plan의 Completed-At은 ISO-8601 date여야 합니다.'
+            )
+    if depends_on_field == '—':
+        dependencies = []
+    else:
+        dependencies = re.findall(r'`([^`]+)`', depends_on_field)
+        canonical_field = ', '.join(f'`{dependency}`' for dependency in dependencies)
+        if not dependencies or depends_on_field != canonical_field:
+            metadata_errors.append(
+                f'{relative_path}: Depends-On은 comma-separated repository-relative backtick path 또는 —여야 합니다.'
+            )
+    plan_metadata[relative_path] = {'status': status, 'dependencies': dependencies}
+
+if metadata_errors:
+    print('Invalid ExecPlan canonical metadata:', file=sys.stderr)
+    for error in metadata_errors:
+        print(f'  {error}', file=sys.stderr)
+    sys.exit(1)
+
+for relative_path, metadata in plan_metadata.items():
+    for dependency in metadata['dependencies']:
+        if dependency not in plan_metadata:
+            print(
+                f'ExecPlan dependency does not name an ExecPlan: {relative_path} -> {dependency}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if dependency == relative_path:
+            print(f'ExecPlan cannot depend on itself: {relative_path}', file=sys.stderr)
+            sys.exit(1)
+        if (
+            metadata['status'] == 'COMPLETED'
+            and plan_metadata[dependency]['status'] != 'COMPLETED'
+        ):
+            print(
+                f'Completed ExecPlan cannot depend on an active plan: {relative_path} -> {dependency}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+visiting = set()
+visited = set()
+
+def visit_exec_plan(relative_path, trail):
+    if relative_path in visiting:
+        cycle_start = trail.index(relative_path)
+        cycle = trail[cycle_start:] + [relative_path]
+        print(f'ExecPlan dependency cycle: {" -> ".join(cycle)}', file=sys.stderr)
+        sys.exit(1)
+    if relative_path in visited:
+        return
+    visiting.add(relative_path)
+    for dependency in plan_metadata[relative_path]['dependencies']:
+        visit_exec_plan(dependency, trail + [relative_path])
+    visiting.remove(relative_path)
+    visited.add(relative_path)
+
+for relative_path in plan_metadata:
+    visit_exec_plan(relative_path, [])
 
 traceability = (root / 'docs/architecture/policy-traceability.md').read_text(encoding='utf-8')
 br14_row = next((line for line in traceability.splitlines() if line.startswith('| BR-14 |')), '')
@@ -770,6 +861,77 @@ else:
     if policy_list_schema.get('minItems') != 5 or policy_list_schema.get('maxItems') != 5:
         print('Expired benefit policy list must return exactly five heads.', file=sys.stderr)
         sys.exit(1)
+    parameters = spec['components']['parameters']
+    limit_schema = parameters['Limit']['schema']
+    if (
+        limit_schema.get('minimum') != 1
+        or limit_schema.get('maximum') != 100
+        or limit_schema.get('default') != 20
+    ):
+        print('Common pagination limit must declare default 20 and range 1..100.', file=sys.stderr)
+        sys.exit(1)
+    cursor_parameter = parameters['Cursor']
+    if (
+        cursor_parameter.get('in') != 'query'
+        or cursor_parameter.get('required') is not False
+        or cursor_parameter.get('schema', {}).get('minLength') != 1
+        or 'HMAC-signed' not in cursor_parameter.get('description', '')
+    ):
+        print('Common cursor must be an optional non-blank HMAC-signed query parameter.', file=sys.stderr)
+        sys.exit(1)
+    expected_cursor_operations = {
+        'GET /stores/nearby',
+        'GET /point-accounts/{accountId}/transactions',
+        'GET /stores/{storeId}/settlements',
+        'GET /stores/{storeId}/settlements/{settlementBatchId}/items',
+    }
+    cursor_operations = set()
+    for path, path_item in spec['paths'].items():
+        for method in ('get', 'post', 'put', 'patch', 'delete'):
+            operation = path_item.get(method)
+            if not isinstance(operation, dict):
+                continue
+            parameter_refs = {
+                item.get('$ref')
+                for item in operation.get('parameters', [])
+                if isinstance(item, dict)
+            }
+            if '#/components/parameters/Cursor' not in parameter_refs:
+                continue
+            operation_name = f'{method.upper()} {path}'
+            cursor_operations.add(operation_name)
+            if '#/components/parameters/Limit' not in parameter_refs:
+                print(f'{operation_name} cursor pagination must also use Limit.', file=sys.stderr)
+                sys.exit(1)
+            if '400' not in operation.get('responses', {}):
+                print(f'{operation_name} must expose 400 for invalid cursor scope or syntax.', file=sys.stderr)
+                sys.exit(1)
+    if cursor_operations != expected_cursor_operations:
+        print('Cursor operation inventory is stale; update the shared pagination contract.', file=sys.stderr)
+        sys.exit(1)
+    policy_get = spec['paths']['/operations/policies/expired-benefit-restoration']['get']
+    policy_get_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in policy_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if policy_get_parameter_refs != {'#/components/parameters/AccessReason'}:
+        print('Expired benefit policy GET must require the AccessReason header.', file=sys.stderr)
+        sys.exit(1)
+    access_reason = parameters['AccessReason']
+    if (
+        access_reason.get('in') != 'header'
+        or access_reason.get('name') != 'X-Access-Reason'
+        or access_reason.get('required') is not True
+        or access_reason.get('schema', {}).get('type') != 'string'
+        or set(policy_get.get('responses', {})) != {'200', '400', '401', '403', '503'}
+    ):
+        print('Expired benefit policy GET access-reason or failure contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    dispute_operation = spec['paths']['/settlement-items/{itemId}/disputes']['post']
+    if dispute_operation.get('tags') != ['Dispute']:
+        print('Settlement dispute endpoint must be owned by the Dispute API tag.', file=sys.stderr)
+        sys.exit(1)
     if 'base GET은 다섯 현재 head를' not in normalized_api_conventions:
         print('API conventions must describe the same five expired-benefit policy heads as OpenAPI.', file=sys.stderr)
         sys.exit(1)
@@ -947,11 +1109,11 @@ else:
         print('Point adjustment active ExecPlan is missing migration, retention or event completion criteria.', file=sys.stderr)
         sys.exit(1)
     adjustment_event_row = next(
-        (line for line in event_catalog.splitlines() if line.startswith('| PointsAdjusted |')),
+        (line for line in event_catalog.splitlines() if line.startswith('| PointsAdjustedV1 |')),
         '',
     )
     if not adjustment_event_row.endswith('| PointTransaction |'):
-        print('PointsAdjusted must use PointTransaction as its source of truth.', file=sys.stderr)
+        print('PointsAdjustedV1 must use PointTransaction as its source of truth.', file=sys.stderr)
         sys.exit(1)
 
     policy_patch = spec['paths'][
@@ -1033,7 +1195,7 @@ else:
 
 print(
     f'Validated {len(ids)} business policies, {len(adr_files)} ADRs, '
-    f'and {len(markdown_files)} Markdown files.'
+    f'{len(markdown_files)} Markdown files, and {len(plan_metadata)} ExecPlans.'
 )
 PY
 

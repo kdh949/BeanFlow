@@ -20,11 +20,11 @@ Ordering ── OrderReady ───────────────> Notifi
 Ordering ── cancellation Delivery command in Tx C0/C1 ──> Notification
 Ordering ── cancellation Refund/recovery snapshot command in Tx C1 ──> Payment
 Ordering ── compensation Case/policy snapshot command in Tx C1 ──> Operations
-Ordering ── OrderCompleted ───────────> Loyalty / Settlement / Analytics
-Payment ── refund facts ──────────────> Loyalty / Settlement / Analytics
+Ordering ── OrderCompletedV2 ─────────> Loyalty / Settlement / Analytics
+Payment ── PaymentRefundedV1 ─────────> Loyalty / Settlement / Analytics
 Payment ── customer cancellation refund result events ──> Notification
 
-Settlement ── confirmed views ────────> Dispute
+Settlement ── confirmed Item views ───> Dispute
 Dispute ── accepted adjustment command ──> Settlement
 
 All transaction contexts ── failures/audit facts ──> Operations
@@ -48,12 +48,12 @@ All source contexts ── idempotent business facts ──> Analytics
 | Ordering | Notification | Ordering fact or cancellation Delivery command | 일반 알림은 after-commit event; 취소 접수는 Tx C0/C1의 동기 Application API | provider 발송은 eventual |
 | Ordering | Payment | Payment | 고객 취소 Refund `REQUESTED`와 cancellation recovery snapshot 생성 Application API | Tx C1 내 강한 일관성, Provider 호출은 밖 |
 | Ordering | Operations | Operations | Tx C0의 target AuditRecord와 Tx C1의 OrderCompensationCase·step·benefit policy snapshot·target AuditRecord 생성 Application API | 취소 transaction 내 강한 일관성 |
-| Ordering | Loyalty | Ordering fact | `OrderCompleted` idempotent event | eventual |
-| Ordering | Settlement | Ordering fact | `OrderCompleted` idempotent event | eventual |
-| Payment | Settlement | Payment fact | 환불·승인 금액 입력 | eventual, Item 생성 기준은 완료 주문 |
-| Payment | Loyalty | Payment fact | 환불 후 사용·적립 포인트 복원·회수 | eventual |
+| Ordering | Loyalty | Ordering fact | `OrderCompletedV2` immutable snapshot event | eventual |
+| Ordering | Settlement | Ordering fact | `OrderCompletedV2` immutable snapshot event | eventual |
+| Payment | Settlement | Payment fact | `PaymentRefundedV1` immutable refund/settlement effect | eventual, Item 생성 기준은 완료 주문 |
+| Payment | Loyalty | Payment fact | `PaymentRefundedV1` 후 사용·적립 포인트 복원·회수 | eventual |
 | Payment | Notification | Payment fact | `CustomerCancellationRefundSucceededV1`/`DelayedV1` 전용 결과 event | eventual, Delivery는 별도 transaction |
-| Settlement | Dispute | Settlement | 조회 API와 adjustment command | 판정 후 조정은 명시적 명령 |
+| Settlement | Dispute | Settlement / Dispute | confirmed Item 조회 API와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 명시적 명령 |
 | Transaction Contexts | Operations | 원본 Context | failure/audit fact와 reconciliation case | eventual, 원본 상태 보존 |
 | Transaction contexts | Analytics | 원본 Context | idempotent event | eventual, 재집계 가능 |
 
@@ -81,7 +81,7 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 | Dispute | SettlementDispute와 Held Amount | dispute workflow and decision fact |
 | Notification | NotificationDelivery | delivery status/failure fact |
 | Analytics | Analytics Read Model | named metric queries |
-| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, 누락 Refund 복구 제안·결정, point adjustment permission evaluation |
+| Operations | ReprocessingCase, AuditRecord, OrderCompensationCase/Step, OrderCompensationBenefitPolicySnapshot, BenefitRestorationPolicyVersion/Head, OperatorPermissionGrant, RepairProposal | reconciliation/reprocessing commands, compensation case 생성·조회, 만료 혜택 정책 조회·변경, explicit operator permission evaluation, 누락 Refund 복구 제안·결정 |
 
 ## Translation boundaries
 
@@ -95,6 +95,9 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 - Operations는 원본 Aggregate를 직접 수정하지 않고 owner Context의 승인된 명령을 호출한다.
   setup 무결성 scanner도 read-only cross-context projection만 사용하고 owner table을
   쓰지 않는다.
+- Operations의 explicit operator permission은 JWT role/claim의 fallback이 아닌
+  `OperatorPermissionGrant`를 source of truth로 한다. 다른 Context는 Operations public
+  authorization API를 호출하며 grant Repository를 직접 조회하지 않는다.
 - owner Context는 종료 event의 trigger를 자기 원장 어휘로 번역한다.
   `OrderCancelledV1 → CUSTOMER_CANCELLATION`, `OrderRejectedV1 → STORE_REJECTION`을
   명시적으로 매핑하고 source reference 문자열에서 추론하지 않는다.

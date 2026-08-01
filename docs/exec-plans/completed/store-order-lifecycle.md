@@ -1,5 +1,9 @@
 # 결제 완료 주문의 매장 처리 생명주기 완성
 
+> **Status:** `COMPLETED`
+> **Depends-On:** `docs/exec-plans/completed/payment-confirmation-and-reconciliation.md`
+> **Completed-At:** `2026-07-30`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture

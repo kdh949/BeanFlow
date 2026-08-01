@@ -1,5 +1,9 @@
 # 부분 환불 allocation과 적립 포인트 회수 foundation을 만든다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md`
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture
@@ -23,6 +27,9 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 - 현재 `loyalty_point_lot`에는 BR-20 issuer type/reference snapshot이 없다. 만료
   부분 환불 compensation은 original issuer/cost lineage를 보존해야 하므로, legacy Lot의
   확인 가능한 issuer source를 먼저 precheck해야 한다.
+- 만료 혜택 정책 API는 현재 role만 검사하며 explicit grant, GET reason/access Audit과
+  grant revoke 경계가 없다. `PaymentRefunded`·`PointsAccrued`·`PointsRestored`도 exact
+  immutable integration event contract가 없다.
 
 ## Definitions
 
@@ -43,6 +50,8 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
   Loyalty Aggregate. `PENDING`은 양수 remaining, `SETTLED`는 0 remaining이다.
 - **Issuer snapshot:** PointLot에 저장하는 `PLATFORM|BRAND|STORE` type과 non-blank
   immutable reference. 보상 Lot은 original Lot의 snapshot을 그대로 승계한다.
+- **OperatorPermissionGrant:** Operations가 actor별 explicit permission과 active/revoked
+  상태를 소유하는 grant. role이나 JWT claim의 fallback이 아니다.
 
 ## Scope
 
@@ -50,6 +59,8 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 
 - Refund line cash allocation, point restoration allocation과 coupon attribution 모델
 - 최종 다섯 expired-benefit policy head/version 저장소, seed와 운영 목록/PATCH API
+- `OperatorPermissionGrant` schema, Operations authorization API와 policy GET의
+  `X-Access-Reason` access Audit
 - source/type별 unique, non-negative와 OrderLine 상한 DB 제약
 - 부분 환불 command의 결정적 allocation과 성공 시점 원장 반영
 - 성공 Refund의 적립 포인트 회수, PointRecoveryPending과 이후 적립 상계 foundation
@@ -57,6 +68,8 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
   issuer precheck/migration gate
 - 승인액·Payment 성공 누계·line 합계 tie-out
 - 고객 전체 취소가 소비할 read/lock API
+- `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` immutable payload와 같은
+  producer result transaction의 persistent publication
 
 ### Non-goals
 
@@ -92,6 +105,9 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
   `SETTLED`는 0 remaining이고 PointAccount `recoveryPendingKrw` summary와 tie-out한다.
 - 이후 적립은 gross `ACCRUAL`을 먼저 기록하고 오래된 PENDING부터 `RECOVERY`로
   상계한다. Account와 Lot available 잔액은 언제나 음수가 아니다.
+- 만료 혜택 정책 조회·변경은 Platform Operator role과 해당 active explicit grant를 모두
+  요구한다. GET은 non-blank `X-Access-Reason`과 access Audit을 하나의 Operations
+  transaction으로 저장하지 못하면 policy body를 반환하지 않는다.
 
 ## Architecture and Transaction Boundaries
 
@@ -112,6 +128,11 @@ PointRecoveryPending으로 보존해 이후 적립에서 먼저 상계한다.
 - Refund API Query Service는 Payment의 현금 Refund와 Loyalty의 point restoration
   allocation을 DTO projection으로 조합한다. 쓰기 Aggregate 연관관계나 callback으로
   두 owner 상태를 합치지 않는다.
+- Operations authorization API는 policy read/PATCH transaction에 참여해 active grant를
+  잠근다. grant/Audit lookup failure는 role-only success로 대체하지 않고 503이다.
+- Payment와 Loyalty result transaction은 ADR-068의 source, immutable amount/date/snapshot과
+  persistent publication을 함께 저장한다. Analytics/Settlement consumer는 live owner state를
+  다시 읽어 payload를 보완하지 않는다.
 
 ## Alternatives Considered
 
@@ -152,6 +173,10 @@ PointTransaction의 `ACCRUAL`/`RECOVERY` type CHECK와 deferred recovery pending
 변환한다.
 Operations의 최종 composite policy version/head 저장소와 다섯 초기 head도 이 계획이
 단독 migration한다. Plan 30은 같은 table/API migration을 다시 만들지 않는다.
+같은 Operations migration scope에서 `operator_permission_grant`의 actor/permission unique,
+active/revoked state, audit source와 grant lookup index를 만든다. Platform Operator role에서
+default grant를 seed하지 않는다. Point adjustment plan은 이 table을 다시 만들지 않고
+Operations public authorization API를 소비한다.
 구 Refund backfill은 실제 row 존재와 reconstructible source를 00 evidence로 확인한 뒤
 별도 전략을 확정한다. 추정 backfill은 금지한다.
 
@@ -166,10 +191,15 @@ PENDING 잔액 합이며, `PointTransaction.RECOVERY`는 음수 signed amount로
 `PointRecoveryPendingRecorded` event는 PointRecoveryPending 생성 사실이며 실제 debit
 transaction을 대신하지 않는다.
 
+`PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1`의 exact payload, version,
+logical source와 producer transaction은 ADR-068을 따른다. 기존 event 이름만으로 analytics
+또는 Settlement consumer를 활성화하지 않는다. 정책 GET은 `X-Access-Reason` header를
+OpenAPI에 추가하고 400/403/503의 grant·Audit failure contract를 가진다.
+
 ## Milestones
 
 1. PointLot issuer precheck와 snapshot schema gate를 완료한다.
-2. 최종 다섯 policy head/version 저장소, seed와 운영 API를 구현한다.
+2. 최종 다섯 policy head/version 저장소, `OperatorPermissionGrant`, seed와 audited 운영 API를 구현한다.
 3. allocation schema와 불변식을 domain/DB test로 고정한다.
 4. 부분 환불 요청의 결정적 line allocation과 policy snapshot을 구현한다.
 5. Refund 성공 transaction과 Payment 누계를 원자화한다.
@@ -177,6 +207,7 @@ transaction을 대신하지 않는다.
    Promotion owner를 호출하지 않음을 고정한다.
 7. Refund 적립 포인트 회수, PointRecoveryPending과 이후 적립 상계를 구현한다.
 8. 고객 취소용 remaining allocation 조회·잠금 API를 제공한다.
+9. ADR-068 Payment/Loyalty immutable event producer와 contract tests를 완료한다.
 
 ## Required Tests
 
@@ -189,6 +220,8 @@ transaction을 대신하지 않는다.
 - 부분 환불 성공 시 CouponIssuance 상태 불변과 Promotion 복원 호출 부재
 - 후속 고객 취소·매장 거절에서 원 쿠폰의 단일 복원
 - 다섯 policy head seed와 PARTIAL_REFUND/COUPON key 부재
+- policy GET/PATCH의 role+grant, GET access reason/Audit atomicity, revoke 경쟁과 grant
+  repository/Audit failure 503
 - Refund POINTS policy snapshot과 변경 전후 version 재현
 - 만료 PointLot의 refundSucceededAt 기준 30일 보상 lot과 issuer/cost lineage
 - PointLot issuer snapshot migration의 empty/verified/unresolvable legacy fixture,
@@ -203,6 +236,8 @@ transaction을 대신하지 않는다.
 - 이후 적립의 gross `ACCRUAL`·oldest PENDING 우선 `RECOVERY` 상계·`PENDING -> SETTLED`
 - Loyalty recovery write 실패 시 Refund 성공을 포인트 회수 성공으로 위장하지 않는 retry/manual review
 - PointTransaction storage magnitude와 OpenAPI signed amount, PointRecoveryPendingRecorded source contract
+- `PaymentRefundedV1` completed/excluded disposition, immutable settlement effect와
+  `PointsAccruedV1`/`PointsRestoredV1` source/version conflict
 - migration empty DB와 지원 가능한 backfill fixture
 
 ## Validation Commands
@@ -222,12 +257,12 @@ tag로 측정한다. Order/Payment/Refund ID는 metric tag에 넣지 않는다.
 
 ## Documentation Updates
 
-ADR-014/036/063/065의 구현 evidence, aggregate invariants, transaction boundaries, OpenAPI
-contract test, event catalog과 payment runbook을 갱신한다.
+ADR-014/036/063/065/068/069의 구현 evidence, aggregate invariants, transaction boundaries,
+authorization matrix, OpenAPI contract test, event catalog과 payment runbook을 갱신한다.
 
 ## Progress
 
-- [ ] five-head policy foundation/API
+- [ ] five-head policy/grant foundation과 audited policy API
 - [ ] PointLot issuer precheck와 snapshot schema gate
 - [ ] schema와 domain invariant
 - [ ] partial refund application flow
@@ -235,6 +270,7 @@ contract test, event catalog과 payment runbook을 갱신한다.
 - [ ] point restoration과 coupon attribution allocation
 - [ ] refund earned-point recovery와 later-accrual offset
 - [ ] customer-cancellation read API
+- [ ] immutable Payment/Loyalty event producer contract
 - [ ] 전체 검증
 
 ## Surprises & Discoveries
@@ -248,9 +284,11 @@ contract test, event catalog과 payment runbook을 갱신한다.
 | 2026-07-31 | Accepted existing | 선행 부분 환불을 허용하고 잔여 allocation만 처리 | 이중 환불·이중 복원 방지 | BR-14/15, ADR-036 |
 | 2026-08-01 | Accepted | 부분 환불은 쿠폰을 복원하지 않고 coupon allocation을 귀속 원장으로만 기록 | 잔여 할인과 재사용 쿠폰의 가치 중복을 막고 기존 CouponIssuance 모델 유지 | BR-12/15, ADR-014/036 |
 | 2026-08-01 | Accepted | Refund 요청·확정 금액과 현금·포인트 owner 상태를 분리 | 202와 비동기 Loyalty 결과를 성공·0으로 위장하지 않음 | ADR-061 |
-| 2026-08-01 | Accepted | PARTIAL_REFUND×POINTS 기본 30일 보상 head와 공통 정책 기반을 이 계획이 구현 | 만료 포인트 가치 보존과 10→20→30 실행 순서 유지 | ADR-063 |
+| 2026-08-01 | Accepted | PARTIAL_REFUND×POINTS 기본 30일 보상 head와 공통 정책 기반을 이 계획이 구현 | 만료 포인트 가치 보존과 Plan 10→30 정책 선행조건 유지 | ADR-063 |
 | 2026-08-01 | Accepted | 실제 `RECOVERY` debit과 별도 PointRecoveryPending을 Plan 10이 구현 | 음수 잔액 없이 부족액을 보존하고 이후 적립으로 한 번만 상계 | BR-13, ADR-065 |
 | 2026-08-01 | Accepted existing | Plan 10이 PointLot issuer snapshot precheck/migration을 소유 | 만료 부분 환불 compensation이 original issuer/cost lineage를 먼저 보존해야 함 | BR-20, ADR-063 |
+| 2026-08-01 | Accepted | Operations grant와 policy GET access Audit은 Plan 10, point-adjustment permission은 후속 계획 | role-only access와 permission revoke 지연 제거 | ADR-069 |
+| 2026-08-01 | Accepted | Payment/Loyalty financial event는 immutable snapshot을 publish | Settlement/Analytics가 current state를 재조회하지 않음 | ADR-068 |
 
 ## Outcomes & Retrospective
 
@@ -266,3 +304,5 @@ contract test, event catalog과 payment runbook을 갱신한다.
   foundation을 추가.
 - 2026-08-01: 만료 부분 환불 compensation의 issuer/cost lineage를 위해 PointLot issuer
   snapshot precheck/migration 소유권을 Plan 10으로 명확화.
+- 2026-08-01: explicit operator grant/audited policy read와 Payment/Loyalty immutable event
+  producer checkpoint를 ADR-069/068에 맞춰 이 계획의 범위로 추가.

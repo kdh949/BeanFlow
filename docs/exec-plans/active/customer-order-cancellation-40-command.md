@@ -1,5 +1,9 @@
 # 고객 취소 command와 Tx C0/C1을 구현한다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md`
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture

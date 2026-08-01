@@ -1,5 +1,9 @@
 # 고객 주문 취소 구현 순서를 조정한다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** —
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture
@@ -72,16 +76,24 @@
 
 ## Architecture and Transaction Boundaries
 
-하위 계획 순서는 다음과 같다.
+하위 계획은 완전 순차가 아니라 다음 직접 선행조건 DAG를 따른다.
 
 ```text
 00 contract baseline and release facts
  ├─> 10 partial-refund allocation foundation
- ├─> 20 Settlement foundation
- └─> 30 common Order compensation foundation
-          10 + 20 + 30 ─> 40 customer cancellation command
-          20 + 30 + 40 ─> 50 customer cancellation recovery
+ │     └─> 30 common Order compensation foundation
+ └─> 20 Settlement foundation
+
+10 + 20 + 30 ─> 40 customer cancellation command
+20 + 30 + 40 ─> 50 customer cancellation recovery
 ```
+
+여기서 "다음 계획"은 milestone 표의 다음 행이 아니라 **모든 직접 선행 계획의 actual
+Outcomes와 validation evidence**가 있는 계획을 뜻한다. Plan 10과 Plan 20은 Plan 00 merge
+baseline에서 병렬 branch로 시작한다. Plan 30 branch의 base는 Plan 10 head이고, Plan 40은
+10·20·30을 모두 통합한 baseline, Plan 50은 20·30·40 통합 baseline을 base로 사용한다.
+Stacked PR은 이 base/head 관계를 PR 설명에 적고, 직접 선행 계획의 migration을 다시 만들지
+않는다.
 
 계획 40의 endpoint는 계획 50이 완료되기 전 production에서 성공 응답을 반환하도록
 활성화하지 않는다. 각 외부 Provider 호출은 claim transaction과 result transaction
@@ -130,21 +142,23 @@
 
 ## Milestones
 
-1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md)
-2. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md)
-3. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md)
-4. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md)
-5. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md)
-6. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md)
+1. [고객 취소 계약 baseline과 release gate를 닫는다](../completed/customer-order-cancellation-00-contract-baseline.md) — 선행 없음
+2. [부분 환불 allocation과 point recovery foundation을 만든다](customer-order-cancellation-10-partial-refund-allocation-foundation.md) — 00
+3. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 00
+4. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 10
+5. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 10, 20, 30
+6. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 20, 30, 40
 
-각 링크의 계획이 자체 Required Tests와 Validation Commands를 통과하고 Outcomes에 실제
-결과를 남겨야 다음 계획이 시작된다.
+각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
+Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
+않는다.
 
 ## Required Tests
 
 - 하위 계획 링크와 의존관계가 순환하지 않음
 - 00 미완료 상태에서 migration 제자리 수정이 시작되지 않음
-- 10/20/30 미완료 상태에서 취소 endpoint가 활성화되지 않음
+- 10 또는 20 또는 30 미완료 상태에서 40이 시작·활성화되지 않음
+- 10 미완료 상태에서 30이 시작되지 않음. 20은 10과 병렬로 Plan 00 뒤 시작할 수 있음
 - 10 미완료 상태에서 `RECOVERY`/PointRecoveryPending target contract를 구현된 것처럼
   노출하지 않음
 - 40만 완료된 상태에서 production success path가 노출되지 않음
@@ -178,6 +192,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 2026-07-31 recovery schema·projection·reason 전달 범위·release path 계약 정합화
 - [x] 2026-07-31 거대 master plan을 여섯 하위 계획으로 분리
 - [x] 2026-07-31 00 fact-verification gate 완료 — 모든 외부 항목 0, clean cutover
+- [x] 2026-08-01 직접 선행조건 DAG와 stacked branch base를 Plan 00→10→30, Plan 00→20로 정정
 - [ ] 10 allocation·point recovery foundation 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
@@ -203,6 +218,8 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 | 2026-07-31 | Plan structure | foundation별 여섯 계획으로 분리 | 독립 검증과 선행조건 강제 | 이 master plan |
 | 2026-08-01 | Accepted | `RECOVERY` debit과 PointRecoveryPending foundation은 Plan 10이 소유 | 부분 환불과 이후 고객 취소가 같은 refund source·point recovery 불변식을 소비 | BR-13, ADR-065 |
 | 2026-08-01 | Accepted existing | PointLot issuer snapshot precheck/migration은 Plan 10이 소유 | 만료 부분 환불 compensation이 original issuer/cost lineage를 먼저 필요로 함 | BR-20, ADR-063 |
+| 2026-08-01 | Accepted | Plan 10과 20은 00 뒤 병렬, Plan 30은 Plan 10 뒤 | ADR-063의 policy schema 선행조건을 지키면서 독립 Settlement foundation 병렬화 | ADR-063, this master plan |
+| 2026-08-01 | Accepted | Plan 20이 최소 OPEN Batch와 Item 귀속을 소유하고 lifecycle 계획이 계산·Adjustment·Dispute를 확장 | Batch-scoped Item API를 선행 구현하면서 migration 중복 제거 | ADR-067 |
 
 ## Outcomes & Retrospective
 
@@ -220,3 +237,5 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
   point recovery foundation으로 구현 소유권을 고정했다.
 - 2026-08-01: Plan 10이 만료 부분 환불 compensation의 PointLot issuer snapshot
   precheck/migration도 선행 소유하도록 명확화했다.
+- 2026-08-01: Plan 30의 Plan 10 직접 의존성과 Plan 10/20 병렬 branch base를 명시하고
+  Settlement 최소 Batch 소유권을 ADR-067로 분리했다.

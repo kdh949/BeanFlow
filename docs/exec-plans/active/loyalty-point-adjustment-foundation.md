@@ -1,5 +1,9 @@
 # 감사형 Loyalty 포인트 조정 foundation을 만든다
 
+> **Status:** `ACTIVE`
+> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-10-partial-refund-allocation-foundation.md`
+> **Completed-At:** `—`
+
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
 ## Purpose / Big Picture
@@ -26,6 +30,9 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 - ADR-065의 Plan 10은 `ACCRUAL`/`RECOVERY`와 PointRecoveryPending foundation을 먼저
   구현한다. 이 계획은 Plan 10의 PointTransaction base migration과 contract test가
   완료되기 전 type CHECK를 경쟁적으로 수정하지 않는다.
+- current JWT role은 인증의 coarse gate일 뿐 `POINT_ADJUSTMENT` permission source가 아니다.
+  Plan 10이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
+  구현해야 한다.
 
 ## Definitions
 
@@ -48,7 +55,7 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 ### In Scope
 
 - `POST /operations/point-accounts/{accountId}/adjustments` OpenAPI, Controller,
-  Application Service와 authorization
+  Application Service와 ADR-069 grant authorization
 - PointAccount row lock 기반 명령 transaction idempotency와 stored 201 response
 - `loyalty_point_adjustment_command_idempotency`와 90일 keyset retention worker
 - Plan 10 issuer snapshot precheck/migration evidence 확인, PointTransaction
@@ -68,8 +75,9 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Business Rules and Invariants
 
-- active `PLATFORM_OPERATOR`의 explicit `POINT_ADJUSTMENT` permission, reason,
-  evidenceReferences와 Idempotency-Key가 없으면 command를 시작하지 않는다.
+- active `PLATFORM_OPERATOR`의 Operations-backed explicit `POINT_ADJUSTMENT` grant, reason,
+  evidenceReferences와 Idempotency-Key가 없으면 command를 시작하지 않는다. JWT role 또는
+  permission claim은 grant query failure/absence의 fallback이 아니다.
 - amount는 signed nonzero다. credit에는 issuer와 `expiresAt > now`가 반드시 있고,
   debit에는 issuer/expiry가 존재하면 안 된다.
 - credit은 하나의 새 Lot과 CREDIT `ADJUSTMENT`; debit은 하나 이상의 기존 Lot과 DEBIT
@@ -95,8 +103,9 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 - Controller는 authorization principal과 DTO만 Application Service에 전달하고 Loyalty
   Repository를 직접 호출하지 않는다.
-- Application Service는 actor permission와 canonical payload를 확인한 뒤 PointAccount를
-  잠근다. credit은 new Lot을 만들고, debit은 `expiresAt > now`인 `(expiresAt, pointLotId)`
+- Application Service는 Operations public authorization API로 actor의 active grant를 같은
+  command transaction에서 확인한 뒤 PointAccount를 잠근다. credit은 new Lot을 만들고,
+  debit은 `expiresAt > now`인 `(expiresAt, pointLotId)`
   순서의 selected available Lot을 잠근다.
 - PointAccount lock 뒤 terminal idempotency record를 조회한다. record가 없을 때만
   command를 실행하고 Account/Lot/ledger/Audit/outbox/201과 같은 transaction에서 저장한다.
@@ -104,7 +113,7 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
   전부 rollback하고, 별도 read transaction에서 winner의 account/hash를 다시 비교해 stored
   201 또는 409을 반환한다. 재실행으로 경쟁을 해결하지 않는다.
 - 같은 local transaction이 Account summary, affected Lot, one-or-more PointTransaction,
-  terminal IdempotencyRecord, AuditRecord와 PointsAdjusted outbox를 commit한다. external
+  terminal IdempotencyRecord, AuditRecord와 PointsAdjustedV1 outbox를 commit한다. external
   Provider, Analytics consumer와 notification은 transaction 밖이다.
 - lock 순서는 항상 PointAccount → ordered PointLot이다. issuer reference는 immutable
   value snapshot이므로 Merchant Aggregate를 JPA association으로 로드하지 않는다.
@@ -121,8 +130,10 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Failure Semantics
 
-- issuer/expiry 누락, zero amount, 잘못된 role/permission, debit issuer 포함은 400/403으로
+- issuer/expiry 누락, zero amount, 잘못된 role/active grant, debit issuer 포함은 400/403으로
   명시적 거부한다.
+- grant lookup/lock failure는 role-only success 또는 403으로 바꾸지 않고 503이며 command
+  write 전에 rollback한다.
 - debit 가능한 Lot 합이 부족하면 `409 POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE`이고
   부분 debit·pending·음수 fallback은 없다.
 - lock contention, DB/Audit/outbox 저장 실패는 503 또는 transaction rollback이며 201·0원
@@ -159,6 +170,8 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
    검증한다.
 6. current source가 Plan 10에서 만든 `ACCRUAL`/`RECOVERY` fields/type CHECK와 충돌하면
    migration을 작성하지 않고 ADR-065/066의 migration ownership conflict로 보고한다.
+7. `OperatorPermissionGrant` table이나 policy read Audit migration은 만들지 않는다. Plan 10의
+   ADR-069 outcome과 Operations public authorization API를 activation prerequisite로 소비한다.
 
 ## API and Event Contracts
 
@@ -169,7 +182,7 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
   expiry, reason과 evidence는 canonical payload에 포함한다.
 - Result는 changed PointAccount와 실제 생성·차감 PointTransaction 목록을 반환한다. replay
   header/field는 없다.
-- `PointsAdjusted` envelope은 PointAccount ID와 commit 뒤 Account version, initial
+- `PointsAdjustedV1` envelope은 PointAccount ID와 commit 뒤 Account version, initial
   `payloadVersion = 1`을 사용한다. payload는 `adjustmentSource`, `accountId`, signed
   `amountKrw` (child transaction signed effect 합)을 가진다. `issuerType`은 CREDIT에만 넣고, 여러 issuer Lot을
   차감할 수 있는 DEBIT에서는 생략한다. raw evidence, actor, Idempotency-Key와 issuer
@@ -178,21 +191,22 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
 
 ## Milestones
 
-1. ADR-066/OpenAPI/API conventions/authorization/event catalog의 contract test를 고정한다.
-2. Plan 10 완료 evidence와 Plan 10 issuer precheck evidence를 확인해 activation
+1. ADR-066/068/069, OpenAPI/API conventions/authorization/event catalog의 contract test를 고정한다.
+2. Plan 10 완료 evidence, issuer precheck와 OperatorPermissionGrant authorization outcome을 확인해 activation
    precondition을 닫는다.
 3. PointTransaction balance_effect/type migration·entities를 구현하고, Plan 10 snapshot을
    사용하는 credit/debit flow를 구현한다.
 4. Loyalty terminal idempotency persistence/retention worker와 credit/debit command
    transaction, Audit/outbox를 구현한다.
-5. Operations endpoint/DTO projection과 role/permission enforcement를 구현한다.
-6. Analytics PointsAdjusted consumer, concurrency/failure/migration suites와 documentation
+5. Operations endpoint/DTO projection과 role+Operations grant enforcement를 구현한다.
+6. Analytics PointsAdjustedV1 consumer, concurrency/failure/migration suites와 documentation
    evidence를 완료한다.
 
 ## Required Tests
 
 - OpenAPI conditional positive/negative request validation and required Idempotency-Key
-- customer/store/settlement role denial and Platform Operator explicit permission/reason/evidence
+- customer/store/settlement role denial, Platform Operator active grant/reason/evidence, revoked grant
+  and grant/Audit DB failure 503
 - credit issuer/expiry snapshot and future boundary `now - 1ns`, `now`, `now + 1ns`
 - debit deterministic multi-Lot selection, reserved/expired Lot exclusion and insufficient rollback
 - Account/Lot/transaction/Audit/outbox/201 commit atomicity and each persistence failure injection
@@ -202,7 +216,7 @@ Plan 10 완료 뒤 최신 migration 번호를 다시 계산한다.
   cleanup failure의 due row 보존
 - Plan 10 issuer precheck의 empty/verified/unresolvable fixture와 endpoint activation
   precondition, balance_effect/type CHECK 및 current-type deterministic backfill
-- public signed amount projection, CREDIT/DEBIT PointsAdjusted payload condition and Analytics replay
+- public signed amount projection, CREDIT/DEBIT PointsAdjustedV1 payload condition/version and Analytics replay
 - Modulith/ArchUnit, PostgreSQL Testcontainers, OpenAPI contract and migration empty/nonempty fixtures
 
 ## Validation Commands
@@ -227,7 +241,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 ## Documentation Updates
 
-- ADR-011, ADR-017, ADR-022, ADR-064, ADR-065/066 implementation evidence
+- ADR-011, ADR-017, ADR-022, ADR-064, ADR-065/066/068/069 implementation evidence
 - BR-10/BR-20/BR-25/BR-26, authorization matrix, aggregate invariants, transaction boundaries,
   state machines, event catalog, OpenAPI and API conventions
 - Operations runbook, analytics contract test and migration release evidence
@@ -235,7 +249,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 ## Progress
 
 - [ ] contract/ADR/OpenAPI validation
-- [ ] Plan 10 prerequisite and issuer precheck evidence
+- [ ] Plan 10 issuer precheck and operator-grant prerequisite evidence
 - [ ] persistence and migration
 - [ ] command transaction/idempotency/audit/outbox
 - [ ] endpoint and authorization
@@ -254,15 +268,17 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
-| 2026-08-01 | Accepted | `ADJUSTMENT`는 Platform Operator의 reason/evidence/audit 필수 signed Loyalty correction | 직접 DB 수정과 Settlement/Refund 의미 혼합 방지 | ADR-066 |
+| 2026-08-01 | Accepted | `ADJUSTMENT`는 Platform Operator의 active explicit grant, reason/evidence/audit 필수 signed Loyalty correction | 직접 DB 수정과 Settlement/Refund 의미 혼합 방지 | ADR-066, ADR-069 |
 | 2026-08-01 | Accepted | 양수 조정은 issuer와 future expiry를 입력하고, 음수 조정은 existing available Lot을 FIFO 차감 | 비용 귀속과 만료를 숨은 기본값 없이 재현 | ADR-066, BR-20 |
 | 2026-08-01 | Accepted | Loyalty가 terminal adjustment idempotency row와 독립 90일 retention worker를 소유 | Context 경계를 지키면서 최초 201 재생과 BR-26 보존을 함께 충족 | ADR-066, BR-26 |
 | 2026-08-01 | Accepted existing | PointLot issuer snapshot migration은 Plan 10의 선행 책임이고 adjustment는 evidence를 소비 | 만료 부분 환불 compensation이 같은 schema를 먼저 필요로 하며 중복 migration을 막음 | ADR-063, ADR-066 |
+| 2026-08-01 | Accepted | `POINT_ADJUSTMENT`는 Operations DB grant로 판정하고 role/JWT claim fallback을 금지 | revoke와 permission dependency failure를 명시적으로 보존 | ADR-069 |
+| 2026-08-01 | Accepted | Analytics event name/version은 `PointsAdjustedV1`/1로 고정 | event catalog 이름만으로 payload를 추측하지 않음 | ADR-068 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 10의 PointTransaction base contract와 issuer precheck evidence가
-완료되기 전에는 endpoint 또는 migration을 시작하지 않는다.
+미구현 상태다. Plan 10의 PointTransaction base contract, issuer precheck와 ADR-069 grant
+authorization evidence가 완료되기 전에는 endpoint 또는 migration을 시작하지 않는다.
 
 ## Revision Notes
 
@@ -270,3 +286,5 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
   ADR-066과 독립 foundation plan으로 분리했다.
 - 2026-08-01: PointLot issuer snapshot migration은 만료 부분 환불 compensation을 먼저
   구현하는 Plan 10이 소유하고, 이 계획은 precheck evidence를 소비하도록 명확화했다.
+- 2026-08-01: ADR-069 Operations grant와 ADR-068 `PointsAdjustedV1` contract를 activation
+  prerequisite로 추가했다.
