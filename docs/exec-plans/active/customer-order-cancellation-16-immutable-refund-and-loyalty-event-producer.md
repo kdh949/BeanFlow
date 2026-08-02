@@ -37,7 +37,7 @@ producer/cutover와 Settlement consumer는 Plan 20 소유다.
 
 - ADR-068 exact payload Kotlin/event catalog/producers
 - Payment and Loyalty result transaction의 persistent publication/source/hash conflict tests
-- completed/pre-acceptance disposition과 snapshot-missing failure gate
+- completed/pre-completion/pre-acceptance disposition과 snapshot-missing failure gate
 
 ### Non-goals
 
@@ -73,8 +73,9 @@ schema를 소비하며, new schema need 발견 시 별도 writer plan/ADR를 먼
 
 ## API and Event Contracts
 
-ADR-068의 field/version/logical source가 canonical이다. `COMPLETED_ORDER`에만 settlement effect를
-넣고 pre-acceptance cancellation은 `NOT_APPLICABLE` branch를 보존한다.
+ADR-068의 field/version/logical source가 canonical이다. `COMPLETED_ORDER`와
+`PRE_COMPLETION_ORDER`에 settlement effect를 넣고, 완료 필드는 `COMPLETED_ORDER`에만 넣는다.
+pre-acceptance cancellation은 effect 없는 `NOT_APPLICABLE` branch를 보존한다.
 이 plan은 refund/Loyalty result event만 생산하며 Order completion event를 생산하거나 그 outbox를
 저장하지 않는다.
 
@@ -86,7 +87,7 @@ ADR-068의 field/version/logical source가 canonical이다. `COMPLETED_ORDER`에
 
 ## Required Tests
 
-- completed vs pre-acceptance payload branch and signed settlement effect
+- completed vs pre-completion vs pre-acceptance payload branch and signed cumulative settlement effect
 - missing snapshot/allocation/source/outbox rollback
 - same source replay and changed-payload conflict
 - delayed event after policy/terms change reproduces original values
@@ -111,6 +112,10 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 
 ## Progress
 
+- [x] 2026-08-02 implementation preflight and refund disposition decision
+  - 기존 부분 환불 허용 상태와 두 값뿐인 ADR-068 disposition의 충돌을 확인했다.
+  - 최초 producer 활성화 전 `PRE_COMPLETION_ORDER`를 추가하고, 완료 전 effect와 완료 후
+    metadata를 분리하며 누적 floor 차분 산식을 BR-15/16과 ADR-068에 기록했다.
 - [ ] exact event contract
 - [ ] Payment/Loyalty publications
 - [ ] failure/replay tests
@@ -133,6 +138,7 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 |---|---|---|---|---|
 | 2026-08-01 | Accepted | event producer를 Plan 15 뒤 Plan 16으로 이동 | immutable snapshot을 사용하면서 allocation/recovery와 settlement input을 순환 없이 소비 | ADR-068, ADR-071 |
 | 2026-08-01 | Accepted | Plan 16 producer 범위는 refund/Loyalty event로 한정 | V2 completion producer/cutover를 Plan 20의 Ordering transaction에 단일 소유시킴 | ADR-068 |
+| 2026-08-02 | Accepted | 완료 전 품목 Refund를 `PRE_COMPLETION_ORDER`로 분리하고 effect는 누적 allocation 차분으로 계산 | 기존 허용 상태를 유지하면서 미수락 종료를 오분류하지 않고 여러 Refund의 remainder를 보존 | BR-15, BR-16, ADR-068 |
 
 ## Outcomes & Retrospective
 

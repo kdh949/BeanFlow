@@ -547,6 +547,16 @@
   이후 주문 전체 종료 시 원 CouponIssuance를 기존 종료 정책에 따라 한 번만 복원한다.
   line별 성공 현금 환불·포인트 복원 원장과 coupon 귀속 원장이 이 합성을 재현 가능하게
   보호해야 한다.
+- **Immutable Refund Event Disposition Amendment (2026-08-02):** 품목 부분 환불은 기존
+  허용 상태인 `PAID`, `ACCEPTED`, `PREPARING`, `READY`, `COMPLETED`를 유지한다. 성공
+  Refund result transaction은 immutable Order 상태·완료 source와 refund trigger를 함께
+  판정해 `PaymentRefundedV1.completionDisposition`을 다음 세 값 중 하나로 고정한다.
+  이미 완료된 Order의 환불은 `COMPLETED_ORDER`, 고객 취소·매장 거절처럼 완료 없이
+  미수락 종료된 환불은 `PRE_ACCEPTANCE_CANCELLATION`, 그 밖의 완료 전 품목 환불은
+  `PRE_COMPLETION_ORDER`다. `PRE_COMPLETION_ORDER`는 주문 생성 시점 settlement snapshot과
+  성공 allocation으로 계산한 refund effect를 포함하지만 완료 시각·정산일·SettlementItem
+  source는 포함하지 않는다. 후속 Settlement와 Analytics는 나중의 `OrderCompletedV2`와
+  source-aware하게 결합하며 현재 Order나 정책을 재조회해 누락 값을 채우지 않는다.
 - **Rationale:** 결제·쿠폰·포인트·정산 금액을 다시 계산하면서 주문 원본이 변하는 문제를 방지한다.
 - **Affected Contexts:** Ordering, Payment, Promotion, Loyalty, Settlement
 - **Affected Aggregates:** Order, Payment, SettlementAdjustment
@@ -555,6 +565,7 @@
   - 품목 단위 부분 환불 금액 계산
   - 반복 부분 환불 누적액 검증
   - 부분 환불 후 고객 전체 취소의 현금·포인트·쿠폰 allocation tie-out
+  - 완료 전 부분 환불의 `PRE_COMPLETION_ORDER`와 이후 완료 event의 out-of-order 수렴
   - 부분 환불에서 이미 복원된 line 포인트의 이중 복원 방지
   - 부분 환불 성공 시 CouponIssuance 상태 불변과 이후 전체 종료 시 한 번만 복원
   - 정산 전·후 부분 환불 처리 차이
@@ -817,6 +828,12 @@
   publication을 완료하지 않는다. 운영 조회는 Order·Refund·Audit 세 원천을 조합해
   “주문 미완료로 정산 제외”를 표시하며 0원 Adjustment나 별도 제외 원장을 만들지
   않는다.
+- **Pre-completion Refund Amendment (2026-08-02):** 완료 전 품목 환불은 미수락 종료와
+  다르므로 `NOT_APPLICABLE`로 종결하지 않는다. `PaymentRefundedV1`의 immutable refund
+  effect를 source-aware pending input으로 보존하고, Order가 나중에 `COMPLETED`되면 그
+  완료일의 SettlementItem에 정확히 한 번 반영한다. Order가 완료 없이 terminal이 되면
+  해당 pending input은 0원 Adjustment로 바꾸지 않고 terminal source와 일치하는 명시적
+  exclusion/reconciliation 경로로 종결한다. consumer 구현과 저장 모델은 Plan 20 소유다.
 - **Rationale:** 매장이 실제로 상품을 인도한 거래를 정산 대상으로 삼는다.
 - **Affected Contexts:** Ordering, Fulfillment, Settlement, Analytics
 - **Affected Aggregates:** Order, SettlementItem, SettlementBatch
@@ -825,6 +842,7 @@
   - 완료되지 않은 주문 제외
   - 자정 경계의 완료 주문
   - 중복 완료 이벤트의 정산 항목 중복 방지
+  - 완료 전 부분 환불과 완료 event의 순서가 바뀌어도 동일한 정산 결과
 - **ADR Required:** Yes — 정산 기준과 조정 원장
 - **Revisit Conditions:** 실제 PG 매입일 또는 영업일 기준 정산이 필요할 때
 

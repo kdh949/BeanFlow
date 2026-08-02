@@ -36,7 +36,7 @@ Idempotency-Key, evidence, 자유 입력 reason/detail 또는 live policy value�
 | Event / envelope version | Exact immutable payload (envelope 외) | Producer transaction / logical source | Consumer checkpoint |
 |---|---|---|---|
 | `OrderCompletedV2` / 2 | `orderId`, `customerId`, `storeId`, `completedAt`, `settlementDate`, `currency`, `grossPaidKrw`, `feeRateBps`, `feeKrw`, `couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`, `completionSource` | Plan 20이 소유하는 Ordering `COMPLETED` guarded transition과 같은 transaction. `order:{orderId}:completed:{aggregateVersion}` | Plan 20: SettlementItem; Loyalty: accrual; Analytics: completion-date input |
-| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때만 `orderCompletedAt`, `settlementDate`, `settlementItemSource`, `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }` | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 12/13: Loyalty restore/recovery; Settlement: Item 반영/Adjustment; Analytics: refund-date와 completion-date delta |
+| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때 `orderCompletedAt`, `settlementDate`, `settlementItemSource`가 required; `COMPLETED_ORDER`와 `PRE_COMPLETION_ORDER`에는 `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }`가 required | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 12/13: Loyalty restore/recovery; Settlement: Item 반영/Adjustment 또는 pre-completion pending; Analytics: refund-date와 completion-date delta |
 | `PointsAccruedV1` / 1 | `pointTransactionSource`, `orderCompletionSource`, `orderId`, `orderCompletedAt`, `amountKrw`, `currency` | Loyalty의 `ACCRUAL` ledger transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsRestoredV1` / 1 | `pointTransactionSource`, `refundSource`, `orderId`, `refundSucceededAt`, `orderCompletedAt`(없는 경우 null), `amountKrw`, `currency`, `restorationDisposition` (`RESTORE`, `COMPENSATION`, `SKIPPED`) | Loyalty의 Refund owner result transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsAdjustedV1` / 1 | `adjustmentSource`, `accountId`, signed `amountKrw`, `issuerType`(CREDIT일 때만) | Loyalty point-adjustment command transaction과 같은 transaction. `point-adjustment:{adjustmentSource}` | Analytics |
@@ -52,15 +52,47 @@ non-negative 64-bit integer KRW다. delta, `PointsAdjustedV1.amountKrw`,
 `feeRateBps`는 `0..10000` integer다. `*Source`와 `reasonCode`는 producer가 만든 stable opaque
 identifier/closed vocabulary이며, consumer가 자유 text 또는 current state로 채우지 않는다.
 
-`completionDisposition`은 `COMPLETED_ORDER` 또는 `PRE_ACCEPTANCE_CANCELLATION`이다.
-후자에는 SettlementItem source와 `settlementRefundEffect`를 넣지 않는다. Settlement는 이를
-0원 Adjustment로 바꾸지 않고 ADR-048의 `NOT_APPLICABLE` Audit 경로로 처리한다. Analytics는
-두 disposition 모두 실제 `cashRefundedKrw`의 refund-date fact로 사용하되,
-`COMPLETED_ORDER`만 completion-date adjustment에 사용한다.
+`completionDisposition`은 `COMPLETED_ORDER`, `PRE_COMPLETION_ORDER` 또는
+`PRE_ACCEPTANCE_CANCELLATION`이다. result transaction에서 이미 immutable completion fact가
+있으면 `COMPLETED_ORDER`, 고객 취소·매장 거절처럼 완료 없이 미수락 종료된 Refund source면
+`PRE_ACCEPTANCE_CANCELLATION`, 그 밖의 완료 전 품목 Refund면 `PRE_COMPLETION_ORDER`다.
+
+`COMPLETED_ORDER`는 `orderCompletedAt`, 서울 기준 `settlementDate`,
+`settlementItemSource`와 effect를 모두 포함한다. `settlementItemSource`는 해당 Order completion의
+logical source `order:{orderId}:completed:{aggregateVersion}`와 동일하다. Plan 20은 이 값을
+SettlementItem의 immutable `itemSource`로 사용한다. `PRE_COMPLETION_ORDER`는 effect를 포함하지만
+아직 존재하지 않는 완료 시각·정산일·Item source를 넣지 않는다. Settlement와 Analytics는 이를
+source-aware pending input으로 보존한 뒤 `OrderCompletedV2`와 결합하며 current Order나 policy를
+재조회해 완성하지 않는다. 완료 없이 terminal이 되면 terminal source와 일치하는 명시적
+exclusion/reconciliation로 끝낸다. `PRE_ACCEPTANCE_CANCELLATION`에는 완료 필드와 effect를 모두
+넣지 않으며 Settlement는 이를 0원 Adjustment로 바꾸지 않고 ADR-048의 `NOT_APPLICABLE` Audit
+경로로 처리한다. Analytics는 세 disposition 모두 실제 `cashRefundedKrw`의 refund-date fact로
+사용하되 completion-date adjustment는 완료 source와 결합된 effect에만 적용한다.
 
 `SettlementRefundEffect`의 모든 delta는 signed KRW이며, Refund로 감소하는 값은 음수다.
 Payment는 이 snapshot을 Refund 요청 때 저장한 immutable line allocation과 completion snapshot으로
 만 계산한다. consumer가 Item의 현재 summary, fee 계약 또는 Campaign을 재조회해 계산하지 않는다.
+
+부분 Refund 하나의 delta는 같은 Payment lock 아래 그 Refund 직전까지 성공한 immutable allocation을
+`before`, 현재 Refund까지 포함한 allocation을 `after`로 두고 다음처럼 계산한다. 이 누적 차분은
+여러 Refund에 걸친 원 미만 remainder를 마지막 Refund까지 정확히 보존한다.
+
+```text
+grossPaidDeltaKrw = -(after.refundedGrossKrw - before.refundedGrossKrw)
+feeDeltaKrw = -(floor(after.refundedCashKrw * feeRateBps / 10_000)
+                - floor(before.refundedCashKrw * feeRateBps / 10_000))
+couponCostDeltaKrw = -(floor(after.refundedCouponKrw * storeCouponShareBps / 10_000)
+                       - floor(before.refundedCouponKrw * storeCouponShareBps / 10_000))
+pointCostDeltaKrw = -(after.refundedMatchingStorePointKrw
+                      - before.refundedMatchingStorePointKrw)
+benefitCostDeltaKrw = couponCostDeltaKrw + pointCostDeltaKrw
+netSettlementDeltaKrw = grossPaidDeltaKrw - feeDeltaKrw - benefitCostDeltaKrw
+```
+
+쿠폰이 없으면 store share와 coupon cost delta는 0이다. store point는 immutable Refund point
+allocation의 `issuerType=STORE`이고 `issuerReference=Order.storeId`인 금액만 센다. 다른 store
+reference, allocation/snapshot 합계 불일치, overflow 또는 누적 delta가 원 snapshot의 gross/fee/
+coupon/point 상한을 넘으면 event를 만들지 않고 result transaction을 rollback한다.
 
 Analytics persistence는 event payload의 customer, account, order, payment, refund, Batch와 Item
 식별자를 public dimension, log 또는 metric tag에 저장하지 않는다. receipt에는 opaque logical
