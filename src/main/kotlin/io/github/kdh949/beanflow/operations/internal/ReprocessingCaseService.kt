@@ -18,6 +18,7 @@ internal enum class ReprocessingCaseType {
     PAYMENT_RECONCILIATION,
     NOTIFICATION_DELIVERY,
     EVENT_PUBLICATION,
+    SETTLEMENT_LATE_ITEM,
 }
 
 internal enum class ReprocessingCaseStatus {
