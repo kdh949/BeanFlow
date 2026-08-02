@@ -111,6 +111,15 @@ Store, Batch, Item, Order와 actor ID는 metric tag로 사용하지 않는다.
 주문번호 기반 CS 검색이 주요 진입 경로로 측정되거나, Batch당 Item 수와 API 호출 수가
 현재 탐색 UX의 운영 문제로 확인될 때
 
+## Implementation Evidence
+
+- 2026-08-03 Plan 20은 `GET /stores/{storeId}/settlements/{settlementBatchId}/items`를
+  `(completedAt ASC, settlementItemId ASC)` DTO projection으로 구현했다. default 20/maximum 100,
+  active StoreMembership과 Batch-store 404 hiding을 적용한다.
+- common signed-cursor codec에 endpoint/store/batch filter를 bind하고 15분 TTL을 사용한다.
+  empty/single/multi-page, 동일 completedAt 경계, tamper/expiry/cross-store/cross-batch reuse와
+  membership 테스트가 통과했다.
+
 ## Related Decisions
 
 - BR-16, BR-22, BR-23, BR-24

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -97,6 +98,15 @@ internal class OrderEntity(
     var completedAt: Instant? = null
         protected set
 
+    @Column(name = "cancelled_at")
+    var cancelledAt: Instant? = null
+        protected set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_cause", length = 32)
+    var cancellationCause: OrderCancellationCause? = null
+        protected set
+
     @Column(name = "rejection_reason", length = 500)
     var rejectionReason: String? = null
         protected set
@@ -187,10 +197,12 @@ internal class OrderEntity(
         updatedAt = now
     }
 
-    fun cancelPendingPayment(now: Instant) {
+    fun cancelAfterPaymentDeclined(now: Instant) {
         requireState(OrderState.PENDING_PAYMENT, "Only a pending-payment order can be cancelled")
         state = OrderState.CANCELLED
         reservationExpiresAt = null
+        cancelledAt = now
+        cancellationCause = OrderCancellationCause.PAYMENT_DECLINED
         updatedAt = now
     }
 

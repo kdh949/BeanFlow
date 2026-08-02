@@ -150,3 +150,14 @@ Order, Payment, Refund, Customer와 Store 식별자는 metric tag로 사용하�
 - [ADR-017](ADR-017-settlement-calculation-and-cost-allocation.md)
 - [ADR-035](ADR-035-paid-cancellation-transaction-boundary.md)
 - [ADR-036](ADR-036-cancellation-after-partial-refund.md)
+
+## Implementation Evidence
+
+- 2026-08-03 Plan 20은 V21에 최소 Order `cancelled_at`/`cancellation_cause` evidence와
+  fail-closed legacy precheck를 추가하고 기존 결제 거절을 `PAYMENT_DECLINED`로 기록한다.
+- `beanflow.settlement.payment-refunded-v1` listener는 public Ordering/Payment evidence API로
+  실제 Order cause/lifecycle과 Refund state/reason/source/version/amount/time을 읽고 Item 부재까지
+  맞는 경우에만 exact `SETTLEMENT_REFUND_EXCLUDED` Audit을 append한다.
+- Testcontainers 통합 테스트가 같은/새 event replay Audit 1건, Item 0건, cause/reason/source/version
+  불일치 conflict, 기존 Item 비덮어쓰기, Audit failure rollback과 Audit commit 뒤 persistent
+  publication completion을 검증한다.

@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/active/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -31,7 +31,7 @@ source conflict, 오래된 event가 0, 빈 결과 또는 stale value를 정상 �
 - `PointsAdjustedV1`의 listener, receipt/idempotency and metric projection은 이 plan의 단독
   consumer checkpoint다. point-adjustment plan은 producer/outbox contract만 소유한다.
 - completed Plan 16은 Refund allocation/recovery 결과의 Payment·Loyalty event producer와 exact
-  replay/conflict/persistence validation을 제공한다. Plan 20은 completion/Settlement Item event 기반을,
+  replay/conflict/persistence validation을 제공한다. completed Plan 20은 completion/Settlement Item event 기반을,
   point-adjustment 및 Settlement lifecycle 계획은 나머지 producer를 만든다. 이 계획은
   활성화할 producer row의 actual event/version contract가 모두 완료된 뒤 시작한다.
 - OpenAPI에는 public Analytics query endpoint가 없다. audience/인가/freshness contract를 추정하지 않고

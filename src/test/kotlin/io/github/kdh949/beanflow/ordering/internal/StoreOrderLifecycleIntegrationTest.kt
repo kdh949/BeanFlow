@@ -1,13 +1,12 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
-import io.github.kdh949.beanflow.eventing.api.EventEnvelope
-import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.NotificationDeliveryWorker
 import io.github.kdh949.beanflow.notification.internal.NotificationProviderResult
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.GatewayRefundResult
@@ -69,6 +68,8 @@ internal class StoreOrderLifecycleIntegrationTest
         private val partialRefundService: PartialRefundService,
         private val pointRecoveryWorker: RefundEarnedPointRecoveryWorker,
         private val pointRecoveryCoordinator: RefundEarnedPointRecoveryCoordinator,
+        private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
+        private val orderCompletedV2Factory: OrderCompletedV2Factory,
         private val deadlineService: StoreAcceptanceDeadlineService,
         private val orderRepository: OrderJpaRepository,
         private val refundWorker: RejectionRefundWorker,
@@ -197,6 +198,32 @@ internal class StoreOrderLifecycleIntegrationTest
             }
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId))
                 .isEqualTo("COMPLETED")
+            await("completion settlement item") {
+                count("SELECT count(*) FROM settlement_item WHERE order_id = ?", orderId) == 1L
+            }
+            assertThat(
+                value<Long>("SELECT net_settlement_krw FROM settlement_item WHERE order_id = ?", orderId),
+            ).isEqualTo(950)
+            assertThat(
+                count(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'SETTLEMENT_ITEM_CREATED' AND target_id = " +
+                        "(SELECT id FROM settlement_item WHERE order_id = ?)",
+                    orderId,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = ?",
+                    "io.github.kdh949.beanflow.eventing.api.OrderCompletedV1",
+                ),
+            ).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = ?",
+                    "io.github.kdh949.beanflow.eventing.api.OrderCompletedV2",
+                ),
+            ).isEqualTo(2)
             await("completion point accrual") {
                 count("SELECT count(*) FROM loyalty_point_accrual_result WHERE order_id = ?", orderId) == 1L
             }
@@ -213,21 +240,10 @@ internal class StoreOrderLifecycleIntegrationTest
             ).isEqualTo(10)
             val completedOrder = orderRepository.findById(orderId).orElseThrow()
             val replayEvent =
-                OrderCompletedV1(
-                    EventEnvelope(
-                        UUID.randomUUID(),
-                        "OrderCompletedV1",
-                        orderId,
-                        completedOrder.version,
-                        requireNotNull(completedOrder.completedAt),
-                        1,
-                        "store-lifecycle-replay",
-                        "test:store-lifecycle-replay",
-                    ),
-                    orderId,
-                    fixture.customerId,
-                    fixture.storeId,
-                    requireNotNull(completedOrder.completedAt),
+                completionEvent(
+                    completedOrder,
+                    "store-lifecycle-replay",
+                    "test:store-lifecycle-replay",
                 )
             pointRecoveryCoordinator.completeAccrual(replayEvent, Instant.now())
             pointRecoveryCoordinator.completeAccrual(replayEvent, Instant.now())
@@ -236,6 +252,69 @@ internal class StoreOrderLifecycleIntegrationTest
             ).isEqualTo(1)
             assertThat(count("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'ACCRUAL'")).isEqualTo(1)
             awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `completion snapshot conflict rolls back the Order transition and V2 publication`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "completion-snapshot-conflict")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            patchStatus(actorId, orderId, "conflict-accepted", "ACCEPTED").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "conflict-preparing", "PREPARING").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "conflict-ready", "READY").andExpect(status().isOk)
+            jdbcTemplate.update(
+                "UPDATE payment_payment SET approved_amount_krw = approved_amount_krw - 1 WHERE order_id = ?",
+                orderId,
+            )
+
+            patchStatus(actorId, orderId, "conflict-completed", "COMPLETED")
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("SETTLEMENT_INPUT_UNAVAILABLE"))
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("READY")
+            assertThat(count("SELECT count(*) FROM settlement_item WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = ?",
+                    "io.github.kdh949.beanflow.eventing.api.OrderCompletedV2",
+                ),
+            ).isZero()
+        }
+
+        @Test
+        fun `V2 outbox persistence failure rolls back completion`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "completion-outbox-rollback")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            patchStatus(actorId, orderId, "outbox-accepted", "ACCEPTED").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "outbox-preparing", "PREPARING").andExpect(status().isOk)
+            patchStatus(actorId, orderId, "outbox-ready", "READY").andExpect(status().isOk)
+            jdbcTemplate.execute(
+                """
+                ALTER TABLE event_publication
+                ADD CONSTRAINT test_reject_order_completed_v2
+                CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.OrderCompletedV2')
+                """.trimIndent(),
+            )
+            try {
+                patchStatus(actorId, orderId, "outbox-completed", "COMPLETED")
+                    .andExpect(status().is5xxServerError)
+            } finally {
+                jdbcTemplate.execute(
+                    "ALTER TABLE event_publication DROP CONSTRAINT test_reject_order_completed_v2",
+                )
+            }
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("READY")
+            assertThat(count("SELECT count(*) FROM settlement_item WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = ?",
+                    "io.github.kdh949.beanflow.eventing.api.OrderCompletedV2",
+                ),
+            ).isZero()
         }
 
         @Test
@@ -311,22 +390,10 @@ internal class StoreOrderLifecycleIntegrationTest
 
             val order = orderRepository.findById(orderId).orElseThrow()
             pointRecoveryCoordinator.completeAccrual(
-                OrderCompletedV1(
-                    envelope =
-                        EventEnvelope(
-                            eventId = UUID.randomUUID(),
-                            eventType = "OrderCompletedV1",
-                            aggregateId = orderId,
-                            aggregateVersion = order.version,
-                            occurredAt = completedAt,
-                            payloadVersion = 1,
-                            correlationId = "out-of-order-point-recovery",
-                            causationId = "test:out-of-order-point-recovery",
-                        ),
-                    orderId = orderId,
-                    customerId = fixture.customerId,
-                    storeId = fixture.storeId,
-                    completedAt = completedAt,
+                completionEvent(
+                    order,
+                    "out-of-order-point-recovery",
+                    "test:out-of-order-point-recovery",
                 ),
                 Instant.now(),
             )
@@ -651,6 +718,38 @@ internal class StoreOrderLifecycleIntegrationTest
                 ),
         )
 
+        private fun completionEvent(
+            order: OrderEntity,
+            correlationId: String,
+            causationId: String,
+        ) = orderCompletedV2Factory.create(
+            order =
+                CompletedOrderFact(
+                    orderId = order.id,
+                    customerId = order.customerId,
+                    storeId = order.storeId,
+                    completedAt = requireNotNull(order.completedAt),
+                    aggregateVersion = order.version,
+                ),
+            payment =
+                ApprovedPaymentSettlementFact(
+                    orderId = order.id,
+                    approvedAmountKrw =
+                        value("SELECT approved_amount_krw FROM payment_payment WHERE order_id = ?", order.id),
+                    currency = value("SELECT currency FROM payment_payment WHERE order_id = ?", order.id),
+                    approvedAt = value("SELECT approved_at FROM payment_payment WHERE order_id = ?", order.id),
+                    approvalSource =
+                        value("SELECT source_reference FROM payment_payment WHERE order_id = ?", order.id),
+                ),
+            snapshot = settlementInputSnapshots.read(order.id),
+            envelopeInput =
+                OrderCompletedV2EnvelopeInput(
+                    eventId = UUID.randomUUID(),
+                    correlationId = correlationId,
+                    causationId = causationId,
+                ),
+        )
+
         private fun storeJwt(
             actorId: UUID,
             role: String = "STORE_STAFF",
@@ -677,7 +776,8 @@ internal class StoreOrderLifecycleIntegrationTest
                        'beanflow.settlement.payment-refunded-v1',
                        'beanflow.analytics.payment-refunded-v1',
                        'beanflow.analytics.points-accrued-v1',
-                       'beanflow.analytics.points-restored-v1'
+                       'beanflow.analytics.points-restored-v1',
+                       'beanflow.analytics.settlement-item-created-v1'
                    )
                 """.trimIndent(),
             )

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
-import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2Contract
 import io.github.kdh949.beanflow.loyalty.api.AccrualUnitAmount
 import io.github.kdh949.beanflow.loyalty.api.AccrualUnitKey
 import io.github.kdh949.beanflow.loyalty.api.AccrueCompletedOrderPointsCommand
@@ -44,7 +45,7 @@ internal class RefundEarnedPointRecoveryCoordinator(
 
     @Transactional
     fun completeAccrual(
-        event: OrderCompletedV1,
+        event: OrderCompletedV2,
         processedAt: Instant,
     ) {
         validateCompletionEvent(event)
@@ -58,7 +59,7 @@ internal class RefundEarnedPointRecoveryCoordinator(
             dependency("Completed Order persisted source does not match its event")
         }
         val source = snapshotOperations.read(event.orderId)
-        val completionSource = completionSource(event.orderId, event.envelope.aggregateVersion)
+        val completionSource = event.completionSource
         if (source.sourceState == OrderPointAccrualSourceState.LEGACY_NOT_APPLICABLE) {
             paymentOperations.recordNotApplicable(
                 RecordPointAccrualNotApplicableCommand(
@@ -198,14 +199,7 @@ internal class RefundEarnedPointRecoveryCoordinator(
         )
     }
 
-    private fun validateCompletionEvent(event: OrderCompletedV1) {
-        if (event.envelope.eventType != "OrderCompletedV1" || event.envelope.payloadVersion != 1 ||
-            event.envelope.aggregateId != event.orderId || event.envelope.aggregateVersion < 0 ||
-            event.envelope.occurredAt != event.completedAt
-        ) {
-            dependency("OrderCompletedV1 source is inconsistent")
-        }
-    }
+    private fun validateCompletionEvent(event: OrderCompletedV2) = OrderCompletedV2Contract.validate(event)
 
     private fun validatePrepared(
         prepared: PreparedRefundPointRecovery,
@@ -242,8 +236,8 @@ internal class OrderCompletedPointAccrualListener(
     private val coordinator: RefundEarnedPointRecoveryCoordinator,
     private val clock: Clock,
 ) {
-    @ApplicationModuleListener
-    fun on(event: OrderCompletedV1) {
+    @ApplicationModuleListener(id = "beanflow.loyalty.order-completed-v2")
+    fun on(event: OrderCompletedV2) {
         coordinator.completeAccrual(event, clock.instant())
     }
 }

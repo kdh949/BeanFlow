@@ -39,7 +39,7 @@
 
 ### In Scope
 
-- Order cancellation cause/reason/detail/cancelledAt와 DB CHECK
+- Plan 20이 선행한 Order cancellation cause/cancelledAt 기반 위의 reason/detail과 cause별 DB CHECK
 - 고객 ownership, reason validation과 deadline guard
 - cancellation command idempotency와 최초 body 저장
 - Tx C0/C1/CT, lock order와 target별 Audit
@@ -91,12 +91,12 @@
 ## Data and Migration
 
 이 plan은 ADR-072 migration-writer lease를 얻은 latest main에서 Draft-only로 시작하고, Plan 50
-combined release PR이 merge될 때까지 그 lease를 유지한다. 이 계획이 ADR-029 Order 취소 네 필드·세 CHECK와 해당 clean-cutover precheck를 단독
-소유한다. 같은 forward migration 계열에서 cancellation idempotency,
-AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추가한다.
-ADR-029 precheck는 legacy 후보 row가 0일 때만 통과하고 하나라도 있으면 값을 추측해
-backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy 전략은 00/10/30
-결과에서 결정한다.
+combined release PR이 merge될 때까지 그 lease를 유지한다. Plan 20이 ADR-048 선행조건으로
+`cancelled_at`, `cancellation_cause`, terminal-state/value CHECK와 clean-cutover precheck를
+이미 소유한다. 이 계획은 남은 `cancellation_reason_code`, `cancellation_detail`, cause별
+사유/detail CHECK를 단독 소유한다. 같은 forward migration 계열에서 cancellation idempotency,
+AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추가한다. 번호와 나머지
+legacy 전략은 00/10/30 결과에서 결정한다.
 
 ## API and Event Contracts
 
@@ -108,7 +108,7 @@ backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy �
 
 ## Milestones
 
-1. Order domain/DB cancellation invariant와 reason validation을 구현한다.
+1. Plan 20의 cause/cancelledAt 불변식을 소비해 reason/detail과 고객 취소 전이 validation을 구현한다.
 2. cancellation idempotency와 canonical payload를 구현한다.
 3. C0의 네 owner release/Audit/Delivery를 원자화한다.
 4. CT durable timeout work와 정확한 deadline 경계를 구현한다.
@@ -125,8 +125,9 @@ backfill하지 않고 migration을 실패시킨다. 번호와 나머지 legacy �
 - BENEFIT_ONLY 0원 branch
 - same/different key/payload/order와 100개 동시 replay
 - acceptance/timeout/expiry 경쟁의 단일 terminal 상태
-- ADR-029 migration precheck의 후보 0 통과와 legacy row 주입 시 실패
-- Plan 30 완료 schema에서 Order 취소 필드 부재, Plan 40 migration 뒤 네 필드·세 CHECK 존재
+- Plan 20 완료 schema에서 cause/cancelledAt와 precheck가 존재하고 legacy row 주입 시 실패
+- Plan 40 migration 뒤 reason/detail과 cause별 사유/detail CHECK가 추가되고 선행 column/CHECK가
+  중복 생성되지 않음
 - Plan 40 Draft only state에서 main/deploy/production success route 부재, Plan 50 combined release PR에서만
   customer cancellation success exposure
 
@@ -169,8 +170,9 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-07-31 | Accepted existing | C0 200, C1 202, 별도 Cancellation Aggregate 없음 | 실제 내구 완료 범위 반영 | ADR-029/031/035 |
-| 2026-08-01 | Accepted | ADR-029 Order 취소 네 필드·세 CHECK와 precheck를 이 계획이 단독 소유 | schema와 실제 command mapping의 응집도 유지 | ADR-059, Plan 30 |
+| 2026-08-01 | Superseded 2026-08-03 | ADR-029 Order 취소 네 필드·세 CHECK와 precheck를 이 계획이 단독 소유 | ADR-048 consumer가 Plan 40 전 실제 cause 증거를 요구해 분리 필요 | ADR-029, ADR-067 |
 | 2026-08-01 | Accepted | Plan 40은 Draft-only이고 Plan 50 head의 combined release PR로만 main에 들어감 | feature flag success와 intermediate deployment를 방지 | ADR-072 |
+| 2026-08-03 | Accepted | Plan 20의 cause/cancelledAt 기반을 소비하고 reason/detail·command만 Plan 40이 소유 | 정산 제외 검증을 선행하면서 command 배포 경계를 유지 | ADR-029, ADR-067 |
 
 ## Outcomes & Retrospective
 
@@ -185,3 +187,5 @@ commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual re
 - 2026-08-01: ADR-029 migration 단일 소유권을 Plan 40으로 확정.
 - 2026-08-02: completed Plan 13 recovery outcome은 upstream evidence로 기록하되 Plan 30 direct
   dependency와 Draft-only readiness gate는 변경하지 않았다.
+- 2026-08-03: cause/cancelledAt와 공통 terminal CHECK의 소유권을 Plan 20으로 이동하고 이 계획의
+  migration 범위를 reason/detail과 고객 취소 command 불변식으로 축소했다.

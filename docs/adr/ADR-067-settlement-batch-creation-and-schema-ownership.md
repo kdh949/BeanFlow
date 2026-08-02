@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
+- **Implementation owners:** [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
 
 ## Context
 
@@ -57,6 +57,19 @@ event를 성공 처리하지 않는다. lifecycle 활성화 전에는 모든 Bat
 | `settlement_adjustment` 전체, source/reason unique와 next-Batch discovery index | Settlement lifecycle plan | 확정 후 append-only 조정·이월 |
 | `settlement_dispute` 전체, active Item partial unique, refile/idempotency/evidence constraints | Dispute Context checkpoint (lifecycle plan 안의 별도 commit) | Dispute Context의 workflow와 held amount |
 
+### 고객 취소 제외 선행 스키마 소유권
+
+ADR-048의 consumer는 Refund event payload만 신뢰하지 않고 실제 Order의 terminal cause를
+읽어야 한다. 2026-08-03 ownership amendment에 따라 Plan 20은 같은 migration-writer lease에서
+`ordering_order.cancelled_at`, `ordering_order.cancellation_cause`, 허용 cause CHECK와
+terminal-state 존재 조건 CHECK를 단독 추가한다. clean-cutover precheck에서 기존 `CANCELLED`
+row가 하나라도 발견되면 값을 추측해 backfill하지 않고 migration을 실패시킨다.
+
+Plan 40은 `cancellation_reason_code`, `cancellation_detail`, cause별 사유/detail CHECK와 실제
+고객 취소 command를 계속 소유한다. 따라서 Plan 20은 `CUSTOMER_REQUEST` command를
+활성화하지 않으며, 기존 결제 명시 거절 transition만 `PAYMENT_DECLINED` 증거를 함께 기록한다.
+두 계획은 같은 column이나 CHECK를 다시 만들지 않는다.
+
 `state` column은 Plan 20이 final vocabulary CHECK를 만들지만 Plan 20은 `OPEN` 이외 전이를
 실행하지 않는다. 후속 계획은 그 column을 재생성하거나 CHECK를 다시 만들지 않고 guarded
 transition만 구현한다. summary/confirmation fields는 후속 계획이 단독으로 추가한다.
@@ -101,6 +114,8 @@ API 선행조건을 충족하면서 migration 중복을 막을 수 있다.
 - Batch summary 목록과 calculation/confirmation은 lifecycle 계획 완료 전 활성화하지 않는다.
 - closed Batch의 지연 Item은 0원 Adjustment, 다음 날짜 이동 또는 현재 Batch 변경으로
   대체하지 않고 명시적 재처리 상태로 남는다.
+- Plan 20 완료 뒤 Settlement는 fixture나 event 추측 없이 Order의 cancellation cause를
+  조회할 수 있고, Plan 40은 남은 고객 입력 필드와 command에 집중한다.
 
 ## Verification
 
@@ -111,6 +126,14 @@ API 선행조건을 충족하면서 migration 중복을 막을 수 있다.
 - `CALCULATED`/`CONFIRMED` Batch에 새 Item source가 도착하면 Batch를 바꾸지 않고 source당
   하나의 late-item reprocessing path를 남긴다.
 - migration inventory에서 matrix의 object가 한 계획의 Flyway migration에만 존재한다.
+
+## Implementation Evidence
+
+- 2026-08-03 V21은 최소 Batch identity/state/store-date unique, immutable Item 전체, Batch FK,
+  cursor index와 open-batch/mutation trigger를 Plan 20 단일 migration으로 만들었다.
+- 동시 same-store/date completion은 Batch 하나에 수렴하고 source/order 중복은 새 Item을 만들지
+  않는다. 닫힌 Batch late Item은 Batch를 변경하지 않고 source-unique
+  `SETTLEMENT_LATE_ITEM` case를 남기며 event를 완료하지 않는다.
 
 ## Metrics
 
@@ -135,3 +158,8 @@ state와 결합될 때 재검토한다.
 - [ADR-062](ADR-062-settlement-batch-item-discovery.md)
 - [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)
 - [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)
+
+## Revision Notes
+
+- 2026-08-03: ADR-048 consumer의 실제 Order 증거를 위해 최소 취소 증거 두 필드와 CHECK의
+  소유권을 Plan 20으로 추가하고 Plan 40의 잔여 소유권을 명시했다.

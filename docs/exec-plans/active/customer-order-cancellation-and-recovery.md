@@ -24,11 +24,14 @@ signed-cursor foundation의 의존관계와 release gate를 관리하는 master 
   `783298a9c1b349f7b444d49d25c8b3d4099a5576`다. 역사적 감사 SHA를 현재 HEAD로
   해석하지 않는다.
 - ADR-029~065와 OpenAPI에는 목표 계약이 Accepted 상태로 기록돼 있다.
-- 고객 취소 Controller, Application Service, Order 취소 필드와 migration은 없다.
-- 현재 Refund는 거절 전용이고 부분 환불을 차단하며 REQUEST/LOOKUP 합산 5회를 쓴다.
+- 고객 취소 Controller, Application Service와 reason/detail 필드는 없다. Plan 20은 정산 제외 검증에
+  필요한 Order cause/cancelledAt와 DB CHECK만 선행 구현했다.
+- Refund는 immutable line/point allocation과 독립 REQUEST/LOOKUP recovery를 제공하지만 고객 취소
+  command composition에는 아직 연결되지 않았다.
 - compensation은 `RejectionCompensation*`와 단일 benefit 정책으로 구현돼 있다.
-- Settlement package, SettlementItem/Batch/Adjustment persistence와 consumer가 없다.
-- line-level cash/benefit refund allocation 원장이 없다.
+- Settlement는 최소 OPEN Batch/immutable Item, V2 completion consumer, signed Item query와 고객 취소
+  제외 Audit까지 구현됐다. Batch lifecycle/Adjustment/Dispute는 후속 계획 범위다.
+- line-level cash/benefit refund allocation과 point recovery 원장은 completed foundation에 존재한다.
 - product owner 운영 상태 확인에서 non-local 환경과 관련 DB·publication·consumer·rollback artifact가
   모두 없음을 확인했고 항목별 0을
   [release evidence](../../quality/customer-order-cancellation-release-evidence.md)에
@@ -168,7 +171,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 8. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
 9. [정산 입력 snapshot foundation을 만든다](../completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10, completed
 10. [immutable refund/Loyalty event producer를 만든다](../completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15, completed
-11. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
+11. [Settlement foundation과 취소 제외 증적을 만든다](../completed/customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor, completed
 12. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
 13. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
 14. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
@@ -230,7 +233,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [ ] 14 point-account read foundation 완료
 - [x] 15 settlement-input snapshot foundation 완료 — V18–V20, immutable snapshot/V2 factory, 229-test build
 - [x] 16 immutable financial event producer 완료 — 세 V1 producer, 243-test build
-- [ ] 20 Settlement foundation 완료
+- [x] 20 Settlement foundation 완료 — V21, V2 completion/consumer, signed Item query, 취소 제외 Audit, 270-test build
 - [ ] 30 common compensation foundation 완료
 - [ ] 40 customer cancellation command 완료
 - [ ] 50 recovery와 release verification 완료
@@ -241,7 +244,8 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - 이후 product owner 확인으로 non-local 환경과 관련 artifact가 모두 0임을 별도
   release evidence에 기록해 fact gate를 닫았다.
 - 최신 정책은 부분 환불을 허용하지만 현재 Refund가 부분 환불을 명시적으로 거부한다.
-- Settlement 정책은 Accepted지만 해당 모듈 구현이 전혀 없다.
+- 역사적 감사 당시 Settlement 구현이 없었고, Plan 20에서 최소 Batch/Item과 취소 제외 증적을
+  완료했다. lifecycle/Adjustment/Dispute는 의도적으로 후속 계획에 남았다.
 - 기존 store 전이 멱등 응답도 BR-25/ADR-057보다 오래된 계약을 구현한다.
 
 ## Decision Log
@@ -269,8 +273,10 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 cursor는 Plan 14/20의 실제 소비 input으로만 남는다. migration-writer lease는 ready plan의 실행 순서를
 직렬화하지만 dependency를 추가하지 않는다. Plan 13 completion으로 Plan 14와 Loyalty adjustment가
 implementation-ready가 됐고 Plan 15 completion 뒤 Plan 16의 세 immutable event producer도 완료됐다.
-Plan 20은 모든 direct dependency가 completed라 implementation-ready이며 V1 inventory를 첫 내부 gate로
-검증해야 한다. Plan 50이 완료되기 전 고객 취소 command의 production success path는 계속 차단된다.
+Plan 20은 V1 inventory 0 gate, V21/V2 producer/consumer, signed query와 고객 취소 제외 증적을
+270-test build로 완료했다. 따라서 Plan 30의 모든 direct dependency가 completed되어
+`Implementation-Ready=true`다. Plan 50이 완료되기 전 고객 취소 command의 production success path는
+계속 차단된다.
 
 ## Revision Notes
 
@@ -294,3 +300,6 @@ Plan 20은 모든 direct dependency가 completed라 implementation-ready이며 V
   Plan 16 readiness를 갱신했다.
 - 2026-08-02: Plan 16 세 financial producer와 243-test outcome을 completed path에 반영하고 Plan 20을
   implementation-ready로 전환했다. Analytics는 나머지 direct dependency 때문에 blocked로 유지했다.
+- 2026-08-03: Plan 20의 V21/V2/consumer/query/exclusion outcome과 270-test build를 completed path에
+  반영하고 Plan 30을 implementation-ready로 전환했다. Analytics는 다른 active dependency 때문에
+  준비 상태를 올리지 않았다.

@@ -54,7 +54,8 @@
 - Notification: 두 상태의 접수 Delivery commit gate, 환불 성공·지연 terminal event,
   기본 step 단조성, 보상 전체 완료 알림 부재
 - Settlement: 미완료 고객 취소 Refund의 Item/Adjustment 0건, source당 exclusion
-  Audit 한 건과 운영 파생 조회
+  Audit 한 건, 실제 Order/Refund source·version·amount·time 검증, 기존 Item conflict와 Audit
+  rollback, persistent publication이 Audit commit 뒤에만 완료됨
 - Operations: setup immediate detector+batch 100 scanner, unique case/Audit, 제한 복구
   guard와 서로 다른 operator 2인 승인·30분 만료
 - Retention: cancellation/store idempotency table별 90일 chunk와 timeout work

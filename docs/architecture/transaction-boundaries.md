@@ -385,6 +385,13 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
   원천 refund reference를 Unique Constraint로 보호한다.
 - `CALCULATED` 또는 `CONFIRMED` Batch로 닫힌 뒤 늦게 도착한 Item source는 Batch를
   바꾸거나 0원 Adjustment를 만들지 않고 source-unique ReprocessingCase로 남긴다.
+- `PaymentRefundedV1` 고객 취소 제외 consumer는 별도 Settlement local transaction에서 public
+  Ordering/Payment evidence API로 Order terminal cause/lifecycle과 Refund 성공 source/version/amount/time을
+  읽고 Item 부재를 확인한다. 모두 일치할 때만 source-unique
+  `SETTLEMENT_REFUND_EXCLUDED` Audit을 append하고 publication을 완료한다. Audit replay는 같은 key의
+  기존 row로 수렴하며, mismatch·missing·기존 Item·Audit insert failure는 transaction을 실패시킨다.
+- 이 evidence read는 Ordering/Payment Repository 직접 접근이나 외부 Provider 호출이 아니다.
+  Order와 Refund는 terminal fact이며 consumer transaction은 그 값을 변경하지 않는다.
 - Dispute Context의 판정과 SettlementAdjustment 생성은 Context 간 별도 트랜잭션이다.
   명령 실패 시 Dispute가 Adjustment 완료로 가장하지 않고 재시도 가능한 상태를 유지한다.
 

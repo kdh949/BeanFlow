@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
-import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 @Component
@@ -53,6 +54,9 @@ internal class EventPublicationRecoveryWorker(
                 .withBatchSize(batchSize)
                 .withMaxInFlight(batchSize)
                 .withFilter { publication ->
+                    if (isReservedAnalyticsTarget(publication.identifier)) {
+                        return@withFilter false
+                    }
                     val attempts = publication.completionAttempts
                     if (EventPublicationRetrySchedule.exhausted(attempts)) {
                         val event = publication.event
@@ -116,6 +120,14 @@ internal class EventPublicationRecoveryWorker(
 
     private fun gauge(name: String): AtomicLong = meterRegistry.gauge(name, AtomicLong(0))
 
+    private fun isReservedAnalyticsTarget(publicationId: UUID): Boolean =
+        jdbcTemplate
+            .queryForObject(
+                "select listener_id from event_publication where id = ?",
+                String::class.java,
+                publicationId,
+            )?.startsWith(RESERVED_ANALYTICS_TARGET_PREFIX) == true
+
     private fun correlationId(
         event: Any,
         fallback: String,
@@ -125,7 +137,11 @@ internal class EventPublicationRecoveryWorker(
             is StoreAcceptanceWarningRequestedV1 -> event.envelope.correlationId
             is OrderAcceptedV1 -> event.envelope.correlationId
             is OrderReadyV1 -> event.envelope.correlationId
-            is OrderCompletedV1 -> event.envelope.correlationId
+            is OrderCompletedV2 -> event.envelope.correlationId
             else -> fallback
         }
+
+    private companion object {
+        const val RESERVED_ANALYTICS_TARGET_PREFIX = "beanflow.analytics."
+    }
 }

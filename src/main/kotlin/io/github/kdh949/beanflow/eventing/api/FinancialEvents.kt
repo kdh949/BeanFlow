@@ -63,10 +63,28 @@ data class PointsRestoredV1(
     val restorationDisposition: PointRestorationDisposition,
 )
 
+data class SettlementItemCreatedV1(
+    val envelope: EventEnvelope,
+    val settlementItemId: UUID,
+    val settlementBatchId: UUID,
+    val itemSource: String,
+    val orderId: UUID,
+    val storeId: UUID,
+    val completedAt: Instant,
+    val settlementDate: LocalDate,
+    val currency: String,
+    val grossPaidKrw: Long,
+    val feeKrw: Long,
+    val benefitCostKrw: Long,
+    val netSettlementKrw: Long,
+)
+
 interface FinancialEventPublicationOperations {
     fun publish(event: PaymentRefundedV1)
 
     fun publish(event: PointsAccruedV1)
 
     fun publish(event: PointsRestoredV1)
+
+    fun publish(event: SettlementItemCreatedV1)
 }

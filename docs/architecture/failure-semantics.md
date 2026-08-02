@@ -64,9 +64,14 @@ Behavior:
   `RETRY_SCHEDULED`, bounded retry 후 `MANUAL_REVIEW` 의미를 보존한다.
 - 동일 source/version/동일 payload replay는 기존 owner result와 publication 한 벌을 반환한다.
   같은 source/version의 changed payload는 기존 row를 갱신하지 않고 conflict로 실패한다.
-- Settlement/Analytics consumer는 별도 후속 local transaction이다. 현재 producer-only target row가
-  미완료인 상태는 downstream 성공이 아니며, 원 owner fact와 함께 저장됐다는 producer checkpoint만
-  의미한다.
+- Settlement/Analytics consumer는 별도 후속 local transaction이다. Plan 20 이후 Settlement의
+  `OrderCompletedV2`와 고객 취소 `PaymentRefundedV1` target은 실제 listener가 처리하지만 Analytics
+  target과 completed/pre-completion Refund 조정은 후속 owner가 활성화할 때까지 성공으로 추정하지
+  않는다. 미완료 target row는 downstream 성공이 아니다.
+- 고객 취소 Refund 제외는 실제 Order `CUSTOMER_REQUEST`, Refund `SUCCEEDED`와 exact source/version,
+  Item 부재가 모두 맞고 append-only Audit이 commit된 경우만 `NOT_APPLICABLE`이다. 누락·불일치·기존
+  Item 또는 Audit 실패는 `SETTLEMENT_SOURCE_CONFLICT` 메시지의 retry/manual-review failure이며
+  0원 Adjustment나 no-op success로 바꾸지 않는다.
 
 ### Asynchronous side effect
 

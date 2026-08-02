@@ -169,6 +169,10 @@ consumer의 live read로 변질된다.
   effect는 persisted V20 snapshot과 immutable successful allocation만 사용했다. missing snapshot,
   allocation persistence와 publication failure는 result transaction을 rollback했고, terms 변경 뒤
   delayed event도 original value를 유지했다. 새 migration이나 live-policy fallback은 없었다.
+- **Plan 20 consumer evidence (2026-08-03):** guarded completion은 V20 snapshot과 matching
+  approved Payment만 factory에 전달해 V2 outbox를 저장하고, Settlement consumer는 V2 payload를
+  current Merchant/Campaign/PointLot/Order snapshot 조회 없이 그대로 immutable Item에 저장한다.
+  terms/burden/issuer 변경 후 값 불변과 outbox/Item/Audit 원자성 테스트가 통과했다.
 
 ## Related Decisions
 

@@ -49,8 +49,8 @@ All source contexts ── idempotent business facts ──> Analytics
 | Ordering | Payment | Payment | 고객 취소 Refund `REQUESTED`와 cancellation recovery snapshot 생성 Application API | Tx C1 내 강한 일관성, Provider 호출은 밖 |
 | Ordering | Operations | Operations | Tx C0의 target AuditRecord와 Tx C1의 OrderCompensationCase·step·benefit policy snapshot·target AuditRecord 생성 Application API | 취소 transaction 내 강한 일관성 |
 | Ordering | Loyalty | Ordering fact | `OrderCompletedV2` immutable snapshot event | eventual |
-| Ordering | Settlement | Ordering fact | `OrderCompletedV2` immutable snapshot event | eventual |
-| Payment | Settlement | Payment fact | `PaymentRefundedV1` immutable refund/settlement effect | eventual, Item 생성 기준은 완료 주문 |
+| Ordering | Settlement | Ordering fact | `OrderCompletedV2` immutable snapshot event; 취소 제외 시 typed cancellation-evidence query | event는 eventual, 제외 판정 read는 consumer local transaction 안의 동기 조회 |
+| Payment | Settlement | Payment fact | `PaymentRefundedV1` immutable refund/settlement effect와 typed Refund evidence query | event는 eventual, Item 생성 기준은 완료 주문 |
 | Payment | Loyalty | Payment fact | `PaymentRefundedV1` 후 사용·적립 포인트 복원·회수 | eventual |
 | Payment | Notification | Payment fact | `CustomerCancellationRefundSucceededV1`/`DelayedV1` 전용 결과 event | eventual, Delivery는 별도 transaction |
 | Settlement | Dispute | Settlement / Dispute | confirmed Item 조회 API와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 명시적 명령 |
@@ -63,10 +63,12 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 경우에도 다른 Context의 Repository를 직접 호출하지 않고 공개 Application API만
 사용한다.
 
-2026-08-02 implementation checkpoint에서 위 Merchant/Promotion/Loyalty 동기 경계는 주문
-생성 local transaction 안에서 `OrderSettlementInputSnapshot` 하나로 물질화된다. 완료 event
-factory는 이 Ordering-owned snapshot과 matching Payment approval fact만 사용한다. 이 checkpoint는
-`OrderCompletedV2` publication 또는 Settlement consumer가 활성화됐다는 뜻이 아니다.
+2026-08-03 Plan 20 outcome에서 위 Merchant/Promotion/Loyalty 동기 경계는 주문 생성 local
+transaction 안의 `OrderSettlementInputSnapshot`으로 고정되고, guarded completion은 matching
+Payment approval과 snapshot만 사용해 `OrderCompletedV2` outbox를 저장한다. Settlement는 별도
+local transaction에서 최소 `OPEN` Batch와 immutable Item을 만든다. 고객 취소 Refund 제외는
+Ordering/Payment의 public evidence API로 실제 terminal source를 읽고 Item 부재와 함께 검증한 뒤
+Audit을 저장한다. 두 consumer 모두 owner Repository나 current policy를 직접 조회하지 않는다.
 
 ## Data ownership
 

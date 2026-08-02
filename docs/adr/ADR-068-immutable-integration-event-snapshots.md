@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -138,6 +138,13 @@ Loyalty는 gross accrual과 각 restoration owner result에 대응하는 target 
 transaction에 저장한다. exact replay/conflict, 세 disposition, delayed terms change,
 snapshot/allocation/publication rollback이 PostgreSQL 테스트를 통과했다. `OrderCompletedV2`,
 Settlement/Analytics consumer와 projection은 구현하지 않았다.
+
+**Plan 20 implementation checkpoint (2026-08-03):** V1 incomplete/deployed consumer inventory 0을
+확인하고 guarded completion의 publication을 `OrderCompletedV2`로 교체했다. V2 outbox save는 Order
+`COMPLETED` transition과 원자적이고 Settlement listener는 별도 local transaction에서 immutable
+payload만으로 Batch/Item/Audit/`SettlementItemCreatedV1` target을 저장한다. 고객 취소
+`PaymentRefundedV1`은 event 누락을 live state로 채우는 용도가 아니라 ADR-048의 명시적
+Order/Refund terminal evidence 확인에만 public typed query를 사용한다.
 
 ### Plan 13의 frozen V1 trigger-only boundary
 

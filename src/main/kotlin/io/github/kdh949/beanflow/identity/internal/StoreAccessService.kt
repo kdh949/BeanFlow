@@ -14,7 +14,7 @@ internal class StoreAccessService(
     private val repository: StoreMembershipJpaRepository,
 ) : StoreAccessOperations {
     @Transactional(readOnly = true)
-    override fun requireOrderManagementAccess(
+    override fun requireStoreAccess(
         actorId: UUID,
         storeId: UUID,
         actorRoles: Set<StoreActorRole>,
@@ -30,6 +30,13 @@ internal class StoreAccessService(
         }
         return StoreActor(actorId, storeId, membership.membershipRole)
     }
+
+    @Transactional(readOnly = true)
+    override fun requireOrderManagementAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor = requireStoreAccess(actorId, storeId, actorRoles)
 
     private fun denied(message: String): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, message)
 }

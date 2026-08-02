@@ -41,6 +41,11 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   `OrderCompletedV2` factory/validator는 이 snapshot과 matching Payment approval fact만 받아
   exact ADR-068 payload를 만든다. Plan 15는 completion outbox, producer activation, Settlement
   Item/Batch/Adjustment를 추가하지 않았다.
+- **Implementation evidence (2026-08-03):** V21과 Plan 20이 V1 inventory 0 gate 뒤
+  `OrderCompletedV2` producer/consumer를 활성화했다. consumer는 immutable payload로 store/date
+  `OPEN` Batch를 insert-or-read하고 Order/source unique SettlementItem, Audit과
+  `SettlementItemCreatedV1` target을 원자 저장한다. 정산 계산·확정·Adjustment는 아직 후속
+  lifecycle 범위다.
 
 ## Alternatives Considered
 

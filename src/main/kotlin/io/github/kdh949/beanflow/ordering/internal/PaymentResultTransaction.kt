@@ -137,7 +137,7 @@ internal class PaymentResultTransaction(
         expireIfDue(order, now)
         if (order.state == OrderState.PENDING_PAYMENT) {
             val reports = release(order, now)
-            order.cancelPendingPayment(now)
+            order.cancelAfterPaymentDeclined(now)
             appendAudits(customerId, orderId, paymentId, now, "PAYMENT_DECLINED", reports)
         }
         val response =

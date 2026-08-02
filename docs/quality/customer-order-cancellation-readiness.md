@@ -107,7 +107,7 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | `PENDING_PAYMENT` 네 금액 | ADR-036은 네 금액 모두 0, ADR-031·api conventions·ADR-050은 검증 불가 금액 생략 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 생략이 canonical이고 네 금액 0은 `BENEFIT_ONLY`뿐; ADR-036과 OpenAPI description 교정 |
 | 매장 보상 step 노출 | authorization matrix·ADR-030·ADR-033 Verification·api conventions는 운영자 전용, OpenAPI·plan 30·runbook·현재 `StoreOrderContracts.kt`는 매장에 여섯 step 노출 | `CONTRACT_CONFLICT` + `IMPLEMENTATION_DRIFT` | 2026-08-01 확정: 매장은 축약 `StoreCompensationSummary`; OpenAPI에 schema 신설하고 plan 30 clean cutover에서 store DTO 축약 |
 | 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 기존 `RejectionRefundService` | `FOUNDATION_COMPLETED` | Plan 12/V15가 full/item partial Refund, immutable line/point allocation, independent retry budgets와 Loyalty restoration work를 구현 |
-| Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 코드·migration에 Settlement 없음 | `MISSING_FOUNDATION` | Settlement foundation plan 20 선행 |
+| Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 역사적 감사 당시 코드·migration에 Settlement 없음 | `FOUNDATION_COMPLETED` | Plan 20의 V21/consumer/source-unique Audit으로 완료 |
 | trigger×benefit 정책과 singleton 구현 | ADR-041 대 V8/Operations singleton policy | `IMPLEMENTATION_DRIFT` | compensation foundation plan 30 |
 | store transition hash/replay 계약 | BR-25/ADR-057 대 hash에서 orderId 누락, V1 operation, replay body mutation | `IMPLEMENTATION_DRIFT` | plan 30의 store regression 범위 |
 | 정책 trace의 Ready 과장 | BR-14/15/16 선행 기반·gate 미반영 | `RESOLVABLE_BY_RECENCY` | prerequisite-blocked로 교정 |
@@ -123,7 +123,7 @@ ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git m
 | 취소 reason code의 persistent event 포함 여부 충돌 | `FIXED` | BR-14/ADR-055에 Order·Audit·Refund/Provider·event·log별 범위를 단일 계약으로 정리 |
 | clean cutover와 legacy event compatibility 요구 충돌 | `FIXED; CLEAN PATH SELECTED` | Required Tests를 조건부 경로로 분리하고 운영 상태 evidence의 전 항목 0에 따라 clean-cutover 경로 선택 |
 | 선행 부분 환불 허용, allocation foundation 부재 | `CONFIRMED, THEN CLOSED` | Plan 12/V15가 request/success line·point allocation과 restoration owner flow를 구현하고 PostgreSQL/MockMvc evidence를 남김 |
-| Settlement `NOT_APPLICABLE` 정책, 구현 부재 | `CONFIRMED` | Settlement package/table/test 없음 |
+| Settlement `NOT_APPLICABLE` 정책, 구현 부재 | `CONFIRMED, THEN CLOSED` | Plan 20이 최소 Batch/Item과 실제 Order/Refund 기반 exclusion Audit/test를 구현 |
 | store transition hash, operation version, replay body drift | `CONFIRMED` | hash는 state/reason만, operation V1, response replay 시 body 변경 |
 | trigger×benefit 정책과 단일 전역 정책 구현 차이 | `CONFIRMED` | singleton policy head와 단일 case policy |
 | README와 실제 구현 상태 불일치 | `CONFIRMED` | store lifecycle을 예정으로 표기; 이번 감사에서 교정 |
@@ -228,11 +228,13 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
   oldest-first offset이 completed owner outcome과 205-test evidence로 구현됐다.
 - [Plan 15 settlement input](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
   V18–V20 Merchant terms, coupon burden legs, Loyalty issuer allocation과 exactly-one Order snapshot,
-  V2 factory/validator/fixture가 229-test evidence로 완료됐다. outbox/cutover/Settlement consumer는 없다.
+  V2 factory/validator/fixture가 229-test evidence로 완료됐다. 당시 outbox/cutover/Settlement consumer는
+  없었고 completed Plan 20이 이를 이어받아 구현했다.
 - [Plan 16 financial events](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
   Refund/Loyalty immutable producer와 owner transaction atomicity, replay/failure evidence가 완료됐다.
-- [Plan 20 Settlement](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md):
-  완료 정산 원천과 미완료 취소 제외 증적을 구현해야 한다.
+- [Plan 20 Settlement](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md):
+  V21 최소 OPEN Batch/immutable Item, V2 completion cutover/consumer, signed Batch Item 조회와
+  실제 Order/Refund evidence 기반 NOT_APPLICABLE Audit이 완료됐다.
 - [Plan 30 compensation](../exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md):
   rejection 전용 구조를 trigger-aware Case/policy/owner convergence로 일반화해야 한다.
 
@@ -277,13 +279,13 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] Plan 13 recovery/pending이 통과함
 - [x] Plan 15 settlement input이 통과함
 - [x] Plan 16 immutable events가 통과함
-- [ ] Plan 20 Settlement foundation이 통과함
+- [x] Plan 20 Settlement foundation이 통과함
 - [ ] Plan 30 common compensation이 통과함
 - [ ] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
 - [x] OpenAPI semantic/local contract 검사가 통과함
 - [x] 기능 branch에서 기존 사용자 변경을 분리·보존함
 
-남은 foundation 체크가 모두 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
+남은 Plan 30 compensation foundation이 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
 
 ## Ordinary-accrual policy/snapshot validation (2026-08-01)
 
@@ -353,6 +355,22 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - 새 Flyway migration, consumer, `OrderCompletedV2` producer는 추가하지 않았다.
 - Plan 20은 all direct dependencies completed로 `Implementation-Ready=true`이며 V1 inventory를 내부
   첫 gate로 검증한다. Analytics는 다른 direct producer dependencies 때문에 false를 유지한다.
+
+## Plan 20 Settlement validation (2026-08-03)
+
+- V1 incomplete publication/deployed consumer inventory 0 gate와 V21 legacy precheck: **Passed**.
+- 최소 OPEN Batch/immutable Item, source/store-date unique, FK/CHECK/immutability trigger와 closed-Batch
+  late-item case: **Passed**.
+- guarded completion/V2 outbox atomicity, separate Settlement consumer, Batch 경쟁과 Item/Audit/publication
+  rollback: **Passed**.
+- signed Batch Item cursor의 ordering/scope/signature/expiry/membership와 OpenAPI contract: **Passed**.
+- 실제 Order/Refund cause/reason/source/version/amount/time, Item 부재와 source-unique exclusion Audit,
+  replay/Audit rollback/publication completion: **Passed**.
+- `./gradlew test --tests '*Settlement*'`와 `./gradlew test --tests '*ModularityTests'`: **Passed**.
+- `./gradlew clean build`: **Passed**, 270 tests, 0 failures/errors; Spotless 포함, 1분 27초.
+- Plan 30과 Settlement lifecycle: 모든 direct dependency가 completed라 `Implementation-Ready=true`.
+- Analytics: Settlement lifecycle과 point-adjustment dependency가 active라
+  `Implementation-Ready=false` 유지.
 
 ## Historical audit validation
 

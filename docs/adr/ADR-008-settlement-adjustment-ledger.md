@@ -36,6 +36,12 @@ SettlementAdjustment를 만들지 않고 append-only AuditRecord로
 - 확정 후 부분·전액 환불
 - 중복 Adjustment 방지
 - 다음 배치 상계 tie-out
+- **Plan 20 evidence (2026-08-03):** V21과 Settlement consumer는 `COMPLETED` source만 immutable
+  Item으로 만들고, 고객 취소 Refund에는 Item/Adjustment 없이 실제 Order/Refund evidence와
+  source-unique `SETTLEMENT_REFUND_EXCLUDED` Audit만 남긴다. existing Item, source mismatch와
+  Audit rollback은 성공 처리되지 않는 통합 테스트로 검증했다.
+- Batch calculation/confirmation과 확정 후 Adjustment/이월 검증은
+  [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)의 범위다.
 
 ## Metrics
 

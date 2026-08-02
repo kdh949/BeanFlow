@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2Contract
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshot
 import io.github.kdh949.beanflow.ordering.api.SettlementCouponCostBearer
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -14,8 +15,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 internal class OrderCompletedV2ContractTest {
-    private val validator = OrderCompletedV2Validator()
-    private val factory = OrderCompletedV2Factory(validator)
+    private val factory = OrderCompletedV2Factory()
     private val objectMapper = ObjectMapper()
 
     @Test
@@ -115,7 +115,7 @@ internal class OrderCompletedV2ContractTest {
         val event = factory.create(fixture.order, fixture.payment, fixture.snapshot, fixture.envelope)
 
         assertThatThrownBy {
-            validator.validate(
+            OrderCompletedV2Contract.validate(
                 event.copy(
                     envelope =
                         event.envelope.copy(

@@ -9,7 +9,8 @@
 | 환불 결과 불명 은폐 | Refund UNKNOWN/RECONCILING | Provider timeout·ACK 유실 | 상태·운영 case |
 | 고객 취소 clean-cutover 오판 | 외부 DB/publication/consumer/rollback fact gate | 항목별 0 운영 상태 attestation, 구현·배포 전 재확인, unknown/nonzero 차단 | ADR-059, customer cancellation release evidence와 readiness report |
 | 부분 환불 뒤 이중 환불·포인트 복원 또는 쿠폰 복원 누락 | line-level cash/point restoration, coupon attribution과 source unique | 선행 부분 환불 후 취소 tie-out·원 쿠폰 단일 복원 | ADR-036, allocation foundation ExecPlan |
-| 미완료 고객 취소의 허위 정산 | SettlementItem/Adjustment 부재와 NOT_APPLICABLE Audit | source/cause/refund 일치 및 중복 event | ADR-048, Settlement foundation ExecPlan |
+| 미완료 고객 취소의 허위 정산 | 실제 Order/Refund evidence, SettlementItem 부재와 source-unique NOT_APPLICABLE Audit | `CustomerCancellationRefundExclusionIntegrationTest`의 cause/reason/source/version/amount/time, replay, 기존 Item, Audit rollback과 publication completion | ADR-048, completed Settlement foundation ExecPlan |
+| 완료 event 중복·지연으로 정산 Item 유실/중복 | V2 immutable payload, store/date OPEN Batch insert-or-read, order/source unique Item, closed-Batch 명시적 case | `SettlementItemCreationIntegrationTest`, `SettlementFoundationMigrationTest`, `SettlementItemQueryIntegrationTest` | ADR-017/062/067/068, V21 PostgreSQL constraints |
 | 슬롯·재고 초과 | reservation, owner row lock, DB constraint | `PickupReservationRepositoryTest`, `StockReservationRepositoryTest`, `ReservationExpiryTest` | PostgreSQL Testcontainers 결과 |
 | 쿠폰 이중 사용 | issuance state, unique constraint | two-order contention | Testcontainers test |
 | 포인트 만료·복원 오류 | PointLot, ledger, Clock | 경계·환불 테스트 | ADR, tie-out |
