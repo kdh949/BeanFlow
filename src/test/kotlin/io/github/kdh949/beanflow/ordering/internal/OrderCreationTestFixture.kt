@@ -43,6 +43,7 @@ internal object OrderCreationDatabaseFixture {
                 payment_payment,
                 payment_method,
                 ordering_idempotency_record,
+                ordering_order_settlement_input_snapshot,
                 ordering_order_line,
                 ordering_order,
                 loyalty_point_accrual_result,
@@ -65,6 +66,7 @@ internal object OrderCreationDatabaseFixture {
                 merchant_menu_configuration,
                 merchant_menu_option,
                 merchant_menu,
+                merchant_store_settlement_terms,
                 merchant_store
             CASCADE
             """.trimIndent(),
@@ -146,11 +148,31 @@ internal object OrderCreationDatabaseFixture {
         slotCapacity: Long = 10,
         stockAvailable: Long = 10,
         priceKrw: Long = 1_000,
+        includeSettlementTerms: Boolean = true,
+        settlementFeeRateBps: Int = 500,
+        settlementTermsEffectiveTo: Instant? = null,
     ) {
         jdbcTemplate.update(
             "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
             fixture.storeId,
         )
+        if (includeSettlementTerms) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_settlement_terms (
+                    terms_version_id, store_id, source_reference, fee_rate_bps,
+                    effective_from, effective_to, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                fixture.storeId,
+                "test:store-settlement-terms:${fixture.storeId}",
+                settlementFeeRateBps,
+                Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")),
+                settlementTermsEffectiveTo?.let(Timestamp::from),
+                Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")),
+            )
+        }
         jdbcTemplate.update(
             """
             INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available)
@@ -210,4 +232,58 @@ internal object OrderCreationDatabaseFixture {
         jdbcTemplate: JdbcTemplate,
         table: String,
     ): Long = requireNotNull(jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java))
+
+    fun insertSettlementInputForDirectOrder(
+        jdbcTemplate: JdbcTemplate,
+        orderId: UUID,
+        storeId: UUID,
+        grossPaidKrw: Long,
+        createdAt: Instant,
+    ) {
+        val termsVersionId = UUID.randomUUID()
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store (id, accepting_orders, pickup_enabled)
+            VALUES (?, true, true)
+            """.trimIndent(),
+            storeId,
+        )
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_settlement_terms (
+                terms_version_id, store_id, source_reference, fee_rate_bps,
+                effective_from, effective_to, created_at
+            ) VALUES (?, ?, ?, 0, ?, NULL, ?)
+            """.trimIndent(),
+            termsVersionId,
+            storeId,
+            "test:direct-order-terms:$orderId",
+            Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")),
+            Timestamp.from(createdAt),
+        )
+        jdbcTemplate.update(
+            """
+            INSERT INTO ordering_order_settlement_input_snapshot (
+                order_id, store_id, store_settlement_terms_version_id,
+                store_settlement_terms_source_reference,
+                coupon_discount_krw, platform_coupon_cost_krw, coupon_cost_krw,
+                points_applied_krw, point_cost_krw,
+                gross_paid_krw, fee_base_krw, fee_rate_bps, fee_krw,
+                benefit_cost_krw, net_settlement_krw, currency,
+                snapshot_schema_version, canonical_snapshot_hash, created_at
+            ) VALUES (
+                ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, ?, 0, 0, 0, ?, 'KRW', 1, ?, ?
+            )
+            """.trimIndent(),
+            orderId,
+            storeId,
+            termsVersionId,
+            "test:direct-order-terms:$orderId",
+            grossPaidKrw,
+            grossPaidKrw,
+            grossPaidKrw,
+            "f".repeat(64),
+            Timestamp.from(createdAt),
+        )
+    }
 }
