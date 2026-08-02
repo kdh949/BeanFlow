@@ -56,6 +56,22 @@ internal class OrderCompletedV2ContractTest {
     }
 
     @Test
+    fun `negative net settlement input is rejected before V2 mapping`() {
+        val fixture = fixture()
+
+        assertThatThrownBy {
+            factory.create(
+                fixture.order,
+                fixture.payment,
+                fixture.snapshot.copy(netSettlementKrw = -1),
+                fixture.envelope,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE)
+        }
+    }
+
+    @Test
     fun `benefit only approval with zero payable remains a valid completion input`() {
         val fixture = fixture()
         val snapshot =

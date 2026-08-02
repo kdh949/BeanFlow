@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -15,6 +16,10 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -186,6 +191,56 @@ internal class OrderSettlementInputSnapshotIntegrationTest
 
             assertThat(snapshotOperations.read(orderId(response.body))).isEqualTo(before)
             assertThat(before.feeRateBps).isEqualTo(500)
+        }
+
+        @Test
+        fun `concurrent future terms publication cannot change the terms selected for order creation`() {
+            val fixture = OrderCreationFixture()
+            val nextEffectiveAt = Instant.now().plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.MICROS)
+            OrderCreationDatabaseFixture.insertBase(
+                jdbcTemplate,
+                fixture,
+                settlementFeeRateBps = 500,
+                settlementTermsEffectiveTo = nextEffectiveAt,
+            )
+            val start = CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+
+            try {
+                val orderFuture =
+                    executor.submit(
+                        Callable<StoredHttpResponse> {
+                        start.await()
+                        createOrderUseCase.create("settlement-input-concurrent-terms-0001", fixture.command())
+                        },
+                    )
+                val termsFuture =
+                    executor.submit(
+                        Callable<Int> {
+                        start.await()
+                        jdbcTemplate.update(
+                            """
+                            INSERT INTO merchant_store_settlement_terms (
+                                terms_version_id, store_id, source_reference, fee_rate_bps,
+                                effective_from, effective_to, created_at
+                            ) VALUES (?, ?, ?, 900, ?, NULL, ?)
+                            """.trimIndent(),
+                            UUID.randomUUID(),
+                            fixture.storeId,
+                            "test:concurrent-future-store-settlement-terms:${fixture.storeId}",
+                            Timestamp.from(nextEffectiveAt),
+                            Timestamp.from(Instant.now()),
+                        )
+                        },
+                    )
+
+                val response = orderFuture.get(20, TimeUnit.SECONDS)
+                assertThat(termsFuture.get(20, TimeUnit.SECONDS)).isEqualTo(1)
+                assertThat(response.status).isEqualTo(201)
+                assertThat(snapshotOperations.read(orderId(response.body)).feeRateBps).isEqualTo(500)
+            } finally {
+                executor.shutdownNow()
+            }
         }
 
         private fun insertMixedPointLots(
