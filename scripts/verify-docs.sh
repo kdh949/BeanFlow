@@ -47,7 +47,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
-  "docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
+  "docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
@@ -354,8 +354,11 @@ if (
 if plan_metadata[plan15_path]['status'] != 'COMPLETED':
     print('Plan 15 must remain completed after its migration and validation pass.', file=sys.stderr)
     sys.exit(1)
-if not plan_metadata[plan16_path]['implementation_ready']:
-    print('Plan 16 must be implementation-ready after Plan 12/13/15 complete.', file=sys.stderr)
+if (
+    plan_metadata[plan16_path]['status'] != 'COMPLETED'
+    or not plan_metadata[plan16_path]['implementation_ready']
+):
+    print('Plan 16 must remain completed after its producers and validation pass.', file=sys.stderr)
     sys.exit(1)
 
 master_plan = (
@@ -1540,7 +1543,7 @@ else:
         root / 'docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md'
     ).read_text(encoding='utf-8')
     plan16 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md'
     ).read_text(encoding='utf-8')
     normalized_plan15 = re.sub(r'\s+', ' ', plan15)
     normalized_plan20 = re.sub(r'\s+', ' ', plan20)

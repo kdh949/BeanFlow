@@ -114,6 +114,10 @@ Plan 15는 2026-08-02에 다음 foundation까지 구현하고 완료했다.
   생성 transaction 통합. store issuer reference는 Order store UUID와 exact-match한다.
 - `OrderCompletedV2` factory/validator/fixture는 구현했지만 outbox row, V1→V2 전환, producer
   activation, Settlement consumer/모델은 구현하지 않았다.
+- Plan 16은 V20 snapshot과 immutable Refund allocation을 typed boundary로 읽어
+  `PaymentRefundedV1.settlementRefundEffect` 누적 차분을 구현했다. 같은 store의 새 Merchant terms
+  version을 추가한 뒤에도 기존 snapshot 기반 effect가 변하지 않는 통합 테스트가 통과했다.
+  `OrderCompletedV2` outbox/cutover 또는 Settlement consumer는 여전히 Plan 20 소유다.
 
 ## Alternatives Considered
 
@@ -161,6 +165,10 @@ consumer의 live read로 변질된다.
   cross-store mismatch, exactly-one/hash/replay/persistence rollback, Payment mismatch/V2 contract가
   통과했다. 외부 runtime DB가 없어 non-local row backfill은 수행하지 않았고, migration은
   active legacy Campaign/reservation 또는 any legacy Order를 fail-closed로 차단한다.
+- **Plan 16 consumer evidence (2026-08-02):** completed/pre-completion refund의 signed cumulative
+  effect는 persisted V20 snapshot과 immutable successful allocation만 사용했다. missing snapshot,
+  allocation persistence와 publication failure는 result transaction을 rollback했고, terms 변경 뒤
+  delayed event도 original value를 유지했다. 새 migration이나 live-policy fallback은 없었다.
 
 ## Related Decisions
 

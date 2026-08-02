@@ -362,7 +362,7 @@ internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
     ): RefundEntity?
 
     @Query(
-        "select refund.id from RefundEntity refund where (" +
+        "select refund.id from RefundEntity refund where refund.reason <> :excludedReason and (" +
             "(refund.state in (" +
             "io.github.kdh949.beanflow.payment.internal.domain.RefundState.REQUESTED, " +
             "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RETRY_SCHEDULED, " +
@@ -374,8 +374,28 @@ internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
             ") and refund.claimUntil <= :now)) " +
             "order by refund.nextAttemptAt, refund.id",
     )
-    fun findDueIds(
+    fun findDueIdsExcludingReason(
         @Param("now") now: Instant,
+        @Param("excludedReason") excludedReason: String,
+        pageable: Pageable,
+    ): List<UUID>
+
+    @Query(
+        "select refund.id from RefundEntity refund where refund.reason = :reason and (" +
+            "(refund.state in (" +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.REQUESTED, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RETRY_SCHEDULED, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.UNKNOWN" +
+            ") and refund.nextAttemptAt <= :now) or " +
+            "(refund.state in (" +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.PROCESSING, " +
+            "io.github.kdh949.beanflow.payment.internal.domain.RefundState.RECONCILING" +
+            ") and refund.claimUntil <= :now)) " +
+            "order by refund.nextAttemptAt, refund.id",
+    )
+    fun findDueIdsByReason(
+        @Param("now") now: Instant,
+        @Param("reason") reason: String,
         pageable: Pageable,
     ): List<UUID>
 }

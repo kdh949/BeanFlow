@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.payment.api.PartialRefundSettlementContext
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
 import io.github.kdh949.beanflow.payment.internal.domain.Refund
@@ -16,6 +17,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
 import java.time.Instant
@@ -42,6 +44,7 @@ internal class RejectionRefundService(
     private val paymentGateway: PaymentGateway,
     private val compensationOperations: RejectionCompensationOperations,
     private val partialRefundSuccessLedger: PartialRefundSuccessLedger,
+    private val refundEventProducer: PaymentRefundEventProducer,
     private val identifierSource: IdentifierSource,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.payment.refund.claim-lease:PT1M}")
@@ -102,47 +105,67 @@ internal class RejectionRefundService(
         limit: Int,
     ): List<ClaimedRefund> {
         require(limit in 1..100)
-        return refundRepository.findDueIds(now, PageRequest.of(0, limit)).mapNotNull { refundId ->
-            val entity = refundRepository.findLockedById(refundId) ?: return@mapNotNull null
-            val refund = entity.toDomain()
-            val token = identifierSource.next()
-            val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
-            val mode =
-                try {
-                    refund.claim(token, now, claimLease)
-                } catch (_: IllegalStateException) {
-                    if (entity.state == RefundState.PROCESSING || entity.state == RefundState.RECONCILING) {
-                        refund.recoverExpiredClaim(now)
-                        entity.apply(refund)
-                        if (entity.reason == REASON) {
-                            recordStep(
-                                entity.orderId,
-                                if (refund.state == RefundState.MANUAL_REVIEW) {
-                                    RejectionCompensationStepState.MANUAL_REVIEW
-                                } else {
-                                    RejectionCompensationStepState.UNKNOWN
-                                },
-                                "CLAIM_LEASE_EXPIRED",
-                                now,
-                            )
-                        }
-                    }
-                    return@mapNotNull null
-                }
-            entity.apply(refund)
-            ClaimedRefund(
-                refundId = entity.id,
-                paymentId = entity.paymentId,
-                orderId = entity.orderId,
-                reason = entity.reason,
-                amountKrw = entity.requestedAmountKrw,
-                providerIdempotencyKey = entity.providerIdempotencyKey,
-                mode = mode,
-                attemptCount = entity.attemptCount,
-                claimToken = token,
-                dueAt = dueAt,
-            )
+        return refundRepository
+            .findDueIdsExcludingReason(now, PARTIAL_REFUND, PageRequest.of(0, limit))
+            .mapNotNull { refundId ->
+                claimLocked(refundId, now)
+            }
+    }
+
+    @Transactional
+    fun claimPartialDue(
+        now: Instant,
+        limit: Int,
+    ): List<ClaimedRefund> {
+        require(limit in 1..100)
+        return refundRepository.findDueIdsByReason(now, PARTIAL_REFUND, PageRequest.of(0, limit)).mapNotNull { refundId ->
+            claimLocked(refundId, now)
         }
+    }
+
+    private fun claimLocked(
+        refundId: UUID,
+        now: Instant,
+    ): ClaimedRefund? {
+        val entity = refundRepository.findLockedById(refundId) ?: return null
+        val refund = entity.toDomain()
+        val token = identifierSource.next()
+        val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
+        val mode =
+            try {
+                refund.claim(token, now, claimLease)
+            } catch (_: IllegalStateException) {
+                if (entity.state == RefundState.PROCESSING || entity.state == RefundState.RECONCILING) {
+                    refund.recoverExpiredClaim(now)
+                    entity.apply(refund)
+                    if (entity.reason == REASON) {
+                        recordStep(
+                            entity.orderId,
+                            if (refund.state == RefundState.MANUAL_REVIEW) {
+                                RejectionCompensationStepState.MANUAL_REVIEW
+                            } else {
+                                RejectionCompensationStepState.UNKNOWN
+                            },
+                            "CLAIM_LEASE_EXPIRED",
+                            now,
+                        )
+                    }
+                }
+                return null
+            }
+        entity.apply(refund)
+        return ClaimedRefund(
+            refundId = entity.id,
+            paymentId = entity.paymentId,
+            orderId = entity.orderId,
+            reason = entity.reason,
+            amountKrw = entity.requestedAmountKrw,
+            providerIdempotencyKey = entity.providerIdempotencyKey,
+            mode = mode,
+            attemptCount = entity.attemptCount,
+            claimToken = token,
+            dueAt = dueAt,
+        )
     }
 
     @Transactional
@@ -153,6 +176,9 @@ internal class RejectionRefundService(
         val entity =
             refundRepository.findLockedById(refundId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Refund is missing")
+        if (entity.reason != PARTIAL_REFUND) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Refund is not a partial Refund")
+        }
         val refund = entity.toDomain()
         val token = identifierSource.next()
         val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
@@ -203,6 +229,28 @@ internal class RejectionRefundService(
         result: GatewayRefundResult,
         now: Instant,
     ) {
+        recordResult(claim, result, null, now)
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun recordPartialResult(
+        claim: ClaimedRefund,
+        result: GatewayRefundResult,
+        settlementContext: PartialRefundSettlementContext,
+        now: Instant,
+    ) {
+        if (claim.reason != PARTIAL_REFUND) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Claim is not a partial Refund")
+        }
+        recordResult(claim, result, settlementContext, now)
+    }
+
+    private fun recordResult(
+        claim: ClaimedRefund,
+        result: GatewayRefundResult,
+        settlementContext: PartialRefundSettlementContext?,
+        now: Instant,
+    ) {
         // Result transactions that need no Order lock always start at Payment, then lock Refund.
         // This preserves the repository-wide Order -> Payment -> Refund/allocation order.
         val payment =
@@ -231,8 +279,13 @@ internal class RejectionRefundService(
                 payment.updatedAt = now
                 entity.apply(refund)
                 if (entity.reason == PARTIAL_REFUND) {
+                    val context =
+                        settlementContext
+                            ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Partial Refund settlement context is missing")
                     partialRefundSuccessLedger.record(entity, payment, now)
+                    refundEventProducer.publishPartial(entity, payment, context, now)
                 } else {
+                    refundEventProducer.publishPreAcceptance(entity, payment, now)
                     recordStep(claim.orderId, RejectionCompensationStepState.SUCCEEDED, null, now)
                 }
             }

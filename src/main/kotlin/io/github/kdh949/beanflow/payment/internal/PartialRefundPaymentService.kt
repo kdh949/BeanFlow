@@ -3,15 +3,20 @@ package io.github.kdh949.beanflow.payment.internal
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundProvider
 import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundRestoration
 import io.github.kdh949.beanflow.payment.api.CreatePartialRefundPaymentCommand
 import io.github.kdh949.beanflow.payment.api.LockPartialRefundPaymentCommand
 import io.github.kdh949.beanflow.payment.api.PartialRefundAuditActorType
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentLock
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentOperations
+import io.github.kdh949.beanflow.payment.api.PartialRefundProviderCompletion
+import io.github.kdh949.beanflow.payment.api.PartialRefundProviderMode
+import io.github.kdh949.beanflow.payment.api.PartialRefundProviderOutcome
 import io.github.kdh949.beanflow.payment.api.PartialRefundRestorationCommandSnapshot
 import io.github.kdh949.beanflow.payment.api.PartialRefundRestorationPolicyMode
 import io.github.kdh949.beanflow.payment.api.PartialRefundRestorationSlice
+import io.github.kdh949.beanflow.payment.api.PartialRefundSettlementContext
 import io.github.kdh949.beanflow.payment.api.PartialRefundStoredResponse
 import io.github.kdh949.beanflow.payment.api.PreparedPartialRefundPayment
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
@@ -41,6 +46,7 @@ internal class PartialRefundPaymentService(
     private val refundRepository: RefundJpaRepository,
     private val refundExecution: RejectionRefundService,
     private val successLedger: PartialRefundSuccessLedger,
+    private val refundEventProducer: PaymentRefundEventProducer,
     private val responseTransaction: PartialRefundResponseTransaction,
     private val audit: AuditRecordOperations,
     private val correlationIdSource: CorrelationIdSource,
@@ -180,22 +186,44 @@ internal class PartialRefundPaymentService(
             refund.nextAttemptAt = null
             refund.updatedAt = command.now
             successLedger.record(refund, payment, command.now)
+            refundEventProducer.publishPartial(refund, payment, command.settlementContext, command.now)
         }
         return PreparedPartialRefundPayment(refundId, cashRequested)
     }
 
-    override fun executeProvider(
+    override fun claimProvider(
         refundId: UUID,
         now: Instant,
-    ) {
-        val claim = refundExecution.claimOne(refundId, now)
+    ): ClaimedPartialRefundProvider = refundExecution.claimOne(refundId, now).toApi()
+
+    override fun claimDueProviders(
+        now: Instant,
+        limit: Int,
+    ): List<ClaimedPartialRefundProvider> = refundExecution.claimPartialDue(now, limit).map { it.toApi() }
+
+    override fun callProvider(claim: ClaimedPartialRefundProvider): PartialRefundProviderCompletion {
+        val internal = claim.toInternal()
         val result =
             try {
-                refundExecution.callProvider(claim)
+                refundExecution.callProvider(internal)
             } catch (_: io.github.kdh949.beanflow.payment.api.ProviderTransportFailure) {
                 GatewayRefundResult.Unknown("PROVIDER_CALL_FAILED")
             }
-        refundExecution.recordResult(claim, result, now)
+        return PartialRefundProviderCompletion(claim, result.toApi())
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun recordProviderCompletion(
+        completion: PartialRefundProviderCompletion,
+        settlementContext: PartialRefundSettlementContext,
+        now: Instant,
+    ) {
+        refundExecution.recordPartialResult(
+            completion.claim.toInternal(),
+            completion.outcome.toInternal(),
+            settlementContext,
+            now,
+        )
     }
 
     override fun recordOrReplayResponse(
@@ -233,7 +261,7 @@ internal class PartialRefundPaymentService(
             jdbcTemplate
                 .query(
                     """
-                    SELECT order_id, updated_at, source_reference,
+                    SELECT order_id, updated_at, source_reference, correlation_id,
                            point_restoration_policy_version_id,
                            point_restoration_policy_mode,
                            point_restoration_policy_validity_days
@@ -245,9 +273,10 @@ internal class PartialRefundPaymentService(
                             UUID.fromString(rs.getString(1)),
                             rs.getTimestamp(2).toInstant(),
                             rs.getString(3),
-                            rs.getLong(4),
-                            PartialRefundRestorationPolicyMode.valueOf(rs.getString(5)),
-                            rs.getInt(6),
+                            rs.getString(4),
+                            rs.getLong(5),
+                            PartialRefundRestorationPolicyMode.valueOf(rs.getString(6)),
+                            rs.getInt(7),
                         )
                     },
                     refundId,
@@ -284,6 +313,8 @@ internal class PartialRefundPaymentService(
             orderId = refund.orderId,
             refundSucceededAt = refund.succeededAt,
             sourceReference = "${refund.sourceReference}:points-restoration",
+            refundSourceReference = refund.sourceReference,
+            correlationId = refund.correlationId,
             policyVersionId = refund.policyVersionId,
             policyMode = refund.policyMode,
             compensationValidityDays = refund.validityDays,
@@ -551,6 +582,51 @@ internal class PartialRefundPaymentService(
             PartialRefundAuditActorType.PLATFORM_OPERATOR -> AuditActorType.PLATFORM_OPERATOR
         }
 
+    private fun ClaimedRefund.toApi() =
+        ClaimedPartialRefundProvider(
+            refundId = refundId,
+            paymentId = paymentId,
+            orderId = orderId,
+            amountKrw = amountKrw,
+            providerIdempotencyKey = providerIdempotencyKey,
+            mode = PartialRefundProviderMode.valueOf(mode.name),
+            attemptCount = attemptCount,
+            claimToken = claimToken,
+            dueAt = dueAt,
+        )
+
+    private fun ClaimedPartialRefundProvider.toInternal() =
+        ClaimedRefund(
+            refundId = refundId,
+            paymentId = paymentId,
+            orderId = orderId,
+            reason = PARTIAL_REFUND,
+            amountKrw = amountKrw,
+            providerIdempotencyKey = providerIdempotencyKey,
+            mode =
+                io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
+                    .valueOf(mode.name),
+            attemptCount = attemptCount,
+            claimToken = claimToken,
+            dueAt = dueAt,
+        )
+
+    private fun GatewayRefundResult.toApi(): PartialRefundProviderOutcome =
+        when (this) {
+            is GatewayRefundResult.Succeeded -> PartialRefundProviderOutcome.Succeeded(providerRefundReference)
+            is GatewayRefundResult.Failed -> PartialRefundProviderOutcome.Failed(code)
+            is GatewayRefundResult.RetryableFailed -> PartialRefundProviderOutcome.RetryableFailed(code)
+            is GatewayRefundResult.Unknown -> PartialRefundProviderOutcome.Unknown(code)
+        }
+
+    private fun PartialRefundProviderOutcome.toInternal(): GatewayRefundResult =
+        when (this) {
+            is PartialRefundProviderOutcome.Succeeded -> GatewayRefundResult.Succeeded(providerRefundReference)
+            is PartialRefundProviderOutcome.Failed -> GatewayRefundResult.Failed(code)
+            is PartialRefundProviderOutcome.RetryableFailed -> GatewayRefundResult.RetryableFailed(code)
+            is PartialRefundProviderOutcome.Unknown -> GatewayRefundResult.Unknown(code)
+        }
+
     private fun failureCode(failure: RuntimeException): String =
         when (failure) {
             is DomainFailure -> {
@@ -589,6 +665,7 @@ internal class PartialRefundPaymentService(
         val orderId: UUID,
         val succeededAt: Instant,
         val sourceReference: String,
+        val correlationId: String,
         val policyVersionId: Long,
         val policyMode: PartialRefundRestorationPolicyMode,
         val validityDays: Int,

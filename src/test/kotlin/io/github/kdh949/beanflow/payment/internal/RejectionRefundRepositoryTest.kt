@@ -49,6 +49,7 @@ internal class RejectionRefundRepositoryTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    event_publication,
                     payment_refund,
                     payment_reconciliation,
                     payment_idempotency_record,
@@ -63,7 +64,7 @@ internal class RejectionRefundRepositoryTest
         }
 
         @Test
-        fun `rejection requests and completes exactly one full refund`() {
+        fun `PaymentRefunded pre-acceptance cancellation omits settlement effect`() {
             val event = fixture()
             refundService.request(event)
             refundService.request(event.copy(envelope = event.envelope.copy(eventId = UUID.randomUUID())))
@@ -86,6 +87,21 @@ internal class RejectionRefundRepositoryTest
             assertThat(paymentStep.state).isEqualTo(RejectionCompensationStepState.SUCCEEDED)
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
             assertThat(refundRepository.count()).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject("select count(*) from event_publication", Long::class.java),
+            ).isEqualTo(2)
+            val payload =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        """
+                        select serialized_event from event_publication
+                         where listener_id = 'beanflow.settlement.payment-refunded-v1'
+                        """.trimIndent(),
+                        String::class.java,
+                    ),
+                )
+            assertThat(payload).contains("\"completionDisposition\":\"PRE_ACCEPTANCE_CANCELLATION\"")
+            assertThat(payload).doesNotContain("settlementRefundEffect", "orderCompletedAt", "settlementItemSource")
         }
 
         @Test

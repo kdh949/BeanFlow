@@ -45,8 +45,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.HexFormat
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -84,6 +87,7 @@ internal class PartialRefundAllocationRepositoryTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    event_publication,
                     payment_refund_point_recovery_work,
                     payment_order_point_accrual_outcome,
                     payment_refund_restoration_work,
@@ -134,7 +138,7 @@ internal class PartialRefundAllocationRepositoryTest
         }
 
         @Test
-        fun `front unit rounding succeeds once and expired points restore with issuer lineage`() {
+        fun `PaymentRefunded pre-completion payload replays once and points restore with issuer lineage`() {
             val fixture = fixture()
             gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-1"))
             val command = command(fixture, "refund-key-0001", fixture.firstLineId, 1)
@@ -169,6 +173,18 @@ internal class PartialRefundAllocationRepositoryTest
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
             assertThat(singleLong("select count(*) from payment_refund_line_allocation")).isEqualTo(1)
             assertThat(singleLong("select count(*) from loyalty_partial_refund_restoration")).isEqualTo(1)
+            assertThat(
+                singleLong(
+                    "select count(*) from event_publication where event_type like '%PaymentRefundedV1'",
+                ),
+            ).isEqualTo(2)
+            val refundEvent = paymentRefundedEvent()
+            assertThat(refundEvent["completionDisposition"].asText()).isEqualTo("PRE_COMPLETION_ORDER")
+            assertThat(refundEvent.has("orderCompletedAt")).isFalse()
+            assertThat(refundEvent.has("settlementItemSource")).isFalse()
+            assertThat(refundEvent["settlementRefundEffect"]["grossPaidDeltaKrw"].asLong()).isEqualTo(-1_000)
+            assertThat(refundEvent["settlementRefundEffect"]["benefitCostDeltaKrw"].asLong()).isEqualTo(-334)
+            assertThat(refundEvent["settlementRefundEffect"]["netSettlementDeltaKrw"].asLong()).isEqualTo(-666)
         }
 
         @Test
@@ -330,9 +346,9 @@ internal class PartialRefundAllocationRepositoryTest
         }
 
         @Test
-        fun `same idempotency key with another payload conflicts before provider`() {
+        fun `PaymentRefunded changed payload replay conflicts without another publication`() {
             val fixture = fixture()
-            gateway.enqueueRejectionRefund(GatewayRefundResult.Failed("DECLINED"))
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-replay"))
             service.create(command(fixture, "refund-key-0002", fixture.firstLineId, 1))
 
             assertThatThrownBy {
@@ -341,6 +357,127 @@ internal class PartialRefundAllocationRepositoryTest
                 assertThat(it.code).isEqualTo(FailureCode.IDEMPOTENCY_KEY_REUSED)
             }
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
+            assertThat(
+                singleLong(
+                    "select count(*) from event_publication where event_type like '%PaymentRefundedV1'",
+                ),
+            ).isEqualTo(2)
+        }
+
+        @Test
+        fun `PaymentRefunded completed payload uses locked completion source and immutable terms`() {
+            val fixture = fixture()
+            jdbcTemplate.update(
+                """
+                update ordering_order
+                   set state = 'COMPLETED', paid_at = ?, acceptance_warning_at = ?, acceptance_deadline_at = ?,
+                       accepted_at = ?, preparing_at = ?, ready_at = ?, completed_at = ?, version = 5
+                 where id = ?
+                """.trimIndent(),
+                Timestamp.from(NOW.minusSeconds(60)),
+                Timestamp.from(NOW.plusSeconds(60)),
+                Timestamp.from(NOW.plusSeconds(120)),
+                Timestamp.from(NOW.minusSeconds(4)),
+                Timestamp.from(NOW.minusSeconds(3)),
+                Timestamp.from(NOW.minusSeconds(2)),
+                Timestamp.from(NOW.minusSeconds(1)),
+                fixture.orderId,
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_settlement_terms (
+                    terms_version_id, store_id, source_reference, fee_rate_bps,
+                    effective_from, effective_to, created_at
+                ) VALUES (?, ?, ?, 9999, ?, NULL, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                fixture.storeId,
+                "test:changed-terms:${fixture.orderId}",
+                Timestamp.from(NOW.plusSeconds(10)),
+                Timestamp.from(NOW.plusSeconds(10)),
+            )
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-completed"))
+
+            service.create(command(fixture, "refund-completed-key", fixture.firstLineId, 1))
+
+            val event = paymentRefundedEvent()
+            assertThat(event["completionDisposition"].asText()).isEqualTo("COMPLETED_ORDER")
+            assertThat(event["orderCompletedAt"].asText()).isEqualTo(NOW.minusSeconds(1).toString())
+            assertThat(event["settlementItemSource"].asText())
+                .isEqualTo("order:${fixture.orderId}:completed:5")
+            assertThat(event["settlementRefundEffect"]["feeDeltaKrw"].asLong()).isZero()
+        }
+
+        @Test
+        fun `PaymentRefunded outbox failure rolls back owner success and allocations`() {
+            val fixture = fixture()
+            jdbcTemplate.execute(
+                """
+                ALTER TABLE event_publication
+                ADD CONSTRAINT test_block_payment_refunded
+                CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1')
+                """.trimIndent(),
+            )
+            try {
+                gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-outbox-failure"))
+
+                assertThatThrownBy {
+                    service.create(command(fixture, "refund-outbox-key", fixture.firstLineId, 1))
+                }.isInstanceOf(DomainFailure::class.java)
+
+                assertThat(singleString("select state from payment_refund")).isEqualTo("PROCESSING")
+                assertThat(singleLong("select succeeded_refund_amount_krw from payment_payment")).isZero()
+                assertThat(singleLong("select count(*) from payment_refund_line_allocation")).isZero()
+                assertThat(singleLong("select count(*) from event_publication")).isZero()
+            } finally {
+                jdbcTemplate.execute("alter table event_publication drop constraint test_block_payment_refunded")
+            }
+        }
+
+        @Test
+        fun `PaymentRefunded missing success allocation rolls back owner result`() {
+            val fixture = fixture()
+            jdbcTemplate.execute(
+                """
+                CREATE FUNCTION test_skip_refund_line_allocation() RETURNS trigger
+                LANGUAGE plpgsql AS 'BEGIN RETURN NULL; END'
+                """.trimIndent(),
+            )
+            jdbcTemplate.execute(
+                """
+                CREATE TRIGGER test_skip_refund_line_allocation
+                BEFORE INSERT ON payment_refund_line_allocation
+                FOR EACH ROW EXECUTE FUNCTION test_skip_refund_line_allocation()
+                """.trimIndent(),
+            )
+            try {
+                gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-allocation-missing"))
+
+                assertThatThrownBy {
+                    service.create(command(fixture, "refund-allocation-missing", fixture.firstLineId, 1))
+                }.isInstanceOf(DomainFailure::class.java)
+
+                assertThat(singleString("select state from payment_refund")).isEqualTo("PROCESSING")
+                assertThat(singleLong("select succeeded_refund_amount_krw from payment_payment")).isZero()
+                assertThat(singleLong("select count(*) from payment_refund_line_allocation")).isZero()
+                assertThat(singleLong("select count(*) from event_publication")).isZero()
+            } finally {
+                jdbcTemplate.execute(
+                    "drop trigger test_skip_refund_line_allocation on payment_refund_line_allocation",
+                )
+                jdbcTemplate.execute("drop function test_skip_refund_line_allocation()")
+            }
+        }
+
+        @Test
+        fun `PaymentRefunded missing settlement snapshot fails before a success fact exists`() {
+            assertThatThrownBy {
+                fixture(includeSettlementSnapshot = false)
+            }.isInstanceOf(org.springframework.dao.DataIntegrityViolationException::class.java)
+                .hasStackTraceContaining("Order requires exactly one settlement input snapshot")
+
+            assertThat(singleLong("select count(*) from payment_refund")).isZero()
+            assertThat(singleLong("select count(*) from event_publication")).isZero()
         }
 
         @Test
@@ -362,7 +499,7 @@ internal class PartialRefundAllocationRepositoryTest
         }
 
         @Test
-        fun `successive partial refunds consume front units with deterministic point remainder`() {
+        fun `PaymentRefunded cumulative effects preserve deterministic allocation remainder`() {
             val fixture = fixture()
             gateway.enqueueRejectionRefund(
                 GatewayRefundResult.Succeeded("provider-refund-3"),
@@ -385,6 +522,18 @@ internal class PartialRefundAllocationRepositoryTest
                 listOf(1, 666, 334, 0),
             )
             assertThat(singleLong("select succeeded_refund_amount_krw from payment_payment")).isEqualTo(1_332)
+            val effects =
+                jdbcTemplate
+                    .queryForList(
+                        """
+                        select serialized_event from event_publication
+                         where listener_id = 'beanflow.settlement.payment-refunded-v1'
+                        """.trimIndent(),
+                        String::class.java,
+                    ).map { objectMapper.readTree(it)["settlementRefundEffect"] }
+            assertThat(effects.sumOf { it["grossPaidDeltaKrw"].asLong() }).isEqualTo(-2_000)
+            assertThat(effects.sumOf { it["benefitCostDeltaKrw"].asLong() }).isEqualTo(-668)
+            assertThat(effects.sumOf { it["netSettlementDeltaKrw"].asLong() }).isEqualTo(-1_332)
         }
 
         @Test
@@ -516,7 +665,7 @@ internal class PartialRefundAllocationRepositoryTest
         }
 
         @Test
-        fun `point lot expiry boundary follows the PostgreSQL microsecond tick`() {
+        fun `PointsRestored expiry boundary publishes each immutable slice once`() {
             val fixture = boundaryFixture()
             val policyVersion =
                 singleLong(
@@ -531,6 +680,9 @@ internal class PartialRefundAllocationRepositoryTest
                     orderId = fixture.orderId,
                     refundSucceededAt = NOW,
                     sourceReference = "boundary-restoration",
+                    refundSourceReference = "partial-refund:boundary",
+                    orderCompletedAt = null,
+                    correlationId = "correlation:${fixture.orderId}",
                     policyVersionId = policyVersion,
                     policyMode = PartialRefundPointPolicyMode.COMPENSATE_WITH_NEW_ISSUANCE,
                     compensationValidityDays = 30,
@@ -539,6 +691,24 @@ internal class PartialRefundAllocationRepositoryTest
 
             val first = pointOperations.restore(command)
             val replay = pointOperations.restore(command)
+
+            assertThat(
+                singleLong(
+                    "select count(*) from event_publication where event_type like '%PointsRestoredV1'",
+                ),
+            ).isEqualTo(3)
+            val restoredPayloads =
+                jdbcTemplate.queryForList(
+                    """
+                    select serialized_event from event_publication
+                     where event_type like '%PointsRestoredV1' order by serialized_event
+                    """.trimIndent(),
+                    String::class.java,
+                )
+            assertThat(restoredPayloads).allSatisfy {
+                assertThat(it).contains("\"refundSource\":\"partial-refund:boundary\"")
+                assertThat(it).contains("\"orderCompletedAt\":null")
+            }
 
             assertThatThrownBy {
                 pointOperations.restore(command.copy(compensationValidityDays = 31))
@@ -583,6 +753,36 @@ internal class PartialRefundAllocationRepositoryTest
                         Timestamp::class.java,
                     ).map { requireNotNull(it).toInstant() },
             ).allMatch { it == NOW.plusSeconds(30L * 86_400) }
+        }
+
+        @Test
+        fun `PointsRestored outbox failure rolls back loyalty owner facts and schedules retry`() {
+            val fixture = fixture()
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-points-outbox"))
+            service.create(command(fixture, "refund-points-outbox", fixture.firstLineId, 1))
+            jdbcTemplate.execute(
+                """
+                ALTER TABLE event_publication
+                ADD CONSTRAINT test_block_points_restored
+                CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.PointsRestoredV1')
+                """.trimIndent(),
+            )
+            try {
+                assertThat(restorationWorker.runOnce()).isEqualTo(1)
+
+                assertThat(singleString("select state from payment_refund_restoration_work"))
+                    .isEqualTo("RETRY_SCHEDULED")
+                assertThat(singleLong("select count(*) from loyalty_partial_refund_restoration")).isZero()
+                assertThat(singleLong("select count(*) from loyalty_point_transaction where refund_id is not null"))
+                    .isZero()
+                assertThat(
+                    singleLong(
+                        "select count(*) from event_publication where event_type like '%PointsRestoredV1'",
+                    ),
+                ).isZero()
+            } finally {
+                jdbcTemplate.execute("alter table event_publication drop constraint test_block_points_restored")
+            }
         }
 
         @Test
@@ -680,7 +880,7 @@ internal class PartialRefundAllocationRepositoryTest
                 .anySatisfy { assertThat(it).contains("Successful Refund unit ranges overlap") }
         }
 
-        private fun fixture(): Fixture {
+        private fun fixture(includeSettlementSnapshot: Boolean = true): Fixture {
             val fixture =
                 Fixture(
                     actorId = UUID.randomUUID(),
@@ -708,6 +908,7 @@ internal class PartialRefundAllocationRepositoryTest
                 Timestamp.from(NOW),
             )
             transactions.executeWithoutResult {
+                val settlementCreatedAt = NOW.minusSeconds(60)
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
@@ -890,42 +1091,73 @@ internal class PartialRefundAllocationRepositoryTest
                     INSERT INTO merchant_store_settlement_terms (
                         terms_version_id, store_id, source_reference, fee_rate_bps,
                         effective_from, effective_to, created_at
-                    ) VALUES (?, ?, ?, 0, '2020-01-01T00:00:00Z', NULL, ?)
+                    ) VALUES (?, ?, ?, 0, '2020-01-01T00:00:00Z', ?, ?)
                     """.trimIndent(),
                     termsVersionId,
                     fixture.storeId,
                     "test:partial-refund-terms:${fixture.orderId}",
+                    Timestamp.from(NOW.plusSeconds(10)),
                     Timestamp.from(NOW),
                 )
-                jdbcTemplate.update(
-                    """
-                    INSERT INTO ordering_order_settlement_input_snapshot (
-                        order_id, store_id, store_settlement_terms_version_id,
-                        store_settlement_terms_source_reference,
-                        coupon_reservation_id, coupon_campaign_id, coupon_campaign_version,
-                        coupon_cost_bearer, coupon_platform_share_bps, coupon_store_share_bps,
-                        coupon_discount_krw, platform_coupon_cost_krw, coupon_cost_krw,
-                        point_reservation_id, point_allocation_hash, points_applied_krw, point_cost_krw,
-                        gross_paid_krw, fee_base_krw, fee_rate_bps, fee_krw,
-                        benefit_cost_krw, net_settlement_krw, currency,
-                        snapshot_schema_version, canonical_snapshot_hash, created_at
-                    ) VALUES (
-                        ?, ?, ?, ?, ?, ?, 0, 'STORE', 0, 10000,
-                        2000, 0, 2000, ?, ?, 3000, 1500,
-                        10000, 5000, 0, 0, 3500, 6500, 'KRW', 1, ?, ?
+                if (includeSettlementSnapshot) {
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO ordering_order_settlement_input_snapshot (
+                            order_id, store_id, store_settlement_terms_version_id,
+                            store_settlement_terms_source_reference,
+                            coupon_reservation_id, coupon_campaign_id, coupon_campaign_version,
+                            coupon_cost_bearer, coupon_platform_share_bps, coupon_store_share_bps,
+                            coupon_discount_krw, platform_coupon_cost_krw, coupon_cost_krw,
+                            point_reservation_id, point_allocation_hash, points_applied_krw, point_cost_krw,
+                            gross_paid_krw, fee_base_krw, fee_rate_bps, fee_krw,
+                            benefit_cost_krw, net_settlement_krw, currency,
+                            snapshot_schema_version, canonical_snapshot_hash, created_at
+                        ) VALUES (
+                            ?, ?, ?, ?, ?, ?, 0, 'STORE', 0, 10000,
+                            2000, 0, 2000, ?, ?, 3000, 1500,
+                            10000, 5000, 0, 0, 3500, 6500, 'KRW', 1, ?, ?
+                        )
+                        """.trimIndent(),
+                        fixture.orderId,
+                        fixture.storeId,
+                        termsVersionId,
+                        "test:partial-refund-terms:${fixture.orderId}",
+                        couponReservationId,
+                        campaignId,
+                        reservationId,
+                        "a".repeat(64),
+                        settlementSnapshotHash(
+                            1,
+                            fixture.orderId,
+                            fixture.storeId,
+                            termsVersionId,
+                            "test:partial-refund-terms:${fixture.orderId}",
+                            couponReservationId,
+                            campaignId,
+                            0L,
+                            "STORE",
+                            0,
+                            10_000,
+                            2_000L,
+                            0L,
+                            2_000L,
+                            reservationId,
+                            "a".repeat(64),
+                            3_000L,
+                            1_500L,
+                            10_000L,
+                            5_000L,
+                            0,
+                            0L,
+                            3_500L,
+                            6_500L,
+                            "KRW",
+                            settlementCreatedAt.epochSecond,
+                            settlementCreatedAt.nano / 1_000,
+                        ),
+                        Timestamp.from(settlementCreatedAt),
                     )
-                    """.trimIndent(),
-                    fixture.orderId,
-                    fixture.storeId,
-                    termsVersionId,
-                    "test:partial-refund-terms:${fixture.orderId}",
-                    couponReservationId,
-                    campaignId,
-                    reservationId,
-                    "a".repeat(64),
-                    "b".repeat(64),
-                    Timestamp.from(NOW.minusSeconds(60)),
-                )
+                }
             }
             return fixture
         }
@@ -953,6 +1185,7 @@ internal class PartialRefundAllocationRepositoryTest
             val lotIds = (1..3).map { UUID.randomUUID() }.sorted()
             return requireNotNull(
                 transactions.execute {
+                    val settlementCreatedAt = NOW.minusSeconds(60)
                     jdbcTemplate.update(
                         """
                         INSERT INTO ordering_order (
@@ -1089,8 +1322,36 @@ internal class PartialRefundAllocationRepositoryTest
                         "test:boundary-terms:$orderId",
                         reservationId,
                         "c".repeat(64),
-                        "d".repeat(64),
-                        Timestamp.from(NOW.minusSeconds(60)),
+                        settlementSnapshotHash(
+                            1,
+                            orderId,
+                            storeId,
+                            termsVersionId,
+                            "test:boundary-terms:$orderId",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            0L,
+                            0L,
+                            0L,
+                            reservationId,
+                            "c".repeat(64),
+                            3L,
+                            0L,
+                            3L,
+                            0L,
+                            0,
+                            0L,
+                            0L,
+                            3L,
+                            "KRW",
+                            settlementCreatedAt.epochSecond,
+                            settlementCreatedAt.nano / 1_000,
+                        ),
+                        Timestamp.from(settlementCreatedAt),
                     )
                     BoundaryFixture(orderId, slices)
                 },
@@ -1116,6 +1377,35 @@ internal class PartialRefundAllocationRepositoryTest
         private fun singleLong(sql: String): Long = requireNotNull(jdbcTemplate.queryForObject(sql, Long::class.java))
 
         private fun singleString(sql: String): String = requireNotNull(jdbcTemplate.queryForObject(sql, String::class.java))
+
+        private fun paymentRefundedEvent() =
+            objectMapper.readTree(
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        """
+                        select serialized_event from event_publication
+                         where listener_id = 'beanflow.settlement.payment-refunded-v1'
+                         order by publication_date desc limit 1
+                        """.trimIndent(),
+                        String::class.java,
+                    ),
+                ),
+            )
+
+        private fun settlementSnapshotHash(vararg fields: Any?): String {
+            val canonical = StringBuilder()
+            fields.forEach { field ->
+                val value = field?.toString() ?: "<null>"
+                canonical.append(value.length).append(':').append(value)
+            }
+            return HexFormat
+                .of()
+                .formatHex(
+                    MessageDigest
+                        .getInstance("SHA-256")
+                        .digest(canonical.toString().toByteArray(StandardCharsets.UTF_8)),
+                )
+        }
 
         private data class Fixture(
             val actorId: UUID,

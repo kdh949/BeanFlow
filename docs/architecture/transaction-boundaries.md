@@ -127,26 +127,34 @@ Tx R1: Order lock + store/platform authorization
      + Refund REQUESTED + immutable line/point request rows + Audit
 commit
 Provider request/lookup (cash가 0이면 생략)
-Tx R2: Payment lock + Refund SUCCEEDED/explicit failure/unknown
+Tx R2 (Ordering result orchestration): Order lock + immutable settlement snapshot read
+     + Payment lock + Refund SUCCEEDED/explicit failure/unknown
      + 성공일 때 Payment 누적액 + immutable line/point success rows
+     + `PaymentRefundedV1` persistent target publications
      + points가 양수이면 durable restoration work + Audit
 commit
 Loyalty Tx R3 (REQUIRES_NEW): PointAccount + USED reservation + sorted allocation/Lot locks
      + original/compensation/skip PointTransaction + restoration ledger
+     + 각 owner result의 `PointsRestoredV1` persistent publication
 commit
 Payment Tx R4: restoration work SUCCEEDED | RETRY_SCHEDULED | MANUAL_REVIEW ack
 ```
 
 - `R1`이 실패하면 Refund/request snapshot/Audit가 모두 rollback되고 Provider를 호출하지 않는다.
 - Provider latency 동안 DB transaction/connection을 유지하지 않는다. `R2` 실패는 claim lease와
-  같은 Provider key lookup으로 수렴하며 성공으로 추정하지 않는다.
+  같은 Provider key lookup으로 수렴하며 성공으로 추정하지 않는다. Provider 결과 시각은 외부 호출이
+  끝난 뒤 기록하고 claim 시각을 성공 시각으로 재사용하지 않는다.
+- `R2`는 Order를 먼저 잠근 뒤 immutable snapshot을 읽고 Payment 공개 API의 owner write를 같은
+  transaction에 참여시킨다. Refund success/allocation/snapshot/source/target publication 중 하나라도
+  없거나 저장에 실패하면 전체 result transaction을 rollback한다.
 - 성공 unit은 가장 작은 미소비 conceptual position부터 고정한다. 실패·불명 Refund는 성공
   allocation을 만들지 않아 position과 승인액을 소비하지 않는다.
 - coupon 금액은 Payment allocation 귀속 원장일 뿐 Promotion 상태 전이나 복원 호출이 아니다.
 - `R3`은 Payment Entity/Repository를 직접 변경하지 않고 `R4`와 다른 local transaction이다.
   Loyalty commit 뒤 `R4` 실패는 같은 Refund source replay로 재확인한다.
 - 부분 복원은 PointReservation `USED`와 reservation-level restoration metadata를 변경하지 않는다.
-- R1/R2의 전역 순서는 `Order → Payment → 정렬된 Refund allocation → 정렬된 원 point allocation`이다.
+- R1/R2의 전역 순서는 `Order → immutable settlement snapshot → Payment → 정렬된 Refund allocation →
+  정렬된 원 point allocation`이다.
 
 ### Customer cancellation
 
@@ -281,7 +289,12 @@ Notification worker: claim transaction -> external Provider -> result transactio
 - 이후 OrderCompleted 적립 transaction은 PointAccount를 먼저 잠그고, 새 PointLot과
   gross `ACCRUAL` transaction을 만든 뒤 오래된 PENDING 행을 `(createdAt, id)` 순서로
   잠근다. 상계 `RECOVERY` transaction, pending state와 Account/Lot summary는 같은
-  local transaction에 속한다.
+  local transaction에 속한다. gross `ACCRUAL` owner result가 있으면 `PointsAccruedV1`
+  target publication도 같은 transaction에 속하며 pending 상계 뒤의 net 잔액으로 event amount를
+  바꾸지 않는다.
+- Refund 복원 transaction은 각 original/compensation/skip PointTransaction과 restoration result,
+  해당 `PointsRestoredV1` target publication을 함께 commit한다. publication 저장 실패 시 Loyalty
+  transaction은 rollback하고 Payment restoration work는 `RETRY_SCHEDULED`로 남긴다.
 - Payment Provider 또는 다른 외부 호출은 위 Loyalty transaction에 넣지 않는다. Refund가
   성공했지만 Loyalty 처리에 실패하면 event publication/retry는 남고, Account를 0 또는
   성공 상태로 추정하지 않는다.

@@ -163,6 +163,10 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   확인한다.
 - Plan 10이 signed-cursor foundation을 direct dependency로 다시 추가하지 않고 Plan 00 outcome만
   소비하는지 확인한다.
+- **Plan 16 completion evidence (2026-08-02):** migration을 쓰지 않는 Plan 16을 completed path로
+  이동하면서 direct successor인 Plan 20과 Analytics의 dependency path를 함께 갱신했다. Plan 20은
+  모든 direct dependency evidence가 completed라 `Implementation-Ready=true`로 전환했고, Analytics는
+  다른 producer dependencies가 active라 `false`를 유지했다.
 
 ## Related Decisions
 

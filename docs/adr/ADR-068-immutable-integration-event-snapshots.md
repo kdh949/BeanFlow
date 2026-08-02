@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -36,7 +36,7 @@ Idempotency-Key, evidence, 자유 입력 reason/detail 또는 live policy value�
 | Event / envelope version | Exact immutable payload (envelope 외) | Producer transaction / logical source | Consumer checkpoint |
 |---|---|---|---|
 | `OrderCompletedV2` / 2 | `orderId`, `customerId`, `storeId`, `completedAt`, `settlementDate`, `currency`, `grossPaidKrw`, `feeRateBps`, `feeKrw`, `couponCostKrw`, `pointCostKrw`, `benefitCostKrw`, `netSettlementKrw`, `completionSource` | Plan 20이 소유하는 Ordering `COMPLETED` guarded transition과 같은 transaction. `order:{orderId}:completed:{aggregateVersion}` | Plan 20: SettlementItem; Loyalty: accrual; Analytics: completion-date input |
-| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때만 `orderCompletedAt`, `settlementDate`, `settlementItemSource`, `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }` | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 12/13: Loyalty restore/recovery; Settlement: Item 반영/Adjustment; Analytics: refund-date와 completion-date delta |
+| `PaymentRefundedV1` / 1 | `refundId`, `refundSource`, `orderId`, `customerId`, `refundSucceededAt`, `currency`, `cashRefundedKrw`, `completionDisposition`; `COMPLETED_ORDER`일 때 `orderCompletedAt`, `settlementDate`, `settlementItemSource`가 required; `COMPLETED_ORDER`와 `PRE_COMPLETION_ORDER`에는 `settlementRefundEffect { grossPaidDeltaKrw, feeDeltaKrw, benefitCostDeltaKrw, netSettlementDeltaKrw }`가 required | Payment의 `Refund -> SUCCEEDED` result transaction과 같은 transaction. `refund:{refundId}:succeeded` | Plan 12/13: Loyalty restore/recovery; Settlement: Item 반영/Adjustment 또는 pre-completion pending; Analytics: refund-date와 completion-date delta |
 | `PointsAccruedV1` / 1 | `pointTransactionSource`, `orderCompletionSource`, `orderId`, `orderCompletedAt`, `amountKrw`, `currency` | Loyalty의 `ACCRUAL` ledger transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsRestoredV1` / 1 | `pointTransactionSource`, `refundSource`, `orderId`, `refundSucceededAt`, `orderCompletedAt`(없는 경우 null), `amountKrw`, `currency`, `restorationDisposition` (`RESTORE`, `COMPENSATION`, `SKIPPED`) | Loyalty의 Refund owner result transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsAdjustedV1` / 1 | `adjustmentSource`, `accountId`, signed `amountKrw`, `issuerType`(CREDIT일 때만) | Loyalty point-adjustment command transaction과 같은 transaction. `point-adjustment:{adjustmentSource}` | Analytics |
@@ -52,15 +52,47 @@ non-negative 64-bit integer KRW다. delta, `PointsAdjustedV1.amountKrw`,
 `feeRateBps`는 `0..10000` integer다. `*Source`와 `reasonCode`는 producer가 만든 stable opaque
 identifier/closed vocabulary이며, consumer가 자유 text 또는 current state로 채우지 않는다.
 
-`completionDisposition`은 `COMPLETED_ORDER` 또는 `PRE_ACCEPTANCE_CANCELLATION`이다.
-후자에는 SettlementItem source와 `settlementRefundEffect`를 넣지 않는다. Settlement는 이를
-0원 Adjustment로 바꾸지 않고 ADR-048의 `NOT_APPLICABLE` Audit 경로로 처리한다. Analytics는
-두 disposition 모두 실제 `cashRefundedKrw`의 refund-date fact로 사용하되,
-`COMPLETED_ORDER`만 completion-date adjustment에 사용한다.
+`completionDisposition`은 `COMPLETED_ORDER`, `PRE_COMPLETION_ORDER` 또는
+`PRE_ACCEPTANCE_CANCELLATION`이다. result transaction에서 이미 immutable completion fact가
+있으면 `COMPLETED_ORDER`, 고객 취소·매장 거절처럼 완료 없이 미수락 종료된 Refund source면
+`PRE_ACCEPTANCE_CANCELLATION`, 그 밖의 완료 전 품목 Refund면 `PRE_COMPLETION_ORDER`다.
+
+`COMPLETED_ORDER`는 `orderCompletedAt`, 서울 기준 `settlementDate`,
+`settlementItemSource`와 effect를 모두 포함한다. `settlementItemSource`는 해당 Order completion의
+logical source `order:{orderId}:completed:{aggregateVersion}`와 동일하다. Plan 20은 이 값을
+SettlementItem의 immutable `itemSource`로 사용한다. `PRE_COMPLETION_ORDER`는 effect를 포함하지만
+아직 존재하지 않는 완료 시각·정산일·Item source를 넣지 않는다. Settlement와 Analytics는 이를
+source-aware pending input으로 보존한 뒤 `OrderCompletedV2`와 결합하며 current Order나 policy를
+재조회해 완성하지 않는다. 완료 없이 terminal이 되면 terminal source와 일치하는 명시적
+exclusion/reconciliation로 끝낸다. `PRE_ACCEPTANCE_CANCELLATION`에는 완료 필드와 effect를 모두
+넣지 않으며 Settlement는 이를 0원 Adjustment로 바꾸지 않고 ADR-048의 `NOT_APPLICABLE` Audit
+경로로 처리한다. Analytics는 세 disposition 모두 실제 `cashRefundedKrw`의 refund-date fact로
+사용하되 completion-date adjustment는 완료 source와 결합된 effect에만 적용한다.
 
 `SettlementRefundEffect`의 모든 delta는 signed KRW이며, Refund로 감소하는 값은 음수다.
 Payment는 이 snapshot을 Refund 요청 때 저장한 immutable line allocation과 completion snapshot으로
 만 계산한다. consumer가 Item의 현재 summary, fee 계약 또는 Campaign을 재조회해 계산하지 않는다.
+
+부분 Refund 하나의 delta는 같은 Payment lock 아래 그 Refund 직전까지 성공한 immutable allocation을
+`before`, 현재 Refund까지 포함한 allocation을 `after`로 두고 다음처럼 계산한다. 이 누적 차분은
+여러 Refund에 걸친 원 미만 remainder를 마지막 Refund까지 정확히 보존한다.
+
+```text
+grossPaidDeltaKrw = -(after.refundedGrossKrw - before.refundedGrossKrw)
+feeDeltaKrw = -(floor(after.refundedCashKrw * feeRateBps / 10_000)
+                - floor(before.refundedCashKrw * feeRateBps / 10_000))
+couponCostDeltaKrw = -(floor(after.refundedCouponKrw * storeCouponShareBps / 10_000)
+                       - floor(before.refundedCouponKrw * storeCouponShareBps / 10_000))
+pointCostDeltaKrw = -(after.refundedMatchingStorePointKrw
+                      - before.refundedMatchingStorePointKrw)
+benefitCostDeltaKrw = couponCostDeltaKrw + pointCostDeltaKrw
+netSettlementDeltaKrw = grossPaidDeltaKrw - feeDeltaKrw - benefitCostDeltaKrw
+```
+
+쿠폰이 없으면 store share와 coupon cost delta는 0이다. store point는 immutable Refund point
+allocation의 `issuerType=STORE`이고 `issuerReference=Order.storeId`인 금액만 센다. 다른 store
+reference, allocation/snapshot 합계 불일치, overflow 또는 누적 delta가 원 snapshot의 gross/fee/
+coupon/point 상한을 넘으면 event를 만들지 않고 result transaction을 rollback한다.
 
 Analytics persistence는 event payload의 customer, account, order, payment, refund, Batch와 Item
 식별자를 public dimension, log 또는 metric tag에 저장하지 않는다. receipt에는 opaque logical
@@ -98,6 +130,15 @@ currency/version을 fail-closed로 검증한다. production reference inventory�
 producer, outbox save, listener 또는 Settlement consumer가 없으므로 이 checkpoint는 Plan 20
 activation이나 V1 drain 완료 증거가 아니다.
 
+**Plan 16 implementation checkpoint (2026-08-02):** `PaymentRefundedV1`, `PointsAccruedV1`,
+`PointsRestoredV1` public Kotlin payload, validator와 exact JSON fixture가 구현됐다. Payment는
+Order-first result orchestration transaction에서 Plan 12 immutable allocation과 Plan 15 snapshot의
+누적 차분을 계산하고 Refund owner result와 existing `event_publication` target row를 함께 저장한다.
+Loyalty는 gross accrual과 각 restoration owner result에 대응하는 target row를 같은 owner
+transaction에 저장한다. exact replay/conflict, 세 disposition, delayed terms change,
+snapshot/allocation/publication rollback이 PostgreSQL 테스트를 통과했다. `OrderCompletedV2`,
+Settlement/Analytics consumer와 projection은 구현하지 않았다.
+
 ### Plan 13의 frozen V1 trigger-only boundary
 
 ADR-073은 Plan 13에 한해 `OrderCompletedV1`을 payload가 없는 frozen trigger로 유지하면서
@@ -115,8 +156,9 @@ boundary 실패는 Loyalty source 처리의 retry/manual-review failure이며, p
 
 2026-08-02 Plan 13 implementation은 이 예외를 frozen `OrderCompletedV1` listener로 활성화했다.
 listener는 persisted Order completion version과 V16 snapshot hash를 검증하고 Payment eligibility와
-Loyalty accrual owner transaction을 호출한다. `PointsAccruedV1` publication은 추가하지 않았으며
-여전히 Plan 16이 소유한다.
+Loyalty accrual owner transaction을 호출한다. Plan 16이 같은 owner transaction에
+`PointsAccruedV1` target publication을 추가했으며 frozen V1 payload와 Plan 20의 V2 ownership은
+변경하지 않았다.
 
 All new producer transactions persist the original fact and Spring Modulith publication atomically.
 External Provider calls remain outside those transactions. A missing required snapshot, source, version
@@ -179,11 +221,16 @@ not treat the Payment-owned restoration worker handoff as the Plan 16 integratio
   become a successful completion publication;
 - the Ordering V2 producer and Settlement V2 consumer commit independently and the consumer does not live-read
   Merchant, Campaign, PointLot, Order snapshot or Payment to complete an event payload;
-- `PaymentRefundedV1` for completed and pre-acceptance-cancellation sources takes the correct Settlement and
-  Analytics branch without live Aggregate reads;
+- `PaymentRefundedV1` for completed, pre-completion and pre-acceptance-cancellation sources takes the correct
+  Settlement and Analytics branch without live mutable policy or terms reads;
 - same logical source with a new event ID is idempotent, while same source with a changed payload fails;
 - delayed event after a policy or contract change reproduces the original date and amount;
 - V1 cutover inventory blocks V2 producer activation when old publication or consumer evidence is nonzero.
+
+**Plan 16 verification evidence (2026-08-02):** the exact financial-event focused suite and
+event-contract/Modulith suite passed. `./gradlew clean build` passed 243 tests with no failure, error or skip.
+Missing/failed snapshot, allocation and target-publication writes roll back the owner result; cumulative
+partial refunds retain rounding remainder, and a later Merchant terms version does not change the event effect.
 
 ## Metrics
 

@@ -19,6 +19,7 @@ import java.time.Instant
 internal class PartialRefundRestorationService(
     private val paymentOperations: PartialRefundPaymentOperations,
     private val pointOperations: PartialRefundPointOperations,
+    private val orderRepository: OrderJpaRepository,
 ) {
     fun claimDue(
         now: Instant,
@@ -27,6 +28,12 @@ internal class PartialRefundRestorationService(
 
     fun callLoyalty(claim: ClaimedPartialRefundRestoration): Long {
         val source = paymentOperations.restorationCommand(claim.refundId)
+        val order =
+            orderRepository.findById(source.orderId).orElse(null)
+                ?: throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                    io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE,
+                    "Refund restoration Order source is missing",
+                )
         return pointOperations
             .restore(
                 RestorePartialRefundPointsCommand(
@@ -34,6 +41,9 @@ internal class PartialRefundRestorationService(
                     orderId = source.orderId,
                     refundSucceededAt = source.refundSucceededAt,
                     sourceReference = source.sourceReference,
+                    refundSourceReference = source.refundSourceReference,
+                    orderCompletedAt = order.completedAt,
+                    correlationId = source.correlationId,
                     policyVersionId = source.policyVersionId,
                     policyMode = PartialRefundPointPolicyMode.valueOf(source.policyMode.name),
                     compensationValidityDays = source.compensationValidityDays,

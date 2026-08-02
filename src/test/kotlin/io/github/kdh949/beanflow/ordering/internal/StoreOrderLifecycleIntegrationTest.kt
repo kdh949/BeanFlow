@@ -81,9 +81,7 @@ internal class StoreOrderLifecycleIntegrationTest
         @BeforeEach
         fun cleanDatabase() {
             await("previous event publications to complete") {
-                count(
-                    "SELECT count(*) FROM event_publication WHERE completion_date IS NULL",
-                ) == 0L
+                outstandingLocalListenerPublicationCount() == 0L
             }
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             jdbcTemplate.execute(
@@ -665,11 +663,24 @@ internal class StoreOrderLifecycleIntegrationTest
 
         private fun awaitNoOutstandingPublications() {
             await("event publications to complete") {
-                count(
-                    "SELECT count(*) FROM event_publication WHERE completion_date IS NULL",
-                ) == 0L
+                outstandingLocalListenerPublicationCount() == 0L
             }
         }
+
+        private fun outstandingLocalListenerPublicationCount(): Long =
+            count(
+                """
+                SELECT count(*)
+                  FROM event_publication
+                 WHERE completion_date IS NULL
+                   AND listener_id NOT IN (
+                       'beanflow.settlement.payment-refunded-v1',
+                       'beanflow.analytics.payment-refunded-v1',
+                       'beanflow.analytics.points-accrued-v1',
+                       'beanflow.analytics.points-restored-v1'
+                   )
+                """.trimIndent(),
+            )
 
         private fun await(
             description: String,
