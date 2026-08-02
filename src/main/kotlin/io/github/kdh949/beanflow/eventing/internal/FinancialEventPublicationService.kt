@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.PointsAccruedV1
 import io.github.kdh949.beanflow.eventing.api.PointsRestoredV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
+import io.github.kdh949.beanflow.eventing.api.SettlementItemCreatedV1
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
@@ -38,6 +39,11 @@ internal class FinancialEventPublicationService(
     override fun publish(event: PointsRestoredV1) {
         validator.validate(event)
         persist(event, POINTS_RESTORED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: SettlementItemCreatedV1) {
+        validator.validate(event)
+        persist(event, SETTLEMENT_ITEM_CREATED_TARGETS, event.envelope)
     }
 
     private fun persist(
@@ -119,6 +125,7 @@ internal class FinancialEventPublicationService(
             )
         val POINTS_ACCRUED_TARGETS = listOf("beanflow.analytics.points-accrued-v1")
         val POINTS_RESTORED_TARGETS = listOf("beanflow.analytics.points-restored-v1")
+        val SETTLEMENT_ITEM_CREATED_TARGETS = listOf("beanflow.analytics.settlement-item-created-v1")
     }
 }
 
@@ -212,6 +219,27 @@ internal class FinancialEventValidator {
         }
     }
 
+    fun validate(event: SettlementItemCreatedV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == SETTLEMENT_ITEM_CREATED &&
+                event.envelope.payloadVersion == 1 &&
+                event.envelope.aggregateId == event.settlementItemId &&
+                event.envelope.aggregateVersion == 0L &&
+                event.envelope.causationId == "settlement-item:${event.itemSource}",
+        )
+        if (event.settlementItemId == ZERO_UUID || event.settlementBatchId == ZERO_UUID ||
+            event.orderId == ZERO_UUID || event.storeId == ZERO_UUID || event.itemSource.isBlank() ||
+            event.itemSource != event.itemSource.trim() || event.itemSource.length > 240 ||
+            event.settlementDate != event.completedAt.atZone(SEOUL).toLocalDate() || event.currency != KRW ||
+            listOf(event.grossPaidKrw, event.feeKrw, event.benefitCostKrw, event.netSettlementKrw).any { it < 0 } ||
+            event.netSettlementKrw !=
+            exactSubtract(exactSubtract(event.grossPaidKrw, event.feeKrw), event.benefitCostKrw)
+        ) {
+            invalid("SettlementItemCreatedV1 required fields do not tie out")
+        }
+    }
+
     private fun validateEnvelope(
         envelope: EventEnvelope,
         eventSpecificValid: Boolean,
@@ -245,6 +273,7 @@ internal class FinancialEventValidator {
         const val PAYMENT_REFUNDED = "PaymentRefundedV1"
         const val POINTS_ACCRUED = "PointsAccruedV1"
         const val POINTS_RESTORED = "PointsRestoredV1"
+        const val SETTLEMENT_ITEM_CREATED = "SettlementItemCreatedV1"
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
         val ZERO_UUID: UUID = UUID(0, 0)
     }

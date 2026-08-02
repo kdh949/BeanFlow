@@ -2,7 +2,6 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
-import io.github.kdh949.beanflow.eventing.api.OrderCompletedV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
@@ -13,6 +12,8 @@ import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.payment.api.ApprovedPaymentSettlementOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -44,6 +45,9 @@ internal class StoreOrderTransitionService(
     private val storeAccessOperations: StoreAccessOperations,
     private val compensationOperations: RejectionCompensationOperations,
     private val rejectionCoordinator: OrderRejectionCoordinator,
+    private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
+    private val approvedPaymentSettlements: ApprovedPaymentSettlementOperations,
+    private val orderCompletedV2Factory: OrderCompletedV2Factory,
     private val auditRecordOperations: AuditRecordOperations,
     private val eventPublisher: ApplicationEventPublisher,
     private val identifierSource: IdentifierSource,
@@ -222,14 +226,34 @@ internal class StoreOrderTransitionService(
         correlationId: String,
         causationId: String,
     ) {
-        val eventId = identifierSource.next()
+        val aggregateVersion = order.version + 1
+        val snapshot = settlementInputSnapshots.read(order.id)
+        val payment = approvedPaymentSettlements.readForCompletion(order.id)
         eventPublisher.publishEvent(
-            OrderCompletedV1(
-                envelope(eventId, "OrderCompletedV1", order, now, correlationId, causationId),
-                order.id,
-                order.customerId,
-                order.storeId,
-                now,
+            orderCompletedV2Factory.create(
+                order =
+                    CompletedOrderFact(
+                        orderId = order.id,
+                        customerId = order.customerId,
+                        storeId = order.storeId,
+                        completedAt = now,
+                        aggregateVersion = aggregateVersion,
+                    ),
+                payment =
+                    ApprovedPaymentSettlementFact(
+                        orderId = payment.orderId,
+                        approvedAmountKrw = payment.approvedAmountKrw,
+                        currency = payment.currency,
+                        approvedAt = payment.approvedAt,
+                        approvalSource = payment.approvalSource,
+                    ),
+                snapshot = snapshot,
+                envelopeInput =
+                    OrderCompletedV2EnvelopeInput(
+                        eventId = identifierSource.next(),
+                        correlationId = correlationId,
+                        causationId = causationId,
+                    ),
             ),
         )
     }

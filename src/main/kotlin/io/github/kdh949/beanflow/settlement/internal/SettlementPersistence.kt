@@ -142,6 +142,16 @@ internal interface SettlementBatchJpaRepository : JpaRepository<SettlementBatchE
     ): SettlementBatchEntity?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select batch from SettlementBatchEntity batch " +
+            "where batch.storeId = :storeId and batch.settlementDate = :settlementDate",
+    )
+    fun findLockedByStoreIdAndSettlementDate(
+        @Param("storeId") storeId: UUID,
+        @Param("settlementDate") settlementDate: LocalDate,
+    ): SettlementBatchEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select batch from SettlementBatchEntity batch where batch.id = :id")
     fun findLockedById(
         @Param("id") id: UUID,

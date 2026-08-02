@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
+import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2Contract
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshot
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -34,9 +35,7 @@ internal data class OrderCompletedV2EnvelopeInput(
 )
 
 @Component
-internal class OrderCompletedV2Factory(
-    private val validator: OrderCompletedV2Validator,
-) {
+internal class OrderCompletedV2Factory {
     fun create(
         order: CompletedOrderFact,
         payment: ApprovedPaymentSettlementFact,
@@ -50,11 +49,11 @@ internal class OrderCompletedV2Factory(
                 envelope =
                     EventEnvelope(
                         eventId = envelopeInput.eventId,
-                        eventType = OrderCompletedV2Validator.EVENT_TYPE,
+                        eventType = OrderCompletedV2Contract.EVENT_TYPE,
                         aggregateId = order.orderId,
                         aggregateVersion = order.aggregateVersion,
                         occurredAt = order.completedAt,
-                        payloadVersion = OrderCompletedV2Validator.PAYLOAD_VERSION,
+                        payloadVersion = OrderCompletedV2Contract.PAYLOAD_VERSION,
                         correlationId = envelopeInput.correlationId,
                         causationId = envelopeInput.causationId,
                     ),
@@ -73,7 +72,7 @@ internal class OrderCompletedV2Factory(
                 netSettlementKrw = snapshot.netSettlementKrw,
                 completionSource = completionSource,
             )
-        validator.validate(event)
+        OrderCompletedV2Contract.validate(event)
         return event
     }
 
@@ -166,70 +165,5 @@ internal class OrderCompletedV2Factory(
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
         val TEN_THOUSAND: BigInteger = BigInteger.valueOf(10_000)
         val HASH_PATTERN = Regex("^[0-9a-f]{64}$")
-    }
-}
-
-@Component
-internal class OrderCompletedV2Validator {
-    fun validate(event: OrderCompletedV2) {
-        val envelope = event.envelope
-        if (envelope.eventType != EVENT_TYPE ||
-            envelope.payloadVersion != PAYLOAD_VERSION ||
-            envelope.aggregateId != event.orderId ||
-            envelope.occurredAt != event.completedAt ||
-            envelope.aggregateVersion < 0 ||
-            envelope.correlationId.isBlank() ||
-            envelope.causationId.isBlank() ||
-            event.settlementDate != event.completedAt.atZone(SEOUL).toLocalDate() ||
-            event.currency != "KRW" ||
-            event.feeRateBps !in 0..10_000 ||
-            event.completionSource != "order:${event.orderId}:completed:${envelope.aggregateVersion}" ||
-            listOf(
-                event.grossPaidKrw,
-                event.feeKrw,
-                event.couponCostKrw,
-                event.pointCostKrw,
-                event.benefitCostKrw,
-                event.netSettlementKrw,
-            ).any { it < 0 }
-        ) {
-            invalid("OrderCompletedV2 envelope or required fields are invalid")
-        }
-        val expectedBenefit = exactAdd(event.couponCostKrw, event.pointCostKrw)
-        val expectedNet = exactSubtract(exactSubtract(event.grossPaidKrw, event.feeKrw), expectedBenefit)
-        if (event.benefitCostKrw != expectedBenefit || event.netSettlementKrw != expectedNet || expectedNet < 0) {
-            invalid("OrderCompletedV2 monetary fields do not tie out")
-        }
-    }
-
-    private fun exactAdd(
-        left: Long,
-        right: Long,
-    ): Long =
-        try {
-            Math.addExact(left, right)
-        } catch (failure: ArithmeticException) {
-            invalid("OrderCompletedV2 monetary fields overflowed", failure)
-        }
-
-    private fun exactSubtract(
-        left: Long,
-        right: Long,
-    ): Long =
-        try {
-            Math.subtractExact(left, right)
-        } catch (failure: ArithmeticException) {
-            invalid("OrderCompletedV2 monetary fields overflowed", failure)
-        }
-
-    private fun invalid(
-        message: String,
-        cause: Throwable? = null,
-    ): Nothing = throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message).also { cause?.let(it::initCause) }
-
-    internal companion object {
-        const val EVENT_TYPE = "OrderCompletedV2"
-        const val PAYLOAD_VERSION = 2
-        val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }

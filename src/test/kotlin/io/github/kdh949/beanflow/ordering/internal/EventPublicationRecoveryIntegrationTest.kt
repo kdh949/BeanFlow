@@ -173,6 +173,49 @@ internal class EventPublicationRecoveryIntegrationTest
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
         }
 
+        @Test
+        fun `reserved analytics target remains durable without consuming retry attempts`() {
+            val event =
+                OrderReadyV1(
+                    envelope =
+                        EventEnvelope(
+                            eventId = UUID.randomUUID(),
+                            eventType = "OrderReadyV1",
+                            aggregateId = UUID.randomUUID(),
+                            aggregateVersion = 1,
+                            occurredAt = Instant.now(),
+                            payloadVersion = 1,
+                            correlationId = "reserved-analytics-correlation",
+                            causationId = "reserved-analytics-test",
+                        ),
+                    orderId = UUID.randomUUID(),
+                    customerId = UUID.randomUUID(),
+                    storeId = UUID.randomUUID(),
+                    readyAt = Instant.now(),
+                )
+            transactions.executeWithoutResult { eventPublisher.publishEvent(event) }
+            await("initial listener failure before target reservation") {
+                failingListener.callCount() == 1 && incompletePublicationAttemptCount() == 1
+            }
+            jdbcTemplate.update(
+                "UPDATE event_publication SET listener_id = 'beanflow.analytics.reserved-test' " +
+                    "WHERE completion_date IS NULL",
+            )
+            try {
+                clock.advance(Duration.ofMinutes(20))
+
+                recoveryWorker.runOnce()
+
+                assertThat(failingListener.callCount()).isEqualTo(1)
+                assertThat(incompletePublicationAttemptCount()).isEqualTo(1)
+                assertThat(eventPublicationManualReviewCount(event.envelope.correlationId)).isZero()
+            } finally {
+                jdbcTemplate.update(
+                    "DELETE FROM event_publication WHERE listener_id = 'beanflow.analytics.reserved-test'",
+                )
+            }
+        }
+
         private fun incompletePublicationCount(): Long =
             requireNotNull(
                 jdbcTemplate.queryForObject(
