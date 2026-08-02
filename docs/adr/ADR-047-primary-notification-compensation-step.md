@@ -114,6 +114,16 @@ Order와 Customer 식별자는 metric tag로 사용하지 않는다.
 
 - **Not measured:** Case 완료와 후속 환불 알림 완료 사이 시간
 
+## Implementation Checkpoint (2026-08-03)
+
+- 공통 Case 생성기는 두 trigger 모두 `CUSTOMER_NOTIFICATION=PROCESSING`으로 시작해 terminal
+  step을 나중에 재개방하지 않고도 ADR-047의 기본 알림 계약을 수용한다.
+- Plan 30 production producer는 기존 `OrderRejectedV1` notification target만 활성화한다.
+  `OrderCancelledV1` Notification consumer와 취소 접수 Delivery 생성은 추가하지 않았으며
+  Plan 40의 Tx C1이 Case와 Delivery를 함께 열어 이 step을 수렴시킨다.
+- 환불 후속 success/delayed 알림은 계속 이 step의 target이 아니며 별도 publication과
+  Delivery 원장을 따른다.
+
 ## Revisit Conditions
 
 OrderCompensationCase가 고정 step enum 대신 의무별 child workflow를 지원하거나,

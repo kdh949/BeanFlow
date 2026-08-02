@@ -76,6 +76,26 @@ internal class OrderCompensationPersistenceTest
         }
 
         @Test
+        fun `customer cancellation foundation keeps the primary notification step pending`() {
+            val orderId = UUID.randomUUID()
+            val command =
+                command(
+                    orderId = orderId,
+                    trigger = OrderCompensationTrigger.CUSTOMER_CANCELLATION,
+                    couponPolicy = current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.COUPON),
+                    pointsPolicy = current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.POINTS),
+                    sourceReference = "order:$orderId:customer-cancellation:7",
+                )
+
+            val view = operations.open(command)
+
+            assertThat(view.steps).hasSize(6)
+            assertThat(view.steps.single { it.type == OrderCompensationStepType.CUSTOMER_NOTIFICATION }.state)
+                .isEqualTo(OrderCompensationStepState.PROCESSING)
+            assertThat(view.benefitPolicies).hasSize(2)
+        }
+
+        @Test
         fun `publication exhaustion changes only one step without a business attempt`() {
             val command = command()
             operations.open(command)
@@ -157,29 +177,36 @@ internal class OrderCompensationPersistenceTest
             paymentRequired: Boolean = true,
             couponRequired: Boolean = true,
             pointsRequired: Boolean = true,
-        ): OpenOrderCompensationCaseCommand {
-            val orderId = UUID.randomUUID()
-            return OpenOrderCompensationCaseCommand(
+            orderId: UUID = UUID.randomUUID(),
+            trigger: OrderCompensationTrigger = OrderCompensationTrigger.STORE_REJECTION,
+            couponPolicy: ExpiredBenefitRestorationPolicySnapshot =
+                current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, ExpiredBenefitType.COUPON),
+            pointsPolicy: ExpiredBenefitRestorationPolicySnapshot =
+                current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, ExpiredBenefitType.POINTS),
+            sourceReference: String = "order:$orderId:rejection:7",
+        ): OpenOrderCompensationCaseCommand =
+            OpenOrderCompensationCaseCommand(
                 caseId = UUID.randomUUID(),
                 eventId = UUID.randomUUID(),
                 orderId = orderId,
                 terminalOrderVersion = 7,
                 customerId = UUID.randomUUID(),
                 storeId = UUID.randomUUID(),
-                trigger = OrderCompensationTrigger.STORE_REJECTION,
-                sourceReference = "order:$orderId:rejection:7",
-                couponPolicy = current(ExpiredBenefitType.COUPON),
-                pointsPolicy = current(ExpiredBenefitType.POINTS),
+                trigger = trigger,
+                sourceReference = sourceReference,
+                couponPolicy = couponPolicy,
+                pointsPolicy = pointsPolicy,
                 paymentRequired = paymentRequired,
                 couponRequired = couponRequired,
                 pointsRequired = pointsRequired,
                 correlationId = "compensation-test-$orderId",
                 now = NOW,
             )
-        }
 
-        private fun current(benefitType: ExpiredBenefitType): ExpiredBenefitRestorationPolicySnapshot =
-            policies.current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, benefitType)
+        private fun current(
+            trigger: ExpiredBenefitRestorationTrigger,
+            benefitType: ExpiredBenefitType,
+        ): ExpiredBenefitRestorationPolicySnapshot = policies.current(trigger, benefitType)
 
         private fun count(table: String): Long =
             requireNotNull(jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java))

@@ -215,7 +215,7 @@ internal class OrderCompensationService(
             }
 
             OrderCompensationStepType.CUSTOMER_NOTIFICATION -> {
-                required(command.trigger == OrderCompensationTrigger.STORE_REJECTION)
+                OrderCompensationStepState.PROCESSING
             }
 
             OrderCompensationStepType.PICKUP,

@@ -723,6 +723,7 @@ else:
         ('/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}', 'get'),
         ('/store-orders/{orderId}/status', 'patch'),
+        ('/operations/orders/{orderId}/compensation', 'get'),
         ('/operations/policies/expired-benefit-restoration', 'get'),
         ('/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}', 'patch'),
     }
@@ -739,8 +740,31 @@ else:
         sys.exit(1)
     deployed_schemas = deployed_spec.get('components', {}).get('schemas', {})
     deployed_transition = deployed_schemas.get('DeployedStoreOrderTransitionResult', {})
-    if set(deployed_transition.get('required', [])) != {'order', 'rejectionRecovery', 'replayed'}:
-        print('Deployed store transition must preserve the current legacy response wrapper.', file=sys.stderr)
+    if set(deployed_transition.get('required', [])) != {'order'}:
+        print('Deployed store transition must use the common response wrapper.', file=sys.stderr)
+        sys.exit(1)
+    deployed_transition_fields = set(deployed_transition.get('properties', {}))
+    if deployed_transition_fields != {'order', 'compensationRecovery'}:
+        print('Deployed store transition compensation projection is incomplete or excessive.', file=sys.stderr)
+        sys.exit(1)
+    deployed_compensation = deployed_schemas.get('DeployedStoreCompensationSummary', {})
+    if set(deployed_compensation.get('required', [])) != {'trigger', 'state', 'updatedAt'}:
+        print('Deployed store compensation summary must remain abbreviated.', file=sys.stderr)
+        sys.exit(1)
+    if set(deployed_compensation.get('properties', {})) != {'trigger', 'state', 'updatedAt'}:
+        print('Deployed store compensation summary exposes operator-only fields.', file=sys.stderr)
+        sys.exit(1)
+    deployed_operator_get = deployed_spec['paths']['/operations/orders/{orderId}/compensation']['get']
+    deployed_operator_refs = {
+        parameter.get('$ref')
+        for parameter in deployed_operator_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if deployed_operator_refs != {
+        './beanflow-v1.yaml#/components/parameters/OrderId',
+        './beanflow-v1.yaml#/components/parameters/AccessReason',
+    }:
+        print('Deployed operator compensation GET must require order ID and audited access reason.', file=sys.stderr)
         sys.exit(1)
     deployed_policy_get = deployed_spec['paths']['/operations/policies/expired-benefit-restoration']['get']
     deployed_policy_get_refs = {
@@ -1743,9 +1767,10 @@ else:
     if '실제 Flyway 번호는 ADR-072의 migration-writer lease' not in re.sub(r'\s+', ' ', idempotency_adr):
         print('ADR-032 must use ADR-072 branch-time migration numbering.', file=sys.stderr)
         sys.exit(1)
-    plan30 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md'
-    ).read_text(encoding='utf-8')
+    plan30_path = root / 'docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md'
+    if not plan30_path.exists():
+        plan30_path = root / 'docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md'
+    plan30 = plan30_path.read_text(encoding='utf-8')
     stable_listener_ids = (
         'beanflow.order-compensation.order-rejected.payment.v1',
         'beanflow.order-compensation.order-rejected.pickup.v1',

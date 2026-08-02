@@ -211,6 +211,15 @@ Order, Case, policy version, actor와 customer ID는 metric tag로 사용하지 
 
 - **Not measured:** trigger×혜택별 정책 변경 빈도와 새 혜택 보상 비용
 
+## Implementation Checkpoint (2026-08-03)
+
+- Plan 11의 다섯 head/version 저장소를 재구현하지 않고, store rejection coordinator가
+  종료용 COUPON→POINTS 두 head를 읽어 Case child와 `OrderRejectedV1`에 함께 고정한다.
+- `OrderCompensationCase` 저장 시 required flag와 무관하게 두 child를 저장하며 deferred
+  cardinality constraint가 정확히 두 row를 강제한다.
+- 두 V1은 `couponPolicy`와 `pointsPolicy` 전체 snapshot을 사용하고 구 단일 policy field,
+  V2 또는 compatibility DTO를 두지 않는다.
+
 ## Revisit Conditions
 
 새 benefit type 또는 trigger가 추가되거나, 다섯 head 운영이 실제 비용 대비

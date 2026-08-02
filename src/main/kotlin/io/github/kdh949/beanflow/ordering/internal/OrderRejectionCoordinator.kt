@@ -12,8 +12,11 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
 
 internal data class RejectionActor(
@@ -27,6 +30,7 @@ internal class OrderRejectionCoordinator(
     private val compensationOperations: OrderCompensationOperations,
     private val eventPublisher: ApplicationEventPublisher,
     private val identifierSource: IdentifierSource,
+    private val meterRegistry: MeterRegistry,
 ) {
     fun reject(
         order: OrderEntity,
@@ -90,6 +94,18 @@ internal class OrderRejectionCoordinator(
                 couponRequired = order.couponDiscountKrw > 0,
                 pointsRequired = order.pointsAppliedKrw > 0,
             ),
+        )
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    meterRegistry
+                        .counter(
+                            "beanflow.order.termination.event.count",
+                            "event_type",
+                            "order_rejected_v1",
+                        ).increment()
+                }
+            },
         )
         return recovery
     }

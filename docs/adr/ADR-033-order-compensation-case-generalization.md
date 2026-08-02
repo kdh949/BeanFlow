@@ -199,6 +199,19 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 
 Order, Store, Customer ID는 metric tag로 사용하지 않는다.
 
+## Implementation Checkpoint (2026-08-03)
+
+- pre-release gate 재확인 뒤 V8이 공통 Case, 두 benefit child와 여섯 step의 최종 shape를
+  직접 만들고 deferred constraint가 child/step cardinality를 commit 시점에 검증한다.
+- store rejection transaction은 Order 전이, 두 policy 선택, Case/Audit, persistent event
+  publications와 store idempotency V2 응답을 한 local transaction으로 commit한다.
+- 매장 projection은 trigger/state/updatedAt만 반환한다. 전체 여섯 step은 active
+  `ORDER_COMPENSATION_READ` grant와 `X-Access-Reason`, read Audit을 요구하는 운영자 endpoint에만
+  반환한다.
+- Case/step terminal 상태는 단조롭고 owner transaction은 분리된다. publication exhaustion은
+  중앙 registry가 매핑한 한 step만 변경하며 publication completion attempt를 business
+  `attemptCount`에 합산하지 않는다.
+
 ## Revisit Conditions
 
 두 trigger의 보상 대상이 실제로 달라지거나, 한 주문에 복수 보상 Case가 필요해지거나,

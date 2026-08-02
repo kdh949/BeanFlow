@@ -187,6 +187,16 @@ Order, customer, issuance, lot, Case와 policy version ID는 metric tag로 사�
 
 - **Not measured:** 고객 취소에서 만료 복원을 생략한 가치와 후속 문의율
 
+## Implementation Checkpoint (2026-08-03)
+
+- V22가 CouponReservation·PointReservation, 보상 CouponIssuance, 종료 PointTransaction과
+  보상 PointLot에 source/trigger/policy/disposition lineage와 immutable CHECK를 추가한다.
+- Coupon·Points owner는 같은 source/trigger/policy만 멱등 재생하고 mismatch에서 기존 가치와
+  원장을 보존한다. 부분 환불 뒤 주문 종료는 allocation별 성공 복원액을 차감한 잔여만
+  종료 source로 복원한다.
+- `SKIPPED_EXPIRED`와 `RESTORE_SKIPPED_EXPIRED`는 가용 가치를 늘리지 않는 성공 결과로
+  보존되며 listener가 해당 benefit step을 `SUCCEEDED`로 수렴시킨다.
+
 ## Revisit Conditions
 
 수락 후 취소 또는 운영자 보상이 같은 복원 metadata를 사용하게 되거나,

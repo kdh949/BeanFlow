@@ -124,6 +124,14 @@ Order, Store, Customer와 reason code는 metric tag로 사용하지 않는다.
 
 - **Not measured:** 제거 전후 publication payload byte 크기
 
+## Implementation Checkpoint (2026-08-03)
+
+- `OrderCancelledV1` public DTO와 exact contract fixture는 이 ADR의 최소 필드 집합만 가진다.
+- Fulfillment·Inventory·Promotion·Loyalty 네 stable listener만 등록됐고 Payment·Notification
+  target은 없다. 각 listener는 Order-linked owner row와 terminal version source만 사용한다.
+- Plan 30은 이 consumer foundation만 활성화하며 고객 취소 producer/HTTP command는 만들지
+  않는다. 최초 운영 publication 전 gate 재확인과 이후 V1 동결 조건은 유지한다.
+
 ## Revisit Conditions
 
 새 독립 consumer가 실제로 고객·매장 routing snapshot을 요구할 때 새 event/version

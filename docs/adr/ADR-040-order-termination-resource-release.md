@@ -83,8 +83,10 @@
 
 ## Consequences
 
-- V9를 수정하지 않고 후속 forward migration에서 CHECK 교체, 상태 update, trigger
-  backfill과 새 CHECK를 수행해야 한다.
+- ADR-059 gate가 유효한 clean-cutover 경로에서는 Plan 30이 V9 source를 최종 상태와
+  trigger/source CHECK로 직접 작성한다. legacy 후보가 하나라도 있으면 V9 precheck가
+  backfill을 추측하지 않고 실패한다. gate가 무효화된 forward 경로에서만 상태 update와
+  trigger backfill을 별도 migration으로 설계한다.
 - 두 owner enum, entity, public API, 거절 listener와 테스트 이름이 바뀐다.
 - 기존 거절 source reference는 그대로 유지되므로 진행 중 publication replay와
   migration 후 row 멱등성이 깨지지 않는다.
@@ -135,6 +137,15 @@
 Order, reservation, stock unit, store와 customer ID는 metric tag로 사용하지 않는다.
 
 - **Not measured:** trigger별 확정 자원 복원량과 충돌 원인 분포
+
+## Implementation Checkpoint (2026-08-03)
+
+- V9가 Pickup·Stock의 `RELEASED_AFTER_TERMINATION`, trigger/source nullability와 legacy
+  `RELEASED_BY_REJECTION` 후보 0 precheck를 직접 만든다.
+- 두 owner API와 `OrderRejectedV1`/`OrderCancelledV1` listener는 trigger를 명시적으로
+  전달하며 source 문자열을 파싱하지 않는다.
+- owner transaction은 각 reservation row만 잠그고 동일 source/trigger replay에는 수량을
+  다시 변경하지 않으며 mismatch는 `COMPENSATION_SOURCE_CONFLICT`로 실패한다.
 
 ## Revisit Conditions
 
