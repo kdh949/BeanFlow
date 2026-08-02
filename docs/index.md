@@ -43,6 +43,7 @@
 - [Quality Evidence Map](quality/quality-evidence-map.md)
 - [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
 - [Code Review Guide](review/code-review.md)
+- [Settlement Foundation Runbook](operations/settlement-foundation-runbook.md)
 
 ## Execution Plans
 
@@ -54,7 +55,7 @@
 - [Cancellation 14 PointAccount Read Vertical Slice](exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
 - [Cancellation 15 Settlement Input Snapshot Foundation](exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
 - [Cancellation 16 Immutable Refund and Loyalty Event Producer](exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md)
-- [Cancellation 20 Settlement Foundation](exec-plans/active/customer-order-cancellation-20-settlement-foundation.md)
+- [Cancellation 20 Settlement Foundation](exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md)
 - [Settlement Batch, Adjustment, and Dispute](exec-plans/active/settlement-batch-adjustment-and-dispute.md)
 - [Cancellation 30 Order Compensation Foundation](exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md)
 - [Cancellation 40 Command](exec-plans/active/customer-order-cancellation-40-command.md)

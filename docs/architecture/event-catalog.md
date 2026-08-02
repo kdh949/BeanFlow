@@ -87,8 +87,17 @@ Loyalty `ACCRUAL`/restoration owner write와 Analytics target publication은 각
 transaction에 속한다. completed/pre-completion refund effect는 Plan 12 allocation과 Plan 15
 snapshot의 누적 차분으로 만들고, pre-acceptance branch에는 effect를 넣지 않는다. 동일
 source/version/payload replay는 새 row를 만들지 않으며 changed payload, missing snapshot/allocation,
-target row 저장 실패는 owner transaction을 실패시킨다. Settlement/Analytics listener와 projection은
-추가하지 않았으므로 consumer 열은 해당 후속 계획의 target architecture로 남는다.
+target row 저장 실패는 owner transaction을 실패시킨다.
+
+2026-08-03 Plan 20 checkpoint: incomplete/deployed `OrderCompletedV1` inventory 0 gate 뒤 guarded
+completion producer를 V2로 교체하고 `beanflow.settlement.order-completed-v2` consumer를 활성화했다.
+consumer는 event payload만으로 최소 `OPEN` Batch, immutable Item, Audit과
+`SettlementItemCreatedV1` Analytics target을 같은 local transaction에 저장한다. 또한
+`beanflow.settlement.payment-refunded-v1` listener가 `PRE_ACCEPTANCE_CANCELLATION`을 실제
+Order `CUSTOMER_REQUEST` terminal evidence, Refund `SUCCEEDED`/reason/source/version/amount/time과
+Item 부재로 재검증해 `SETTLEMENT_REFUND_EXCLUDED` Audit 뒤에만 완료한다. 그 밖의 Refund나
+불일치는 성공/no-op으로 소비하지 않는다. Analytics target/projection과 completed-refund
+Adjustment consumer는 계속 후속 계획 범위다.
 
 `OrderCompletedV1`은 frozen trigger로 유지한다. Plan 13의 Loyalty accrual은 이 event의 payload를
 확장하지 않고, ADR-073의 typed Ordering boundary가 반환하는 immutable

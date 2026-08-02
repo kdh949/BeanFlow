@@ -48,7 +48,7 @@ required=(
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
-  "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
@@ -1540,7 +1540,7 @@ else:
         root / 'docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md'
     ).read_text(encoding='utf-8')
     plan20 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md'
     ).read_text(encoding='utf-8')
     plan16 = (
         root / 'docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md'

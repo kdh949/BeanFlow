@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
+- **Implementation owners:** [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
 
 ## Context
 
@@ -126,6 +126,14 @@ API 선행조건을 충족하면서 migration 중복을 막을 수 있다.
 - `CALCULATED`/`CONFIRMED` Batch에 새 Item source가 도착하면 Batch를 바꾸지 않고 source당
   하나의 late-item reprocessing path를 남긴다.
 - migration inventory에서 matrix의 object가 한 계획의 Flyway migration에만 존재한다.
+
+## Implementation Evidence
+
+- 2026-08-03 V21은 최소 Batch identity/state/store-date unique, immutable Item 전체, Batch FK,
+  cursor index와 open-batch/mutation trigger를 Plan 20 단일 migration으로 만들었다.
+- 동시 same-store/date completion은 Batch 하나에 수렴하고 source/order 중복은 새 Item을 만들지
+  않는다. 닫힌 Batch late Item은 Batch를 변경하지 않고 source-unique
+  `SETTLEMENT_LATE_ITEM` case를 남기며 event를 완료하지 않는다.
 
 ## Metrics
 

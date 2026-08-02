@@ -167,6 +167,11 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   이동하면서 direct successor인 Plan 20과 Analytics의 dependency path를 함께 갱신했다. Plan 20은
   모든 direct dependency evidence가 completed라 `Implementation-Ready=true`로 전환했고, Analytics는
   다른 producer dependencies가 active라 `false`를 유지했다.
+- **Plan 20 completion evidence (2026-08-03):** 단독 migration writer로 V21을 작성하고 최소
+  Settlement Batch/Item, V2 completion cutover/consumer, signed Item query와 cancellation exclusion을
+  270-test clean build로 검증한 뒤 completed path로 이동했다. direct successor인 Plan 30과 Settlement
+  lifecycle은 모든 dependency가 completed라 `Implementation-Ready=true`로 전환했고, Analytics는
+  Settlement lifecycle과 point-adjustment가 active라 `false`를 유지했다.
 
 ## Related Decisions
 

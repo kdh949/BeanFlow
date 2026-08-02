@@ -176,6 +176,11 @@ canonical filter hash를 signature 대상에 넣으면 다른 radius, account, s
 - cursor가 raw coordinate, secret 또는 Authorization value를 포함하지 않으며 logs/metric tags에도 남지
   않는다.
 
+**Plan 20 endpoint evidence (2026-08-03):** Settlement Batch Item 조회가 common codec의
+endpoint/filter binding, 15분 expiry와 `(completedAt ASC, itemId ASC)` tuple adapter를 사용한다.
+default/max limit, tamper/expiry, 다른 store/Batch scope 재사용과 authorization 재검증 통합 테스트가
+통과했으며 별도 key/secret fallback은 추가하지 않았다.
+
 ## Metrics
 
 - `beanflow.pagination.cursor.validation.count{endpoint,outcome}`

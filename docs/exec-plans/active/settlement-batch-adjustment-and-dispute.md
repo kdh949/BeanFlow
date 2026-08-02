@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -29,8 +29,9 @@
   취소 `NOT_APPLICABLE` Audit을 소유하는 direct phase predecessor다. signed-cursor foundation은
   Batch list와 Item cursor를 이 계획이 직접 소비하는 독립 input이다. 그 merged baseline에는 Plan 10의
   Refund allocation, Coupon attribution, PointLot issuer snapshot과 `RECOVERY` ledger가 포함된다.
-- 현재 Settlement/Dispute package와 migration은 없다. Plan 20과 signed-cursor Outcome/migration evidence가
-  실제로 통과하기 전에는 이 계획의 코드·migration을 시작하지 않는다.
+- Settlement package와 V21 최소 Batch/Item migration, V2 consumer, signed Item query와 고객 취소
+  제외 Audit은 completed Plan 20에 존재한다. Dispute package, Batch lifecycle summary와 Adjustment
+  migration은 아직 없으며 이 계획이 ADR-072 lease 뒤 forward migration으로 확장한다.
 - OpenAPI에는 Batch 목록, Batch Item 조회, `POST /settlement-items/{itemId}/disputes`가 있다.
   Batch 계산·확정과 Dispute 판정은 내부 Application Service/worker이며 공개 운영 endpoint를 만들지 않는다.
 
@@ -196,7 +197,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Progress
 
-- [ ] Plan 16/20 precondition evidence
+- [x] Plan 16/20 precondition evidence
 - [ ] Batch/Adjustment/Dispute schema와 domain invariant
 - [ ] calculation/confirmation과 Batch query
 - [ ] refund adjustment/carry-forward
@@ -218,14 +219,18 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 | 2026-08-01 | Plan boundary | 최소 Batch/Item/제외 Audit은 Plan 20, lifecycle summary/Adjustment는 Settlement checkpoint, Dispute schema/workflow는 별도 Dispute checkpoint | 소유권·commit 경계 혼동 방지 | ADR-067, Plan 20 |
 | 2026-08-01 | Accepted | direct phase dependency는 Plan 20과 signed-cursor foundation이며 Plan 10/15 artifact는 merged baseline으로 소비 | Batch list가 공통 codec을 직접 소비하되 ancestor path 중복과 branch-base 추측은 방지 | ADR-070, ADR-072 |
 | 2026-08-01 | Accepted existing | Dispute Context가 SettlementDispute/held amount/decision event를 소유하고 Settlement는 Adjustment command만 제공 | Context Map·용어집·ADR-018과 일치 | ADR-018, Context Map |
+| 2026-08-03 | Ready | Plan 20의 V21 Batch/Item, V2 consumer, signed query와 exclusion evidence를 verified input으로 소비 | 두 direct dependency completion과 migration writer 선행 순서를 확인 | completed Plan 20, ADR-072 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 16/20의 actual validation evidence가 통과한 뒤에만 시작한다. 완료 시
-정상·실패·중복·restart 경로와 남은 운영 제한을 실제 검증 결과로 기록한다.
+미구현 상태다. Plan 20과 signed-cursor foundation의 actual validation evidence가 모두 통과해
+`Implementation-Ready=true`다. ADR-072 migration-writer lease 뒤 시작하며, 완료 시 정상·실패·중복·
+restart 경로와 남은 운영 제한을 실제 검증 결과로 기록한다.
 
 ## Revision Notes
 
 - 2026-08-01: Accepted 정산·이의제기 결정에 대응하는 누락 ExecPlan을 최초 작성.
 - 2026-08-01: ADR-067의 최소 Batch ownership, ADR-068 event contract, ADR-070 signed cursor와
   Dispute Context ownership을 반영했다.
+- 2026-08-03: Plan 20 completed dependency와 실제 V21/consumer/query/exclusion outcome을 반영하고
+  implementation-ready로 전환했다.
