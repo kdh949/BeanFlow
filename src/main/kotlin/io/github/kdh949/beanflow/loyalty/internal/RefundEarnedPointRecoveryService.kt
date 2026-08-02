@@ -1,5 +1,8 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperations
+import io.github.kdh949.beanflow.eventing.api.PointsAccruedV1
 import io.github.kdh949.beanflow.loyalty.api.AccrualUnitKey
 import io.github.kdh949.beanflow.loyalty.api.AccrueCompletedOrderPointsCommand
 import io.github.kdh949.beanflow.loyalty.api.AccrueCompletedOrderPointsResult
@@ -32,6 +35,7 @@ internal class RefundEarnedPointRecoveryService(
     private val accrualResultRepository: PointAccrualResultJpaRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val identifierSource: IdentifierSource,
+    private val publications: FinancialEventPublicationOperations,
     private val meterRegistry: MeterRegistry,
 ) : RefundEarnedPointRecoveryOperations {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -163,17 +167,18 @@ internal class RefundEarnedPointRecoveryService(
                 ),
             )
         account.availablePointsKrw = Math.addExact(account.availablePointsKrw, accruedAmount)
-        transactionRepository.save(
-            PointTransactionEntity(
-                id = identifierSource.next(),
-                pointAccountId = account.id,
-                pointLotId = lot.id,
-                amountKrw = accruedAmount,
-                type = PointTransactionType.ACCRUAL,
-                sourceReference = "order:${command.orderId}:completion-accrual:transaction",
-                occurredAt = command.completedAt,
-            ),
-        )
+        val accrualTransaction =
+            transactionRepository.save(
+                PointTransactionEntity(
+                    id = identifierSource.next(),
+                    pointAccountId = account.id,
+                    pointLotId = lot.id,
+                    amountKrw = accruedAmount,
+                    type = PointTransactionType.ACCRUAL,
+                    sourceReference = "order:${command.orderId}:completion-accrual:transaction",
+                    occurredAt = command.completedAt,
+                ),
+            )
 
         val pendingRows = pendingRepository.findPendingLocked(account.id)
         verifyPendingSummary(account, pendingRows)
@@ -224,6 +229,27 @@ internal class RefundEarnedPointRecoveryService(
                 pointLotId = lot.id,
                 completedAt = command.completedAt,
                 createdAt = command.processedAt,
+            ),
+        )
+        publications.publish(
+            PointsAccruedV1(
+                envelope =
+                    EventEnvelope(
+                        eventId = identifierSource.next(),
+                        eventType = POINTS_ACCRUED_EVENT_TYPE,
+                        aggregateId = account.id,
+                        aggregateVersion = Math.addExact(account.version, 1),
+                        occurredAt = command.completedAt,
+                        payloadVersion = 1,
+                        correlationId = command.correlationId,
+                        causationId = "point-transaction:${accrualTransaction.sourceReference}",
+                    ),
+                pointTransactionSource = accrualTransaction.sourceReference,
+                orderCompletionSource = command.completionSourceReference,
+                orderId = command.orderId,
+                orderCompletedAt = command.completedAt,
+                amountKrw = accruedAmount,
+                currency = "KRW",
             ),
         )
         metric("completion_accrual", if (offset == 0L) "accrued" else "pending_offset")
@@ -405,6 +431,7 @@ internal class RefundEarnedPointRecoveryService(
         val keys = command.units.map { AccrualUnitKey(it.orderLineId, it.unitPosition) }
         val issuer = command.issuerReference.trim()
         if (command.orderId == ZERO_UUID || command.customerId == ZERO_UUID ||
+            command.correlationId.isBlank() || command.correlationId.length > 240 ||
             command.completionSourceReference.isBlank() || command.completionSourceReference.length > 240 ||
             command.completionAggregateVersion < 0 || command.snapshotSchemaVersion < 1 ||
             !HASH_PATTERN.matches(command.snapshotHash) || command.snapshotGrossAmountKrw < 0 ||
@@ -461,6 +488,7 @@ internal class RefundEarnedPointRecoveryService(
     }
 
     private companion object {
+        const val POINTS_ACCRUED_EVENT_TYPE = "PointsAccruedV1"
         val ZERO_UUID: UUID = UUID(0, 0)
         val HASH_PATTERN = Regex("^[0-9a-f]{64}$")
     }

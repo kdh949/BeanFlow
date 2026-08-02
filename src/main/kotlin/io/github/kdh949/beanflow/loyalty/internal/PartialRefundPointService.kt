@@ -1,5 +1,9 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperations
+import io.github.kdh949.beanflow.eventing.api.PointRestorationDisposition
+import io.github.kdh949.beanflow.eventing.api.PointsRestoredV1
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointOperations
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointPolicyMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointRestorationResult
@@ -30,6 +34,7 @@ internal class PartialRefundPointService(
     private val transactionRepository: PointTransactionJpaRepository,
     private val restorationRepository: PartialRefundRestorationJpaRepository,
     private val identifierSource: IdentifierSource,
+    private val publications: FinancialEventPublicationOperations,
     private val meterRegistry: MeterRegistry,
 ) : PartialRefundPointOperations {
     @Transactional(propagation = Propagation.MANDATORY)
@@ -166,23 +171,24 @@ internal class PartialRefundPointService(
                     }
                 }
             val source = sliceSource(command, slice.orderLineId, allocation.id)
-            transactionRepository.save(
-                PointTransactionEntity(
-                    id = identifierSource.next(),
-                    pointAccountId = lockedAccount.id,
-                    pointLotId = restoredLot.id,
-                    amountKrw = slice.amountKrw,
-                    type = transactionType,
-                    sourceReference = "$source:transaction",
-                    occurredAt = command.refundSucceededAt,
-                    refundId = command.refundId,
-                    orderLineId = slice.orderLineId,
-                    pointReservationAllocationId = allocation.id,
-                    restorationTrigger = PARTIAL_REFUND,
-                    restorationPolicyVersionId = command.policyVersionId,
-                    restorationDisposition = disposition.name,
-                ),
-            )
+            val pointTransaction =
+                transactionRepository.save(
+                    PointTransactionEntity(
+                        id = identifierSource.next(),
+                        pointAccountId = lockedAccount.id,
+                        pointLotId = restoredLot.id,
+                        amountKrw = slice.amountKrw,
+                        type = transactionType,
+                        sourceReference = "$source:transaction",
+                        occurredAt = command.refundSucceededAt,
+                        refundId = command.refundId,
+                        orderLineId = slice.orderLineId,
+                        pointReservationAllocationId = allocation.id,
+                        restorationTrigger = PARTIAL_REFUND,
+                        restorationPolicyVersionId = command.policyVersionId,
+                        restorationDisposition = disposition.name,
+                    ),
+                )
             restorationRepository.save(
                 PartialRefundRestorationEntity(
                     id = identifierSource.next(),
@@ -204,6 +210,29 @@ internal class PartialRefundPointService(
                     restoredAt = command.refundSucceededAt,
                 ),
             )
+            publications.publish(
+                PointsRestoredV1(
+                    envelope =
+                        EventEnvelope(
+                            eventId = identifierSource.next(),
+                            eventType = POINTS_RESTORED_EVENT_TYPE,
+                            aggregateId = lockedAccount.id,
+                            aggregateVersion = Math.addExact(lockedAccount.version, 1),
+                            occurredAt = command.refundSucceededAt,
+                            payloadVersion = 1,
+                            correlationId = command.correlationId,
+                            causationId = "point-transaction:${pointTransaction.sourceReference}",
+                        ),
+                    pointTransactionSource = pointTransaction.sourceReference,
+                    refundSource = command.refundSourceReference,
+                    orderId = command.orderId,
+                    refundSucceededAt = command.refundSucceededAt,
+                    orderCompletedAt = command.orderCompletedAt,
+                    amountKrw = slice.amountKrw,
+                    currency = "KRW",
+                    restorationDisposition = disposition.toEventDisposition(),
+                ),
+            )
             meterRegistry
                 .counter(
                     "beanflow.loyalty.partial_refund_restoration.count",
@@ -219,7 +248,8 @@ internal class PartialRefundPointService(
     }
 
     private fun validate(command: RestorePartialRefundPointsCommand) {
-        if (command.sourceReference.isBlank() || command.policyVersionId < 1 ||
+        if (command.sourceReference.isBlank() || command.refundSourceReference.isBlank() ||
+            command.correlationId.isBlank() || command.policyVersionId < 1 ||
             command.compensationValidityDays !in 1..365 || command.slices.isEmpty() ||
             command.slices.any { it.amountKrw <= 0 || it.issuerReference.isBlank() }
         ) {
@@ -269,12 +299,20 @@ internal class PartialRefundPointService(
         allocationId: UUID,
     ) = "${sliceSource(command, lineId, allocationId)}:lot"
 
+    private fun PartialRefundRestorationDisposition.toEventDisposition(): PointRestorationDisposition =
+        when (this) {
+            PartialRefundRestorationDisposition.ORIGINAL_LOT -> PointRestorationDisposition.RESTORE
+            PartialRefundRestorationDisposition.COMPENSATION_LOT -> PointRestorationDisposition.COMPENSATION
+            PartialRefundRestorationDisposition.SKIPPED_EXPIRED -> PointRestorationDisposition.SKIPPED
+        }
+
     private fun fail(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
 
     private companion object {
+        const val POINTS_RESTORED_EVENT_TYPE = "PointsRestoredV1"
         const val PARTIAL_REFUND = "PARTIAL_REFUND"
     }
 }

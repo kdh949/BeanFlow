@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderRefundSnapshotOperations
+import io.github.kdh949.beanflow.ordering.api.RefundResultOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.RefundableOrderLineSnapshot
 import io.github.kdh949.beanflow.ordering.api.RefundableOrderSnapshot
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
@@ -30,8 +31,11 @@ internal class OrderRefundSnapshotService(
         }
         return RefundableOrderSnapshot(
             orderId = order.id,
+            customerId = order.customerId,
             storeId = order.storeId,
             state = order.state.name,
+            completedAt = order.completedAt,
+            aggregateVersion = order.version,
             currency = order.currency,
             lines =
                 lines.map {
@@ -46,6 +50,22 @@ internal class OrderRefundSnapshotService(
                         cashPayableKrw = it.cashPayableKrw,
                     )
                 },
+        )
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockResultSnapshot(orderId: UUID): RefundResultOrderSnapshot {
+        val order =
+            orderRepository.findLockedById(orderId)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
+        return RefundResultOrderSnapshot(
+            orderId = order.id,
+            customerId = order.customerId,
+            storeId = order.storeId,
+            state = order.state.name,
+            completedAt = order.completedAt,
+            aggregateVersion = order.version,
+            currency = order.currency,
         )
     }
 

@@ -116,6 +116,7 @@ internal class RefundEarnedPointRecoveryCoordinator(
                     eligibility.excludedUnits.mapTo(linkedSetOf()) {
                         AccrualUnitKey(it.orderLineId, it.unitPosition)
                     },
+                correlationId = event.envelope.correlationId,
                 processedAt = processedAt,
             ),
         )

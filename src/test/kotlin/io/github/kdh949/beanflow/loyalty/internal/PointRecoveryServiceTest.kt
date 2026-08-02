@@ -38,6 +38,7 @@ internal class PointRecoveryServiceTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    event_publication,
                     loyalty_point_accrual_result,
                     loyalty_point_recovery_result,
                     loyalty_point_recovery_pending,
@@ -80,7 +81,7 @@ internal class PointRecoveryServiceTest
         }
 
         @Test
-        fun `gross accrual offsets oldest pending first and leaves only net available`() {
+        fun `PointsAccrued publishes gross accrual even when recovery consumes the available balance`() {
             val customerId = UUID.randomUUID()
             val firstRecovery = recoveryCommand(customerId, target = 30, refundSucceededAt = NOW.plusSeconds(1))
             val secondRecovery =
@@ -117,10 +118,15 @@ internal class PointRecoveryServiceTest
                 .isEqualTo(2)
             assertThat(long("select available_amount_krw from loyalty_point_lot where accrual_order_id is not null"))
                 .isZero()
+            assertThat(long("select count(*) from event_publication where event_type like '%PointsAccruedV1'"))
+                .isEqualTo(1)
+            val event = accruedEvent()
+            assertThat(event).contains("\"amountKrw\":40")
+            assertThat(event).contains("\"orderCompletionSource\":")
         }
 
         @Test
-        fun `accrual replay preserves exact excluded unit set even when amounts match`() {
+        fun `PointsAccrued replay preserves one publication and changed snapshot conflicts`() {
             val customerId = UUID.randomUUID()
             val orderId = UUID.randomUUID()
             val firstLine = UUID.randomUUID()
@@ -144,10 +150,38 @@ internal class PointRecoveryServiceTest
             assertThat(first.excludedAmountKrw).isEqualTo(5)
             assertThat(first.availableAmountKrw).isEqualTo(5)
             assertThat(replay).isEqualTo(first.copy(replayed = true))
+            assertThat(long("select count(*) from event_publication where event_type like '%PointsAccruedV1'"))
+                .isEqualTo(1)
             assertThatThrownBy {
                 operations.accrue(command.copy(excludedUnits = setOf(AccrualUnitKey(secondLine, 0))))
             }.isInstanceOfSatisfying(DomainFailure::class.java) {
                 assertThat(it.code).isEqualTo(FailureCode.IDEMPOTENCY_KEY_REUSED)
+            }
+            assertThat(long("select count(*) from event_publication where event_type like '%PointsAccruedV1'"))
+                .isEqualTo(1)
+        }
+
+        @Test
+        fun `PointsAccrued outbox failure rolls back account lot transaction and receipt`() {
+            val customerId = UUID.randomUUID()
+            jdbcTemplate.execute(
+                """
+                ALTER TABLE event_publication
+                ADD CONSTRAINT test_block_points_accrued
+                CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.PointsAccruedV1')
+                """.trimIndent(),
+            )
+            try {
+                assertThatThrownBy { operations.accrue(accrualCommand(customerId, gross = 10)) }
+                    .isInstanceOf(DomainFailure::class.java)
+
+                assertThat(long("select count(*) from loyalty_point_account")).isZero()
+                assertThat(long("select count(*) from loyalty_point_lot")).isZero()
+                assertThat(long("select count(*) from loyalty_point_transaction")).isZero()
+                assertThat(long("select count(*) from loyalty_point_accrual_result")).isZero()
+                assertThat(long("select count(*) from event_publication")).isZero()
+            } finally {
+                jdbcTemplate.execute("alter table event_publication drop constraint test_block_points_accrued")
             }
         }
 
@@ -281,6 +315,7 @@ internal class PointRecoveryServiceTest
             expiresAt = NOW.plusSeconds(30L * 86_400),
             units = units,
             excludedUnits = excluded,
+            correlationId = "correlation:$orderId",
             processedAt = NOW.plusSeconds(2),
         )
 
@@ -294,6 +329,14 @@ internal class PointRecoveryServiceTest
             )
 
         private fun long(sql: String): Long = requireNotNull(jdbcTemplate.queryForObject(sql, Long::class.java))
+
+        private fun accruedEvent(): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "select serialized_event from event_publication where event_type like '%PointsAccruedV1'",
+                    String::class.java,
+                ),
+            )
 
         private companion object {
             val NOW: Instant = Instant.parse("2026-08-01T00:00:00Z")

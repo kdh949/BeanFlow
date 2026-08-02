@@ -49,6 +49,7 @@ data class AccrueCompletedOrderPointsCommand(
     val expiresAt: Instant,
     val units: List<AccrualUnitAmount>,
     val excludedUnits: Set<AccrualUnitKey>,
+    val correlationId: String,
     val processedAt: Instant,
 )
 

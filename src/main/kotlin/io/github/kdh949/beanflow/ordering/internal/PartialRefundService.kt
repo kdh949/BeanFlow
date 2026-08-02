@@ -8,7 +8,12 @@ import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyO
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationTrigger
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitType
 import io.github.kdh949.beanflow.ordering.api.OrderRefundSnapshotOperations
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshot
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.api.RefundResultOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.RefundableOrderLineSnapshot
+import io.github.kdh949.beanflow.ordering.api.RefundableOrderSnapshot
+import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundProvider
 import io.github.kdh949.beanflow.payment.api.CreatePartialRefundPaymentCommand
 import io.github.kdh949.beanflow.payment.api.LockPartialRefundPaymentCommand
 import io.github.kdh949.beanflow.payment.api.PartialRefundAuditActorType
@@ -17,7 +22,9 @@ import io.github.kdh949.beanflow.payment.api.PartialRefundLineRequestSnapshot
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentLock
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentOperations
 import io.github.kdh949.beanflow.payment.api.PartialRefundPointRequestSnapshot
+import io.github.kdh949.beanflow.payment.api.PartialRefundProviderCompletion
 import io.github.kdh949.beanflow.payment.api.PartialRefundRestorationPolicyMode
+import io.github.kdh949.beanflow.payment.api.PartialRefundSettlementContext
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
@@ -86,6 +93,7 @@ private data class UnitAllocation(
 internal class PartialRefundService(
     private val preparation: PartialRefundPreparationTransaction,
     private val paymentOperations: PartialRefundPaymentOperations,
+    private val providerExecution: PartialRefundProviderExecutionService,
     private val clock: Clock,
 ) {
     fun create(command: PartialRefundCommand): PartialRefundHttpResult {
@@ -99,7 +107,7 @@ internal class PartialRefundService(
             )
         }
         if (prepared.cashAmountKrw > 0) {
-            paymentOperations.executeProvider(prepared.refundId, clock.instant())
+            providerExecution.execute(prepared.refundId, clock.instant())
         }
         val response = paymentOperations.recordOrReplayResponse(prepared.refundId, clock.instant())
         return PartialRefundHttpResult(response.status, response.body)
@@ -110,6 +118,7 @@ internal class PartialRefundService(
 internal class PartialRefundPreparationTransaction(
     private val paymentOperations: PartialRefundPaymentOperations,
     private val orderSnapshots: OrderRefundSnapshotOperations,
+    private val settlementSnapshots: OrderSettlementInputSnapshotOperations,
     private val storeAccess: StoreAccessOperations,
     private val pointOperations: PartialRefundPointOperations,
     private val policyOperations: ExpiredBenefitRestorationPolicyOperations,
@@ -122,6 +131,7 @@ internal class PartialRefundPreparationTransaction(
         validate(command)
         val payloadHash = payloadHash(command)
         val order = orderSnapshots.lockRefundableSnapshot(paymentOperations.orderId(command.paymentId))
+        val settlement = settlementSnapshots.read(order.orderId)
         authorize(command.actor, order.storeId)
         val locked =
             paymentOperations.lock(
@@ -186,11 +196,27 @@ internal class PartialRefundPreparationTransaction(
                     compensationValidityDays = policy.compensationValidityDays,
                     lineRequests = requestedLines.map { it.toPaymentSnapshot() },
                     pointRequests = pointRequests,
+                    settlementContext = settlementContext(order, settlement),
                     now = now,
                 ),
             )
         return PreparedPartialRefund(prepared.refundId, prepared.cashAmountKrw)
     }
+
+    private fun settlementContext(
+        order: RefundableOrderSnapshot,
+        settlement: OrderSettlementInputSnapshot,
+    ): PartialRefundSettlementContext =
+        settlementContext(
+            orderId = order.orderId,
+            customerId = order.customerId,
+            storeId = order.storeId,
+            state = order.state,
+            completedAt = order.completedAt,
+            aggregateVersion = order.aggregateVersion,
+            currency = order.currency,
+            settlement = settlement,
+        )
 
     private fun requestedLines(
         commandLines: List<PartialRefundLineInput>?,
@@ -374,4 +400,89 @@ internal class PartialRefundPreparationTransaction(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
+}
+
+@Service
+internal class PartialRefundProviderExecutionService(
+    private val paymentOperations: PartialRefundPaymentOperations,
+    private val resultTransaction: PartialRefundResultTransaction,
+    private val clock: Clock,
+) {
+    fun execute(
+        refundId: UUID,
+        now: Instant,
+    ) {
+        process(paymentOperations.claimProvider(refundId, now))
+    }
+
+    fun process(claim: ClaimedPartialRefundProvider) {
+        val completion = paymentOperations.callProvider(claim)
+        resultTransaction.record(completion, clock.instant())
+    }
+}
+
+@Service
+internal class PartialRefundResultTransaction(
+    private val orderSnapshots: OrderRefundSnapshotOperations,
+    private val settlementSnapshots: OrderSettlementInputSnapshotOperations,
+    private val paymentOperations: PartialRefundPaymentOperations,
+) {
+    @Transactional
+    fun record(
+        completion: PartialRefundProviderCompletion,
+        now: Instant,
+    ) {
+        val order = orderSnapshots.lockResultSnapshot(completion.claim.orderId)
+        val settlement = settlementSnapshots.read(order.orderId)
+        paymentOperations.recordProviderCompletion(
+            completion,
+            settlementContext(order, settlement),
+            now,
+        )
+    }
+}
+
+private fun settlementContext(
+    order: RefundResultOrderSnapshot,
+    settlement: OrderSettlementInputSnapshot,
+): PartialRefundSettlementContext =
+    settlementContext(
+        orderId = order.orderId,
+        customerId = order.customerId,
+        storeId = order.storeId,
+        state = order.state,
+        completedAt = order.completedAt,
+        aggregateVersion = order.aggregateVersion,
+        currency = order.currency,
+        settlement = settlement,
+    )
+
+private fun settlementContext(
+    orderId: UUID,
+    customerId: UUID,
+    storeId: UUID,
+    state: String,
+    completedAt: Instant?,
+    aggregateVersion: Long,
+    currency: String,
+    settlement: OrderSettlementInputSnapshot,
+): PartialRefundSettlementContext {
+    if (settlement.orderId != orderId || settlement.storeId != storeId || settlement.currency != currency) {
+        throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Settlement snapshot does not match the locked Order")
+    }
+    return PartialRefundSettlementContext(
+        customerId = customerId,
+        storeId = storeId,
+        orderState = state,
+        orderCompletedAt = completedAt,
+        orderAggregateVersion = aggregateVersion,
+        grossPaidKrw = settlement.grossPaidKrw,
+        feeBaseKrw = settlement.feeBaseKrw,
+        feeRateBps = settlement.feeRateBps,
+        couponDiscountKrw = settlement.couponDiscountKrw,
+        couponStoreShareBps = settlement.couponStoreShareBps ?: 0,
+        pointsAppliedKrw = settlement.pointsAppliedKrw,
+        pointCostKrw = settlement.pointCostKrw,
+        currency = settlement.currency,
+    )
 }
