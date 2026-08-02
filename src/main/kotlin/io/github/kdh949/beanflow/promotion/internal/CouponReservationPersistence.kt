@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -38,6 +39,13 @@ internal class CampaignEntity(
     val maximumDiscountKrw: Long?,
     @Column(name = "all_menus_eligible", nullable = false)
     val allMenusEligible: Boolean,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cost_bearer")
+    val costBearer: CouponCostBearer?,
+    @Column(name = "platform_share_bps")
+    val platformShareBps: Int?,
+    @Column(name = "store_share_bps")
+    val storeShareBps: Int?,
     @Version
     var version: Long = 0,
 )
@@ -100,6 +108,10 @@ internal class CouponReservationEntity(
     val orderId: UUID,
     @Column(name = "coupon_issuance_id", nullable = false)
     val couponIssuanceId: UUID,
+    @Column(name = "campaign_id", nullable = false)
+    val campaignId: UUID,
+    @Column(name = "campaign_version", nullable = false)
+    val campaignVersion: Long,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var state: CouponReservationState,
@@ -118,6 +130,17 @@ internal class CouponReservationEntity(
     val minimumEligibleSubtotalKrw: Long,
     @Column(name = "maximum_discount_krw")
     val maximumDiscountKrw: Long?,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cost_bearer", nullable = false)
+    val costBearer: CouponCostBearer,
+    @Column(name = "platform_share_bps", nullable = false)
+    val platformShareBps: Int,
+    @Column(name = "store_share_bps", nullable = false)
+    val storeShareBps: Int,
+    @Column(name = "platform_coupon_cost_krw", nullable = false)
+    val platformCouponCostKrw: Long,
+    @Column(name = "store_coupon_cost_krw", nullable = false)
+    val storeCouponCostKrw: Long,
     @Column(name = "reservation_expires_at", nullable = false)
     val reservationExpiresAt: Instant,
     @Column(name = "source_reference", nullable = false)
@@ -132,7 +155,13 @@ internal class CouponReservationEntity(
     var version: Long = 0,
 )
 
-internal interface CampaignJpaRepository : JpaRepository<CampaignEntity, UUID>
+internal interface CampaignJpaRepository : JpaRepository<CampaignEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select campaign from CampaignEntity campaign where campaign.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): CampaignEntity?
+}
 
 internal interface CampaignEligibleMenuJpaRepository : JpaRepository<CampaignEligibleMenuEntity, UUID> {
     fun findAllByCampaignId(campaignId: UUID): List<CampaignEligibleMenuEntity>

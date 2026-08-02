@@ -116,9 +116,10 @@ internal object OrderCreationDatabaseFixture {
             """
             INSERT INTO promotion_campaign (
                 id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
-                minimum_eligible_subtotal_krw, maximum_discount_krw, all_menus_eligible
+                minimum_eligible_subtotal_krw, maximum_discount_krw, all_menus_eligible,
+                cost_bearer, platform_share_bps, store_share_bps
             )
-            VALUES (?, ?, true, 'FIXED_KRW', ?, NULL, 0, NULL, true)
+            VALUES (?, ?, true, 'FIXED_KRW', ?, NULL, 0, NULL, true, 'STORE', 0, 10000)
             """.trimIndent(),
             campaignId,
             fixture.storeId,

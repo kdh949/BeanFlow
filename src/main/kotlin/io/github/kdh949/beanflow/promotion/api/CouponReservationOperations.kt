@@ -25,6 +25,12 @@ enum class CouponDiscountType {
     RATE_BPS,
 }
 
+enum class CouponCostBearer {
+    PLATFORM,
+    STORE,
+    SHARED,
+}
+
 data class CouponReservationQuote(
     val reservationId: UUID,
     val discountKrw: Long,
@@ -34,6 +40,13 @@ data class CouponReservationQuote(
     val rateBps: Int?,
     val minimumEligibleSubtotalKrw: Long,
     val maximumDiscountKrw: Long?,
+    val campaignId: UUID,
+    val campaignVersion: Long,
+    val costBearer: CouponCostBearer,
+    val platformShareBps: Int,
+    val storeShareBps: Int,
+    val platformCouponCostKrw: Long,
+    val storeCouponCostKrw: Long,
 )
 
 enum class ExpiredCouponRestorationMode {

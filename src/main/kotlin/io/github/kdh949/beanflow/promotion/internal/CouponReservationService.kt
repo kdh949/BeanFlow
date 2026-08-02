@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.CouponReservationQuote
@@ -49,8 +50,14 @@ internal class CouponReservationService(
         ) {
             fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon issuance is expired, used, or owned by another customer")
         }
+        if (issuance.originalIssuanceId != null) {
+            fail(
+                FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
+                "Compensation coupon cost snapshot is not available",
+            )
+        }
         val campaign =
-            campaignRepository.findById(issuance.campaignId).orElse(null)
+            campaignRepository.findLockedById(issuance.campaignId)
                 ?: fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon campaign is missing")
         if (!campaign.active || campaign.storeId != command.storeId) {
             fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon campaign is not available for the store")
@@ -82,12 +89,15 @@ internal class CouponReservationService(
         if (discount <= 0) {
             fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon discount is zero")
         }
+        val burden = calculateBurden(campaign, discount)
 
         val reservation =
             CouponReservationEntity(
                 id = identifierSource.next(),
                 orderId = command.orderId,
                 couponIssuanceId = issuance.id,
+                campaignId = campaign.id,
+                campaignVersion = campaign.version,
                 state = CouponReservationState.RESERVED,
                 discountKrw = discount,
                 eligibleLineSequences = eligibleLines.map { it.lineSequence }.sorted().joinToString(","),
@@ -96,6 +106,11 @@ internal class CouponReservationService(
                 rateBps = campaign.rateBps,
                 minimumEligibleSubtotalKrw = campaign.minimumEligibleSubtotalKrw,
                 maximumDiscountKrw = campaign.maximumDiscountKrw,
+                costBearer = burden.costBearer,
+                platformShareBps = burden.platformShareBps,
+                storeShareBps = burden.storeShareBps,
+                platformCouponCostKrw = burden.platformCouponCostKrw,
+                storeCouponCostKrw = burden.storeCouponCostKrw,
                 reservationExpiresAt = command.reservationExpiresAt,
                 sourceReference = command.sourceReference,
                 createdAt = now,
@@ -247,6 +262,53 @@ internal class CouponReservationService(
             }
         }
 
+    private fun calculateBurden(
+        campaign: CampaignEntity,
+        discountKrw: Long,
+    ): CouponBurden {
+        val costBearer =
+            campaign.costBearer
+                ?: settlementInputUnavailable("Coupon campaign cost bearer is missing")
+        val platformShareBps =
+            campaign.platformShareBps
+                ?: settlementInputUnavailable("Coupon campaign platform share is missing")
+        val storeShareBps =
+            campaign.storeShareBps
+                ?: settlementInputUnavailable("Coupon campaign store share is missing")
+        val validShares =
+            when (costBearer) {
+                CouponCostBearer.PLATFORM -> {
+                    platformShareBps == 10_000 && storeShareBps == 0
+                }
+
+                CouponCostBearer.STORE -> {
+                    platformShareBps == 0 && storeShareBps == 10_000
+                }
+
+                CouponCostBearer.SHARED -> {
+                    platformShareBps > 0 &&
+                        storeShareBps > 0 &&
+                        platformShareBps + storeShareBps == 10_000
+                }
+            }
+        if (!validShares) {
+            settlementInputUnavailable("Coupon campaign cost shares are invalid")
+        }
+        val storeCouponCostKrw =
+            BigInteger
+                .valueOf(discountKrw)
+                .multiply(BigInteger.valueOf(storeShareBps.toLong()))
+                .divide(BigInteger.valueOf(10_000))
+                .longValueExact()
+        return CouponBurden(
+            costBearer = costBearer,
+            platformShareBps = platformShareBps,
+            storeShareBps = storeShareBps,
+            platformCouponCostKrw = discountKrw - storeCouponCostKrw,
+            storeCouponCostKrw = storeCouponCostKrw,
+        )
+    }
+
     private fun CouponReservationEntity.toQuote(): CouponReservationQuote =
         CouponReservationQuote(
             reservationId = id,
@@ -263,12 +325,29 @@ internal class CouponReservationService(
             rateBps = rateBps,
             minimumEligibleSubtotalKrw = minimumEligibleSubtotalKrw,
             maximumDiscountKrw = maximumDiscountKrw,
+            campaignId = campaignId,
+            campaignVersion = campaignVersion,
+            costBearer = costBearer,
+            platformShareBps = platformShareBps,
+            storeShareBps = storeShareBps,
+            platformCouponCostKrw = platformCouponCostKrw,
+            storeCouponCostKrw = storeCouponCostKrw,
         )
 
     private fun invalidCampaign(): Nothing = fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon campaign discount fields are invalid")
+
+    private fun settlementInputUnavailable(message: String): Nothing = fail(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
 
     private fun fail(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
+
+    private data class CouponBurden(
+        val costBearer: CouponCostBearer,
+        val platformShareBps: Int,
+        val storeShareBps: Int,
+        val platformCouponCostKrw: Long,
+        val storeCouponCostKrw: Long,
+    )
 }

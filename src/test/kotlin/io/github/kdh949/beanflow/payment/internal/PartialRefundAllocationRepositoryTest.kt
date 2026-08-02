@@ -837,8 +837,10 @@ internal class PartialRefundAllocationRepositoryTest
                 INSERT INTO promotion_campaign (
                     id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
                     minimum_eligible_subtotal_krw, maximum_discount_krw,
-                    all_menus_eligible, version
-                ) VALUES (?, ?, true, 'FIXED_KRW', 2000, NULL, 0, NULL, true, 0)
+                    all_menus_eligible, cost_bearer, platform_share_bps,
+                    store_share_bps, version
+                ) VALUES (?, ?, true, 'FIXED_KRW', 2000, NULL, 0, NULL, true,
+                          'STORE', 0, 10000, 0)
                 """.trimIndent(),
                 campaignId,
                 fixture.storeId,
@@ -861,13 +863,16 @@ internal class PartialRefundAllocationRepositoryTest
                     id, order_id, coupon_issuance_id, state, discount_krw,
                     eligible_line_sequences, discount_type, fixed_amount_krw, rate_bps,
                     minimum_eligible_subtotal_krw, maximum_discount_krw,
+                    campaign_id, campaign_version, cost_bearer, platform_share_bps,
+                    store_share_bps, platform_coupon_cost_krw, store_coupon_cost_krw,
                     reservation_expires_at, source_reference, created_at, updated_at, version
                 ) VALUES (?, ?, ?, 'USED', 2000, '0,1', 'FIXED_KRW', 2000, NULL,
-                          0, NULL, ?, ?, ?, ?, 0)
+                          0, NULL, ?, 0, 'STORE', 0, 10000, 0, 2000, ?, ?, ?, ?, 0)
                 """.trimIndent(),
                 UUID.randomUUID(),
                 fixture.orderId,
                 issuanceId,
+                campaignId,
                 Timestamp.from(NOW.plusSeconds(300)),
                 "coupon:${fixture.orderId}",
                 Timestamp.from(NOW),
