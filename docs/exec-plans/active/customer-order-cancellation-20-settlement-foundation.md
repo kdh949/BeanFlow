@@ -124,7 +124,11 @@ store/date unique·state CHECK와 `settlement_item` 전체를 단독 migration�
 `settlement_batch_id NOT NULL` FK, immutable financial snapshot/source unique와
 `(settlement_batch_id, completed_at, id)` cursor index를 둔다. Adjustment, Batch summary/
 confirmation fields와 Dispute table은 만들지 않는다. 기존 환경 적용 전략은 00 plan 결과를
-따른다.
+따른다. ADR-029/067의 2026-08-03 ownership amendment에 따라 ADR-048 consumer가 실제
+Order 원인을 검증하는 데 필요한 `ordering_order.cancelled_at`과
+`ordering_order.cancellation_cause`, terminal-state/value CHECK와 clean-cutover precheck도
+같은 Plan 20 migration이 소유한다. Plan 40은 reason/detail 필드와 고객 취소 command를
+계속 소유하며 Plan 20은 그 성공 경로를 활성화하지 않는다.
 
 ## API and Event Contracts
 
@@ -148,7 +152,8 @@ confirmation fields와 Dispute table은 만들지 않는다. 기존 환경 적�
 3. Ordering guarded completion V2 outbox producer/cutover와 별도 Settlement consumer, Batch unique 경쟁과
    Item source unique를 구현한다.
 4. signed Batch Item query projection을 OpenAPI와 일치시킨다.
-5. 고객 취소 Refund NOT_APPLICABLE consumer와 target Audit을 구현한다.
+5. 실제 Order/Refund 증거를 읽는 고객 취소 Refund NOT_APPLICABLE consumer와 target Audit을
+   구현한다. 이를 위해 최소 취소 증거 두 필드와 기존 결제 거절 mapping을 먼저 고정한다.
 6. 중복·재시작·closed-Batch late Item·불일치 failure recovery를 검증한다.
 
 ## Required Tests
@@ -192,11 +197,10 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Progress
 
-- [ ] V2 cutover/event contract gate — Plan 15 input/factory와 Plan 16 financial producer 완료,
-  V1 inventory는 이 Plan의 첫 실행 gate로 남음
-- [ ] Settlement minimum Batch/Item schema
-- [ ] OrderCompletedV2 Batch/Item consumer
-- [ ] query contract
+- [x] V2 cutover/event contract gate — V1 incomplete/deployed consumer inventory 0 확인
+- [x] Settlement minimum Batch/Item schema
+- [x] OrderCompletedV2 Batch/Item consumer
+- [x] query contract
 - [ ] customer cancellation exclusion consumer
 - [ ] recovery/observability
 - [ ] 전체 검증
@@ -204,6 +208,9 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 ## Surprises & Discoveries
 
 - Accepted 정산 정책과 OpenAPI가 있지만 구현 package와 table은 하나도 없다.
+- ADR-048 consumer가 요구하는 실제 Order `cancellationCause` 증거는 Plan 40 소유로만
+  남아 있어 Plan 20 단독 구현이 불가능했다. 사용자 결정으로 최소 증거 두 필드만 Plan 20으로
+  앞당기고 command/reason/detail 책임은 Plan 40에 유지했다.
 
 ## Decision Log
 
@@ -215,6 +222,7 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 | 2026-08-01 | Accepted | Item input은 `OrderCompletedV2` immutable snapshot이며 V1 cutover gate를 거침 | live policy/current Aggregate 재조회와 V1 required-field drift 방지 | ADR-068 |
 | 2026-08-01 | Accepted | Plan 15 immutable settlement-input outcome 뒤에만 Plan 20을 시작 | fee/burden/issuer source가 없는 event payload 추측 방지 | ADR-071 |
 | 2026-08-01 | Accepted | Plan 20이 Ordering guarded completion V2 outbox/cutover와 Settlement consumer를 함께 소유 | Plan 15의 snapshot/factory handoff와 actual producer activation을 분리하고 producer/consumer transaction을 독립시킴 | ADR-068, ADR-071 |
+| 2026-08-03 | Accepted | `cancelled_at`·`cancellation_cause` 최소 증거와 CHECK를 Plan 20으로 이동 | ADR-048 consumer가 실제 Order 원인을 검증하고 fixture/event 추측을 피함 | ADR-029, ADR-067 |
 
 ## Outcomes & Retrospective
 
@@ -236,3 +244,6 @@ producer, Settlement schema/consumer 또는 public Item endpoint를 진행하지
 - 2026-08-02: completed Plan 16의 세 financial event producer와 243-test evidence를 반영했다.
   모든 direct dependency가 완료돼 implementation-ready로 전환했으며 V1 inventory는 첫 milestone의
   fail-closed gate로 유지했다.
+- 2026-08-03: 사용자 결정에 따라 최소 Order 취소 증거 스키마를 Plan 20으로 앞당기고 Plan 40의
+  command/reason/detail 소유권을 유지했다. V1 inventory, Batch/Item, V2 consumer와 query milestone의
+  실제 완료 상태도 반영했다.

@@ -76,6 +76,14 @@ API 상태 코드를 모두 결정하는 상류 결정이다.
   backfill 규칙 자체는 삭제하지 않는다. gate가 nonzero 또는 unknown이 되면 그대로
   forward-migration 경로의 계약이 된다. migration은 어느 경로에서든 후보 row 수를
   확인하고, clean-cutover 전제에서 row가 발견되면 조용히 통과하지 않고 실패한다.
+- **Schema ownership amendment (2026-08-03):** ADR-048의 정산 제외 consumer가 실제
+  Order 원인을 검증할 수 있도록 Plan 20이 `cancelled_at`과 `cancellation_cause`, 두 필드의
+  terminal-state/value CHECK와 clean-cutover precheck를 먼저 소유한다. 이 선행 변경은 기존
+  결제 명시 거절 경로에 `PAYMENT_DECLINED` 증거를 기록하고, 테스트 fixture가 아닌 실제
+  Order read model로 `CUSTOMER_REQUEST`를 판정하기 위한 최소 기반이다. Plan 40은
+  `cancellation_reason_code`, `cancellation_detail`, cause별 사유/detail CHECK, 고객 취소
+  command와 추가 상태 전이를 계속 단독 소유한다. Plan 20은 고객 취소 command나
+  `CUSTOMER_REQUEST` 전이를 새로 활성화하지 않는다.
 - 별도 `Cancellation` Aggregate와 Repository는 도입하지 않는다. Order Aggregate가
   자신의 취소 사실과 불변식을 계속 소유한다.
 - 고객 취소 사유는 닫힌 reason code를 필수로 받고 자유 입력 상세 사유는 선택으로
@@ -225,3 +233,8 @@ Accepted Business Policy로 확정될 때
 - [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
 - [ADR-028](ADR-028-expired-benefit-restoration-policy.md)
 - [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md)
+
+## Revision Notes
+
+- 2026-08-03: ADR-048 정산 제외의 실제 Order 증거 의존성을 닫기 위해 최소 취소 증거
+  스키마 소유권을 Plan 40에서 Plan 20으로 앞당겼다.
