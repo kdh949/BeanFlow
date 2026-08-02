@@ -36,6 +36,5 @@ internal class ApprovedPaymentSettlementService(
         )
     }
 
-    private fun unavailable(message: String): Nothing =
-        throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
+    private fun unavailable(message: String): Nothing = throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
 }

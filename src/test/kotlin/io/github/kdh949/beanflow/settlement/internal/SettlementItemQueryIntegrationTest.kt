@@ -158,17 +158,23 @@ internal class SettlementItemQueryIntegrationTest
             val revokedId = insertMembership(storeId, "STAFF", "REVOKED")
             val otherStoreActor = insertMembership(insertStore(), "STAFF", "ACTIVE")
 
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_OWNER")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_OWNER")))
                 .andExpect(status().isOk)
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(staffId, "STORE_STAFF")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(staffId, "STORE_STAFF")))
                 .andExpect(status().isOk)
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(UUID.randomUUID(), "STORE_STAFF")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(UUID.randomUUID(), "STORE_STAFF")))
                 .andExpect(status().isForbidden)
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(revokedId, "STORE_STAFF")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(revokedId, "STORE_STAFF")))
                 .andExpect(status().isForbidden)
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_STAFF")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_STAFF")))
                 .andExpect(status().isForbidden)
-            mockMvc.perform(get(path(storeId, batchId)).with(storeJwt(otherStoreActor, "STORE_STAFF")))
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(otherStoreActor, "STORE_STAFF")))
                 .andExpect(status().isForbidden)
         }
 

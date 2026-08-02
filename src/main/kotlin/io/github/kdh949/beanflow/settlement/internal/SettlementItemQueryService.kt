@@ -140,11 +140,9 @@ internal class SettlementItemQueryService(
 
     private fun invalid(message: String): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, message)
 
-    private fun notFound(): Nothing =
-        throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Settlement batch was not found")
+    private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Settlement batch was not found")
 
-    private fun dependency(message: String): Nothing =
-        throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
+    private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 
     private companion object {
         const val DEFAULT_LIMIT = 20
@@ -161,7 +159,9 @@ internal class SettlementItemQueryService(
                     return try {
                         val completedAt = Instant.parse(values[0])
                         val itemId = UUID.fromString(values[1])
-                        if (completedAt.toString() != values[0] || itemId.toString() != values[1]) null else {
+                        if (completedAt.toString() != values[0] || itemId.toString() != values[1]) {
+                            null
+                        } else {
                             SettlementItemSort(completedAt, itemId)
                         }
                     } catch (_: DateTimeParseException) {

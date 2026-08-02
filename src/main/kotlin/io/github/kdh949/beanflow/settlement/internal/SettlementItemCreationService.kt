@@ -53,8 +53,7 @@ internal class SettlementBatchPersistence(
             ?: unavailable("SettlementBatch insert-or-read did not produce a durable batch")
     }
 
-    private fun unavailable(message: String): Nothing =
-        throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
+    private fun unavailable(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 }
 
 @Service
@@ -186,8 +185,7 @@ internal class SettlementItemCreationService(
             netSettlementKrw = netSettlementKrw,
         )
 
-    private fun unavailable(message: String): Nothing =
-        throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
+    private fun unavailable(message: String): Nothing = throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
 
     private companion object {
         const val SYSTEM_ACTOR = "beanflow-settlement"

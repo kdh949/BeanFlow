@@ -28,11 +28,12 @@ internal class SettlementItemQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     fun findBatchStoreId(settlementBatchId: UUID): UUID? =
-        jdbcTemplate.query(
-            "SELECT store_id FROM settlement_batch WHERE id = ?",
-            { resultSet, _ -> resultSet.getObject("store_id", UUID::class.java) },
-            settlementBatchId,
-        ).singleOrNull()
+        jdbcTemplate
+            .query(
+                "SELECT store_id FROM settlement_batch WHERE id = ?",
+                { resultSet, _ -> resultSet.getObject("store_id", UUID::class.java) },
+                settlementBatchId,
+            ).singleOrNull()
 
     fun findPage(
         settlementBatchId: UUID,

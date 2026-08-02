@@ -1,8 +1,8 @@
 package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
-import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
+import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -26,7 +26,8 @@ internal class AuditRecordService(
     private val repository: AuditRecordJpaRepository,
     private val identifierSource: IdentifierSource,
     private val objectMapper: ObjectMapper,
-) : AuditRecordOperations, AuditRecordQueryOperations {
+) : AuditRecordOperations,
+    AuditRecordQueryOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun appendAll(commands: List<AppendAuditRecordCommand>): List<UUID> {
         if (commands.isEmpty()) return emptyList()
