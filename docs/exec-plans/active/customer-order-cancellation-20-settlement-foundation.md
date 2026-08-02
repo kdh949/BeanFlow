@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -24,6 +24,9 @@
 - completed Plan 15의 V18–V20은 Merchant terms, Campaign burden, PointLot issuer와 net
   calculation을 Ordering `OrderSettlementInputSnapshot`으로 materialize하고 V2 factory/validator/
   fixture까지 제공한다. production V2 producer/outbox/consumer는 아직 없다.
+- completed Plan 16은 `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` exact contract와
+  Payment/Loyalty persistent producer를 구현했다. Settlement consumer는 추가하지 않았으므로
+  Plan 20이 refund target publication을 처음 소비한다.
 - OpenAPI에는 Settlement 조회 계약이 있다.
 - `src/main/kotlin`과 migration에는 Settlement package/table/consumer가 없다.
 - 현재 `OrderCompletedV1`, `PaymentRefunded` 계약은 문서에 있으나 Settlement 소비 구현이 없다.
@@ -113,9 +116,10 @@
 
 ## Data and Migration
 
-Plan 15 snapshot, Plan 16 refund event producer와 signed-cursor foundation actual outcomes가 completed path에 기록되고
-`OrderCompletedV1` incomplete publication/deployed consumer inventory가 zero로 검증된 뒤, ADR-072 migration-writer
-lease를 얻은 latest main에서만 시작한다. ADR-067 matrix에 따라 이 계획은 `settlement_batch`의 최소 identity/scope/open-state fields,
+Plan 15 snapshot, Plan 16 refund event producer와 signed-cursor foundation actual outcomes는 completed
+path에 기록됐다. 이 계획은 첫 milestone에서 `OrderCompletedV1` incomplete publication/deployed consumer
+inventory가 zero인지 검증하고, 통과한 뒤 ADR-072 migration-writer lease를 얻은 latest main에서 schema
+write를 시작한다. ADR-067 matrix에 따라 이 계획은 `settlement_batch`의 최소 identity/scope/open-state fields,
 store/date unique·state CHECK와 `settlement_item` 전체를 단독 migration한다. Item에는
 `settlement_batch_id NOT NULL` FK, immutable financial snapshot/source unique와
 `(settlement_batch_id, completed_at, id)` cursor index를 둔다. Adjustment, Batch summary/
@@ -188,7 +192,8 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Progress
 
-- [ ] V2 cutover/event contract gate — Plan 15 immutable input/factory 완료, Plan 16과 V1 inventory 남음
+- [ ] V2 cutover/event contract gate — Plan 15 input/factory와 Plan 16 financial producer 완료,
+  V1 inventory는 이 Plan의 첫 실행 gate로 남음
 - [ ] Settlement minimum Batch/Item schema
 - [ ] OrderCompletedV2 Batch/Item consumer
 - [ ] query contract
@@ -213,10 +218,10 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 15 snapshot/payload-factory와 signed-cursor foundation evidence는 completed다.
-Plan 16 refund/Loyalty producer와 V1 cutover inventory가 남아 `Implementation-Ready=false`이며, 이 둘이
-통과하기 전에는 Ordering V2 producer, Settlement schema/consumer 또는 public Item endpoint를 시작하지
-않는다.
+미구현 상태다. Plan 15 snapshot/payload-factory, Plan 16 refund/Loyalty producer와 signed-cursor
+foundation evidence가 모두 completed path에 있어 `Implementation-Ready=true`다. V1 cutover inventory는
+dependency가 아니라 이 계획의 첫 번째 runtime/repository gate다. inventory가 nonzero/unknown이면 V2
+producer, Settlement schema/consumer 또는 public Item endpoint를 진행하지 않는다.
 
 ## Revision Notes
 
@@ -228,3 +233,6 @@ Plan 16 refund/Loyalty producer와 V1 cutover inventory가 남아 `Implementatio
   separate Settlement consumer transaction으로 명확화했다.
 - 2026-08-02: completed Plan 15 V18–V20과 V2 factory handoff를 반영했다. Plan 16과 V1 inventory는
   그대로 remaining activation gates다.
+- 2026-08-02: completed Plan 16의 세 financial event producer와 243-test evidence를 반영했다.
+  모든 direct dependency가 완료돼 implementation-ready로 전환했으며 V1 inventory는 첫 milestone의
+  fail-closed gate로 유지했다.

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -130,6 +130,15 @@ currency/version을 fail-closed로 검증한다. production reference inventory�
 producer, outbox save, listener 또는 Settlement consumer가 없으므로 이 checkpoint는 Plan 20
 activation이나 V1 drain 완료 증거가 아니다.
 
+**Plan 16 implementation checkpoint (2026-08-02):** `PaymentRefundedV1`, `PointsAccruedV1`,
+`PointsRestoredV1` public Kotlin payload, validator와 exact JSON fixture가 구현됐다. Payment는
+Order-first result orchestration transaction에서 Plan 12 immutable allocation과 Plan 15 snapshot의
+누적 차분을 계산하고 Refund owner result와 existing `event_publication` target row를 함께 저장한다.
+Loyalty는 gross accrual과 각 restoration owner result에 대응하는 target row를 같은 owner
+transaction에 저장한다. exact replay/conflict, 세 disposition, delayed terms change,
+snapshot/allocation/publication rollback이 PostgreSQL 테스트를 통과했다. `OrderCompletedV2`,
+Settlement/Analytics consumer와 projection은 구현하지 않았다.
+
 ### Plan 13의 frozen V1 trigger-only boundary
 
 ADR-073은 Plan 13에 한해 `OrderCompletedV1`을 payload가 없는 frozen trigger로 유지하면서
@@ -147,8 +156,9 @@ boundary 실패는 Loyalty source 처리의 retry/manual-review failure이며, p
 
 2026-08-02 Plan 13 implementation은 이 예외를 frozen `OrderCompletedV1` listener로 활성화했다.
 listener는 persisted Order completion version과 V16 snapshot hash를 검증하고 Payment eligibility와
-Loyalty accrual owner transaction을 호출한다. `PointsAccruedV1` publication은 추가하지 않았으며
-여전히 Plan 16이 소유한다.
+Loyalty accrual owner transaction을 호출한다. Plan 16이 같은 owner transaction에
+`PointsAccruedV1` target publication을 추가했으며 frozen V1 payload와 Plan 20의 V2 ownership은
+변경하지 않았다.
 
 All new producer transactions persist the original fact and Spring Modulith publication atomically.
 External Provider calls remain outside those transactions. A missing required snapshot, source, version
@@ -211,11 +221,16 @@ not treat the Payment-owned restoration worker handoff as the Plan 16 integratio
   become a successful completion publication;
 - the Ordering V2 producer and Settlement V2 consumer commit independently and the consumer does not live-read
   Merchant, Campaign, PointLot, Order snapshot or Payment to complete an event payload;
-- `PaymentRefundedV1` for completed and pre-acceptance-cancellation sources takes the correct Settlement and
-  Analytics branch without live Aggregate reads;
+- `PaymentRefundedV1` for completed, pre-completion and pre-acceptance-cancellation sources takes the correct
+  Settlement and Analytics branch without live mutable policy or terms reads;
 - same logical source with a new event ID is idempotent, while same source with a changed payload fails;
 - delayed event after a policy or contract change reproduces the original date and amount;
 - V1 cutover inventory blocks V2 producer activation when old publication or consumer evidence is nonzero.
+
+**Plan 16 verification evidence (2026-08-02):** the exact financial-event focused suite and
+event-contract/Modulith suite passed. `./gradlew clean build` passed 243 tests with no failure, error or skip.
+Missing/failed snapshot, allocation and target-publication writes roll back the owner result; cumulative
+partial refunds retain rounding remainder, and a later Merchant terms version does not change the event effect.
 
 ## Metrics
 

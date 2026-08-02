@@ -71,8 +71,8 @@ Plan 20 owns the `OrderCompletedV1 -> V2` cutover and Ordering guarded completio
 only the immutable snapshot and matching immutable Payment approval fact, then consumes the immutable V2 payload
 in its separate Settlement transaction. Neither producer nor consumer may fabricate or live-read Merchant,
 Campaign or PointLot current values; the consumer also does not re-read Ordering snapshot or Payment to fill an
-event payload. Plan 16 owns only `PaymentRefundedV1`, `PointsAccruedV1` and `PointsRestoredV1` producers; it is
-not an `OrderCompletedV2` producer.
+event payload. Completed Plan 16 owns and implements only `PaymentRefundedV1`, `PointsAccruedV1` and
+`PointsRestoredV1` producers; it is not an `OrderCompletedV2` producer.
 
 2026-08-02 Plan 15 checkpoint: `OrderCompletedV2` public payload, typed factory/validator와 exact
 contract fixture는 구현됐다. Factory는 immutable `OrderSettlementInputSnapshot`과 matching
@@ -80,6 +80,15 @@ approved Payment fact만 입력으로 받는다. existing completion transition�
 `OrderCompletedV1` 경로이고, V2 outbox save/producer reference/listener/Settlement consumer는
 추가되지 않았다. 따라서 catalog의 V2 consumer 행은 계속 target architecture이며 activation
 evidence는 Plan 20이 소유한다.
+
+2026-08-02 Plan 16 checkpoint: 세 V1 public payload/validator/exact fixture와 persistent producer가
+구현됐다. Payment Refund `SUCCEEDED` owner write와 Settlement/Analytics target publication,
+Loyalty `ACCRUAL`/restoration owner write와 Analytics target publication은 각각 같은 local
+transaction에 속한다. completed/pre-completion refund effect는 Plan 12 allocation과 Plan 15
+snapshot의 누적 차분으로 만들고, pre-acceptance branch에는 effect를 넣지 않는다. 동일
+source/version/payload replay는 새 row를 만들지 않으며 changed payload, missing snapshot/allocation,
+target row 저장 실패는 owner transaction을 실패시킨다. Settlement/Analytics listener와 projection은
+추가하지 않았으므로 consumer 열은 해당 후속 계획의 target architecture로 남는다.
 
 `OrderCompletedV1`은 frozen trigger로 유지한다. Plan 13의 Loyalty accrual은 이 event의 payload를
 확장하지 않고, ADR-073의 typed Ordering boundary가 반환하는 immutable

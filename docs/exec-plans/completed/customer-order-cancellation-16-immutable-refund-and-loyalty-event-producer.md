@@ -1,11 +1,11 @@
 # Immutable refund와 Loyalty event producer를 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-02`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -18,13 +18,14 @@ producer/cutover와 Settlement consumer는 Plan 20 소유다.
 
 ## Current State
 
-- Refund/Point result에 durable immutable financial event producer와 contract tests가 없다.
-- completed Plan 15의 V18–V20과 public snapshot boundary가
-  `PaymentRefundedV1.settlementRefundEffect` 계산에 필요한 immutable fee/coupon/point input을
-  제공한다. V2 factory는 완료됐지만 completion producer/outbox는 Plan 20에 남아 있다.
-- completed Plan 13 V17은 immutable Loyalty accrual/recovery result receipt와 exact
-  completion/refund source/version/hash를 제공한다. Plan 16은 이 owner fact를 publication source로
-  소비하며 recovery/pending을 재구현하지 않는다.
+- `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` exact Kotlin/JSON 계약과 producer가
+  구현됐다. owner result와 existing `event_publication` target row는 같은 local transaction에서
+  commit하거나 함께 rollback한다.
+- Payment producer는 Plan 12 immutable Refund allocation과 Plan 15 V20 snapshot만 사용해 누적
+  signed settlement effect를 계산한다. `OrderCompletedV2` producer/outbox와 consumer는 여전히
+  Plan 20 소유다.
+- Loyalty producer는 completed Plan 13의 immutable accrual/recovery owner result를 사용하며
+  recovery/pending lifecycle을 재구현하지 않는다.
 
 ## Definitions
 
@@ -116,10 +117,16 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
   - 기존 부분 환불 허용 상태와 두 값뿐인 ADR-068 disposition의 충돌을 확인했다.
   - 최초 producer 활성화 전 `PRE_COMPLETION_ORDER`를 추가하고, 완료 전 effect와 완료 후
     metadata를 분리하며 누적 floor 차분 산식을 BR-15/16과 ADR-068에 기록했다.
-- [ ] exact event contract
-- [ ] Payment/Loyalty publications
-- [ ] failure/replay tests
-- [ ] validation evidence
+- [x] 2026-08-02 exact event contract
+  - 세 V1 Kotlin DTO, envelope/payload validator와 exact JSON fixture를 추가했다.
+- [x] 2026-08-02 Payment/Loyalty publications
+  - Refund `SUCCEEDED`, `ACCRUAL` ledger, 각 restoration result owner transaction에 persistent
+    publication을 결합했다. Provider와 downstream consumer 호출은 transaction 밖에 남겼다.
+- [x] 2026-08-02 failure/replay tests
+  - 세 refund disposition, 누적 floor 차분, immutable terms 변경, exact replay/conflict와
+    snapshot/allocation/outbox rollback을 PostgreSQL 통합 테스트로 검증했다.
+- [x] 2026-08-02 validation evidence
+  - 지정 focused suite, event contract/Modulith suite, clean build 243 tests와 문서 검증을 통과했다.
 
 ## Surprises & Discoveries
 
@@ -131,6 +138,12 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
   transaction evidence without publishing `PointsAccruedV1`. Plan 15 is the only remaining direct blocker.
 - 2026-08-02: Plan 15 completed V18–V20 owner inputs, snapshot hash/tie-out and the V2 factory fixture
   without activating an event producer. All Plan 16 direct dependencies are now completed.
+- 2026-08-02: 새 schema 없이 기존 Spring Modulith `event_publication` table과 row semantics를
+  재사용할 수 있었다. 현재 build의 starter가 core registry type을 compile API로 노출하지 않아
+  Eventing-owned JDBC publication boundary가 active owner transaction 안에서 target row를 저장한다.
+- 2026-08-02: Settlement/Analytics consumer는 후속 Plan 소유이므로 그 target row는 현재 배포에서
+  미완료 publication으로 남는다. 기존 lifecycle test는 이 producer-only target을 로컬 listener
+  완료 대기에서 분리했고, target persistence 자체는 전용 producer test에서 검증한다.
 
 ## Decision Log
 
@@ -142,10 +155,26 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 12/13의 immutable allocation/result receipt와 Plan 15의 settlement snapshot
-outcome이 모두 completed path에 있다. `PaymentRefundedV1`, `PointsAccruedV1`,
-`PointsRestoredV1` publication은 여전히 이 계획 소유이고 조기 활성화되지 않았다. 모든 direct
-dependency와 product contract가 충족되어 `Implementation-Ready=true`다.
+세 immutable financial event와 producer checkpoint를 완료했다. Payment result orchestration은
+Order를 먼저 잠그고 immutable settlement snapshot을 읽은 뒤 Payment의 Refund/result/allocation과
+`PaymentRefundedV1` target publication을 원자적으로 저장한다. 완료 주문, 완료 전 품목 환불,
+미수락 종료를 각각 `COMPLETED_ORDER`, `PRE_COMPLETION_ORDER`,
+`PRE_ACCEPTANCE_CANCELLATION`으로 보존하며 completed/pre-completion effect는 누적 allocation
+floor 차분으로 계산한다.
+
+Loyalty는 gross `ACCRUAL` PointTransaction/result와 `PointsAccruedV1`, 각 복원
+PointTransaction/restoration result와 `PointsRestoredV1`을 각각 같은 owner transaction에서 저장한다.
+exact source/version/payload replay는 기존 owner result와 publication 한 벌로 수렴하고 changed payload는
+덮어쓰지 않고 conflict로 실패한다. snapshot/allocation/source/publication persistence failure는 owner
+result transaction을 rollback하며, 이미 성공한 외부 Refund 뒤 Loyalty restoration 실패는 Payment work의
+`RETRY_SCHEDULED`/bounded retry/`MANUAL_REVIEW` 의미를 유지한다.
+
+- `./gradlew test --tests '*PaymentRefunded*' --tests '*PointsAccrued*' --tests '*PointsRestored*'`:
+  **Passed**.
+- `./gradlew test --tests '*EventContract*' --tests '*ModularityTests'`: **Passed**.
+- `./gradlew clean build`: **Passed**, 243 tests, 0 failures/errors/skips; Spotless 포함.
+- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
+- 새 Flyway migration, production dependency, consumer/listener, V2 completion producer는 추가하지 않았다.
 
 ## Revision Notes
 
@@ -157,3 +186,6 @@ dependency와 product contract가 충족되어 `Implementation-Ready=true`다.
   Plan 15만 remaining blocker로 남겼다.
 - 2026-08-02: Plan 15 V18–V20/229-test outcome을 completed dependency로 반영하고
   implementation-ready로 전환했다.
+- 2026-08-02: 세 producer와 failure/replay validation을 완료하고 completed path로 이동했다.
+  Plan 20 dependency를 completed로 갱신해 implementation-ready로 전환하고, Analytics는 남은 direct
+  producer dependencies 때문에 blocked 상태를 유지했다.

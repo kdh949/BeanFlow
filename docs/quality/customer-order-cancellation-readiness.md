@@ -229,8 +229,8 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Plan 15 settlement input](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
   V18–V20 Merchant terms, coupon burden legs, Loyalty issuer allocation과 exactly-one Order snapshot,
   V2 factory/validator/fixture가 229-test evidence로 완료됐다. outbox/cutover/Settlement consumer는 없다.
-- [Plan 16 financial events](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
-  Refund/Loyalty immutable producer가 Settlement와 recovery consumer의 입력을 제공해야 한다.
+- [Plan 16 financial events](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
+  Refund/Loyalty immutable producer와 owner transaction atomicity, replay/failure evidence가 완료됐다.
 - [Plan 20 Settlement](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md):
   완료 정산 원천과 미완료 취소 제외 증적을 구현해야 한다.
 - [Plan 30 compensation](../exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md):
@@ -276,7 +276,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] ordinary-accrual policy/snapshot foundation이 통과함
 - [x] Plan 13 recovery/pending이 통과함
 - [x] Plan 15 settlement input이 통과함
-- [ ] Plan 16 immutable events가 통과함
+- [x] Plan 16 immutable events가 통과함
 - [ ] Plan 20 Settlement foundation이 통과함
 - [ ] Plan 30 common compensation이 통과함
 - [ ] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
@@ -341,6 +341,18 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
 - Plan 16: all direct dependencies completed, `Implementation-Ready=true`; Plan 20은 Plan 16과 V1
   inventory가 남아 `Implementation-Ready=false`.
+
+## Plan 16 immutable-event validation (2026-08-02)
+
+- 세 V1 exact contract, Payment/Loyalty owner result와 persistent publication atomicity: **Passed**.
+- refund disposition/누적 effect, immutable terms change, replay/conflict와 required persistence rollback:
+  **Passed**.
+- focused event suite와 contract/Modulith suite: **Passed**.
+- `./gradlew clean build`: **Passed**, 243 tests, 0 failures/errors/skips; Spotless 포함.
+- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
+- 새 Flyway migration, consumer, `OrderCompletedV2` producer는 추가하지 않았다.
+- Plan 20은 all direct dependencies completed로 `Implementation-Ready=true`이며 V1 inventory를 내부
+  첫 gate로 검증한다. Analytics는 다른 direct producer dependencies 때문에 false를 유지한다.
 
 ## Historical audit validation
 

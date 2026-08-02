@@ -51,6 +51,23 @@ Behavior:
   Plan 15는 이 검증까지만 제공하며 outbox 저장·V1→V2 activation과 Settlement consumer 실패
   처리는 Plan 20의 별도 transaction 경계다.
 
+#### Immutable Refund and Loyalty publication
+
+- Refund `SUCCEEDED` result는 immutable request/success allocation, Plan 15 settlement snapshot,
+  exact logical source와 `PaymentRefundedV1` target publication을 같은 local transaction에서
+  저장한다. 이 중 하나라도 없거나 invalid하고, tie-out 또는 target row 저장이 실패하면 Refund
+  result owner transaction을 rollback한다. Provider 성공을 새 성공 event나 API success로 추정하지
+  않고 동일 Provider key lookup/reconciliation으로 수렴한다.
+- Loyalty gross `ACCRUAL`과 각 restoration owner result는 각각 `PointsAccruedV1` 또는
+  `PointsRestoredV1` target publication과 함께 commit한다. publication failure를 0원 적립·복원,
+  빈 event 또는 no-op success로 바꾸지 않는다. Refund 복원 transaction rollback 뒤 Payment work는
+  `RETRY_SCHEDULED`, bounded retry 후 `MANUAL_REVIEW` 의미를 보존한다.
+- 동일 source/version/동일 payload replay는 기존 owner result와 publication 한 벌을 반환한다.
+  같은 source/version의 changed payload는 기존 row를 갱신하지 않고 conflict로 실패한다.
+- Settlement/Analytics consumer는 별도 후속 local transaction이다. 현재 producer-only target row가
+  미완료인 상태는 downstream 성공이 아니며, 원 owner fact와 함께 저장됐다는 producer checkpoint만
+  의미한다.
+
 ### Asynchronous side effect
 
 Examples:
