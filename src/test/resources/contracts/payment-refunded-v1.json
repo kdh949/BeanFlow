@@ -1,0 +1,29 @@
+{
+  "envelope": {
+    "eventId": "44444444-4444-4444-4444-444444444444",
+    "eventType": "PaymentRefundedV1",
+    "aggregateId": "11111111-1111-1111-1111-111111111111",
+    "aggregateVersion": 3,
+    "occurredAt": "2026-08-02T00:30:00Z",
+    "payloadVersion": 1,
+    "correlationId": "correlation:refund-fixture",
+    "causationId": "refund:11111111-1111-1111-1111-111111111111:succeeded"
+  },
+  "refundId": "11111111-1111-1111-1111-111111111111",
+  "refundSource": "partial-refund:fixture",
+  "orderId": "22222222-2222-2222-2222-222222222222",
+  "customerId": "33333333-3333-3333-3333-333333333333",
+  "refundSucceededAt": "2026-08-02T00:30:00Z",
+  "currency": "KRW",
+  "cashRefundedKrw": 500,
+  "completionDisposition": "COMPLETED_ORDER",
+  "orderCompletedAt": "2026-08-01T15:30:00Z",
+  "settlementDate": "2026-08-02",
+  "settlementItemSource": "order:22222222-2222-2222-2222-222222222222:completed:7",
+  "settlementRefundEffect": {
+    "grossPaidDeltaKrw": -1000,
+    "feeDeltaKrw": -50,
+    "benefitCostDeltaKrw": -300,
+    "netSettlementDeltaKrw": -650
+  }
+}
