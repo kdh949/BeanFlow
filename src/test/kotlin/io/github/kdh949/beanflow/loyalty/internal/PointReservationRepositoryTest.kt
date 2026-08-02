@@ -245,6 +245,46 @@ internal class PointReservationRepositoryTest
         }
 
         @Test
+        fun `expired customer cancellation preserve policy records skipped restoration without available points`() {
+            val fixture = insertPoints(available = 100)
+            val orderId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                operations.reserve(command(fixture, orderId, 80, "points-order-$orderId"))
+                operations.confirm(orderId, "points-order-$orderId")
+            }
+
+            val report =
+                operations.restoreUsedAfterTermination(
+                    RestorePointsAfterTerminationCommand(
+                        orderId = orderId,
+                        terminatedAt = Instant.parse("2031-01-01T00:00:00Z"),
+                        sourceReference = "order:$orderId:customer-cancellation:7:points",
+                        trigger = OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                        policyVersionId = 4,
+                        mode = ExpiredPointRestorationMode.PRESERVE_ORIGINAL_EXPIRY,
+                        compensationValidityDays = 30,
+                    ),
+                )
+
+            assertThat(report.result).isEqualTo(ReservationTransitionResult.APPLIED)
+            transactions.executeWithoutResult {
+                val account = accountRepository.findById(fixture.accountId).orElseThrow()
+                val reservation = requireNotNull(reservationRepository.findByOrderId(orderId))
+                val restoration =
+                    pointTransactionRepository
+                        .findAll()
+                        .single { it.type == PointTransactionType.RESTORE_SKIPPED_EXPIRED }
+                assertThat(account.availablePointsKrw).isEqualTo(20)
+                assertThat(lotRepository.findAll()).hasSize(1)
+                assertThat(reservation.state).isEqualTo(PointReservationState.RESTORED)
+                assertThat(reservation.restorationTrigger).isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION)
+                assertThat(reservation.restorationPolicyVersionId).isEqualTo(4)
+                assertThat(restoration.amountKrw).isEqualTo(80)
+                assertThat(restoration.restorationDisposition).isEqualTo("SKIPPED_EXPIRED")
+            }
+        }
+
+        @Test
         fun `issuer precheck records verified outcome for final issuer snapshots`() {
             insertPoints(available = 100)
             val meterRegistry = SimpleMeterRegistry()
