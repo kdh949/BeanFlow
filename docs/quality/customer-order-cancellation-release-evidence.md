@@ -80,3 +80,27 @@ compensation foundation과 고객 취소 command 구현 완료를 의미하지 �
 - **Test evidence:** PostgreSQL Testcontainers covered empty final constraints, verified
   exact backfill, missing and invalid mappings, immutable issuer snapshots, DTO projection,
   compensation issuer inheritance, and Spring startup failure.
+
+## Plan 15 settlement-input execution evidence
+
+- **Recorded at:** 2026-08-02
+- **Execution inventory:** this workspace had no configured non-local runtime database or
+  deployment environment. No Merchant terms, active Campaign, CouponReservation or Order row
+  outside repository Testcontainers could be inspected or reclassified. This preserves the earlier
+  external-environment inventory of explicit zero; it is not evidence that an unknown future legacy
+  database is safely mappable.
+- **Migration interpretation:** V18 adds immutable versioned Merchant terms without inventing a
+  fee for existing Stores. V19 stops when an active legacy Campaign or any legacy CouponReservation
+  lacks verified burden lineage. V20 stops when any legacy Order exists because terms/coupon/point
+  source cannot be reconstructed from price totals. Application activation therefore accepts the
+  clean path and fails closed for unverified financial history; checksum repair or guessed backfill
+  is not an allowed release action.
+- **Runtime interpretation:** a Store without exactly one applicable terms version, an incomplete
+  coupon burden snapshot, mismatched PointLot issuer allocation or monetary/hash tie-out failure
+  returns `SETTLEMENT_INPUT_UNAVAILABLE` and rolls back Order plus all reservations. No local,
+  in-memory, current-value or zero-cost fallback is active.
+- **Test evidence:** PostgreSQL Testcontainers covered V18–V20 constraints and legacy gates,
+  applicable/overlapping/concurrent terms, all coupon burden modes and integer remainder, mixed
+  issuer allocation, source/hash/formula tie-outs, exactly-one replay and forced persistence rollback.
+  `OrderCompletedV2` contract tests covered exact fixture mapping and Payment mismatch without adding
+  a producer/outbox or Settlement consumer.

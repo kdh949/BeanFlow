@@ -166,7 +166,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 6. [일반 포인트 적립 policy와 Order snapshot을 만든다](../completed/ordinary-point-accrual-policy-management.md) — 11, 12, completed
 7. [환불 적립 포인트 회수를 만든다](../completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md) — 12, ordinary-accrual policy/snapshot, completed
 8. [PointAccount 지원 조회를 만든다](customer-order-cancellation-14-point-account-read-vertical-slice.md) — 11, 13, cursor
-9. [정산 입력 snapshot foundation을 만든다](customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10
+9. [정산 입력 snapshot foundation을 만든다](../completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10, completed
 10. [immutable refund/Loyalty event producer를 만든다](customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15
 11. [Settlement foundation과 취소 제외 증적을 만든다](customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor
 12. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
@@ -228,7 +228,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 13 recovery foundation 완료 — V17 Payment eligibility, Loyalty recovery/pending과 frozen V1 accrual offset, 205-test build
 - [x] ordinary-accrual policy/snapshot foundation 완료 — V16, operator API/bootstrap, atomic Order snapshot
 - [ ] 14 point-account read foundation 완료
-- [ ] 15 settlement-input snapshot foundation 완료
+- [x] 15 settlement-input snapshot foundation 완료 — V18–V20, immutable snapshot/V2 factory, 229-test build
 - [ ] 16 immutable financial event producer 완료
 - [ ] 20 Settlement foundation 완료
 - [ ] 30 common compensation foundation 완료
@@ -267,9 +267,10 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 아직 기능 구현을 시작하지 않았다. 계약 정합성 감사와 fact gate는 완료됐으며
 `CLEAN_CUTOVER_GATE = PASSED`다. Plan 10은 Plan 00 outcome 뒤 독립적으로 시작할 수 있고 signed
 cursor는 Plan 14/20의 실제 소비 input으로만 남는다. migration-writer lease는 ready plan의 실행 순서를
-직렬화하지만 dependency를 추가하지 않는다. Plan 13 completion으로 Plan 14와 Loyalty adjustment는
-implementation-ready가 됐고 Plan 16은 Plan 15만 remaining blocker다. Plan 50이 완료되기 전 고객 취소
-command의 production success path는 계속 차단된다.
+직렬화하지만 dependency를 추가하지 않는다. Plan 13 completion으로 Plan 14와 Loyalty adjustment가
+implementation-ready가 됐고 Plan 15 completion으로 Plan 16도 implementation-ready가 됐다. Plan 20은
+Plan 16이 active라 계속 blocked다. Plan 50이 완료되기 전 고객 취소 command의 production success
+path는 계속 차단된다.
 
 ## Revision Notes
 
@@ -288,4 +289,7 @@ command의 production success path는 계속 차단된다.
 - 2026-08-01: Plan 10의 signed-cursor dependency와 이를 강제하던 milestone 표현을 제거했다. queue
   priority는 migration-writer lease/Goal Router가 관리하며 `Depends-On`은 실제 phase input만 기록한다.
 - 2026-08-02: Plan 13 V17/owner flow와 205-test outcome을 completed path에 반영하고 Plan 14,
+  Loyalty adjustment readiness를 갱신했다.
+- 2026-08-02: Plan 15 V18–V20/immutable V2 input과 229-test outcome을 completed path에 반영하고
+  Plan 16 readiness를 갱신했다.
   Loyalty adjustment와 Plan 16 readiness를 갱신했다.

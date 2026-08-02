@@ -37,6 +37,20 @@ Behavior:
 - correlation ID 제공
 - 외부 결과가 불명확하면 reconciliation 생성
 
+#### Immutable settlement input
+
+- Order 생성은 applicable Merchant fee-contract version, Promotion reservation의 final
+  platform/store coupon legs와 Loyalty reservation의 immutable issuer allocation을 모두
+  검증한 뒤 `OrderSettlementInputSnapshot`을 같은 local transaction에 저장한다.
+- owner source가 없거나 ambiguous하고, share/allocation/formula/hash가 맞지 않거나 snapshot
+  저장이 실패하면 `503 SETTLEMENT_INPUT_UNAVAILABLE`로 Order와 모든 owner reservation을
+  rollback한다. fee 0, platform burden, 현재 Campaign/PointLot 또는 부분 snapshot으로
+  대체하지 않는다.
+- `OrderCompletedV2` factory는 persisted snapshot과 matching approved Payment fact만 받는다.
+  approval amount/currency/source/time 또는 monetary tie-out이 다르면 event를 만들지 않는다.
+  Plan 15는 이 검증까지만 제공하며 outbox 저장·V1→V2 activation과 Settlement consumer 실패
+  처리는 Plan 20의 별도 transaction 경계다.
+
 ### Asynchronous side effect
 
 Examples:

@@ -24,12 +24,18 @@
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
 | REPROCESSING_PROPOSAL_STALE | 409 | Yes, after reviewing current state | 제안 뒤 case·snapshot·Refund 상태가 바뀌어 fingerprint 재검증 실패 |
+| SETTLEMENT_INPUT_UNAVAILABLE | 503 | Yes, after owner source/setup is corrected | 주문 생성 또는 완료 event의 immutable 정산 입력 source·version·금액 tie-out을 검증할 수 없음. fee/cost default나 현재 값 fallback 없음 |
 | DEPENDENCY_UNAVAILABLE | 503 | Yes | 필수 외부·DB 의존성 일시 장애 |
 | NOTIFICATION_DELIVERY_FAILED | operation-specific | Operator | 주문과 독립된 발송 실패 |
 | SETTLEMENT_ALREADY_CONFIRMED | 409 | No | 확정 결과 직접 변경 시도 |
 | DISPUTE_WINDOW_CLOSED | 409 | No | 이의제기 기간 종료 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
+
+`SETTLEMENT_INPUT_UNAVAILABLE`은 일시 DB 장애만 뜻하는 `DEPENDENCY_UNAVAILABLE`과
+구분한다. Merchant 계약, Campaign burden, PointLot issuer/allocation 또는 immutable snapshot
+자체가 누락·모순인 setup/source 실패다. 주문 생성에서는 Order와 모든 예약을 rollback하며,
+완료 mapping에서는 V2 publication 성공으로 진행하지 않는다.
 
 고객 주문 취소는 명령 트랜잭션 멱등성 모델이라 `IDEMPOTENCY_REQUEST_IN_PROGRESS`를
 반환하지 않는다. 같은 key에 다른 `orderId`·`reasonCode`·`detail`이 오면

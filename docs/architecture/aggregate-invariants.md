@@ -57,14 +57,17 @@
 | Owner / Repository candidate | Aggregate Root | DB reinforcement candidate | Concurrency control |
 |---|---|---|---|
 | `StoreRepository` | Store | store identity, valid status check | optimistic version |
+| `StoreSettlementTermsRepository` | StoreSettlementTerms | immutable version/source, fee `0..10000`, store interval overlap 금지 | store advisory lock + applicable interval query |
 | `MenuRepository` | Menu | non-negative integer KRW price, unique store/menu code | optimistic version |
 | `MenuConfigurationRepository` | MenuConfiguration | unique menu/normalized-option-set, positive sellable requirement | optimistic version |
 | `OrderRepository` | Order | order number unique, non-negative totals, cancellation timestamp/cause/reason-code/detail과 state 조합 CHECK | optimistic version + guarded transition |
+| `OrderSettlementInputSnapshotRepository` | OrderSettlementInputSnapshot | order당 exactly one, owner source FK, fee/coupon/point/benefit/net 공식·hash tie-out, update/delete 금지 | Order 생성 local transaction + order unique FK |
 | `PickupSlotRepository` | PickupSlot | unique store/time range, non-negative capacity | conditional update or row lock |
 | `PickupReservationRepository` | PickupReservation | active order reservation unique, 종료 복원 state/trigger/source CHECK | unique/partial index + row lock |
 | `SellableStockRepository` | SellableStock | unique store/sellable unit, non-negative quantities | conditional update or row lock |
 | `StockReservationRepository` | StockReservation | active order/SKU unique, 종료 복원 state/trigger/source CHECK | unique/partial index + row lock |
 | `CampaignRepository` | Campaign | valid period/type/value/minimum/maximum/target/share ratio | optimistic version |
+| `CouponReservationRepository` | CouponReservation | final discount=platform+store legs, burden source/version/share complete, row immutable | issuance lock + order/source unique |
 | `CouponIssuanceRepository` | CouponIssuance | one active reservation/use per issuance, compensation source unique, restoration metadata와 terms snapshot CHECK | unique/partial index + guarded transition |
 | `PointAccountRepository` | PointAccount | unique member/program, non-negative available balance | row lock/version |
 | `PointLotRepository` | PointLot | non-negative available/reserved/remaining, amount tie-out, issuer type/reference NOT NULL·immutable; V14 non-empty legacy rows require one exact verified precheck mapping | ordered row lock |

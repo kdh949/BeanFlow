@@ -35,6 +35,12 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   실제 원천·주문 시점 materialization, `grossPaidKrw`/fee-base/net formula와 missing-source
   failure는 ADR-071이 canonical이다. Plan 20은 해당 snapshot foundation outcome 없이 현재
   Merchant/Campaign/Loyalty 값을 조회해 Item을 만들지 않는다.
+- **Implementation evidence (2026-08-02):** V18–V20과 주문 생성 Application Service가
+  versioned Merchant terms, CouponReservation final two-leg burden, PointReservation issuer
+  allocation을 Order당 하나의 immutable `OrderSettlementInputSnapshot`으로 물질화한다.
+  `OrderCompletedV2` factory/validator는 이 snapshot과 matching Payment approval fact만 받아
+  exact ADR-068 payload를 만든다. Plan 15는 completion outbox, producer activation, Settlement
+  Item/Batch/Adjustment를 추가하지 않았다.
 
 ## Alternatives Considered
 
@@ -48,7 +54,8 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 
 ## Consequences
 
-- Order 또는 SettlementItem에 수수료·비용부담 snapshot이 필요하다.
+- Order의 `OrderSettlementInputSnapshot`이 수수료·비용부담의 canonical immutable input이다.
+  SettlementItem은 이후 V2 payload를 소비하며 current owner 값을 다시 읽지 않는다.
 - 현재 유효 금액 조회는 Item, Adjustment와 이월 잔액을 합산해야 한다.
 
 ## Verification
@@ -58,6 +65,8 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - PointLot 발급 주체 혼합 사용
 - 확정 후 환불과 연속 음수 이월
 - 재실행 시 Item/Adjustment 중복 0
+- V18–V20 migration의 legacy gate, overlap/exactly-one/immutable/tie-out constraint
+- missing terms, burden 또는 issuer source의 503 rollback과 idempotent snapshot replay
 
 ## Metrics
 

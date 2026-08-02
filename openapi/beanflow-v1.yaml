@@ -129,7 +129,7 @@ paths:
         "409":
           $ref: "#/components/responses/OrderCreationConflict"
         "503":
-          $ref: "#/components/responses/DependencyUnavailable"
+          $ref: "#/components/responses/OrderCreationDependencyUnavailable"
   /orders/{orderId}:
     get:
       tags: [Ordering]
@@ -1169,6 +1169,16 @@ components:
             $ref: "#/components/schemas/Error"
     DependencyUnavailable:
       description: A required dependency is unavailable; no fallback result was used
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    OrderCreationDependencyUnavailable:
+      description: |
+        A required dependency is unavailable, or the immutable settlement input could
+        not be materialized. The Error code is DEPENDENCY_UNAVAILABLE or
+        SETTLEMENT_INPUT_UNAVAILABLE. No fee, coupon-cost, point-cost, current-value, or
+        partial-snapshot fallback is used; the order and every owner reservation roll back.
       content:
         application/json:
           schema:

@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -21,8 +21,9 @@
 - ADR-008/017/048은 SettlementItem/Batch/Adjustment와 고객 취소 `NOT_APPLICABLE`
   Audit을 Accepted로 정의한다. ADR-067은 이 계획이 최소 `OPEN` Batch와 Item 귀속만
   소유하고 lifecycle/Adjustment는 후속 계획이 소유한다고 고정한다.
-- ADR-071은 Merchant terms, Campaign burden, PointLot issuer와 net calculation을 Ordering
-  `OrderSettlementInputSnapshot`으로 materialize하는 Plan 15를 이 plan의 direct prerequisite로 고정한다.
+- completed Plan 15의 V18–V20은 Merchant terms, Campaign burden, PointLot issuer와 net
+  calculation을 Ordering `OrderSettlementInputSnapshot`으로 materialize하고 V2 factory/validator/
+  fixture까지 제공한다. production V2 producer/outbox/consumer는 아직 없다.
 - OpenAPI에는 Settlement 조회 계약이 있다.
 - `src/main/kotlin`과 migration에는 Settlement package/table/consumer가 없다.
 - 현재 `OrderCompletedV1`, `PaymentRefunded` 계약은 문서에 있으나 Settlement 소비 구현이 없다.
@@ -187,7 +188,7 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Progress
 
-- [ ] V2 cutover/event contract gate
+- [ ] V2 cutover/event contract gate — Plan 15 immutable input/factory 완료, Plan 16과 V1 inventory 남음
 - [ ] Settlement minimum Batch/Item schema
 - [ ] OrderCompletedV2 Batch/Item consumer
 - [ ] query contract
@@ -212,9 +213,10 @@ transaction boundaries, Settlement runbook과 quality evidence를 갱신한다.
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 15 snapshot/payload-factory, Plan 16 refund producer와 signed-cursor foundation evidence,
-V2 cutover inventory가 모두 통과하기 전에는 Ordering V2 producer, Settlement schema/consumer 또는 public Item
-endpoint를 시작하지 않는다.
+미구현 상태다. Plan 15 snapshot/payload-factory와 signed-cursor foundation evidence는 completed다.
+Plan 16 refund/Loyalty producer와 V1 cutover inventory가 남아 `Implementation-Ready=false`이며, 이 둘이
+통과하기 전에는 Ordering V2 producer, Settlement schema/consumer 또는 public Item endpoint를 시작하지
+않는다.
 
 ## Revision Notes
 
@@ -224,3 +226,5 @@ endpoint를 시작하지 않는다.
   맞춰 분리했다.
 - 2026-08-01: Plan 15에서 V2 outbox ownership을 제거하고, Plan 20의 Ordering producer cutover와
   separate Settlement consumer transaction으로 명확화했다.
+- 2026-08-02: completed Plan 15 V18–V20과 V2 factory handoff를 반영했다. Plan 16과 V1 inventory는
+  그대로 remaining activation gates다.

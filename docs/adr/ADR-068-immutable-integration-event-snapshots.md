@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -91,6 +91,13 @@ Settlement `OrderCompletedV2` consumer. The Ordering producer transaction and Se
 are separate local transactions; sharing an event never makes them one database transaction. Plan 16 owns only
 the named Refund/Loyalty producers in the table and is not an `OrderCompletedV2` producer.
 
+**Plan 15 implementation checkpoint (2026-08-02):** `OrderCompletedV2`의 public Kotlin payload,
+factory, validator와 exact JSON fixture가 구현됐다. Factory input은 completed Order fact,
+approved Payment fact와 persisted `OrderSettlementInputSnapshot`으로 제한되고 amount/source/time/
+currency/version을 fail-closed로 검증한다. production reference inventory에는 factory 외 V2
+producer, outbox save, listener 또는 Settlement consumer가 없으므로 이 checkpoint는 Plan 20
+activation이나 V1 drain 완료 증거가 아니다.
+
 ### Plan 13의 frozen V1 trigger-only boundary
 
 ADR-073은 Plan 13에 한해 `OrderCompletedV1`을 payload가 없는 frozen trigger로 유지하면서
@@ -154,6 +161,12 @@ unimplemented event shape to consume.
   ordinary accrual을 materialize한다.
 
 ## Verification
+
+**Plan 15 contract evidence (2026-08-02):** exact fixture serialization, envelope type/version,
+Payment payable equality, benefit-only zero payable, negative net and delayed immutable mapping tests
+passed. Current Merchant/Campaign/PointLot values are absent from the factory API. Plan 20 outbox
+atomicity, cutover inventory and Settlement consumer checks remain intentionally not run because those
+components are outside this checkpoint.
 
 **Plan 12 boundary evidence (2026-08-01):** V15 and the Payment result transaction now provide the
 immutable Refund line/point allocation, succeeded-at and policy lineage that Plan 16 may serialize. Plan 12

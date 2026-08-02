@@ -210,27 +210,27 @@ internal class OrderSettlementInputSnapshotIntegrationTest
                 val orderFuture =
                     executor.submit(
                         Callable<StoredHttpResponse> {
-                        start.await()
-                        createOrderUseCase.create("settlement-input-concurrent-terms-0001", fixture.command())
+                            start.await()
+                            createOrderUseCase.create("settlement-input-concurrent-terms-0001", fixture.command())
                         },
                     )
                 val termsFuture =
                     executor.submit(
                         Callable<Int> {
-                        start.await()
-                        jdbcTemplate.update(
-                            """
-                            INSERT INTO merchant_store_settlement_terms (
-                                terms_version_id, store_id, source_reference, fee_rate_bps,
-                                effective_from, effective_to, created_at
-                            ) VALUES (?, ?, ?, 900, ?, NULL, ?)
-                            """.trimIndent(),
-                            UUID.randomUUID(),
-                            fixture.storeId,
-                            "test:concurrent-future-store-settlement-terms:${fixture.storeId}",
-                            Timestamp.from(nextEffectiveAt),
-                            Timestamp.from(Instant.now()),
-                        )
+                            start.await()
+                            jdbcTemplate.update(
+                                """
+                                INSERT INTO merchant_store_settlement_terms (
+                                    terms_version_id, store_id, source_reference, fee_rate_bps,
+                                    effective_from, effective_to, created_at
+                                ) VALUES (?, ?, ?, 900, ?, NULL, ?)
+                                """.trimIndent(),
+                                UUID.randomUUID(),
+                                fixture.storeId,
+                                "test:concurrent-future-store-settlement-terms:${fixture.storeId}",
+                                Timestamp.from(nextEffectiveAt),
+                                Timestamp.from(Instant.now()),
+                            )
                         },
                     )
 

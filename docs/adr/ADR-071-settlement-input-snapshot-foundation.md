@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owner:** [Settlement input snapshot foundation](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
+- **Implementation owner:** [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
 
 ## Context
 
@@ -96,6 +96,25 @@ V1 drain/deployment gate 또는 Settlement consumer를 소유하지 않는다.
 publication retry 또는 `MANUAL_REVIEW`로 남긴다. Ordering producer와 Settlement consumer는 별도의 local
 transaction이며 consumer가 mutable source를 재조회해 producer input을 복구하지 않는다.
 
+## Implementation Status
+
+Plan 15는 2026-08-02에 다음 foundation까지 구현하고 완료했다.
+
+- V18 `merchant_store_settlement_terms`: immutable source/version, half-open effective interval,
+  store별 overlap 방지와 applicable-version exact-one lookup. 기존 Store에 임의 fee를 채우지
+  않으며 terms가 없는 Store의 주문만 명시적으로 실패한다.
+- V19 Campaign/CouponReservation: burden bearer/share와 source/version, final platform/store KRW
+  legs 및 immutable reservation constraint. active legacy Campaign 또는 기존 reservation은
+  verified source 없이 migration하지 않는다.
+- V20 `ordering_order_settlement_input_snapshot`: Order FK unique/exactly-one, owner source FK와
+  amount formula/tie-out CHECK 및 update/delete 금지 trigger. 기존 Order는 source를 추측하지
+  않고 migration activation을 중단한다.
+- `StoreSettlementTermsOperations`, `CouponReservationOperations`,
+  `PointReservationOperations`, `OrderSettlementInputSnapshotOperations` 공개 DTO 경계와 주문
+  생성 transaction 통합. store issuer reference는 Order store UUID와 exact-match한다.
+- `OrderCompletedV2` factory/validator/fixture는 구현했지만 outbox row, V1→V2 전환, producer
+  activation, Settlement consumer/모델은 구현하지 않았다.
+
 ## Alternatives Considered
 
 ### SettlementItem 생성 시 현재 계약과 Campaign을 조회
@@ -137,6 +156,11 @@ consumer의 live read로 변질된다.
   payload hash로 수렴한다.
 - Plan 15는 snapshot/factory validation만 제공하고 Plan 20만 V2 outbox save/cutover를 수행하며,
   producer와 Settlement consumer는 separate local transaction으로 수렴한다.
+- **Implementation evidence (2026-08-02):** V18–V20 Testcontainers migration, applicable terms
+  전후/overlap/동시 future publication, PLATFORM/STORE/SHARED leg와 remainder, mixed issuer와
+  cross-store mismatch, exactly-one/hash/replay/persistence rollback, Payment mismatch/V2 contract가
+  통과했다. 외부 runtime DB가 없어 non-local row backfill은 수행하지 않았고, migration은
+  active legacy Campaign/reservation 또는 any legacy Order를 fail-closed로 차단한다.
 
 ## Related Decisions
 

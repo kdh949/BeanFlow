@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -19,7 +19,9 @@ producer/cutover와 Settlement consumer는 Plan 20 소유다.
 ## Current State
 
 - Refund/Point result에 durable immutable financial event producer와 contract tests가 없다.
-- `PaymentRefundedV1.settlementRefundEffect`는 Plan 15 snapshot 없이는 계산할 수 없다.
+- completed Plan 15의 V18–V20과 public snapshot boundary가
+  `PaymentRefundedV1.settlementRefundEffect` 계산에 필요한 immutable fee/coupon/point input을
+  제공한다. V2 factory는 완료됐지만 completion producer/outbox는 Plan 20에 남아 있다.
 - completed Plan 13 V17은 immutable Loyalty accrual/recovery result receipt와 exact
   completion/refund source/version/hash를 제공한다. Plan 16은 이 owner fact를 publication source로
   소비하며 recovery/pending을 재구현하지 않는다.
@@ -122,6 +124,8 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
   at that checkpoint Plan 13 and Plan 15 remained active blockers.
 - 2026-08-02: Plan 13 now provides completed immutable accrual/recovery result receipts and owner
   transaction evidence without publishing `PointsAccruedV1`. Plan 15 is the only remaining direct blocker.
+- 2026-08-02: Plan 15 completed V18–V20 owner inputs, snapshot hash/tie-out and the V2 factory fixture
+  without activating an event producer. All Plan 16 direct dependencies are now completed.
 
 ## Decision Log
 
@@ -132,9 +136,10 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 12와 Plan 13 validation evidence는 completed path에 있고 Plan 13은
-`PointsAccruedV1` publication을 이 계획에 남겼다. Plan 15가 active인 유일한 direct blocker이므로
-`Implementation-Ready=false`를 유지하며 해당 outcome이 completed path에 있을 때만 시작한다.
+미구현 상태다. Plan 12/13의 immutable allocation/result receipt와 Plan 15의 settlement snapshot
+outcome이 모두 completed path에 있다. `PaymentRefundedV1`, `PointsAccruedV1`,
+`PointsRestoredV1` publication은 여전히 이 계획 소유이고 조기 활성화되지 않았다. 모든 direct
+dependency와 product contract가 충족되어 `Implementation-Ready=true`다.
 
 ## Revision Notes
 
@@ -144,3 +149,5 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 - 2026-08-01: Plan 12 completion path를 반영하고 Plan 13/15가 남은 direct blockers임을 명시했다.
 - 2026-08-02: Plan 13 V17/result receipt와 205-test outcome을 completed dependency로 반영하고
   Plan 15만 remaining blocker로 남겼다.
+- 2026-08-02: Plan 15 V18–V20/229-test outcome을 completed dependency로 반영하고
+  implementation-ready로 전환했다.

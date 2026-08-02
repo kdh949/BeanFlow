@@ -47,7 +47,7 @@ paths:
         "409":
           $ref: "./beanflow-v1.yaml#/components/responses/OrderCreationConflict"
         "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+          $ref: "./beanflow-v1.yaml#/components/responses/OrderCreationDependencyUnavailable"
   /orders/{orderId}:
     get:
       tags: [Ordering]
