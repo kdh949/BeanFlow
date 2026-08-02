@@ -7,9 +7,10 @@ import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ExpiredCouponRestorationMode
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
-import io.github.kdh949.beanflow.promotion.api.RestoreCouponByRejectionCommand
+import io.github.kdh949.beanflow.promotion.api.RestoreCouponAfterTerminationCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -35,18 +37,20 @@ internal class CouponReservationRepositoryTest
         private val eligibleMenuRepository: CampaignEligibleMenuJpaRepository,
         private val issuanceRepository: CouponIssuanceJpaRepository,
         private val reservationRepository: CouponReservationJpaRepository,
+        private val compensationTermsRepository: CompensationCouponTermsSnapshotJpaRepository,
+        private val compensationEligibleMenuRepository: CompensationCouponEligibleMenuJpaRepository,
+        private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
 
         @BeforeEach
         fun cleanDatabase() {
-            transactions.executeWithoutResult {
-                reservationRepository.deleteAllInBatch()
-                issuanceRepository.deleteAllInBatch()
-                eligibleMenuRepository.deleteAllInBatch()
-                campaignRepository.deleteAllInBatch()
-            }
+            jdbcTemplate.execute(
+                "TRUNCATE TABLE promotion_compensation_coupon_eligible_menu, " +
+                    "promotion_compensation_coupon_terms_snapshot, promotion_coupon_reservation, " +
+                    "promotion_coupon_issuance, promotion_campaign_eligible_menu, promotion_campaign CASCADE",
+            )
         }
 
         @Test
@@ -189,16 +193,18 @@ internal class CouponReservationRepositoryTest
                 operations.confirm(orderId, "coupon-order-$orderId")
             }
             val restore =
-                RestoreCouponByRejectionCommand(
+                RestoreCouponAfterTerminationCommand(
                     orderId,
                     Instant.parse("2029-01-01T00:00:00Z"),
                     "rejection-coupon-$orderId",
+                    OrderTerminationTrigger.STORE_REJECTION,
+                    1,
                     ExpiredCouponRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
                     30,
                 )
 
-            val first = operations.restoreUsedByRejection(restore)
-            val replay = operations.restoreUsedByRejection(restore)
+            val first = operations.restoreUsedAfterTermination(restore)
+            val replay = operations.restoreUsedAfterTermination(restore)
 
             assertThat(first.result).isEqualTo(ReservationTransitionResult.APPLIED)
             assertThat(replay.result).isEqualTo(ReservationTransitionResult.ALREADY_APPLIED)
@@ -207,14 +213,106 @@ internal class CouponReservationRepositoryTest
                     .isEqualTo(CouponIssuanceState.RESTORED)
                 assertThat(reservationRepository.findByOrderId(orderId)?.state)
                     .isEqualTo(CouponReservationState.RESTORED)
+                assertThat(reservationRepository.findByOrderId(orderId)?.restorationDisposition)
+                    .isEqualTo(CouponRestorationDisposition.ORIGINAL_RESTORED)
+                assertThat(reservationRepository.findByOrderId(orderId)?.restorationTrigger)
+                    .isEqualTo(OrderTerminationTrigger.STORE_REJECTION)
                 operations.reserve(command(fixture, UUID.randomUUID(), "coupon-reused-${fixture.issuanceId}"))
             }
+            val conflict =
+                runCatching {
+                    operations.restoreUsedAfterTermination(
+                        restore.copy(trigger = OrderTerminationTrigger.CUSTOMER_CANCELLATION),
+                    )
+                }.exceptionOrNull()
+            assertThat(conflict).isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.COMPENSATION_SOURCE_CONFLICT)
+            }
+        }
+
+        @Test
+        fun `expired coupon compensation preserves immutable terms after campaign deactivation`() {
+            val fixture =
+                insertFixedCoupon(
+                    costBearer = CouponCostBearer.SHARED,
+                    platformShareBps = 4_000,
+                    storeShareBps = 6_000,
+                    allMenusEligible = false,
+                )
+            val orderId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                operations.reserve(command(fixture, orderId, "coupon-order-$orderId"))
+                operations.confirm(orderId, "coupon-order-$orderId")
+            }
+
+            val report =
+                operations.restoreUsedAfterTermination(
+                    RestoreCouponAfterTerminationCommand(
+                        orderId,
+                        Instant.parse("2031-01-01T00:00:00Z"),
+                        "termination-coupon-$orderId",
+                        OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                        3,
+                        ExpiredCouponRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
+                        30,
+                    ),
+                )
+
+            assertThat(report.result).isEqualTo(ReservationTransitionResult.APPLIED)
+            val compensation = issuanceRepository.findAll().single { it.originalIssuanceId == fixture.issuanceId }
+            assertThat(compensation.restorationTrigger).isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION)
+            assertThat(compensation.restorationPolicyVersionId).isEqualTo(3)
+            assertThat(compensationTermsRepository.findById(compensation.id)).isPresent
+            assertThat(compensationEligibleMenuRepository.findAllByCouponIssuanceId(compensation.id).map { it.menuId })
+                .containsExactly(fixture.menuId)
+            jdbcTemplate.update("UPDATE promotion_campaign SET active = false WHERE id = ?", compensation.campaignId)
+
+            val quote =
+                transactions.execute {
+                    operations.reserve(
+                        command(
+                            fixture.copy(issuanceId = compensation.id),
+                            UUID.randomUUID(),
+                            "compensation-coupon-${compensation.id}",
+                        ),
+                    )
+                }
+            assertThat(quote.costBearer).isEqualTo(CouponCostBearer.SHARED)
+            assertThat(quote.platformShareBps).isEqualTo(4_000)
+            assertThat(quote.storeShareBps).isEqualTo(6_000)
+        }
+
+        @Test
+        fun `expired preserve policy records skipped disposition without new issuance`() {
+            val fixture = insertFixedCoupon()
+            val orderId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                operations.reserve(command(fixture, orderId, "coupon-order-$orderId"))
+                operations.confirm(orderId, "coupon-order-$orderId")
+            }
+
+            operations.restoreUsedAfterTermination(
+                RestoreCouponAfterTerminationCommand(
+                    orderId,
+                    Instant.parse("2031-01-01T00:00:00Z"),
+                    "termination-coupon-$orderId",
+                    OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                    3,
+                    ExpiredCouponRestorationMode.PRESERVE_ORIGINAL_EXPIRY,
+                    30,
+                ),
+            )
+
+            assertThat(issuanceRepository.findAll()).hasSize(1)
+            assertThat(reservationRepository.findByOrderId(orderId)?.restorationDisposition)
+                .isEqualTo(CouponRestorationDisposition.SKIPPED_EXPIRED)
         }
 
         private fun insertFixedCoupon(
             costBearer: CouponCostBearer = CouponCostBearer.STORE,
             platformShareBps: Int = 0,
             storeShareBps: Int = 10_000,
+            allMenusEligible: Boolean = true,
         ): CouponFixture {
             val fixture =
                 CouponFixture(
@@ -235,12 +333,17 @@ internal class CouponReservationRepositoryTest
                         rateBps = null,
                         minimumEligibleSubtotalKrw = 0,
                         maximumDiscountKrw = null,
-                        allMenusEligible = true,
+                        allMenusEligible = allMenusEligible,
                         costBearer = costBearer,
                         platformShareBps = platformShareBps,
                         storeShareBps = storeShareBps,
                     ),
                 )
+                if (!allMenusEligible) {
+                    eligibleMenuRepository.save(
+                        CampaignEligibleMenuEntity(UUID.randomUUID(), campaignId, fixture.menuId),
+                    )
+                }
                 issuanceRepository.save(
                     CouponIssuanceEntity(
                         id = fixture.issuanceId,

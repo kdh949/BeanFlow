@@ -5,10 +5,10 @@ DECLARE
 BEGIN
     SELECT count(*) INTO legacy_pickup_count
       FROM fulfillment_pickup_reservation
-     WHERE state = 'RELEASED_AFTER_TERMINATION';
+     WHERE state = 'RELEASED_BY_REJECTION';
     SELECT count(*) INTO legacy_stock_count
       FROM inventory_stock_reservation
-     WHERE state = 'RELEASED_AFTER_TERMINATION';
+     WHERE state = 'RELEASED_BY_REJECTION';
     IF legacy_pickup_count <> 0 OR legacy_stock_count <> 0 THEN
         RAISE EXCEPTION
             'V9 order termination clean-cutover precheck failed: legacy rejection release rows exist';

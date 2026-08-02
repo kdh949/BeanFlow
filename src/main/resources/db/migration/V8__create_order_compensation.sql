@@ -3,12 +3,12 @@ DECLARE
     legacy_case_count bigint := 0;
     legacy_step_count bigint := 0;
 BEGIN
-    IF to_regclass('operations_order_compensation_case') IS NOT NULL THEN
-        EXECUTE 'SELECT count(*) FROM operations_order_compensation_case'
+    IF to_regclass('operations_rejection_compensation_case') IS NOT NULL THEN
+        EXECUTE 'SELECT count(*) FROM operations_rejection_compensation_case'
            INTO legacy_case_count;
     END IF;
-    IF to_regclass('operations_order_compensation_step') IS NOT NULL THEN
-        EXECUTE 'SELECT count(*) FROM operations_order_compensation_step'
+    IF to_regclass('operations_rejection_compensation_step') IS NOT NULL THEN
+        EXECUTE 'SELECT count(*) FROM operations_rejection_compensation_step'
            INTO legacy_step_count;
     END IF;
     IF legacy_case_count <> 0 OR legacy_step_count <> 0 THEN

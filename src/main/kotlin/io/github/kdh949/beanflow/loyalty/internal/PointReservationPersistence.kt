@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -104,8 +105,13 @@ internal class PointReservationEntity(
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
-    @Column(name = "restoration_source_reference", length = 200)
+    @Column(name = "restoration_source_reference", length = 240)
     var restorationSourceReference: String? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restoration_trigger")
+    var restorationTrigger: OrderTerminationTrigger? = null,
+    @Column(name = "restoration_policy_version_id")
+    var restorationPolicyVersionId: Long? = null,
     @Version
     var version: Long = 0,
 )
@@ -278,4 +284,12 @@ internal interface PointTransactionJpaRepository : JpaRepository<PointTransactio
 
 internal interface PartialRefundRestorationJpaRepository : JpaRepository<PartialRefundRestorationEntity, UUID> {
     fun findAllByRefundIdOrderByOrderLineIdAscPointReservationAllocationIdAsc(refundId: UUID): List<PartialRefundRestorationEntity>
+
+    @Query(
+        "select coalesce(sum(restoration.amountKrw), 0) from PartialRefundRestorationEntity restoration " +
+            "where restoration.pointReservationAllocationId = :allocationId",
+    )
+    fun sumRestoredAmountByAllocationId(
+        @Param("allocationId") allocationId: UUID,
+    ): Long
 }

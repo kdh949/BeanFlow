@@ -419,9 +419,11 @@ paths:
       description: |
         Platform operator view of the order compensation case. Step level state,
         attempt counts and internal error codes are operator-only and are never
-        returned to customers or store members.
+        returned to customers or store members. Requires an active
+        ORDER_COMPENSATION_READ grant and an audited X-Access-Reason.
       parameters:
         - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/AccessReason"
       responses:
         "200":
           description: Compensation case for the order

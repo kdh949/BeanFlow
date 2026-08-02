@@ -5,10 +5,17 @@ import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
+import io.github.kdh949.beanflow.fulfillment.internal.OrderRejectedPickupListener
+import io.github.kdh949.beanflow.inventory.internal.OrderRejectedStockListener
+import io.github.kdh949.beanflow.loyalty.internal.OrderRejectedPointsListener
+import io.github.kdh949.beanflow.notification.internal.OrderRejectedNotificationListener
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
+import io.github.kdh949.beanflow.payment.internal.OrderRejectedRefundListener
+import io.github.kdh949.beanflow.promotion.internal.OrderRejectedCouponListener
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatIllegalStateException
 import org.junit.jupiter.api.Test
+import org.springframework.modulith.events.ApplicationModuleListener
 import java.time.Instant
 import java.util.UUID
 
@@ -59,6 +66,46 @@ internal class CompensationPublicationTargetRegistryTest {
         assertThatIllegalStateException()
             .isThrownBy { registry.requireUnique(listOf(duplicate, duplicate.copy())) }
             .withMessage("Duplicate compensation publication target")
+    }
+
+    @Test
+    fun `listener annotations expose exactly the registry target identifiers`() {
+        val annotatedTargets =
+            listOf(
+                OrderRejectedRefundListener::class.java,
+                OrderRejectedPickupListener::class.java,
+                OrderRejectedStockListener::class.java,
+                OrderRejectedCouponListener::class.java,
+                OrderRejectedPointsListener::class.java,
+                OrderRejectedNotificationListener::class.java,
+            ).flatMap { listener ->
+                listener.declaredMethods.mapNotNull { method ->
+                    val annotation = method.getAnnotation(ApplicationModuleListener::class.java) ?: return@mapNotNull null
+                    if (!annotation.id.startsWith("beanflow.order-compensation.")) return@mapNotNull null
+                    method.parameterTypes.single().name to annotation.id
+                }
+            }.toSet()
+
+        val expected =
+            setOf(
+                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.payment.v1",
+                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.pickup.v1",
+                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.stock.v1",
+                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.coupon.v1",
+                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.points.v1",
+                OrderRejectedV1::class.java.name to
+                    "beanflow.order-compensation.order-rejected.customer-notification.v1",
+                OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.pickup.v1",
+                OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.stock.v1",
+                OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.coupon.v1",
+                OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.points.v1",
+            )
+
+        assertThat(annotatedTargets).isEqualTo(expected)
+        annotatedTargets.forEach { (eventType, listenerId) ->
+            val event = if (eventType == OrderRejectedV1::class.java.name) rejectedEvent() else cancelledEvent()
+            assertThat(registry.find(event, listenerId)).isNotNull()
+        }
     }
 
     private fun rejectedEvent() =

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -86,8 +87,13 @@ internal class CouponIssuanceEntity(
     var reservedOrderId: UUID? = null,
     @Column(name = "original_issuance_id")
     val originalIssuanceId: UUID? = null,
-    @Column(name = "restoration_source_reference", length = 200)
+    @Column(name = "restoration_source_reference", length = 240)
     val restorationSourceReference: String? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restoration_trigger")
+    val restorationTrigger: OrderTerminationTrigger? = null,
+    @Column(name = "restoration_policy_version_id")
+    val restorationPolicyVersionId: Long? = null,
     @Version
     var version: Long = 0,
 )
@@ -97,6 +103,12 @@ internal enum class CouponReservationState {
     USED,
     RELEASED,
     RESTORED,
+}
+
+internal enum class CouponRestorationDisposition {
+    ORIGINAL_RESTORED,
+    COMPENSATION_ISSUED,
+    SKIPPED_EXPIRED,
 }
 
 @Entity
@@ -112,6 +124,8 @@ internal class CouponReservationEntity(
     val campaignId: UUID,
     @Column(name = "campaign_version", nullable = false)
     val campaignVersion: Long,
+    @Column(name = "store_id", nullable = false)
+    val storeId: UUID,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var state: CouponReservationState,
@@ -119,6 +133,10 @@ internal class CouponReservationEntity(
     val discountKrw: Long,
     @Column(name = "eligible_line_sequences", nullable = false)
     val eligibleLineSequences: String,
+    @Column(name = "all_menus_eligible", nullable = false)
+    val allMenusEligible: Boolean,
+    @Column(name = "eligible_menu_ids", nullable = false, length = 4000)
+    val eligibleMenuIds: String,
     @Enumerated(EnumType.STRING)
     @Column(name = "discount_type", nullable = false)
     val discountType: CouponDiscountType,
@@ -149,10 +167,65 @@ internal class CouponReservationEntity(
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
-    @Column(name = "restoration_source_reference", length = 200)
+    @Column(name = "restoration_source_reference", length = 240)
     var restorationSourceReference: String? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restoration_trigger")
+    var restorationTrigger: OrderTerminationTrigger? = null,
+    @Column(name = "restoration_policy_version_id")
+    var restorationPolicyVersionId: Long? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restoration_disposition")
+    var restorationDisposition: CouponRestorationDisposition? = null,
     @Version
     var version: Long = 0,
+)
+
+@Entity
+@Table(name = "promotion_compensation_coupon_terms_snapshot")
+internal class CompensationCouponTermsSnapshotEntity(
+    @Id
+    @Column(name = "coupon_issuance_id")
+    val couponIssuanceId: UUID,
+    @Column(name = "campaign_id", nullable = false)
+    val campaignId: UUID,
+    @Column(name = "campaign_version", nullable = false)
+    val campaignVersion: Long,
+    @Column(name = "store_id", nullable = false)
+    val storeId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "discount_type", nullable = false)
+    val discountType: CouponDiscountType,
+    @Column(name = "fixed_amount_krw")
+    val fixedAmountKrw: Long?,
+    @Column(name = "rate_bps")
+    val rateBps: Int?,
+    @Column(name = "minimum_eligible_subtotal_krw", nullable = false)
+    val minimumEligibleSubtotalKrw: Long,
+    @Column(name = "maximum_discount_krw")
+    val maximumDiscountKrw: Long?,
+    @Column(name = "all_menus_eligible", nullable = false)
+    val allMenusEligible: Boolean,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cost_bearer", nullable = false)
+    val costBearer: CouponCostBearer,
+    @Column(name = "platform_share_bps", nullable = false)
+    val platformShareBps: Int,
+    @Column(name = "store_share_bps", nullable = false)
+    val storeShareBps: Int,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+)
+
+@Entity
+@Table(name = "promotion_compensation_coupon_eligible_menu")
+internal class CompensationCouponEligibleMenuEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "coupon_issuance_id", nullable = false)
+    val couponIssuanceId: UUID,
+    @Column(name = "menu_id", nullable = false)
+    val menuId: UUID,
 )
 
 internal interface CampaignJpaRepository : JpaRepository<CampaignEntity, UUID> {
@@ -185,4 +258,10 @@ internal interface CouponReservationJpaRepository : JpaRepository<CouponReservat
     fun findLockedByOrderId(
         @Param("orderId") orderId: UUID,
     ): CouponReservationEntity?
+}
+
+internal interface CompensationCouponTermsSnapshotJpaRepository : JpaRepository<CompensationCouponTermsSnapshotEntity, UUID>
+
+internal interface CompensationCouponEligibleMenuJpaRepository : JpaRepository<CompensationCouponEligibleMenuEntity, UUID> {
+    fun findAllByCouponIssuanceId(couponIssuanceId: UUID): List<CompensationCouponEligibleMenuEntity>
 }

@@ -87,6 +87,24 @@ internal class EventPublicationRecoveryWorker(
                                 now,
                             )
                         }
+                        meterRegistry
+                            .counter(
+                                "beanflow.event.publication.exhaustion.count",
+                                "event_type",
+                                event.javaClass.simpleName.lowercase(),
+                                "outcome",
+                                if (stepType == null && compensationEvent) "unmapped" else "manual_review",
+                            ).increment()
+                        if (compensationEvent && stepType == null) {
+                            meterRegistry
+                                .counter(
+                                    "beanflow.order.termination.event.routing_error.count",
+                                    "event_type",
+                                    event.javaClass.simpleName.lowercase(),
+                                    "consumer",
+                                    "unmapped",
+                                ).increment()
+                        }
                         logger.error(
                             "event_publication id={} eventType={} outcome=MANUAL_REVIEW attempts={}",
                             publication.identifier,

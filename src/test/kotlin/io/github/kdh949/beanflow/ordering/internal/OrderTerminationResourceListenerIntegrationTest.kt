@@ -163,6 +163,19 @@ internal class OrderTerminationResourceListenerIntegrationTest
                 .isEqualTo(OrderCompensationStepState.SUCCEEDED)
             assertThat(steps.getValue(OrderCompensationStepType.STOCK).state)
                 .isEqualTo(OrderCompensationStepState.SUCCEEDED)
+            val publicationTargets =
+                jdbcTemplate.queryForList(
+                    "SELECT listener_id FROM event_publication WHERE event_type = ? AND serialized_event LIKE ?",
+                    String::class.java,
+                    OrderCancelledV1::class.java.name,
+                    "%${event.envelope.eventId}%",
+                )
+            assertThat(publicationTargets).containsExactlyInAnyOrder(
+                "beanflow.order-compensation.order-cancelled.pickup.v1",
+                "beanflow.order-compensation.order-cancelled.stock.v1",
+                "beanflow.order-compensation.order-cancelled.coupon.v1",
+                "beanflow.order-compensation.order-cancelled.points.v1",
+            )
         }
 
         private fun io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot.toEventPolicy() =

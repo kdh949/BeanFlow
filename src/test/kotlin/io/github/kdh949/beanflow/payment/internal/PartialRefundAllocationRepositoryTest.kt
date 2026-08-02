@@ -1,11 +1,14 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointOperations
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointPolicyMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointSlice
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
+import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.RestorePartialRefundPointsCommand
+import io.github.kdh949.beanflow.loyalty.api.RestorePointsAfterTerminationCommand
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualCalculator
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualLineInput
@@ -25,6 +28,8 @@ import io.github.kdh949.beanflow.payment.api.RefundPointAccrualUnit
 import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
+import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.Assertions.catchThrowable
@@ -70,6 +75,7 @@ internal class PartialRefundAllocationRepositoryTest
         private val restorationWorker: PartialRefundRestorationWorker,
         private val restorationService: PartialRefundRestorationService,
         private val pointOperations: PartialRefundPointOperations,
+        private val pointReservationOperations: PointReservationOperations,
         private val gateway: ScriptedTestPaymentGateway,
         private val jdbcTemplate: JdbcTemplate,
         private val objectMapper: ObjectMapper,
@@ -167,6 +173,39 @@ internal class PartialRefundAllocationRepositoryTest
                 .isEqualTo(fixture.storeId.toString())
             assertThat(singleString("select disposition from loyalty_partial_refund_restoration"))
                 .isEqualTo("COMPENSATION_LOT")
+
+            val terminationPolicyVersion =
+                singleLong(
+                    """
+                    select policy_version from operations_expired_benefit_policy_head
+                     where trigger = 'STORE_REJECTION' and benefit_type = 'POINTS'
+                    """.trimIndent(),
+                )
+            val termination =
+                RestorePointsAfterTerminationCommand(
+                    orderId = fixture.orderId,
+                    terminatedAt = NOW,
+                    sourceReference = "order:${fixture.orderId}:store-rejection:points",
+                    trigger = OrderTerminationTrigger.STORE_REJECTION,
+                    policyVersionId = terminationPolicyVersion,
+                    mode = ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
+                    compensationValidityDays = 30,
+                )
+            val terminationResult = pointReservationOperations.restoreUsedAfterTermination(termination)
+            val terminationReplay = pointReservationOperations.restoreUsedAfterTermination(termination)
+
+            assertThat(terminationResult.result).isEqualTo(ReservationTransitionResult.APPLIED)
+            assertThat(terminationReplay.result).isEqualTo(ReservationTransitionResult.ALREADY_APPLIED)
+            assertThat(singleString("select state from loyalty_point_reservation")).isEqualTo("RESTORED")
+            assertThat(singleLong("select available_points_krw from loyalty_point_account")).isEqualTo(3_000)
+            assertThat(
+                singleLong(
+                    """
+                    select coalesce(sum(amount_krw), 0) from loyalty_point_transaction
+                     where restoration_trigger = 'STORE_REJECTION'
+                    """.trimIndent(),
+                ),
+            ).isEqualTo(2_667)
 
             val replay = service.create(command)
             assertThat(replay).isEqualTo(first)
@@ -1066,16 +1105,18 @@ internal class PartialRefundAllocationRepositoryTest
                         id, order_id, coupon_issuance_id, state, discount_krw,
                         eligible_line_sequences, discount_type, fixed_amount_krw, rate_bps,
                         minimum_eligible_subtotal_krw, maximum_discount_krw,
-                        campaign_id, campaign_version, cost_bearer, platform_share_bps,
+                        campaign_id, campaign_version, store_id, all_menus_eligible,
+                        eligible_menu_ids, cost_bearer, platform_share_bps,
                         store_share_bps, platform_coupon_cost_krw, store_coupon_cost_krw,
                         reservation_expires_at, source_reference, created_at, updated_at, version
                     ) VALUES (?, ?, ?, 'USED', 2000, '0,1', 'FIXED_KRW', 2000, NULL,
-                              0, NULL, ?, 0, 'STORE', 0, 10000, 0, 2000, ?, ?, ?, ?, 0)
+                              0, NULL, ?, 0, ?, true, '', 'STORE', 0, 10000, 0, 2000, ?, ?, ?, ?, 0)
                     """.trimIndent(),
                     couponReservationId,
                     fixture.orderId,
                     issuanceId,
                     campaignId,
+                    fixture.storeId,
                     Timestamp.from(NOW.plusSeconds(300)),
                     "coupon:${fixture.orderId}",
                     Timestamp.from(NOW),

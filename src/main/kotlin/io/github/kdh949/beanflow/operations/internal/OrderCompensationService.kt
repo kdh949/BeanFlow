@@ -10,11 +10,16 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepView
+import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -25,6 +30,7 @@ internal class OrderCompensationService(
     private val stepRepository: OrderCompensationStepJpaRepository,
     private val identifierSource: IdentifierSource,
     private val advisoryLock: DatabaseAdvisoryLock,
+    private val meterRegistry: MeterRegistry,
 ) : OrderCompensationOperations {
     @Transactional
     override fun open(command: OpenOrderCompensationCaseCommand): OrderCompensationCaseView {
@@ -58,7 +64,7 @@ internal class OrderCompensationService(
                 policyEntity(beanCase.id, ExpiredBenefitType.POINTS, command.pointsPolicy),
             ),
         )
-        stepRepository.saveAll(
+        val steps =
             OrderCompensationStepType.entries.map { type ->
                 OrderCompensationStepEntity(
                     id = identifierSource.next(),
@@ -69,8 +75,22 @@ internal class OrderCompensationService(
                     lastErrorCode = null,
                     updatedAt = command.now,
                 )
-            },
-        )
+            }
+        stepRepository.saveAll(steps)
+        afterCommit {
+            recordCaseMetric(command.trigger, OrderCompensationState.PROCESSING)
+            steps.forEach { recordStepMetric(command.trigger, it.stepType, it.state) }
+            listOf(ExpiredBenefitType.COUPON, ExpiredBenefitType.POINTS).forEach { benefitType ->
+                meterRegistry
+                    .counter(
+                        "beanflow.order.compensation.policy_snapshot.count",
+                        "trigger",
+                        command.trigger.name.lowercase(),
+                        "benefit_type",
+                        benefitType.name.lowercase(),
+                    ).increment()
+            }
+        }
         return view(beanCase)
     }
 
@@ -114,6 +134,26 @@ internal class OrderCompensationService(
         step.updatedAt = now
         beanCase.updatedAt = now
         beanCase.state = deriveState(stepRepository.findAllByCaseIdOrderByStepType(beanCase.id))
+        afterCommit {
+            recordStepMetric(beanCase.trigger, step.stepType, step.state)
+            recordCaseMetric(beanCase.trigger, beanCase.state)
+            if (beanCase.state == OrderCompensationState.SUCCEEDED ||
+                beanCase.state == OrderCompensationState.MANUAL_REVIEW
+            ) {
+                meterRegistry
+                    .summary(
+                        "beanflow.order.compensation.lag",
+                        "trigger",
+                        beanCase.trigger.name.lowercase(),
+                    ).record(
+                        Duration
+                            .between(beanCase.createdAt, now)
+                            .seconds
+                            .coerceAtLeast(0)
+                            .toDouble(),
+                    )
+            }
+        }
         return view(beanCase)
     }
 
@@ -162,10 +202,27 @@ internal class OrderCompensationService(
         command: OpenOrderCompensationCaseCommand,
     ): OrderCompensationStepState =
         when (type) {
-            OrderCompensationStepType.PAYMENT -> required(command.paymentRequired)
-            OrderCompensationStepType.COUPON -> required(command.couponRequired)
-            OrderCompensationStepType.POINTS -> required(command.pointsRequired)
-            else -> OrderCompensationStepState.PROCESSING
+            OrderCompensationStepType.PAYMENT -> {
+                required(command.paymentRequired)
+            }
+
+            OrderCompensationStepType.COUPON -> {
+                required(command.couponRequired)
+            }
+
+            OrderCompensationStepType.POINTS -> {
+                required(command.pointsRequired)
+            }
+
+            OrderCompensationStepType.CUSTOMER_NOTIFICATION -> {
+                required(command.trigger == OrderCompensationTrigger.STORE_REJECTION)
+            }
+
+            OrderCompensationStepType.PICKUP,
+            OrderCompensationStepType.STOCK,
+            -> {
+                OrderCompensationStepState.PROCESSING
+            }
         }
 
     private fun required(required: Boolean): OrderCompensationStepState =
@@ -209,4 +266,43 @@ internal class OrderCompensationService(
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order compensation case was not found")
 
     private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.COMPENSATION_SOURCE_CONFLICT, message)
+
+    private fun recordCaseMetric(
+        trigger: OrderCompensationTrigger,
+        state: OrderCompensationState,
+    ) {
+        meterRegistry
+            .counter(
+                "beanflow.order.compensation.case.count",
+                "trigger",
+                trigger.name.lowercase(),
+                "state",
+                state.name.lowercase(),
+            ).increment()
+    }
+
+    private fun recordStepMetric(
+        trigger: OrderCompensationTrigger,
+        type: OrderCompensationStepType,
+        state: OrderCompensationStepState,
+    ) {
+        meterRegistry
+            .counter(
+                "beanflow.order.compensation.step.count",
+                "trigger",
+                trigger.name.lowercase(),
+                "type",
+                type.name.lowercase(),
+                "state",
+                state.name.lowercase(),
+            ).increment()
+    }
+
+    private fun afterCommit(action: () -> Unit) {
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
+        )
+    }
 }

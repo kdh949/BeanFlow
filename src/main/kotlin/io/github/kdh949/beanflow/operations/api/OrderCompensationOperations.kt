@@ -59,6 +59,42 @@ data class OrderCompensationCaseView(
     val updatedAt: Instant,
 )
 
+data class CompensationBenefitPolicyReference(
+    val benefitType: ExpiredBenefitType,
+    val policyVersionId: Long,
+)
+
+data class CompensationStep(
+    val type: OrderCompensationStepType,
+    val state: OrderCompensationStepState,
+    val attemptCount: Int,
+    val lastErrorCode: String?,
+)
+
+data class CompensationSummary(
+    val caseId: UUID,
+    val trigger: OrderCompensationTrigger,
+    val benefitPolicies: List<CompensationBenefitPolicyReference>,
+    val state: OrderCompensationState,
+    val steps: List<CompensationStep>,
+    val updatedAt: Instant,
+)
+
+data class OperatorCompensationView(
+    val compensation: CompensationSummary,
+)
+
+data class ReadOperatorCompensationCommand(
+    val actorId: UUID,
+    val orderId: UUID,
+    val accessReason: String,
+    val now: Instant,
+)
+
+interface OperatorCompensationQueryOperations {
+    fun read(command: ReadOperatorCompensationCommand): OperatorCompensationView
+}
+
 data class OpenOrderCompensationCaseCommand(
     val caseId: UUID,
     val eventId: UUID,

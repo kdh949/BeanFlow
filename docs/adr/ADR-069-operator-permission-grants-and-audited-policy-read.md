@@ -34,6 +34,12 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   migration으로 추가한다. 일반 적립 policy current/history 조회와 version 변경은 이 두 grant를
   사용하고 expired-benefit grant를 재사용하지 않는다. 기존 offline grant bootstrap은 새 enum과 DB
   vocabulary가 적용된 뒤 두 permission의 grant/revoke/regrant에도 그대로 사용한다.
+- **2026-08-03 order compensation read amendment:** Plan 30은 운영자 전용
+  `GET /operations/orders/{orderId}/compensation`에만 쓰는
+  `ORDER_COMPENSATION_READ`를 closed vocabulary에 forward migration으로 추가한다.
+  active grant, 1..200자의 control-character 없는 `X-Access-Reason`, target Case access
+  Audit를 같은 local transaction에서 요구한다. 기존 policy·point permission이나 role은
+  fallback이 아니다.
 - **2026-08-01 migration ownership amendment:** Plan 11이
   `operator_permission_grant` schema와 위 네 값을 허용하는 closed DB vocabulary를 한
   migration에서 단독 생성한다. Plan 14와 point adjustment plan은 새 permission 값이나
