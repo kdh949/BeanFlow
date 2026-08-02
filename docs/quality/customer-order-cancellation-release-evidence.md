@@ -96,6 +96,17 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
 - `OrderCancelledV1` DTO와 네 owner consumer foundation만 준비됐고 고객 취소 HTTP command,
   Refund 생성과 production success endpoint는 포함하지 않았다.
 
+### Validation result (2026-08-03)
+
+- `./gradlew test --tests '*Compensation*' --tests '*StoreOrder*'`: Passed, 21초.
+- `./gradlew test --tests '*EventPublication*'`: Passed, 10초.
+- `./gradlew test --tests '*ModularityTests'`: Passed, 2초.
+- `./gradlew clean build`: Passed, 294 tests, failures/errors/skips 0, 1분 26초.
+- `bash scripts/verify-docs.sh`: Passed, target 26/deployed 9 paths, 73 schemas,
+  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
+- `git diff --check`: Passed.
+- Not run: 없음.
+
 ## Plan 10 issuer provenance execution evidence
 
 - **Recorded at:** 2026-08-01

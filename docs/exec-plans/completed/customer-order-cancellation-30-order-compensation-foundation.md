@@ -1,11 +1,11 @@
 # 공통 Order compensation foundation을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -18,21 +18,17 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 
 ## Current State
 
-- V8~V11과 코드는 `RejectionCompensation*`, rejection table/state/method 이름을 쓴다.
-- benefit policy는 singleton head 하나와 Case의 단일 policy snapshot이다.
-- `OrderRejectedV1`은 customer/store/actor/reason과 단일 policy를 담는다.
-- publication retry 소진은 모든 미완료 step을 MANUAL_REVIEW로 바꾼다.
-- ADR-033/034/040~043/055/059는 목표 공통 모델을 정의한다.
-- Plan 11은 ADR-063에 따라 최종 다섯 policy head/version 저장소와 운영 API를 먼저
-  구현한다. 이 계획은 그중 종료용 네 head를 소비한다.
-- Plan 11은 종료용 네 policy head의 direct source이고 Plan 20은 ADR-072 migration-writer lane의
-  direct phase predecessor다. Plan 30은 두 completion evidence 뒤 latest-main baseline에서 policy
-  head를 소비하며, independent parallel migration branch를 만들지 않는다.
-- Plan 20은 V21의 최소 Order 취소 evidence와 Settlement Batch/Item, V2 completion consumer,
-  고객 취소 제외 Audit을 270-test build로 완료했다. 두 direct dependency가 모두 completed이므로
-  이 계획은 ADR-072 migration-writer lease를 얻은 뒤 시작할 수 있다.
-- 00 plan에서 모든 non-local 환경·artifact가 0으로 확인돼 ADR-059 gate가 통과했다.
-  이 계획은 clean-cutover migration/event 전략을 입력으로 사용할 수 있다.
+- V8/V9/V22와 runtime은 rejection 전용 명칭 없이 공통 `OrderCompensation*`, 두 trigger,
+  여섯 step과 정확히 두 policy child를 사용한다.
+- Plan 11의 종료용 네 policy head를 COUPON→POINTS 순서로 선택해 Case와 두 V1 fact에
+  immutable snapshot으로 저장한다. policy table/API/seed를 중복 구현하지 않는다.
+- Pickup·Stock·Coupon·Points는 공통 termination source/trigger 계약으로 수렴하고 benefit
+  owner는 policy/disposition과 immutable compensation terms/lot lineage를 보존한다.
+- `OrderRejectedV1` producer와 여섯 consumer, `OrderCancelledV1` DTO와 네 owner consumer가
+  stable listener ID로 정렬됐다. 고객 취소 producer/HTTP command는 Plan 40에 남아 있다.
+- publication recovery는 중앙 registry로 실패 target 한 step만 수동 검토하고 unknown target은
+  Case를 변경하지 않는다. store projection은 축약되고 운영자 상세는 명시 권한과 Audit을 요구한다.
+- ADR-059 gate 재확인과 세 migration의 legacy 후보 0 precheck, 294-test 전체 build가 통과했다.
 
 ## Definitions
 
@@ -199,16 +195,23 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 ## Progress
 
 - [x] 2026-07-31 migration/event strategy gate — ADR-059 clean cutover
-- [ ] common case/schema
-- [ ] termination policy snapshot integration
-- [ ] owner restoration
-- [ ] store rejection regression
-- [ ] publication recovery
-- [ ] 전체 검증
+- [x] 2026-08-03 common case/schema
+- [x] 2026-08-03 termination policy snapshot integration
+- [x] 2026-08-03 owner restoration
+- [x] 2026-08-03 store rejection regression
+- [x] 2026-08-03 publication recovery
+- [x] 2026-08-03 전체 검증 — 294 tests, failures/errors/skips 0
 
 ## Surprises & Discoveries
 
 - 현재 code는 단일 publication 실패에서 모든 미완료 step을 수동 검토로 바꾼다.
+- Spring Modulith가 같은 event fact에 listener별 publication row를 만들므로 annotation ID,
+  중앙 registry와 실제 target 집합을 함께 검증해야 단일-step exhaustion을 안전하게 복구할 수 있다.
+- 고객 취소 기본 알림 step을 `NOT_REQUIRED`로 만들면 terminal 단조성 때문에 Plan 40이 접수
+  Delivery를 연결할 수 없다. foundation은 두 trigger 모두 `PROCESSING`으로 열고 실제 취소
+  Delivery producer는 Plan 40에 남겼다.
+- 부분 환불 뒤 PointReservation은 `USED`를 유지하므로 종료 복원은 allocation별 기복원액을
+  차감한 잔여만 원장에 기록해야 한다.
 
 ## Decision Log
 
@@ -223,12 +226,38 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 | 2026-08-01 | Accepted | Plan 30은 Plan 11 policy output과 Plan 20 lane completion 뒤 latest main baseline에서 시작 | policy head direct input을 보존하면서 migration writer lane을 단일화 | ADR-063, ADR-072 |
 | 2026-08-01 | Accepted | versioned listener ID와 중앙 event-target-step registry를 사용 | 실패 target 하나만 정확히 수동 검토하고 method rename과 영속 계약을 분리 | ADR-010, ADR-034 |
 | 2026-08-03 | Accepted | Plan 20의 cause/cancelledAt와 Settlement completion evidence를 소비하고 Plan 30 migration lane을 준비 상태로 전환 | 정산 제외 증거와 compensation schema 소유권을 분리하고 단일 writer 순서를 유지 | ADR-029, ADR-067, ADR-072 |
+| 2026-08-03 | Implemented | V8/V9/V22 세 migration을 legacy 후보 0 precheck와 최종 shape로 직접 작성 | gate 무효화를 배포 시점에 fail-closed로 탐지하고 guessed backfill 제거 | ADR-033/040/042/059 |
+| 2026-08-03 | Implemented | 정확한 열 stable listener mapping과 unknown-target no-step-mutation 복구 | publication attempt와 owner business attempt를 분리하고 실패 범위를 한 step으로 제한 | ADR-010/034 |
+| 2026-08-03 | Implemented | 고객 취소 기본 알림 step은 PROCESSING으로 준비하고 producer는 Plan 40에 유지 | terminal step 재개방 없이 ADR-047 Tx C1 계약을 수용하고 조기 endpoint 활성화를 방지 | ADR-047, Plan 40 |
 
 ## Outcomes & Retrospective
 
-미구현이다. 00 fact gate, Plan 11 policy output과 Plan 20 Settlement completion evidence가 모두
-verified completed라 `Implementation-Ready=true`다. 구현은 latest-main baseline에서 ADR-072
-migration-writer lease를 얻은 뒤 시작하며, Plan 20 schema를 재구현하지 않는다.
+공통 `OrderCompensationCase`, trigger 두 값, 여섯 step과 정확히 두 immutable policy child를
+V8 최종 shape와 Application API로 구현했다. Store rejection은 Order/Case/Audit/publication/
+멱등 응답의 기존 local transaction을 유지하면서 two-policy `OrderRejectedV1`과 여섯 stable
+consumer로 회귀했다. `OrderCancelledV1`은 최소 DTO와 Pickup·Stock·Coupon·Points 네 consumer만
+준비했으며 HTTP command, Refund와 production success endpoint는 추가하지 않았다.
+
+V9/V22는 owner의 공통 termination state, source/trigger/policy/disposition, immutable 보상
+Coupon terms와 부분 환불 잔여 Point 복원을 fail-closed migration으로 고정했다. publication
+exhaustion은 중앙 registry가 매핑한 한 step만 `MANUAL_REVIEW`로 바꾸고 unknown target은
+`PUBLICATION_TARGET_UNMAPPED` 운영 case만 남긴다. store projection은 trigger/state/updatedAt로
+축약했고 운영자 상세는 explicit grant, access reason과 read Audit을 요구한다.
+
+검증 결과:
+
+- `./gradlew test --tests '*Compensation*' --tests '*StoreOrder*'`: Passed, 21초.
+- `./gradlew test --tests '*EventPublication*'`: Passed, 10초.
+- `./gradlew test --tests '*ModularityTests'`: Passed, 2초.
+- `./gradlew clean build`: Passed, 294 tests, failures/errors/skips 0, 1분 26초.
+- `bash scripts/verify-docs.sh`: Passed, target 26/deployed 9 paths, 73 schemas,
+  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
+- `git diff --check`: Passed.
+- Not run: 없음.
+
+Plan 40의 direct dependency가 completed가 되어 `Implementation-Ready=true`다. 다만 Plan 40은
+계속 Draft-only이며 Plan 50 recovery/release evidence 전에는 main merge, deployment와 production
+고객 취소 success endpoint를 활성화하지 않는다.
 
 ## Revision Notes
 
@@ -241,3 +270,5 @@ migration-writer lease를 얻은 뒤 시작하며, Plan 20 schema를 재구현�
   latest-main migration lane으로 변경했다.
 - 2026-08-03: completed Plan 20 dependency와 최소 Order 취소 evidence ownership을 반영하고
   모든 direct dependency가 완료돼 implementation-ready로 전환했다.
+- 2026-08-03: 공통 Case/owner/event/publication/API/관측성 구현과 전체 294-test 검증을 완료하고
+  completed로 이동했다. 같은 변경에서 Plan 40 dependency와 readiness를 갱신했다.

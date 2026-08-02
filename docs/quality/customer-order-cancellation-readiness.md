@@ -193,22 +193,22 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 | Area | Current behavior | Target behavior | Primary files |
 |---|---|---|---|
 | Customer command | endpoint/service 없음 | C0/C1/CT와 stored response | `OrderController.kt`, 신규 service/contracts |
-| Order model | CANCELLED cause/reason/time 없음 | cancellation fields와 CHECK | `Order.kt`, `OrderingPersistence.kt`, migration |
+| Order model | Plan 20의 cancelledAt/cause와 terminal CHECK는 있고 customer reason/detail은 없음 | Plan 40이 reason/detail과 cause별 CHECK 추가 | `Order.kt`, `OrderingPersistence.kt`, Plan 40 migration |
 | Refund composition | 공개 부분 Refund는 V15 immutable unit/line allocation을 사용하지만 고객 취소 C1은 미구현 | C1이 remaining cash + 아직 미복원 point allocation을 snapshot | Payment partial Refund API, 신규 cancellation service |
 | Refund recovery | 공통 Refund domain은 REQUEST 3 + LOOKUP 5 독립 예산과 irreversible LOOKUP 전환을 구현 | 고객 취소 work/source와 같은 예산을 연결 | `Refund.kt`, `RejectionRefundService.kt`, 신규 cancellation service |
 | Provider failure | adapter allowlisted `RetryableFailed`와 unknown 전환을 지원하지만 고객 취소 Provider flow는 미연결 | allowlist만 same-key safe request retry | Payment gateway/service, 신규 cancellation flow |
-| Compensation | rejection 전용, 단일 policy | trigger-aware Case와 두 policy | Operations API/service/persistence, V8 |
-| Store compensation projection | 매장 응답이 여섯 step·attemptCount·lastErrorCode·caseId·policyVersion 노출 | trigger·state·updatedAt만 담은 축약 요약 | `StoreOrderContracts.kt`, `StoreOrderTransitionService.kt` |
-| Publication failure | 모든 미완료 step manual review | 실패 listener step만 manual review | `RejectionCompensationService.kt`, recovery worker |
-| Events | reason/customer/store와 단일 policy | 최소 payload/두 policy 또는 호환 version | `StoreOrderEvents.kt`, producer/listeners |
-| Owner restore | `RELEASED_BY_REJECTION`, event-ID source | common termination state, stable owner source | four owner APIs/listeners, V9 |
+| Compensation | Plan 30의 trigger-aware Case, 여섯 step과 두 immutable policy child 완료 | Plan 40 C1이 CUSTOMER_CANCELLATION Case 생성 | Operations API/service/persistence, V8 |
+| Store compensation projection | trigger·state·updatedAt만 노출하고 상세는 audited operator view로 분리 | 완료 | `StoreOrderContracts.kt`, `OperatorCompensationController.kt` |
+| Publication failure | stable target registry가 실패 listener 한 step만 manual review, unknown target은 Case 불변 | 완료 | `CompensationPublicationTargetRegistry.kt`, recovery worker |
+| Events | two-policy `OrderRejectedV1`과 최소 `OrderCancelledV1` DTO/네 owner listener 완료, 취소 producer 없음 | Plan 40이 Tx C1 producer만 연결 | `StoreOrderEvents.kt`, producer/listeners |
+| Owner restore | 공통 termination state/source/trigger/policy/disposition과 stable source 완료 | 완료 | four owner APIs/listeners, V9/V22 |
 | Notification | rejection/warning/ready template | accepted/succeeded/delayed logical sources | Notification service/persistence, V11 |
-| Store idempotency | orderId hash 누락, V1 op, replay body 변경 | orderId 포함, V2 op, stored body 불변 | store transition files/tests |
+| Store idempotency | orderId 포함 V2 scope와 stored response replay 완료 | 완료 | store transition files/tests |
 | Setup recovery | 없음 | detector/scanner/case/2인 repair | Payment/Operations, V12 이후 |
-| Tests | customer cancellation suite 없음 | contract/concurrency/failure/restart tests | 신규 module별 tests |
+| Tests | Plan 30 compensation/owner/publication/migration suite 완료, command suite 없음 | Plan 40/50 contract·concurrency·failure·restart suite | 신규 module별 tests |
 
-현재 code와 test를 target 문서에 맞춰 되돌리지 않았다. 모든 차이는 후속 구현 계획의
-입력이다.
+현재 code와 test를 target 문서에 맞춰 되돌리지 않았다. 표에 남은 차이는 Plan 40/50의
+후속 구현 입력이다.
 
 ## Missing foundations
 
@@ -235,8 +235,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Plan 20 Settlement](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md):
   V21 최소 OPEN Batch/immutable Item, V2 completion cutover/consumer, signed Batch Item 조회와
   실제 Order/Refund evidence 기반 NOT_APPLICABLE Audit이 완료됐다.
-- [Plan 30 compensation](../exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md):
-  rejection 전용 구조를 trigger-aware Case/policy/owner convergence로 일반화해야 한다.
+- [Plan 30 compensation](../exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md):
+  V8/V9/V22, trigger-aware Case/two-policy snapshot, owner convergence, 열 stable publication target,
+  축약 store/audited operator projection과 294-test evidence가 완료됐다.
 
 [Signed cursor foundation](../exec-plans/completed/signed-cursor-foundation.md)은 Plan 14/20의 조회 input이며,
 [Plan 14 PointAccount read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)는
@@ -280,12 +281,14 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] Plan 15 settlement input이 통과함
 - [x] Plan 16 immutable events가 통과함
 - [x] Plan 20 Settlement foundation이 통과함
-- [ ] Plan 30 common compensation이 통과함
-- [ ] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
+- [x] Plan 30 common compensation이 통과함
+- [x] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
 - [x] OpenAPI semantic/local contract 검사가 통과함
 - [x] 기능 branch에서 기존 사용자 변경을 분리·보존함
 
-남은 Plan 30 compensation foundation이 닫히기 전 고객 취소 command 구현은 시작할 수 없다.
+Plan 40은 direct dependency가 completed라 Draft 구현을 시작할 수 있다. Plan 50 actual
+recovery/release evidence 전에는 main merge, deployment 또는 production success endpoint를
+활성화할 수 없다.
 
 ## Ordinary-accrual policy/snapshot validation (2026-08-01)
 
@@ -371,6 +374,28 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - Plan 30과 Settlement lifecycle: 모든 direct dependency가 completed라 `Implementation-Ready=true`.
 - Analytics: Settlement lifecycle과 point-adjustment dependency가 active라
   `Implementation-Ready=false` 유지.
+
+## Plan 30 common-compensation validation (2026-08-03)
+
+- ADR-059 revalidation, V8/V9/V22 legacy 후보 0 precheck와 empty full migration 최종
+  CHECK/FK/UNIQUE/deferred cardinality: **Passed**.
+- 두 trigger, 여섯 step, 정확히 두 policy child, terminal replay/conflict와
+  `SUCCEEDED`/`NOT_REQUIRED` 단조성: **Passed**.
+- Pickup·Stock 공통 termination release와 Coupon·Points source/trigger/policy/disposition,
+  보상 Coupon immutable terms, 부분 환불 뒤 잔여 Point 복원: **Passed**.
+- 두 V1 exact contract, 열 annotation/registry/실제 target, duplicate startup failure,
+  unknown target Case 불변과 listener별 exhaustion/attempt 분리: **Passed**.
+- 축약 store projection, explicit `ORDER_COMPENSATION_READ`/access reason/read Audit 운영자
+  projection과 store idempotency V2: **Passed**.
+- `./gradlew test --tests '*Compensation*' --tests '*StoreOrder*'`: **Passed**, 21초.
+- `./gradlew test --tests '*EventPublication*'`: **Passed**, 10초.
+- `./gradlew test --tests '*ModularityTests'`: **Passed**, 2초.
+- `./gradlew clean build`: **Passed**, 294 tests, failures/errors/skips 0, 1분 26초.
+- `bash scripts/verify-docs.sh`: **Passed**, target 26/deployed 9 paths, 73 schemas,
+  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
+- `git diff --check`: **Passed**. Not run 항목 없음.
+- Plan 40: direct dependency completed, `Implementation-Ready=true`; Draft-only/Plan 50 combined
+  release gate 유지.
 
 ## Historical audit validation
 

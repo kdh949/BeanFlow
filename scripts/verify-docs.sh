@@ -49,7 +49,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md"
-  "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-40-command.md"
   "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
