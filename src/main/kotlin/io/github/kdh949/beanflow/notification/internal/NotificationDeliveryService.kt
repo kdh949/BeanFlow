@@ -10,9 +10,9 @@ import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipi
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationTemplate
 import io.github.kdh949.beanflow.operations.api.NotificationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
@@ -57,7 +57,7 @@ private data class NewNotificationDelivery(
 internal class NotificationDeliveryService(
     private val deliveryRepository: NotificationDeliveryJpaRepository,
     private val provider: NotificationProvider,
-    private val compensationOperations: RejectionCompensationOperations,
+    private val compensationOperations: OrderCompensationOperations,
     private val reprocessingCaseOperations: NotificationReprocessingCaseOperations,
     private val identifierSource: IdentifierSource,
     private val objectMapper: ObjectMapper,
@@ -114,7 +114,7 @@ internal class NotificationDeliveryService(
         if (delivery.state == NotificationDeliveryState.SUCCEEDED) {
             recordRejectionStep(
                 event.orderId,
-                RejectionCompensationStepState.SUCCEEDED,
+                OrderCompensationStepState.SUCCEEDED,
                 null,
                 event.rejectedAt,
             )
@@ -220,7 +220,7 @@ internal class NotificationDeliveryService(
                 if (entity.template == NotificationTemplate.ORDER_REJECTED) {
                     recordRejectionStep(
                         entity.orderId,
-                        RejectionCompensationStepState.SUCCEEDED,
+                        OrderCompensationStepState.SUCCEEDED,
                         null,
                         now,
                     )
@@ -288,9 +288,9 @@ internal class NotificationDeliveryService(
             recordRejectionStep(
                 entity.orderId,
                 if (unknown) {
-                    RejectionCompensationStepState.UNKNOWN
+                    OrderCompensationStepState.UNKNOWN
                 } else {
-                    RejectionCompensationStepState.RETRY_SCHEDULED
+                    OrderCompensationStepState.RETRY_SCHEDULED
                 },
                 normalized(code),
                 now,
@@ -314,7 +314,7 @@ internal class NotificationDeliveryService(
         if (entity.template == NotificationTemplate.ORDER_REJECTED) {
             recordRejectionStep(
                 entity.orderId,
-                RejectionCompensationStepState.MANUAL_REVIEW,
+                OrderCompensationStepState.MANUAL_REVIEW,
                 code,
                 now,
             )
@@ -324,13 +324,13 @@ internal class NotificationDeliveryService(
 
     private fun recordRejectionStep(
         orderId: UUID,
-        state: RejectionCompensationStepState,
+        state: OrderCompensationStepState,
         code: String?,
         now: Instant,
     ) {
         compensationOperations.recordStep(
             orderId,
-            RejectionCompensationStepType.CUSTOMER_NOTIFICATION,
+            OrderCompensationStepType.CUSTOMER_NOTIFICATION,
             state,
             code,
             now,

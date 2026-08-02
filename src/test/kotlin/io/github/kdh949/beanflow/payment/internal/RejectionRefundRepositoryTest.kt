@@ -1,15 +1,17 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationMode
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot
-import io.github.kdh949.beanflow.operations.api.OpenRejectionCompensationCaseCommand
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
 import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
@@ -40,7 +42,7 @@ internal class RejectionRefundRepositoryTest
         private val refundRepository: RefundJpaRepository,
         private val paymentRepository: PaymentJpaRepository,
         private val paymentMethodRepository: PaymentMethodJpaRepository,
-        private val compensationOperations: RejectionCompensationOperations,
+        private val compensationOperations: OrderCompensationOperations,
         private val gateway: ScriptedTestPaymentGateway,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -55,8 +57,8 @@ internal class RejectionRefundRepositoryTest
                     payment_idempotency_record,
                     payment_payment,
                     payment_method,
-                    operations_rejection_compensation_step,
-                    operations_rejection_compensation_case
+                    operations_order_compensation_step,
+                    operations_order_compensation_case
                 CASCADE
                 """.trimIndent(),
             )
@@ -80,11 +82,11 @@ internal class RejectionRefundRepositoryTest
                 compensationOperations
                     .findByOrderId(event.orderId)!!
                     .steps
-                    .single { it.type == RejectionCompensationStepType.PAYMENT }
+                    .single { it.type == OrderCompensationStepType.PAYMENT }
             assertThat(refund.state).isEqualTo(RefundState.SUCCEEDED)
             assertThat(refund.succeededAmountKrw).isEqualTo(7_000)
             assertThat(payment.succeededRefundAmountKrw).isEqualTo(7_000)
-            assertThat(paymentStep.state).isEqualTo(RejectionCompensationStepState.SUCCEEDED)
+            assertThat(paymentStep.state).isEqualTo(OrderCompensationStepState.SUCCEEDED)
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
             assertThat(refundRepository.count()).isEqualTo(1)
             assertThat(
@@ -142,9 +144,9 @@ internal class RejectionRefundRepositoryTest
 
             val refund = refundRepository.findAll().single()
             val beanCase = compensationOperations.findByOrderId(event.orderId)!!
-            val paymentStep = beanCase.steps.single { it.type == RejectionCompensationStepType.PAYMENT }
+            val paymentStep = beanCase.steps.single { it.type == OrderCompensationStepType.PAYMENT }
             assertThat(refund.state).isEqualTo(RefundState.FAILED)
-            assertThat(paymentStep.state).isEqualTo(RejectionCompensationStepState.MANUAL_REVIEW)
+            assertThat(paymentStep.state).isEqualTo(OrderCompensationStepState.MANUAL_REVIEW)
         }
 
         private fun fixture(): OrderRejectedV1 {
@@ -197,14 +199,17 @@ internal class RejectionRefundRepositoryTest
                     reason = "INITIAL_DEFAULT",
                 )
             compensationOperations.open(
-                OpenRejectionCompensationCaseCommand(
+                OpenOrderCompensationCaseCommand(
                     caseId = UUID.randomUUID(),
                     eventId = eventId,
                     orderId = orderId,
+                    terminalOrderVersion = 1,
                     customerId = customerId,
                     storeId = storeId,
+                    trigger = OrderCompensationTrigger.STORE_REJECTION,
                     sourceReference = "event:$eventId:rejection-case",
-                    policy = policy,
+                    couponPolicy = policy,
+                    pointsPolicy = policy,
                     paymentRequired = true,
                     couponRequired = false,
                     pointsRequired = false,
@@ -231,14 +236,20 @@ internal class RejectionRefundRepositoryTest
                 actorType = OrderRejectionActorType.STORE_STAFF,
                 reason = "OUT_OF_STOCK",
                 rejectedAt = NOW,
-                policyVersion = 1,
-                policyMode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE.name,
-                policyValidityDays = 30,
+                couponPolicy = eventPolicy(),
+                pointsPolicy = eventPolicy(),
                 paymentRequired = true,
                 couponRequired = false,
                 pointsRequired = false,
             )
         }
+
+        private fun eventPolicy() =
+            BenefitRestorationPolicySnapshotV1(
+                policyVersionId = 1,
+                mode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE.name,
+                compensationValidityDays = 30,
+            )
 
         private companion object {
             val NOW: Instant = Instant.parse("2026-07-30T10:00:00Z")

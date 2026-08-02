@@ -4,9 +4,9 @@ import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.RestorePointsByRejectionCommand
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
@@ -16,9 +16,9 @@ import org.springframework.stereotype.Component
 @Component
 internal class OrderRejectedPointsListener(
     private val pointOperations: PointReservationOperations,
-    private val compensationOperations: RejectionCompensationOperations,
+    private val compensationOperations: OrderCompensationOperations,
 ) {
-    @ApplicationModuleListener
+    @ApplicationModuleListener(id = "beanflow.order-compensation.order-rejected.points.v1")
     fun on(event: OrderRejectedV1) {
         if (!event.pointsRequired) return
         val report =
@@ -27,8 +27,8 @@ internal class OrderRejectedPointsListener(
                     orderId = event.orderId,
                     rejectedAt = event.rejectedAt,
                     sourceReference = "event:${event.envelope.eventId}:points",
-                    mode = ExpiredPointRestorationMode.valueOf(event.policyMode),
-                    compensationValidityDays = event.policyValidityDays,
+                    mode = ExpiredPointRestorationMode.valueOf(event.pointsPolicy.mode),
+                    compensationValidityDays = event.pointsPolicy.compensationValidityDays,
                 ),
             )
         if (report.result == ReservationTransitionResult.NOT_ELIGIBLE) {
@@ -39,8 +39,8 @@ internal class OrderRejectedPointsListener(
         }
         compensationOperations.recordStep(
             event.orderId,
-            RejectionCompensationStepType.POINTS,
-            RejectionCompensationStepState.SUCCEEDED,
+            OrderCompensationStepType.POINTS,
+            OrderCompensationStepState.SUCCEEDED,
             null,
             event.rejectedAt,
         )

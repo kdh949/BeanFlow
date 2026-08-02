@@ -1,13 +1,14 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
+import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.operations.api.EventPublicationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -25,7 +26,8 @@ import java.util.concurrent.atomic.AtomicLong
 @Component
 internal class EventPublicationRecoveryWorker(
     private val publications: IncompleteEventPublications,
-    private val compensationOperations: RejectionCompensationOperations,
+    private val compensationOperations: OrderCompensationOperations,
+    private val compensationTargets: CompensationPublicationTargetRegistry,
     private val reprocessingCaseOperations: EventPublicationReprocessingCaseOperations,
     private val jdbcTemplate: JdbcTemplate,
     private val clock: Clock,
@@ -60,17 +62,27 @@ internal class EventPublicationRecoveryWorker(
                     val attempts = publication.completionAttempts
                     if (EventPublicationRetrySchedule.exhausted(attempts)) {
                         val event = publication.event
+                        val compensationEvent = event is OrderRejectedV1 || event is OrderCancelledV1
+                        val listenerId = listenerId(publication.identifier)
+                        val stepType = if (compensationEvent) compensationTargets.find(event, listenerId) else null
+                        val reason =
+                            if (compensationEvent && stepType == null) {
+                                "PUBLICATION_TARGET_UNMAPPED"
+                            } else {
+                                "EVENT_PUBLICATION_RETRY_EXHAUSTED"
+                            }
                         reprocessingCaseOperations.openEventPublicationCase(
                             OpenReprocessingCaseCommand(
                                 ownerReference = "event-publication:${publication.identifier}",
-                                reason = "EVENT_PUBLICATION_RETRY_EXHAUSTED",
+                                reason = reason,
                                 correlationId = correlationId(event, publication.identifier.toString()),
                                 now = now,
                             ),
                         )
-                        if (event is OrderRejectedV1) {
+                        if (stepType != null) {
                             compensationOperations.markPublicationManualReview(
-                                event.orderId,
+                                compensationOrderId(event),
+                                stepType,
                                 "EVENT_PUBLICATION_RETRY_EXHAUSTED",
                                 now,
                             )
@@ -121,12 +133,23 @@ internal class EventPublicationRecoveryWorker(
     private fun gauge(name: String): AtomicLong = meterRegistry.gauge(name, AtomicLong(0))
 
     private fun isReservedAnalyticsTarget(publicationId: UUID): Boolean =
-        jdbcTemplate
-            .queryForObject(
+        listenerId(publicationId).startsWith(RESERVED_ANALYTICS_TARGET_PREFIX)
+
+    private fun listenerId(publicationId: UUID): String =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
                 "select listener_id from event_publication where id = ?",
                 String::class.java,
                 publicationId,
-            )?.startsWith(RESERVED_ANALYTICS_TARGET_PREFIX) == true
+            ),
+        )
+
+    private fun compensationOrderId(event: Any): UUID =
+        when (event) {
+            is OrderRejectedV1 -> event.orderId
+            is OrderCancelledV1 -> event.orderId
+            else -> error("Not an order compensation event")
+        }
 
     private fun correlationId(
         event: Any,
@@ -134,6 +157,7 @@ internal class EventPublicationRecoveryWorker(
     ): String =
         when (event) {
             is OrderRejectedV1 -> event.envelope.correlationId
+            is OrderCancelledV1 -> event.envelope.correlationId
             is StoreAcceptanceWarningRequestedV1 -> event.envelope.correlationId
             is OrderAcceptedV1 -> event.envelope.correlationId
             is OrderReadyV1 -> event.envelope.correlationId

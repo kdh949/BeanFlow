@@ -1,9 +1,9 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.payment.api.PartialRefundSettlementContext
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
@@ -42,7 +42,7 @@ internal class RejectionRefundService(
     private val paymentRepository: PaymentJpaRepository,
     private val requestLoader: PaymentProviderRequestLoader,
     private val paymentGateway: PaymentGateway,
-    private val compensationOperations: RejectionCompensationOperations,
+    private val compensationOperations: OrderCompensationOperations,
     private val partialRefundSuccessLedger: PartialRefundSuccessLedger,
     private val refundEventProducer: PaymentRefundEventProducer,
     private val identifierSource: IdentifierSource,
@@ -57,7 +57,7 @@ internal class RejectionRefundService(
         val existing = refundRepository.findBySourceReference(sourceReference)
         if (existing != null) {
             if (existing.state == RefundState.SUCCEEDED) {
-                recordStep(event.orderId, RejectionCompensationStepState.SUCCEEDED, null, event.rejectedAt)
+                recordStep(event.orderId, OrderCompensationStepState.SUCCEEDED, null, event.rejectedAt)
             }
             return
         }
@@ -80,7 +80,7 @@ internal class RejectionRefundService(
         }
         refundRepository.findByPaymentIdAndReason(payment.id, REASON)?.let { existingRefund ->
             if (existingRefund.state == RefundState.SUCCEEDED) {
-                recordStep(event.orderId, RejectionCompensationStepState.SUCCEEDED, null, event.rejectedAt)
+                recordStep(event.orderId, OrderCompensationStepState.SUCCEEDED, null, event.rejectedAt)
             }
             return
         }
@@ -142,9 +142,9 @@ internal class RejectionRefundService(
                         recordStep(
                             entity.orderId,
                             if (refund.state == RefundState.MANUAL_REVIEW) {
-                                RejectionCompensationStepState.MANUAL_REVIEW
+                                OrderCompensationStepState.MANUAL_REVIEW
                             } else {
-                                RejectionCompensationStepState.UNKNOWN
+                                OrderCompensationStepState.UNKNOWN
                             },
                             "CLAIM_LEASE_EXPIRED",
                             now,
@@ -286,7 +286,7 @@ internal class RejectionRefundService(
                     refundEventProducer.publishPartial(entity, payment, context, now)
                 } else {
                     refundEventProducer.publishPreAcceptance(entity, payment, now)
-                    recordStep(claim.orderId, RejectionCompensationStepState.SUCCEEDED, null, now)
+                    recordStep(claim.orderId, OrderCompensationStepState.SUCCEEDED, null, now)
                 }
             }
 
@@ -296,7 +296,7 @@ internal class RejectionRefundService(
                 if (entity.reason == REASON) {
                     recordStep(
                         claim.orderId,
-                        RejectionCompensationStepState.MANUAL_REVIEW,
+                        OrderCompensationStepState.MANUAL_REVIEW,
                         normalized(result.code),
                         now,
                     )
@@ -310,9 +310,9 @@ internal class RejectionRefundService(
                     recordStep(
                         claim.orderId,
                         if (refund.state == RefundState.MANUAL_REVIEW) {
-                            RejectionCompensationStepState.MANUAL_REVIEW
+                            OrderCompensationStepState.MANUAL_REVIEW
                         } else {
-                            RejectionCompensationStepState.UNKNOWN
+                            OrderCompensationStepState.UNKNOWN
                         },
                         normalized(result.code),
                         now,
@@ -325,9 +325,9 @@ internal class RejectionRefundService(
                 entity.apply(refund)
                 val stepState =
                     if (refund.state == RefundState.MANUAL_REVIEW) {
-                        RejectionCompensationStepState.MANUAL_REVIEW
+                        OrderCompensationStepState.MANUAL_REVIEW
                     } else {
-                        RejectionCompensationStepState.UNKNOWN
+                        OrderCompensationStepState.UNKNOWN
                     }
                 if (entity.reason == REASON) {
                     recordStep(claim.orderId, stepState, normalized(result.code), now)
@@ -347,13 +347,13 @@ internal class RejectionRefundService(
 
     private fun recordStep(
         orderId: UUID,
-        state: RejectionCompensationStepState,
+        state: OrderCompensationStepState,
         errorCode: String?,
         now: Instant,
     ) {
         compensationOperations.recordStep(
             orderId,
-            RejectionCompensationStepType.PAYMENT,
+            OrderCompensationStepType.PAYMENT,
             state,
             errorCode,
             now,

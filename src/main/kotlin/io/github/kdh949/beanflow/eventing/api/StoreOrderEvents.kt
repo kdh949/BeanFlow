@@ -30,12 +30,27 @@ data class OrderRejectedV1(
     val actorType: OrderRejectionActorType,
     val reason: String,
     val rejectedAt: Instant,
-    val policyVersion: Long,
-    val policyMode: String,
-    val policyValidityDays: Int,
+    val couponPolicy: BenefitRestorationPolicySnapshotV1,
+    val pointsPolicy: BenefitRestorationPolicySnapshotV1,
     val paymentRequired: Boolean,
     val couponRequired: Boolean,
     val pointsRequired: Boolean,
+)
+
+data class BenefitRestorationPolicySnapshotV1(
+    val policyVersionId: Long,
+    val mode: String,
+    val compensationValidityDays: Int,
+)
+
+data class OrderCancelledV1(
+    val envelope: EventEnvelope,
+    val orderId: UUID,
+    val cancelledAt: Instant,
+    val couponRequired: Boolean,
+    val pointsRequired: Boolean,
+    val couponPolicy: BenefitRestorationPolicySnapshotV1,
+    val pointsPolicy: BenefitRestorationPolicySnapshotV1,
 )
 
 data class StoreAcceptanceWarningRequestedV1(

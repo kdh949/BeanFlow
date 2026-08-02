@@ -20,7 +20,7 @@ internal class StoreAcceptanceWarningNotificationListener(
 internal class OrderRejectedNotificationListener(
     private val deliveryService: NotificationDeliveryService,
 ) {
-    @ApplicationModuleListener
+    @ApplicationModuleListener(id = "beanflow.order-compensation.order-rejected.customer-notification.v1")
     fun on(event: OrderRejectedV1) {
         deliveryService.requestRejection(event)
     }

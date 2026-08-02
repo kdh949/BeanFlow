@@ -10,8 +10,8 @@ import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationCaseView
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
 import io.github.kdh949.beanflow.payment.api.ApprovedPaymentSettlementOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
@@ -43,7 +43,7 @@ internal class StoreOrderTransitionService(
     private val orderLineRepository: OrderLineJpaRepository,
     private val idempotencyRepository: StoreCommandIdempotencyJpaRepository,
     private val storeAccessOperations: StoreAccessOperations,
-    private val compensationOperations: RejectionCompensationOperations,
+    private val compensationOperations: OrderCompensationOperations,
     private val rejectionCoordinator: OrderRejectionCoordinator,
     private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
     private val approvedPaymentSettlements: ApprovedPaymentSettlementOperations,
@@ -64,7 +64,7 @@ internal class StoreOrderTransitionService(
         storeAccessOperations.requireOrderManagementAccess(actor.actorId, order.storeId, actor.roles)
         return StoreOrderResult(
             order = response(order),
-            rejectionRecovery = compensationOperations.findByOrderId(orderId)?.toResponse(),
+            compensationRecovery = compensationOperations.findByOrderId(orderId)?.toStoreSummary(),
         )
     }
 
@@ -86,7 +86,7 @@ internal class StoreOrderTransitionService(
                 order.storeId,
                 actor.roles,
             )
-        val payloadHash = CanonicalStoreOrderTransitionPayload.hash(request.targetState, request.reason)
+        val payloadHash = CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
         idempotencyRepository
             .findByActorIdAndOperationAndIdempotencyKey(
                 actor.actorId,
@@ -99,7 +99,7 @@ internal class StoreOrderTransitionService(
                         "Idempotency-Key was reused with a different store transition payload",
                     )
                 }
-                return StoreTransitionHttpResult(existing.responseStatus, replay(existing.responseBody))
+                return StoreTransitionHttpResult(existing.responseStatus, existing.responseBody)
             }
 
         val before = order.state.name
@@ -138,10 +138,9 @@ internal class StoreOrderTransitionService(
         val status = if (request.targetState == StoreOrderTargetState.REJECTED) 202 else 200
         val body =
             objectMapper.writeValueAsString(
-                StoreOrderTransitionResult(
+                StoreOrderResult(
                     order = response(order),
-                    rejectionRecovery = recovery?.toResponse(),
-                    replayed = false,
+                    compensationRecovery = recovery?.toStoreSummary(),
                 ),
             )
         idempotencyRepository.save(
@@ -167,7 +166,7 @@ internal class StoreOrderTransitionService(
         now: Instant,
         correlationId: String,
         causationId: String,
-    ): RejectionCompensationCaseView =
+    ): OrderCompensationCaseView =
         rejectionCoordinator.reject(
             order = order,
             actor =
@@ -349,22 +348,7 @@ internal class StoreOrderTransitionService(
         )
     }
 
-    private fun RejectionCompensationCaseView.toResponse() =
-        RejectionRecoveryResponse(
-            caseId,
-            policyVersion,
-            state,
-            steps.map {
-                RejectionRecoveryStepResponse(it.type, it.state, it.attemptCount, it.lastErrorCode)
-            },
-            updatedAt,
-        )
-
-    private fun replay(body: String): String {
-        val tree = objectMapper.readTree(body)
-        (tree as tools.jackson.databind.node.ObjectNode).put("replayed", true)
-        return objectMapper.writeValueAsString(tree)
-    }
+    private fun OrderCompensationCaseView.toStoreSummary() = StoreCompensationSummary(trigger, state, updatedAt)
 
     private fun validate(request: StoreOrderTransitionRequest) {
         if (request.targetState == StoreOrderTargetState.REJECTED &&
@@ -382,6 +366,6 @@ internal class StoreOrderTransitionService(
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
 
     private companion object {
-        const val OPERATION = "STORE_ORDER_TRANSITION"
+        const val OPERATION = "STORE_ORDER_TRANSITION_V2"
     }
 }
