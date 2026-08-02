@@ -160,7 +160,7 @@ internal class PartialRefundAllocationRepositoryTest
             assertThat(singleString("select issuer_type from loyalty_point_lot where original_point_lot_id is not null"))
                 .isEqualTo("STORE")
             assertThat(singleString("select issuer_reference from loyalty_point_lot where original_point_lot_id is not null"))
-                .isEqualTo("store:fixture")
+                .isEqualTo(fixture.storeId.toString())
             assertThat(singleString("select disposition from loyalty_partial_refund_restoration"))
                 .isEqualTo("COMPENSATION_LOT")
 
@@ -647,13 +647,14 @@ internal class PartialRefundAllocationRepositoryTest
                                 issuer_type, issuer_reference, requested_amount_krw,
                                 source_reference, created_at
                             )
-                            SELECT ?, ?, ?, ?, id, point_lot_id, 'STORE', 'store:fixture', 333, ?, ?
+                            SELECT ?, ?, ?, ?, id, point_lot_id, 'STORE', ?, 333, ?, ?
                               FROM loyalty_point_reservation_allocation order by point_lot_id limit 1
                             """.trimIndent(),
                             UUID.randomUUID(),
                             refundId,
                             lineRequestId,
                             fixture.firstLineId,
+                            fixture.storeId.toString(),
                             "overlap:$refundId:point",
                             Timestamp.from(NOW),
                         )
@@ -697,6 +698,7 @@ internal class PartialRefundAllocationRepositoryTest
             val reservationId = UUID.randomUUID()
             val campaignId = UUID.randomUUID()
             val issuanceId = UUID.randomUUID()
+            val couponReservationId = UUID.randomUUID()
             jdbcTemplate.update(
                 "insert into identity_store_membership values (?, ?, ?, 'OWNER', 'ACTIVE', ?, ?, 0)",
                 UUID.randomUUID(),
@@ -749,135 +751,182 @@ internal class PartialRefundAllocationRepositoryTest
                             OrderPointAccrualLineInput(fixture.secondLineId, 1, 3_500, 2, 7_000, 1_999, 2_000, 3_001),
                         ),
                 )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO loyalty_point_account (
+                        id, customer_id, available_points_krw, reserved_points_krw, version
+                    ) VALUES (?, ?, 0, 0, 0)
+                    """.trimIndent(),
+                    accountId,
+                    fixture.customerId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO loyalty_point_lot (
+                        id, point_account_id, available_amount_krw, reserved_amount_krw,
+                        expires_at, version, issuer_type, issuer_reference
+                    ) VALUES
+                        (?, ?, 0, 0, '2025-01-01T00:00:00Z', 0, 'STORE', ?),
+                        (?, ?, 0, 0, '2035-01-01T00:00:00Z', 0, 'BRAND', 'brand:fixture')
+                    """.trimIndent(),
+                    expiredLotId,
+                    accountId,
+                    fixture.storeId.toString(),
+                    validLotId,
+                    accountId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO loyalty_point_reservation (
+                        id, order_id, point_account_id, amount_krw, state,
+                        reservation_expires_at, source_reference, created_at, updated_at, version
+                    ) VALUES (?, ?, ?, 3000, 'USED', ?, ?, ?, ?, 0)
+                    """.trimIndent(),
+                    reservationId,
+                    fixture.orderId,
+                    accountId,
+                    Timestamp.from(NOW.plusSeconds(300)),
+                    "points:${fixture.orderId}",
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO loyalty_point_reservation_allocation VALUES
+                        (?, ?, ?, 1500), (?, ?, ?, 1500)
+                    """.trimIndent(),
+                    UUID.randomUUID(),
+                    reservationId,
+                    expiredLotId,
+                    UUID.randomUUID(),
+                    reservationId,
+                    validLotId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO payment_method VALUES
+                        (?, ?, 'SCRIPTED', 'token', 'test', 'TEST', '1234', 'ACTIVE', ?, ?, 0)
+                    """.trimIndent(),
+                    methodId,
+                    fixture.customerId,
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO payment_payment (
+                        id, order_id, type, approval_state, approved_amount_krw, currency,
+                        benefit_snapshot_reference, source_reference, correlation_id,
+                        approved_at, updated_at, customer_id, payment_method_id,
+                        requested_amount_krw, provider_transaction_reference,
+                        created_at, version, succeeded_refund_amount_krw
+                    ) VALUES (?, ?, 'EXTERNAL', 'APPROVED', 5000, 'KRW', NULL, ?, ?, ?, ?,
+                              ?, ?, 5000, ?, ?, 0, 0)
+                    """.trimIndent(),
+                    fixture.paymentId,
+                    fixture.orderId,
+                    "payment:${fixture.paymentId}",
+                    "correlation:${fixture.orderId}",
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                    fixture.customerId,
+                    methodId,
+                    "provider-payment:${fixture.paymentId}",
+                    Timestamp.from(NOW),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO promotion_campaign (
+                        id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
+                        minimum_eligible_subtotal_krw, maximum_discount_krw,
+                        all_menus_eligible, cost_bearer, platform_share_bps,
+                        store_share_bps, version
+                    ) VALUES (?, ?, true, 'FIXED_KRW', 2000, NULL, 0, NULL, true,
+                              'STORE', 0, 10000, 0)
+                    """.trimIndent(),
+                    campaignId,
+                    fixture.storeId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO promotion_coupon_issuance (
+                        id, campaign_id, customer_id, state, coupon_expires_at,
+                        reserved_order_id, version
+                    ) VALUES (?, ?, ?, 'USED', '2035-01-01T00:00:00Z', ?, 0)
+                    """.trimIndent(),
+                    issuanceId,
+                    campaignId,
+                    fixture.customerId,
+                    fixture.orderId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO promotion_coupon_reservation (
+                        id, order_id, coupon_issuance_id, state, discount_krw,
+                        eligible_line_sequences, discount_type, fixed_amount_krw, rate_bps,
+                        minimum_eligible_subtotal_krw, maximum_discount_krw,
+                        campaign_id, campaign_version, cost_bearer, platform_share_bps,
+                        store_share_bps, platform_coupon_cost_krw, store_coupon_cost_krw,
+                        reservation_expires_at, source_reference, created_at, updated_at, version
+                    ) VALUES (?, ?, ?, 'USED', 2000, '0,1', 'FIXED_KRW', 2000, NULL,
+                              0, NULL, ?, 0, 'STORE', 0, 10000, 0, 2000, ?, ?, ?, ?, 0)
+                    """.trimIndent(),
+                    couponReservationId,
+                    fixture.orderId,
+                    issuanceId,
+                    campaignId,
+                    Timestamp.from(NOW.plusSeconds(300)),
+                    "coupon:${fixture.orderId}",
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW),
+                )
+                val termsVersionId = UUID.randomUUID()
+                jdbcTemplate.update(
+                    "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
+                    fixture.storeId,
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO merchant_store_settlement_terms (
+                        terms_version_id, store_id, source_reference, fee_rate_bps,
+                        effective_from, effective_to, created_at
+                    ) VALUES (?, ?, ?, 0, '2020-01-01T00:00:00Z', NULL, ?)
+                    """.trimIndent(),
+                    termsVersionId,
+                    fixture.storeId,
+                    "test:partial-refund-terms:${fixture.orderId}",
+                    Timestamp.from(NOW),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order_settlement_input_snapshot (
+                        order_id, store_id, store_settlement_terms_version_id,
+                        store_settlement_terms_source_reference,
+                        coupon_reservation_id, coupon_campaign_id, coupon_campaign_version,
+                        coupon_cost_bearer, coupon_platform_share_bps, coupon_store_share_bps,
+                        coupon_discount_krw, platform_coupon_cost_krw, coupon_cost_krw,
+                        point_reservation_id, point_allocation_hash, points_applied_krw, point_cost_krw,
+                        gross_paid_krw, fee_base_krw, fee_rate_bps, fee_krw,
+                        benefit_cost_krw, net_settlement_krw, currency,
+                        snapshot_schema_version, canonical_snapshot_hash, created_at
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, 0, 'STORE', 0, 10000,
+                        2000, 0, 2000, ?, ?, 3000, 1500,
+                        10000, 5000, 0, 0, 3500, 6500, 'KRW', 1, ?, ?
+                    )
+                    """.trimIndent(),
+                    fixture.orderId,
+                    fixture.storeId,
+                    termsVersionId,
+                    "test:partial-refund-terms:${fixture.orderId}",
+                    couponReservationId,
+                    campaignId,
+                    reservationId,
+                    "a".repeat(64),
+                    "b".repeat(64),
+                    Timestamp.from(NOW.minusSeconds(60)),
+                )
             }
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_account (
-                    id, customer_id, available_points_krw, reserved_points_krw, version
-                ) VALUES (?, ?, 0, 0, 0)
-                """.trimIndent(),
-                accountId,
-                fixture.customerId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_lot (
-                    id, point_account_id, available_amount_krw, reserved_amount_krw,
-                    expires_at, version, issuer_type, issuer_reference
-                ) VALUES
-                    (?, ?, 0, 0, '2025-01-01T00:00:00Z', 0, 'STORE', 'store:fixture'),
-                    (?, ?, 0, 0, '2035-01-01T00:00:00Z', 0, 'BRAND', 'brand:fixture')
-                """.trimIndent(),
-                expiredLotId,
-                accountId,
-                validLotId,
-                accountId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_reservation (
-                    id, order_id, point_account_id, amount_krw, state,
-                    reservation_expires_at, source_reference, created_at, updated_at, version
-                ) VALUES (?, ?, ?, 3000, 'USED', ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                reservationId,
-                fixture.orderId,
-                accountId,
-                Timestamp.from(NOW.plusSeconds(300)),
-                "points:${fixture.orderId}",
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_reservation_allocation VALUES
-                    (?, ?, ?, 1500), (?, ?, ?, 1500)
-                """.trimIndent(),
-                UUID.randomUUID(),
-                reservationId,
-                expiredLotId,
-                UUID.randomUUID(),
-                reservationId,
-                validLotId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO payment_method VALUES
-                    (?, ?, 'SCRIPTED', 'token', 'test', 'TEST', '1234', 'ACTIVE', ?, ?, 0)
-                """.trimIndent(),
-                methodId,
-                fixture.customerId,
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO payment_payment (
-                    id, order_id, type, approval_state, approved_amount_krw, currency,
-                    benefit_snapshot_reference, source_reference, correlation_id,
-                    approved_at, updated_at, customer_id, payment_method_id,
-                    requested_amount_krw, provider_transaction_reference,
-                    created_at, version, succeeded_refund_amount_krw
-                ) VALUES (?, ?, 'EXTERNAL', 'APPROVED', 5000, 'KRW', NULL, ?, ?, ?, ?,
-                          ?, ?, 5000, ?, ?, 0, 0)
-                """.trimIndent(),
-                fixture.paymentId,
-                fixture.orderId,
-                "payment:${fixture.paymentId}",
-                "correlation:${fixture.orderId}",
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-                fixture.customerId,
-                methodId,
-                "provider-payment:${fixture.paymentId}",
-                Timestamp.from(NOW),
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO promotion_campaign (
-                    id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
-                    minimum_eligible_subtotal_krw, maximum_discount_krw,
-                    all_menus_eligible, cost_bearer, platform_share_bps,
-                    store_share_bps, version
-                ) VALUES (?, ?, true, 'FIXED_KRW', 2000, NULL, 0, NULL, true,
-                          'STORE', 0, 10000, 0)
-                """.trimIndent(),
-                campaignId,
-                fixture.storeId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO promotion_coupon_issuance (
-                    id, campaign_id, customer_id, state, coupon_expires_at,
-                    reserved_order_id, version
-                ) VALUES (?, ?, ?, 'USED', '2035-01-01T00:00:00Z', ?, 0)
-                """.trimIndent(),
-                issuanceId,
-                campaignId,
-                fixture.customerId,
-                fixture.orderId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO promotion_coupon_reservation (
-                    id, order_id, coupon_issuance_id, state, discount_krw,
-                    eligible_line_sequences, discount_type, fixed_amount_krw, rate_bps,
-                    minimum_eligible_subtotal_krw, maximum_discount_krw,
-                    campaign_id, campaign_version, cost_bearer, platform_share_bps,
-                    store_share_bps, platform_coupon_cost_krw, store_coupon_cost_krw,
-                    reservation_expires_at, source_reference, created_at, updated_at, version
-                ) VALUES (?, ?, ?, 'USED', 2000, '0,1', 'FIXED_KRW', 2000, NULL,
-                          0, NULL, ?, 0, 'STORE', 0, 10000, 0, 2000, ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                UUID.randomUUID(),
-                fixture.orderId,
-                issuanceId,
-                campaignId,
-                Timestamp.from(NOW.plusSeconds(300)),
-                "coupon:${fixture.orderId}",
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-            )
             return fixture
         }
 
@@ -902,107 +951,150 @@ internal class PartialRefundAllocationRepositoryTest
             val reservationId = UUID.randomUUID()
             val lineIds = (1..3).map { UUID.randomUUID() }.sorted()
             val lotIds = (1..3).map { UUID.randomUUID() }.sorted()
-            transactions.executeWithoutResult {
-                jdbcTemplate.update(
-                    """
-                    INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
-                        coupon_discount_krw, points_applied_krw, payable_krw, currency,
-                        reservation_expires_at, created_at, updated_at, paid_at,
-                        acceptance_warning_at, acceptance_deadline_at, version
-                    ) VALUES (?, ?, ?, ?, 'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
-                    """.trimIndent(),
-                    orderId,
-                    customerId,
-                    storeId,
-                    UUID.randomUUID(),
-                    Timestamp.from(NOW.minusSeconds(60)),
-                    Timestamp.from(NOW),
-                    Timestamp.from(NOW),
-                    Timestamp.from(NOW.plusSeconds(120)),
-                    Timestamp.from(NOW.plusSeconds(180)),
-                )
-                lineIds.forEachIndexed { index, lineId ->
+            return requireNotNull(
+                transactions.execute {
                     jdbcTemplate.update(
                         """
-                        INSERT INTO ordering_order_line VALUES
-                            (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0)
+                        INSERT INTO ordering_order (
+                            id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                            coupon_discount_krw, points_applied_krw, payable_krw, currency,
+                            reservation_expires_at, created_at, updated_at, paid_at,
+                            acceptance_warning_at, acceptance_deadline_at, version
+                        ) VALUES (?, ?, ?, ?, 'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
                         """.trimIndent(),
-                        lineId,
                         orderId,
-                        index,
+                        customerId,
+                        storeId,
                         UUID.randomUUID(),
-                        "boundary-$index",
+                        Timestamp.from(NOW.minusSeconds(60)),
+                        Timestamp.from(NOW),
+                        Timestamp.from(NOW),
+                        Timestamp.from(NOW.plusSeconds(120)),
+                        Timestamp.from(NOW.plusSeconds(180)),
                     )
-                }
-                savePointAccrualSnapshot(
-                    orderId = orderId,
-                    storeId = storeId,
-                    payableKrw = 0,
-                    lines =
-                        lineIds.mapIndexed { index, lineId ->
-                            OrderPointAccrualLineInput(lineId, index, 1, 1, 1, 0, 1, 0)
-                        },
-                )
-            }
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_account (
-                    id, customer_id, available_points_krw, reserved_points_krw, version
-                ) VALUES (?, ?, 0, 0, 0)
-                """.trimIndent(),
-                accountId,
-                customerId,
-            )
-            val expiries = listOf(NOW.minusNanos(1_000), NOW, NOW.plusNanos(1_000))
-            lotIds.forEachIndexed { index, lotId ->
-                jdbcTemplate.update(
-                    """
-                    INSERT INTO loyalty_point_lot (
-                        id, point_account_id, available_amount_krw, reserved_amount_krw,
-                        expires_at, version, issuer_type, issuer_reference
-                    ) VALUES (?, ?, 0, 0, ?, 0, 'BRAND', ?)
-                    """.trimIndent(),
-                    lotId,
-                    accountId,
-                    Timestamp.from(expiries[index]),
-                    "brand:boundary-$index",
-                )
-            }
-            jdbcTemplate.update(
-                """
-                INSERT INTO loyalty_point_reservation (
-                    id, order_id, point_account_id, amount_krw, state,
-                    reservation_expires_at, source_reference, created_at, updated_at, version
-                ) VALUES (?, ?, ?, 3, 'USED', ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                reservationId,
-                orderId,
-                accountId,
-                Timestamp.from(NOW.plusSeconds(300)),
-                "boundary:$orderId",
-                Timestamp.from(NOW),
-                Timestamp.from(NOW),
-            )
-            val slices =
-                lineIds.zip(lotIds).mapIndexed { index, (lineId, lotId) ->
-                    val allocationId = UUID.randomUUID()
+                    lineIds.forEachIndexed { index, lineId ->
+                        jdbcTemplate.update(
+                            """
+                            INSERT INTO ordering_order_line VALUES
+                                (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0)
+                            """.trimIndent(),
+                            lineId,
+                            orderId,
+                            index,
+                            UUID.randomUUID(),
+                            "boundary-$index",
+                        )
+                    }
+                    savePointAccrualSnapshot(
+                        orderId = orderId,
+                        storeId = storeId,
+                        payableKrw = 0,
+                        lines =
+                            lineIds.mapIndexed { index, lineId ->
+                                OrderPointAccrualLineInput(lineId, index, 1, 1, 1, 0, 1, 0)
+                            },
+                    )
                     jdbcTemplate.update(
-                        "insert into loyalty_point_reservation_allocation values (?, ?, ?, 1)",
-                        allocationId,
+                        """
+                        INSERT INTO loyalty_point_account (
+                            id, customer_id, available_points_krw, reserved_points_krw, version
+                        ) VALUES (?, ?, 0, 0, 0)
+                        """.trimIndent(),
+                        accountId,
+                        customerId,
+                    )
+                    val expiries = listOf(NOW.minusNanos(1_000), NOW, NOW.plusNanos(1_000))
+                    lotIds.forEachIndexed { index, lotId ->
+                        jdbcTemplate.update(
+                            """
+                            INSERT INTO loyalty_point_lot (
+                                id, point_account_id, available_amount_krw, reserved_amount_krw,
+                                expires_at, version, issuer_type, issuer_reference
+                            ) VALUES (?, ?, 0, 0, ?, 0, 'BRAND', ?)
+                            """.trimIndent(),
+                            lotId,
+                            accountId,
+                            Timestamp.from(expiries[index]),
+                            "brand:boundary-$index",
+                        )
+                    }
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO loyalty_point_reservation (
+                            id, order_id, point_account_id, amount_krw, state,
+                            reservation_expires_at, source_reference, created_at, updated_at, version
+                        ) VALUES (?, ?, ?, 3, 'USED', ?, ?, ?, ?, 0)
+                        """.trimIndent(),
                         reservationId,
-                        lotId,
+                        orderId,
+                        accountId,
+                        Timestamp.from(NOW.plusSeconds(300)),
+                        "boundary:$orderId",
+                        Timestamp.from(NOW),
+                        Timestamp.from(NOW),
                     )
-                    PartialRefundPointSlice(
-                        orderLineId = lineId,
-                        pointReservationAllocationId = allocationId,
-                        originalPointLotId = lotId,
-                        issuerType = PointIssuerType.BRAND,
-                        issuerReference = "brand:boundary-$index",
-                        amountKrw = 1,
+                    val slices =
+                        lineIds.zip(lotIds).mapIndexed { index, (lineId, lotId) ->
+                            val allocationId = UUID.randomUUID()
+                            jdbcTemplate.update(
+                                "insert into loyalty_point_reservation_allocation values (?, ?, ?, 1)",
+                                allocationId,
+                                reservationId,
+                                lotId,
+                            )
+                            PartialRefundPointSlice(
+                                orderLineId = lineId,
+                                pointReservationAllocationId = allocationId,
+                                originalPointLotId = lotId,
+                                issuerType = PointIssuerType.BRAND,
+                                issuerReference = "brand:boundary-$index",
+                                amountKrw = 1,
+                            )
+                        }
+                    val termsVersionId = UUID.randomUUID()
+                    jdbcTemplate.update(
+                        "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
+                        storeId,
                     )
-                }
-            return BoundaryFixture(orderId, slices)
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO merchant_store_settlement_terms (
+                            terms_version_id, store_id, source_reference, fee_rate_bps,
+                            effective_from, effective_to, created_at
+                        ) VALUES (?, ?, ?, 0, '2020-01-01T00:00:00Z', NULL, ?)
+                        """.trimIndent(),
+                        termsVersionId,
+                        storeId,
+                        "test:boundary-terms:$orderId",
+                        Timestamp.from(NOW),
+                    )
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO ordering_order_settlement_input_snapshot (
+                            order_id, store_id, store_settlement_terms_version_id,
+                            store_settlement_terms_source_reference,
+                            coupon_discount_krw, platform_coupon_cost_krw, coupon_cost_krw,
+                            point_reservation_id, point_allocation_hash, points_applied_krw, point_cost_krw,
+                            gross_paid_krw, fee_base_krw, fee_rate_bps, fee_krw,
+                            benefit_cost_krw, net_settlement_krw, currency,
+                            snapshot_schema_version, canonical_snapshot_hash, created_at
+                        ) VALUES (
+                            ?, ?, ?, ?, 0, 0, 0, ?, ?, 3, 0,
+                            3, 0, 0, 0, 0, 3, 'KRW', 1, ?, ?
+                        )
+                        """.trimIndent(),
+                        orderId,
+                        storeId,
+                        termsVersionId,
+                        "test:boundary-terms:$orderId",
+                        reservationId,
+                        "c".repeat(64),
+                        "d".repeat(64),
+                        Timestamp.from(NOW.minusSeconds(60)),
+                    )
+                    BoundaryFixture(orderId, slices)
+                },
+            )
         }
 
         private fun savePointAccrualSnapshot(
