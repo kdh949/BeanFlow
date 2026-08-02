@@ -105,6 +105,12 @@ internal class PaymentConfirmationIntegrationTest @Autowired constructor(
 		assertThat(response.body).contains(FailureCode.PAYMENT_DECLINED.name)
 		assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("CANCELLED")
 		assertThat(
+			value<String>("SELECT cancellation_cause FROM ordering_order WHERE id = ?", orderId),
+		).isEqualTo("PAYMENT_DECLINED")
+		assertThat(
+			value<Instant>("SELECT cancelled_at FROM ordering_order WHERE id = ?", orderId),
+		).isNotNull()
+		assertThat(
 			value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId),
 		).isEqualTo("RELEASED")
 		assertThat(

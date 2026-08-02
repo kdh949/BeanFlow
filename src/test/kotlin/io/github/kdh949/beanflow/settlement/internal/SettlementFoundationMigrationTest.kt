@@ -78,6 +78,47 @@ internal class SettlementFoundationMigrationTest {
     }
 
     @Test
+    fun `legacy cancelled Order blocks unverified cancellation evidence migration`() {
+        val storeId = insertStore()
+        insertLegacyCancelledOrder(storeId)
+
+        assertThatThrownBy { migrateCurrent() }
+            .hasStackTraceContaining("legacy CANCELLED Order")
+            .hasStackTraceContaining("verified cancellation evidence")
+
+        assertThat(columnCount("ordering_order", "cancelled_at")).isZero()
+        assertThat(columnCount("ordering_order", "cancellation_cause")).isZero()
+        assertThat(tableCount("settlement_batch")).isZero()
+    }
+
+    @Test
+    fun `cancellation evidence constraints reject missing and misplaced facts`() {
+        migrateCurrent()
+        val storeId = insertStore()
+
+        assertThatThrownBy { insertLegacyCancelledOrder(storeId) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            jdbcTemplate.update(
+                """
+                INSERT INTO ordering_order (
+                    id, customer_id, store_id, pickup_slot_id, state,
+                    subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                    currency, reservation_expires_at, cancelled_at, cancellation_cause,
+                    created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, 'PENDING_PAYMENT', 1000, 0, 0, 1000,
+                          'KRW', now() + interval '5 minutes', now(), 'CUSTOMER_REQUEST',
+                          now(), now(), 0)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                storeId,
+                UUID.randomUUID(),
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
     fun `batch and immutable item constraints reinforce settlement invariants`() {
         migrateCurrent()
         val storeId = insertStore()
@@ -214,6 +255,29 @@ internal class SettlementFoundationMigrationTest {
             }
         }
 
+    private fun insertLegacyCancelledOrder(storeId: UUID): UUID =
+        UUID.randomUUID().also { orderId ->
+            jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
+            try {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id, state,
+                        subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                        currency, reservation_expires_at, created_at, updated_at, version
+                    ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
+                              'KRW', NULL, now(), now(), 0)
+                    """.trimIndent(),
+                    orderId,
+                    UUID.randomUUID(),
+                    storeId,
+                    UUID.randomUUID(),
+                )
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
+            }
+        }
+
     private fun insertBatch(
         batchId: UUID,
         storeId: UUID,
@@ -275,6 +339,23 @@ internal class SettlementFoundationMigrationTest {
                 "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
                 Long::class.java,
                 name,
+            ),
+        )
+
+    private fun columnCount(
+        tableName: String,
+        columnName: String,
+    ): Long =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                """
+                SELECT count(*)
+                  FROM information_schema.columns
+                 WHERE table_name = ? AND column_name = ?
+                """.trimIndent(),
+                Long::class.java,
+                tableName,
+                columnName,
             ),
         )
 

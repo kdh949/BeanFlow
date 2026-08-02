@@ -12,6 +12,38 @@ BEGIN
 END
 $$;
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM ordering_order
+         WHERE state = 'CANCELLED'
+    ) THEN
+        RAISE EXCEPTION
+            'Settlement activation blocked: legacy CANCELLED Order requires verified cancellation evidence';
+    END IF;
+END
+$$;
+
+ALTER TABLE ordering_order
+    ADD COLUMN cancelled_at timestamptz,
+    ADD COLUMN cancellation_cause varchar(32),
+    ADD CONSTRAINT chk_order_cancellation_cause
+        CHECK (
+            cancellation_cause IS NULL
+            OR cancellation_cause IN ('CUSTOMER_REQUEST', 'PAYMENT_DECLINED')
+        ),
+    ADD CONSTRAINT chk_order_cancellation_evidence
+        CHECK (
+            (state = 'CANCELLED'
+                AND cancelled_at IS NOT NULL
+                AND cancellation_cause IS NOT NULL)
+            OR
+            (state <> 'CANCELLED'
+                AND cancelled_at IS NULL
+                AND cancellation_cause IS NULL)
+        );
+
 CREATE TABLE settlement_batch (
     id uuid PRIMARY KEY,
     store_id uuid NOT NULL REFERENCES merchant_store(id),

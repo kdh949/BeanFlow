@@ -49,6 +49,13 @@ internal class AuditRecordEntity(
 )
 
 internal interface AuditRecordJpaRepository : JpaRepository<AuditRecordEntity, UUID> {
+	fun existsByActionAndTargetTypeAndTargetIdAndSourceReference(
+		action: String,
+		targetType: String,
+		targetId: UUID,
+		sourceReference: String,
+	): Boolean
+
 	@Query(
 		"select record.id from AuditRecordEntity record " +
 			"where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -63,6 +64,19 @@ class OrderEntityLifecycleTest {
         assertThat(order.markAcceptanceWarningRequested(paidAt.plusSeconds(120))).isTrue()
         assertThat(order.markAcceptanceWarningRequested(paidAt.plusSeconds(121))).isFalse()
         assertThat(order.acceptanceWarningRequestedAt).isEqualTo(paidAt.plusSeconds(120))
+    }
+
+    @Test
+    fun `explicit payment decline records terminal cancellation evidence`() {
+        val order = pendingOrder()
+        val declinedAt = paidAt.plusSeconds(10)
+
+        order.cancelAfterPaymentDeclined(declinedAt)
+
+        assertThat(order.state).isEqualTo(OrderState.CANCELLED)
+        assertThat(order.cancelledAt).isEqualTo(declinedAt)
+        assertThat(order.cancellationCause).isEqualTo(OrderCancellationCause.PAYMENT_DECLINED)
+        assertThat(order.reservationExpiresAt).isNull()
     }
 
     private fun pendingOrder(): OrderEntity =

@@ -28,3 +28,14 @@ data class AppendAuditRecordCommand(
 interface AuditRecordOperations {
     fun appendAll(commands: List<AppendAuditRecordCommand>): List<UUID>
 }
+
+data class AuditRecordKey(
+    val action: String,
+    val targetType: String,
+    val targetId: UUID,
+    val sourceReference: String,
+)
+
+interface AuditRecordQueryOperations {
+    fun exists(key: AuditRecordKey): Boolean
+}
