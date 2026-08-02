@@ -14,6 +14,12 @@ data class StoreActor(
 )
 
 interface StoreAccessOperations {
+    fun requireStoreAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor
+
     fun requireOrderManagementAccess(
         actorId: UUID,
         storeId: UUID,
