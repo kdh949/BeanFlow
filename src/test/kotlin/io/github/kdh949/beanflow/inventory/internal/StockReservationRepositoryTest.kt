@@ -2,10 +2,12 @@ package io.github.kdh949.beanflow.inventory.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
+import io.github.kdh949.beanflow.inventory.api.RestoreStockAfterTerminationCommand
 import io.github.kdh949.beanflow.inventory.api.StockRequirement
 import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -118,7 +120,7 @@ internal class StockReservationRepositoryTest
         }
 
         @Test
-        fun `confirmed stock is restored by rejection exactly once`() {
+        fun `confirmed stock is restored after termination exactly once and metadata conflicts fail`() {
             val storeId = UUID.randomUUID()
             val stockId = UUID.randomUUID()
             val orderId = UUID.randomUUID()
@@ -137,16 +139,22 @@ internal class StockReservationRepositoryTest
             }
 
             val first =
-                operations.restoreConfirmedByRejection(
-                    orderId,
-                    Instant.parse("2029-01-01T00:00:00Z"),
-                    "rejection-stock-$orderId",
+                operations.restoreConfirmedAfterTermination(
+                    RestoreStockAfterTerminationCommand(
+                        orderId,
+                        Instant.parse("2029-01-01T00:00:00Z"),
+                        "rejection-stock-$orderId",
+                        OrderTerminationTrigger.STORE_REJECTION,
+                    ),
                 )
             val replay =
-                operations.restoreConfirmedByRejection(
-                    orderId,
-                    Instant.parse("2029-01-01T00:00:01Z"),
-                    "rejection-stock-$orderId",
+                operations.restoreConfirmedAfterTermination(
+                    RestoreStockAfterTerminationCommand(
+                        orderId,
+                        Instant.parse("2029-01-01T00:00:01Z"),
+                        "rejection-stock-$orderId",
+                        OrderTerminationTrigger.STORE_REJECTION,
+                    ),
                 )
 
             assertThat(first.result).isEqualTo(ReservationTransitionResult.APPLIED)
@@ -157,7 +165,24 @@ internal class StockReservationRepositoryTest
                 assertThat(stock.reservedQuantity).isZero()
                 assertThat(stock.confirmedQuantity).isZero()
                 assertThat(reservationRepository.findByOrderIdOrderBySellableUnitId(orderId).single().state)
-                    .isEqualTo(StockReservationState.RELEASED_BY_REJECTION)
+                    .isEqualTo(StockReservationState.RELEASED_AFTER_TERMINATION)
+                assertThat(reservationRepository.findByOrderIdOrderBySellableUnitId(orderId).single().restorationTrigger)
+                    .isEqualTo(OrderTerminationTrigger.STORE_REJECTION)
+            }
+
+            val conflict =
+                runCatching {
+                    operations.restoreConfirmedAfterTermination(
+                        RestoreStockAfterTerminationCommand(
+                            orderId,
+                            Instant.parse("2029-01-01T00:00:02Z"),
+                            "another-stock-$orderId",
+                            OrderTerminationTrigger.STORE_REJECTION,
+                        ),
+                    )
+                }.exceptionOrNull()
+            assertThat(conflict).isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.COMPENSATION_SOURCE_CONFLICT)
             }
         }
 

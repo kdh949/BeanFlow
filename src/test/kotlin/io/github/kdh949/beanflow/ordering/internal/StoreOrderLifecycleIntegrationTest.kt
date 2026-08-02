@@ -445,11 +445,11 @@ internal class StoreOrderLifecycleIntegrationTest
                     value<String>(
                         "SELECT state FROM inventory_stock_reservation WHERE order_id = ?",
                         orderId,
-                    ) == "RELEASED_BY_REJECTION" &&
+                    ) == "RELEASED_AFTER_TERMINATION" &&
                     value<String>(
                         "SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?",
                         orderId,
-                    ) == "RELEASED_BY_REJECTION"
+                    ) == "RELEASED_AFTER_TERMINATION"
             }
             assertThat(
                 value<String>(

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
+import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -98,7 +99,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -140,7 +141,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -185,7 +186,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -193,34 +194,33 @@ internal class PickupReservationService(
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun releaseConfirmedByRejection(
-        orderId: UUID,
-        now: Instant,
-        sourceReference: String,
-    ): ReservationTransitionReport {
+    override fun releaseConfirmedAfterTermination(command: ReleasePickupAfterTerminationCommand): ReservationTransitionReport {
         val current =
-            reservationRepository.findByOrderId(orderId)
+            reservationRepository.findByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         val slot =
             slotRepository.findLockedById(current.slotId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed pickup slot is missing")
         val reservation =
-            reservationRepository.findLockedByOrderId(orderId)
+            reservationRepository.findLockedByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        if (reservation.state == PickupReservationState.RELEASED_BY_REJECTION) {
-            return if (reservation.restorationSourceReference == sourceReference) {
+        if (reservation.state == PickupReservationState.RELEASED_AFTER_TERMINATION) {
+            return if (reservation.restorationSourceReference == command.sourceReference &&
+                reservation.restorationTrigger == command.trigger
+            ) {
                 report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
             } else {
-                report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+                fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, "Pickup termination release metadata conflicts")
             }
         }
         if (reservation.state != PickupReservationState.CONFIRMED) {
-            return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+            fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, "Pickup reservation is not confirmed for termination release")
         }
         slot.releaseConfirmedOne()
-        reservation.state = PickupReservationState.RELEASED_BY_REJECTION
-        reservation.restorationSourceReference = sourceReference
-        reservation.updatedAt = now
+        reservation.state = PickupReservationState.RELEASED_AFTER_TERMINATION
+        reservation.restorationSourceReference = command.sourceReference
+        reservation.restorationTrigger = command.trigger
+        reservation.updatedAt = command.terminatedAt
         return report(ReservationTransitionResult.APPLIED, reservation.id)
     }
 

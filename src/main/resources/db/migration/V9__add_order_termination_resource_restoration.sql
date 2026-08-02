@@ -1,19 +1,61 @@
+DO $$
+DECLARE
+    legacy_pickup_count bigint;
+    legacy_stock_count bigint;
+BEGIN
+    SELECT count(*) INTO legacy_pickup_count
+      FROM fulfillment_pickup_reservation
+     WHERE state = 'RELEASED_AFTER_TERMINATION';
+    SELECT count(*) INTO legacy_stock_count
+      FROM inventory_stock_reservation
+     WHERE state = 'RELEASED_AFTER_TERMINATION';
+    IF legacy_pickup_count <> 0 OR legacy_stock_count <> 0 THEN
+        RAISE EXCEPTION
+            'V9 order termination clean-cutover precheck failed: legacy rejection release rows exist';
+    END IF;
+END
+$$;
+
 ALTER TABLE fulfillment_pickup_reservation
     DROP CONSTRAINT chk_pickup_reservation_state,
-    ADD COLUMN restoration_source_reference varchar(200),
+    ALTER COLUMN state TYPE varchar(32),
+    ADD COLUMN restoration_source_reference varchar(240),
+    ADD COLUMN restoration_trigger varchar(32),
     ADD CONSTRAINT chk_pickup_reservation_state
         CHECK (state IN (
-            'RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED', 'RELEASED_BY_REJECTION'
+            'RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED', 'RELEASED_AFTER_TERMINATION'
         )),
+    ADD CONSTRAINT chk_pickup_termination_restoration_metadata
+        CHECK (
+            (state = 'RELEASED_AFTER_TERMINATION'
+                AND restoration_source_reference IS NOT NULL
+                AND restoration_trigger IN ('STORE_REJECTION', 'CUSTOMER_CANCELLATION'))
+            OR
+            (state <> 'RELEASED_AFTER_TERMINATION'
+                AND restoration_source_reference IS NULL
+                AND restoration_trigger IS NULL)
+        ),
     ADD CONSTRAINT uq_pickup_restoration_source UNIQUE (restoration_source_reference);
 
 ALTER TABLE inventory_stock_reservation
     DROP CONSTRAINT chk_stock_reservation_state,
-    ADD COLUMN restoration_source_reference varchar(200),
+    ALTER COLUMN state TYPE varchar(32),
+    ADD COLUMN restoration_source_reference varchar(240),
+    ADD COLUMN restoration_trigger varchar(32),
     ADD CONSTRAINT chk_stock_reservation_state
         CHECK (state IN (
-            'RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED', 'RELEASED_BY_REJECTION'
-        ));
+            'RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED', 'RELEASED_AFTER_TERMINATION'
+        )),
+    ADD CONSTRAINT chk_stock_termination_restoration_metadata
+        CHECK (
+            (state = 'RELEASED_AFTER_TERMINATION'
+                AND restoration_source_reference IS NOT NULL
+                AND restoration_trigger IN ('STORE_REJECTION', 'CUSTOMER_CANCELLATION'))
+            OR
+            (state <> 'RELEASED_AFTER_TERMINATION'
+                AND restoration_source_reference IS NULL
+                AND restoration_trigger IS NULL)
+        );
 
 CREATE UNIQUE INDEX uq_stock_restoration_source_unit
     ON inventory_stock_reservation (restoration_source_reference, sellable_unit_id)
@@ -23,7 +65,7 @@ ALTER TABLE promotion_coupon_issuance
     DROP CONSTRAINT promotion_coupon_issuance_state_check,
     DROP CONSTRAINT promotion_coupon_issuance_check,
     ADD COLUMN original_issuance_id uuid REFERENCES promotion_coupon_issuance(id),
-    ADD COLUMN restoration_source_reference varchar(200),
+    ADD COLUMN restoration_source_reference varchar(240),
     ADD CONSTRAINT chk_coupon_issuance_state
         CHECK (state IN ('AVAILABLE', 'RESERVED', 'USED', 'RESTORED')),
     ADD CONSTRAINT chk_coupon_issuance_order
@@ -38,7 +80,7 @@ ALTER TABLE promotion_coupon_issuance
 ALTER TABLE promotion_coupon_reservation
     DROP CONSTRAINT promotion_coupon_reservation_state_check,
     DROP CONSTRAINT promotion_coupon_reservation_coupon_issuance_id_key,
-    ADD COLUMN restoration_source_reference varchar(200),
+    ADD COLUMN restoration_source_reference varchar(240),
     ADD CONSTRAINT chk_coupon_reservation_state
         CHECK (state IN ('RESERVED', 'USED', 'RELEASED', 'RESTORED')),
     ADD CONSTRAINT uq_coupon_reservation_restoration_source
@@ -56,7 +98,7 @@ ALTER TABLE loyalty_point_lot
 
 ALTER TABLE loyalty_point_reservation
     DROP CONSTRAINT loyalty_point_reservation_state_check,
-    ADD COLUMN restoration_source_reference varchar(200),
+    ADD COLUMN restoration_source_reference varchar(240),
     ADD CONSTRAINT chk_point_reservation_state
         CHECK (state IN ('RESERVED', 'USED', 'RELEASED', 'RESTORED')),
     ADD CONSTRAINT uq_point_reservation_restoration_source

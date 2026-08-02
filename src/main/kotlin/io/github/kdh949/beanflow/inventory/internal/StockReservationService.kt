@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.inventory.internal
 
 import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
+import io.github.kdh949.beanflow.inventory.api.RestoreStockAfterTerminationCommand
 import io.github.kdh949.beanflow.inventory.api.StockRequirement
 import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -94,12 +95,8 @@ internal class StockReservationService(
     ): ReservationTransitionReport = transition(orderId, sourceReference, now, StockTransition.EXPIRE)
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun restoreConfirmedByRejection(
-        orderId: UUID,
-        now: Instant,
-        sourceReference: String,
-    ): ReservationTransitionReport {
-        val current = reservationRepository.findByOrderIdOrderBySellableUnitId(orderId)
+    override fun restoreConfirmedAfterTermination(command: RestoreStockAfterTerminationCommand): ReservationTransitionReport {
+        val current = reservationRepository.findByOrderIdOrderBySellableUnitId(command.orderId)
         if (current.isEmpty()) return report(ReservationTransitionResult.NOT_ELIGIBLE)
         val stocks =
             current.sortedBy(StockReservationEntity::sellableUnitId).associate { reservation ->
@@ -108,22 +105,24 @@ internal class StockReservationService(
                         ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed sellable stock is missing")
                 )
             }
-        val reservations = reservationRepository.findLockedByOrderId(orderId)
+        val reservations = reservationRepository.findLockedByOrderId(command.orderId)
         if (reservations.all {
-                it.state == StockReservationState.RELEASED_BY_REJECTION &&
-                    it.restorationSourceReference == sourceReference
+                it.state == StockReservationState.RELEASED_AFTER_TERMINATION &&
+                    it.restorationSourceReference == command.sourceReference &&
+                    it.restorationTrigger == command.trigger
             }
         ) {
             return report(ReservationTransitionResult.ALREADY_APPLIED, reservations)
         }
         if (reservations.any { it.state != StockReservationState.CONFIRMED }) {
-            return report(ReservationTransitionResult.NOT_ELIGIBLE, reservations)
+            fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, "Stock termination release metadata conflicts")
         }
         reservations.forEach { reservation ->
             stocks.getValue(reservation.sellableUnitId).restoreConfirmed(reservation.quantity)
-            reservation.state = StockReservationState.RELEASED_BY_REJECTION
-            reservation.restorationSourceReference = sourceReference
-            reservation.updatedAt = now
+            reservation.state = StockReservationState.RELEASED_AFTER_TERMINATION
+            reservation.restorationSourceReference = command.sourceReference
+            reservation.restorationTrigger = command.trigger
+            reservation.updatedAt = command.terminatedAt
         }
         return report(ReservationTransitionResult.APPLIED, reservations)
     }

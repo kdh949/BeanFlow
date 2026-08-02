@@ -2,9 +2,11 @@ package io.github.kdh949.beanflow.fulfillment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
+import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -111,7 +113,7 @@ internal class PickupReservationRepositoryTest
         }
 
         @Test
-        fun `confirmed pickup is released by rejection exactly once`() {
+        fun `confirmed pickup is released after termination exactly once and metadata conflicts fail`() {
             val storeId = UUID.randomUUID()
             val slotId = UUID.randomUUID()
             val orderId = UUID.randomUUID()
@@ -130,16 +132,22 @@ internal class PickupReservationRepositoryTest
             }
 
             val first =
-                operations.releaseConfirmedByRejection(
-                    orderId,
-                    Instant.parse("2029-01-01T00:00:00Z"),
-                    "rejection-pickup-$orderId",
+                operations.releaseConfirmedAfterTermination(
+                    ReleasePickupAfterTerminationCommand(
+                        orderId,
+                        Instant.parse("2029-01-01T00:00:00Z"),
+                        "rejection-pickup-$orderId",
+                        OrderTerminationTrigger.STORE_REJECTION,
+                    ),
                 )
             val replay =
-                operations.releaseConfirmedByRejection(
-                    orderId,
-                    Instant.parse("2029-01-01T00:00:01Z"),
-                    "rejection-pickup-$orderId",
+                operations.releaseConfirmedAfterTermination(
+                    ReleasePickupAfterTerminationCommand(
+                        orderId,
+                        Instant.parse("2029-01-01T00:00:01Z"),
+                        "rejection-pickup-$orderId",
+                        OrderTerminationTrigger.STORE_REJECTION,
+                    ),
                 )
 
             assertThat(first.result).isEqualTo(ReservationTransitionResult.APPLIED)
@@ -149,7 +157,24 @@ internal class PickupReservationRepositoryTest
                 assertThat(slot.reservedCount).isZero()
                 assertThat(slot.confirmedCount).isZero()
                 assertThat(reservationRepository.findByOrderId(orderId)?.state)
-                    .isEqualTo(PickupReservationState.RELEASED_BY_REJECTION)
+                    .isEqualTo(PickupReservationState.RELEASED_AFTER_TERMINATION)
+                assertThat(reservationRepository.findByOrderId(orderId)?.restorationTrigger)
+                    .isEqualTo(OrderTerminationTrigger.STORE_REJECTION)
+            }
+
+            val conflict =
+                runCatching {
+                    operations.releaseConfirmedAfterTermination(
+                        ReleasePickupAfterTerminationCommand(
+                            orderId,
+                            Instant.parse("2029-01-01T00:00:02Z"),
+                            "rejection-pickup-$orderId",
+                            OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                        ),
+                    )
+                }.exceptionOrNull()
+            assertThat(conflict).isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.COMPENSATION_SOURCE_CONFLICT)
             }
         }
 
