@@ -1,11 +1,11 @@
 # 정산 입력 snapshot을 주문 생성 시점에 물질화한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-02`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -19,14 +19,12 @@ platform default로 성공하지 않는다.
 
 ## Current State
 
-- ADR-017/068은 fee, coupon, point cost snapshot을 요구하지만 current Order에는 subtotal,
-  coupon discount, points applied, payable amount만 있다.
-- Merchant Store에는 settlement terms가 없고, Campaign/CouponReservation에는 burden terms/final
-  legs가 없다.
-- Plan 10은 PointLot issuer snapshot precheck/migration을 단독 소유한다. 이 plan은 그 schema를
-  다시 만들지 않는다.
-- Plan 20은 `OrderCompletedV2` consumer와 SettlementItem을 소유하지만 required financial input을
-  추측할 수 없다.
+- V18은 Merchant Store별 immutable settlement terms version과 exact applicable lookup을 제공한다.
+- V19는 Campaign burden source/share와 CouponReservation의 immutable final two-leg cost를 제공한다.
+- completed Plan 10의 PointLot issuer snapshot과 allocation DTO를 재사용하며 issuer schema를
+  중복하지 않는다.
+- V20은 신규 Order마다 exactly-one `OrderSettlementInputSnapshot`을 같은 create transaction에
+  저장한다. Plan 20의 producer/outbox/Settlement model은 아직 없고 이 immutable input만 소비한다.
 
 ## Definitions
 
@@ -108,11 +106,11 @@ platform default로 성공하지 않는다.
 Plan 10 issuer outcome 후, migration writer lane을 얻은 최신 main에서 다음 object를 이 plan만
 소유한다.
 
-1. Merchant `store_settlement_terms` version table: store FK, immutable version/source, effective
+1. V18 `merchant_store_settlement_terms` version table: store FK, immutable version/source, effective
    interval, `fee_rate_bps`, overlap 방지와 applicable-version query index.
-2. Promotion Campaign burden fields and CouponReservation final platform/store cost legs with required
+2. V19 Promotion Campaign burden fields and CouponReservation final platform/store cost legs with required
    CHECK/sum constraints. active legacy Campaign inventory가 verified value를 제공하지 않으면 stop한다.
-3. Ordering `order_settlement_input_snapshot`: order unique FK, terms version/source, gross/fee base,
+3. V20 Ordering `ordering_order_settlement_input_snapshot`: order unique FK, terms version/source, gross/fee base,
    fee rate, coupon/point/benefit/net cost fields, immutable created timestamp and CHECK tie-outs.
 4. no historical Order/Campaign/terms/lot value를 추정 backfill하지 않는다. clean-cutover gate가
    요구하는 existing-row inventory와 deployment evidence를 Outcomes에 남긴다.
@@ -175,17 +173,23 @@ issuer reference는 tag/log field에 넣지 않는다.
 
 ## Progress
 
-- [ ] Plan 10 issuer outcome and data inventory
-- [ ] Merchant/Campaign burden source schema
-- [ ] Ordering snapshot transaction
-- [ ] completion/event tie-out
-- [ ] migration/architecture/documentation evidence
-- [ ] full validation
+- [x] Plan 10 issuer outcome and data inventory
+- [x] Merchant/Campaign burden source schema
+- [x] Ordering snapshot transaction
+- [x] completion/event tie-out
+- [x] migration/architecture/documentation evidence
+- [x] full validation
 
 ## Surprises & Discoveries
 
 - 2026-08-01: current Order price snapshot alone does not contain Merchant fee terms, Campaign cost burden
   or PointLot issuer provenance, so completion cannot safely create ADR-068 amounts.
+- 2026-08-02: PostgreSQL `CHECK`에서 nullable 표현식은 `UNKNOWN`을 통과시키므로 burden/source
+  조합은 명시적 `IS NOT NULL`과 state별 branch로 보호해야 했다.
+- 2026-08-02: PostgreSQL timestamp precision은 JVM `Instant`보다 낮아 applicable interval 비교 전에
+  microsecond half-up 정규화와 second rollover 처리가 필요했다.
+- 2026-08-02: V20 owner-source FK/trigger 도입으로 직접 SQL을 쓰던 partial-refund fixture도
+  Order, terms, point source와 snapshot을 한 transaction에 완전하게 구성해야 했다.
 
 ## Decision Log
 
@@ -194,12 +198,27 @@ issuer reference는 tag/log field에 넣지 않는다.
 | 2026-08-01 | Accepted | settlement input is Order-owned immutable snapshot created with order/reservations | current owner data must not change completed settlement | ADR-071 |
 | 2026-08-01 | Accepted | Plan 10 issuer outcome is a direct prerequisite; Plan 16 event producer와 Plan 20은 이 plan을 소비 | issuer migration과 immutable refund effect를 순환 없이 분리 | ADR-063, ADR-068, ADR-071 |
 | 2026-08-01 | Accepted | Plan 15는 completion input/factory/fixture만 제공하고 Plan 20이 V2 outbox cutover를 소유 | snapshot materialization과 actual producer activation의 transaction owner를 분리 | ADR-068, ADR-071 |
+| 2026-08-02 | Implemented | legacy active Campaign/reservation과 any legacy Order는 verified source 없이는 migration 중단 | fee/burden/issuer를 기존 합계에서 추측하지 않음 | V19, V20, ADR-071 |
+| 2026-08-02 | Implemented | fee와 store coupon share는 integer floor, platform coupon은 exact remainder | BR-02 산식과 leg 합계를 동시에 보존 | BR-02, ADR-071 |
+| 2026-08-02 | Implemented | snapshot hash/source/tie-out 검증과 metric tag는 closed vocabulary만 사용 | immutable replay와 low-cardinality observability 보장 | ADR-071 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Merchant/Campaign/PointLot input inventory와 Plan 10 issuer evidence가 모두
-verified가 되기 전에는 Plan 20의 V2 producer, SettlementItem 또는 settlement endpoint activation을
-시작하지 않는다.
+V18–V20에서 Merchant terms, Promotion burden legs와 Ordering exactly-one snapshot을 구현했고,
+completed Plan 10의 Loyalty issuer allocation을 주문 생성 local transaction에 연결했다. missing/
+ambiguous source, cross-store issuer, formula/hash mismatch와 snapshot persistence fault는
+`SETTLEMENT_INPUT_UNAVAILABLE`로 전체 transaction을 rollback한다. 동일 idempotent replay는 같은
+snapshot/hash 하나로 수렴하며 future terms 변경과 delayed V2 mapping은 기존 금액을 바꾸지 않는다.
+
+public `OrderCompletedV2` DTO, typed factory/validator와 exact JSON fixture는 snapshot과 matching
+approved Payment fact만 사용한다. production search에서 factory 외 producer/outbox/listener reference는
+없다. Settlement module/table/consumer도 만들지 않았으므로 Plan 20의 V1 inventory, cutover, outbox
+atomicity와 SettlementItem은 의도대로 미구현 상태다.
+
+외부 runtime DB가 없어 non-local backfill은 수행하지 않았다. V19는 active legacy Campaign 또는
+existing reservation, V20은 any legacy Order에서 stop하며 guessed source를 만들지 않는다. 최종 scoped,
+Modulith와 clean build는 각각 통과했고 clean build 결과는 229 tests, 0 failures/errors/skips다.
+`scripts/verify-docs.sh`와 `git diff --check`도 completion graph 이동 뒤 통과했다.
 
 ## Revision Notes
 
@@ -207,3 +226,5 @@ verified가 되기 전에는 Plan 20의 V2 producer, SettlementItem 또는 settl
   Plan 20 앞의 dedicated foundation으로 작성했다.
 - 2026-08-01: Plan 15에서 V2 outbox/cutover ownership을 제거하고 immutable input, mapper, validator와
   contract fixture handoff로 한정했다.
+- 2026-08-02: V18–V20 실제 schema/API/transaction, legacy stop gate와 V2 factory handoff 결과를
+  반영하고 Plan 20 non-goal 경계를 구현 inventory로 확인했다.

@@ -46,7 +46,7 @@ required=(
   "docs/exec-plans/completed/ordinary-point-accrual-policy-management.md"
   "docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
-  "docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
+  "docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md"
@@ -333,6 +333,9 @@ ordinary_accrual_path = plan_paths_by_filename[
 plan13_path = plan_paths_by_filename[
     'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md'
 ]
+plan15_path = plan_paths_by_filename[
+    'customer-order-cancellation-15-settlement-input-snapshot-foundation.md'
+]
 plan16_path = plan_paths_by_filename[
     'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md'
 ]
@@ -348,8 +351,11 @@ if (
 ):
     print('Plan 13 must remain completed after both direct dependencies and product decisions are complete.', file=sys.stderr)
     sys.exit(1)
-if plan_metadata[plan16_path]['implementation_ready']:
-    print('Plan 16 must remain blocked while Plan 15 is active.', file=sys.stderr)
+if plan_metadata[plan15_path]['status'] != 'COMPLETED':
+    print('Plan 15 must remain completed after its migration and validation pass.', file=sys.stderr)
+    sys.exit(1)
+if not plan_metadata[plan16_path]['implementation_ready']:
+    print('Plan 16 must be implementation-ready after Plan 12/13/15 complete.', file=sys.stderr)
     sys.exit(1)
 
 master_plan = (
@@ -1528,7 +1534,7 @@ else:
         print('Settlement-input source/materialization ADR is incomplete.', file=sys.stderr)
         sys.exit(1)
     plan15 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md'
     ).read_text(encoding='utf-8')
     plan20 = (
         root / 'docs/exec-plans/active/customer-order-cancellation-20-settlement-foundation.md'

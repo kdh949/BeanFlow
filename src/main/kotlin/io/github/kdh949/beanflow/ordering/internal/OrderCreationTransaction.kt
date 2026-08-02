@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
+import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
@@ -38,6 +39,7 @@ import java.util.UUID
 @Service
 internal class OrderCreationTransaction(
     private val menuQuoteUseCase: MenuQuoteUseCase,
+    private val storeSettlementTermsOperations: StoreSettlementTermsOperations,
     private val pickupOperations: PickupReservationOperations,
     private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
@@ -49,6 +51,7 @@ internal class OrderCreationTransaction(
     private val auditRecordOperations: AuditRecordOperations,
     private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyOperations,
     private val pointAccrualSnapshotService: OrderPointAccrualSnapshotService,
+    private val settlementInputSnapshotService: OrderSettlementInputSnapshotService,
     private val identifierSource: IdentifierSource,
     private val correlationIdSource: CorrelationIdSource,
     private val clock: Clock,
@@ -68,6 +71,7 @@ internal class OrderCreationTransaction(
         validate(command)
         val createdAt = clock.instant()
         val expiresAt = createdAt.plus(RESERVATION_LEASE)
+        val settlementTerms = storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
         val quotes =
             menuQuoteUseCase.quote(
                 command.storeId,
@@ -218,6 +222,13 @@ internal class OrderCreationTransaction(
         orderRepository.save(snapshotAssembler.order(order))
         orderLineRepository.saveAll(snapshotAssembler.lines(order))
         orderLineRepository.flush()
+        settlementInputSnapshotService.materialize(
+            order = order,
+            terms = settlementTerms,
+            coupon = couponQuote,
+            points = pointReservation,
+            createdAt = createdAt,
+        )
         val selectedPointAccrualPolicy = pointAccrualPolicyOperations.selectForOrder(order.storeId)
         val pointAccrualCalculation =
             pointAccrualCalculator.calculate(

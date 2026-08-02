@@ -102,6 +102,13 @@ internal class OrderPointAccrualSnapshotPersistenceTest
                         listOf(OrderPointAccrualLineInput(orderLineId, 0, 100, 2, 200, 0, 0, 200)),
                     )
                 snapshotService.save(orderId, 200, selected, calculation, now)
+                OrderCreationDatabaseFixture.insertSettlementInputForDirectOrder(
+                    jdbcTemplate,
+                    orderId,
+                    storeId,
+                    200,
+                    now,
+                )
             }
             return Fixture(orderId)
         }

@@ -37,6 +37,12 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 통화는 KRW만 지원하고 금액은 정수 원 단위로 저장한다. 정률 할인과 수수료 계산 중간값은 충분한 소수 정밀도로 계산하되, 최종 항목별 금액을 확정할 때 원 미만을 버림한다. 주문 총액·환불액·정산액은 확정된 항목 금액의 합으로 계산한다.
+- **Settlement Input Amendment (2026-08-02):** 주문 정산 입력은 다음 정수 산식을
+  canonical하게 사용한다. `feeKrw=floor(payableKrw*feeRateBps/10000)`,
+  `storeCouponCostKrw=floor(couponDiscountKrw*storeShareBps/10000)`, platform coupon
+  leg는 할인액의 나머지다. `benefitCostKrw=storeCouponCostKrw+storePointCostKrw`,
+  `netSettlementKrw=subtotalKrw-feeKrw-benefitCostKrw`이며 모든 항과 최종 net은 음수가
+  아니어야 한다. overflow나 tie-out 불일치는 반올림·0원으로 보정하지 않고 실패한다.
 - **Rationale:** 부동소수점 오차를 방지하고 주문·환불·정산의 재현성을 확보한다.
 - **Affected Contexts:** Ordering, Promotion, Loyalty, Payment, Settlement, Analytics
 - **Affected Aggregates:** Order, Campaign, Payment, SettlementItem, SettlementAdjustment
@@ -841,6 +847,11 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 플랫폼 수수료는 쿠폰과 포인트를 반영한 최종 실결제액을 기준으로 계산한다. 수수료율은 매장 계약 스냅샷을 주문 또는 SettlementItem에 저장하며, 정산 시 현재 계약 값을 다시 조회하지 않는다.
+- **Order Snapshot Amendment (2026-08-02):** canonical 저장 위치는 Order당 정확히 하나인
+  immutable `OrderSettlementInputSnapshot`이다. `feeBaseKrw=Order.payableKrw`이고 Payment
+  승인 금액도 이 값과 같아야 한다. Merchant의 applicable `StoreSettlementTerms` version ID,
+  source와 fee rate를 주문 생성 transaction에서 고정하며, 적용 version이 없거나 둘 이상이면
+  default rate 없이 `SETTLEMENT_INPUT_UNAVAILABLE`로 전체 생성 transaction을 rollback한다.
 - **Rationale:** 거래 당시 계약과 실제 결제액을 기준으로 재현 가능한 정산을 만든다.
 - **Affected Contexts:** Settlement, Payment, Ordering, Merchant
 - **Affected Aggregates:** SettlementItem, Order, Payment
@@ -863,6 +874,12 @@
   완료 주문에서 실제 사용될 때 그 주문의 SettlementItem에 비용을 반영한다. 미사용·
   만료에는 비용이 없고, snapshot 누락은 플랫폼 부담이나 현재 값으로 fallback하지
   않고 명시적 복원 실패로 처리한다.
+- **Reservation Leg Amendment (2026-08-02):** Campaign의 burden source와 version을
+  CouponReservation에 복사하고 final discount를 platform/store 정수 leg로 확정한다.
+  `PLATFORM=(10000,0)`, `STORE=(0,10000)`, `SHARED`는 두 share의 합이 10000이어야 하며
+  store leg는 BR-02의 floor, platform leg는 나머지다. active legacy Campaign 또는 이미
+  존재하는 reservation의 verified burden source가 없으면 migration을 중단한다. 보상
+  CouponIssuance에 승계된 burden snapshot이 없으면 예약도 같은 fail-closed 규칙을 따른다.
 - **Rationale:** 할인액이 누구의 정산액에서 차감되는지 명확히 하고 과거 캠페인의 재현성을 확보한다.
 - **Affected Contexts:** Promotion, Ordering, Settlement
 - **Affected Aggregates:** Campaign, Order, SettlementItem
@@ -884,6 +901,11 @@
   추론하거나 PLATFORM으로 대체하지 않는다. 이 Lot이 이후 사용될 때만 snapshot의
   발급 주체가 비용 배분 입력이 되며, adjustment command 자체는 SettlementItem이나
   SettlementAdjustment를 만들지 않는다.
+- **Order Allocation Amendment (2026-08-02):** 주문 생성에서 PointReservation의 immutable
+  allocation 합은 사용 포인트와 정확히 같아야 한다. 그중 `issuerType=STORE`이고
+  `issuerReference`가 해당 Order의 `storeId` canonical UUID와 정확히 일치하는 금액만
+  `pointCostKrw`에 포함한다. `PLATFORM`, `BRAND`는 해당 매장 비용에서 제외하고 다른 매장
+  reference·누락 issuer·allocation 불일치는 cross-store 정책이나 0원으로 추정하지 않는다.
 - **Rationale:** 서로 다른 발급 주체의 포인트를 섞어 사용할 때 비용 책임을 추적하기 위함이다.
 - **Affected Contexts:** Loyalty, Settlement, Merchant, Operations
 - **Affected Aggregates:** LoyaltyProgram, PointAccount, PointLot, PointTransaction,

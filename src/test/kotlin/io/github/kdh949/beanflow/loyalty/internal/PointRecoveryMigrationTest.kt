@@ -307,7 +307,7 @@ internal class PointRecoveryMigrationTest {
         )!!
 
     private fun migrateCurrent() {
-        flyway().migrate()
+        flyway(target = "17").migrate()
     }
 
     private fun flyway(

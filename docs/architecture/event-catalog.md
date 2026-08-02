@@ -74,6 +74,13 @@ Campaign or PointLot current values; the consumer also does not re-read Ordering
 event payload. Plan 16 owns only `PaymentRefundedV1`, `PointsAccruedV1` and `PointsRestoredV1` producers; it is
 not an `OrderCompletedV2` producer.
 
+2026-08-02 Plan 15 checkpoint: `OrderCompletedV2` public payload, typed factory/validator와 exact
+contract fixture는 구현됐다. Factory는 immutable `OrderSettlementInputSnapshot`과 matching
+approved Payment fact만 입력으로 받는다. existing completion transition은 여전히 frozen
+`OrderCompletedV1` 경로이고, V2 outbox save/producer reference/listener/Settlement consumer는
+추가되지 않았다. 따라서 catalog의 V2 consumer 행은 계속 target architecture이며 activation
+evidence는 Plan 20이 소유한다.
+
 `OrderCompletedV1`은 frozen trigger로 유지한다. Plan 13의 Loyalty accrual은 이 event의 payload를
 확장하지 않고, ADR-073의 typed Ordering boundary가 반환하는 immutable
 `OrderPointAccrualSnapshot`만 사용한다. 이는 일반 financial event consumer를 위한 current Aggregate

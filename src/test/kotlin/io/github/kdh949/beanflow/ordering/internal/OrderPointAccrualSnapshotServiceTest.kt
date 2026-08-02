@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -28,6 +29,7 @@ internal class OrderPointAccrualSnapshotServiceTest
         private val lineRepository: OrderLineJpaRepository,
         private val snapshotService: OrderPointAccrualSnapshotService,
         private val policyOperations: OrdinaryPointAccrualPolicyOperations,
+        private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -101,6 +103,13 @@ internal class OrderPointAccrualSnapshotServiceTest
                         listOf(OrderPointAccrualLineInput(lineId, 0, 100, 2, 200, 0, 0, 200)),
                     )
                 snapshotService.save(orderId, 200, selected, calculation, now)
+                OrderCreationDatabaseFixture.insertSettlementInputForDirectOrder(
+                    jdbcTemplate,
+                    orderId,
+                    storeId,
+                    200,
+                    now,
+                )
             }
             return orderId
         }

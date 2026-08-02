@@ -37,12 +37,12 @@ All source contexts ── idempotent business facts ──> Analytics
 |---|---|---|---|---|
 | Identity | API/Application Services | Identity | 인증 actor와 membership 조회 | 요청 시 동기 |
 | Eventing | Ordering과 event consumers | 원본 Context | 중립적인 versioned event 계약 | producer/consumer compile-time 분리 |
-| Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement 공개 동기 조회 | 주문 생성 시 현재 값 필요 |
+| Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement와 applicable immutable settlement-terms 공개 동기 조회 | 주문 생성 시 현재 메뉴 값과 정확히 하나의 terms version 필요 |
 | Merchant | Discovery | Merchant `StoreDiscoveryProfile` | public Query API의 동기 DTO projection | 검색 응답은 current owner state를 사용 |
 | Ordering | Fulfillment | Fulfillment | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Inventory | Inventory | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
-| Ordering | Promotion | Promotion | 검증·예약 API | 주문 금액 확정 전 필요 |
-| Ordering | Loyalty | Loyalty | 포인트 예약 API | 주문 금액 확정 전 필요 |
+| Ordering | Promotion | Promotion | 검증·예약 API와 CouponReservation final burden-leg DTO | 주문 금액과 정산 입력 확정 전 필요 |
+| Ordering | Loyalty | Loyalty | 포인트 예약 API와 allocation별 immutable issuer DTO | 주문 금액과 정산 입력 확정 전 필요 |
 | Ordering | Payment | Ordering / Payment | Payment command와 Tx2 결과 적용 | 외부 호출과 DB tx 분리, 승인 내부 반영은 로컬 원자성 |
 | Payment | Ordering | Payment | 승인·거절·불명·환불 fact | Tx2 후 후속 소비자용 after-commit, consumer idempotent |
 | Ordering | Notification | Ordering fact or cancellation Delivery command | 일반 알림은 after-commit event; 취소 접수는 Tx C0/C1의 동기 Application API | provider 발송은 eventual |
@@ -62,6 +62,11 @@ eventual이지만, 주문 종료 transaction이 만드는 보상 Case와 target 
 transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다. Ordering은 어느
 경우에도 다른 Context의 Repository를 직접 호출하지 않고 공개 Application API만
 사용한다.
+
+2026-08-02 implementation checkpoint에서 위 Merchant/Promotion/Loyalty 동기 경계는 주문
+생성 local transaction 안에서 `OrderSettlementInputSnapshot` 하나로 물질화된다. 완료 event
+factory는 이 Ordering-owned snapshot과 matching Payment approval fact만 사용한다. 이 checkpoint는
+`OrderCompletedV2` publication 또는 Settlement consumer가 활성화됐다는 뜻이 아니다.
 
 ## Data ownership
 

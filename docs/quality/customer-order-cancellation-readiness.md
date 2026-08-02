@@ -226,8 +226,9 @@ PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감
 - [Plan 13 recovery](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
   V17 Payment eligibility work, Loyalty actual `RECOVERY`/PointRecoveryPending과 gross accrual
   oldest-first offset이 completed owner outcome과 205-test evidence로 구현됐다.
-- [Plan 15 settlement input](../exec-plans/active/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
-  완료 시점 live 조회 없이 immutable 정산 입력을 제공해야 한다.
+- [Plan 15 settlement input](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
+  V18–V20 Merchant terms, coupon burden legs, Loyalty issuer allocation과 exactly-one Order snapshot,
+  V2 factory/validator/fixture가 229-test evidence로 완료됐다. outbox/cutover/Settlement consumer는 없다.
 - [Plan 16 financial events](../exec-plans/active/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
   Refund/Loyalty immutable producer가 Settlement와 recovery consumer의 입력을 제공해야 한다.
 - [Plan 20 Settlement](../exec-plans/active/customer-order-cancellation-20-settlement-foundation.md):
@@ -274,7 +275,7 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - [x] Plan 12 allocation/restoration이 통과함
 - [x] ordinary-accrual policy/snapshot foundation이 통과함
 - [x] Plan 13 recovery/pending이 통과함
-- [ ] Plan 15 settlement input이 통과함
+- [x] Plan 15 settlement input이 통과함
 - [ ] Plan 16 immutable events가 통과함
 - [ ] Plan 20 Settlement foundation이 통과함
 - [ ] Plan 30 common compensation이 통과함
@@ -323,7 +324,23 @@ migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan
 - `./gradlew clean build`: **Passed**, 205 tests, 0 failures/errors/skips.
 - `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
 - Plan 14와 Loyalty adjustment: all direct dependencies completed, `Implementation-Ready=true`.
-- Plan 16: Plan 13 blocker는 completed이고 Plan 15만 active라 `Implementation-Ready=false`.
+- Plan 16: Plan 12/13/15가 모두 completed라 `Implementation-Ready=true`.
+
+## Plan 15 settlement-input validation (2026-08-02)
+
+- V18 versioned Merchant terms, overlap/immutability/applicable interval과 concurrent future terms:
+  **Passed**.
+- V19 PLATFORM/STORE/SHARED Campaign burden, CouponReservation final legs/remainder, active legacy
+  Campaign와 reservation stop gate: **Passed**.
+- V20 exactly-one Order snapshot, owner source/hash/formula CHECK, legacy Order stop gate, replay와
+  forced persistence rollback: **Passed**.
+- mixed PLATFORM/BRAND/STORE point allocation, cross-store issuer failure, zero-payable, negative net,
+  Payment mismatch와 exact `OrderCompletedV2` fixture: **Passed**.
+- required scoped suite와 `*ModularityTests`: **Passed**.
+- `./gradlew clean build`: **Passed**, 229 tests, 0 failures/errors/skips; Spotless 포함.
+- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
+- Plan 16: all direct dependencies completed, `Implementation-Ready=true`; Plan 20은 Plan 16과 V1
+  inventory가 남아 `Implementation-Ready=false`.
 
 ## Historical audit validation
 

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
@@ -107,6 +108,9 @@ internal class CouponReservationRepositoryTest
                         minimumEligibleSubtotalKrw = 100,
                         maximumDiscountKrw = null,
                         allMenusEligible = false,
+                        costBearer = CouponCostBearer.SHARED,
+                        platformShareBps = 3_333,
+                        storeShareBps = 6_667,
                     ),
                 )
                 eligibleMenuRepository.save(CampaignEligibleMenuEntity(UUID.randomUUID(), campaignId, eligibleMenuId))
@@ -142,6 +146,38 @@ internal class CouponReservationRepositoryTest
 
             assertThat(quote.discountKrw).isEqualTo(50)
             assertThat(quote.eligibleLineSequences).containsExactly(0)
+            assertThat(quote.campaignId).isEqualTo(campaignId)
+            assertThat(quote.campaignVersion).isZero()
+            assertThat(quote.costBearer).isEqualTo(CouponCostBearer.SHARED)
+            assertThat(quote.platformShareBps).isEqualTo(3_333)
+            assertThat(quote.storeShareBps).isEqualTo(6_667)
+            assertThat(quote.platformCouponCostKrw).isEqualTo(17)
+            assertThat(quote.storeCouponCostKrw).isEqualTo(33)
+        }
+
+        @Test
+        fun `platform and store campaigns persist exact final burden legs`() {
+            val platform =
+                insertFixedCoupon(
+                    costBearer = CouponCostBearer.PLATFORM,
+                    platformShareBps = 10_000,
+                    storeShareBps = 0,
+                )
+            val store = insertFixedCoupon()
+
+            val platformQuote =
+                transactions.execute {
+                    operations.reserve(command(platform, UUID.randomUUID(), "platform-coupon"))
+                }
+            val storeQuote =
+                transactions.execute {
+                    operations.reserve(command(store, UUID.randomUUID(), "store-coupon"))
+                }
+
+            assertThat(platformQuote?.platformCouponCostKrw).isEqualTo(100)
+            assertThat(platformQuote?.storeCouponCostKrw).isZero()
+            assertThat(storeQuote?.platformCouponCostKrw).isZero()
+            assertThat(storeQuote?.storeCouponCostKrw).isEqualTo(100)
         }
 
         @Test
@@ -175,7 +211,11 @@ internal class CouponReservationRepositoryTest
             }
         }
 
-        private fun insertFixedCoupon(): CouponFixture {
+        private fun insertFixedCoupon(
+            costBearer: CouponCostBearer = CouponCostBearer.STORE,
+            platformShareBps: Int = 0,
+            storeShareBps: Int = 10_000,
+        ): CouponFixture {
             val fixture =
                 CouponFixture(
                     storeId = UUID.randomUUID(),
@@ -196,6 +236,9 @@ internal class CouponReservationRepositoryTest
                         minimumEligibleSubtotalKrw = 0,
                         maximumDiscountKrw = null,
                         allMenusEligible = true,
+                        costBearer = costBearer,
+                        platformShareBps = platformShareBps,
+                        storeShareBps = storeShareBps,
                     ),
                 )
                 issuanceRepository.save(

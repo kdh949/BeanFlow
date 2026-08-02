@@ -16,6 +16,11 @@ Initial decision:
   PointReservation issuer allocations이 모두 검증된 뒤 같은 transaction에
   `OrderSettlementInputSnapshot`을 저장한다. source/snapshot tie-out failure는 Order·예약의
   부분 성공이나 default fee/cost로 대체하지 않고 전체 rollback한다.
+- 2026-08-02 Plan 15 구현은 V18–V20 owner source FK/trigger와 Order unique snapshot을 이
+  경계에 연결했다. snapshot insert failure, missing terms, coupon burden 또는 cross-store
+  point issuer는 `SETTLEMENT_INPUT_UNAVAILABLE`로 Order·Pickup·Stock·Coupon·Point 변경을
+  함께 rollback한다. concurrent future terms publication은 주문 시각에 적용되는 기존 version을
+  바꾸지 않는다.
 - Order와 OrderLine을 저장한 뒤 같은 transaction에서 Operations의 typed selector로
   STORE override 또는 현재 GLOBAL version을 선택한다. Ordering은 선택된 immutable policy values,
   canonical hash, selection source, 주문 실결제액과 conceptual-unit별 현금·적립 배분을
@@ -238,6 +243,9 @@ Notification worker: claim transaction -> external Provider -> result transactio
 
 - Plan 15는 주문 생성 transaction에서 `OrderSettlementInputSnapshot`과 V2 payload factory/validator의
   immutable input을 materialize한다. Plan 15는 completion outbox를 저장하지 않는다.
+- 2026-08-02 Plan 15 checkpoint에는 public `OrderCompletedV2` payload와 factory/validator/fixture만
+  존재한다. factory는 completed Order fact, approved Payment fact와 snapshot source/time/currency/
+  formula를 검증하지만 Order transition이나 event publication을 수행하지 않는다.
 - Plan 20은 V1 publication drain/deployed consumer inventory가 verified zero일 때만 existing Ordering
   completion producer를 V2로 cut over한다. Ordering의 guarded `COMPLETED` transaction은 immutable snapshot과
   matching Payment approval payable tie-out을 검증하고 `OrderCompletedV2` outbox를 Order transition과

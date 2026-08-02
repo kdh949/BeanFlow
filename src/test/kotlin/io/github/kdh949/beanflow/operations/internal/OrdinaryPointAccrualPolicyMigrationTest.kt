@@ -320,7 +320,7 @@ internal class OrdinaryPointAccrualPolicyMigrationTest {
     private fun count(table: String): Long = jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
 
     private fun migrateCurrent() {
-        flyway().migrate()
+        flyway(target = "16").migrate()
     }
 
     private fun flyway(

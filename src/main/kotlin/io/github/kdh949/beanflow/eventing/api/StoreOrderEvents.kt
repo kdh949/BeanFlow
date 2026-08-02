@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.eventing.api
 
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 data class EventEnvelope(
@@ -65,4 +66,22 @@ data class OrderCompletedV1(
     val customerId: UUID,
     val storeId: UUID,
     val completedAt: Instant,
+)
+
+data class OrderCompletedV2(
+    val envelope: EventEnvelope,
+    val orderId: UUID,
+    val customerId: UUID,
+    val storeId: UUID,
+    val completedAt: Instant,
+    val settlementDate: LocalDate,
+    val currency: String,
+    val grossPaidKrw: Long,
+    val feeRateBps: Int,
+    val feeKrw: Long,
+    val couponCostKrw: Long,
+    val pointCostKrw: Long,
+    val benefitCostKrw: Long,
+    val netSettlementKrw: Long,
+    val completionSource: String,
 )
