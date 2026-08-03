@@ -29,6 +29,8 @@ internal class NotificationDeliveryEntity(
     val eventId: UUID,
     @Column(name = "event_type", nullable = false)
     val eventType: String,
+    @Column(name = "logical_source", nullable = false, length = 240)
+    val logicalSource: String,
     @Column(name = "order_id", nullable = false)
     val orderId: UUID,
     @Enumerated(EnumType.STRING)
@@ -72,6 +74,8 @@ internal class NotificationDeliveryEntity(
 )
 
 internal interface NotificationDeliveryJpaRepository : JpaRepository<NotificationDeliveryEntity, UUID> {
+    fun findByLogicalSource(logicalSource: String): NotificationDeliveryEntity?
+
     fun findByEventIdAndRecipientIdAndLogicalChannel(
         eventId: UUID,
         recipientId: UUID,

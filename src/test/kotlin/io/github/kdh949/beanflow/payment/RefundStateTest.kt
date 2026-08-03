@@ -99,13 +99,63 @@ internal class RefundStateTest {
         assertThat(refund.nextAttemptAt).isNull()
     }
 
-    private fun refund(): Refund =
+    @Test
+    fun `operator reconciliation from failed uses one lookup without changing the automatic budget`() {
+        val refund = refund(reason = "CUSTOMER_ORDER_CANCELLED")
+        refund.claim(UUID.randomUUID(), NOW, LEASE)
+        refund.fail("refund_declined", NOW)
+
+        refund.scheduleOperatorReconciliation(NOW.plusSeconds(1))
+        assertThat(refund.state).isEqualTo(RefundState.UNKNOWN)
+        assertThat(refund.operatorReconciliationPending).isTrue()
+        assertThat(refund.claim(UUID.randomUUID(), NOW.plusSeconds(1), LEASE))
+            .isEqualTo(RefundClaimMode.LOOKUP)
+        assertThat(refund.requestAttemptCount).isEqualTo(1)
+        assertThat(refund.lookupAttemptCount).isZero()
+        assertThatThrownBy { refund.recordUnknown("wrong_result_path", NOW.plusSeconds(1)) }
+            .isInstanceOf(IllegalStateException::class.java)
+        assertThat(refund.state).isEqualTo(RefundState.RECONCILING)
+
+        refund.recordOperatorReconciliationUnknown("lookup_timeout", NOW.plusSeconds(1))
+        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
+        assertThat(refund.operatorReconciliationPending).isFalse()
+        assertThat(refund.nextAttemptAt).isNull()
+        assertThat(refund.lookupAttemptCount).isZero()
+    }
+
+    @Test
+    fun `expired operator lookup from manual review returns terminal without another provider budget`() {
+        val refund = refund(reason = "CUSTOMER_ORDER_CANCELLED")
+        var now = NOW
+        refund.claim(UUID.randomUUID(), now, LEASE)
+        refund.recordUnknown("ack_lost", now)
+        now = requireNotNull(refund.nextAttemptAt)
+        repeat(Refund.LOOKUP_MAX_ATTEMPTS) {
+            refund.claim(UUID.randomUUID(), now, LEASE)
+            refund.recordUnknown("ack_lost", now)
+            now = refund.nextAttemptAt ?: now
+        }
+        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
+
+        val scheduledAt = now.plusSeconds(1)
+        refund.scheduleOperatorReconciliation(scheduledAt)
+        refund.claim(UUID.randomUUID(), scheduledAt, LEASE)
+        refund.recoverExpiredClaim(scheduledAt.plus(LEASE))
+
+        assertThat(refund.state).isEqualTo(RefundState.MANUAL_REVIEW)
+        assertThat(refund.operatorReconciliationPending).isFalse()
+        assertThat(refund.nextAttemptAt).isNull()
+        assertThat(refund.requestAttemptCount).isEqualTo(1)
+        assertThat(refund.lookupAttemptCount).isEqualTo(Refund.LOOKUP_MAX_ATTEMPTS)
+    }
+
+    private fun refund(reason: String = "STORE_ORDER_REJECTED"): Refund =
         Refund.request(
             id = UUID.randomUUID(),
             paymentId = UUID.randomUUID(),
             orderId = UUID.randomUUID(),
             requestedAmountKrw = 7_000,
-            reason = "STORE_ORDER_REJECTED",
+            reason = reason,
             providerIdempotencyKey = "refund-key",
             sourceReference = "event:refund",
             now = NOW,

@@ -20,8 +20,35 @@ internal data class StoreOrderTransitionRequest(
 )
 
 internal data class StoreOrderResult(
-    val order: OrderResponse,
+    val order: StoreOrderResponse,
     val compensationRecovery: StoreCompensationSummary?,
+)
+
+internal data class StoreOrderResponse(
+    val orderId: UUID,
+    val storeId: UUID,
+    val state: String,
+    val reservationExpiresAt: Instant?,
+    val paidAt: Instant?,
+    val acceptanceWarningAt: Instant?,
+    val acceptanceWarningRequestedAt: Instant?,
+    val acceptanceDeadlineAt: Instant?,
+    val acceptedAt: Instant?,
+    val rejectedAt: Instant?,
+    val preparingAt: Instant?,
+    val readyAt: Instant?,
+    val completedAt: Instant?,
+    val cancelledAt: Instant?,
+    val cancellationCause: io.github.kdh949.beanflow.ordering.api.OrderCancellationCause?,
+    val rejectionReason: String?,
+    val lines: List<OrderLineResponse>,
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+    val currency: String,
+    val createdAt: Instant,
+    val updatedAt: Instant,
 )
 
 internal data class StoreCompensationSummary(

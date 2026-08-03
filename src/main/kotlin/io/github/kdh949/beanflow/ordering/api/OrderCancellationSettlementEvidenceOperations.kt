@@ -8,6 +8,15 @@ enum class OrderCancellationCause {
     PAYMENT_DECLINED,
 }
 
+enum class CustomerCancellationReasonCode {
+    CHANGED_MIND,
+    ORDER_MISTAKE,
+    WAIT_TOO_LONG,
+    PICKUP_TIME_CONFLICT,
+    PAYMENT_ISSUE,
+    OTHER,
+}
+
 data class OrderCancellationSettlementEvidence(
     val orderId: UUID,
     val customerId: UUID,

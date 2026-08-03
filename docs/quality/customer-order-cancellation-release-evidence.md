@@ -147,3 +147,89 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   issuer allocation, source/hash/formula tie-outs, exactly-one replay and forced persistence rollback.
   `OrderCompletedV2` contract tests covered exact fixture mapping and Payment mismatch without adding
   a producer/outbox or Settlement consumer.
+
+## Plan 40 and Plan 50 combined Draft execution evidence
+
+- **Recorded at:** 2026-08-03
+- **Repository baseline:** local `main`과 `origin/main`의 `5f52320`에서 Plan 40→50 단일 Draft
+  stack을 시작했다. Plan 40 completed handoff `7a0d636` 뒤 Plan 50을 같은 branch와 shared
+  migration-writer lease에서 계속했다.
+- **Migration:** Plan 40은 V23, Plan 50은 V24 terminal notification source, V25 setup integrity,
+  V26 two-person repair, V27 terminal Refund operator reconciliation을 forward migration으로 추가했다.
+  적용된 migration 수정, checksum repair, guessed financial backfill은 없다.
+- **Runtime:** Refund REQUEST는 allowlist 안에서 최초 포함 최대 3회, UNKNOWN 뒤 LOOKUP은 별도 최대
+  5회다. 네 owner 수렴, 고객/운영자 projection, terminal notification, Settlement
+  `NOT_APPLICABLE`, setup detector/scanner, LOOKUP-only two-person repair와 terminal Refund
+  single-operator LOOKUP이 명시적 상태로 수렴한다. 직접 저장하는 financial target publication은
+  최초 `FAILED`/attempt 0으로 남겨 실제 bounded recovery worker가 consumer를 호출한다.
+- **Missing-Refund repair boundary:** 서로 다른 활성 operator 두 명, 30분 proposal TTL, 승인 시 원 snapshot과
+  Refund 부재 재검증, 원 ID/source/provider key/amount의 정확한 복원만 허용한다. Provider request는
+  보내지 않고 `RECONCILING/LOOKUP`에서 시작하며 proposal, decision idempotency와 Audit를 보존한다.
+- **Terminal-Refund reconciliation boundary:** 전용 persistent grant를 가진 operator 한 명이
+  `FAILED`/`MANUAL_REVIEW` Refund를 같은 Provider key의 LOOKUP 한 번으로만 다시 연다. 새 REQUEST,
+  수기 성공과 금융 입력은 금지하고 명령 멱등성, Audit, 지연 뒤 실제 성공의 별도 Delivery를 보존한다.
+- **Deployment gate:** 이 증거 작성 시 Plan 40/50 branch의 main merge 또는 non-local deployment는
+  수행하지 않았다. V27 이후 final read-only preflight에서 local `main`, `origin/main`과
+  remote `main`이 모두 `5f5232054206b8324e35ca488857e485a59a8fba`임을 확인했다. remote
+  feature branch와 기존 PR, GitHub deployment와 environment는 각각 0이었다. 이후 사용자 승인으로
+  구현 head `19d69f2`를 `feature/customer-order-cancellation-command`에 push하고 Plan 40+50 combined
+  main-targeted ready PR #39를 생성했다. Plan 50 completion 이동은 같은 PR에 포함하며 main merge,
+  deployment와 environment 생성은 수행하지 않았다.
+
+### V24~V26 validation baseline (2026-08-03)
+
+- `./gradlew test --tests '*Refund*' --tests '*CustomerCancellation*'`: Passed, 76 tests,
+  failures/errors/skips 0, 30초, exit 0.
+- `./gradlew test --tests '*Notification*' --tests '*Settlement*'`: Passed, 42 tests,
+  failures/errors/skips 0, 23초, exit 0.
+- `./gradlew test --tests '*Repair*' --tests '*SetupIntegrity*'`: Passed, 6 tests,
+  failures/errors/skips 0, 13초, exit 0.
+- `./gradlew test --tests '*ModularityTests'`: Passed, 1 test, failures/errors/skips 0,
+  3초, exit 0.
+- Plan 20/30 owner·Settlement 연계 묶음: Passed, 16 tests, failures/errors/skips 0, exit 0.
+- 첫 `./gradlew clean build`: Failed, 기본 512MiB test JVM heap 고갈로 345 tests 중 14 context
+  initialization failure와 1 skip, exit 1. 기능 assertion 실패가 아니라 `OutOfMemoryError`였으며
+  실패를 release success로 계산하지 않는다.
+- completion audit에서 violation-only scanner backlog 진행, customer/operator/Refund worker/Settlement
+  즉시 감지, Refund/snapshot 단독·동시 누락과 source/amount 위반, 감지 증적 저장 실패 rollback을
+  추가 검증했다.
+- test-only `maxHeapSize = "1g"` 보정 뒤 최종 `./gradlew clean build`: Passed, 358 tests,
+  failures/errors/skips 0, 2분 25초, exit 0.
+- `bash scripts/verify-docs.sh`: Passed, target 26/deployed 12 paths, 73 schemas,
+  32 policies, 74 ADRs, 141 Markdown files와 24 ExecPlans, exit 0.
+- `git diff --check`: Passed, exit 0.
+
+### V27 and financial-publication correction validation (2026-08-03)
+
+- `./gradlew cleanTest test --tests '*Refund*' --tests '*CustomerCancellation*'`: Passed, 89 tests,
+  failures/errors/skips 0, 37초, exit 0. operator claim marker와 result metadata 불일치가 자동
+  LOOKUP budget으로 흐르지 않는 Aggregate guard도 포함한다.
+- `./gradlew cleanTest test --tests '*Notification*' --tests '*Settlement*'`: Passed, 43 tests,
+  failures/errors/skips 0, 28초, exit 0.
+- `./gradlew cleanTest test --tests '*Repair*' --tests '*SetupIntegrity*'`: Passed, 13 tests,
+  failures/errors/skips 0, 18초, exit 0. terminal command 101개 중 첫 실행 100개, 두 번째 실행
+  잔여 1개를 삭제하는 retention 상한을 실제 PostgreSQL에서 검증했다.
+- `./gradlew cleanTest test --tests '*ModularityTests'`: Passed, 1 test,
+  failures/errors/skips 0, 4초, exit 0.
+- `bash scripts/verify-docs.sh`: Passed, target 27/deployed 13 paths, 75 schemas,
+  32 policies, 75 ADRs, 142 Markdown files와 24 ExecPlans, exit 0.
+- 첫 `./gradlew clean build`: Not completed. Testcontainers가 Docker container inspect에서 대기하던 중
+  Docker backend가 `no space left on device`를 기록하고 daemon을 종료했다. 이 실행은 수동 중단
+  exit 130이며 기능 성공·실패로 계산하지 않는다.
+- 디스크 여유 공간 확보와 Docker daemon 재시작 뒤 최종 `./gradlew clean build`: Passed, 365 tests,
+  failures/errors/skips 0, 2분 10초, exit 0. clean compile, Spotless, bootJar와 PostgreSQL
+  Testcontainers를 포함한다.
+- V27 이후 `git diff --check`: Passed, exit 0. 변경 파일 secret/personal-context/generated-artifact,
+  fallback/예외 삼킴, production dependency와 migration inventory 점검도 통과했다.
+- final pre-push remote gate: Passed. remote `main=5f52320`, feature branch 0, head PR 0,
+  deployment 0, environment 0이었다. 승인 뒤 feature branch와 ready PR #39만 생성했고 base는 main이다.
+- PR #39 최초 GitHub Actions build(run `30811253139`): Failed, 365 tests 중
+  `PaymentSetupRepairIntegrationTest` 9건, exit 1. Linux runner의 나노초 Provider 결과 시각이
+  PostgreSQL 마이크로초 Refund 시각과 달라 settlement listener가 `SETTLEMENT_SOURCE_CONFLICT`를
+  반환한 것이며 이 실패를 release success로 계산하지 않는다. 결과 기록 경계에서 시각을 마이크로초로
+  한 번 정규화하고 고정 `+789ns` 회귀 입력을 추가했다. 보정 뒤 단일 setup-repair 13 tests,
+  refund/settlement/setup-repair 대상 묶음과 365-test `./gradlew clean build`가 모두 exit 0이다.
+  보정 head의 원격 build 성공은 여전히 merge gate다.
+- Not run: 실제 Provider credential을 이용한 외부 E2E, non-local deployment와 production smoke.
+  현재 외부 환경·credential·SLA가 없고 Draft-only release gate가 배포를 금지하므로 의도적으로
+  실행하지 않았다.

@@ -18,6 +18,9 @@ internal enum class NotificationTemplate {
     STORE_ACCEPTANCE_WARNING,
     ORDER_REJECTED,
     ORDER_READY,
+    ORDER_CANCELLATION_ACCEPTED,
+    CUSTOMER_CANCELLATION_REFUND_SUCCEEDED,
+    CUSTOMER_CANCELLATION_REFUND_DELAYED,
 }
 
 internal enum class NotificationDeliveryState {
@@ -32,6 +35,7 @@ internal class NotificationDelivery private constructor(
     val id: UUID,
     val eventId: UUID,
     val eventType: String,
+    val logicalSource: String,
     val orderId: UUID,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
@@ -181,6 +185,7 @@ internal class NotificationDelivery private constructor(
             id: UUID,
             eventId: UUID,
             eventType: String,
+            logicalSource: String,
             orderId: UUID,
             recipientType: NotificationRecipientType,
             recipientId: UUID,
@@ -192,6 +197,7 @@ internal class NotificationDelivery private constructor(
             now: Instant,
         ): NotificationDelivery {
             require(eventType.isNotBlank())
+            require(logicalSource.isNotBlank())
             require(payloadJson.isNotBlank())
             require(providerIdempotencyKey.isNotBlank())
             require(correlationId.isNotBlank())
@@ -199,6 +205,7 @@ internal class NotificationDelivery private constructor(
                 id = id,
                 eventId = eventId,
                 eventType = eventType,
+                logicalSource = logicalSource,
                 orderId = orderId,
                 recipientType = recipientType,
                 recipientId = recipientId,
@@ -224,6 +231,7 @@ internal class NotificationDelivery private constructor(
             id: UUID,
             eventId: UUID,
             eventType: String,
+            logicalSource: String,
             orderId: UUID,
             recipientType: NotificationRecipientType,
             recipientId: UUID,
@@ -246,6 +254,7 @@ internal class NotificationDelivery private constructor(
                 id,
                 eventId,
                 eventType,
+                logicalSource,
                 orderId,
                 recipientType,
                 recipientId,

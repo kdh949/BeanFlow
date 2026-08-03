@@ -205,6 +205,11 @@ unimplemented event shape to consume.
 - Plan 16 must materialize Refund allocation-derived Settlement effect from Plan 12 allocation and Plan 15 snapshot before the success event is stored.
 - Event catalog, Kotlin event API and producer tests must change together at each checkpoint; the catalog is
   not proof that a producer has already been implemented.
+- Eventing이 explicit listener target을 JDBC로 직접 enqueue할 때 최초 row는 `FAILED`,
+  `completion_attempts=0`, `last_resubmission_date=NULL`로 저장한다. 현재 Modulith의 bounded
+  `ResubmissionOptions`는 FAILED publication만 선택하므로, 실제 listener를 호출하지 않은 row를
+  `PUBLISHED`로 쓰면 durable하지만 영구히 전달되지 않는다. 이 `FAILED`는 owner fact 실패나
+  Provider 실패가 아니라 “아직 consumer completion이 없는 bounded-delivery 대상”이다.
 - Analytics starts with only the producers whose exact contract and validation evidence are complete.
 - Plan 13은 frozen V1 payload를 확장하지 않고 ADR-073의 immutable snapshot boundary를 통해서만
   ordinary accrual을 materialize한다.
@@ -238,6 +243,11 @@ not treat the Payment-owned restoration worker handoff as the Plan 16 integratio
 event-contract/Modulith suite passed. `./gradlew clean build` passed 243 tests with no failure, error or skip.
 Missing/failed snapshot, allocation and target-publication writes roll back the owner result; cumulative
 partial refunds retain rounding remainder, and a later Merchant terms version does not change the event effect.
+
+**Consumer activation correction (2026-08-03):** 고객 취소 terminal consumer e2e에서 direct JDBC
+target가 `PUBLISHED`로 저장되면 Modulith 2.1 bounded recovery 대상이 되지 않는 것을 확인했다.
+최초 상태를 `FAILED`/attempt 0으로 수정하고 recovery worker가 Notification과 Settlement listener를
+실제로 완료하는 통합 테스트로 검증했다. reserved Analytics target은 기존 filter대로 미완료로 보존한다.
 
 ## Metrics
 

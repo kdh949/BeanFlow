@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
+- **Amended by:** ADR-075의 단일 운영자 LOOKUP reconciliation
 
 ## Context
 

@@ -203,6 +203,8 @@ internal class RefundEntity(
     var succeededAmountKrw: Long? = null,
     @Column(nullable = false)
     val reason: String,
+    @Column(name = "customer_reason_code", length = 32)
+    val customerReasonCode: String? = null,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var state: RefundState,
@@ -239,6 +241,8 @@ internal class RefundEntity(
     @Enumerated(EnumType.STRING)
     @Column(name = "next_action", nullable = false)
     var nextAction: RefundClaimMode = RefundClaimMode.REQUEST,
+    @Column(name = "operator_reconciliation_pending", nullable = false)
+    var operatorReconciliationPending: Boolean = false,
     @Column(name = "next_attempt_at")
     var nextAttemptAt: Instant?,
     @Column(name = "provider_request_started_at")
@@ -272,6 +276,12 @@ internal interface PaymentJpaRepository : JpaRepository<PaymentEntity, UUID> {
     @Query("select payment from PaymentEntity payment where payment.id = :id")
     fun findLockedById(
         @Param("id") id: UUID,
+    ): PaymentEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select payment from PaymentEntity payment where payment.orderId = :orderId")
+    fun findLockedByOrderId(
+        @Param("orderId") orderId: UUID,
     ): PaymentEntity?
 
     @Query(
@@ -330,6 +340,8 @@ internal interface PaymentReconciliationJpaRepository : JpaRepository<PaymentRec
 internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
     fun findBySourceReference(sourceReference: String): RefundEntity?
 
+    fun findByProviderIdempotencyKey(providerIdempotencyKey: String): RefundEntity?
+
     fun findByPaymentIdAndReason(
         paymentId: UUID,
         reason: String,
@@ -352,6 +364,12 @@ internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
             "order by refund.createdAt, refund.id",
     )
     fun findUnresolvedByPaymentId(
+        @Param("paymentId") paymentId: UUID,
+    ): List<RefundEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select refund from RefundEntity refund where refund.paymentId = :paymentId order by refund.id")
+    fun findAllLockedByPaymentId(
         @Param("paymentId") paymentId: UUID,
     ): List<RefundEntity>
 

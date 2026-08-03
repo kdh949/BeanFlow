@@ -69,7 +69,9 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                     settlement_item,
                     settlement_batch,
                     operations_audit_record,
+                    operations_reprocessing_case,
                     event_publication,
+                    payment_cancellation_recovery_snapshot,
                     payment_refund,
                     payment_payment,
                     payment_method,
@@ -108,6 +110,68 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
         }
 
         @Test
+        fun `missing payment setup opens durable evidence and keeps settlement exclusion retryable`() {
+            val fixture = fixture()
+            jdbcTemplate.update(
+                "DELETE FROM payment_cancellation_recovery_snapshot WHERE order_id = ?",
+                fixture.orderId,
+            )
+
+            assertConflict(fixture.event, "payment setup is incomplete")
+
+            assertThat(exclusionAuditCount()).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE case_type = 'PAYMENT_CANCELLATION_SETUP' AND status = 'OPEN'",
+                ),
+            ).isOne()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED'",
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `settlement exclusion fails retryably when setup evidence cannot persist`() {
+            val fixture = fixture()
+            jdbcTemplate.update(
+                "DELETE FROM payment_cancellation_recovery_snapshot WHERE order_id = ?",
+                fixture.orderId,
+            )
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_audit_record ADD CONSTRAINT test_reject_settlement_setup_detection " +
+                    "CHECK (action <> 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED')",
+            )
+            try {
+                assertThatThrownBy { exclude(fixture.event) }
+                    .isInstanceOfSatisfying(DomainFailure::class.java) {
+                        assertThat(it.code).isEqualTo(io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE)
+                    }
+            } finally {
+                jdbcTemplate.execute(
+                    "ALTER TABLE operations_audit_record DROP CONSTRAINT test_reject_settlement_setup_detection",
+                )
+            }
+
+            assertThat(exclusionAuditCount()).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE case_type = 'PAYMENT_CANCELLATION_SETUP'",
+                ),
+            ).isZero()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED'",
+                ),
+            ).isZero()
+        }
+
+        @Test
         fun `persistent publication completes only after exclusion audit commits`() {
             val fixture = fixture()
 
@@ -131,7 +195,12 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
         fun `non-customer Order cause keeps the refund exclusion incomplete`() {
             val fixture = fixture()
             jdbcTemplate.update(
-                "UPDATE ordering_order SET cancellation_cause = 'PAYMENT_DECLINED' WHERE id = ?",
+                """
+                UPDATE ordering_order
+                   SET cancellation_cause = 'PAYMENT_DECLINED',
+                       cancellation_reason_code = NULL
+                 WHERE id = ?
+                """.trimIndent(),
                 fixture.orderId,
             )
 
@@ -222,9 +291,10 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, cancelled_at, cancellation_cause,
+                        cancellation_reason_code,
                         created_at, updated_at, version
                     ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
-                              'KRW', NULL, ?, ?, ?, ?, 'CUSTOMER_REQUEST', ?, ?, ?)
+                              'KRW', NULL, ?, ?, ?, ?, 'CUSTOMER_REQUEST', 'OTHER', ?, ?, ?)
                     """.trimIndent(),
                     orderId,
                     customerId,
@@ -287,10 +357,12 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                     requestedAmountKrw = 1_000,
                     succeededAmountKrw = 1_000,
                     reason = refundReason,
+                    customerReasonCode = if (refundReason == "CUSTOMER_ORDER_CANCELLED") "OTHER" else null,
                     state = RefundState.SUCCEEDED,
                     providerRefundReference = "provider-refund:$refundId",
                     providerIdempotencyKey = "refund-key:$refundId",
                     sourceReference = storedRefundSource ?: source,
+                    correlationId = if (refundReason == "CUSTOMER_ORDER_CANCELLED") "correlation:$orderId" else null,
                     attemptCount = 1,
                     requestAttemptCount = 1,
                     lookupAttemptCount = 0,
@@ -299,6 +371,27 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                     createdAt = CANCELLED_AT,
                     updatedAt = REFUND_SUCCEEDED_AT,
                 ),
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO payment_cancellation_recovery_snapshot (
+                    id, payment_id, order_id, cancellation_order_version,
+                    approved_amount_krw, succeeded_refund_amount_before_cancellation_krw,
+                    cancellation_requested_refund_amount_krw, cancellation_refund_id,
+                    refund_source_reference, provider_idempotency_key, correlation_id,
+                    created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, 1000, 0, 1000, ?, ?, ?, ?, ?, ?, 0)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                payment.id,
+                orderId,
+                orderVersion,
+                refundId,
+                source,
+                "refund-key:$refundId",
+                "correlation:$orderId",
+                Timestamp.from(CANCELLED_AT),
+                Timestamp.from(CANCELLED_AT),
             )
             val refundVersion = value<Long>("SELECT version FROM payment_refund WHERE id = ?", refundId)
             val event =

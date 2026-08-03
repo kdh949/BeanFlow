@@ -4,7 +4,7 @@
 |---|---:|---:|---:|---:|---:|
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
-| 고객 주문 취소 | Own and allowed state | No | No | Approved operation — 후속 Feature, 현재 미구현 | No |
+| 고객 주문 취소 | Own and allowed state | No | No | No direct cancellation | No |
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
 | 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
@@ -20,6 +20,7 @@
 | 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
 | 누락 Refund 복구 제안 | No | No | No | Explicit permission + reason | No |
 | 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
+| terminal 고객 취소 Refund LOOKUP 재개 | No | No | No | Active `CUSTOMER_CANCELLATION_REFUND_RECONCILE` grant + reason | No |
 | 권한 변경 | No | Limited | No | Audited | No |
 | 만료 혜택 복원 정책 조회·변경 | No | No | No | Active `EXPIRED_BENEFIT_POLICY_READ`/`WRITE` grant + reason | No |
 | 일반 포인트 적립 정책 조회·변경 | No | No | No | Active `POINT_ACCRUAL_POLICY_READ`/`WRITE` grant + reason | No |
@@ -58,6 +59,14 @@ GLOBAL/STORE append-only PATCH에만 유효하며 서로 대체하지 않는다.
 확인 뒤 Merchant의 authoritative Store 존재 boundary를 사용하고, 조회 실패를 존재하지 않음이나
 GLOBAL fallback으로 바꾸지 않는다.
 포인트 조정은 `POINT_ADJUSTMENT` grant와 body reason/evidence를 요구한다. 상세는 ADR-069를 따른다.
+누락 Refund 복구의 제안과 결정은 모두 `PAYMENT_CANCELLATION_SETUP_REPAIR` grant를
+요구한다. 결정자는 제안자와 다른 actor여야 하며, role이나 다른 permission은 이 grant를
+대체하지 않는다. request body는 사유와 결정만 허용하고 금융 필드는 거부한다.
+terminal 고객 취소 Refund 재조회는 별도 `CUSTOMER_CANCELLATION_REFUND_RECONCILE`
+grant를 요구한다. 단일 운영자는 body reason과 `Idempotency-Key`만 제출할 수 있고,
+Application Service는 완전한 고객 취소 원천을 다시 검증한 뒤 기존 Provider key의 LOOKUP
+한 번만 예약한다. 다른 repair/read grant나 `PLATFORM_OPERATOR` role만으로 통과하지 않으며,
+금액·Provider 결과·금융 식별자를 입력하거나 새 REQUEST를 보내는 권한은 부여하지 않는다.
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
 header는 optional이고 operator branch에서만 required다.

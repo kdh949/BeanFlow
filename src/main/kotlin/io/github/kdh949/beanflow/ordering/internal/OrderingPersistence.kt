@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -107,6 +108,15 @@ internal class OrderEntity(
     var cancellationCause: OrderCancellationCause? = null
         protected set
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_reason_code", length = 32)
+    var cancellationReasonCode: CustomerCancellationReasonCode? = null
+        protected set
+
+    @Column(name = "cancellation_detail", length = 200)
+    var cancellationDetail: String? = null
+        protected set
+
     @Column(name = "rejection_reason", length = 500)
     var rejectionReason: String? = null
         protected set
@@ -203,6 +213,35 @@ internal class OrderEntity(
         reservationExpiresAt = null
         cancelledAt = now
         cancellationCause = OrderCancellationCause.PAYMENT_DECLINED
+        updatedAt = now
+    }
+
+    fun cancelByCustomer(
+        now: Instant,
+        reasonCode: CustomerCancellationReasonCode,
+        detail: String?,
+    ) {
+        if (state != OrderState.PENDING_PAYMENT && state != OrderState.PAID) {
+            conflict("Order state does not allow customer cancellation")
+        }
+        if (state == OrderState.PAID) {
+            val deadline =
+                acceptanceDeadlineAt
+                    ?: throw DomainFailure(
+                        FailureCode.DEPENDENCY_UNAVAILABLE,
+                        "Paid order has no acceptance deadline",
+                    )
+            if (!now.isBefore(deadline)) {
+                conflict("Store acceptance deadline has passed")
+            }
+        }
+        val normalizedDetail = CanonicalCustomerCancellationPayload.normalizeDetail(detail)
+        state = OrderState.CANCELLED
+        reservationExpiresAt = null
+        cancelledAt = now
+        cancellationCause = OrderCancellationCause.CUSTOMER_REQUEST
+        cancellationReasonCode = reasonCode
+        cancellationDetail = normalizedDetail
         updatedAt = now
     }
 
@@ -316,6 +355,8 @@ internal class StoreCommandIdempotencyEntity(
     val responseBody: String,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Column(name = "retention_expires_at", nullable = false)
+    val retentionExpiresAt: Instant,
 )
 
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
@@ -389,4 +430,15 @@ internal interface StoreCommandIdempotencyJpaRepository : JpaRepository<StoreCom
         operation: String,
         idempotencyKey: String,
     ): StoreCommandIdempotencyEntity?
+
+    @Query(
+        "select record.id from StoreCommandIdempotencyEntity record " +
+            "where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",
+    )
+    fun findDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    fun countByRetentionExpiresAtLessThanEqual(now: Instant): Long
 }

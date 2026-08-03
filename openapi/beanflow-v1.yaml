@@ -439,6 +439,44 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/orders/{orderId}/customer-cancellation-refund-reconciliations:
+    post:
+      tags: [Operations]
+      operationId: scheduleCustomerCancellationRefundReconciliation
+      summary: Schedule one operator-authorized LOOKUP for a terminal customer-cancellation Refund
+      description: |
+        Requires PLATFORM_OPERATOR and an active
+        CUSTOMER_CANCELLATION_REFUND_RECONCILE grant. The transaction validates
+        the immutable cancellation setup and schedules exactly one LOOKUP using
+        the existing Provider idempotency key. It never accepts financial or
+        Provider identifiers, records a manual success, or sends a new REQUEST.
+        A 202 response means LOOKUP_SCHEDULED, not refund success.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCancellationRefundReconciliationRequest"
+      responses:
+        "202":
+          description: LOOKUP scheduled or replayed from the first identical command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerCancellationRefundReconciliation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/reprocessing-cases/{caseId}/repair-proposals:
     post:
       tags: [Operations]
@@ -447,7 +485,8 @@ paths:
       description: |
         Creates a 30-minute repair proposal after validating that the durable
         recovery snapshot is complete and only the Refund row is missing. Requires
-        an active PLATFORM_OPERATOR. Financial values and provider keys are
+        an active PLATFORM_OPERATOR with the explicit
+        PAYMENT_CANCELLATION_SETUP_REPAIR grant. Financial values and provider keys are
         server-derived and cannot be supplied by the caller.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -487,7 +526,8 @@ paths:
       operationId: decideCustomerCancellationSetupRepair
       summary: Approve or reject a missing-Refund repair proposal
       description: |
-        Requires a different active PLATFORM_OPERATOR from the proposer. Approval
+        Requires a different active PLATFORM_OPERATOR with the explicit
+        PAYMENT_CANCELLATION_SETUP_REPAIR grant from the proposer. Approval
         revalidates every safety guard under Order and Payment locks. A successful
         approval recreates the Refund for same-key LOOKUP; it never calls the
         provider inside the HTTP transaction.
@@ -1709,6 +1749,36 @@ components:
           $ref: "#/components/schemas/DateTime"
         lastErrorCode:
           type: string
+    CustomerCancellationRefundReconciliationRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+          description: |
+            Operational justification. It is normalized for command idempotency
+            but is not copied to the response or Audit summaries.
+    CustomerCancellationRefundReconciliation:
+      type: object
+      additionalProperties: false
+      required: [operationId, orderId, cancellationOrderVersion, state, scheduledAt]
+      properties:
+        operationId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        cancellationOrderVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          const: LOOKUP_SCHEDULED
+        scheduledAt:
+          $ref: "#/components/schemas/DateTime"
     CompensationBenefitPolicyReference:
       type: object
       additionalProperties: false

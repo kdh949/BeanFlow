@@ -219,7 +219,11 @@ CLAIMED -> PENDING | MANUAL_REVIEW
 
 같은 Order와 acceptance deadline source에는 work가 하나다. in-memory wakeup은
 latency optimization이고 durable row와 periodic worker가 복구 근거다.
-`PENDING`, `CLAIMED`, `MANUAL_REVIEW`는 retention cleanup 대상이 아니다.
+`COMPLETED` outcome은 timeout 거절을 확인한 `REJECTED` 또는 deadline 전 수락을 확인한
+`NOT_APPLICABLE`만 허용한다. source/deadline 불일치는 성공으로 추정하지 않고
+`MANUAL_REVIEW`로 보낸다. claim lease는 1분이고 최초 포함 최대 네 번 실행하며 실패 뒤
+1초·5초·30초에 재시도한다. `PENDING`, `CLAIMED`, `MANUAL_REVIEW`는 retention cleanup
+대상이 아니고 `COMPLETED`만 완료 시각부터 90일 뒤 chunk cleanup한다.
 
 ## Repair proposal
 

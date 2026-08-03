@@ -82,6 +82,16 @@ data class CompensationSummary(
 
 data class OperatorCompensationView(
     val compensation: CompensationSummary,
+    val paymentSetupIssue: PaymentSetupIssue? = null,
+    val setupReprocessingCaseId: UUID? = null,
+)
+
+data class PaymentSetupIssue(
+    val state: String = "SETUP_INCOMPLETE",
+    val missingArtifacts: Set<PaymentCancellationSetupMissingArtifact> = emptySet(),
+    val invariantViolations: Set<PaymentCancellationSetupInvariantViolation> = emptySet(),
+    val detectedAt: Instant,
+    val lastErrorCode: String,
 )
 
 data class ReadOperatorCompensationCommand(
@@ -130,6 +140,20 @@ interface OrderCompensationOperations {
         stepType: OrderCompensationStepType,
         stepState: OrderCompensationStepState,
         errorCode: String?,
+        now: Instant,
+    ): OrderCompensationCaseView
+
+    fun reopenPaymentForSetupRepair(
+        orderId: UUID,
+        cancellationOrderVersion: Long,
+        errorCode: String,
+        now: Instant,
+    ): OrderCompensationCaseView
+
+    fun reopenPaymentForRefundReconciliation(
+        orderId: UUID,
+        cancellationOrderVersion: Long,
+        errorCode: String,
         now: Instant,
     ): OrderCompensationCaseView
 }

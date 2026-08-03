@@ -8,8 +8,13 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -19,6 +24,8 @@ internal enum class ReprocessingCaseType {
     NOTIFICATION_DELIVERY,
     EVENT_PUBLICATION,
     SETTLEMENT_LATE_ITEM,
+    ACCEPTANCE_TIMEOUT_WORK,
+    PAYMENT_CANCELLATION_SETUP,
 }
 
 internal enum class ReprocessingCaseStatus {
@@ -49,12 +56,22 @@ internal class ReprocessingCaseEntity(
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
+    @Column(length = 120)
+    var resolution: String? = null,
+    @Version
+    var version: Long = 0,
 )
 
 internal interface ReprocessingCaseJpaRepository : JpaRepository<ReprocessingCaseEntity, UUID> {
     fun findByCaseTypeAndOwnerReference(
         caseType: ReprocessingCaseType,
         ownerReference: String,
+    ): ReprocessingCaseEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select beanCase from ReprocessingCaseEntity beanCase where beanCase.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
     ): ReprocessingCaseEntity?
 }
 

@@ -172,6 +172,24 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   270-test clean build로 검증한 뒤 completed path로 이동했다. direct successor인 Plan 30과 Settlement
   lifecycle은 모든 dependency가 completed라 `Implementation-Ready=true`로 전환했고, Analytics는
   Settlement lifecycle과 point-adjustment가 active라 `false`를 유지했다.
+- **Plan 40 Draft completion evidence (2026-08-03):** latest `main`/`origin/main` `5f52320`과
+  completed Plan 30 outcome, clean worktree, 다른 migration writer 부재를 확인한 뒤 Plan 40→50 shared
+  lease로 V23을 선택했다. C0/C1/CT, command idempotency, timeout recovery와 retention을 332-test
+  clean build로 검증하고 Plan 40을 completed path로 이동했다. direct successor Plan 50만
+  `Implementation-Ready=true`로 전환했으며, Plan 40 head는 계속 Draft-only라 main merge,
+  deployment와 production success endpoint exposure를 하지 않는다. Plan 50은 이 head와 lease를
+  그대로 이어받고 final combined release PR만 main을 target한다.
+- **Plan 50 implementation verification evidence (2026-08-03):** Plan 40 completed Draft head와
+  shared lease에서 V24~V27, refund recovery, projection/notification, setup detection과 2인 제한 repair,
+  terminal Refund single-operator LOOKUP을 구현했다. V24~V26 기준 owner/Settlement 연계, setup 손상
+  분류·즉시 감지·scanner backlog·저장 실패 rollback, Modulith와 358-test clean build가 통과했다.
+  기본 512MiB test JVM의 OOM 실패는 test-only 1GiB 상한으로 보정했다. ADR-075/V27과 실제 financial
+  publication consumer 활성화 뒤 대상군, 문서/OpenAPI와 365-test clean build를 재검증했다. 첫 전체
+  실행은 Docker backend 디스크 고갈과 daemon 종료로 완료되지 않았고 디스크·daemon 복구 뒤 동일
+  명령으로 통과했다. final read-only gate에서 `origin/main=5f52320`, remote feature branch/PR/
+  deployment/environment 0을 확인했다. 이후 사용자 승인으로 구현 head `19d69f2`를 push하고 main 대상
+  ready PR #39를 생성해 Plan 50을 completed path로 이동했다. main merge/deployment는 없으며 shared
+  migration-writer lease는 PR #39 merge까지 held 상태로 유지한다.
 
 ## Related Decisions
 

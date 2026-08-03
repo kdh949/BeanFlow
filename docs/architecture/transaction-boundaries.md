@@ -173,6 +173,10 @@ After commit: wake existing timeout worker
   Case와 customer-cancellation event를 만들지 않는다.
 - work 또는 Audit 저장 실패는 rollback과 `503 DEPENDENCY_UNAVAILABLE`이며, periodic
   timeout scan이 나중에 처리할 수 있다는 이유로 409를 반환하지 않는다.
+- C0/C1 replay scope는 owned Order를 먼저 잠근 뒤 `actorId + operation + Idempotency-Key`의
+  PostgreSQL transaction advisory lock을 얻는다. 같은 key의 교차 Order 요청도 한 scope로
+  직렬화한 뒤 canonical payload hash 불일치로 거부하며, advisory lock은 DB row나 성공
+  응답을 대신하지 않는다.
 
 `PENDING_PAYMENT`:
 

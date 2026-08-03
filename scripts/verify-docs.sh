@@ -50,8 +50,8 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md"
-  "docs/exec-plans/active/customer-order-cancellation-40-command.md"
-  "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
+  "docs/exec-plans/completed/customer-order-cancellation-40-command.md"
+  "docs/exec-plans/completed/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
   "docs/exec-plans/completed/signed-cursor-foundation.md"
   "docs/exec-plans/completed/ci-pr-validation.md"
@@ -719,11 +719,15 @@ else:
     expected_deployed_operations = {
         ('/orders', 'post'),
         ('/orders/{orderId}', 'get'),
+        ('/orders/{orderId}/cancellations', 'post'),
         ('/orders/{orderId}/payment-confirmations', 'post'),
         ('/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}', 'get'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/operations/orders/{orderId}/compensation', 'get'),
+        ('/operations/orders/{orderId}/customer-cancellation-refund-reconciliations', 'post'),
+        ('/operations/reprocessing-cases/{caseId}/repair-proposals', 'post'),
+        ('/operations/reprocessing-repair-proposals/{proposalId}/decisions', 'post'),
         ('/operations/policies/expired-benefit-restoration', 'get'),
         ('/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}', 'patch'),
     }
@@ -810,6 +814,9 @@ else:
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
         '/operations/point-accounts/{accountId}/adjustments',
+        '/operations/orders/{orderId}/customer-cancellation-refund-reconciliations',
+        '/operations/reprocessing-cases/{caseId}/repair-proposals',
+        '/operations/reprocessing-repair-proposals/{proposalId}/decisions',
         '/operations/policies/ordinary-point-accrual/global',
         '/operations/policies/ordinary-point-accrual/global/versions',
         '/operations/policies/ordinary-point-accrual/stores',
@@ -858,6 +865,9 @@ else:
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
         ('/operations/point-accounts/{accountId}/adjustments', 'post'),
+        ('/operations/orders/{orderId}/customer-cancellation-refund-reconciliations', 'post'),
+        ('/operations/reprocessing-cases/{caseId}/repair-proposals', 'post'),
+        ('/operations/reprocessing-repair-proposals/{proposalId}/decisions', 'post'),
         ('/operations/policies/ordinary-point-accrual/global', 'patch'),
         ('/operations/policies/ordinary-point-accrual/stores/{storeId}', 'patch'),
     ]

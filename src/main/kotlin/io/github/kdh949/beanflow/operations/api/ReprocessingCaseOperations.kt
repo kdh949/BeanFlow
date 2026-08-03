@@ -22,6 +22,10 @@ interface EventPublicationReprocessingCaseOperations {
     fun openEventPublicationCase(command: OpenReprocessingCaseCommand): UUID
 }
 
+interface AcceptanceTimeoutWorkReprocessingCaseOperations {
+    fun openAcceptanceTimeoutWorkCase(command: OpenReprocessingCaseCommand): UUID
+}
+
 interface SettlementLateItemReprocessingCaseOperations {
     fun openLateItemCase(command: OpenReprocessingCaseCommand): UUID
 }

@@ -25,11 +25,21 @@ beanflow:
     chunk-size: 100
     fixed-delay-ms: 1000
     initial-delay-ms: 60000
+  acceptance-timeout-work:
+    chunk-size: 100
+    fixed-delay-ms: 1000
+    initial-delay-ms: 60000
+    retention-fixed-delay-ms: 3600000
+    retention-initial-delay-ms: 300000
   event-publication:
     batch-size: 100
     fixed-delay-ms: 10000
     initial-delay-ms: 30000
   audit-retention:
+    chunk-size: 100
+    fixed-delay-ms: 3600000
+    initial-delay-ms: 300000
+  ordering-idempotency-retention:
     chunk-size: 100
     fixed-delay-ms: 3600000
     initial-delay-ms: 300000

@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import java.time.Instant
 import java.util.UUID
 
@@ -42,6 +44,7 @@ internal data class OrderResponse(
     val storeId: UUID,
     val state: String,
     val reservationExpiresAt: Instant?,
+    val paymentRecovery: CancellationRefundRecoverySummary?,
     val paidAt: Instant?,
     val acceptanceWarningAt: Instant?,
     val acceptanceWarningRequestedAt: Instant?,
@@ -51,6 +54,9 @@ internal data class OrderResponse(
     val preparingAt: Instant?,
     val readyAt: Instant?,
     val completedAt: Instant?,
+    val cancelledAt: Instant?,
+    val cancellationCause: OrderCancellationCause?,
+    val cancellationReasonCode: CustomerCancellationReasonCode?,
     val rejectionReason: String?,
     val lines: List<OrderLineResponse>,
     val subtotalKrw: Long,

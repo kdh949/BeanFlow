@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -77,6 +78,77 @@ class OrderEntityLifecycleTest {
         assertThat(order.cancelledAt).isEqualTo(declinedAt)
         assertThat(order.cancellationCause).isEqualTo(OrderCancellationCause.PAYMENT_DECLINED)
         assertThat(order.reservationExpiresAt).isNull()
+        assertThat(order.cancellationReasonCode).isNull()
+        assertThat(order.cancellationDetail).isNull()
+    }
+
+    @Test
+    fun `customer cancellation normalizes detail and records the reason`() {
+        val order = pendingOrder()
+        val cancelledAt = paidAt.plusSeconds(10)
+
+        order.cancelByCustomer(
+            cancelledAt,
+            CustomerCancellationReasonCode.CHANGED_MIND,
+            "  ordered by mistake  ",
+        )
+
+        assertThat(order.state).isEqualTo(OrderState.CANCELLED)
+        assertThat(order.cancelledAt).isEqualTo(cancelledAt)
+        assertThat(order.cancellationCause).isEqualTo(OrderCancellationCause.CUSTOMER_REQUEST)
+        assertThat(order.cancellationReasonCode).isEqualTo(CustomerCancellationReasonCode.CHANGED_MIND)
+        assertThat(order.cancellationDetail).isEqualTo("ordered by mistake")
+    }
+
+    @Test
+    fun `paid customer cancellation wins only before the acceptance deadline`() {
+        val beforeDeadline = pendingOrder().also { it.markPaid(paidAt) }
+        val atDeadline = pendingOrder().also { it.markPaid(paidAt) }
+        val afterDeadline = pendingOrder().also { it.markPaid(paidAt) }
+
+        beforeDeadline.cancelByCustomer(
+            paidAt.plusSeconds(180).minusNanos(1),
+            CustomerCancellationReasonCode.WAIT_TOO_LONG,
+            null,
+        )
+
+        assertThat(beforeDeadline.state).isEqualTo(OrderState.CANCELLED)
+        assertThatThrownBy {
+            atDeadline.cancelByCustomer(
+                paidAt.plusSeconds(180),
+                CustomerCancellationReasonCode.WAIT_TOO_LONG,
+                null,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
+        assertThatThrownBy {
+            afterDeadline.cancelByCustomer(
+                paidAt.plusSeconds(180).plusNanos(1),
+                CustomerCancellationReasonCode.WAIT_TOO_LONG,
+                null,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
+        assertThat(atDeadline.state).isEqualTo(OrderState.PAID)
+        assertThat(afterDeadline.state).isEqualTo(OrderState.PAID)
+    }
+
+    @Test
+    fun `customer cancellation rejects control characters`() {
+        val order = pendingOrder()
+
+        assertThatThrownBy {
+            order.cancelByCustomer(
+                paidAt.plusSeconds(10),
+                CustomerCancellationReasonCode.OTHER,
+                "unsafe\ntext",
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+        }
+        assertThat(order.state).isEqualTo(OrderState.PENDING_PAYMENT)
     }
 
     private fun pendingOrder(): OrderEntity =

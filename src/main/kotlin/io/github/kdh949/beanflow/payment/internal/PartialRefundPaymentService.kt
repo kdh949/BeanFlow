@@ -607,6 +607,7 @@ internal class PartialRefundPaymentService(
                 io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
                     .valueOf(mode.name),
             attemptCount = attemptCount,
+            operatorAuthorized = false,
             claimToken = claimToken,
             dueAt = dueAt,
         )

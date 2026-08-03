@@ -86,6 +86,7 @@ internal class NotificationDeliveryStateTest {
             id = UUID.randomUUID(),
             eventId = UUID.randomUUID(),
             eventType = "OrderReadyV1",
+            logicalSource = "event:ready:customer-app",
             orderId = UUID.randomUUID(),
             recipientType = NotificationRecipientType.CUSTOMER,
             recipientId = UUID.randomUUID(),

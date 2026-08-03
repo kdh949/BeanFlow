@@ -6,11 +6,14 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.CompensationBenefitPolicyReference
 import io.github.kdh949.beanflow.operations.api.CompensationStep
 import io.github.kdh949.beanflow.operations.api.CompensationSummary
+import io.github.kdh949.beanflow.operations.api.DetectPaymentCancellationSetupIssueCommand
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationView
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
+import io.github.kdh949.beanflow.operations.api.PaymentSetupIssue
 import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -26,6 +29,8 @@ internal class OperatorCompensationQueryService(
     private val auditRecordOperations: AuditRecordOperations,
     private val correlationIdSource: CorrelationIdSource,
     private val identifierSource: IdentifierSource,
+    private val setupQueries: PaymentCancellationSetupIntegrityQueryService,
+    private val setupIntegrity: PaymentCancellationSetupIntegrityOperations,
 ) : OperatorCompensationQueryOperations {
     @Transactional
     override fun read(command: ReadOperatorCompensationCommand): OperatorCompensationView {
@@ -37,6 +42,26 @@ internal class OperatorCompensationQueryService(
                     FailureCode.RESOURCE_NOT_FOUND,
                     "Order compensation case was not found",
                 )
+        val setupAssessment =
+            if (beanCase.trigger == io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger.CUSTOMER_CANCELLATION) {
+                setupQueries.assess(command.orderId, beanCase.terminalOrderVersion)
+            } else {
+                null
+            }
+        val setupDetection =
+            setupAssessment?.let {
+                setupIntegrity.detect(
+                    DetectPaymentCancellationSetupIssueCommand(
+                        orderId = it.orderId,
+                        cancellationOrderVersion = it.cancellationOrderVersion,
+                        missingArtifacts = it.missingArtifacts,
+                        invariantViolations = it.invariantViolations,
+                        errorCode = it.errorCode,
+                        correlationId = it.correlationId,
+                        now = command.now,
+                    ),
+                )
+            }
         auditRecordOperations.appendAll(
             listOf(
                 AppendAuditRecordCommand(
@@ -74,6 +99,16 @@ internal class OperatorCompensationQueryService(
                         },
                     updatedAt = beanCase.updatedAt,
                 ),
+            paymentSetupIssue =
+                setupAssessment?.let {
+                    PaymentSetupIssue(
+                        missingArtifacts = it.missingArtifacts,
+                        invariantViolations = it.invariantViolations,
+                        detectedAt = requireNotNull(setupDetection).detectedAt,
+                        lastErrorCode = setupDetection.lastErrorCode,
+                    )
+                },
+            setupReprocessingCaseId = setupDetection?.caseId,
         )
     }
 
