@@ -2588,6 +2588,7 @@ components:
         amountKrw:
           allOf:
             - $ref: "#/components/schemas/SignedMoneyKrw"
+            - minimum: -9223372036854775807
           not:
             const: 0
           description: Nonzero signed correction. Positive creates a new PointLot; negative consumes available lots.
@@ -2600,12 +2601,13 @@ components:
         reason:
           type: string
           minLength: 1
-          maxLength: 500
+          maxLength: 160
           pattern: '.*\S.*'
           description: Non-blank operator reason for the correction
         evidenceReferences:
           type: array
           minItems: 1
+          maxItems: 20
           items:
             type: string
             minLength: 1

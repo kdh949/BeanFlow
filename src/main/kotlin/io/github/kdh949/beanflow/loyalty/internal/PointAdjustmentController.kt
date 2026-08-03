@@ -10,6 +10,7 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Size
@@ -42,16 +43,17 @@ internal data class PointAdjustmentIssuerRequest(
 }
 
 internal data class PointAdjustmentRequest(
+    @field:Min(POINT_ADJUSTMENT_MIN_AMOUNT_KRW)
     val amountKrw: Long,
     @field:Valid
     val issuer: PointAdjustmentIssuerRequest? = null,
     val expiresAt: Instant? = null,
-    @field:NotBlank @field:Size(max = 500)
+    @field:NotBlank @field:Size(max = POINT_ADJUSTMENT_REASON_MAX_LENGTH)
     val reason: String,
-    @field:NotEmpty
+    @field:NotEmpty @field:Size(max = POINT_ADJUSTMENT_EVIDENCE_MAX_COUNT)
     val evidenceReferences: List<
         @NotBlank
-        @Size(max = 500)
+        @Size(max = POINT_ADJUSTMENT_EVIDENCE_MAX_LENGTH)
         String,
     >,
 ) {

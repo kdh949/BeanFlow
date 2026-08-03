@@ -23,9 +23,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceException
 import org.springframework.dao.DataAccessException
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.ByteBuffer
@@ -34,6 +32,11 @@ import java.security.MessageDigest
 import java.time.Duration
 import java.util.HexFormat
 import java.util.UUID
+
+internal const val POINT_ADJUSTMENT_MIN_AMOUNT_KRW = -9_223_372_036_854_775_807L
+internal const val POINT_ADJUSTMENT_REASON_MAX_LENGTH = 160
+internal const val POINT_ADJUSTMENT_EVIDENCE_MAX_COUNT = 20
+internal const val POINT_ADJUSTMENT_EVIDENCE_MAX_LENGTH = 500
 
 internal enum class PointAdjustmentDirection {
     CREDIT,
@@ -65,7 +68,6 @@ internal data class PointAdjustmentExecution(
 @Service
 internal class PointAdjustmentService(
     private val transaction: PointAdjustmentTransaction,
-    private val raceReader: PointAdjustmentRaceReader,
     private val meterRegistry: MeterRegistry,
 ) : PointAdjustmentOperations {
     override fun adjust(command: ApplyPointAdjustmentCommand): PointAdjustmentResult {
@@ -73,12 +75,7 @@ internal class PointAdjustmentService(
         try {
             val normalized = normalize(command)
             val payloadHash = CanonicalPointAdjustmentPayload.hash(normalized)
-            val execution =
-                try {
-                    transaction.execute(normalized, payloadHash)
-                } catch (_: DataIntegrityViolationException) {
-                    raceReader.resolve(normalized, payloadHash)
-                }
+            val execution = transaction.execute(normalized, payloadHash)
             metric(direction, if (execution.replayed) "REPLAYED" else "APPLIED")
             if (!execution.replayed) {
                 meterRegistry
@@ -94,7 +91,10 @@ internal class PointAdjustmentService(
             throw failure
         } catch (failure: DataAccessException) {
             metric(direction, "DEPENDENCY_UNAVAILABLE")
-            throw failure
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Point adjustment persistence failed",
+            ).also { it.initCause(failure) }
         } catch (failure: PersistenceException) {
             metric(direction, "DEPENDENCY_UNAVAILABLE")
             throw DomainFailure(
@@ -112,8 +112,10 @@ internal class PointAdjustmentService(
         val issuer = command.issuer?.copy(issuerReference = command.issuer.issuerReference.trim())
         if (command.actorId == ZERO_UUID || command.pointAccountId == ZERO_UUID ||
             key.length !in 8..128 || key != command.idempotencyKey || key.hasControlCharacter() ||
-            command.amountKrw == 0L || command.amountKrw == Long.MIN_VALUE ||
-            reason.length !in 1..500 || evidence.isEmpty() || evidence.any { it.length !in 1..500 } ||
+            command.amountKrw == 0L || command.amountKrw < POINT_ADJUSTMENT_MIN_AMOUNT_KRW ||
+            reason.length !in 1..POINT_ADJUSTMENT_REASON_MAX_LENGTH ||
+            evidence.size !in 1..POINT_ADJUSTMENT_EVIDENCE_MAX_COUNT ||
+            evidence.any { it.length !in 1..POINT_ADJUSTMENT_EVIDENCE_MAX_LENGTH } ||
             correlationId.length !in 1..160 || correlationId.hasControlCharacter()
         ) {
             invalid("Point adjustment command fields are invalid")
@@ -448,29 +450,6 @@ internal class PointAdjustmentTransaction(
         const val CREATED_STATUS = 201
         const val RESPONSE_VERSION = 1
         const val POINTS_ADJUSTED_EVENT_TYPE = "PointsAdjustedV1"
-    }
-}
-
-@Service
-internal class PointAdjustmentRaceReader(
-    private val idempotencies: PointAdjustmentIdempotencyJpaRepository,
-    private val objectMapper: ObjectMapper,
-) {
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    fun resolve(
-        command: NormalizedPointAdjustmentCommand,
-        payloadHash: String,
-    ): PointAdjustmentExecution {
-        val winner =
-            idempotencies.findByActorIdAndOperationAndIdempotencyKey(
-                command.actorId,
-                PointAdjustmentOperation.POINT_ADJUSTMENT,
-                command.idempotencyKey,
-            ) ?: throw DomainFailure(
-                FailureCode.DEPENDENCY_UNAVAILABLE,
-                "Point adjustment race winner could not be read",
-            )
-        return replay(winner, command, payloadHash, objectMapper)
     }
 }
 

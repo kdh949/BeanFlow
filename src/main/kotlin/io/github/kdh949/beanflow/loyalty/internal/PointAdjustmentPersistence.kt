@@ -72,12 +72,6 @@ internal interface PointAdjustmentIdempotencyJpaRepository : JpaRepository<Point
         @Param("idempotencyKey") idempotencyKey: String,
     ): PointAdjustmentIdempotencyEntity?
 
-    fun findByActorIdAndOperationAndIdempotencyKey(
-        actorId: UUID,
-        operation: PointAdjustmentOperation,
-        idempotencyKey: String,
-    ): PointAdjustmentIdempotencyEntity?
-
     @Query(
         "select record.id from PointAdjustmentIdempotencyEntity record " +
             "where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",
