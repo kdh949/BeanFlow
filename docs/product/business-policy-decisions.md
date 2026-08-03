@@ -1008,6 +1008,21 @@
 - **ADR Required:** No
 - **Revisit Conditions:** 외부 중재나 다단계 심사 절차가 도입될 때
 
+### BR-16~BR-24 Implementation Evidence (2026-08-03)
+
+- V28~V30과 Settlement/Dispute Application Service가 store/date Batch 하나,
+  `OPEN → CALCULATED → CONFIRMED`, immutable Item/Adjustment, source unique 사후 조정,
+  음수 carry-forward와 active Item dispute 하나를 DB 제약과 guarded transition으로 보호한다.
+- Batch는 500건 keyset chunk로 Item snapshot만 합산하며 이전 confirmed Batch의 음수 잔액과
+  calculation 시각까지 생성된 Adjustment를 다음 Batch에서 한 번 소비한다. 환불·이의 판정은
+  확정 Batch를 수정하지 않고 `REFUND_SUCCEEDED` 또는 `DISPUTE_ACCEPTED` Adjustment를 만든다.
+- OWNER filing은 확정 Batch의 서울 날짜 기준 `[D+1 00:00, D+15 00:00)`를 적용한다.
+  진행 중 중복은 Item당 하나로 수렴하고, 종결 직후 ID와 이전 배열에 없던 evidence reference를
+  모두 제시한 경우에만 새 Aggregate로 한 번 재이의할 수 있다.
+- `ACCEPTED` 판정은 별도 Settlement transaction의 Adjustment commit을 먼저 확인한 뒤 Dispute를
+  terminal로 만든다. handoff 뒤 Dispute transaction이 실패하면 `UNDER_REVIEW`와
+  `SETTLEMENT_DISPUTE_DECISION` ReprocessingCase가 남고 같은 source retry가 정확히 수렴한다.
+
 ---
 
 # E. 멱등성·외부 연동·운영 정책

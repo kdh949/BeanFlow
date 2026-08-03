@@ -16,7 +16,7 @@
 | 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
 | 이의제기 생성 | No | Owned store | No | No | No |
-| 이의제기 판정 | No | No | No | No by default | Explicit permission |
+| 이의제기 판정 | No | No | No | No public endpoint | No public endpoint |
 | 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
 | 누락 Refund 복구 제안 | No | No | No | Explicit permission + reason | No |
 | 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
@@ -85,6 +85,12 @@ terminal exit contract는 [operator permission bootstrap runbook](../operations/
 
 매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
 role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.
+
+정산 Batch/Item 조회와 이의제기 접수도 JWT `STORE_OWNER`와 Identity의 현재 `ACTIVE OWNER`
+membership을 함께 요구한다. `STORE_STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
+없다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
+JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전용 permission, actor Audit와
+결정 사유 계약을 먼저 확정한다.
 
 고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소

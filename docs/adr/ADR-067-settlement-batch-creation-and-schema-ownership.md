@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)
+- **Implementation owners:** [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md)
 
 ## Context
 
@@ -134,6 +134,10 @@ API 선행조건을 충족하면서 migration 중복을 막을 수 있다.
 - 동시 same-store/date completion은 Batch 하나에 수렴하고 source/order 중복은 새 Item을 만들지
   않는다. 닫힌 Batch late Item은 Batch를 변경하지 않고 source-unique
   `SETTLEMENT_LATE_ITEM` case를 남기며 event를 완료하지 않는다.
+- 2026-08-03 V28은 lifecycle 소유 summary/carry/transition, immutable Adjustment와 Dispute
+  schema를 추가했고 V29는 Adjustment creation-time ingestion cursor, V30은 재이의의 실제 새
+  evidence 포함 조건을 forward migration으로 강화했다. V21 object를 재생성하거나 적용 migration을
+  수정하지 않았으며 PostgreSQL 17.6 full migration과 CHECK/FK/unique/trigger 검증이 통과했다.
 
 ## Metrics
 

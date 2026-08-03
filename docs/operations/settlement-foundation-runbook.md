@@ -4,8 +4,10 @@
 
 이 문서는 Plan 20이 구현한 `OrderCompletedV2` → 최소 `OPEN` Batch/SettlementItem과
 매장 수락 전 고객 취소 Refund의 `NOT_APPLICABLE` Audit을 진단한다. Batch 계산·확정,
-SettlementAdjustment, Dispute와 실제 계좌 지급은 후속 lifecycle 범위다. 운영자가 Batch,
-Item, Audit 또는 publication을 SQL로 직접 생성·수정·삭제하지 않는다.
+SettlementAdjustment와 Dispute는
+[Settlement Lifecycle and Dispute Runbook](settlement-lifecycle-and-dispute-runbook.md)을 따른다.
+실제 계좌 지급은 여전히 범위 밖이다. 운영자가 Batch, Item, Audit 또는 publication을 SQL로
+직접 생성·수정·삭제하지 않는다.
 
 ## Completion ingestion
 
@@ -90,8 +92,9 @@ WHERE p.listener_id = 'beanflow.settlement.payment-refunded-v1'
 ORDER BY p.publication_date, p.id;
 ```
 
-매장 거절, 완료 전 일반 환불과 완료 후 환불을 고객 취소 제외로 강제 완료하지 않는다. 이 target의
-후속 Adjustment 의미가 구현되기 전에는 원천을 바꾸거나 허위 Audit을 넣지 않는다.
+매장 거절, 완료 전 일반 환불과 완료 후 환불을 고객 취소 제외로 강제 완료하지 않는다. 완료 후
+환불은 confirmed Item이면 lifecycle의 source-unique Adjustment로 처리하고, unconfirmed Item이면
+publication retry에 남긴다. 원천을 바꾸거나 허위 Audit/0원 Adjustment를 넣지 않는다.
 
 ## Metrics
 

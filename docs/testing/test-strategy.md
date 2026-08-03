@@ -78,6 +78,25 @@
 - Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
   하나라도 있으면 clean cutover 차단
 
+## Settlement lifecycle release suite
+
+- Domain/DB: Batch `OPEN → CALCULATED → CONFIRMED`, summary·carry tie-out, confirmed mutation
+  금지, Adjustment append-only/source unique, Dispute active partial unique와 실제 새 evidence 1회
+- Calculation: 500건 keyset chunk, 같은 Batch 동시·재실행, multi-store, 서울 자정, 이전 Batch
+  confirmation 선행, Item/Adjustment overflow와 creation-time high-watermark
+- Refund: confirmed Item Adjustment, unconfirmed publication retry, non-success와 pre-acceptance
+  Adjustment 0건, source payload conflict ReprocessingCase와 기존 exclusion 회귀
+- Dispute/API: D+1 inclusive/D+15 exclusive fixed Clock, OWNER active membership, staff/revoked 거부,
+  exact 201 replay, changed payload 409, active duplicate, immediate previous/new evidence/second refile
+- Decision recovery: accepted Adjustment 선커밋, decision Audit/publication rollback 뒤
+  `UNDER_REVIEW`와 manual Case, exact Adjustment replay 뒤 terminal event와 Case resolve;
+  rejected/withdrawn held 0과 Adjustment 0건
+- Contract/architecture: Batch/Item signed cursor scope와 order, `Settlement*V1` exact payload 및
+  민감 field 부재, 실제 target listener completion, Spring Modulith dependency direction
+- Performance evidence: PostgreSQL 17.6 고정 1,000 Item fixture에서 500-row
+  `EXPLAIN (ANALYZE, BUFFERS)`, calculation/confirmation duration과 제어된 row-lock wait를 기록한다.
+  단일 로컬 값은 SLA나 개선율로 사용하지 않는다.
+
 성능 수치는 구현 후 같은 PostgreSQL fixture, 동일 batch와 동시성 조건에서 기준선과
 함께 측정한다. 측정 없이 scanner, lock 또는 payload 성능 개선을 주장하지 않는다.
 

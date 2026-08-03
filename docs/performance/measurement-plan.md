@@ -53,3 +53,22 @@
 - `Revisit when`: 재검토 조건
 
 측정하지 않은 개선율을 작성하지 않는다.
+
+## Settlement lifecycle measurement (2026-08-03)
+
+- **Measured environment:** Apple Silicon local workstation, Java 21 test worker, PostgreSQL 17.6
+  Testcontainers, full V1~V30 schema, 단일 application test process. 별도 CPU/memory limit과 warm-up은
+  두지 않았다.
+- **Fixture:** 한 store/date Batch, immutable SettlementItem 1,000건, 각 800 KRW net,
+  application chunk 500, Adjustment 0건. DB `ANALYZE settlement_item` 뒤 측정했다.
+- **Query plan:** 첫 500건 keyset query는 `idx_settlement_item_batch_cursor` index scan,
+  shared hit 20, planning 0.110ms, execution 0.119ms였다. plan은
+  `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)`로 수집했다.
+- **Application duration:** calculation 36.054ms, confirmation 17.260ms의 단일 관측이다.
+- **Lock wait:** 첫 connection이 같은 Batch row의 `FOR UPDATE` lock을 의도적으로 200ms 보유한
+  뒤 두 번째 connection의 관측 대기는 203.086ms였다. 이는 contention 목표가 아니라 lock
+  직렬화와 측정 경로가 실제 동작하는지 확인한 제어 실험이다.
+- **Not measured:** warm p50/p95/p99, RPS, GC/allocation, Hikari pending, 대규모 multi-store
+  backlog와 운영 I/O. 따라서 이 기록으로 SLA, 최대 처리량 또는 성능 개선을 주장하지 않는다.
+- **Revisit when:** 실제 일별 Item 분포, Batch backlog 또는 SLO가 생기면 동일 schema/query/chunk를
+  고정하고 10k/100k Item, multi-store parallelism과 pool/GC를 포함해 재측정한다.

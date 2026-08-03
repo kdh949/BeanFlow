@@ -29,6 +29,8 @@
 | NOTIFICATION_DELIVERY_FAILED | operation-specific | Operator | 주문과 독립된 발송 실패 |
 | SETTLEMENT_ALREADY_CONFIRMED | 409 | No | 확정 결과 직접 변경 시도 |
 | DISPUTE_WINDOW_CLOSED | 409 | No | 이의제기 기간 종료 |
+| DISPUTE_ALREADY_ACTIVE | 409 | No | 같은 SettlementItem에 `FILED` 또는 `UNDER_REVIEW` 이의제기가 이미 존재 |
+| DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
@@ -53,3 +55,9 @@ Idempotency-Key로 다시 요청할 수 있다.
 반환하는 경우가 아니다. command가 접수됐지만 외부 결과가 불명확한 경우 202 body의
 상태와 correlation ID로 표현한다. 같은 idempotency key/payload의 polling 성격 재시도는
 새 Provider 부작용을 만들지 않는다.
+
+정산 이의제기 409는 DB 장애를 business conflict로 바꾼 결과가 아니다. 같은 Item 접수는
+Item advisory lock으로 직렬화하고, 같은 actor·operation·Idempotency-Key는 별도 advisory
+lock과 terminal 응답으로 수렴한다. persistence, Audit 또는 persistent publication 실패는
+접수 전체를 rollback하고 `DEPENDENCY_UNAVAILABLE` 503으로 반환한다. 같은 key의 다른
+canonical payload만 `IDEMPOTENCY_KEY_REUSED`다.

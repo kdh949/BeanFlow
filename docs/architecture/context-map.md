@@ -53,7 +53,7 @@ All source contexts ── idempotent business facts ──> Analytics
 | Payment | Settlement | Payment fact | `PaymentRefundedV1` immutable refund/settlement effect와 typed Refund evidence query | event는 eventual, Item 생성 기준은 완료 주문 |
 | Payment | Loyalty | Payment fact | `PaymentRefundedV1` 후 사용·적립 포인트 복원·회수 | eventual |
 | Payment | Notification | Payment fact | `CustomerCancellationRefundSucceededV1`/`DelayedV1` 전용 결과 event | eventual, Delivery는 별도 transaction |
-| Settlement | Dispute | Settlement / Dispute | confirmed Item 조회 API와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 명시적 명령 |
+| Settlement | Dispute | Settlement / Dispute | confirmed Item·Batch view와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 별도 Settlement transaction의 명시적 명령 |
 | Transaction Contexts | Operations | 원본 Context | failure/audit fact와 reconciliation case | eventual, 원본 상태 보존 |
 | Transaction contexts | Analytics | 원본 Context | idempotent event | eventual, 재집계 가능 |
 
@@ -68,7 +68,15 @@ transaction 안의 `OrderSettlementInputSnapshot`으로 고정되고, guarded co
 Payment approval과 snapshot만 사용해 `OrderCompletedV2` outbox를 저장한다. Settlement는 별도
 local transaction에서 최소 `OPEN` Batch와 immutable Item을 만든다. 고객 취소 Refund 제외는
 Ordering/Payment의 public evidence API로 실제 terminal source를 읽고 Item 부재와 함께 검증한 뒤
-Audit을 저장한다. 두 consumer 모두 owner Repository나 current policy를 직접 조회하지 않는다.
+ Audit을 저장한다. 두 consumer 모두 owner Repository나 current policy를 직접 조회하지 않는다.
+
+2026-08-03 settlement lifecycle outcome에서 Settlement는 500건 keyset 계산, immutable Batch
+확정, refund/dispute source Adjustment와 confirmed Item·Batch public view를 소유한다. Dispute는
+OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlement Repository를 직접 읽지
+않는다. `ACCEPTED`는 Settlement public command가 `REQUIRES_NEW`로 Adjustment를 먼저 commit한
+뒤 Dispute local transaction이 terminal 상태·Audit·event를 저장한다. 후속 저장 실패는
+`UNDER_REVIEW`와 source-unique Operations ReprocessingCase로 관측되며 replay가 기존 Adjustment를
+검증해 수렴한다.
 
 ## Data ownership
 

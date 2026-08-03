@@ -110,6 +110,13 @@ beanflow:
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
 base64 parsing을 만들지 않는다.
 
+2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
+`CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고
+`OPEN` summary를 0으로 만들지 않는다. default 20/maximum 100, 15분 expiry, endpoint+store filter
+hash를 사용하며 다른 store cursor, malformed/expired/signature mismatch와 staff/revoked membership을
+통합 테스트에서 거부했다. Plan 20 Item endpoint의 store+Batch scope와 오름차순 cursor 계약도
+그대로 유지했다.
+
 ### Nearby distance와 filter canonicalization
 
 `GET /stores/nearby`의 `radiusMeters`는 integer `1..10000`이다. DB range predicate는 raw

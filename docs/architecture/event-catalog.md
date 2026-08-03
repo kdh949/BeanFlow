@@ -38,10 +38,10 @@
 | PointsAdjustedV1 | Loyalty | Analytics | adjustment source + payload version | PointTransaction |
 | PointRecoveryPendingRecorded | Loyalty | Operations, Analytics | account + refund/reference unique | PointRecoveryPending |
 | SettlementItemCreatedV1 | Settlement | Analytics | item source + payload version | SettlementItem |
-| SettlementBatchConfirmed | Settlement | Dispute/Notification | batch version | SettlementBatch |
+| SettlementBatchConfirmedV1 | Settlement | Dispute | batch ID + confirmed version | SettlementBatch |
 | SettlementAdjustmentCreatedV1 | Settlement | Analytics | adjustment source + payload version | SettlementAdjustment |
-| SettlementDisputeFiled | Dispute | Operations | dispute ID | SettlementDispute |
-| SettlementDisputeDecided | Dispute | Settlement, Notification, Operations | dispute ID + terminal version | SettlementDispute |
+| SettlementDisputeFiledV1 | Dispute | Operations | dispute ID + filed version | SettlementDispute |
+| SettlementDisputeDecidedV1 | Dispute | Operations | dispute ID + terminal version | SettlementDispute |
 | NotificationFailed | Notification | Operations | delivery ID | NotificationDelivery |
 | AnalyticsBackfillRequired | Analytics | Operations | source event/day unique | ReprocessingCase |
 
@@ -52,7 +52,8 @@
 ## Immutable financial event contracts
 
 `OrderCompletedV2`, `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1`,
-`PointsAdjustedV1`, `SettlementItemCreatedV1`, `SettlementAdjustmentCreatedV1`의 exact
+`PointsAdjustedV1`, `SettlementItemCreatedV1`, `SettlementBatchConfirmedV1`,
+`SettlementAdjustmentCreatedV1`, `SettlementDisputeFiledV1`, `SettlementDisputeDecidedV1`의 exact
 payload field set, version, logical source, producer transaction과 cutover checkpoint는
 [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md)가 canonical이다. 이 catalog의
 consumer 열은 target architecture이지 Kotlin producer가 이미 구현됐다는 증거가 아니다. Analytics와
@@ -97,7 +98,16 @@ consumer는 event payload만으로 최소 `OPEN` Batch, immutable Item, Audit과
 Order `CUSTOMER_REQUEST` terminal evidence, Refund `SUCCEEDED`/reason/source/version/amount/time과
 Item 부재로 재검증해 `SETTLEMENT_REFUND_EXCLUDED` Audit 뒤에만 완료한다. 그 밖의 Refund나
 불일치는 성공/no-op으로 소비하지 않는다. Analytics target/projection과 completed-refund
-Adjustment consumer는 계속 후속 계획 범위다.
+Plan 20 checkpoint 당시 Analytics projection과 completed-refund Adjustment consumer는 후속
+범위였고, 아래 settlement lifecycle checkpoint에서 Adjustment consumer가 활성화됐다.
+
+2026-08-03 settlement lifecycle checkpoint: Batch confirmation은
+`beanflow.dispute.settlement-batch-confirmed-v1`, Dispute filing/decision은 각각
+`beanflow.operations.settlement-dispute-filed-v1`과
+`beanflow.operations.settlement-dispute-decided-v1` target을 persistent publication으로 저장하고
+실제 annotated consumer가 완료한다. `SettlementDisputeDecidedV1`은 Settlement에 Adjustment를
+요청하는 command가 아니다. `ACCEPTED` 판정은 event 발행 전에 Dispute가 Settlement public
+Application API를 동기 호출하며, Notification consumer는 이번 구현에 존재하지 않는다.
 
 `OrderCompletedV1`은 frozen trigger로 유지한다. Plan 13의 Loyalty accrual은 이 event의 payload를
 확장하지 않고, ADR-073의 typed Ordering boundary가 반환하는 immutable

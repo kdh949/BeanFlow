@@ -17,10 +17,13 @@
 | 부분 환불 뒤 이중 환불·포인트 복원 또는 쿠폰 복원 누락 | line-level cash/point restoration, coupon attribution과 source unique | 선행 부분 환불 후 취소 tie-out·원 쿠폰 단일 복원 | ADR-036, allocation foundation ExecPlan |
 | 미완료 고객 취소의 허위 정산 | 실제 Order/Refund evidence, SettlementItem 부재와 source-unique NOT_APPLICABLE Audit | `CustomerCancellationRefundExclusionIntegrationTest`의 cause/reason/source/version/amount/time, replay, 기존 Item, Audit rollback과 publication completion | ADR-048, completed Settlement foundation ExecPlan |
 | 완료 event 중복·지연으로 정산 Item 유실/중복 | V2 immutable payload, store/date OPEN Batch insert-or-read, order/source unique Item, closed-Batch 명시적 case | `SettlementItemCreationIntegrationTest`, `SettlementFoundationMigrationTest`, `SettlementItemQueryIntegrationTest` | ADR-017/062/067/068, V21 PostgreSQL constraints |
+| Batch 집계 중복·불완전 summary·음수 이월 재적용 | Batch row lock, 500건 keyset snapshot 합산, 이전 confirmed gate, calculation-time Adjustment cursor와 carry source | `SettlementBatchLifecycleIntegrationTest`의 concurrent/restart/multi-store/서울 경계/tie-out/carry와 고정 measurement fixture | ADR-008/017/067, V28/V29 CHECK·transition trigger |
+| 확정 후 Refund/Dispute가 과거 원장을 변경하거나 중복 Adjustment 생성 | confirmed target public view, append-only Adjustment, source/reason unique, Audit/outbox commit gate | `SettlementRefundAdjustmentIntegrationTest`, `SettlementDisputeIntegrationTest`, Plan 20 exclusion regression | ADR-008/017/018/068, V28 immutable trigger |
+| 이의기한·권한·재이의 우회 또는 accepted handoff 부분 성공 은폐 | OWNER membership, 서울 half-open window, Item/actor-key advisory lock, active partial unique, 실제 새 evidence 1회, Adjustment 선커밋+Case | fixed Clock/API/concurrency/refile/Audit-publication fault와 exact retry 통합 테스트 | BR-22~24, ADR-018, V28/V30, settlement lifecycle runbook |
 | 슬롯·재고 초과 | reservation, owner row lock, DB constraint | `PickupReservationRepositoryTest`, `StockReservationRepositoryTest`, `ReservationExpiryTest` | PostgreSQL Testcontainers 결과 |
 | 쿠폰 이중 사용 | issuance state, unique constraint | two-order contention | Testcontainers test |
 | 포인트 만료·복원 오류 | PointLot, ledger, Clock | 경계·환불 테스트 | ADR, tie-out |
-| 확정 정산 변경 | immutable item/batch, adjustment | post-confirm refund | 원장·금액 tie-out |
+| 확정 정산 변경 | immutable item/batch, adjustment | post-confirm refund/dispute와 DB mutation 거부 | 원장·금액 tie-out |
 | 중복 이벤트 | consumer idempotency | duplicate delivery | module/integration test |
 | 알림 실패 은폐 | persistent delivery state | timeout·manual review | metric/runbook |
 | N+1 | use-case fetch plan | SQL count, plan | Before/After report |

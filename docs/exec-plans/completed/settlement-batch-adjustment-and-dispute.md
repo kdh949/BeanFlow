@@ -1,11 +1,11 @@
 # 일별 정산 Batch, 사후 조정과 이의제기를 수렴시킨다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -163,7 +163,7 @@ Plan 20-owned Batch identity/scope fields, state CHECK, Item table/FK/source uni
 - confirmed/non-confirmed Item Refund, non-success Refund Adjustment 0건, Plan 20 exclusion regression
 - D+1 00:00 allow/D+15 00:00 reject, active duplicate, missing evidence/second refile, handoff retry
 - Batch/Item signed cursor scope/order/signature/expiry, membership and other-store access, OpenAPI contract
-- Dispute Context가 held amount와 `SettlementDisputeFiled/Decided` producer를 소유하고 Settlement는
+- Dispute Context가 held amount와 `SettlementDisputeFiledV1`/`SettlementDisputeDecidedV1` producer를 소유하고 Settlement는
   public Adjustment command만 받는 Modulith dependency direction
 - Testcontainers CHECK/unique/index, Modulith boundary, publication/Audit failure, fixed Clock and 503 no-fallback
 
@@ -180,9 +180,10 @@ Outcomes에 실제 값으로 기록한다. 기준선 없는 성능 수치는 주
 
 ## Observability
 
-- `beanflow.settlement.batch.count{state,outcome}`, item count, calculation lag/chunk count
-- `beanflow.settlement.adjustment.count{reason,outcome}`와 carry-forward age
-- `beanflow.settlement.dispute.count{state,outcome}`, held amount
+- `beanflow.settlement.batch.count{state,outcome}`, `batch.item_count`,
+  `batch.calculation_lag_seconds`, `batch.chunk_count`
+- `beanflow.settlement.adjustment.count{reason_code,outcome}`와 `carry_forward.age_seconds`
+- `beanflow.settlement.dispute.count{state,outcome}`, `dispute.held_amount_abs_krw`
 - `beanflow.settlement.reprocessing.count{reason,outcome}`
 
 metric tag/log에는 store/order/customer/payment/item/dispute ID, actor, key, evidence와 raw amount
@@ -202,8 +203,8 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 - [x] calculation/confirmation과 Batch query — 500건 keyset 계산, 서울 날짜, 확정 Audit/publication, owner signed cursor
 - [x] refund adjustment/carry-forward — confirmed Refund append-only Adjustment, unconfirmed retry, source conflict Case
 - [x] dispute filing/decision handoff — owner membership, half-open window, advisory lock, one refile, Adjustment 선커밋
-- [ ] recovery/observability/runbook
-- [ ] full validation/measurement
+- [x] recovery/observability/runbook — Adjustment/Dispute Case, bounded metric와 read-only 운영 절차
+- [x] full validation/measurement — 398-test clean build, 문서 검증, PostgreSQL 17.6 fixed fixture 실측
 
 ## Surprises & Discoveries
 
@@ -215,6 +216,9 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 - 2026-08-03: V28의 재이의 trigger는 evidence 배열 전체가 달라지는지만 비교해 기존 reference의
   순서 변경도 새 증빙으로 오인할 수 있었다. V30에서 이전 배열에 없던 reference가 최소 하나인지
   검사하도록 교체하고 DB·Application 양쪽에 같은 규칙을 적용했다.
+- 2026-08-03: metric 보강 뒤 첫 증분 compile은 Kotlin cache가 삭제된 class file을 참조해
+  연쇄 compile 오류로 종료됐다. source assertion 실패로 숨기지 않고 `clean test`로 같은 15개
+  Batch/Dispute tests를 재실행해 통과했고 최종 `clean build`도 398개를 통과했다.
 
 ## Decision Log
 
@@ -231,9 +235,24 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 20과 signed-cursor foundation의 actual validation evidence가 모두 통과해
-`Implementation-Ready=true`다. ADR-072 migration-writer lease 뒤 시작하며, 완료 시 정상·실패·중복·
-restart 경로와 남은 운영 제한을 실제 검증 결과로 기록한다.
+V28~V30, Settlement/Dispute Application Service와 public boundary로 일별 Batch 계산·확정,
+확정 후 Refund/Dispute Adjustment, OWNER filing/재이의와 decision handoff를 완료했다. Batch는
+500건 keyset chunk와 이전 confirmed gate, calculation-time Adjustment cursor/negative carry를
+사용하며 confirmed 원장은 수정하지 않는다. filing은 서울 half-open window, active OWNER,
+Item/actor-key advisory lock과 terminal 201 replay를 사용한다. accepted Adjustment 선커밋 뒤
+Dispute transaction이 실패하면 `UNDER_REVIEW`/held와 manual Case가 남고 exact retry가 terminal
+event와 Case resolve로 수렴한다.
+
+검증 결과는 Settlement/Dispute 64 tests(44초), Refund/Modulith 70 tests(35초), 전체 clean build
+398 tests(2분 39초) 모두 failures/errors/skips 0이다. 문서 검증은 target/deployed 27/13 paths,
+75 schemas, 32 policies, 75 ADRs, 144 Markdown와 24 ExecPlans를 통과했다. PostgreSQL 17.6의
+1,000 Item/chunk 500 단일 fixture에서 first-page index scan은 shared hit 20, planning 0.110ms,
+execution 0.119ms, calculation 36.054ms, confirmation 17.260ms였고 제어된 200ms row lock의
+관측 wait는 203.086ms였다. 기준선·SLA가 없는 진단 값으로 성능 개선율은 주장하지 않는다.
+
+남은 제한은 실제 계좌 지급/외부 hold, evidence file provider, 자동 판정과 공개 운영 판정 API,
+late closed-Batch Item 자동 재귀속이다. 모두 명시적 Non-goal이며 현재 코드는 fake/no-op으로
+대체하지 않는다. 외부 E2E, non-local deployment, push/PR/merge는 실행하지 않았다.
 
 ## Revision Notes
 
@@ -242,3 +261,4 @@ restart 경로와 남은 운영 제한을 실제 검증 결과로 기록한다.
   Dispute Context ownership을 반영했다.
 - 2026-08-03: Plan 20 completed dependency와 실제 V21/consumer/query/exclusion outcome을 반영하고
   implementation-ready로 전환했다.
+- 2026-08-03: V28~V30 구현, release validation, 실측과 운영 runbook을 완료하고 completed로 이동했다.
