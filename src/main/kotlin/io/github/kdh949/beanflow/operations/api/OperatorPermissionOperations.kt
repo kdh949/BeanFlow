@@ -10,6 +10,7 @@ enum class OperatorPermission {
     POINT_ACCRUAL_POLICY_READ,
     POINT_ACCRUAL_POLICY_WRITE,
     ORDER_COMPENSATION_READ,
+    PAYMENT_CANCELLATION_SETUP_REPAIR,
 }
 
 interface OperatorPermissionAuthorization {

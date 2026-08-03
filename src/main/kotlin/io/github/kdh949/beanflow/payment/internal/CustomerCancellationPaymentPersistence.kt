@@ -3,9 +3,13 @@ package io.github.kdh949.beanflow.payment.internal
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
@@ -46,4 +50,10 @@ internal interface CustomerCancellationPaymentSnapshotJpaRepository : JpaReposit
     fun findByOrderId(orderId: UUID): CustomerCancellationPaymentSnapshotEntity?
 
     fun findByCancellationRefundId(cancellationRefundId: UUID): CustomerCancellationPaymentSnapshotEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select snapshot from CustomerCancellationPaymentSnapshotEntity snapshot where snapshot.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): CustomerCancellationPaymentSnapshotEntity?
 }

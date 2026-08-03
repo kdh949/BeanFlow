@@ -338,6 +338,8 @@ internal interface PaymentReconciliationJpaRepository : JpaRepository<PaymentRec
 internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {
     fun findBySourceReference(sourceReference: String): RefundEntity?
 
+    fun findByProviderIdempotencyKey(providerIdempotencyKey: String): RefundEntity?
+
     fun findByPaymentIdAndReason(
         paymentId: UUID,
         reason: String,
