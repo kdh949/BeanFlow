@@ -65,6 +65,9 @@ internal class GetOrderService(
             preparingAt = order.preparingAt,
             readyAt = order.readyAt,
             completedAt = order.completedAt,
+            cancelledAt = order.cancelledAt,
+            cancellationCause = order.cancellationCause,
+            cancellationReasonCode = order.cancellationReasonCode,
             rejectionReason = order.rejectionReason,
             lines =
                 lines.map { line ->

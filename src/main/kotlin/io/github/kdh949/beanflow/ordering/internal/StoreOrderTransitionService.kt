@@ -307,9 +307,9 @@ internal class StoreOrderTransitionService(
         )
     }
 
-    private fun response(order: OrderEntity): OrderResponse {
+    private fun response(order: OrderEntity): StoreOrderResponse {
         val lines = orderLineRepository.findAllByOrderIdOrderByLineSequence(order.id)
-        return OrderResponse(
+        return StoreOrderResponse(
             orderId = order.id,
             storeId = order.storeId,
             state = order.state.name,
@@ -323,6 +323,8 @@ internal class StoreOrderTransitionService(
             preparingAt = order.preparingAt,
             readyAt = order.readyAt,
             completedAt = order.completedAt,
+            cancelledAt = order.cancelledAt,
+            cancellationCause = order.cancellationCause,
             rejectionReason = order.rejectionReason,
             lines =
                 lines.map {

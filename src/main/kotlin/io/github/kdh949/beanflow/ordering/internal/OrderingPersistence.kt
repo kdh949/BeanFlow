@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -107,6 +108,15 @@ internal class OrderEntity(
     var cancellationCause: OrderCancellationCause? = null
         protected set
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_reason_code", length = 32)
+    var cancellationReasonCode: CustomerCancellationReasonCode? = null
+        protected set
+
+    @Column(name = "cancellation_detail", length = 200)
+    var cancellationDetail: String? = null
+        protected set
+
     @Column(name = "rejection_reason", length = 500)
     var rejectionReason: String? = null
         protected set
@@ -206,6 +216,35 @@ internal class OrderEntity(
         updatedAt = now
     }
 
+    fun cancelByCustomer(
+        now: Instant,
+        reasonCode: CustomerCancellationReasonCode,
+        detail: String?,
+    ) {
+        if (state != OrderState.PENDING_PAYMENT && state != OrderState.PAID) {
+            conflict("Order state does not allow customer cancellation")
+        }
+        if (state == OrderState.PAID) {
+            val deadline =
+                acceptanceDeadlineAt
+                    ?: throw DomainFailure(
+                        FailureCode.DEPENDENCY_UNAVAILABLE,
+                        "Paid order has no acceptance deadline",
+                    )
+            if (!now.isBefore(deadline)) {
+                conflict("Store acceptance deadline has passed")
+            }
+        }
+        val normalizedDetail = normalizeCancellationDetail(detail)
+        state = OrderState.CANCELLED
+        reservationExpiresAt = null
+        cancelledAt = now
+        cancellationCause = OrderCancellationCause.CUSTOMER_REQUEST
+        cancellationReasonCode = reasonCode
+        cancellationDetail = normalizedDetail
+        updatedAt = now
+    }
+
     private fun requireState(
         expected: OrderState,
         message: String,
@@ -216,6 +255,17 @@ internal class OrderEntity(
     }
 
     private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, message)
+
+    private fun normalizeCancellationDetail(detail: String?): String? {
+        val normalized = detail?.trim()?.ifEmpty { null } ?: return null
+        if (normalized.length > 200 || normalized.any(Char::isISOControl)) {
+            throw DomainFailure(
+                FailureCode.INVALID_REQUEST,
+                "Cancellation detail must contain at most 200 non-control characters",
+            )
+        }
+        return normalized
+    }
 
     private companion object {
         val ACCEPTANCE_WARNING_DELAY: Duration = Duration.ofMinutes(2)
