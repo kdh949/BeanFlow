@@ -5,9 +5,11 @@ import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
+import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationTemplate
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationMode
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot
 import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
@@ -22,6 +24,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
 
@@ -43,7 +47,10 @@ internal class NotificationDeliveryRepositoryTest
         private val compensationOperations: OrderCompensationOperations,
         private val provider: ScriptedTestNotificationProvider,
         private val jdbcTemplate: JdbcTemplate,
+        transactionManager: PlatformTransactionManager,
     ) {
+        private val transactions = TransactionTemplate(transactionManager)
+
         @BeforeEach
         fun cleanDatabase() {
             jdbcTemplate.execute(
@@ -131,6 +138,32 @@ internal class NotificationDeliveryRepositoryTest
                 ),
             ).isEqualTo(1)
             assertThat(service.claimDue(now.plusSeconds(1), 10)).isEmpty()
+        }
+
+        @Test
+        fun `customer cancellation acceptance stores one pending delivery without reason detail or provider call`() {
+            val orderId = UUID.randomUUID()
+            val eventId = UUID.randomUUID()
+            val command =
+                RequestCustomerCancellationAcceptedNotificationCommand(
+                    eventId = eventId,
+                    orderId = orderId,
+                    customerId = UUID.randomUUID(),
+                    storeId = UUID.randomUUID(),
+                    cancelledAt = NOW,
+                    correlationId = "customer-cancellation-$orderId",
+                )
+
+            val first = transactions.execute { service.requestAccepted(command) }
+            val replay = transactions.execute { service.requestAccepted(command) }
+
+            assertThat(first).isEqualTo(replay)
+            val delivery = repository.findAll().single()
+            assertThat(delivery.state).isEqualTo(NotificationDeliveryState.PENDING)
+            assertThat(delivery.template).isEqualTo(NotificationTemplate.ORDER_CANCELLATION_ACCEPTED)
+            assertThat(delivery.payloadJson).contains(orderId.toString(), "cancelledAt")
+            assertThat(delivery.payloadJson).doesNotContain("reason", "detail")
+            assertThat(provider.requests).isEmpty()
         }
 
         private fun rejectionEvent(): OrderRejectedV1 {

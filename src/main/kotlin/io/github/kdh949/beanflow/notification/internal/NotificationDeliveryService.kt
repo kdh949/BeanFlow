@@ -3,6 +3,9 @@ package io.github.kdh949.beanflow.notification.internal
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
+import io.github.kdh949.beanflow.notification.api.AcceptedCustomerCancellationNotification
+import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
+import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDelivery
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
@@ -20,6 +23,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.time.Duration
@@ -64,7 +68,34 @@ internal class NotificationDeliveryService(
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.notification.claim-lease:PT1M}")
     private val claimLease: Duration,
-) {
+) : CustomerCancellationNotificationOperations {
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun requestAccepted(
+        command: RequestCustomerCancellationAcceptedNotificationCommand,
+    ): AcceptedCustomerCancellationNotification {
+        val delivery =
+            request(
+                NewNotificationDelivery(
+                    eventId = command.eventId,
+                    eventType = "CustomerOrderCancellationAcceptedV1",
+                    orderId = command.orderId,
+                    recipientType = NotificationRecipientType.CUSTOMER,
+                    recipientId = command.customerId,
+                    logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                    template = NotificationTemplate.ORDER_CANCELLATION_ACCEPTED,
+                    payload =
+                        mapOf(
+                            "orderId" to command.orderId,
+                            "storeId" to command.storeId,
+                            "cancelledAt" to command.cancelledAt,
+                        ),
+                    correlationId = command.correlationId,
+                    occurredAt = command.cancelledAt,
+                ),
+            )
+        return AcceptedCustomerCancellationNotification(delivery.id, delivery.state.name)
+    }
+
     @Transactional
     fun requestWarning(event: StoreAcceptanceWarningRequestedV1) {
         request(

@@ -18,6 +18,7 @@ internal enum class NotificationTemplate {
     STORE_ACCEPTANCE_WARNING,
     ORDER_REJECTED,
     ORDER_READY,
+    ORDER_CANCELLATION_ACCEPTED,
 }
 
 internal enum class NotificationDeliveryState {
