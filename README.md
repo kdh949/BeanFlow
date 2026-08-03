@@ -129,11 +129,17 @@ API와 초기 데이터 seed는 아직 없으므로 주문 흐름을 수동 확�
 ```text
 POST /api/v1/orders
 GET  /api/v1/orders/{orderId}
+POST /api/v1/orders/{orderId}/cancellations
 POST /api/v1/orders/{orderId}/payment-confirmations
+POST /api/v1/payments/{paymentId}/refunds
 GET  /api/v1/store-orders/{orderId}
 PATCH /api/v1/store-orders/{orderId}/status
+GET  /api/v1/operations/orders/{orderId}/compensation
+POST /api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations
+POST /api/v1/operations/reprocessing-cases/{caseId}/repair-proposals
+POST /api/v1/operations/reprocessing-repair-proposals/{proposalId}/decisions
 GET  /api/v1/operations/policies/expired-benefit-restoration
-PATCH /api/v1/operations/policies/expired-benefit-restoration
+PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}
 ```
 
 ### 목표 OpenAPI 계약
@@ -156,12 +162,6 @@ PATCH /api/v1/operations/policies/expired-benefit-restoration
 GET  /api/v1/stores/nearby
 GET  /api/v1/stores/{storeId}/menus
 GET  /api/v1/stores/{storeId}/pickup-slots
-POST /api/v1/orders/{orderId}/cancellations
-POST /api/v1/payments/{paymentId}/refunds
-GET  /api/v1/operations/orders/{orderId}/compensation
-POST /api/v1/operations/reprocessing-cases/{caseId}/repair-proposals
-POST /api/v1/operations/reprocessing-repair-proposals/{proposalId}/decisions
-PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}
 GET  /api/v1/point-accounts/{accountId}
 GET  /api/v1/point-accounts/{accountId}/transactions
 GET  /api/v1/stores/{storeId}/settlements

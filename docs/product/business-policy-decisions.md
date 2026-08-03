@@ -325,6 +325,16 @@
   환불 성공·지연 후속 event, publication과 Delivery는 이 step을 다시 열거나
   갱신하지 않고 각각의 publication, Delivery와 ReprocessingCase에서 복구한다.
   따라서 Case 완료는 미래 환불 후속 알림 전체의 완료를 뜻하지 않는다.
+- **Operator Refund Reconciliation Amendment (2026-08-03):** 환불 지연 알림이 확정된
+  고객 취소 Refund가 `FAILED` 또는 `MANUAL_REVIEW`이면 활성
+  `CUSTOMER_CANCELLATION_REFUND_RECONCILE` grant를 가진 PLATFORM_OPERATOR 한 명이
+  사유와 Idempotency-Key를 제출해 기존 Provider key의 LOOKUP 한 번을 예약할 수 있다.
+  운영자는 환불 금액, Provider key/reference와 성공 결과를 입력할 수 없고 새 REQUEST도
+  만들 수 없다. Order terminal version, recovery snapshot, Refund source와 금액 tie-out을
+  transaction에서 재검증하고 PAYMENT step을 `UNKNOWN`으로 다시 연다. 권한, 멱등 레코드,
+  Refund/step 전이와 append-only Audit 중 하나라도 실패하면 전부 rollback한다. LOOKUP이
+  실제 `SUCCEEDED`를 반환할 때만 성공 원장과 성공 event·별도 logical notification을
+  확정하며 실패·불명은 다시 terminal 지연 상태로 수렴한다.
 - **Compensation Completion Notification Amendment (2026-07-31):** 고객 취소
   OrderCompensationCase 전체 성공, 슬롯·재고 복원 또는 쿠폰·포인트 복원 완료에는
   별도 고객 알림을 보내지 않는다. 고객 알림은 취소 접수와 현금 환불 성공·지연으로

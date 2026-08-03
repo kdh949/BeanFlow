@@ -49,9 +49,25 @@ internal class CustomerCancellationPaymentService(
             return measured(CustomerCancellationPaymentProjection(state = "NOT_REQUIRED"))
         }
         if (snapshot == null) {
+            val expectedSource = sourceReference(command.orderId, command.cancellationOrderVersion)
+            val sourceRefund = refunds.findBySourceReference(expectedSource)
             return setupIncomplete(
                 command,
-                missing = setOf(PaymentCancellationSetupMissingArtifact.PAYMENT_RECOVERY_SNAPSHOT),
+                missing =
+                    buildSet {
+                        add(PaymentCancellationSetupMissingArtifact.PAYMENT_RECOVERY_SNAPSHOT)
+                        if (sourceRefund == null) {
+                            add(PaymentCancellationSetupMissingArtifact.CANCELLATION_REFUND)
+                        }
+                    },
+                violations =
+                    if (sourceRefund != null &&
+                        (sourceRefund.orderId != command.orderId || sourceRefund.reason != REASON)
+                    ) {
+                        setOf(PaymentCancellationSetupInvariantViolation.SOURCE_MISMATCH)
+                    } else {
+                        emptySet()
+                    },
                 errorCode = "MISSING_PAYMENT_RECOVERY_SNAPSHOT",
             )
         }

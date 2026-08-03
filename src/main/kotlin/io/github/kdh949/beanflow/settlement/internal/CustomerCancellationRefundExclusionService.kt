@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
+import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
+import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidence
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidenceOperations
@@ -30,6 +32,7 @@ internal class CustomerCancellationRefundExclusionService(
     private val items: SettlementItemJpaRepository,
     private val auditRecords: AuditRecordOperations,
     private val auditRecordQueries: AuditRecordQueryOperations,
+    private val setupIntegrity: PaymentCancellationSetupIntegrityOperations,
     private val meterRegistry: MeterRegistry,
 ) {
     @Transactional(propagation = Propagation.MANDATORY)
@@ -38,16 +41,36 @@ internal class CustomerCancellationRefundExclusionService(
         processedAt: Instant,
     ) {
         validateEventShape(event)
-        val order =
-            orders.find(event.orderId)
-                ?: conflict("ORDER_MISSING", "Customer-cancellation Order evidence is missing")
-        validateOrder(event, order)
-        val refund =
-            refunds.find(event.refundId)
-                ?: conflict("REFUND_MISSING", "Customer-cancellation Refund evidence is missing")
-        validateRefund(event, refund)
-        if (items.findByOrderId(event.orderId) != null) {
-            conflict("SETTLEMENT_ITEM_EXISTS", "Cancelled Order unexpectedly has a SettlementItem")
+        try {
+            val order =
+                orders.find(event.orderId)
+                    ?: conflict("ORDER_MISSING", "Customer-cancellation Order evidence is missing")
+            validateOrder(event, order)
+            val refund =
+                refunds.find(event.refundId)
+                    ?: conflict("REFUND_MISSING", "Customer-cancellation Refund evidence is missing")
+            validateRefund(event, refund)
+            if (items.findByOrderId(event.orderId) != null) {
+                conflict("SETTLEMENT_ITEM_EXISTS", "Cancelled Order unexpectedly has a SettlementItem")
+            }
+        } catch (failure: DomainFailure) {
+            setupIntegrity.inspect(
+                InspectPaymentCancellationSetupCommand(
+                    orderId = event.orderId,
+                    now = processedAt,
+                ),
+            )
+            throw failure
+        }
+        val setupIssue =
+            setupIntegrity.inspect(
+                InspectPaymentCancellationSetupCommand(
+                    orderId = event.orderId,
+                    now = processedAt,
+                ),
+            )
+        if (setupIssue != null) {
+            conflict("PAYMENT_SETUP_INCOMPLETE", "Customer-cancellation payment setup is incomplete")
         }
 
         val auditKey =

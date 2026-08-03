@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import com.fasterxml.jackson.annotation.JsonAnySetter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
@@ -23,7 +24,13 @@ import java.util.UUID
 internal data class CreateRepairProposalRequest(
     @field:Size(min = 1, max = 500)
     val reason: String,
-)
+) {
+    @JsonAnySetter
+    fun rejectUnknownField(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        @Suppress("UNUSED_PARAMETER") value: Any?,
+    ): Unit = throw IllegalArgumentException("Unknown repair request field")
+}
 
 internal enum class RepairProposalDecision {
     APPROVE,
@@ -34,7 +41,13 @@ internal data class RepairProposalDecisionRequest(
     val decision: RepairProposalDecision,
     @field:Size(min = 1, max = 500)
     val reason: String,
-)
+) {
+    @JsonAnySetter
+    fun rejectUnknownField(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        @Suppress("UNUSED_PARAMETER") value: Any?,
+    ): Unit = throw IllegalArgumentException("Unknown repair decision field")
+}
 
 internal data class RepairProposal(
     val proposalId: UUID,

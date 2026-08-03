@@ -23,6 +23,12 @@ data class DetectPaymentCancellationSetupIssueCommand(
     val now: Instant,
 )
 
+data class InspectPaymentCancellationSetupCommand(
+    val orderId: UUID,
+    val cancellationOrderVersion: Long? = null,
+    val now: Instant,
+)
+
 data class DetectedPaymentCancellationSetupIssue(
     val caseId: UUID,
     val detectedAt: Instant,
@@ -31,4 +37,6 @@ data class DetectedPaymentCancellationSetupIssue(
 
 interface PaymentCancellationSetupIntegrityOperations {
     fun detect(command: DetectPaymentCancellationSetupIssueCommand): DetectedPaymentCancellationSetupIssue
+
+    fun inspect(command: InspectPaymentCancellationSetupCommand): DetectedPaymentCancellationSetupIssue?
 }

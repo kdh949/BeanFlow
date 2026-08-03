@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
 import io.github.kdh949.beanflow.operations.api.DetectPaymentCancellationSetupIssueCommand
 import io.github.kdh949.beanflow.operations.api.DetectedPaymentCancellationSetupIssue
+import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
 import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -25,6 +26,7 @@ internal class PaymentCancellationSetupIntegrityService(
     private val auditQueries: AuditRecordQueryOperations,
     private val jdbcTemplate: JdbcTemplate,
     private val meterRegistry: MeterRegistry,
+    private val queries: PaymentCancellationSetupIntegrityQueryService,
 ) : PaymentCancellationSetupIntegrityOperations {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun detect(command: DetectPaymentCancellationSetupIssueCommand): DetectedPaymentCancellationSetupIssue =
@@ -36,6 +38,34 @@ internal class PaymentCancellationSetupIntegrityService(
             throw DomainFailure(
                 FailureCode.DEPENDENCY_UNAVAILABLE,
                 "Payment cancellation setup issue could not be recorded",
+            ).also { it.initCause(failure) }
+        }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun inspect(command: InspectPaymentCancellationSetupCommand): DetectedPaymentCancellationSetupIssue? =
+        try {
+            val cancellationOrderVersion =
+                command.cancellationOrderVersion
+                    ?: queries.findCurrentCancellationVersion(command.orderId)
+                    ?: return null
+            val assessment = queries.assess(command.orderId, cancellationOrderVersion) ?: return null
+            detectInTransaction(
+                DetectPaymentCancellationSetupIssueCommand(
+                    orderId = assessment.orderId,
+                    cancellationOrderVersion = assessment.cancellationOrderVersion,
+                    missingArtifacts = assessment.missingArtifacts,
+                    invariantViolations = assessment.invariantViolations,
+                    errorCode = assessment.errorCode,
+                    correlationId = assessment.correlationId,
+                    now = command.now,
+                ),
+            )
+        } catch (failure: DomainFailure) {
+            throw failure
+        } catch (failure: RuntimeException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Payment cancellation setup issue could not be inspected",
             ).also { it.initCause(failure) }
         }
 

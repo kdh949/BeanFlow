@@ -70,6 +70,50 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /orders/{orderId}/cancellations:
+    post:
+      tags: [Ordering]
+      operationId: cancelOrder
+      summary: Cancel an order in a customer-allowed state
+      description: |
+        The owning customer may cancel PENDING_PAYMENT or pre-acceptance PAID
+        orders. Same-key/same-payload replay returns the first 200 or 202 body.
+        A PAID cancellation durably starts compensation; it does not claim that
+        refund or owner restoration has completed.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CancellationRequest"
+      responses:
+        "200":
+          description: PENDING_PAYMENT cancellation completed synchronously
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/Cancellation"
+        "202":
+          description: PAID cancellation committed with durable compensation work
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/Cancellation"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /orders/{orderId}/payment-confirmations:
     post:
       tags: [Payment]
@@ -246,6 +290,126 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         "404":
           $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/orders/{orderId}/customer-cancellation-refund-reconciliations:
+    post:
+      tags: [Operations]
+      operationId: scheduleCustomerCancellationRefundReconciliation
+      summary: Schedule one operator-authorized LOOKUP for a terminal customer-cancellation Refund
+      description: |
+        Requires PLATFORM_OPERATOR and an active
+        CUSTOMER_CANCELLATION_REFUND_RECONCILE grant. It schedules one LOOKUP
+        with existing server-owned financial identifiers and never sends a new
+        Provider REQUEST. A 202 response is not proof of refund success.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliationRequest"
+      responses:
+        "202":
+          description: LOOKUP scheduled or replayed from the first identical command
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliation"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/reprocessing-cases/{caseId}/repair-proposals:
+    post:
+      tags: [Operations]
+      operationId: proposeCustomerCancellationSetupRepair
+      summary: Propose safe recreation of a missing customer-cancellation Refund
+      description: |
+        Requires PLATFORM_OPERATOR and an active
+        PAYMENT_CANCELLATION_SETUP_REPAIR grant. Financial values and identifiers
+        are derived from the complete recovery snapshot; unknown request fields
+        are rejected.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            $ref: "./beanflow-v1.yaml#/components/schemas/Identifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CreateRepairProposalRequest"
+      responses:
+        "201":
+          description: Pending proposal or replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposal"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/reprocessing-repair-proposals/{proposalId}/decisions:
+    post:
+      tags: [Operations]
+      operationId: decideCustomerCancellationSetupRepair
+      summary: Approve or reject a missing-Refund repair proposal
+      description: |
+        Requires a different PLATFORM_OPERATOR with an active
+        PAYMENT_CANCELLATION_SETUP_REPAIR grant. Approval revalidates under
+        Order then Payment locks and creates LOOKUP-only recovery without an
+        in-transaction Provider call.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            $ref: "./beanflow-v1.yaml#/components/schemas/Identifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposalDecisionRequest"
+      responses:
+        "200":
+          description: Terminal proposal or replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposal"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/policies/expired-benefit-restoration:

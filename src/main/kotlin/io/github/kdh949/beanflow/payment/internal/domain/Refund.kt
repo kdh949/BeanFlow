@@ -35,6 +35,7 @@ internal class Refund private constructor(
     requestAttemptCount: Int,
     lookupAttemptCount: Int,
     nextAction: RefundClaimMode,
+    operatorReconciliationPending: Boolean,
     nextAttemptAt: Instant?,
     providerRequestStartedAt: Instant?,
     claimToken: UUID?,
@@ -55,6 +56,8 @@ internal class Refund private constructor(
     val attemptCount: Int
         get() = requestAttemptCount + lookupAttemptCount
     var nextAction: RefundClaimMode = nextAction
+        private set
+    var operatorReconciliationPending: Boolean = operatorReconciliationPending
         private set
     var nextAttemptAt: Instant? = nextAttemptAt
         private set
@@ -87,8 +90,10 @@ internal class Refund private constructor(
             }
 
             RefundClaimMode.LOOKUP -> {
-                check(lookupAttemptCount < lookupMaxAttempts) { "Refund lookup attempts are exhausted" }
-                lookupAttemptCount++
+                if (!operatorReconciliationPending) {
+                    check(lookupAttemptCount < lookupMaxAttempts) { "Refund lookup attempts are exhausted" }
+                    lookupAttemptCount++
+                }
                 state = RefundState.RECONCILING
             }
         }
@@ -107,6 +112,7 @@ internal class Refund private constructor(
             check(!providerReference.isNullOrBlank()) { "Provider refund reference is required" }
         }
         state = RefundState.SUCCEEDED
+        operatorReconciliationPending = false
         succeededAmountKrw = requestedAmountKrw
         providerRefundReference = providerReference
         lastFailureCode = null
@@ -131,6 +137,7 @@ internal class Refund private constructor(
     ) {
         requireOwnedClaim()
         state = RefundState.FAILED
+        operatorReconciliationPending = false
         lastFailureCode = normalized(code)
         nextAttemptAt = null
         clearClaim()
@@ -165,6 +172,9 @@ internal class Refund private constructor(
         lookupMaxAttempts: Int = LOOKUP_MAX_ATTEMPTS,
     ) {
         requireOwnedClaim()
+        check(!operatorReconciliationPending) {
+            "Operator reconciliation must use its terminal result transition"
+        }
         lastFailureCode = normalized(code)
         nextAction = RefundClaimMode.LOOKUP
         if (lookupAttemptCount >= lookupMaxAttempts) {
@@ -175,6 +185,34 @@ internal class Refund private constructor(
             state = RefundState.UNKNOWN
             nextAttemptAt = now.plus(lookupDelays[lookupAttemptCount])
         }
+        clearClaim()
+        updatedAt = now
+    }
+
+    fun recordOperatorReconciliationUnknown(
+        code: String,
+        now: Instant,
+    ) {
+        requireOwnedClaim(RefundClaimMode.LOOKUP)
+        check(operatorReconciliationPending) { "Refund is not in operator reconciliation" }
+        state = RefundState.MANUAL_REVIEW
+        operatorReconciliationPending = false
+        lastFailureCode = normalized(code)
+        nextAttemptAt = null
+        clearClaim()
+        updatedAt = now
+    }
+
+    fun scheduleOperatorReconciliation(now: Instant) {
+        check(state == RefundState.FAILED || state == RefundState.MANUAL_REVIEW) {
+            "Only a terminal delayed Refund can be reconciled by an operator"
+        }
+        check(!operatorReconciliationPending) { "Operator reconciliation is already pending" }
+        state = RefundState.UNKNOWN
+        nextAction = RefundClaimMode.LOOKUP
+        operatorReconciliationPending = true
+        nextAttemptAt = now
+        lastFailureCode = "OPERATOR_RECONCILIATION_SCHEDULED"
         clearClaim()
         updatedAt = now
     }
@@ -194,7 +232,11 @@ internal class Refund private constructor(
         }
         check(claimUntil?.let { !now.isBefore(it) } == true) { "Refund claim lease has not expired" }
         nextAction = RefundClaimMode.LOOKUP
-        if (lookupAttemptCount >= lookupMaxAttempts) {
+        if (operatorReconciliationPending) {
+            operatorReconciliationPending = false
+            state = RefundState.MANUAL_REVIEW
+            nextAttemptAt = null
+        } else if (lookupAttemptCount >= lookupMaxAttempts) {
             state = RefundState.MANUAL_REVIEW
             nextAttemptAt = null
         } else {
@@ -282,6 +324,7 @@ internal class Refund private constructor(
                 0,
                 0,
                 RefundClaimMode.REQUEST,
+                false,
                 now,
                 null,
                 null,
@@ -307,6 +350,7 @@ internal class Refund private constructor(
             requestAttemptCount: Int,
             lookupAttemptCount: Int,
             nextAction: RefundClaimMode,
+            operatorReconciliationPending: Boolean,
             nextAttemptAt: Instant?,
             providerRequestStartedAt: Instant?,
             claimToken: UUID?,
@@ -329,6 +373,7 @@ internal class Refund private constructor(
                 requestAttemptCount,
                 lookupAttemptCount,
                 nextAction,
+                operatorReconciliationPending,
                 nextAttemptAt,
                 providerRequestStartedAt,
                 claimToken,

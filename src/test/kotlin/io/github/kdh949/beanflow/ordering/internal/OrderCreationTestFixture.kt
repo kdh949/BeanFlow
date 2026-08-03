@@ -36,6 +36,7 @@ internal object OrderCreationDatabaseFixture {
             TRUNCATE TABLE
                 event_publication,
                 notification_delivery,
+                operations_customer_cancellation_refund_reconciliation_command,
                 operations_audit_record,
                 operations_reprocessing_case,
                 operations_order_compensation_step,

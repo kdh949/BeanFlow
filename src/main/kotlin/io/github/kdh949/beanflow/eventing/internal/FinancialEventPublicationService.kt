@@ -76,13 +76,12 @@ internal class FinancialEventPublicationService(
                         INSERT INTO event_publication (
                             id, listener_id, event_type, serialized_event, publication_date,
                             completion_date, status, completion_attempts, last_resubmission_date
-                        ) VALUES (?, ?, ?, ?, ?, NULL, 'PUBLISHED', 1, ?)
+                        ) VALUES (?, ?, ?, ?, ?, NULL, 'FAILED', 0, NULL)
                         """.trimIndent(),
                         UUID.randomUUID(),
                         target,
                         event.javaClass.name,
                         serializedEvent,
-                        Timestamp.from(envelope.occurredAt),
                         Timestamp.from(envelope.occurredAt),
                     )
                 if (inserted != 1) {

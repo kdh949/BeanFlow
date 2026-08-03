@@ -21,11 +21,20 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
   332-test clean build를 완료했다. 이 plan은 해당 verified completed-plan head를 유일한 parent로
   하는 Draft stack에서 recovery/release evidence를 완성하고 separate migration-writer lease를
   얻지 않는다.
-- 현재 Refund는 REQUEST 1회 후 LOOKUP 4회인 합산 attempt 모델이다.
-- retryable explicit failure allowlist와 request 3/lookup 5 분리 예산이 없다.
-- customer cancellation terminal result event/template, setup detector/scanner/repair가 없다.
-- Plan 30의 publication exhaustion은 stable listener target별 step-specific recovery로 완료됐다.
-- Plan 20의 Settlement foundation과 고객 취소 refund NOT_APPLICABLE evidence consumer가 완료됐다.
+- Refund는 allowlist REQUEST 최대 3회와 UNKNOWN 이후 LOOKUP 최대 5회를 분리하며 claim
+  crash도 REQUEST 재전송 없이 LOOKUP으로 복구한다.
+- customer cancellation terminal result event/template과 version logical source Delivery가
+  구현됐고 기본 CUSTOMER_NOTIFICATION step을 다시 열지 않는다.
+- 고객/운영자 projection, inline+1분 batch-100 setup detector/scanner와 source-unique
+  Case/Audit가 구현됐다.
+- 완전 snapshot+Refund 누락만 서로 다른 활성 operator 두 명이 30분 내 승인해 원
+  ID/source/key/amount와 LOOKUP-first 상태로 복원한다. 자동 만료와 repair idempotency 90일
+  bounded cleanup을 포함한다.
+- 자동 처리가 끝난 기존 terminal Refund는 전용 persistent grant를 가진 단일 운영자가 금융
+  입력 없이 같은 Provider key의 LOOKUP 한 번만 재개할 수 있다. 명령 멱등성, Audit, 90일
+  batch-100 cleanup과 지연 뒤 실제 성공 알림을 포함한다.
+- Plan 30의 stable listener별 owner 수렴과 Plan 20의 Settlement NOT_APPLICABLE consumer를
+  combined branch에서 재검증했다.
 
 ## Definitions
 
@@ -44,6 +53,7 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 - customer/operations compensation projection
 - inline detector, 1분 batch-100 setup scanner와 source-unique Case/Audit
 - 완전 snapshot+Refund 누락만 복구하는 2인 승인 API
+- terminal FAILED/MANUAL_REVIEW Refund의 단일 운영자 LOOKUP-only 재개 API
 - Settlement NOT_APPLICABLE 연계, idempotency/timeout cleanup과 운영 runbook
 
 ### Non-goals
@@ -61,6 +71,8 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 - 고객은 내부 FAILED/MANUAL_REVIEW를 PROCESSING+REFUND_DELAYED로 본다.
 - 정상 setup 금액 네 개는 모두 존재하고 손상 시 검증 불가 금액을 모두 생략한다.
 - repair는 서로 다른 활성 PLATFORM_OPERATOR 두 명과 30분 경계, 재검증을 요구한다.
+- terminal Refund reconciliation은 전용 grant를 가진 PLATFORM_OPERATOR 한 명이 기존 key의
+  LOOKUP 한 번만 예약하며 새 REQUEST, 수기 성공과 금융 값 입력을 허용하지 않는다.
 
 ## Architecture and Transaction Boundaries
 
@@ -69,13 +81,17 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 - terminal result event는 Refund result transaction과 publication을 함께 commit한다.
 - Notification/Settlement/setup scanner/repair는 각각 독립 짧은 transaction이다.
 - repair 승인 lock은 Order → Payment이고 Provider call은 transaction 밖이다.
+- terminal reconciliation 명령은 권한·Refund/PAYMENT step·멱등성·Audit를 한 transaction에
+  저장하고 Provider LOOKUP은 transaction 밖의 기존 Refund worker가 정확히 한 번 수행한다.
 
 ## Alternatives Considered
 
 - UNKNOWN 뒤 request 재전송: 중복 환불 위험으로 제외한다.
 - terminal Refund polling으로 알림: result publication 원자성을 잃어 제외한다.
 - setup snapshot 자동 재구성: 취소 시점 금융 원천을 추정해 제외한다.
-- 한 운영자 즉시 repair: 금융 오조작 방어가 부족해 제외한다.
+- 한 운영자 누락 Refund 즉시 repair: 금융 row를 재구성하므로 오조작 방어가 부족해 제외한다.
+- terminal Refund의 2인 LOOKUP 승인: 읽기 전용 Provider 조회에도 복구 지연이 커 전용 grant,
+  원천 tie-out과 append-only Audit를 갖춘 단일 운영자 명령을 선택했다.
 
 ## Failure Semantics
 
@@ -84,12 +100,15 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 - detector의 Case/Audit 저장 실패는 조회 503, worker/consumer retry다.
 - Notification 네 번째 실패는 Delivery MANUAL_REVIEW와 ReprocessingCase다.
 - owner 하나 실패해도 다른 owner 작업을 계속하고 Order CANCELLED를 되돌리지 않는다.
+- operator LOOKUP 실패·불명은 자동 budget을 늘리거나 재시도하지 않고 즉시 terminal 지연
+  상태로 돌아가며, 다음 시도에는 새 운영 명령과 Audit가 필요하다.
 
 ## Data and Migration
 
-ADR-072의 Plan 40→50 shared migration-writer lease에서 completed Plan 40 head를 parent로 시작한 뒤 request/lookup counts, next action, terminal result logical source, setup repair proposal/
-decision, scanner index와 retention index를 forward migration으로 추가한다. 계획 00의
-migration 전략을 따른다.
+ADR-072의 Plan 40→50 shared migration-writer lease에서 completed Plan 40 head를 parent로 시작한 뒤
+V24 terminal result logical source, V25 setup integrity, V26 two-person setup repair, V27 terminal
+Refund operator reconciliation command/marker/index를 forward migration으로 추가한다. 적용 migration
+수정이나 checksum repair 없이 계획 00의 migration 전략을 따른다.
 
 ## API and Event Contracts
 
@@ -97,6 +116,8 @@ migration 전략을 따른다.
 - payload는 최소 envelope/order/customer/version/amount/outcomeAt만 가진다.
 - GET Order와 cancellation response는 같은 customer projection mapper를 쓴다.
 - operations view만 attempt/error/setup issue/repair case를 노출한다.
+- operations reconciliation POST는 reason과 `Idempotency-Key`만 받고 `202` 예약 결과만 반환한다.
+  unknown JSON·금융 식별자 입력은 fail-closed이며 환불 성공을 뜻하지 않는다.
 
 ## Milestones
 
@@ -106,7 +127,8 @@ migration 전략을 따른다.
 4. customer/operations projection과 Notification을 구현한다.
 5. Settlement exclusion 연계를 검증한다.
 6. setup inline/scanner detection과 2인 repair를 구현한다.
-7. retention, metrics, alerts, runbook과 release verification을 완료하고 Plan 40+50 combined main-targeted release PR을 만든다.
+7. terminal Refund의 single-operator LOOKUP recovery와 지연 뒤 성공 수렴을 구현한다.
+8. retention, metrics, alerts, runbook과 release verification을 완료하고 Plan 40+50 combined main-targeted release PR을 만든다.
 
 ## Required Tests
 
@@ -118,6 +140,8 @@ migration 전략을 따른다.
 - success/delayed notification, delayed 뒤 success, provider retry
 - setup inline+scanner 수렴, 저장 실패, 모든 손상 분류
 - self/stale/expired/concurrent 2인 승인과 LOOKUP-only repair
+- terminal FAILED/MANUAL_REVIEW의 grant/revoke, 멱등 replay/conflict, 동시 명령, 정확히 한 번
+  LOOKUP, 불명 즉시 종결, 지연 뒤 성공 알림과 batch-100/90일 retention
 - Settlement Item/Adjustment 부재와 Audit
 - restart, Modulith, architecture/startup failure
 - Plan 40/50 Draft stack에서는 production deployment가 없고, final combined release PR만 main base를
@@ -147,18 +171,30 @@ runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
 
 ## Progress
 
-- [ ] refund budgets/allowlist
-- [ ] result events
-- [ ] owner convergence
-- [ ] projections/notifications
-- [ ] settlement integration
-- [ ] setup detection/repair
-- [ ] retention/operations/release
-- [ ] 전체 검증
+- [x] refund budgets/allowlist
+- [x] result events
+- [x] owner convergence
+- [x] projections/notifications
+- [x] settlement integration
+- [x] setup detection/repair
+- [x] terminal Refund single-operator LOOKUP recovery
+- [x] retention/operations
+- [x] 전체 release verification
+- [ ] combined PR과 completed 이동
+- [x] V27 이후 전체 검증
 
 ## Surprises & Discoveries
 
 - 현재 Refund attempt 5회에는 최초 REQUEST가 포함돼 lookup은 네 번뿐이다.
+- Operations가 Payment API를 직접 호출하면 기존 Payment→Operations API와 module cycle이
+  생긴다. Operations-owned repair port를 Operations API에 두고 Payment가 구현하는 의존성
+  역전으로 proposal 소유권과 단방향 Modulith 경계를 함께 보존했다.
+- Plan 20/30의 Settlement exclusion과 owner listener/exhaustion은 새 구현 대상이 아니라
+  verified foundation이었다. Plan 50 branch에서 16개 관련 테스트로 실제 연계를 재확인했다.
+- explicit financial target publication은 listener를 직접 호출하지 않으므로 최초 row가
+  `PUBLISHED`이면 Modulith 2.1 bounded resubmission 대상이 되지 않았다. `FAILED`, attempt 0,
+  last-resubmission null로 저장해 실제 recovery worker가 Notification/Settlement consumer를
+  호출하도록 ADR-068과 Plan 16 evidence를 바로잡았다.
 
 ## Decision Log
 
@@ -167,11 +203,22 @@ runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
 | 2026-07-31 | Accepted existing | request 3, unknown 후 lookup 5, 고객 지연 projection | 중복 환불 없이 bounded recovery | ADR-037/038 |
 | 2026-07-31 | Accepted existing | 제한 repair는 2인 승인과 LOOKUP-only | 금융 원천 추정·오조작 방지 | ADR-052/053 |
 | 2026-08-01 | Accepted | Plan 50은 Plan 40 Draft head의 only child이고 final release PR로 40+50을 함께 main에 병합 | incomplete cancellation endpoint의 intermediate deployment 방지 | ADR-072 |
+| 2026-08-03 | Accepted | terminal Refund는 전용 grant의 단일 운영자 명령으로 기존 key LOOKUP 한 번만 재개 | 새 금융 부수효과와 수기 성공 없이 실제 Provider 결과로 지연 뒤 성공을 수렴 | ADR-075 |
+| 2026-08-03 | Corrected | 직접 저장한 financial target publication 최초 상태는 FAILED/attempt 0 | Modulith bounded resubmission이 실제 listener를 선택하도록 함 | ADR-068 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 40 Draft implementation의 actual outcomes를 parent로 소비하며, 이 계획의
-recovery/release verification이 끝난 combined release PR만 고객 취소 capability를 main/deploy한다.
+구현은 V24 terminal notification source, V25 setup integrity, V26 two-person repair와 V27 terminal
+Refund single-operator reconciliation까지 확장됐다. Refund state machine, 고객/운영자 projection,
+notification, owner convergence, Settlement exclusion, 두 repair 경계와 retention의 대상 검증이
+통과했다. completion audit에서 violation-only scanner backlog 진행, customer/operator/Refund
+worker/Settlement 즉시 감지, 모든 setup 손상 분류, 감지 증적 저장 실패 rollback과 실제 financial
+publication consumer 전달을 보강했다. V27 이후 문서/OpenAPI 검증과 대상 test 묶음은 통과했지만
+초기 전체 build는 Docker backend의 디스크 고갈과 daemon 종료로 완료되지 않았다. 디스크 여유 공간과
+daemon을 복구한 뒤 365-test clean build를 failure/error/skip 0으로 재검증했다. final diff/security/
+remote gate에서도 origin/main 불변, remote feature branch/PR/deployment/environment 부재를 확인했다.
+승인된 push와 combined main-targeted PR 생성 전에는 completed 이동, main merge나 deployment를 수행하지
+않는다.
 
 ## Revision Notes
 
@@ -179,3 +226,7 @@ recovery/release verification이 끝난 combined release PR만 고객 취소 cap
 - 2026-08-03: Plan 40 completed Draft handoff와 332-test evidence를 확인하고 dependency를 completed
   path로 바꿔 `Implementation-Ready=true`로 전환했다. shared migration-writer lease와 Draft-only
   production gate는 유지한다.
+- 2026-08-03: V24~V26 구현, owner/Settlement 재검증과 358-test baseline을 완료했다. 이후 ADR-075와
+  V27 single-operator terminal reconciliation, 실제 financial publication consumer 전달을 보강했다.
+  V27 이후 365-test clean build와 문서/OpenAPI 검증을 완료했다. combined release PR 생성 전이므로
+  active 상태와 shared migration-writer lease를 유지한다.

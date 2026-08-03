@@ -188,6 +188,32 @@ internal class NotificationDeliveryRepositoryTest
         }
 
         @Test
+        fun `customer cancellation delayed then succeeded creates two independent logical deliveries`() {
+            val orderId = UUID.randomUUID()
+            val customerId = UUID.randomUUID()
+
+            service.requestCustomerCancellationRefundDelayed(
+                cancellationDelayedEvent(orderId, customerId, UUID.randomUUID(), 7_000),
+            )
+            service.requestCustomerCancellationRefundSucceeded(
+                cancellationSucceededEvent(orderId, customerId, UUID.randomUUID(), 7_000),
+            )
+
+            val deliveries = repository.findAll()
+            assertThat(deliveries).hasSize(2)
+            assertThat(deliveries.map { it.template })
+                .containsExactlyInAnyOrder(
+                    NotificationTemplate.CUSTOMER_CANCELLATION_REFUND_DELAYED,
+                    NotificationTemplate.CUSTOMER_CANCELLATION_REFUND_SUCCEEDED,
+                )
+            assertThat(deliveries.map { it.logicalSource })
+                .containsExactlyInAnyOrder(
+                    "order:$orderId:customer-cancellation:11:refund-delayed",
+                    "order:$orderId:customer-cancellation:11:refund-succeeded",
+                )
+        }
+
+        @Test
         fun `same cancellation terminal logical source with conflicting payload fails closed`() {
             val orderId = UUID.randomUUID()
             val customerId = UUID.randomUUID()

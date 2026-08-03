@@ -1,10 +1,14 @@
 package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.internal.EventPublicationRecoveryWorker
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
+import io.github.kdh949.beanflow.payment.internal.GatewayRefundResult
+import io.github.kdh949.beanflow.payment.internal.RejectionRefundService
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
+import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -18,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -36,6 +41,7 @@ import java.util.UUID
         "beanflow.store-acceptance.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
         "beanflow.payment-cancellation-setup.initial-delay-ms=3600000",
+        "beanflow.payment-cancellation-setup.batch-size=3",
         "beanflow.payment-setup-repair-maintenance.initial-delay-ms=3600000",
     ],
 )
@@ -45,6 +51,8 @@ internal class PaymentSetupRepairIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val paymentGateway: ScriptedTestPaymentGateway,
+        private val refundService: RejectionRefundService,
+        private val eventPublicationRecoveryWorker: EventPublicationRecoveryWorker,
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
         private val maintenanceWorker: PaymentSetupRepairMaintenanceWorker,
     ) {
@@ -58,7 +66,10 @@ internal class PaymentSetupRepairIntegrationTest
             awaitPublicationsSettled()
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             jdbcTemplate.update(
-                "DELETE FROM operations_operator_permission_grant WHERE permission = 'PAYMENT_CANCELLATION_SETUP_REPAIR'",
+                "DELETE FROM operations_operator_permission_grant WHERE actor_id IN (?, ?, ?)",
+                proposer,
+                approver,
+                reviewer,
             )
             grant(proposer)
             grant(approver)
@@ -283,6 +294,378 @@ internal class PaymentSetupRepairIntegrationTest
             assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
         }
 
+        @Test
+        fun `repair request rejects operator supplied financial fields`() {
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/operations/reprocessing-cases/{caseId}/repair-proposals",
+                        UUID.randomUUID(),
+                    ).with(operatorJwt(proposer))
+                        .header("Idempotency-Key", "repair-contract-0001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reason":"Must derive values","requestedAmountKrw":1}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        }
+
+        @Test
+        fun `scanner skips a full healthy batch and detects the next damaged setup`() {
+            repeat(3) { index -> createHealthySetup("repair-scan-healthy-$index") }
+            val damaged = createMissingRefundCase("repair-scan-backlog")
+
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE id = ? AND case_type = 'PAYMENT_CANCELLATION_SETUP' AND status = 'OPEN'",
+                    Long::class.java,
+                    damaged.caseId,
+                ),
+            ).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE case_type = 'PAYMENT_CANCELLATION_SETUP'",
+                    Long::class.java,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `operator compensation read exposes the durable missing Refund issue without duplicating detection`() {
+            val damaged = createMissingRefundCase("repair-operator-read")
+            grantRead(proposer)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/orders/{orderId}/compensation", damaged.orderId)
+                        .with(operatorJwt(proposer))
+                        .header("X-Access-Reason", "Payment setup review"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.paymentSetupIssue.state").value("SETUP_INCOMPLETE"))
+                .andExpect(
+                    jsonPath("$.paymentSetupIssue.missingArtifacts[0]").value("CANCELLATION_REFUND"),
+                ).andExpect(jsonPath("$.paymentSetupIssue.invariantViolations").isEmpty)
+                .andExpect(jsonPath("$.paymentSetupIssue.detectedAt").isString)
+                .andExpect(jsonPath("$.paymentSetupIssue.lastErrorCode").value("MISSING_CANCELLATION_REFUND"))
+                .andExpect(jsonPath("$.setupReprocessingCaseId").value(damaged.caseId.toString()))
+
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE case_type = 'PAYMENT_CANCELLATION_SETUP' AND owner_reference LIKE ?",
+                    Long::class.java,
+                    "order:${damaged.orderId}:%",
+                ),
+            ).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED' AND target_id = ?",
+                    Long::class.java,
+                    damaged.orderId,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `single operator LOOKUP turns a delayed Refund into success and creates the second logical delivery`() {
+            val orderId = createTerminalDelayedRefund("operator-reconcile-success")
+            grantRefundReconcile(proposer)
+            val idempotencyKey = "refund-reconcile-0001"
+
+            val first = scheduleRefundReconciliation(orderId, proposer, idempotencyKey, "Provider result review")
+            val replay = scheduleRefundReconciliation(orderId, proposer, idempotencyKey, "Provider result review")
+
+            assertThat(first.status).isEqualTo(202)
+            assertThat(replay.status).isEqualTo(202)
+            assertThat(replay.contentAsString).isEqualTo(first.contentAsString)
+            assertThat(first.contentAsString)
+                .contains("\"state\":\"LOOKUP_SCHEDULED\"")
+                .doesNotContain(idempotencyKey, "Provider result review", "provider", "refundId", "paymentId")
+            val scheduledRefund =
+                jdbcTemplate.queryForMap(
+                    "SELECT state, next_action, operator_reconciliation_pending, request_attempt_count, " +
+                        "lookup_attempt_count FROM payment_refund WHERE order_id = ?",
+                    orderId,
+                )
+            assertThat(scheduledRefund["state"]).isEqualTo("UNKNOWN")
+            assertThat(scheduledRefund["next_action"]).isEqualTo("LOOKUP")
+            assertThat(scheduledRefund["operator_reconciliation_pending"]).isEqualTo(true)
+            assertThat(scheduledRefund["request_attempt_count"]).isEqualTo(1)
+            assertThat(scheduledRefund["lookup_attempt_count"]).isEqualTo(0)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+            assertThat(
+                value(
+                    "SELECT step.state FROM operations_order_compensation_step step " +
+                        "JOIN operations_order_compensation_case bean_case ON bean_case.id = step.case_id " +
+                        "WHERE bean_case.order_id = ? AND step.step_type = 'PAYMENT'",
+                    orderId,
+                ),
+            ).isEqualTo("UNKNOWN")
+
+            paymentGateway.enqueueRejectionRefundLookup(GatewayRefundResult.Succeeded("provider-operator-success"))
+            val resultAt = Instant.now().plusSeconds(5)
+            val claim = refundService.claimDue(resultAt, 10).single()
+            assertThat(claim.mode).isEqualTo(RefundClaimMode.LOOKUP)
+            assertThat(claim.operatorAuthorized).isTrue()
+            assertThat(claim.attemptCount).isEqualTo(1)
+            refundService.recordResult(claim, refundService.callProvider(claim), resultAt)
+            deliverDueFinancialPublications()
+
+            val succeededRefund =
+                jdbcTemplate.queryForMap(
+                    "SELECT state, operator_reconciliation_pending, request_attempt_count, lookup_attempt_count " +
+                        "FROM payment_refund WHERE order_id = ?",
+                    orderId,
+                )
+            assertThat(succeededRefund["state"]).isEqualTo("SUCCEEDED")
+            assertThat(succeededRefund["operator_reconciliation_pending"]).isEqualTo(false)
+            assertThat(succeededRefund["request_attempt_count"]).isEqualTo(1)
+            assertThat(succeededRefund["lookup_attempt_count"]).isEqualTo(0)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForList(
+                    "SELECT template FROM notification_delivery WHERE order_id = ? ORDER BY template",
+                    String::class.java,
+                    orderId,
+                ),
+            ).contains(
+                "CUSTOMER_CANCELLATION_REFUND_DELAYED",
+                "CUSTOMER_CANCELLATION_REFUND_SUCCEEDED",
+            )
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(DISTINCT logical_source) FROM notification_delivery WHERE order_id = ? " +
+                        "AND template IN ('CUSTOMER_CANCELLATION_REFUND_DELAYED', " +
+                        "'CUSTOMER_CANCELLATION_REFUND_SUCCEEDED')",
+                    Long::class.java,
+                    orderId,
+                ),
+            ).isEqualTo(2)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'SETTLEMENT_REFUND_EXCLUDED' AND target_id = " +
+                        "(SELECT id FROM payment_refund WHERE order_id = ?)",
+                    Long::class.java,
+                    orderId,
+                ),
+            ).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM settlement_item WHERE order_id = ?",
+                    Long::class.java,
+                    orderId,
+                ),
+            ).isZero()
+            val audit =
+                jdbcTemplate.queryForMap(
+                    "SELECT actor_id, actor_type, action, reason, before_summary, after_summary, source_reference " +
+                        "FROM operations_audit_record WHERE action = " +
+                        "'CUSTOMER_CANCELLATION_REFUND_RECONCILIATION_SCHEDULED'",
+                )
+            assertThat(audit["actor_id"]).isEqualTo(proposer.toString())
+            assertThat(audit["actor_type"]).isEqualTo("PLATFORM_OPERATOR")
+            assertThat(audit["reason"]).isEqualTo("OPERATOR_INITIATED_LOOKUP")
+            assertThat(audit.toString()).doesNotContain(idempotencyKey, "Provider result review", "provider-operator-success")
+
+            jdbcTemplate.update(
+                "UPDATE operations_customer_cancellation_refund_reconciliation_command " +
+                    "SET created_at = now() - interval '91 days', " +
+                    "retention_expires_at = now() - interval '1 day'",
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_customer_cancellation_refund_reconciliation_command (
+                    id, actor_id, idempotency_key, payload_hash, order_id,
+                    cancellation_order_version, operator_reason, state, response_json,
+                    created_at, retention_expires_at
+                )
+                SELECT md5('refund-reconciliation-retention-' || series)::uuid,
+                       ?, 'refund-retention-' || series, repeat('a', 64), ?, 2,
+                       'Retention boundary test', 'LOOKUP_SCHEDULED', '{}',
+                       now() - interval '91 days', now() - interval '1 day'
+                  FROM generate_series(1, 100) AS series
+                """.trimIndent(),
+                reviewer,
+                orderId,
+            )
+            maintenanceWorker.runScheduled()
+            assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isOne()
+            maintenanceWorker.runScheduled()
+            assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isZero()
+        }
+
+        @Test
+        fun `reconciliation requires its grant rejects unknown fields and protects idempotency payload`() {
+            val orderId = createTerminalDelayedRefund("operator-reconcile-contract")
+
+            scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-0002", "No grant")
+                .also { assertThat(it.status).isEqualTo(403) }
+            grantRefundReconcile(reviewer)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now(), " +
+                    "version = version + 1 WHERE actor_id = ? AND permission = " +
+                    "'CUSTOMER_CANCELLATION_REFUND_RECONCILE'",
+                reviewer,
+            )
+            scheduleRefundReconciliation(orderId, reviewer, "refund-reconcile-0004", "Revoked grant")
+                .also { assertThat(it.status).isEqualTo(403) }
+            grantRefundReconcile(proposer)
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations",
+                        orderId,
+                    ).with(operatorJwt(proposer))
+                        .header("Idempotency-Key", "refund-reconcile-0002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reason":"Review","requestedAmountKrw":1000}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            val accepted = scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-0002", "Review")
+            val conflict = scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-0002", "Different review")
+
+            assertThat(accepted.status).isEqualTo(202)
+            assertThat(conflict.status).isEqualTo(409)
+            assertThat(conflict.contentAsString).contains("IDEMPOTENCY_KEY_REUSED")
+            assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isOne()
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        @Test
+        fun `operator LOOKUP unknown returns directly to manual review without an automatic retry`() {
+            val orderId = createTerminalDelayedRefund("operator-reconcile-unknown")
+            grantRefundReconcile(proposer)
+            scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-0005", "Provider timeout review")
+                .also { assertThat(it.status).isEqualTo(202) }
+
+            paymentGateway.enqueueRejectionRefundLookup(GatewayRefundResult.Unknown("LOOKUP_TIMEOUT"))
+            val resultAt = Instant.now().plusSeconds(5)
+            val claim = refundService.claimDue(resultAt, 10).single()
+            assertThat(claim.mode).isEqualTo(RefundClaimMode.LOOKUP)
+            assertThat(claim.operatorAuthorized).isTrue()
+            refundService.recordResult(claim, refundService.callProvider(claim), resultAt)
+            deliverDueFinancialPublications()
+
+            val refund =
+                jdbcTemplate.queryForMap(
+                    "SELECT state, next_attempt_at, operator_reconciliation_pending, request_attempt_count, " +
+                        "lookup_attempt_count, last_failure_code FROM payment_refund WHERE order_id = ?",
+                    orderId,
+                )
+            assertThat(refund["state"]).isEqualTo("MANUAL_REVIEW")
+            assertThat(refund["next_attempt_at"]).isNull()
+            assertThat(refund["operator_reconciliation_pending"]).isEqualTo(false)
+            assertThat(refund["request_attempt_count"]).isEqualTo(1)
+            assertThat(refund["lookup_attempt_count"]).isEqualTo(0)
+            assertThat(refund["last_failure_code"]).isEqualTo("LOOKUP_TIMEOUT")
+            assertThat(refundService.claimDue(resultAt.plusSeconds(3600), 10)).isEmpty()
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isEqualTo(1)
+            assertThat(
+                value(
+                    "SELECT step.state FROM operations_order_compensation_step step " +
+                        "JOIN operations_order_compensation_case bean_case ON bean_case.id = step.case_id " +
+                        "WHERE bean_case.order_id = ? AND step.step_type = 'PAYMENT'",
+                    orderId,
+                ),
+            ).isEqualTo("MANUAL_REVIEW")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM notification_delivery WHERE order_id = ? " +
+                        "AND template = 'CUSTOMER_CANCELLATION_REFUND_DELAYED'",
+                    Long::class.java,
+                    orderId,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `concurrent reconciliation commands schedule only one operator LOOKUP`() {
+            val orderId = createTerminalDelayedRefund("operator-reconcile-race")
+            grantRefundReconcile(proposer)
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val executor =
+                java.util.concurrent.Executors
+                    .newFixedThreadPool(2)
+            try {
+                val first =
+                    executor.submit<org.springframework.mock.web.MockHttpServletResponse> {
+                        barrier.await()
+                        scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-race-1", "Concurrent review")
+                    }
+                val second =
+                    executor.submit<org.springframework.mock.web.MockHttpServletResponse> {
+                        barrier.await()
+                        scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-race-2", "Concurrent review")
+                    }
+                val responses =
+                    listOf(
+                        first.get(20, java.util.concurrent.TimeUnit.SECONDS),
+                        second.get(20, java.util.concurrent.TimeUnit.SECONDS),
+                    )
+                assertThat(responses.map { it.status }).containsExactlyInAnyOrder(202, 409)
+            } finally {
+                executor.shutdownNow()
+            }
+
+            assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE action = " +
+                        "'CUSTOMER_CANCELLATION_REFUND_RECONCILIATION_SCHEDULED'",
+                    Long::class.java,
+                ),
+            ).isOne()
+            assertThat(value("SELECT state FROM payment_refund WHERE order_id = ?", orderId)).isEqualTo("UNKNOWN")
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        @Test
+        fun `reconciliation audit failure rolls back Refund step and idempotency command`() {
+            val orderId = createTerminalDelayedRefund("operator-reconcile-rollback")
+            grantRefundReconcile(proposer)
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_audit_record ADD CONSTRAINT test_reject_refund_reconciliation_audit " +
+                    "CHECK (action <> 'CUSTOMER_CANCELLATION_REFUND_RECONCILIATION_SCHEDULED')",
+            )
+            val response =
+                try {
+                    scheduleRefundReconciliation(orderId, proposer, "refund-reconcile-0003", "Rollback proof")
+                } finally {
+                    jdbcTemplate.execute(
+                        "ALTER TABLE operations_audit_record DROP CONSTRAINT test_reject_refund_reconciliation_audit",
+                    )
+                }
+
+            assertThat(response.status).isEqualTo(503)
+            assertThat(response.contentAsString).contains("DEPENDENCY_UNAVAILABLE")
+            assertThat(value("SELECT state FROM payment_refund WHERE order_id = ?", orderId)).isEqualTo("FAILED")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT operator_reconciliation_pending FROM payment_refund WHERE order_id = ?",
+                    Boolean::class.java,
+                    orderId,
+                ),
+            ).isFalse()
+            assertThat(
+                value(
+                    "SELECT step.state FROM operations_order_compensation_step step " +
+                        "JOIN operations_order_compensation_case bean_case ON bean_case.id = step.case_id " +
+                        "WHERE bean_case.order_id = ? AND step.step_type = 'PAYMENT'",
+                    orderId,
+                ),
+            ).isEqualTo("MANUAL_REVIEW")
+            assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isZero()
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
         private fun createMissingRefundCase(key: String): DamagedSetup {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -315,6 +698,41 @@ internal class PaymentSetupRepairIntegrationTest
                 sourceReference = snapshot["refund_source_reference"] as String,
                 providerKey = snapshot["provider_idempotency_key"] as String,
             )
+        }
+
+        private fun createTerminalDelayedRefund(key: String): UUID {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "$key-create")
+            approvePayment(orderId, fixture.customerId)
+            cancel(orderId, fixture.customerId, "$key-cancel")
+            awaitPublicationsSettled()
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Failed("DECLINED"))
+            val resultAt = Instant.now().plusSeconds(5)
+            val claim = refundService.claimDue(resultAt, 10).single()
+            refundService.recordResult(claim, refundService.callProvider(claim), resultAt)
+            deliverDueFinancialPublications()
+            assertThat(value("SELECT state FROM payment_refund WHERE order_id = ?", orderId)).isEqualTo("FAILED")
+            return orderId
+        }
+
+        private fun deliverDueFinancialPublications() {
+            jdbcTemplate.update(
+                "UPDATE event_publication SET publication_date = now() - interval '11 seconds', " +
+                    "last_resubmission_date = now() - interval '11 seconds' " +
+                    "WHERE completion_date IS NULL AND listener_id NOT LIKE 'beanflow.analytics.%'",
+            )
+            eventPublicationRecoveryWorker.runOnce()
+            awaitPublicationsSettled()
+        }
+
+        private fun createHealthySetup(key: String) {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "$key-create")
+            approvePayment(orderId, fixture.customerId)
+            cancel(orderId, fixture.customerId, "$key-cancel")
+            awaitPublicationsSettled()
         }
 
         private fun createOrder(
@@ -421,6 +839,23 @@ internal class PaymentSetupRepairIntegrationTest
             ).andReturn()
             .response
 
+        private fun scheduleRefundReconciliation(
+            orderId: UUID,
+            actorId: UUID,
+            key: String,
+            reason: String,
+        ) = mockMvc
+            .perform(
+                post(
+                    "/api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations",
+                    orderId,
+                ).with(operatorJwt(actorId))
+                    .header("Idempotency-Key", key)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"reason":"$reason"}"""),
+            ).andReturn()
+            .response
+
         private fun grant(actorId: UUID) {
             jdbcTemplate.update(
                 "INSERT INTO operations_operator_permission_grant " +
@@ -428,6 +863,26 @@ internal class PaymentSetupRepairIntegrationTest
                     "VALUES (?, 'PAYMENT_CANCELLATION_SETUP_REPAIR', 'ACTIVE', now(), null, 1, ?)",
                 actorId,
                 "repair-test:$actorId",
+            )
+        }
+
+        private fun grantRead(actorId: UUID) {
+            jdbcTemplate.update(
+                "INSERT INTO operations_operator_permission_grant " +
+                    "(actor_id, permission, state, granted_at, revoked_at, version, audit_source_reference) " +
+                    "VALUES (?, 'ORDER_COMPENSATION_READ', 'ACTIVE', now(), null, 1, ?)",
+                actorId,
+                "repair-read-test:$actorId",
+            )
+        }
+
+        private fun grantRefundReconcile(actorId: UUID) {
+            jdbcTemplate.update(
+                "INSERT INTO operations_operator_permission_grant " +
+                    "(actor_id, permission, state, granted_at, revoked_at, version, audit_source_reference) " +
+                    "VALUES (?, 'CUSTOMER_CANCELLATION_REFUND_RECONCILE', 'ACTIVE', now(), null, 1, ?)",
+                actorId,
+                "refund-reconcile-test:$actorId",
             )
         }
 
@@ -460,18 +915,26 @@ internal class PaymentSetupRepairIntegrationTest
             repeat(100) {
                 val outstanding =
                     jdbcTemplate.queryForObject(
-                        "SELECT count(*) FROM event_publication WHERE completion_date IS NULL",
+                        "SELECT count(*) FROM event_publication WHERE completion_date IS NULL " +
+                            "AND listener_id NOT LIKE 'beanflow.analytics.%'",
                         Long::class.java,
                     ) ?: 0
                 if (outstanding == 0L) return
                 Thread.sleep(50)
             }
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT count(*) FROM event_publication WHERE completion_date IS NULL",
-                    Long::class.java,
-                ),
-            ).isZero()
+            val outstanding =
+                jdbcTemplate.queryForList(
+                    "SELECT listener_id, event_type, status, completion_attempts, publication_date, " +
+                        "last_resubmission_date FROM event_publication WHERE completion_date IS NULL " +
+                        "AND listener_id NOT LIKE 'beanflow.analytics.%'",
+                )
+            val deliveries =
+                jdbcTemplate.queryForList(
+                    "SELECT event_type, logical_source, template, state FROM notification_delivery ORDER BY created_at",
+                )
+            assertThat(outstanding)
+                .describedAs("unfinished publications; notification deliveries=%s", deliveries)
+                .isEmpty()
         }
 
         private fun installAuditFailureTrigger() {

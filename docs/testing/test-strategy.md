@@ -57,9 +57,10 @@
   Audit 한 건, 실제 Order/Refund source·version·amount·time 검증, 기존 Item conflict와 Audit
   rollback, persistent publication이 Audit commit 뒤에만 완료됨
 - Operations: setup immediate detector+batch 100 scanner, unique case/Audit, 제한 복구
-  guard와 서로 다른 operator 2인 승인·30분 만료
-- Retention: cancellation/store idempotency table별 90일 chunk와 timeout work
-  nonterminal 보존
+  guard와 서로 다른 operator 2인 승인·30분 만료, terminal Refund 단일 operator
+  LOOKUP-only grant/replay/concurrency/terminal result
+- Retention: cancellation/store/repair/reconciliation idempotency table별 90일 chunk,
+  repair proposal 자동 만료와 timeout work nonterminal 보존
 - API/Privacy: 200/202/409/503, customer setup 지연 projection과 조건부 금액,
   `replayed` 부재, event/log/Audit의 detail·customer/store/reason/provider key 금지
 - Refund contention: 선행 Refund 여섯 미확정 상태

@@ -1,9 +1,14 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
+import io.github.kdh949.beanflow.operations.api.CustomerCancellationRefundReconciliationOperations
+import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
+import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
+import io.github.kdh949.beanflow.operations.api.ScheduleCustomerCancellationRefundLookupCommand
+import io.github.kdh949.beanflow.operations.api.ScheduledCustomerCancellationRefundLookup
 import io.github.kdh949.beanflow.payment.api.PartialRefundSettlementContext
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
@@ -32,6 +37,7 @@ internal data class ClaimedRefund(
     val providerIdempotencyKey: String,
     val mode: RefundClaimMode,
     val attemptCount: Int,
+    val operatorAuthorized: Boolean,
     val claimToken: UUID,
     val dueAt: Instant,
 )
@@ -44,13 +50,14 @@ internal class RejectionRefundService(
     private val requestLoader: PaymentProviderRequestLoader,
     private val paymentGateway: PaymentGateway,
     private val compensationOperations: OrderCompensationOperations,
+    private val setupIntegrity: PaymentCancellationSetupIntegrityOperations,
     private val partialRefundSuccessLedger: PartialRefundSuccessLedger,
     private val refundEventProducer: PaymentRefundEventProducer,
     private val identifierSource: IdentifierSource,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.payment.refund.claim-lease:PT1M}")
     private val claimLease: Duration,
-) {
+) : CustomerCancellationRefundReconciliationOperations {
     @Transactional
     fun request(event: OrderRejectedV1) {
         if (!event.paymentRequired) return
@@ -124,6 +131,41 @@ internal class RejectionRefundService(
         }
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun scheduleLookup(command: ScheduleCustomerCancellationRefundLookupCommand): ScheduledCustomerCancellationRefundLookup {
+        val initialSnapshot =
+            cancellationSnapshots.findByOrderId(command.orderId)
+                ?: conflict(FailureCode.REPROCESSING_NOT_SAFE, "Payment recovery snapshot is missing")
+        val payment =
+            paymentRepository.findLockedById(initialSnapshot.paymentId)
+                ?: conflict(FailureCode.REPROCESSING_NOT_SAFE, "Cancellation Payment is missing")
+        val snapshot =
+            cancellationSnapshots.findLockedById(initialSnapshot.id)
+                ?: conflict(FailureCode.REPROCESSING_NOT_SAFE, "Payment recovery snapshot is missing")
+        val refundId =
+            snapshot.cancellationRefundId
+                ?: conflict(FailureCode.REPROCESSING_NOT_SAFE, "Cancellation Refund source is missing")
+        val entity =
+            refundRepository.findLockedById(refundId)
+                ?: conflict(FailureCode.REPROCESSING_NOT_SAFE, "Cancellation Refund is missing")
+        requireOperatorReconciliationSource(command, payment, snapshot, entity)
+        val previousState = entity.state
+        val refund = entity.toDomain()
+        try {
+            refund.scheduleOperatorReconciliation(command.now)
+        } catch (failure: IllegalStateException) {
+            conflict(FailureCode.ORDER_STATE_CONFLICT, failure.message ?: "Refund cannot be reconciled")
+        }
+        entity.apply(refund)
+        compensationOperations.reopenPaymentForRefundReconciliation(
+            command.orderId,
+            command.cancellationOrderVersion,
+            "OPERATOR_RECONCILIATION_SCHEDULED",
+            command.now,
+        )
+        return ScheduledCustomerCancellationRefundLookup(previousRefundState = previousState.name)
+    }
+
     private fun claimLocked(
         refundId: UUID,
         now: Instant,
@@ -136,6 +178,7 @@ internal class RejectionRefundService(
         val refund = entity.toDomain()
         val token = identifierSource.next()
         val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
+        val operatorAuthorized = refund.operatorReconciliationPending
         val mode =
             try {
                 refund.claim(token, now, claimLease)
@@ -155,7 +198,10 @@ internal class RejectionRefundService(
                             now,
                         )
                     }
-                    if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                    if (entity.reason == CUSTOMER_CANCELLATION_REASON &&
+                        refund.state == RefundState.MANUAL_REVIEW &&
+                        !operatorAuthorized
+                    ) {
                         publishCustomerCancellationDelayed(entity, payment, now)
                     }
                 }
@@ -171,6 +217,7 @@ internal class RejectionRefundService(
             providerIdempotencyKey = entity.providerIdempotencyKey,
             mode = mode,
             attemptCount = entity.attemptCount,
+            operatorAuthorized = operatorAuthorized,
             claimToken = token,
             dueAt = dueAt,
         )
@@ -206,6 +253,7 @@ internal class RejectionRefundService(
             providerIdempotencyKey = entity.providerIdempotencyKey,
             mode = mode,
             attemptCount = entity.attemptCount,
+            operatorAuthorized = false,
             claimToken = token,
             dueAt = dueAt,
         )
@@ -270,6 +318,9 @@ internal class RejectionRefundService(
         val refund = entity.toDomain()
         try {
             refund.requireClaim(claim.claimToken)
+            check(refund.operatorReconciliationPending == claim.operatorAuthorized) {
+                "Refund operator reconciliation claim marker does not match"
+            }
         } catch (failure: IllegalStateException) {
             throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, failure.message ?: "Refund claim was lost")
         }
@@ -312,13 +363,17 @@ internal class RejectionRefundService(
                         now,
                     )
                 }
-                if (entity.reason == CUSTOMER_CANCELLATION_REASON) {
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON && !claim.operatorAuthorized) {
                     publishCustomerCancellationDelayed(entity, payment, now)
                 }
             }
 
             is GatewayRefundResult.RetryableFailed -> {
-                refund.recordRetryableRequestFailure(result.code, now)
+                when {
+                    claim.operatorAuthorized -> refund.recordOperatorReconciliationUnknown(result.code, now)
+                    claim.mode == RefundClaimMode.LOOKUP -> refund.recordUnknown(result.code, now)
+                    else -> refund.recordRetryableRequestFailure(result.code, now)
+                }
                 entity.apply(refund)
                 if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(
@@ -332,13 +387,20 @@ internal class RejectionRefundService(
                         now,
                     )
                 }
-                if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON &&
+                    refund.state == RefundState.MANUAL_REVIEW &&
+                    !claim.operatorAuthorized
+                ) {
                     publishCustomerCancellationDelayed(entity, payment, now)
                 }
             }
 
             is GatewayRefundResult.Unknown -> {
-                refund.recordUnknown(result.code, now)
+                if (claim.operatorAuthorized) {
+                    refund.recordOperatorReconciliationUnknown(result.code, now)
+                } else {
+                    refund.recordUnknown(result.code, now)
+                }
                 entity.apply(refund)
                 val stepState =
                     if (refund.state == RefundState.MANUAL_REVIEW) {
@@ -349,7 +411,10 @@ internal class RejectionRefundService(
                 if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(claim.orderId, stepState, normalized(result.code), now)
                 }
-                if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON &&
+                    refund.state == RefundState.MANUAL_REVIEW &&
+                    !claim.operatorAuthorized
+                ) {
                     publishCustomerCancellationDelayed(entity, payment, now)
                 }
                 meterRegistry.counter("beanflow.payment.refund.unknown.count").increment()
@@ -359,7 +424,7 @@ internal class RejectionRefundService(
             .counter(
                 "beanflow.payment.refund.attempts",
                 "mode",
-                claim.mode.name.lowercase(),
+                if (claim.operatorAuthorized) "operator_lookup" else claim.mode.name.lowercase(),
                 "reason",
                 reasonTag(entity.reason),
                 "provider",
@@ -374,6 +439,7 @@ internal class RejectionRefundService(
         payment: PaymentEntity,
         now: Instant,
     ) {
+        requireCompleteCustomerCancellationSetup(refund.orderId, now)
         val snapshot = requireCustomerCancellationSnapshot(refund)
         refundEventProducer.publishCustomerCancellationSucceeded(refund, payment, snapshot, now)
         meterRegistry.counter("beanflow.event.customer_cancellation_refund.count", "event_type", "succeeded").increment()
@@ -384,9 +450,26 @@ internal class RejectionRefundService(
         payment: PaymentEntity,
         now: Instant,
     ) {
+        requireCompleteCustomerCancellationSetup(refund.orderId, now)
         val snapshot = requireCustomerCancellationSnapshot(refund)
         refundEventProducer.publishCustomerCancellationDelayed(refund, payment, snapshot, now)
         meterRegistry.counter("beanflow.event.customer_cancellation_refund.count", "event_type", "delayed").increment()
+    }
+
+    private fun requireCompleteCustomerCancellationSetup(
+        orderId: UUID,
+        now: Instant,
+    ) {
+        val issue =
+            setupIntegrity.inspect(
+                InspectPaymentCancellationSetupCommand(
+                    orderId = orderId,
+                    now = now,
+                ),
+            )
+        if (issue != null) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Customer cancellation payment setup is incomplete")
+        }
     }
 
     private fun requireCustomerCancellationSnapshot(refund: RefundEntity): CustomerCancellationPaymentSnapshotEntity {
@@ -438,6 +521,7 @@ internal class RejectionRefundService(
             requestAttemptCount = requestAttemptCount,
             lookupAttemptCount = lookupAttemptCount,
             nextAction = nextAction,
+            operatorReconciliationPending = operatorReconciliationPending,
             nextAttemptAt = nextAttemptAt,
             providerRequestStartedAt = providerRequestStartedAt,
             claimToken = claimToken,
@@ -462,6 +546,7 @@ internal class RejectionRefundService(
             requestAttemptCount = requestAttemptCount,
             lookupAttemptCount = lookupAttemptCount,
             nextAction = nextAction,
+            operatorReconciliationPending = operatorReconciliationPending,
             nextAttemptAt = nextAttemptAt,
             providerRequestStartedAt = providerRequestStartedAt,
             claimToken = claimToken,
@@ -479,6 +564,7 @@ internal class RejectionRefundService(
         requestAttemptCount = refund.requestAttemptCount
         lookupAttemptCount = refund.lookupAttemptCount
         nextAction = refund.nextAction
+        operatorReconciliationPending = refund.operatorReconciliationPending
         nextAttemptAt = refund.nextAttemptAt
         providerRequestStartedAt = refund.providerRequestStartedAt
         claimToken = refund.claimToken
@@ -495,7 +581,57 @@ internal class RejectionRefundService(
             is GatewayRefundResult.Unknown -> "unknown"
         }
 
+    private fun requireOperatorReconciliationSource(
+        command: ScheduleCustomerCancellationRefundLookupCommand,
+        payment: PaymentEntity,
+        snapshot: CustomerCancellationPaymentSnapshotEntity,
+        refund: RefundEntity,
+    ) {
+        val expectedSource =
+            "order:${command.orderId}:customer-cancellation:${command.cancellationOrderVersion}:payment"
+        val expectedProviderKey =
+            "refund:customer-cancellation:${command.orderId}:${command.cancellationOrderVersion}"
+        val valid =
+            snapshot.orderId == command.orderId &&
+                snapshot.cancellationOrderVersion == command.cancellationOrderVersion &&
+                snapshot.paymentId == payment.id &&
+                payment.orderId == command.orderId &&
+                payment.type == PaymentType.EXTERNAL &&
+                payment.approvalState == PaymentApprovalState.APPROVED &&
+                payment.approvedAmountKrw == snapshot.approvedAmountKrw &&
+                payment.succeededRefundAmountKrw == snapshot.succeededRefundAmountBeforeCancellationKrw &&
+                snapshot.cancellationRequestedRefundAmountKrw > 0 &&
+                snapshot.refundSourceReference == expectedSource &&
+                snapshot.providerIdempotencyKey == expectedProviderKey &&
+                refund.id == snapshot.cancellationRefundId &&
+                refund.orderId == command.orderId &&
+                refund.paymentId == payment.id &&
+                refund.reason == CUSTOMER_CANCELLATION_REASON &&
+                refund.requestedAmountKrw == snapshot.cancellationRequestedRefundAmountKrw &&
+                refund.sourceReference == expectedSource &&
+                refund.providerIdempotencyKey == expectedProviderKey &&
+                refund.succeededAmountKrw == null
+        val tieOut =
+            try {
+                snapshot.approvedAmountKrw ==
+                    Math.addExact(
+                        snapshot.succeededRefundAmountBeforeCancellationKrw,
+                        snapshot.cancellationRequestedRefundAmountKrw,
+                    )
+            } catch (_: ArithmeticException) {
+                false
+            }
+        if (!valid || !tieOut) {
+            conflict(FailureCode.REPROCESSING_NOT_SAFE, "Customer cancellation Refund source is inconsistent")
+        }
+    }
+
     private fun sourceReference(event: OrderRejectedV1): String = "event:${event.envelope.eventId}:payment-refund"
+
+    private fun conflict(
+        code: FailureCode,
+        message: String,
+    ): Nothing = throw DomainFailure(code, message)
 
     private fun normalized(code: String): String =
         code

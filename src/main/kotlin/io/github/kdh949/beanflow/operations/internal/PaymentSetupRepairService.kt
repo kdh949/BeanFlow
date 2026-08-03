@@ -151,6 +151,9 @@ internal class PaymentSetupRepairService(
         authorization.requireActive(command.actorId, OperatorPermission.PAYMENT_CANCELLATION_SETUP_REPAIR)
         val observed = proposals.findById(command.proposalId).orElseThrow(::notFound)
         if (observed.proposedBy == command.actorId) {
+            meterRegistry
+                .counter("beanflow.operations.payment_setup.approval.count", "outcome", "self_decision_denied")
+                .increment()
             conflict(
                 FailureCode.REPROCESSING_APPROVER_MUST_DIFFER,
                 "Repair proposal must be decided by a different active operator",
@@ -168,6 +171,10 @@ internal class PaymentSetupRepairService(
             val terminal = transition(command, REJECTED, REJECTED_ACTION)
             saveIdempotency(command.actorId, DECIDE, command.idempotencyKey, hash, terminal.id, terminal.toView(), null, command.now)
             afterCommit { proposalMetric(REJECTED.name.lowercase()) }
+            afterCommit {
+                approvalMetric("rejected")
+                proposalAge(terminal, command.now)
+            }
             return PaymentSetupRepairDecisionOutcome.Succeeded(terminal.toView())
         }
 
@@ -254,7 +261,12 @@ internal class PaymentSetupRepairService(
         saveIdempotency(command.actorId, DECIDE, command.idempotencyKey, hash, lockedProposal.id, response, null, command.now)
         afterCommit {
             proposalMetric(EXECUTED.name.lowercase())
+            proposalAge(lockedProposal, command.now)
+            approvalMetric("executed")
             repairMetric("succeeded", "missing_refund")
+            meterRegistry
+                .counter("beanflow.operations.payment_setup.repair.lookup.count", "outcome", "scheduled")
+                .increment()
         }
         return PaymentSetupRepairDecisionOutcome.Succeeded(response)
     }
@@ -267,14 +279,30 @@ internal class PaymentSetupRepairService(
         require(limit in 1..100)
         val dueIds = proposals.findDueIds(now, PageRequest.of(0, limit))
         var expired = 0
+        val expiredAges = mutableListOf<Double>()
         dueIds.forEach { proposalId ->
             val proposal = lockProposal(proposalId)
             if (proposal.state == PENDING && now >= proposal.expiresAt) {
                 expire(proposal, now)
+                expiredAges +=
+                    Duration
+                        .between(proposal.createdAt, now)
+                        .seconds
+                        .coerceAtLeast(0)
+                        .toDouble()
                 expired++
             }
         }
-        if (expired > 0) afterCommit { repeat(expired) { proposalMetric(EXPIRED.name.lowercase()) } }
+        if (expired > 0) {
+            afterCommit {
+                repeat(expired) { proposalMetric(EXPIRED.name.lowercase()) }
+                expiredAges.forEach { age ->
+                    meterRegistry
+                        .summary("beanflow.operations.payment_setup.proposal.age.seconds", "state", "expired")
+                        .record(age)
+                }
+            }
+        }
         return expired
     }
 
@@ -309,6 +337,8 @@ internal class PaymentSetupRepairService(
         )
         afterCommit {
             proposalMetric(EXPIRED.name.lowercase())
+            proposalAge(proposal, command.now)
+            approvalMetric("expired")
             repairMetric("rejected", FailureCode.REPROCESSING_PROPOSAL_EXPIRED.name.lowercase())
         }
         return PaymentSetupRepairDecisionOutcome.Failed(
@@ -359,6 +389,8 @@ internal class PaymentSetupRepairService(
         saveIdempotency(command.actorId, DECIDE, command.idempotencyKey, hash, terminal.id, response, code, command.now)
         afterCommit {
             proposalMetric(state.name.lowercase())
+            proposalAge(terminal, command.now)
+            approvalMetric(state.name.lowercase())
             repairMetric("rejected", code.name.lowercase())
         }
         return PaymentSetupRepairDecisionOutcome.Failed(response, code, message)
@@ -599,6 +631,25 @@ internal class PaymentSetupRepairService(
         reason: String,
     ) {
         meterRegistry.counter("beanflow.operations.payment_setup.repair.count", "outcome", outcome, "reason", reason).increment()
+    }
+
+    private fun approvalMetric(outcome: String) {
+        meterRegistry.counter("beanflow.operations.payment_setup.approval.count", "outcome", outcome).increment()
+    }
+
+    private fun proposalAge(
+        proposal: PaymentSetupRepairProposalEntity,
+        now: Instant,
+    ) {
+        meterRegistry
+            .summary("beanflow.operations.payment_setup.proposal.age.seconds", "state", proposal.state.name.lowercase())
+            .record(
+                Duration
+                    .between(proposal.createdAt, now)
+                    .seconds
+                    .coerceAtLeast(0)
+                    .toDouble(),
+            )
     }
 
     private fun afterCommit(action: () -> Unit) {

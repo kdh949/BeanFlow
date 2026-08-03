@@ -141,6 +141,10 @@ ADR-068/071/072, event catalog, Plan 20/analytics successor evidence를 갱신�
 - 2026-08-02: 새 schema 없이 기존 Spring Modulith `event_publication` table과 row semantics를
   재사용할 수 있었다. 현재 build의 starter가 core registry type을 compile API로 노출하지 않아
   Eventing-owned JDBC publication boundary가 active owner transaction 안에서 target row를 저장한다.
+- 2026-08-03: Plan 50 consumer e2e에서 Modulith 2.1의 bounded resubmission은 `FAILED` row만
+  선택하는 반면 direct JDBC producer가 listener를 호출하지 않고 `PUBLISHED`를 기록해 전달되지
+  않음을 확인했다. 최초 row를 `FAILED`/attempt 0으로 바로잡아 owner transaction 원자성은
+  유지하면서 실제 recovery worker 전달을 활성화했다.
 - 2026-08-02: Settlement/Analytics consumer는 후속 Plan 소유이므로 그 target row는 현재 배포에서
   미완료 publication으로 남는다. 기존 lifecycle test는 이 producer-only target을 로컬 listener
   완료 대기에서 분리했고, target persistence 자체는 전용 producer test에서 검증한다.

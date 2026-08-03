@@ -140,6 +140,35 @@ internal class OrderCompensationService(
         return view(beanCase)
     }
 
+    @Transactional
+    override fun reopenPaymentForRefundReconciliation(
+        orderId: UUID,
+        cancellationOrderVersion: Long,
+        errorCode: String,
+        now: Instant,
+    ): OrderCompensationCaseView {
+        val found = caseRepository.findByOrderId(orderId) ?: notFound()
+        val beanCase = caseRepository.findLockedById(found.id) ?: notFound()
+        if (beanCase.trigger != OrderCompensationTrigger.CUSTOMER_CANCELLATION ||
+            beanCase.terminalOrderVersion != cancellationOrderVersion
+        ) {
+            conflict("Only customer cancellation Refund reconciliation can reopen payment")
+        }
+        val step =
+            stepRepository.findLocked(beanCase.id, OrderCompensationStepType.PAYMENT)
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Order compensation payment step is missing")
+        if (step.state != OrderCompensationStepState.MANUAL_REVIEW) {
+            conflict("Only a manual-review payment step can be reconciled")
+        }
+        step.state = OrderCompensationStepState.UNKNOWN
+        step.attemptCount++
+        step.lastErrorCode = normalized(errorCode)
+        step.updatedAt = now
+        beanCase.updatedAt = now
+        beanCase.state = deriveState(stepRepository.findAllByCaseIdOrderByStepType(beanCase.id))
+        return view(beanCase)
+    }
+
     private fun updateStep(
         orderId: UUID,
         stepType: OrderCompensationStepType,

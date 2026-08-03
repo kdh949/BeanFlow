@@ -122,6 +122,121 @@ internal class CustomerCancellationPaymentServiceTest
                     Long::class.java,
                 ),
             ).isEqualTo(1)
+            assertThat(setupAuditBeforeSummary())
+                .contains("CANCELLATION_REFUND,PAYMENT_RECOVERY_SNAPSHOT")
+        }
+
+        @Test
+        fun `missing snapshot with its source Refund records only the snapshot artifact`() {
+            val orderId = UUID.randomUUID()
+            externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+            prepare(orderId, cancellationVersion = 8)
+            snapshots.deleteAll()
+            snapshots.flush()
+
+            val projection = project(orderId, cancellationVersion = 8)
+
+            assertThat(projection.state).isEqualTo("PROCESSING")
+            assertThat(projection.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(projection.approvedAmountKrw).isNull()
+            assertThat(setupAuditBeforeSummary())
+                .contains("PAYMENT_RECOVERY_SNAPSHOT")
+                .doesNotContain("CANCELLATION_REFUND")
+        }
+
+        @Test
+        fun `missing Refund preserves verified snapshot amounts and records only the Refund artifact`() {
+            val orderId = UUID.randomUUID()
+            externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 3_000)
+            prepare(orderId, cancellationVersion = 8)
+            refunds.deleteAll()
+            refunds.flush()
+
+            val projection = project(orderId, cancellationVersion = 8)
+
+            assertThat(projection.state).isEqualTo("PROCESSING")
+            assertThat(projection.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(projection.approvedAmountKrw).isEqualTo(10_000)
+            assertThat(projection.succeededRefundAmountBeforeCancellationKrw).isEqualTo(3_000)
+            assertThat(projection.cancellationRequestedRefundAmountKrw).isEqualTo(7_000)
+            assertThat(projection.remainingRefundableAmountKrw).isEqualTo(7_000)
+            assertThat(setupAuditBeforeSummary())
+                .contains("CANCELLATION_REFUND")
+                .doesNotContain("PAYMENT_RECOVERY_SNAPSHOT")
+        }
+
+        @Test
+        fun `source and amount mismatches remain internal delayed states with durable classifications`() {
+            val sourceMismatchOrderId = UUID.randomUUID()
+            externalPayment(sourceMismatchOrderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+            prepare(sourceMismatchOrderId, cancellationVersion = 8)
+            jdbcTemplate.execute("ALTER TABLE payment_refund DISABLE TRIGGER USER")
+            try {
+                jdbcTemplate.update(
+                    "UPDATE payment_refund SET source_reference = 'tampered:' || id WHERE order_id = ?",
+                    sourceMismatchOrderId,
+                )
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE payment_refund ENABLE TRIGGER USER")
+            }
+
+            val sourceMismatch = project(sourceMismatchOrderId, cancellationVersion = 8)
+
+            assertThat(sourceMismatch.state).isEqualTo("PROCESSING")
+            assertThat(sourceMismatch.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(sourceMismatch.approvedAmountKrw).isNull()
+            assertThat(setupAuditBeforeSummary()).contains("SOURCE_MISMATCH")
+
+            cleanDatabase()
+            val amountMismatchOrderId = UUID.randomUUID()
+            externalPayment(amountMismatchOrderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+            prepare(amountMismatchOrderId, cancellationVersion = 8)
+            jdbcTemplate.update(
+                "UPDATE payment_payment SET succeeded_refund_amount_krw = 1000 WHERE order_id = ?",
+                amountMismatchOrderId,
+            )
+
+            val amountMismatch = project(amountMismatchOrderId, cancellationVersion = 8)
+
+            assertThat(amountMismatch.state).isEqualTo("PROCESSING")
+            assertThat(amountMismatch.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(amountMismatch.approvedAmountKrw).isNull()
+            assertThat(setupAuditBeforeSummary()).contains("AMOUNT_TIE_OUT_MISMATCH")
+        }
+
+        @Test
+        fun `customer read fails dependency unavailable when setup detection cannot persist`() {
+            val orderId = UUID.randomUUID()
+            externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+            jdbcTemplate.execute(
+                """
+                CREATE FUNCTION fail_payment_setup_audit() RETURNS trigger AS ${'$'}${'$'}
+                BEGIN
+                    IF NEW.action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED' THEN
+                        RAISE EXCEPTION 'forced setup audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                ${'$'}${'$'} LANGUAGE plpgsql
+                """.trimIndent(),
+            )
+            jdbcTemplate.execute(
+                "CREATE TRIGGER fail_payment_setup_audit BEFORE INSERT ON operations_audit_record " +
+                    "FOR EACH ROW EXECUTE FUNCTION fail_payment_setup_audit()",
+            )
+            try {
+                assertThatThrownBy { project(orderId, cancellationVersion = 8) }
+                    .isInstanceOfSatisfying(DomainFailure::class.java) {
+                        assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+                    }
+            } finally {
+                jdbcTemplate.execute("DROP TRIGGER fail_payment_setup_audit ON operations_audit_record")
+                jdbcTemplate.execute("DROP FUNCTION fail_payment_setup_audit()")
+            }
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM operations_reprocessing_case", Long::class.java))
+                .isZero()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java))
+                .isZero()
         }
 
         @Test
@@ -424,6 +539,15 @@ internal class CustomerCancellationPaymentServiceTest
                 now = NOW,
             ),
         )
+
+        private fun setupAuditBeforeSummary(): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT before_summary FROM operations_audit_record " +
+                        "WHERE action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED'",
+                    String::class.java,
+                ),
+            )
 
         private fun benefitOnlyPayment(orderId: UUID): PaymentEntity =
             insertPaidOrder(orderId).let {

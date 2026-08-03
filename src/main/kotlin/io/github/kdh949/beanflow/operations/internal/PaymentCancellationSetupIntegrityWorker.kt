@@ -3,10 +3,12 @@ package io.github.kdh949.beanflow.operations.internal
 import io.github.kdh949.beanflow.operations.api.DetectPaymentCancellationSetupIssueCommand
 import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.Clock
+import java.time.Duration
 
 @Component
 internal class PaymentCancellationSetupIntegrityWorker(
@@ -27,6 +29,7 @@ internal class PaymentCancellationSetupIntegrityWorker(
     )
     fun runScheduled() {
         val now = clock.instant()
+        val sample = Timer.start(meterRegistry)
         try {
             val keys = queries.findScanKeys(batchSize)
             var candidates = 0
@@ -48,9 +51,22 @@ internal class PaymentCancellationSetupIntegrityWorker(
             }
             meterRegistry.counter("beanflow.operations.payment_setup.scan.count", "outcome", "succeeded").increment()
             meterRegistry.summary("beanflow.operations.payment_setup.scan.candidates").record(candidates.toDouble())
+            queries.oldestOpenCaseCreatedAt()?.let { createdAt ->
+                meterRegistry
+                    .summary("beanflow.operations.payment_setup.oldest_age.seconds")
+                    .record(
+                        Duration
+                            .between(createdAt, now)
+                            .seconds
+                            .coerceAtLeast(0)
+                            .toDouble(),
+                    )
+            }
         } catch (failure: RuntimeException) {
             meterRegistry.counter("beanflow.operations.payment_setup.scan.count", "outcome", "failed").increment()
             throw failure
+        } finally {
+            sample.stop(meterRegistry.timer("beanflow.operations.payment_setup.scan.duration"))
         }
     }
 }

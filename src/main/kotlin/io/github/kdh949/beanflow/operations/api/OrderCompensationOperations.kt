@@ -149,4 +149,11 @@ interface OrderCompensationOperations {
         errorCode: String,
         now: Instant,
     ): OrderCompensationCaseView
+
+    fun reopenPaymentForRefundReconciliation(
+        orderId: UUID,
+        cancellationOrderVersion: Long,
+        errorCode: String,
+        now: Instant,
+    ): OrderCompensationCaseView
 }

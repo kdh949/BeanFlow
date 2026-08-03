@@ -241,6 +241,8 @@ internal class RefundEntity(
     @Enumerated(EnumType.STRING)
     @Column(name = "next_action", nullable = false)
     var nextAction: RefundClaimMode = RefundClaimMode.REQUEST,
+    @Column(name = "operator_reconciliation_pending", nullable = false)
+    var operatorReconciliationPending: Boolean = false,
     @Column(name = "next_attempt_at")
     var nextAttemptAt: Instant?,
     @Column(name = "provider_request_started_at")

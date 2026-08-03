@@ -10,6 +10,7 @@ import java.time.Clock
 @Component
 internal class PaymentSetupRepairMaintenanceWorker(
     private val service: PaymentSetupRepairService,
+    private val refundReconciliations: CustomerCancellationRefundReconciliationService,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.payment-setup-repair-maintenance.chunk-size:100}")
@@ -24,13 +25,16 @@ internal class PaymentSetupRepairMaintenanceWorker(
         try {
             val expired = service.expireDue(now, chunkSize)
             val deleted = service.purgeIdempotencyDue(now, chunkSize)
+            val reconciliationDeleted = refundReconciliations.purgeDue(now, chunkSize)
             meterRegistry.counter("beanflow.operations.payment_setup.proposal.expired").increment(expired.toDouble())
             meterRegistry.counter("beanflow.operations.payment_setup.idempotency.retention.deleted").increment(deleted.toDouble())
-            if (expired > 0 || deleted > 0) {
+            if (expired > 0 || deleted > 0 || reconciliationDeleted > 0) {
                 logger.info(
-                    "payment_setup_repair_maintenance outcome=COMPLETED expiredCount={} idempotencyDeletedCount={}",
+                    "payment_setup_repair_maintenance outcome=COMPLETED expiredCount={} " +
+                        "idempotencyDeletedCount={} refundReconciliationDeletedCount={}",
                     expired,
                     deleted,
+                    reconciliationDeleted,
                 )
             }
         } catch (failure: RuntimeException) {
