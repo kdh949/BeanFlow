@@ -1,11 +1,11 @@
 # 감사형 Loyalty 포인트 조정 foundation을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-04`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -19,23 +19,16 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Current State
 
-- OpenAPI `PointTransaction` enum에는 `ADJUSTMENT`가 있으나 의미·write API·DB direction
-  표현이 없다.
-- Kotlin `PointTransactionType`과 migration type CHECK에는 `ADJUSTMENT`가 없다.
-- PointLot persistence에는 아직 BR-20 issuer type/reference snapshot이 없다. Plan 10이
-  만료 부분 환불 compensation에 필요한 schema와 legacy issuer precheck/migration gate를
-  먼저 소유하며, 이 계획은 그 gate evidence를 선행조건으로 소비한다.
-- AuditRecord, Idempotency-Key와 PointAccount row lock의 공통 규칙은 존재하지만 manual
-  point adjustment command는 구현되지 않았다.
-- Loyalty에는 이 terminal command의 최초 `201` body를 90일 보존할 idempotency table이나
-  Context-owned retention worker가 없다. Ordering의 retention worker를 다른 Context table에
-  재사용할 수 없다.
-- completed Plan 13 V17은 `ACCRUAL`/`RECOVERY`, PointRecoveryPending과 PointTransaction base
-  contract를 구현했다. 이 계획은 해당 CHECK를 재구현하지 않고 후속 `ADJUSTMENT` vocabulary만
-  단일 migration-writer lease에서 확장한다.
-- current JWT role은 인증의 coarse gate일 뿐 `POINT_ADJUSTMENT` permission source가 아니다.
-  Plan 11이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
-  구현해야 한다.
+- deployed OpenAPI와 Controller가 audited adjustment POST, conditional request와 stored
+  `201 PointAdjustmentResult` replay를 제공한다.
+- V31과 Kotlin persistence는 existing transaction의 deterministic `balance_effect`,
+  `ADJUSTMENT` vocabulary/source CHECK와 Loyalty terminal idempotency relation을 제공한다.
+- Plan 10 V14의 immutable PointLot issuer snapshot/precheck, Plan 11 V13의 Operations grant와
+  Plan 13 V17의 recovery ledger를 선행 결과로 소비하며 중복 migration이나 fallback을 만들지 않았다.
+- Application Service는 ADR-069 lock order로 credit/debit, target Audit와
+  `PointsAdjustedV1` outbox를 한 local transaction에 저장한다.
+- Loyalty-owned retention worker가 terminal response를 90일 보존하고 due row를 100건씩
+  정리한다. Analytics consumer/receipt/projection은 active Analytics plan의 후속 책임이다.
 
 ## Definitions
 
@@ -260,7 +253,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 - [x] command transaction/idempotency/audit/outbox
 - [x] endpoint and authorization
 - [x] producer/concurrency/failure validation and Analytics handoff
-- [ ] full build and documentation evidence
+- [x] full build and documentation evidence
 
 ## Surprises & Discoveries
 
@@ -298,7 +291,13 @@ input으로 소비했다. V31은 current type의 deterministic `balance_effect` 
 FIFO·만료·reserved 제외, replay/conflict, 동시 요청, 모든 owner persistence rollback, retention
 경계와 `PointsAdjustedV1` producer contract가 통과했다. Analytics consumer 구현은 이 plan의
 completion condition이 아니라 Analytics plan의 own checkpoint다. 전체 build와 문서 completion
-evidence는 마지막 checkpoint에 기록한다.
+evidence를 별도 release evidence와 운영 runbook에 기록했다. focused PointAdjustment/Loyalty와
+Modulith 검증 뒤 최종 `./gradlew clean build`는 417 tests, failures/errors/skips 0으로 통과했다.
+첫 clean build는 Spotless 위반으로 test 전에 중단됐고 formatter 적용 뒤 전체 명령을 다시
+실행했으며, 이 실패와 보정도 evidence에서 숨기지 않았다.
+completed 이동, Analytics successor dependency/readiness 갱신 뒤 `bash scripts/verify-docs.sh`는
+target 27/deployed 14 paths, 75 schemas, 32 policies, 75 ADRs, 146 Markdown files와 24 ExecPlans를
+검증했다.
 
 ## Revision Notes
 
@@ -310,3 +309,5 @@ evidence는 마지막 checkpoint에 기록한다.
   prerequisite로 추가했다.
 - 2026-08-02: completed Plan 13 V17/PointTransaction owner outcome을 반영해 마지막 direct
   dependency와 implementation readiness를 닫았다.
+- 2026-08-04: V31, audited command/API, terminal retention, `PointsAdjustedV1` producer와
+  운영·release evidence를 완료하고 active plan을 completed로 이동했다.

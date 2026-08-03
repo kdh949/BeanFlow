@@ -52,7 +52,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-40-command.md"
   "docs/exec-plans/completed/customer-order-cancellation-50-recovery.md"
-  "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
+  "docs/exec-plans/completed/loyalty-point-adjustment-foundation.md"
   "docs/exec-plans/completed/signed-cursor-foundation.md"
   "docs/exec-plans/completed/ci-pr-validation.md"
   "docs/review/code-review.md"
@@ -1530,7 +1530,7 @@ else:
         print('Point adjustment result must return PointTransaction entries.', file=sys.stderr)
         sys.exit(1)
     adjustment_plan = (
-        root / 'docs/exec-plans/active/loyalty-point-adjustment-foundation.md'
+        root / 'docs/exec-plans/completed/loyalty-point-adjustment-foundation.md'
     ).read_text(encoding='utf-8')
     adjustment_plan_requirements = (
         'Plan 10 issuer precheck evidence',
@@ -1539,7 +1539,7 @@ else:
         'LoyaltyPointAdjustmentIdempotencyRetentionWorker',
     )
     if not all(fragment in adjustment_plan for fragment in adjustment_plan_requirements):
-        print('Point adjustment active ExecPlan is missing migration, retention or event completion criteria.', file=sys.stderr)
+        print('Point adjustment completed ExecPlan is missing migration, retention or event completion evidence.', file=sys.stderr)
         sys.exit(1)
     adjustment_event_row = next(
         (line for line in event_catalog.splitlines() if line.startswith('| PointsAdjustedV1 |')),

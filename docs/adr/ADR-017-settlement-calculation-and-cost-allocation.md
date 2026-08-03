@@ -50,6 +50,10 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   confirmation 선행조건, calculation/confirmation 시각과 negative carry를 DB와 Aggregate 양쪽에서
   보호한다. confirmation은 Audit와 `SettlementBatchConfirmedV1`을 원자 저장한다. completed
   Refund와 accepted Dispute는 Item snapshot을 수정하지 않고 이후 Adjustment로만 반영된다.
+- **Point adjustment issuer evidence (2026-08-04):** V31 audited CREDIT command는 caller가
+  명시한 issuer type/reference를 새 PointLot의 immutable snapshot으로 보존하며 command 시점에
+  SettlementItem/Adjustment를 만들지 않는다. 이후 비용 배분은 기존 PointLot allocation 경계를
+  그대로 사용한다.
 
 ## Alternatives Considered
 

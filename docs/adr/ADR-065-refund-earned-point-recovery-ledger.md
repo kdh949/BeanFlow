@@ -171,6 +171,11 @@ PointRecoveryPending이다. 이 결정은 pending이 settle될 때 새 public ev
 전체 clean build 205건이 통과했다. concurrent Refund, pre-completion exclusion, out-of-order
 recovery→pending→completion offset과 source/version/hash replay를 포함한다.
 
+2026-08-04 adjustment compatibility evidence: V31은 existing `ACCRUAL`과 `RECOVERY`를 각각
+`CREDIT`과 `DEBIT`으로 deterministic backfill하고 combination CHECK로 고정했다. manual CREDIT은
+`PointRecoveryPending`을 상계하지 않으며 기존 recovery/pending flow의 type, source와 state를
+수정하지 않는다.
+
 ## Required Tests
 
 - 전액 회수: Account/Lot 감소, 음수 API `RECOVERY`, pending 없음

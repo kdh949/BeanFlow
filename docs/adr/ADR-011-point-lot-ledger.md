@@ -138,6 +138,12 @@
 - 수동 양수/음수 adjustment의 issuer·expiry, balance effect와 Audit atomicity
 - 원장과 balance tie-out
 
+**Point adjustment implementation evidence (2026-08-04):** V31과 audited command가
+PointAccount summary, immutable issuer Lot, magnitude+effect transaction, terminal response,
+Audit와 `PointsAdjustedV1` outbox를 원자 저장한다. PostgreSQL fixture가 FIFO, 만료·reserved
+제외, insufficient rollback, 모든 storage fault와 전체 type signed projection을 검증했다.
+상세 결과는 [release evidence](../quality/loyalty-point-adjustment-release-evidence.md)에 있다.
+
 ## Metrics
 
 측정 전에는 목표·가정과 실제 결과를 분리한다. 실제 측정 결과가 생기면 조건과 함께 추가한다.

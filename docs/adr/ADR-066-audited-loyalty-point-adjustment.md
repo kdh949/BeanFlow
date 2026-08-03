@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-01
 - **Amends:** ADR-011의 PointTransaction 조정 표현
-- **Implementation owner:** `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
+- **Implementation owner:** `docs/exec-plans/completed/loyalty-point-adjustment-foundation.md`
 - **Schema prerequisite owners:** [Plan 10](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)의 PointLot issuer snapshot precheck/migration, [Plan 11](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)의 grant, [completed Plan 13](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)의 PointTransaction base
 
 ## Context
@@ -192,6 +192,20 @@ Lot을 만들거나 차감하는 실제 command와 target Audit을 하나의 tra
   고객 notification 부재
 - Plan 10 PointLot issuer precheck의 empty/known/unresolvable fixture와 adjustment
   endpoint 활성화 선행조건
+
+## Implementation Evidence
+
+2026-08-04에 V31과 Loyalty audited command를 구현했다. lock 순서는 ADR-069에 따라
+PointAccount → active grant → terminal idempotency → ordered PointLot이다. migration은
+current type의 `balance_effect`를 deterministic backfill하고 ADJUSTMENT type/effect/source,
+terminal 201 scope/hash/90-day retention과 immutable row를 DB 제약으로 보호한다.
+
+PostgreSQL 통합 검증은 credit issuer/expiry, debit FIFO·만료·reserved 제외, insufficient
+rollback, replay/different account/payload, concurrent debit/cross-account request와 Account,
+Lot, transaction, Audit, outbox, idempotency 각각의 failure rollback을 포함한다. exact
+`PointsAdjustedV1` fixture와 전체 type signed projection도 통과했다. 배포 전 절차와 정확한
+검증 결과는 [runbook](../operations/loyalty-point-adjustment-runbook.md)과
+[release evidence](../quality/loyalty-point-adjustment-release-evidence.md)에 기록한다.
 
 ## Metrics
 

@@ -43,9 +43,11 @@
 - [Quality Evidence Map](quality/quality-evidence-map.md)
 - [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
 - [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
+- [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
 - [Code Review Guide](review/code-review.md)
 - [Settlement Foundation Runbook](operations/settlement-foundation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
+- [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 
 ## Execution Plans
 
@@ -62,7 +64,7 @@
 - [Cancellation 30 Order Compensation Foundation](exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md)
 - [Cancellation 40 Command](exec-plans/completed/customer-order-cancellation-40-command.md)
 - [Completed Cancellation 50 Recovery](exec-plans/completed/customer-order-cancellation-50-recovery.md)
-- [Audited Loyalty Point Adjustment Foundation](exec-plans/active/loyalty-point-adjustment-foundation.md)
+- [Completed Audited Loyalty Point Adjustment Foundation](exec-plans/completed/loyalty-point-adjustment-foundation.md)
 - [Nearby Store Discovery](exec-plans/active/nearby-store-discovery.md)
 - [Analytics Refund and Late-Event Projection](exec-plans/active/analytics-refund-and-late-event-projection.md)
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
@@ -79,3 +81,4 @@
 - [Store Order Lifecycle and Rejection Recovery Runbook](operations/store-order-lifecycle-runbook.md)
 - [Customer Order Cancellation and Refund Recovery Runbook](operations/customer-order-cancellation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
+- [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)

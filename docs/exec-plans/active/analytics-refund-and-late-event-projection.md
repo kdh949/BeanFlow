@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/completed/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/active/loyalty-point-adjustment-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md`, `docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md`, `docs/exec-plans/completed/settlement-batch-adjustment-and-dispute.md`, `docs/exec-plans/completed/loyalty-point-adjustment-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
