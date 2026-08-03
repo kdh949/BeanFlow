@@ -137,6 +137,13 @@ internal enum class PointTransactionType {
     RESTORE_SKIPPED_EXPIRED,
     ACCRUAL,
     RECOVERY,
+    ADJUSTMENT,
+}
+
+internal enum class PointBalanceEffect {
+    CREDIT,
+    DEBIT,
+    NONE,
 }
 
 @Entity
@@ -153,6 +160,9 @@ internal class PointTransactionEntity(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     val type: PointTransactionType,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "balance_effect", nullable = false)
+    val balanceEffect: PointBalanceEffect = type.defaultBalanceEffect(),
     @Column(name = "source_reference", nullable = false)
     val sourceReference: String,
     @Column(name = "occurred_at", nullable = false)
@@ -171,7 +181,45 @@ internal class PointTransactionEntity(
     val restorationDisposition: String? = null,
     @Column(name = "point_recovery_pending_id")
     val pointRecoveryPendingId: UUID? = null,
-)
+) {
+    init {
+        require(amountKrw > 0) { "Point transaction amount must be positive" }
+        require(sourceReference.isNotBlank()) { "Point transaction source must not be blank" }
+        require(type.allows(balanceEffect)) { "Point transaction balance effect does not match its type" }
+    }
+}
+
+private fun PointTransactionType.defaultBalanceEffect(): PointBalanceEffect =
+    when (this) {
+        PointTransactionType.ACCRUAL,
+        PointTransactionType.RESTORE,
+        PointTransactionType.COMPENSATION,
+        -> PointBalanceEffect.CREDIT
+
+        PointTransactionType.USE,
+        PointTransactionType.EXPIRATION,
+        PointTransactionType.RECOVERY,
+        -> PointBalanceEffect.DEBIT
+
+        PointTransactionType.RESTORE_SKIPPED_EXPIRED -> PointBalanceEffect.NONE
+        PointTransactionType.ADJUSTMENT -> error("Adjustment balance effect must be explicit")
+    }
+
+private fun PointTransactionType.allows(effect: PointBalanceEffect): Boolean =
+    when (this) {
+        PointTransactionType.ACCRUAL,
+        PointTransactionType.RESTORE,
+        PointTransactionType.COMPENSATION,
+        -> effect == PointBalanceEffect.CREDIT
+
+        PointTransactionType.USE,
+        PointTransactionType.EXPIRATION,
+        PointTransactionType.RECOVERY,
+        -> effect == PointBalanceEffect.DEBIT
+
+        PointTransactionType.RESTORE_SKIPPED_EXPIRED -> effect == PointBalanceEffect.NONE
+        PointTransactionType.ADJUSTMENT -> effect == PointBalanceEffect.CREDIT || effect == PointBalanceEffect.DEBIT
+    }
 
 internal enum class PartialRefundRestorationDisposition {
     ORIGINAL_LOT,
@@ -222,6 +270,12 @@ internal class PartialRefundRestorationEntity(
 
 internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select account from PointAccountEntity account where account.id = :accountId")
+    fun findLockedById(
+        @Param("accountId") accountId: UUID,
+    ): PointAccountEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select account from PointAccountEntity account where account.customerId = :customerId")
     fun findLockedByCustomerId(
         @Param("customerId") customerId: UUID,
@@ -229,6 +283,14 @@ internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity,
 }
 
 internal interface PointLotJpaRepository : JpaRepository<PointLotEntity, UUID> {
+    @Query(
+        "select coalesce(sum(lot.availableAmountKrw), 0) from PointLotEntity lot " +
+            "where lot.pointAccountId = :accountId",
+    )
+    fun sumAvailableAmountByAccountId(
+        @Param("accountId") accountId: UUID,
+    ): Long
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select lot from PointLotEntity lot where lot.pointAccountId = :accountId " +
@@ -244,6 +306,16 @@ internal interface PointLotJpaRepository : JpaRepository<PointLotEntity, UUID> {
             "and lot.expiresAt > :now and lot.availableAmountKrw > 0 order by lot.expiresAt, lot.id",
     )
     fun findReservableLotsLocked(
+        @Param("accountId") accountId: UUID,
+        @Param("now") now: Instant,
+    ): List<PointLotEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select lot from PointLotEntity lot where lot.pointAccountId = :accountId " +
+            "and lot.expiresAt > :now and lot.availableAmountKrw > 0 order by lot.expiresAt, lot.id",
+    )
+    fun findAdjustmentDebitLotsLocked(
         @Param("accountId") accountId: UUID,
         @Param("now") now: Instant,
     ): List<PointLotEntity>
@@ -280,7 +352,9 @@ internal interface PointReservationAllocationJpaRepository : JpaRepository<Point
     ): List<PointReservationAllocationEntity>
 }
 
-internal interface PointTransactionJpaRepository : JpaRepository<PointTransactionEntity, UUID>
+internal interface PointTransactionJpaRepository : JpaRepository<PointTransactionEntity, UUID> {
+    fun findAllByPointAccountIdOrderByOccurredAtAscIdAsc(pointAccountId: UUID): List<PointTransactionEntity>
+}
 
 internal interface PartialRefundRestorationJpaRepository : JpaRepository<PartialRefundRestorationEntity, UUID> {
     fun findAllByRefundIdOrderByOrderLineIdAscPointReservationAllocationIdAsc(refundId: UUID): List<PartialRefundRestorationEntity>

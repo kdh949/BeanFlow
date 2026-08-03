@@ -730,6 +730,7 @@ else:
         ('/operations/reprocessing-repair-proposals/{proposalId}/decisions', 'post'),
         ('/operations/policies/expired-benefit-restoration', 'get'),
         ('/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}', 'patch'),
+        ('/operations/point-accounts/{accountId}/adjustments', 'post'),
     }
     actual_deployed_operations = {
         (path, method)

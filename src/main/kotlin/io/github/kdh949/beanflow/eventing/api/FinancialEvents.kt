@@ -81,6 +81,15 @@ data class PointsRestoredV1(
     val restorationDisposition: PointRestorationDisposition,
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class PointsAdjustedV1(
+    val envelope: EventEnvelope,
+    val adjustmentSource: String,
+    val accountId: UUID,
+    val amountKrw: Long,
+    val issuerType: String? = null,
+)
+
 data class SettlementItemCreatedV1(
     val envelope: EventEnvelope,
     val settlementItemId: UUID,
@@ -151,6 +160,8 @@ interface FinancialEventPublicationOperations {
     fun publish(event: PointsAccruedV1)
 
     fun publish(event: PointsRestoredV1)
+
+    fun publish(event: PointsAdjustedV1)
 
     fun publish(event: SettlementItemCreatedV1)
 
