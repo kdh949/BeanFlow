@@ -174,7 +174,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 11. [Settlement foundation과 취소 제외 증적을 만든다](../completed/customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor, completed
 12. [공통 Order compensation foundation을 만든다](../completed/customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane, completed
 13. [고객 취소 command와 Tx C0/C1을 구현한다](../completed/customer-order-cancellation-40-command.md) — 30, completed Draft handoff
-14. [고객 취소 recovery와 운영 수렴을 구현한다](../completed/customer-order-cancellation-50-recovery.md) — 40 Draft stack, completed, PR #39 merge 대기
+14. [고객 취소 recovery와 운영 수렴을 구현한다](../completed/customer-order-cancellation-50-recovery.md) — 40 Draft stack, completed, PR #39 merged
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
 Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
