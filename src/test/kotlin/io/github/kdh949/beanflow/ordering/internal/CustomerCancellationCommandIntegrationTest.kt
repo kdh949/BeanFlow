@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
+import io.github.kdh949.beanflow.operations.internal.PaymentCancellationSetupIntegrityWorker
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
@@ -38,6 +39,7 @@ import java.util.UUID
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
         "beanflow.store-acceptance.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
+        "beanflow.payment-cancellation-setup.initial-delay-ms=3600000",
     ],
 )
 internal class CustomerCancellationCommandIntegrationTest
@@ -53,6 +55,7 @@ internal class CustomerCancellationCommandIntegrationTest
         private val storeTransitionService: StoreOrderTransitionService,
         private val reservationExpiryUseCase: ReservationExpiryUseCase,
         private val meterRegistry: MeterRegistry,
+        private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
     ) {
         @BeforeEach
         fun cleanDatabase() {
@@ -193,6 +196,40 @@ internal class CustomerCancellationCommandIntegrationTest
             ).isEqualTo("NOT_REQUIRED")
             assertThat(count("event_publication")).isEqualTo(4)
             assertThat(countCommandAudits()).isEqualTo(4)
+        }
+
+        @Test
+        fun `customer order read records missing setup and returns delayed without inferred amounts`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "setup-inline-create")
+            approvePayment(orderId, fixture.customerId, 1_000)
+            cancel(orderId, fixture.customerId, "setup-inline-cancel", "CHANGED_MIND", null)
+            jdbcTemplate.update("DELETE FROM payment_cancellation_recovery_snapshot WHERE order_id = ?", orderId)
+
+            mockMvc
+                .perform(get("/api/v1/orders/{orderId}", orderId).with(customerJwt(fixture.customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.paymentRecovery.state").value("PROCESSING"))
+                .andExpect(jsonPath("$.paymentRecovery.noticeCode").value("REFUND_DELAYED"))
+                .andExpect(jsonPath("$.paymentRecovery.approvedAmountKrw").doesNotExist())
+                .andExpect(jsonPath("$.paymentRecovery.remainingRefundableAmountKrw").doesNotExist())
+            assertSetupIntegrityEvidence()
+        }
+
+        @Test
+        fun `bounded setup scanner detects cancellation damage without customer access`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "setup-scan-create")
+            approvePayment(orderId, fixture.customerId, 1_000)
+            cancel(orderId, fixture.customerId, "setup-scan-cancel", "CHANGED_MIND", null)
+            jdbcTemplate.update("DELETE FROM payment_cancellation_recovery_snapshot WHERE order_id = ?", orderId)
+
+            setupIntegrityWorker.runScheduled()
+            setupIntegrityWorker.runScheduled()
+
+            assertSetupIntegrityEvidence()
         }
 
         @Test
@@ -748,6 +785,23 @@ internal class CustomerCancellationCommandIntegrationTest
 
         private fun count(table: String): Long =
             requireNotNull(jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java))
+
+        private fun assertSetupIntegrityEvidence() {
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_reprocessing_case " +
+                        "WHERE case_type = 'PAYMENT_CANCELLATION_SETUP'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+        }
 
         private fun countCommandAudits(): Long =
             requireNotNull(

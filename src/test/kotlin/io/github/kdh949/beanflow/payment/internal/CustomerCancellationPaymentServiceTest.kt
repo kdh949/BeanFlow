@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.payment.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
 import io.github.kdh949.beanflow.payment.api.PrepareCustomerCancellationPaymentCommand
+import io.github.kdh949.beanflow.payment.api.ProjectCustomerCancellationPaymentCommand
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
 import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
@@ -59,11 +60,85 @@ internal class CustomerCancellationPaymentServiceTest
                     payment_refund,
                     payment_payment,
                     payment_method,
+                    operations_audit_record,
+                    operations_reprocessing_case,
                     ordering_order,
                     merchant_store
                 CASCADE
                 """.trimIndent(),
             )
+        }
+
+        @Test
+        fun `customer projection maps requested and terminal failure without exposing internal state`() {
+            val orderId = UUID.randomUUID()
+            externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 3_000)
+            prepare(orderId, cancellationVersion = 8)
+
+            val requested = project(orderId, cancellationVersion = 8)
+            assertThat(requested.state).isEqualTo("REQUESTED")
+            assertThat(requested.noticeCode).isNull()
+            assertThat(requested.approvedAmountKrw).isEqualTo(10_000)
+            assertThat(requested.remainingRefundableAmountKrw).isEqualTo(7_000)
+
+            val refund = refunds.findAll().single()
+            refund.state = RefundState.FAILED
+            refund.nextAttemptAt = null
+            refund.lastFailureCode = "PROVIDER_DECLINED"
+            refunds.saveAndFlush(refund)
+
+            val delayed = project(orderId, cancellationVersion = 8)
+            assertThat(delayed.state).isEqualTo("PROCESSING")
+            assertThat(delayed.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(delayed.toString()).doesNotContain("FAILED", "MANUAL_REVIEW", "PROVIDER_DECLINED")
+        }
+
+        @Test
+        fun `missing snapshot returns delayed without inferred amounts and records one setup case and audit`() {
+            val orderId = UUID.randomUUID()
+            externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+
+            val first = project(orderId, cancellationVersion = 8)
+            val replay = project(orderId, cancellationVersion = 8)
+
+            assertThat(first).isEqualTo(replay)
+            assertThat(first.state).isEqualTo("PROCESSING")
+            assertThat(first.noticeCode).isEqualTo("REFUND_DELAYED")
+            assertThat(first.approvedAmountKrw).isNull()
+            assertThat(first.succeededRefundAmountBeforeCancellationKrw).isNull()
+            assertThat(first.cancellationRequestedRefundAmountKrw).isNull()
+            assertThat(first.remainingRefundableAmountKrw).isNull()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "select count(*) from operations_reprocessing_case " +
+                        "where case_type = 'PAYMENT_CANCELLATION_SETUP'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "select count(*) from operations_audit_record " +
+                        "where action = 'PAYMENT_CANCELLATION_SETUP_INCOMPLETE_DETECTED'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+        }
+
+        @Test
+        fun `benefit only projection is not required with four verified zero amounts`() {
+            val orderId = UUID.randomUUID()
+            benefitOnlyPayment(orderId)
+            prepare(orderId, cancellationVersion = 8)
+
+            val projection = project(orderId, cancellationVersion = 8)
+
+            assertThat(projection.state).isEqualTo("NOT_REQUIRED")
+            assertThat(projection.approvedAmountKrw).isZero()
+            assertThat(projection.succeededRefundAmountBeforeCancellationKrw).isZero()
+            assertThat(projection.cancellationRequestedRefundAmountKrw).isZero()
+            assertThat(projection.remainingRefundableAmountKrw).isZero()
+            assertThat(jdbcTemplate.queryForObject("select count(*) from operations_reprocessing_case", Long::class.java))
+                .isZero()
         }
 
         @Test
@@ -336,6 +411,19 @@ internal class CustomerCancellationPaymentServiceTest
                 ),
             )
         }
+
+        private fun project(
+            orderId: UUID,
+            cancellationVersion: Long,
+        ) = operations.project(
+            ProjectCustomerCancellationPaymentCommand(
+                orderId = orderId,
+                cancellationOrderVersion = cancellationVersion,
+                paymentExpected = true,
+                correlationId = "customer-cancellation-$orderId",
+                now = NOW,
+            ),
+        )
 
         private fun benefitOnlyPayment(orderId: UUID): PaymentEntity =
             insertPaidOrder(orderId).let {

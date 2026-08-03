@@ -23,8 +23,10 @@ import io.github.kdh949.beanflow.ordering.api.ReservationExpiryOutcome
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
+import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentProjection
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentSnapshot
 import io.github.kdh949.beanflow.payment.api.PrepareCustomerCancellationPaymentCommand
+import io.github.kdh949.beanflow.payment.api.ProjectCustomerCancellationPaymentCommand
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -325,7 +327,17 @@ internal class CustomerCancellationTransaction(
                 status = 200,
                 order = order,
                 reasonCode = reasonCode,
-                recovery = CancellationRefundRecoverySummary("NOT_REQUIRED"),
+                recovery =
+                    paymentOperations
+                        .project(
+                            ProjectCustomerCancellationPaymentCommand(
+                                orderId = order.id,
+                                cancellationOrderVersion = terminalVersion,
+                                paymentExpected = false,
+                                correlationId = correlationId,
+                                now = now,
+                            ),
+                        ).toCustomerSummary(),
                 customerId = customerId,
                 idempotencyKey = idempotencyKey,
                 payloadHash = payloadHash,
@@ -447,14 +459,16 @@ internal class CustomerCancellationTransaction(
             ),
         )
         val recovery =
-            CancellationRefundRecoverySummary(
-                state = if (payment.paymentRecoveryRequired) "REQUESTED" else "NOT_REQUIRED",
-                approvedAmountKrw = payment.approvedAmountKrw,
-                succeededRefundAmountBeforeCancellationKrw = payment.succeededRefundAmountBeforeCancellationKrw,
-                cancellationRequestedRefundAmountKrw = payment.requestedRefundAmountKrw,
-                remainingRefundableAmountKrw = payment.requestedRefundAmountKrw,
-                lastUpdatedAt = payment.updatedAt,
-            )
+            paymentOperations
+                .project(
+                    ProjectCustomerCancellationPaymentCommand(
+                        orderId = order.id,
+                        cancellationOrderVersion = terminalVersion,
+                        paymentExpected = true,
+                        correlationId = correlationId,
+                        now = now,
+                    ),
+                ).toCustomerSummary()
         metrics.rollbackTarget = "idempotency_record"
         val outcome =
             success(
@@ -767,6 +781,17 @@ internal class CustomerCancellationTransaction(
             policyVersionId = policyVersion,
             mode = mode.name,
             compensationValidityDays = compensationValidityDays,
+        )
+
+    private fun CustomerCancellationPaymentProjection.toCustomerSummary() =
+        CancellationRefundRecoverySummary(
+            state = state,
+            noticeCode = noticeCode,
+            approvedAmountKrw = approvedAmountKrw,
+            succeededRefundAmountBeforeCancellationKrw = succeededRefundAmountBeforeCancellationKrw,
+            cancellationRequestedRefundAmountKrw = cancellationRequestedRefundAmountKrw,
+            remainingRefundableAmountKrw = remainingRefundableAmountKrw,
+            lastUpdatedAt = lastUpdatedAt,
         )
 
     private fun sourcePrefix(

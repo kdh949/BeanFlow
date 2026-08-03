@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
+import io.github.kdh949.beanflow.payment.api.ProjectCustomerCancellationPaymentCommand
+import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
@@ -17,6 +19,7 @@ internal class GetOrderService(
     private val orderRepository: OrderJpaRepository,
     private val orderLineRepository: OrderLineJpaRepository,
     private val cancellationPayments: CustomerCancellationPaymentOperations,
+    private val correlationIds: CorrelationIdSource,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) {
@@ -56,17 +59,27 @@ internal class GetOrderService(
         val lines = orderLineRepository.findAllByOrderIdOrderByLineSequence(orderId)
         val paymentRecovery =
             if (order.cancellationCause == OrderCancellationCause.CUSTOMER_REQUEST) {
-                cancellationPayments.findSnapshot(orderId)?.let { snapshot ->
-                    CancellationRefundRecoverySummary(
-                        state = if (snapshot.paymentRecoveryRequired) "REQUESTED" else "NOT_REQUIRED",
-                        approvedAmountKrw = snapshot.approvedAmountKrw,
-                        succeededRefundAmountBeforeCancellationKrw =
-                            snapshot.succeededRefundAmountBeforeCancellationKrw,
-                        cancellationRequestedRefundAmountKrw = snapshot.requestedRefundAmountKrw,
-                        remainingRefundableAmountKrw = snapshot.requestedRefundAmountKrw,
-                        lastUpdatedAt = snapshot.updatedAt,
-                    )
-                } ?: CancellationRefundRecoverySummary(state = "NOT_REQUIRED")
+                cancellationPayments
+                    .project(
+                        ProjectCustomerCancellationPaymentCommand(
+                            orderId = orderId,
+                            cancellationOrderVersion = order.version,
+                            paymentExpected = order.paidAt != null,
+                            correlationId = correlationIds.currentOrCreate(),
+                            now = clock.instant(),
+                        ),
+                    ).let {
+                        CancellationRefundRecoverySummary(
+                            state = it.state,
+                            noticeCode = it.noticeCode,
+                            approvedAmountKrw = it.approvedAmountKrw,
+                            succeededRefundAmountBeforeCancellationKrw =
+                                it.succeededRefundAmountBeforeCancellationKrw,
+                            cancellationRequestedRefundAmountKrw = it.cancellationRequestedRefundAmountKrw,
+                            remainingRefundableAmountKrw = it.remainingRefundableAmountKrw,
+                            lastUpdatedAt = it.lastUpdatedAt,
+                        )
+                    }
             } else {
                 null
             }

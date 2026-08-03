@@ -27,8 +27,28 @@ data class CustomerCancellationPaymentSnapshot(
         get() = requestedRefundAmountKrw > 0
 }
 
+data class ProjectCustomerCancellationPaymentCommand(
+    val orderId: UUID,
+    val cancellationOrderVersion: Long,
+    val paymentExpected: Boolean,
+    val correlationId: String,
+    val now: Instant,
+)
+
+data class CustomerCancellationPaymentProjection(
+    val state: String,
+    val noticeCode: String? = null,
+    val approvedAmountKrw: Long? = null,
+    val succeededRefundAmountBeforeCancellationKrw: Long? = null,
+    val cancellationRequestedRefundAmountKrw: Long? = null,
+    val remainingRefundableAmountKrw: Long? = null,
+    val lastUpdatedAt: Instant? = null,
+)
+
 interface CustomerCancellationPaymentOperations {
     fun prepare(command: PrepareCustomerCancellationPaymentCommand): CustomerCancellationPaymentSnapshot
 
     fun findSnapshot(orderId: UUID): CustomerCancellationPaymentSnapshot?
+
+    fun project(command: ProjectCustomerCancellationPaymentCommand): CustomerCancellationPaymentProjection
 }
