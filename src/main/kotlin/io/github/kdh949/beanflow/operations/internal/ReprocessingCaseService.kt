@@ -26,6 +26,8 @@ internal enum class ReprocessingCaseType {
     SETTLEMENT_LATE_ITEM,
     ACCEPTANCE_TIMEOUT_WORK,
     PAYMENT_CANCELLATION_SETUP,
+    SETTLEMENT_ADJUSTMENT,
+    SETTLEMENT_DISPUTE,
 }
 
 internal enum class ReprocessingCaseStatus {

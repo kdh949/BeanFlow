@@ -302,10 +302,9 @@ internal class FinancialEventValidator {
             event.envelope.eventType == SETTLEMENT_BATCH_CONFIRMED &&
                 event.envelope.payloadVersion == 1 &&
                 event.envelope.aggregateId == event.settlementBatchId &&
-                event.envelope.causationId == "settlement-batch:${event.settlementBatchId}:confirmed" &&
-                event.envelope.occurredAt.toString().isNotBlank(),
+                event.envelope.causationId == "settlement-batch:${event.settlementBatchId}:confirmed",
         )
-        if (event.state != "CONFIRMED" || event.currency != KRW) {
+        if (event.settlementBatchId == ZERO_UUID || event.state != "CONFIRMED" || event.currency != KRW) {
             invalid("SettlementBatchConfirmedV1 required fields are invalid")
         }
     }
@@ -320,7 +319,9 @@ internal class FinancialEventValidator {
                 event.envelope.occurredAt == event.effectiveAt &&
                 event.envelope.causationId == "settlement-adjustment:${event.adjustmentSource}",
         )
-        if (event.adjustmentSource.isBlank() || event.adjustmentSource != event.adjustmentSource.trim() ||
+        if (event.settlementAdjustmentId == ZERO_UUID || event.settlementItemId == ZERO_UUID ||
+            event.settlementBatchId == ZERO_UUID || event.adjustmentSource.isBlank() ||
+            event.adjustmentSource != event.adjustmentSource.trim() ||
             event.adjustmentSource.length > 240 || event.reasonCode !in SETTLEMENT_ADJUSTMENT_REASONS ||
             event.currency != KRW ||
             event.settlementDate != event.orderCompletedAt.atZone(SEOUL).toLocalDate()

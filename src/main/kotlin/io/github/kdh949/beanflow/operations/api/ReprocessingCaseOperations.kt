@@ -29,3 +29,11 @@ interface AcceptanceTimeoutWorkReprocessingCaseOperations {
 interface SettlementLateItemReprocessingCaseOperations {
     fun openLateItemCase(command: OpenReprocessingCaseCommand): UUID
 }
+
+interface SettlementAdjustmentReprocessingCaseOperations {
+    fun openAdjustmentCase(command: OpenReprocessingCaseCommand): UUID
+}
+
+interface SettlementDisputeReprocessingCaseOperations {
+    fun openDisputeCase(command: OpenReprocessingCaseCommand): UUID
+}
