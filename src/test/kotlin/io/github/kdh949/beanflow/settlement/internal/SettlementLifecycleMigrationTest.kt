@@ -147,6 +147,9 @@ internal class SettlementLifecycleMigrationTest {
                 "version = version + 1 WHERE id = ?",
             firstId,
         )
+        assertThatThrownBy { insertDispute(itemId, storeId, "evidence:first", firstId) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+            .hasStackTraceContaining("refile guard")
         val refileId = insertDispute(itemId, storeId, "evidence:refile", firstId)
 
         assertThat(

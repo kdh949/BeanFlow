@@ -8,6 +8,8 @@ import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemView
+import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchOperations
+import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchView
 import io.github.kdh949.beanflow.settlement.api.CreateSettlementAdjustmentCommand
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentReasonCode
@@ -35,7 +37,8 @@ internal class SettlementAdjustmentService(
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
 ) : SettlementAdjustmentOperations,
-    ConfirmedSettlementItemOperations {
+    ConfirmedSettlementItemOperations,
+    ConfirmedSettlementBatchOperations {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun create(command: CreateSettlementAdjustmentCommand): SettlementAdjustmentResult =
         try {
@@ -108,7 +111,7 @@ internal class SettlementAdjustmentService(
         }
 
     @Transactional(readOnly = true)
-    override fun find(settlementItemId: UUID): ConfirmedSettlementItemView? {
+    override fun findConfirmedItem(settlementItemId: UUID): ConfirmedSettlementItemView? {
         val item = items.findById(settlementItemId).orElse(null) ?: return null
         val batch = batches.findById(item.settlementBatchId).orElse(null) ?: return null
         if (batch.state != SettlementBatchState.CONFIRMED) return null
@@ -121,6 +124,19 @@ internal class SettlementAdjustmentService(
             settlementDate = item.settlementDate,
             currency = item.currency,
             batchConfirmedAt = requireNotNull(batch.confirmedAt),
+        )
+    }
+
+    @Transactional(readOnly = true)
+    override fun findConfirmedBatch(settlementBatchId: UUID): ConfirmedSettlementBatchView? {
+        val batch = batches.findById(settlementBatchId).orElse(null) ?: return null
+        if (batch.state != SettlementBatchState.CONFIRMED) return null
+        return ConfirmedSettlementBatchView(
+            settlementBatchId = batch.id,
+            settlementDate = batch.settlementDate,
+            netSettlementKrw = requireNotNull(batch.netSettlementKrw()),
+            currency = "KRW",
+            confirmedAt = requireNotNull(batch.confirmedAt),
         )
     }
 

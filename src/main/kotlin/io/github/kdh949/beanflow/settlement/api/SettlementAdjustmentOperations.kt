@@ -48,5 +48,17 @@ data class ConfirmedSettlementItemView(
 )
 
 interface ConfirmedSettlementItemOperations {
-    fun find(settlementItemId: UUID): ConfirmedSettlementItemView?
+    fun findConfirmedItem(settlementItemId: UUID): ConfirmedSettlementItemView?
+}
+
+data class ConfirmedSettlementBatchView(
+    val settlementBatchId: UUID,
+    val settlementDate: LocalDate,
+    val netSettlementKrw: Long,
+    val currency: String,
+    val confirmedAt: Instant,
+)
+
+interface ConfirmedSettlementBatchOperations {
+    fun findConfirmedBatch(settlementBatchId: UUID): ConfirmedSettlementBatchView?
 }

@@ -75,6 +75,16 @@ internal interface ReprocessingCaseJpaRepository : JpaRepository<ReprocessingCas
     fun findLockedById(
         @Param("id") id: UUID,
     ): ReprocessingCaseEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select beanCase from ReprocessingCaseEntity beanCase " +
+            "where beanCase.caseType = :caseType and beanCase.ownerReference = :ownerReference",
+    )
+    fun findLockedByCaseTypeAndOwnerReference(
+        @Param("caseType") caseType: ReprocessingCaseType,
+        @Param("ownerReference") ownerReference: String,
+    ): ReprocessingCaseEntity?
 }
 
 @Service

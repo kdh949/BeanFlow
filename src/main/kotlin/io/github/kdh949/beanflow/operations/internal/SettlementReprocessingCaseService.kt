@@ -27,6 +27,24 @@ internal class SettlementDisputeReprocessingCaseService(
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun openDisputeCase(command: OpenReprocessingCaseCommand): UUID =
         openCase(repository, identifierSource, ReprocessingCaseType.SETTLEMENT_DISPUTE, command)
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun resolveDisputeCase(
+        ownerReference: String,
+        resolution: String,
+        now: java.time.Instant,
+    ) {
+        require(ownerReference.isNotBlank())
+        require(resolution.isNotBlank())
+        repository
+            .findLockedByCaseTypeAndOwnerReference(ReprocessingCaseType.SETTLEMENT_DISPUTE, ownerReference)
+            ?.let { existing ->
+                existing.status = ReprocessingCaseStatus.RESOLVED
+                existing.resolution = resolution
+                existing.updatedAt = now
+                repository.saveAndFlush(existing)
+            }
+    }
 }
 
 private fun openCase(

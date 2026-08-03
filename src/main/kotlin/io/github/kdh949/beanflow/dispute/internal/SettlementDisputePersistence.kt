@@ -171,6 +171,13 @@ internal interface SettlementDisputeJpaRepository : JpaRepository<SettlementDisp
         states: Collection<SettlementDisputeState>,
     ): SettlementDisputeEntity?
 
+    fun findFirstBySettlementItemIdOrderByFiledAtDescIdDesc(settlementItemId: UUID): SettlementDisputeEntity?
+
+    fun findByStateOrderByFiledAtAscIdAsc(
+        state: SettlementDisputeState,
+        pageable: org.springframework.data.domain.Pageable,
+    ): List<SettlementDisputeEntity>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select dispute from SettlementDisputeEntity dispute where dispute.id = :id")
     fun findLockedById(

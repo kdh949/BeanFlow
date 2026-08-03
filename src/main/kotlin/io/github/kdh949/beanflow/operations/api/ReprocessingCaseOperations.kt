@@ -36,4 +36,10 @@ interface SettlementAdjustmentReprocessingCaseOperations {
 
 interface SettlementDisputeReprocessingCaseOperations {
     fun openDisputeCase(command: OpenReprocessingCaseCommand): UUID
+
+    fun resolveDisputeCase(
+        ownerReference: String,
+        resolution: String,
+        now: Instant,
+    )
 }

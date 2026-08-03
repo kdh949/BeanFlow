@@ -120,6 +120,31 @@ data class SettlementAdjustmentCreatedV1(
     val amountKrw: Long,
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class SettlementDisputeFiledV1(
+    val envelope: EventEnvelope,
+    val disputeId: UUID,
+    val settlementItemId: UUID,
+    val previousDisputeId: UUID?,
+    val state: String,
+    val expectedAdjustmentKrw: Long,
+    val heldAmountKrw: Long,
+    val currency: String,
+    val filedAt: Instant,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class SettlementDisputeDecidedV1(
+    val envelope: EventEnvelope,
+    val disputeId: UUID,
+    val settlementItemId: UUID,
+    val state: String,
+    val heldAmountKrw: Long,
+    val settlementAdjustmentId: UUID?,
+    val currency: String,
+    val decidedAt: Instant,
+)
+
 interface FinancialEventPublicationOperations {
     fun publish(event: PaymentRefundedV1)
 
@@ -132,6 +157,10 @@ interface FinancialEventPublicationOperations {
     fun publish(event: SettlementBatchConfirmedV1)
 
     fun publish(event: SettlementAdjustmentCreatedV1)
+
+    fun publish(event: SettlementDisputeFiledV1)
+
+    fun publish(event: SettlementDisputeDecidedV1)
 
     fun publish(event: CustomerCancellationRefundSucceededV1)
 

@@ -199,9 +199,9 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 
 - [x] Plan 16/20 precondition evidence
 - [x] Batch/Adjustment/Dispute schema와 domain invariant — V28, PostgreSQL 17.6 migration 3 tests와 domain 8 tests
-- [ ] calculation/confirmation과 Batch query
-- [ ] refund adjustment/carry-forward
-- [ ] dispute filing/decision handoff
+- [x] calculation/confirmation과 Batch query — 500건 keyset 계산, 서울 날짜, 확정 Audit/publication, owner signed cursor
+- [x] refund adjustment/carry-forward — confirmed Refund append-only Adjustment, unconfirmed retry, source conflict Case
+- [x] dispute filing/decision handoff — owner membership, half-open window, advisory lock, one refile, Adjustment 선커밋
 - [ ] recovery/observability/runbook
 - [ ] full validation/measurement
 
@@ -212,6 +212,9 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 - 2026-08-03: V28 적용 뒤 기존 Settlement 회귀 40개 중 두 fixture가 summary 없이
   `CALCULATED` 상태를 직접 주입해 새 lifecycle CHECK에 실패했다. 두 fixture를 실제 계산 완료
   summary로 고친 뒤 같은 40-test suite가 통과했다. 제품 fallback이나 기존 migration 수정은 없었다.
+- 2026-08-03: V28의 재이의 trigger는 evidence 배열 전체가 달라지는지만 비교해 기존 reference의
+  순서 변경도 새 증빙으로 오인할 수 있었다. V30에서 이전 배열에 없던 reference가 최소 하나인지
+  검사하도록 교체하고 DB·Application 양쪽에 같은 규칙을 적용했다.
 
 ## Decision Log
 
@@ -224,6 +227,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 | 2026-08-01 | Accepted existing | Dispute Context가 SettlementDispute/held amount/decision event를 소유하고 Settlement는 Adjustment command만 제공 | Context Map·용어집·ADR-018과 일치 | ADR-018, Context Map |
 | 2026-08-03 | Ready | Plan 20의 V21 Batch/Item, V2 consumer, signed query와 exclusion evidence를 verified input으로 소비 | 두 direct dependency completion과 migration writer 선행 순서를 확인 | completed Plan 20, ADR-072 |
 | 2026-08-03 | Accepted implementation | Batch가 이전 confirmed Batch의 carry source와 calculation 시각 기반 Adjustment ingestion high-watermark를 summary에 고정 | 늦게 전달된 과거 effective-time Adjustment도 생성 시각 기준 다음 Batch에서 한 번 소비하고 Adjustment row는 갱신하지 않음 | ADR-008, ADR-017, V28~V29 |
+| 2026-08-03 | Accepted implementation | Dispute filing을 Item과 actor/idempotency advisory lock으로 직렬화하고 refile은 새 evidence reference를 DB와 Application에서 이중 검증 | 동시 active 중복과 단순 evidence 순서 변경 우회를 안정적인 409로 수렴 | ADR-018, V30 |
 
 ## Outcomes & Retrospective
 
