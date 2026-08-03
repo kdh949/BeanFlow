@@ -396,8 +396,27 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
   기존 row로 수렴하며, mismatch·missing·기존 Item·Audit insert failure는 transaction을 실패시킨다.
 - 이 evidence read는 Ordering/Payment Repository 직접 접근이나 외부 Provider 호출이 아니다.
   Order와 Refund는 terminal fact이며 consumer transaction은 그 값을 변경하지 않는다.
+- Batch calculation transaction은 Batch row를 잠그고 이전 confirmed Batch를 확인한 뒤
+  Item·Adjustment를 각각 500건 keyset projection으로 읽는다. summary, calculation 시각,
+  Adjustment ingestion high-watermark와 carry source를 한 번에 저장하며 다른 Context나 외부
+  Provider를 호출하지 않는다. confirmation은 별도 transaction에서 `CALCULATED → CONFIRMED`,
+  target Audit와 `SettlementBatchConfirmedV1` publication을 원자 저장한다.
+- completed-order `PaymentRefundedV1` consumer는 confirmed Item view를 검증하고
+  `REFUND_SUCCEEDED` Adjustment, target Audit와 `SettlementAdjustmentCreatedV1`을 하나의
+  Settlement transaction에 저장한다. unconfirmed Item은 0원/no-op으로 완료하지 않고 publication
+  retry에 남긴다. 같은 source의 payload conflict는 source-unique ReprocessingCase를 연다.
+- Dispute filing transaction은 Item/actor-key advisory lock, confirmed Item과 active membership
+  확인, terminal idempotency response, Dispute/held, target Audit와
+  `SettlementDisputeFiledV1` publication을 함께 commit한다. Audit/publication 실패에는 row와
+  201 응답을 남기지 않는다.
 - Dispute Context의 판정과 SettlementAdjustment 생성은 Context 간 별도 트랜잭션이다.
-  명령 실패 시 Dispute가 Adjustment 완료로 가장하지 않고 재시도 가능한 상태를 유지한다.
+  `ACCEPTED`는 Settlement public command가 `REQUIRES_NEW`로 source-unique Adjustment를 먼저
+  commit하고, 그 뒤 Dispute transaction이 `UNDER_REVIEW → ACCEPTED`, held 0, Audit와
+  `SettlementDisputeDecidedV1`을 commit한다. 후자가 실패하면 Adjustment는 보존되지만 Dispute는
+  `UNDER_REVIEW`이고 `SETTLEMENT_DISPUTE_DECISION` Case가 `MANUAL_REVIEW`로 남는다. 같은 명령
+  재시도는 기존 Adjustment의 target/reason/amount를 검증한 뒤 terminal commit과 Case resolve로
+  수렴한다. `REJECTED`/`WITHDRAWN`은 Adjustment 없이 held 0과 terminal fact를 한 transaction에
+  저장한다.
 
 ## Audited expired-benefit policy read
 

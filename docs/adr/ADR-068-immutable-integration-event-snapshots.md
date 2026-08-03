@@ -2,14 +2,15 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
 Settlement은 완료 시점의 수수료율과 혜택 비용 snapshot으로 과거 결과를 재현해야 하고,
 Analytics는 late/replayed event를 현재 Aggregate나 현재 정책을 다시 읽지 않고 집계해야
 한다. 현재 `OrderCompletedV1`은 식별자와 완료 시각만 가지며, `PaymentRefunded`,
-`PointsAccrued`, `PointsRestored`, `SettlementItemCreated`, `SettlementAdjustmentCreated`는
+`PointsAccrued`, `PointsRestored`, `SettlementItemCreated`, `SettlementBatchConfirmed`,
+`SettlementAdjustmentCreated`, `SettlementDisputeFiled`, `SettlementDisputeDecided`는
 catalog 이름만 있고 Kotlin 계약·producer checkpoint가 없다.
 
 consumer가 최신 Order, Campaign, Merchant 계약 또는 PointLot을 다시 조회하면 정책·계약
@@ -41,14 +42,19 @@ Idempotency-Key, evidence, 자유 입력 reason/detail 또는 live policy value�
 | `PointsRestoredV1` / 1 | `pointTransactionSource`, `refundSource`, `orderId`, `refundSucceededAt`, `orderCompletedAt`(없는 경우 null), `amountKrw`, `currency`, `restorationDisposition` (`RESTORE`, `COMPENSATION`, `SKIPPED`) | Loyalty의 Refund owner result transaction과 같은 transaction. `point-transaction:{source}` | Analytics |
 | `PointsAdjustedV1` / 1 | `adjustmentSource`, `accountId`, signed `amountKrw`, `issuerType`(CREDIT일 때만) | Loyalty point-adjustment command transaction과 같은 transaction. `point-adjustment:{adjustmentSource}` | Analytics |
 | `SettlementItemCreatedV1` / 1 | `settlementItemId`, `settlementBatchId`, `itemSource`, `orderId`, `storeId`, `completedAt`, `settlementDate`, `currency`, `grossPaidKrw`, `feeKrw`, `benefitCostKrw`, `netSettlementKrw` | SettlementItem/Audit/outbox를 저장하는 Plan 20 Settlement transaction. `settlement-item:{itemSource}` | Analytics |
+| `SettlementBatchConfirmedV1` / 1 | `settlementBatchId`, `settlementDate`, `state=CONFIRMED`, signed `netSettlementKrw`, `currency` | Batch `CALCULATED → CONFIRMED`, Audit와 outbox를 저장하는 lifecycle transaction. `settlement-batch:{settlementBatchId}:confirmed` | Dispute의 confirmed Batch observation |
 | `SettlementAdjustmentCreatedV1` / 1 | `settlementAdjustmentId`, `adjustmentSource`, `settlementItemId`, `settlementBatchId`, `reasonCode`, `effectiveAt`, `orderCompletedAt`, `settlementDate`, `currency`, signed `amountKrw` | SettlementAdjustment/Audit/outbox를 저장하는 lifecycle transaction. `settlement-adjustment:{adjustmentSource}` | Analytics |
+| `SettlementDisputeFiledV1` / 1 | `disputeId`, `settlementItemId`, `previousDisputeId`(최초 접수는 null), `state=FILED`, signed `expectedAdjustmentKrw`, signed `heldAmountKrw`, `currency`, `filedAt` | Dispute/idempotency response/Audit/outbox를 저장하는 filing transaction. `settlement-dispute:{disputeId}:filed` | Operations |
+| `SettlementDisputeDecidedV1` / 1 | `disputeId`, `settlementItemId`, terminal `state`, `heldAmountKrw=0`, `settlementAdjustmentId`(`ACCEPTED`만 required), `currency`, `decidedAt` | Dispute terminal/Audit/outbox를 저장하는 decision transaction. `settlement-dispute:{disputeId}:decided` | Operations |
 
 명시적으로 conditional 또는 nullable이라고 적힌 field 외에는 모든 field가 required다. 식별자는
 canonical UUID string, `*At`은 offset을 가진 `Instant`, `settlementDate`는 `Asia/Seoul`의
 `YYYY-MM-DD`, `currency`는 `KRW`다. `grossPaidKrw`, `feeKrw`, `couponCostKrw`, `pointCostKrw`,
 `benefitCostKrw`, `netSettlementKrw`, `cashRefundedKrw`와 일반 accrual/restoration `amountKrw`는
 non-negative 64-bit integer KRW다. delta, `PointsAdjustedV1.amountKrw`,
-`SettlementAdjustmentCreatedV1.amountKrw`는 signed 64-bit integer KRW이고,
+`SettlementAdjustmentCreatedV1.amountKrw`, `SettlementBatchConfirmedV1.netSettlementKrw`와
+Dispute의 expected/held amount는 signed 64-bit integer KRW다. Dispute event에는 evidence
+reference, 자유 입력 reason, actor와 Idempotency-Key를 포함하지 않는다.
 `feeRateBps`는 `0..10000` integer다. `*Source`와 `reasonCode`는 producer가 만든 stable opaque
 identifier/closed vocabulary이며, consumer가 자유 text 또는 current state로 채우지 않는다.
 
@@ -107,6 +113,7 @@ source만 보존한다.
 | `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` | Plan 16 | Payment/Loyalty producer transaction and allocation/snapshot tests pass; it does not own an Order completion event |
 | `PointsAdjustedV1` | Point adjustment plan | adjustment transaction, permission gate and outbox contract tests pass |
 | `SettlementAdjustmentCreatedV1` | Settlement lifecycle plan | adjustment source/reason unique and outbox contract tests pass |
+| `SettlementBatchConfirmedV1`, `SettlementDisputeFiledV1`, `SettlementDisputeDecidedV1` | Settlement lifecycle plan | guarded transition, Audit/outbox rollback, 실제 Dispute/Operations listener completion과 민감 field 부재 검증 통과 |
 | receipt/delta/freshness projection | Analytics plan | every enabled producer row above has actual outcome evidence |
 
 `OrderCompletedV1` is frozen. Plan 20 may replace its producer with `OrderCompletedV2` only after a
@@ -145,6 +152,14 @@ Settlement/Analytics consumer와 projection은 구현하지 않았다.
 payload만으로 Batch/Item/Audit/`SettlementItemCreatedV1` target을 저장한다. 고객 취소
 `PaymentRefundedV1`은 event 누락을 live state로 채우는 용도가 아니라 ADR-048의 명시적
 Order/Refund terminal evidence 확인에만 public typed query를 사용한다.
+
+**Settlement lifecycle implementation checkpoint (2026-08-03):**
+`SettlementBatchConfirmedV1`, `SettlementAdjustmentCreatedV1`,
+`SettlementDisputeFiledV1`과 `SettlementDisputeDecidedV1` typed payload/validator/persistent producer가
+활성화됐다. Batch target은 실제 Dispute listener, 두 Dispute target은 실제 Operations listener가
+완료한다. completed Refund consumer는 confirmed Item에만 Adjustment event를 만들고 unconfirmed
+target은 publication retry에 남긴다. accepted Dispute Adjustment는 event consumer가 아니라
+Dispute의 Settlement public command로 선커밋되며 decision event에는 evidence/actor/client key가 없다.
 
 ### Plan 13의 frozen V1 trigger-only boundary
 

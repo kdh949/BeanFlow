@@ -42,8 +42,10 @@
 - [Measurement Plan](performance/measurement-plan.md)
 - [Quality Evidence Map](quality/quality-evidence-map.md)
 - [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
+- [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
 - [Code Review Guide](review/code-review.md)
 - [Settlement Foundation Runbook](operations/settlement-foundation-runbook.md)
+- [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 
 ## Execution Plans
 
@@ -56,7 +58,7 @@
 - [Cancellation 15 Settlement Input Snapshot Foundation](exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
 - [Cancellation 16 Immutable Refund and Loyalty Event Producer](exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md)
 - [Cancellation 20 Settlement Foundation](exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md)
-- [Settlement Batch, Adjustment, and Dispute](exec-plans/active/settlement-batch-adjustment-and-dispute.md)
+- [Completed Settlement Batch, Adjustment, and Dispute](exec-plans/completed/settlement-batch-adjustment-and-dispute.md)
 - [Cancellation 30 Order Compensation Foundation](exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md)
 - [Cancellation 40 Command](exec-plans/completed/customer-order-cancellation-40-command.md)
 - [Completed Cancellation 50 Recovery](exec-plans/completed/customer-order-cancellation-50-recovery.md)
@@ -76,3 +78,4 @@
 - [Payment Approval and Reconciliation Runbook](operations/payment-reconciliation-runbook.md)
 - [Store Order Lifecycle and Rejection Recovery Runbook](operations/store-order-lifecycle-runbook.md)
 - [Customer Order Cancellation and Refund Recovery Runbook](operations/customer-order-cancellation-runbook.md)
+- [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)

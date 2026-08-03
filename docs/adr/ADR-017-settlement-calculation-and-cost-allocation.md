@@ -44,8 +44,12 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 - **Implementation evidence (2026-08-03):** V21과 Plan 20이 V1 inventory 0 gate 뒤
   `OrderCompletedV2` producer/consumer를 활성화했다. consumer는 immutable payload로 store/date
   `OPEN` Batch를 insert-or-read하고 Order/source unique SettlementItem, Audit과
-  `SettlementItemCreatedV1` target을 원자 저장한다. 정산 계산·확정·Adjustment는 아직 후속
-  lifecycle 범위다.
+  `SettlementItemCreatedV1` target을 원자 저장한다.
+- **Lifecycle implementation evidence (2026-08-03):** V28~V29와 lifecycle service가 매장·서울
+  완료일 Batch를 500건 keyset으로 합산하고, immutable Item summary formula, 이전 Batch
+  confirmation 선행조건, calculation/confirmation 시각과 negative carry를 DB와 Aggregate 양쪽에서
+  보호한다. confirmation은 Audit와 `SettlementBatchConfirmedV1`을 원자 저장한다. completed
+  Refund와 accepted Dispute는 Item snapshot을 수정하지 않고 이후 Adjustment로만 반영된다.
 
 ## Alternatives Considered
 
@@ -75,8 +79,10 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
 
 ## Metrics
 
-- **Not measured:** Batch 처리량과 chunk 크기
-- 첫 Settlement Feature에서 동일 데이터 조건의 처리시간과 lock wait를 측정한다.
+- **Measured (2026-08-03, single local run):** PostgreSQL 17.6, 1,000 Item, chunk 500,
+  `idx_settlement_item_batch_cursor` index scan에서 500 rows 실행 0.119ms(shared hit 20), Batch
+  calculation 36.054ms, confirmation 17.260ms였다. 의도적으로 row lock을 200ms 보유한 동일
+  Batch 경쟁의 관측 대기는 203.086ms였다. 기준선·부하·SLA가 없는 재현 fixture 값이다.
 
 ## Revisit Conditions
 

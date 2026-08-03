@@ -40,12 +40,18 @@ SettlementAdjustment를 만들지 않고 append-only AuditRecord로
   Item으로 만들고, 고객 취소 Refund에는 Item/Adjustment 없이 실제 Order/Refund evidence와
   source-unique `SETTLEMENT_REFUND_EXCLUDED` Audit만 남긴다. existing Item, source mismatch와
   Audit rollback은 성공 처리되지 않는 통합 테스트로 검증했다.
-- Batch calculation/confirmation과 확정 후 Adjustment/이월 검증은
-  [Settlement lifecycle plan](../exec-plans/active/settlement-batch-adjustment-and-dispute.md)의 범위다.
+- **Settlement lifecycle evidence (2026-08-03):** V28~V29와 Settlement Application Service는
+  confirmed Item/Batch에만 append-only Adjustment를 허용하고 source/reason unique와 mutation
+  trigger로 중복·변경을 막는다. completed Refund와 accepted Dispute는 각각 stable source로
+  하나의 Adjustment, Audit와 persistent event에 수렴한다. 계산 시각 기반 ingestion
+  high-watermark와 이전 confirmed Batch의 negative carry source를 summary에 고정해 늦게 생성된
+  Adjustment를 다음 Batch에서 한 번만 소비한다. 500건 keyset tie-out, 연속 음수 이월,
+  exact replay와 conflict failure를 PostgreSQL 통합 테스트로 검증했다.
 
 ## Metrics
 
-측정 전에는 목표·가정과 실제 결과를 분리한다. 실제 측정 결과가 생기면 조건과 함께 추가한다.
+- **Measured (2026-08-03, single local run):** PostgreSQL 17.6, 1,000 Item, chunk 500에서
+  calculation 36.054ms, confirmation 17.260ms였다. 기준선·SLA가 없는 진단 값이며 개선율 주장이 아니다.
 
 ## Revisit Conditions
 

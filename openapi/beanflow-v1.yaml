@@ -947,6 +947,11 @@ paths:
       tags: [Settlement]
       operationId: listStoreSettlements
       summary: List settlement batches for an owned store
+      description: |
+        Returns only CALCULATED and CONFIRMED batch summaries. OPEN batches are
+        internal ingestion state and are not represented with fabricated zero
+        summaries. Results are ordered by settlementDate and settlementBatchId
+        descending, and the cursor is scoped to this store.
       parameters:
         - $ref: "#/components/parameters/StoreId"
         - $ref: "#/components/parameters/Cursor"
@@ -1005,6 +1010,13 @@ paths:
       tags: [Dispute]
       operationId: createSettlementDispute
       summary: File a dispute for a confirmed settlement item
+      description: |
+        Requires the STORE_OWNER role and an active OWNER membership for the
+        item's store. Filing is allowed during [D+1 00:00, D+15 00:00) in
+        Asia/Seoul, where D is the batch confirmation date. The same actor,
+        operation, Idempotency-Key, and canonical payload replay the original
+        201 response. An active dispute, a refile without a new evidence
+        reference, or a second refile is a stable conflict.
       parameters:
         - $ref: "#/components/parameters/SettlementItemId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1031,6 +1043,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -2659,7 +2673,7 @@ components:
           description: Completion date in Asia/Seoul
         state:
           type: string
-          enum: [OPEN, CALCULATED, CONFIRMED]
+          enum: [CALCULATED, CONFIRMED]
         grossPaidKrw:
           $ref: "#/components/schemas/MoneyKrw"
         feeKrw:

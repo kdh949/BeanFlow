@@ -8,12 +8,17 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
 import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
+import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
+import io.github.kdh949.beanflow.operations.api.SettlementAdjustmentReprocessingCaseOperations
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidence
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidenceOperations
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationRefundEvidence
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationRefundEvidenceOperations
+import io.github.kdh949.beanflow.settlement.api.CreateSettlementAdjustmentCommand
+import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentOperations
+import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentReasonCode
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
@@ -203,11 +208,147 @@ internal class CustomerCancellationRefundExclusionService(
 
 @Component
 internal class PaymentRefundedSettlementListener(
-    private val service: CustomerCancellationRefundExclusionService,
+    private val exclusions: CustomerCancellationRefundExclusionService,
+    private val adjustments: SettlementRefundAdjustmentService,
     private val clock: Clock,
 ) {
     @ApplicationModuleListener(id = "beanflow.settlement.payment-refunded-v1")
     fun on(event: PaymentRefundedV1) {
-        service.exclude(event, clock.instant())
+        when (event.completionDisposition) {
+            RefundCompletionDisposition.PRE_ACCEPTANCE_CANCELLATION -> exclusions.exclude(event, clock.instant())
+            RefundCompletionDisposition.COMPLETED_ORDER -> adjustments.adjust(event, clock.instant())
+            RefundCompletionDisposition.PRE_COMPLETION_ORDER -> adjustments.deferPreCompletion(event, clock.instant())
+        }
+    }
+}
+
+@Service
+internal class SettlementRefundAdjustmentService(
+    private val items: SettlementItemJpaRepository,
+    private val adjustmentOperations: SettlementAdjustmentOperations,
+    private val reprocessingCases: SettlementAdjustmentReprocessingCaseOperations,
+    private val meterRegistry: MeterRegistry,
+) {
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun adjust(
+        event: PaymentRefundedV1,
+        processedAt: Instant,
+    ) {
+        validateCompletedEvent(event)
+        val itemSource = requireNotNull(event.settlementItemSource)
+        val item = items.findByItemSource(itemSource)
+        if (item == null || item.orderId != event.orderId || item.completedAt != event.orderCompletedAt ||
+            item.settlementDate != event.settlementDate || item.currency != event.currency
+        ) {
+            reprocess(event, processedAt, "CONFIRMED_ITEM_SOURCE_CONFLICT")
+        }
+        val effect = requireNotNull(event.settlementRefundEffect)
+        try {
+            adjustmentOperations.create(
+                CreateSettlementAdjustmentCommand(
+                    settlementItemId = requireNotNull(item).id,
+                    adjustmentSource = event.refundSource,
+                    reasonCode = SettlementAdjustmentReasonCode.REFUND_SUCCEEDED,
+                    effectiveAt = event.refundSucceededAt,
+                    amountKrw = effect.netSettlementDeltaKrw,
+                    correlationId = event.envelope.correlationId,
+                ),
+            )
+            dispositionMetric("ADJUSTMENT_CREATED")
+        } catch (failure: DomainFailure) {
+            if (failure.message.startsWith("SETTLEMENT_SOURCE_CONFLICT:")) {
+                reprocess(event, processedAt, "ADJUSTMENT_SOURCE_CONFLICT")
+            }
+            throw failure
+        }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun deferPreCompletion(
+        event: PaymentRefundedV1,
+        processedAt: Instant,
+    ): Nothing {
+        validatePreCompletionEvent(event)
+        reprocess(event, processedAt, "PRE_COMPLETION_REFUND_REQUIRES_SETTLEMENT_RECONCILIATION")
+    }
+
+    private fun validateCompletedEvent(event: PaymentRefundedV1) {
+        val effect = event.settlementRefundEffect
+        if (event.envelope.eventType != "PaymentRefundedV1" || event.envelope.payloadVersion != 1 ||
+            event.envelope.aggregateId != event.refundId || event.envelope.occurredAt != event.refundSucceededAt ||
+            event.envelope.causationId != "refund:${event.refundId}:succeeded" ||
+            event.envelope.correlationId.isBlank() || event.refundSource.isBlank() || event.currency != "KRW" ||
+            event.orderCompletedAt == null || event.settlementDate == null || event.settlementItemSource == null ||
+            effect == null || !tiesOut(effect) ||
+            listOf(
+                effect.grossPaidDeltaKrw,
+                effect.feeDeltaKrw,
+                effect.benefitCostDeltaKrw,
+                effect.netSettlementDeltaKrw,
+            ).any { it > 0 }
+        ) {
+            throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "PaymentRefundedV1 completed payload is invalid")
+        }
+    }
+
+    private fun tiesOut(effect: io.github.kdh949.beanflow.eventing.api.SettlementRefundEffect): Boolean =
+        try {
+            effect.netSettlementDeltaKrw ==
+                Math.subtractExact(
+                    Math.subtractExact(effect.grossPaidDeltaKrw, effect.feeDeltaKrw),
+                    effect.benefitCostDeltaKrw,
+                )
+        } catch (_: ArithmeticException) {
+            false
+        }
+
+    private fun validatePreCompletionEvent(event: PaymentRefundedV1) {
+        val effect = event.settlementRefundEffect
+        if (event.envelope.eventType != "PaymentRefundedV1" || event.envelope.payloadVersion != 1 ||
+            event.envelope.aggregateId != event.refundId || event.envelope.occurredAt != event.refundSucceededAt ||
+            event.envelope.causationId != "refund:${event.refundId}:succeeded" ||
+            event.envelope.correlationId.isBlank() || event.refundSource.isBlank() || event.currency != "KRW" ||
+            event.orderCompletedAt != null || event.settlementDate != null || event.settlementItemSource != null ||
+            effect == null || !tiesOut(effect) ||
+            listOf(
+                effect.grossPaidDeltaKrw,
+                effect.feeDeltaKrw,
+                effect.benefitCostDeltaKrw,
+                effect.netSettlementDeltaKrw,
+            ).any { it > 0 }
+        ) {
+            throw DomainFailure(
+                FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
+                "PaymentRefundedV1 pre-completion payload is invalid",
+            )
+        }
+    }
+
+    private fun reprocess(
+        event: PaymentRefundedV1,
+        processedAt: Instant,
+        reason: String,
+    ): Nothing {
+        reprocessingCases.openAdjustmentCase(
+            OpenReprocessingCaseCommand(
+                ownerReference = "settlement-adjustment:${event.refundSource}",
+                reason = reason,
+                correlationId = event.envelope.correlationId,
+                now = processedAt,
+            ),
+        )
+        dispositionMetric("MANUAL_REVIEW")
+        throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, reason)
+    }
+
+    private fun dispositionMetric(disposition: String) {
+        meterRegistry
+            .counter(
+                "beanflow.settlement.refund.disposition.count",
+                "disposition",
+                disposition,
+                "reason",
+                "REFUND_SUCCEEDED",
+            ).increment()
     }
 }

@@ -8,6 +8,10 @@ import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.PointsAccruedV1
 import io.github.kdh949.beanflow.eventing.api.PointsRestoredV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
+import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementBatchConfirmedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementDisputeFiledV1
 import io.github.kdh949.beanflow.eventing.api.SettlementItemCreatedV1
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -47,6 +51,26 @@ internal class FinancialEventPublicationService(
     override fun publish(event: SettlementItemCreatedV1) {
         validator.validate(event)
         persist(event, SETTLEMENT_ITEM_CREATED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: SettlementBatchConfirmedV1) {
+        validator.validate(event)
+        persist(event, SETTLEMENT_BATCH_CONFIRMED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: SettlementAdjustmentCreatedV1) {
+        validator.validate(event)
+        persist(event, SETTLEMENT_ADJUSTMENT_CREATED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: SettlementDisputeFiledV1) {
+        validator.validate(event)
+        persist(event, SETTLEMENT_DISPUTE_FILED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: SettlementDisputeDecidedV1) {
+        validator.validate(event)
+        persist(event, SETTLEMENT_DISPUTE_DECIDED_TARGETS, event.envelope)
     }
 
     override fun publish(event: CustomerCancellationRefundSucceededV1) {
@@ -138,6 +162,10 @@ internal class FinancialEventPublicationService(
         val POINTS_ACCRUED_TARGETS = listOf("beanflow.analytics.points-accrued-v1")
         val POINTS_RESTORED_TARGETS = listOf("beanflow.analytics.points-restored-v1")
         val SETTLEMENT_ITEM_CREATED_TARGETS = listOf("beanflow.analytics.settlement-item-created-v1")
+        val SETTLEMENT_BATCH_CONFIRMED_TARGETS = listOf("beanflow.dispute.settlement-batch-confirmed-v1")
+        val SETTLEMENT_ADJUSTMENT_CREATED_TARGETS = listOf("beanflow.analytics.settlement-adjustment-created-v1")
+        val SETTLEMENT_DISPUTE_FILED_TARGETS = listOf("beanflow.operations.settlement-dispute-filed-v1")
+        val SETTLEMENT_DISPUTE_DECIDED_TARGETS = listOf("beanflow.operations.settlement-dispute-decided-v1")
         val CUSTOMER_CANCELLATION_REFUND_SUCCEEDED_TARGETS =
             listOf("beanflow.notification.customer-cancellation-refund-succeeded-v1")
         val CUSTOMER_CANCELLATION_REFUND_DELAYED_TARGETS =
@@ -282,6 +310,74 @@ internal class FinancialEventValidator {
         }
     }
 
+    fun validate(event: SettlementBatchConfirmedV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == SETTLEMENT_BATCH_CONFIRMED &&
+                event.envelope.payloadVersion == 1 &&
+                event.envelope.aggregateId == event.settlementBatchId &&
+                event.envelope.causationId == "settlement-batch:${event.settlementBatchId}:confirmed",
+        )
+        if (event.settlementBatchId == ZERO_UUID || event.state != "CONFIRMED" || event.currency != KRW) {
+            invalid("SettlementBatchConfirmedV1 required fields are invalid")
+        }
+    }
+
+    fun validate(event: SettlementAdjustmentCreatedV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == SETTLEMENT_ADJUSTMENT_CREATED &&
+                event.envelope.payloadVersion == 1 &&
+                event.envelope.aggregateId == event.settlementAdjustmentId &&
+                event.envelope.aggregateVersion == 0L &&
+                event.envelope.occurredAt == event.effectiveAt &&
+                event.envelope.causationId == "settlement-adjustment:${event.adjustmentSource}",
+        )
+        if (event.settlementAdjustmentId == ZERO_UUID || event.settlementItemId == ZERO_UUID ||
+            event.settlementBatchId == ZERO_UUID || event.adjustmentSource.isBlank() ||
+            event.adjustmentSource != event.adjustmentSource.trim() ||
+            event.adjustmentSource.length > 240 || event.reasonCode !in SETTLEMENT_ADJUSTMENT_REASONS ||
+            event.currency != KRW ||
+            event.settlementDate != event.orderCompletedAt.atZone(SEOUL).toLocalDate()
+        ) {
+            invalid("SettlementAdjustmentCreatedV1 required fields are invalid")
+        }
+    }
+
+    fun validate(event: SettlementDisputeFiledV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == SETTLEMENT_DISPUTE_FILED &&
+                event.envelope.payloadVersion == 1 && event.envelope.aggregateId == event.disputeId &&
+                event.envelope.occurredAt == event.filedAt &&
+                event.envelope.causationId == "settlement-dispute:${event.disputeId}:filed",
+        )
+        if (event.disputeId == ZERO_UUID || event.settlementItemId == ZERO_UUID ||
+            event.previousDisputeId == ZERO_UUID || event.state != "FILED" || event.currency != KRW ||
+            event.heldAmountKrw != event.expectedAdjustmentKrw
+        ) {
+            invalid("SettlementDisputeFiledV1 required fields are invalid")
+        }
+    }
+
+    fun validate(event: SettlementDisputeDecidedV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == SETTLEMENT_DISPUTE_DECIDED &&
+                event.envelope.payloadVersion == 1 && event.envelope.aggregateId == event.disputeId &&
+                event.envelope.occurredAt == event.decidedAt &&
+                event.envelope.causationId == "settlement-dispute:${event.disputeId}:decided",
+        )
+        if (event.disputeId == ZERO_UUID || event.settlementItemId == ZERO_UUID ||
+            event.state !in SETTLEMENT_DISPUTE_TERMINAL_STATES || event.heldAmountKrw != 0L ||
+            event.currency != KRW ||
+            ((event.state == "ACCEPTED") != (event.settlementAdjustmentId != null)) ||
+            event.settlementAdjustmentId == ZERO_UUID
+        ) {
+            invalid("SettlementDisputeDecidedV1 required fields are invalid")
+        }
+    }
+
     private fun validateEnvelope(
         envelope: EventEnvelope,
         eventSpecificValid: Boolean,
@@ -339,9 +435,15 @@ internal class FinancialEventValidator {
         const val POINTS_ACCRUED = "PointsAccruedV1"
         const val POINTS_RESTORED = "PointsRestoredV1"
         const val SETTLEMENT_ITEM_CREATED = "SettlementItemCreatedV1"
+        const val SETTLEMENT_BATCH_CONFIRMED = "SettlementBatchConfirmedV1"
+        const val SETTLEMENT_ADJUSTMENT_CREATED = "SettlementAdjustmentCreatedV1"
+        const val SETTLEMENT_DISPUTE_FILED = "SettlementDisputeFiledV1"
+        const val SETTLEMENT_DISPUTE_DECIDED = "SettlementDisputeDecidedV1"
         const val CUSTOMER_CANCELLATION_REFUND_SUCCEEDED = "CustomerCancellationRefundSucceededV1"
         const val CUSTOMER_CANCELLATION_REFUND_DELAYED = "CustomerCancellationRefundDelayedV1"
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
         val ZERO_UUID: UUID = UUID(0, 0)
+        val SETTLEMENT_ADJUSTMENT_REASONS = setOf("REFUND_SUCCEEDED", "DISPUTE_ACCEPTED")
+        val SETTLEMENT_DISPUTE_TERMINAL_STATES = setOf("ACCEPTED", "REJECTED", "WITHDRAWN")
     }
 }

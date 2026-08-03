@@ -26,6 +26,8 @@ internal enum class ReprocessingCaseType {
     SETTLEMENT_LATE_ITEM,
     ACCEPTANCE_TIMEOUT_WORK,
     PAYMENT_CANCELLATION_SETUP,
+    SETTLEMENT_ADJUSTMENT,
+    SETTLEMENT_DISPUTE,
 }
 
 internal enum class ReprocessingCaseStatus {
@@ -72,6 +74,16 @@ internal interface ReprocessingCaseJpaRepository : JpaRepository<ReprocessingCas
     @Query("select beanCase from ReprocessingCaseEntity beanCase where beanCase.id = :id")
     fun findLockedById(
         @Param("id") id: UUID,
+    ): ReprocessingCaseEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select beanCase from ReprocessingCaseEntity beanCase " +
+            "where beanCase.caseType = :caseType and beanCase.ownerReference = :ownerReference",
+    )
+    fun findLockedByCaseTypeAndOwnerReference(
+        @Param("caseType") caseType: ReprocessingCaseType,
+        @Param("ownerReference") ownerReference: String,
     ): ReprocessingCaseEntity?
 }
 

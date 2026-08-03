@@ -22,10 +22,17 @@ BR-22~BR-24는 확정 SettlementItem에 대한 14일 이의 기간, 분쟁 금�
 - 종결 후 새 증빙 reference와 이전 dispute ID가 있을 때 별도 Aggregate instance로
   한 번만 재이의를 허용한다.
 - **Context boundary amendment (2026-08-01):** Dispute Context가 `SettlementDispute`, held
-  amount, filing/decision state와 `SettlementDisputeFiled/Decided` event를 소유한다.
+  amount, filing/decision state와 `SettlementDisputeFiledV1`/`SettlementDisputeDecidedV1` event를 소유한다.
   Settlement Context는 SettlementItem/Batch/Adjustment를 소유하고 Dispute에 confirmed Item
   view를 제공한다. accepted decision은 Dispute가 Settlement의 public Adjustment command를
   호출해 전달하며, 어느 Context도 다른 Context의 Repository를 직접 호출하지 않는다.
+- **Implementation evidence (2026-08-03):** V28/V30과 Dispute Application Service가 confirmed
+  Item, OWNER membership, 서울 half-open window, Item 및 actor-key advisory lock, terminal 201
+  replay를 구현했다. active partial unique와 DB/Application refile guard는 immediate previous
+  terminal ID, 이전 배열에 없던 evidence reference와 총 1회 제한을 함께 강제한다.
+  `ACCEPTED`는 `dispute:{id}:accepted` Adjustment의 별도 commit 뒤에만 terminal이고, 이후
+  Audit/publication failure는 `UNDER_REVIEW`와 `SETTLEMENT_DISPUTE_DECISION` ReprocessingCase를
+  남긴다. retry는 기존 Adjustment exact replay, terminal event와 Case resolve로 수렴한다.
 
 ## Alternatives Considered
 
@@ -51,7 +58,8 @@ BR-22~BR-24는 확정 SettlementItem에 대한 14일 이의 기간, 분쟁 금�
 
 ## Metrics
 
-- **Not measured:** 이의 접수량과 처리시간
+- **Not measured:** 운영 이의 접수량, review queue latency와 실제 판정 처리시간. 구현 검증은
+  고정 Clock 경계·동시 접수·handoff fault/retry에 한정한다.
 
 ## Revisit Conditions
 

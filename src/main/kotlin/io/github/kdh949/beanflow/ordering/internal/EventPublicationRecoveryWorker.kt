@@ -5,6 +5,10 @@ import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementBatchConfirmedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1
+import io.github.kdh949.beanflow.eventing.api.SettlementDisputeFiledV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.operations.api.EventPublicationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
@@ -180,6 +184,10 @@ internal class EventPublicationRecoveryWorker(
             is OrderAcceptedV1 -> event.envelope.correlationId
             is OrderReadyV1 -> event.envelope.correlationId
             is OrderCompletedV2 -> event.envelope.correlationId
+            is SettlementBatchConfirmedV1 -> event.envelope.correlationId
+            is SettlementAdjustmentCreatedV1 -> event.envelope.correlationId
+            is SettlementDisputeFiledV1 -> event.envelope.correlationId
+            is SettlementDisputeDecidedV1 -> event.envelope.correlationId
             else -> fallback
         }
 

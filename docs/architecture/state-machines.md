@@ -243,7 +243,9 @@ OPEN -> CALCULATED -> CONFIRMED
 
 `CONFIRMED` 이후 Item 또는 Batch를 수정하지 않고 Adjustment를 추가한다.
 SettlementItem과 SettlementAdjustment는 append-only 원장 항목이므로 별도 수정 상태
-머신을 두지 않는다.
+머신을 두지 않는다. `CALCULATED` summary에는 calculation 시각까지 생성된 Adjustment의
+high-watermark와 직전 confirmed Batch의 음수 carry source가 고정되며 재실행은 같은 상태를
+반환한다. 이전 날짜 Batch가 미확정이면 다음 날짜 계산을 시작하지 않는다.
 
 ## Dispute
 
@@ -254,9 +256,14 @@ FILED -> UNDER_REVIEW -> ACCEPTED | REJECTED | WITHDRAWN
 재이의제기는 이전 Dispute를 참조하는 별도 Aggregate instance다.
 
 - `FILED` 시 대상 예상 조정액을 held amount로 기록한다.
+- `FILED` 접수는 confirmed Batch의 서울 날짜 D 기준 `[D+1 00:00, D+15 00:00)`에서만
+  허용하며 active Item partial unique와 advisory lock으로 동시 요청을 하나로 수렴한다.
 - `ACCEPTED`는 Settlement에 Adjustment 생성 명령을 보내고, 성공한 원천 reference를
-  중복 생성하지 않는다.
+  중복 생성하지 않는다. Adjustment가 별도 transaction에서 commit된 뒤에만 Dispute를
+  terminal로 저장한다. 후속 transaction 실패 시 `UNDER_REVIEW`와 재처리 Case를 유지한다.
 - `REJECTED` 또는 `WITHDRAWN`은 held amount를 해제한다.
+- terminal Dispute 뒤 재접수는 immediate previous ID와 이전 배열에 없던 evidence reference를
+  요구하며 별도 Aggregate instance로 한 번만 허용한다.
 
 ## Idempotency record
 
