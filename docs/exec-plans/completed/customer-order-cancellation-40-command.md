@@ -1,11 +1,11 @@
 # 고객 취소 command와 Tx C0/C1을 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -17,17 +17,17 @@
 
 ## Current State
 
-- OpenAPI와 ADR-029~035/039/044/054/058/061/063/064는 command 계약과 선행
-  Refund·policy·멱등성 기준을 확정했다.
-- 현재 Order에는 결제 거절용 `cancelPendingPayment`만 있고 고객 취소 필드/guard가 없다.
-- `OrderController`에는 cancellations mapping이 없다.
-- 고객 취소 멱등 table, AcceptanceTimeoutWork와 cancellation Audit action이 없다.
-- direct phase predecessor인 Plan 30은 공통 Case, owner convergence, stable publication recovery와
-  294-test validation을 완료했다. 이 plan은 해당 completed outcome이 반영된 latest main에서
-  Draft-only로 시작한다.
-- Plan 13 recovery/pending은 V17 owner outcome과 205-test evidence로 completed지만, 이는
-  Plan 16→20→30을 통해 간접 소비되는 upstream input이다. Plan 40의 direct dependency가
-  completed path에 있으므로 `Implementation-Ready=true`다.
+- Plan 30 완료 main `5f52320`에서 migration-writer lease를 얻고 V23을 선택했다.
+- Order 고객 취소 전이, reason/detail DB 불변식, command endpoint와 최초 응답 재생이 구현됐다.
+- C0는 Order와 사용 중인 Pickup·Stock·Coupon·Point 예약, accepted Delivery, target Audit와
+  terminal 멱등 응답을 한 transaction에 저장한다.
+- C1은 Payment recovery snapshot, 필요한 Refund, 공통 Case와 여섯 step, 두 policy snapshot,
+  accepted Delivery, Audit, 네 owner publication과 최초 202 응답을 한 transaction에 저장한다.
+- CT는 deduplicated AcceptanceTimeoutWork와 Audit만 commit하고 409를 반환하며, 4회 bounded
+  claim/retry와 source-aware `REJECTED | NOT_APPLICABLE | MANUAL_REVIEW` 수렴을 제공한다.
+- 고객·매장 command idempotency는 90일 terminal 보존과 table별 독립 chunk cleanup을 사용한다.
+- 332-test clean build와 대상군·Modulith 검증이 통과했지만, 이 완료 head는 Plan 50의 Draft
+  parent일 뿐 main merge·deployment·production success endpoint 활성화 대상이 아니다.
 
 ## Definitions
 
@@ -97,7 +97,10 @@ combined release PR이 merge될 때까지 그 lease를 유지한다. Plan 20이 
 이미 소유한다. 이 계획은 남은 `cancellation_reason_code`, `cancellation_detail`, cause별
 사유/detail CHECK를 단독 소유한다. 같은 forward migration 계열에서 cancellation idempotency,
 AcceptanceTimeoutWork, recovery snapshot과 필요한 source unique/index를 추가한다. 번호와 나머지
-legacy 전략은 00/10/30 결과에서 결정한다.
+legacy 전략은 00/10/30 결과에서 결정한다. 실제 구현은 latest main의 V22 다음 V23에
+reason/detail CHECK, cancellation idempotency, AcceptanceTimeoutWork, Payment recovery snapshot,
+Refund/Notification/ReprocessingCase 확장과 store-command retention backfill을 한 forward
+migration으로 기록했다. timeout due와 expired claim은 각각 부분 index로 분리했다.
 
 ## API and Event Contracts
 
@@ -154,17 +157,22 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 
 ## Progress
 
-- [ ] Order invariant/schema
-- [ ] idempotency
-- [ ] C0
-- [ ] CT
-- [ ] C1
-- [ ] API/contract
-- [ ] 전체 검증
+- [x] 2026-08-03 Order invariant/schema
+- [x] 2026-08-03 idempotency
+- [x] 2026-08-03 C0
+- [x] 2026-08-03 CT
+- [x] 2026-08-03 C1
+- [x] 2026-08-03 API/contract
+- [x] 2026-08-03 전체 검증 — 332 tests, failures/errors/skips 0
 
 ## Surprises & Discoveries
 
-- 현재 `CANCELLED`는 결제 거절 경로에만 쓰이며 cause/reason 불변식이 없다.
+- V23의 강화된 CUSTOMER_REQUEST reason과 Refund command-shape CHECK가 Plan 20 정산 제외
+  fixture의 누락된 reason/correlation을 드러냈다. fixture를 실제 production invariant와 맞췄다.
+- Notification API는 Plan 40에서 처음 Ordering이 소비했으므로 `notification :: api` named
+  interface와 ordering allowed dependency를 함께 선언해야 Modulith 검증이 통과했다.
+- timeout wakeup 실행이 거부돼도 DB의 PENDING work가 periodic worker의 복구 근거로 남아
+  in-memory 실행기 실패를 성공이나 work 손실로 바꾸지 않는다.
 
 ## Decision Log
 
@@ -174,13 +182,38 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 | 2026-08-01 | Superseded 2026-08-03 | ADR-029 Order 취소 네 필드·세 CHECK와 precheck를 이 계획이 단독 소유 | ADR-048 consumer가 Plan 40 전 실제 cause 증거를 요구해 분리 필요 | ADR-029, ADR-067 |
 | 2026-08-01 | Accepted | Plan 40은 Draft-only이고 Plan 50 head의 combined release PR로만 main에 들어감 | feature flag success와 intermediate deployment를 방지 | ADR-072 |
 | 2026-08-03 | Accepted | Plan 20의 cause/cancelledAt 기반을 소비하고 reason/detail·command만 Plan 40이 소유 | 정산 제외 검증을 선행하면서 command 배포 경계를 유지 | ADR-029, ADR-067 |
+| 2026-08-03 | Implemented | Order lock 뒤 actor/key advisory scope로 command replay를 직렬화하고 terminal row만 90일 보존 | PROCESSING 응답 없이 최초 200/202 body를 정확히 재생하고 교차 주문 key 재사용을 거부 | ADR-032/039 |
+| 2026-08-03 | Implemented | CT work는 4회 claim, 1초·5초·30초 retry, 1분 lease와 source-aware terminal outcome 사용 | deadline 409 뒤 durable timeout 수렴과 crash recovery를 명시적으로 보존 | ADR-034/044 |
+| 2026-08-03 | Implemented | C1 command transaction은 Provider를 호출하지 않고 snapshot/Refund/Case/Delivery/Audit/publication/response만 원자 저장 | 202가 내구 작업 착수만 뜻하고 외부 성공으로 오인되지 않도록 함 | ADR-035/047 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. completed Plan 30의 공통 compensation output을 소비해 latest-main 기반 Draft
-PR에서만 구현한다. verified outcome 뒤 completion
-commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual recovery/release evidence가
-없는 동안 main merge, deployment와 production success path를 활성화하지 않는다.
+Plan 30 main을 기준으로 V23과 C0/C1/CT command를 구현했다. C0는 사용 중인 네 owner 예약,
+accepted Delivery, Audit와 200 응답을 원자 commit하고 event/Case/Refund를 만들지 않는다. C1은
+Payment snapshot과 필요한 Refund, 공통 Case·policy, accepted Delivery, target Audit, 네 owner
+publication과 202 응답을 원자 commit하되 Provider는 호출하지 않는다. CT는 취소 승자로 가장하지
+않고 timeout work와 Audit가 commit된 뒤 409를 반환한다.
+
+canonical hash는 sorted JSON의 orderId/reasonCode/normalized detail을 사용한다. 같은 key/payload는
+저장된 최초 body를 재생하고 다른 payload/order는 409다. 취소 detail은 Order에만 저장되고 business
+response, event, Audit, metric과 log에 노출하지 않는다. C0/C1/CT 각 commit gate fault, prior Refund
+여섯 상태, Order→Payment lock 경쟁, 100개 동시 replay, acceptance/timeout/expiry race와 migration
+제약을 실제 PostgreSQL에서 검증했다.
+
+검증 결과:
+
+- `./gradlew test --tests '*CustomerCancellation*' --tests '*AcceptanceTimeout*'`: Passed,
+  37 tests, 37초. 강화된 V23 invariant에 맞지 않던 기존 정산 fixture를 보정한 뒤 재실행했다.
+- `./gradlew test --tests '*ModularityTests'`: Passed, 1 test, 12초.
+- `./gradlew clean build`: Passed, 332 tests, failures/errors/skips 0, 2분 8초.
+- `./gradlew spotlessCheck`: Passed, 4초.
+- `bash scripts/verify-docs.sh`: Passed, target 26/deployed 9 paths, 73 schemas,
+  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
+- `git diff --check`: Passed.
+- Not run: 없음.
+
+이 completion은 같은 Draft stack의 Plan 50 starting point다. Plan 50 recovery/release evidence가 없는
+동안 이 endpoint를 main에 merge·deploy하거나 production 2xx로 활성화하지 않는다.
 
 ## Revision Notes
 
@@ -192,3 +225,5 @@ commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual re
   migration 범위를 reason/detail과 고객 취소 command 불변식으로 축소했다.
 - 2026-08-03: Plan 30이 294-test validation과 completed outcome을 남겨 direct dependency path를
   completed로 바꾸고 `Implementation-Ready=true`로 전환했다. Draft-only 규칙은 유지한다.
+- 2026-08-03: V23과 C0/C1/CT, timeout recovery, idempotency retention을 구현하고 332-test clean
+  build를 통과해 completed Draft handoff로 전환했다.

@@ -172,6 +172,13 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   270-test clean build로 검증한 뒤 completed path로 이동했다. direct successor인 Plan 30과 Settlement
   lifecycle은 모든 dependency가 completed라 `Implementation-Ready=true`로 전환했고, Analytics는
   Settlement lifecycle과 point-adjustment가 active라 `false`를 유지했다.
+- **Plan 40 Draft completion evidence (2026-08-03):** latest `main`/`origin/main` `5f52320`과
+  completed Plan 30 outcome, clean worktree, 다른 migration writer 부재를 확인한 뒤 Plan 40→50 shared
+  lease로 V23을 선택했다. C0/C1/CT, command idempotency, timeout recovery와 retention을 332-test
+  clean build로 검증하고 Plan 40을 completed path로 이동했다. direct successor Plan 50만
+  `Implementation-Ready=true`로 전환했으며, Plan 40 head는 계속 Draft-only라 main merge,
+  deployment와 production success endpoint exposure를 하지 않는다. Plan 50은 이 head와 lease를
+  그대로 이어받고 final combined release PR만 main을 target한다.
 
 ## Related Decisions
 

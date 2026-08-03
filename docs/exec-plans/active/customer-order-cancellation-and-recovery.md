@@ -173,7 +173,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 10. [immutable refund/Loyalty event producer를 만든다](../completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15, completed
 11. [Settlement foundation과 취소 제외 증적을 만든다](../completed/customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor, completed
 12. [공통 Order compensation foundation을 만든다](../completed/customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane, completed
-13. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
+13. [고객 취소 command와 Tx C0/C1을 구현한다](../completed/customer-order-cancellation-40-command.md) — 30, completed Draft handoff
 14. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고

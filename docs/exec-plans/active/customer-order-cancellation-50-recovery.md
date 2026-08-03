@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-40-command.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-40-command.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -17,14 +17,15 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 
 ## Current State
 
-- direct predecessor Plan 40은 Draft-only command implementation이다. 이 plan은 Plan 40의 verified
-  completed-plan head를 유일한 parent로 하는 Draft stack에서 recovery/release evidence를 완성하고,
-  separate migration-writer lease를 얻지 않는다.
+- direct predecessor Plan 40은 V23과 C0/C1/CT, command-time projection, timeout recovery와
+  332-test clean build를 완료했다. 이 plan은 해당 verified completed-plan head를 유일한 parent로
+  하는 Draft stack에서 recovery/release evidence를 완성하고 separate migration-writer lease를
+  얻지 않는다.
 - 현재 Refund는 REQUEST 1회 후 LOOKUP 4회인 합산 attempt 모델이다.
 - retryable explicit failure allowlist와 request 3/lookup 5 분리 예산이 없다.
 - customer cancellation terminal result event/template, setup detector/scanner/repair가 없다.
-- 현재 publication exhaustion은 step-specific가 아니다.
-- Settlement foundation은 계획 20에서 제공돼야 한다.
+- Plan 30의 publication exhaustion은 stable listener target별 step-specific recovery로 완료됐다.
+- Plan 20의 Settlement foundation과 고객 취소 refund NOT_APPLICABLE evidence consumer가 완료됐다.
 
 ## Definitions
 
@@ -175,3 +176,6 @@ recovery/release verification이 끝난 combined release PR만 고객 취소 cap
 ## Revision Notes
 
 - 2026-07-31: readiness audit에서 최초 작성.
+- 2026-08-03: Plan 40 completed Draft handoff와 332-test evidence를 확인하고 dependency를 completed
+  path로 바꿔 `Implementation-Ready=true`로 전환했다. shared migration-writer lease와 Draft-only
+  production gate는 유지한다.

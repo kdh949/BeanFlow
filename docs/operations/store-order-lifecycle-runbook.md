@@ -75,6 +75,23 @@ acceptance deadline 뒤 고객 취소가 도착하면 취소 endpoint는
 scanner와 경쟁하면 Order lock과 timeout source unique로 한 번만 거절한다.
 `PENDING`, `CLAIMED`, `MANUAL_REVIEW` work를 retention cleanup으로 삭제하지 않는다.
 
+```sql
+SELECT id, order_id, acceptance_deadline_at, state, completion_outcome,
+       attempt_count, next_attempt_at, claim_until, last_failure_code,
+       completed_at, retention_expires_at
+FROM ordering_acceptance_timeout_work
+WHERE state <> 'COMPLETED'
+   OR retention_expires_at > now()
+ORDER BY COALESCE(next_attempt_at, claim_until, completed_at), id;
+```
+
+claim lease는 1분이고 최초 claim을 포함해 최대 네 번 실행한다. 실패 뒤 1초·5초·30초에
+재시도하며 네 번째 실패 또는 네 번째 claim lease 만료는 source-unique
+`ACCEPTANCE_TIMEOUT_WORK` ReprocessingCase와 `MANUAL_REVIEW`로 수렴한다. source가 정확한
+timeout 거절이면 `REJECTED`, deadline 전에 수락된 terminal 후손이면 `NOT_APPLICABLE`로
+완료한다. 다른 source·deadline·terminal 조합은 성공으로 분류하지 않는다. 완료 work만
+90일 보존 뒤 최대 100건씩 삭제한다.
+
 - `beanflow.order.acceptance_timeout.work.count{state,outcome}`
 - `beanflow.order.acceptance_timeout.work.lag`
 - `beanflow.order.acceptance_timeout.work.manual_review.count`

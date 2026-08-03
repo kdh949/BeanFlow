@@ -58,7 +58,7 @@
 - [Cancellation 20 Settlement Foundation](exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md)
 - [Settlement Batch, Adjustment, and Dispute](exec-plans/active/settlement-batch-adjustment-and-dispute.md)
 - [Cancellation 30 Order Compensation Foundation](exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md)
-- [Cancellation 40 Command](exec-plans/active/customer-order-cancellation-40-command.md)
+- [Cancellation 40 Command](exec-plans/completed/customer-order-cancellation-40-command.md)
 - [Cancellation 50 Recovery](exec-plans/active/customer-order-cancellation-50-recovery.md)
 - [Audited Loyalty Point Adjustment Foundation](exec-plans/active/loyalty-point-adjustment-foundation.md)
 - [Nearby Store Discovery](exec-plans/active/nearby-store-discovery.md)
