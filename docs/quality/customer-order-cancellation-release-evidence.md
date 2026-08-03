@@ -223,6 +223,13 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   fallback/예외 삼킴, production dependency와 migration inventory 점검도 통과했다.
 - final pre-push remote gate: Passed. remote `main=5f52320`, feature branch 0, head PR 0,
   deployment 0, environment 0이었다. 승인 뒤 feature branch와 ready PR #39만 생성했고 base는 main이다.
+- PR #39 최초 GitHub Actions build(run `30811253139`): Failed, 365 tests 중
+  `PaymentSetupRepairIntegrationTest` 9건, exit 1. Linux runner의 나노초 Provider 결과 시각이
+  PostgreSQL 마이크로초 Refund 시각과 달라 settlement listener가 `SETTLEMENT_SOURCE_CONFLICT`를
+  반환한 것이며 이 실패를 release success로 계산하지 않는다. 결과 기록 경계에서 시각을 마이크로초로
+  한 번 정규화하고 고정 `+789ns` 회귀 입력을 추가했다. 보정 뒤 단일 setup-repair 13 tests,
+  refund/settlement/setup-repair 대상 묶음과 365-test `./gradlew clean build`가 모두 exit 0이다.
+  보정 head의 원격 build 성공은 여전히 merge gate다.
 - Not run: 실제 Provider credential을 이용한 외부 E2E, non-local deployment와 production smoke.
   현재 외부 환경·credential·SLA가 없고 Draft-only release gate가 배포를 금지하므로 의도적으로
   실행하지 않았다.

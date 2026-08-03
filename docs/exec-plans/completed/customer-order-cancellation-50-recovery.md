@@ -195,6 +195,10 @@ runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
   `PUBLISHED`이면 Modulith 2.1 bounded resubmission 대상이 되지 않았다. `FAILED`, attempt 0,
   last-resubmission null로 저장해 실제 recovery worker가 Notification/Settlement consumer를
   호출하도록 ADR-068과 Plan 16 evidence를 바로잡았다.
+- PR #39 최초 GitHub Actions runner는 나노초 정밀도의 `Instant`를 반환해, PostgreSQL에 저장된
+  마이크로초 Refund 시각과 원본 `PaymentRefundedV1` 시각이 달라지는 플랫폼 의존 결함을 드러냈다.
+  Provider 결과 기록 경계에서 한 번 정규화해 Refund, Payment, event와 compensation이 같은 시각을
+  사용하도록 보정했다.
 
 ## Decision Log
 
@@ -219,7 +223,9 @@ daemon을 복구한 뒤 365-test clean build를 failure/error/skip 0으로 재�
 remote preflight에서도 origin/main 불변, remote feature branch/PR/deployment/environment 부재를
 확인했다. 이후 사용자 승인으로 구현 head `19d69f2`를 push하고 Plan 40+50 전체 diff를 담은 main 대상
 ready PR #39를 생성했다. 이 completion 이동도 같은 PR에 포함한다. main merge나 deployment는 수행하지
-않았으며 shared migration-writer lease는 PR #39 merge까지 유지한다.
+않았으며 shared migration-writer lease는 PR #39 merge까지 유지한다. PR 최초 build 실패는 성공으로
+계산하지 않았고 PostgreSQL 시각 정밀도 보정과 고정 나노초 회귀 입력을 추가한 뒤 대상 테스트와
+365-test clean build를 다시 통과했다. 보정 head의 원격 build 성공을 merge gate로 유지한다.
 
 ## Revision Notes
 
@@ -232,3 +238,5 @@ ready PR #39를 생성했다. 이 completion 이동도 같은 PR에 포함한다
   V27 이후 365-test clean build와 문서/OpenAPI 검증을 완료했다.
 - 2026-08-03: 구현 head `19d69f2`를 push해 main 대상 ready PR #39를 만들고 completed path로 이동했다.
   main merge/deployment는 없으며 shared migration-writer lease는 PR merge까지 held 상태로 유지한다.
+- 2026-08-03: PR #39 최초 build의 Linux/JVM 나노초 대 PostgreSQL 마이크로초 불일치를 수정하고
+  고정 나노초 회귀 입력, 대상 테스트와 365-test clean build를 재검증했다.

@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 internal data class ClaimedRefund(
@@ -307,6 +308,7 @@ internal class RejectionRefundService(
         settlementContext: PartialRefundSettlementContext?,
         now: Instant,
     ) {
+        val recordedAt = now.truncatedTo(ChronoUnit.MICROS)
         // Result transactions that need no Order lock always start at Payment, then lock Refund.
         // This preserves the repository-wide Order -> Payment -> Refund/allocation order.
         val payment =
@@ -333,46 +335,46 @@ internal class RejectionRefundService(
                 if (nextRefundedAmount > approvedAmount) {
                     fail(FailureCode.ORDER_STATE_CONFLICT, "Successful refunds would exceed approved amount")
                 }
-                refund.succeed(result.providerRefundReference, now)
+                refund.succeed(result.providerRefundReference, recordedAt)
                 payment.succeededRefundAmountKrw = nextRefundedAmount
-                payment.updatedAt = now
+                payment.updatedAt = recordedAt
                 entity.apply(refund)
                 if (entity.reason == PARTIAL_REFUND) {
                     val context =
                         settlementContext
                             ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Partial Refund settlement context is missing")
-                    partialRefundSuccessLedger.record(entity, payment, now)
-                    refundEventProducer.publishPartial(entity, payment, context, now)
+                    partialRefundSuccessLedger.record(entity, payment, recordedAt)
+                    refundEventProducer.publishPartial(entity, payment, context, recordedAt)
                 } else {
-                    refundEventProducer.publishPreAcceptance(entity, payment, now)
+                    refundEventProducer.publishPreAcceptance(entity, payment, recordedAt)
                     if (entity.reason == CUSTOMER_CANCELLATION_REASON) {
-                        publishCustomerCancellationSucceeded(entity, payment, now)
+                        publishCustomerCancellationSucceeded(entity, payment, recordedAt)
                     }
-                    recordStep(claim.orderId, OrderCompensationStepState.SUCCEEDED, null, now)
+                    recordStep(claim.orderId, OrderCompensationStepState.SUCCEEDED, null, recordedAt)
                 }
             }
 
             is GatewayRefundResult.Failed -> {
-                refund.fail(result.code, now)
+                refund.fail(result.code, recordedAt)
                 entity.apply(refund)
                 if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(
                         claim.orderId,
                         OrderCompensationStepState.MANUAL_REVIEW,
                         normalized(result.code),
-                        now,
+                        recordedAt,
                     )
                 }
                 if (entity.reason == CUSTOMER_CANCELLATION_REASON && !claim.operatorAuthorized) {
-                    publishCustomerCancellationDelayed(entity, payment, now)
+                    publishCustomerCancellationDelayed(entity, payment, recordedAt)
                 }
             }
 
             is GatewayRefundResult.RetryableFailed -> {
                 when {
-                    claim.operatorAuthorized -> refund.recordOperatorReconciliationUnknown(result.code, now)
-                    claim.mode == RefundClaimMode.LOOKUP -> refund.recordUnknown(result.code, now)
-                    else -> refund.recordRetryableRequestFailure(result.code, now)
+                    claim.operatorAuthorized -> refund.recordOperatorReconciliationUnknown(result.code, recordedAt)
+                    claim.mode == RefundClaimMode.LOOKUP -> refund.recordUnknown(result.code, recordedAt)
+                    else -> refund.recordRetryableRequestFailure(result.code, recordedAt)
                 }
                 entity.apply(refund)
                 if (entity.reason in COMPENSATION_REASONS) {
@@ -384,22 +386,22 @@ internal class RejectionRefundService(
                             OrderCompensationStepState.UNKNOWN
                         },
                         normalized(result.code),
-                        now,
+                        recordedAt,
                     )
                 }
                 if (entity.reason == CUSTOMER_CANCELLATION_REASON &&
                     refund.state == RefundState.MANUAL_REVIEW &&
                     !claim.operatorAuthorized
                 ) {
-                    publishCustomerCancellationDelayed(entity, payment, now)
+                    publishCustomerCancellationDelayed(entity, payment, recordedAt)
                 }
             }
 
             is GatewayRefundResult.Unknown -> {
                 if (claim.operatorAuthorized) {
-                    refund.recordOperatorReconciliationUnknown(result.code, now)
+                    refund.recordOperatorReconciliationUnknown(result.code, recordedAt)
                 } else {
-                    refund.recordUnknown(result.code, now)
+                    refund.recordUnknown(result.code, recordedAt)
                 }
                 entity.apply(refund)
                 val stepState =
@@ -409,13 +411,13 @@ internal class RejectionRefundService(
                         OrderCompensationStepState.UNKNOWN
                     }
                 if (entity.reason in COMPENSATION_REASONS) {
-                    recordStep(claim.orderId, stepState, normalized(result.code), now)
+                    recordStep(claim.orderId, stepState, normalized(result.code), recordedAt)
                 }
                 if (entity.reason == CUSTOMER_CANCELLATION_REASON &&
                     refund.state == RefundState.MANUAL_REVIEW &&
                     !claim.operatorAuthorized
                 ) {
-                    publishCustomerCancellationDelayed(entity, payment, now)
+                    publishCustomerCancellationDelayed(entity, payment, recordedAt)
                 }
                 meterRegistry.counter("beanflow.payment.refund.unknown.count").increment()
             }

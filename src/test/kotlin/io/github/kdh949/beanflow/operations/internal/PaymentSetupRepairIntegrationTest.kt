@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -406,7 +407,12 @@ internal class PaymentSetupRepairIntegrationTest
             ).isEqualTo("UNKNOWN")
 
             paymentGateway.enqueueRejectionRefundLookup(GatewayRefundResult.Succeeded("provider-operator-success"))
-            val resultAt = Instant.now().plusSeconds(5)
+            val resultAt =
+                Instant
+                    .now()
+                    .plusSeconds(5)
+                    .truncatedTo(ChronoUnit.MICROS)
+                    .plusNanos(789)
             val claim = refundService.claimDue(resultAt, 10).single()
             assertThat(claim.mode).isEqualTo(RefundClaimMode.LOOKUP)
             assertThat(claim.operatorAuthorized).isTrue()
