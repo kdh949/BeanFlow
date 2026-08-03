@@ -409,8 +409,7 @@ internal class SettlementDisputeIntegrationTest
             amountKrw: Long = -120,
             evidence: List<String> = listOf("evidence:first"),
             previousDisputeId: UUID? = null,
-        ): SettlementDisputeResponse =
-            filing.file(command(fixture, key, amountKrw, evidence, previousDisputeId))
+        ): SettlementDisputeResponse = filing.file(command(fixture, key, amountKrw, evidence, previousDisputeId))
 
         private fun command(
             fixture: Fixture,

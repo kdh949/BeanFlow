@@ -27,7 +27,10 @@ internal data class CreateSettlementDisputeRequest(
     @field:NotBlank @field:Size(max = 1000)
     val reason: String,
     @field:NotEmpty
-    val evidenceReferences: List<@Size(min = 1, max = 500) String>,
+    val evidenceReferences: List<
+        @Size(min = 1, max = 500)
+        String,
+    >,
     val previousDisputeId: UUID? = null,
 )
 

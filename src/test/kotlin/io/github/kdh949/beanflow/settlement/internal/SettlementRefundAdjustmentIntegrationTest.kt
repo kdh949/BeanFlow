@@ -13,8 +13,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
@@ -410,7 +410,10 @@ internal class SettlementRefundAdjustmentIntegrationTest
             description: String,
             assertion: () -> Boolean,
         ) {
-            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+            val deadline =
+                System.nanoTime() +
+                    java.util.concurrent.TimeUnit.SECONDS
+                        .toNanos(5)
             while (System.nanoTime() < deadline) {
                 if (runCatching(assertion).getOrDefault(false)) return
                 Thread.sleep(20)

@@ -6,10 +6,10 @@ import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
-import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemOperations
-import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemView
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchView
+import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemOperations
+import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemView
 import io.github.kdh949.beanflow.settlement.api.CreateSettlementAdjustmentCommand
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentReasonCode
@@ -48,9 +48,10 @@ internal class SettlementAdjustmentService(
                 metric(command.reasonCode, "REPLAYED")
                 return existing.toResult()
             }
-            val item = items.findById(command.settlementItemId).orElseThrow {
-                DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "Confirmed SettlementItem was not found")
-            }
+            val item =
+                items.findById(command.settlementItemId).orElseThrow {
+                    DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "Confirmed SettlementItem was not found")
+                }
             val batch = batches.findLockedById(item.settlementBatchId) ?: unavailable("SettlementBatch was not found")
             if (batch.state != SettlementBatchState.CONFIRMED) {
                 unavailable("SettlementAdjustment requires a confirmed SettlementBatch")
@@ -197,8 +198,7 @@ internal class SettlementAdjustmentService(
             amountKrw = amountKrw,
         )
 
-    private fun SettlementAdjustmentReasonCode.toPersistenceReason(): SettlementAdjustmentReason =
-        SettlementAdjustmentReason.valueOf(name)
+    private fun SettlementAdjustmentReasonCode.toPersistenceReason(): SettlementAdjustmentReason = SettlementAdjustmentReason.valueOf(name)
 
     private fun metric(
         reasonCode: SettlementAdjustmentReasonCode,
@@ -217,8 +217,7 @@ internal class SettlementAdjustmentService(
     private fun sourceConflict(reason: String): Nothing =
         throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "SETTLEMENT_SOURCE_CONFLICT: $reason")
 
-    private fun unavailable(message: String): Nothing =
-        throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
+    private fun unavailable(message: String): Nothing = throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, message)
 
     private companion object {
         const val SYSTEM_ACTOR = "beanflow-settlement"

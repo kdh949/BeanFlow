@@ -166,7 +166,7 @@ internal class SettlementBatchEntity(
 
     private fun validateState() {
         when (state) {
-            SettlementBatchState.OPEN ->
+            SettlementBatchState.OPEN -> {
                 require(
                     listOf(
                         itemCount,
@@ -184,6 +184,7 @@ internal class SettlementBatchEntity(
                         confirmedAt,
                     ).all { it == null },
                 ) { "OPEN SettlementBatch cannot contain a calculated summary" }
+            }
 
             SettlementBatchState.CALCULATED,
             SettlementBatchState.CONFIRMED,

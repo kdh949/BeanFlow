@@ -150,7 +150,9 @@ internal class SettlementBatchQueryService(
                     return try {
                         val date = LocalDate.parse(values[0])
                         val batchId = UUID.fromString(values[1])
-                        if (date.toString() != values[0] || batchId.toString() != values[1]) null else {
+                        if (date.toString() != values[0] || batchId.toString() != values[1]) {
+                            null
+                        } else {
                             SettlementBatchSort(date, batchId)
                         }
                     } catch (_: DateTimeParseException) {

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
@@ -76,7 +77,26 @@ internal class SettlementBatchLifecycleService(
                 )
             batch.calculate(summary, calculatedAt)
             batches.saveAndFlush(batch)
-            metrics.recordBatch(SettlementBatchState.CALCULATED, "SUCCEEDED", itemSummary.chunkCount)
+            metrics.recordBatch(
+                state = SettlementBatchState.CALCULATED,
+                outcome = "SUCCEEDED",
+                chunkCount = itemSummary.chunkCount,
+                itemCount = itemSummary.itemCount,
+                calculationLagSeconds =
+                    Duration
+                        .between(
+                            batch.settlementDate
+                                .plusDays(1)
+                                .atStartOfDay(SEOUL)
+                                .toInstant(),
+                            calculatedAt,
+                        ).seconds
+                        .coerceAtLeast(0),
+                carryForwardAgeSeconds =
+                    previous
+                        ?.takeIf { it.carryForwardOutKrw < 0 }
+                        ?.let { Duration.between(it.calculatedAt, calculatedAt).seconds.coerceAtLeast(0) },
+            )
             batch.toLifecycleResult()
         } catch (failure: DomainFailure) {
             metrics.recordBatch(SettlementBatchState.OPEN, failure.code.name)
@@ -315,8 +335,18 @@ internal class SettlementBatchMetrics(
         state: SettlementBatchState,
         outcome: String,
         chunkCount: Int? = null,
+        itemCount: Int? = null,
+        calculationLagSeconds: Long? = null,
+        carryForwardAgeSeconds: Long? = null,
     ) {
         meterRegistry.counter("beanflow.settlement.batch.count", "state", state.name, "outcome", outcome).increment()
         chunkCount?.let { meterRegistry.summary("beanflow.settlement.batch.chunk_count").record(it.toDouble()) }
+        itemCount?.let { meterRegistry.summary("beanflow.settlement.batch.item_count").record(it.toDouble()) }
+        calculationLagSeconds?.let {
+            meterRegistry.summary("beanflow.settlement.batch.calculation_lag_seconds").record(it.toDouble())
+        }
+        carryForwardAgeSeconds?.let {
+            meterRegistry.summary("beanflow.settlement.carry_forward.age_seconds").record(it.toDouble())
+        }
     }
 }

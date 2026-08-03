@@ -8,19 +8,19 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
 import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
-import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
+import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.github.kdh949.beanflow.operations.api.SettlementAdjustmentReprocessingCaseOperations
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidence
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationSettlementEvidenceOperations
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationRefundEvidence
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationRefundEvidenceOperations
-import io.github.kdh949.beanflow.shared.api.DomainFailure
-import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.settlement.api.CreateSettlementAdjustmentCommand
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentReasonCode
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.modulith.events.ApplicationModuleListener
 import org.springframework.stereotype.Component
@@ -279,7 +279,8 @@ internal class SettlementRefundAdjustmentService(
             event.envelope.causationId != "refund:${event.refundId}:succeeded" ||
             event.envelope.correlationId.isBlank() || event.refundSource.isBlank() || event.currency != "KRW" ||
             event.orderCompletedAt == null || event.settlementDate == null || event.settlementItemSource == null ||
-            effect == null || !tiesOut(effect) || listOf(
+            effect == null || !tiesOut(effect) ||
+            listOf(
                 effect.grossPaidDeltaKrw,
                 effect.feeDeltaKrw,
                 effect.benefitCostDeltaKrw,
@@ -308,7 +309,8 @@ internal class SettlementRefundAdjustmentService(
             event.envelope.causationId != "refund:${event.refundId}:succeeded" ||
             event.envelope.correlationId.isBlank() || event.refundSource.isBlank() || event.currency != "KRW" ||
             event.orderCompletedAt != null || event.settlementDate != null || event.settlementItemSource != null ||
-            effect == null || !tiesOut(effect) || listOf(
+            effect == null || !tiesOut(effect) ||
+            listOf(
                 effect.grossPaidDeltaKrw,
                 effect.feeDeltaKrw,
                 effect.benefitCostDeltaKrw,

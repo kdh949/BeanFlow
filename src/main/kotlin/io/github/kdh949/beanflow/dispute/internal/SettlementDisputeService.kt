@@ -90,7 +90,9 @@ internal class SettlementDisputeFilingLock(
 
     private fun lockKey(source: String): Long {
         val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray(StandardCharsets.UTF_8))
-        return java.nio.ByteBuffer.wrap(digest, 0, Long.SIZE_BYTES).long
+        return java.nio.ByteBuffer
+            .wrap(digest, 0, Long.SIZE_BYTES)
+            .long
     }
 }
 
@@ -132,7 +134,7 @@ internal class SettlementDisputeFilingService(
                     if (existing.payloadHash != payloadHash) {
                         conflict(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency-Key was reused with another dispute")
                     }
-                    metrics.record(existing.state, "REPLAYED")
+                    metrics.record(existing.state, "REPLAYED", existing.heldAmountKrw)
                     return objectMapper.readValue(existing.responseBody, SettlementDisputeResponse::class.java)
                 }
             val now = clock.instant()
@@ -178,7 +180,7 @@ internal class SettlementDisputeFilingService(
                 )
             audits.appendAll(listOf(dispute.filedAudit()))
             financialEvents.publish(dispute.toFiledEvent(item.currency, identifierSource.next()))
-            metrics.record(dispute.state, "FILED")
+            metrics.record(dispute.state, "FILED", dispute.heldAmountKrw)
             response
         } catch (failure: DomainFailure) {
             metrics.record(null, failure.code.name)
@@ -348,7 +350,7 @@ internal class SettlementDisputeDecisionService(
         if (dispute.state != SettlementDisputeState.FILED) return dispute.toDecisionResult()
         dispute.startReview()
         repository.saveAndFlush(dispute)
-        metrics.record(dispute.state, "STARTED")
+        metrics.record(dispute.state, "STARTED", dispute.heldAmountKrw)
         return dispute.toDecisionResult()
     }
 
@@ -356,22 +358,19 @@ internal class SettlementDisputeDecisionService(
     fun accept(
         disputeId: UUID,
         decidedAt: Instant,
-    ): SettlementDisputeDecisionResult =
-        decide(disputeId, SettlementDisputeState.ACCEPTED, decidedAt)
+    ): SettlementDisputeDecisionResult = decide(disputeId, SettlementDisputeState.ACCEPTED, decidedAt)
 
     @Transactional
     fun reject(
         disputeId: UUID,
         decidedAt: Instant,
-    ): SettlementDisputeDecisionResult =
-        decide(disputeId, SettlementDisputeState.REJECTED, decidedAt)
+    ): SettlementDisputeDecisionResult = decide(disputeId, SettlementDisputeState.REJECTED, decidedAt)
 
     @Transactional
     fun withdraw(
         disputeId: UUID,
         decidedAt: Instant,
-    ): SettlementDisputeDecisionResult =
-        decide(disputeId, SettlementDisputeState.WITHDRAWN, decidedAt)
+    ): SettlementDisputeDecisionResult = decide(disputeId, SettlementDisputeState.WITHDRAWN, decidedAt)
 
     private fun decide(
         disputeId: UUID,
@@ -419,7 +418,7 @@ internal class SettlementDisputeDecisionService(
             audits.appendAll(listOf(dispute.decisionAudit()))
             financialEvents.publish(dispute.toDecidedEvent(item.currency, identifierSource.next()))
             resolveCaseAfterCommit(disputeId, decidedAt)
-            metrics.record(dispute.state, "DECIDED")
+            metrics.record(dispute.state, "DECIDED", dispute.heldAmountKrw)
             dispute.toDecisionResult()
         } catch (failure: DomainFailure) {
             openDecisionCase(disputeId, outcome, failure.code.name, decidedAt)
@@ -582,6 +581,7 @@ internal class SettlementDisputeMetrics(
     fun record(
         state: SettlementDisputeState?,
         outcome: String,
+        heldAmountKrw: Long? = null,
     ) {
         meterRegistry
             .counter(
@@ -591,5 +591,10 @@ internal class SettlementDisputeMetrics(
                 "outcome",
                 outcome,
             ).increment()
+        heldAmountKrw?.let {
+            meterRegistry
+                .summary("beanflow.settlement.dispute.held_amount_abs_krw")
+                .record(if (it == Long.MIN_VALUE) Long.MAX_VALUE.toDouble() else kotlin.math.abs(it).toDouble())
+        }
     }
 }
