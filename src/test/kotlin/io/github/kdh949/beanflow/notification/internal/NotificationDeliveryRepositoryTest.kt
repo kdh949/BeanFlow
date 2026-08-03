@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.notification.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
@@ -9,10 +10,11 @@ import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogica
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationMode
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot
-import io.github.kdh949.beanflow.operations.api.OpenRejectionCompensationCaseCommand
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationOperations
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepState
-import io.github.kdh949.beanflow.operations.api.RejectionCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,7 +40,7 @@ internal class NotificationDeliveryRepositoryTest
     constructor(
         private val service: NotificationDeliveryService,
         private val repository: NotificationDeliveryJpaRepository,
-        private val compensationOperations: RejectionCompensationOperations,
+        private val compensationOperations: OrderCompensationOperations,
         private val provider: ScriptedTestNotificationProvider,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -49,8 +51,8 @@ internal class NotificationDeliveryRepositoryTest
                 TRUNCATE TABLE
                     notification_delivery,
                     operations_reprocessing_case,
-                    operations_rejection_compensation_step,
-                    operations_rejection_compensation_case
+                    operations_order_compensation_step,
+                    operations_order_compensation_case
                 CASCADE
                 """.trimIndent(),
             )
@@ -73,10 +75,10 @@ internal class NotificationDeliveryRepositoryTest
                 compensationOperations
                     .findByOrderId(event.orderId)!!
                     .steps
-                    .single { it.type == RejectionCompensationStepType.CUSTOMER_NOTIFICATION }
+                    .single { it.type == OrderCompensationStepType.CUSTOMER_NOTIFICATION }
             assertThat(retrying.state).isEqualTo(NotificationDeliveryState.RETRY_SCHEDULED)
             assertThat(retrying.nextAttemptAt).isEqualTo(NOW.plusSeconds(60))
-            assertThat(unknownStep.state).isEqualTo(RejectionCompensationStepState.UNKNOWN)
+            assertThat(unknownStep.state).isEqualTo(OrderCompensationStepState.UNKNOWN)
 
             provider.enqueue(NotificationProviderResult.Acknowledged("provider-delivery-1"))
             val retryClaim = service.claimDue(NOW.plusSeconds(60), 10).single()
@@ -91,11 +93,11 @@ internal class NotificationDeliveryRepositoryTest
                 compensationOperations
                     .findByOrderId(event.orderId)!!
                     .steps
-                    .single { it.type == RejectionCompensationStepType.CUSTOMER_NOTIFICATION }
+                    .single { it.type == OrderCompensationStepType.CUSTOMER_NOTIFICATION }
             assertThat(succeeded.state).isEqualTo(NotificationDeliveryState.SUCCEEDED)
             assertThat(succeeded.recipientType).isEqualTo(NotificationRecipientType.CUSTOMER)
             assertThat(succeeded.logicalChannel).isEqualTo(NotificationLogicalChannel.CUSTOMER_APP)
-            assertThat(succeededStep.state).isEqualTo(RejectionCompensationStepState.SUCCEEDED)
+            assertThat(succeededStep.state).isEqualTo(OrderCompensationStepState.SUCCEEDED)
             assertThat(provider.requests.map { it.providerIdempotencyKey }.distinct()).hasSize(1)
             assertThat(repository.count()).isEqualTo(1)
         }
@@ -118,9 +120,9 @@ internal class NotificationDeliveryRepositoryTest
                 compensationOperations
                     .findByOrderId(event.orderId)!!
                     .steps
-                    .single { it.type == RejectionCompensationStepType.CUSTOMER_NOTIFICATION }
+                    .single { it.type == OrderCompensationStepType.CUSTOMER_NOTIFICATION }
             assertThat(delivery.state).isEqualTo(NotificationDeliveryState.MANUAL_REVIEW)
-            assertThat(step.state).isEqualTo(RejectionCompensationStepState.MANUAL_REVIEW)
+            assertThat(step.state).isEqualTo(OrderCompensationStepState.MANUAL_REVIEW)
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM operations_reprocessing_case " +
@@ -153,9 +155,8 @@ internal class NotificationDeliveryRepositoryTest
                 actorType = OrderRejectionActorType.STORE_STAFF,
                 reason = "OUT_OF_STOCK",
                 rejectedAt = NOW,
-                policyVersion = 1,
-                policyMode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE.name,
-                policyValidityDays = 30,
+                couponPolicy = eventPolicy(),
+                pointsPolicy = eventPolicy(),
                 paymentRequired = false,
                 couponRequired = false,
                 pointsRequired = false,
@@ -164,16 +165,27 @@ internal class NotificationDeliveryRepositoryTest
 
         private fun openCompensationCase(event: OrderRejectedV1) {
             compensationOperations.open(
-                OpenRejectionCompensationCaseCommand(
+                OpenOrderCompensationCaseCommand(
                     caseId = UUID.randomUUID(),
                     eventId = event.envelope.eventId,
                     orderId = event.orderId,
+                    terminalOrderVersion = event.envelope.aggregateVersion,
                     customerId = event.customerId,
                     storeId = event.storeId,
+                    trigger = OrderCompensationTrigger.STORE_REJECTION,
                     sourceReference = "event:${event.envelope.eventId}:rejection-case",
-                    policy =
+                    couponPolicy =
                         ExpiredBenefitRestorationPolicySnapshot(
                             policyVersion = 1,
+                            mode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
+                            compensationValidityDays = 30,
+                            effectiveAt = NOW,
+                            updatedBy = UUID(0, 0),
+                            reason = "INITIAL_DEFAULT",
+                        ),
+                    pointsPolicy =
+                        ExpiredBenefitRestorationPolicySnapshot(
+                            policyVersion = 2,
                             mode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
                             compensationValidityDays = 30,
                             effectiveAt = NOW,
@@ -188,6 +200,13 @@ internal class NotificationDeliveryRepositoryTest
                 ),
             )
         }
+
+        private fun eventPolicy() =
+            BenefitRestorationPolicySnapshotV1(
+                policyVersionId = 1,
+                mode = ExpiredBenefitRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE.name,
+                compensationValidityDays = 30,
+            )
 
         private companion object {
             val NOW: Instant = Instant.parse("2026-07-30T11:00:00Z")

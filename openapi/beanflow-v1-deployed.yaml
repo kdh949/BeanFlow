@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: BeanFlow API — Deployed Contract
-  version: 0.1.0
+  version: 0.2.0
   x-beanflow-contract-status: deployed
-  x-beanflow-contract-date: 2026-08-01
+  x-beanflow-contract-date: 2026-08-03
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings. Components shared with the target
@@ -159,7 +159,11 @@ paths:
     get:
       tags: [Store Orders]
       operationId: getStoreOrder
-      summary: Get the current store order and legacy rejection recovery detail
+      summary: Get an order and its abbreviated compensation status
+      description: |
+        Returns the store projection plus trigger, case state and updatedAt only.
+        Step detail, attempts, internal errors, case identifier and policy versions
+        are available only through the audited platform-operator endpoint.
       parameters:
         - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
       responses:
@@ -181,7 +185,7 @@ paths:
     patch:
       tags: [Store Orders]
       operationId: transitionStoreOrderStatus
-      summary: Transition an order using the current legacy response wrapper
+      summary: Transition an order from the store operational view
       parameters:
         - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
         - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
@@ -199,7 +203,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeployedStoreOrderTransitionResult"
         "202":
-          description: REJECTED committed while legacy rejection compensation continues
+          description: REJECTED committed while order compensation continues separately
           content:
             application/json:
               schema:
@@ -214,6 +218,34 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "409":
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/orders/{orderId}/compensation:
+    get:
+      tags: [Operations]
+      operationId: getOrderCompensation
+      summary: Read owner compensation progress for a rejected order
+      description: |
+        Requires an active PLATFORM_OPERATOR with ORDER_COMPENSATION_READ and a
+        non-blank X-Access-Reason. The access is audited before the response returns.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Compensation case for the order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployedOperatorCompensationView"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/policies/expired-benefit-restoration:
@@ -314,64 +346,39 @@ components:
     DeployedStoreOrderResult:
       type: object
       additionalProperties: false
-      required: [order, rejectionRecovery]
+      required: [order]
       properties:
         order:
           $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
-        rejectionRecovery:
-          oneOf:
-            - $ref: "#/components/schemas/DeployedRejectionRecovery"
-            - type: "null"
+        compensationRecovery:
+          $ref: "#/components/schemas/DeployedStoreCompensationSummary"
     DeployedStoreOrderTransitionResult:
       type: object
       additionalProperties: false
-      required: [order, rejectionRecovery, replayed]
+      required: [order]
       properties:
         order:
           $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
-        rejectionRecovery:
-          oneOf:
-            - $ref: "#/components/schemas/DeployedRejectionRecovery"
-            - type: "null"
-        replayed:
-          type: boolean
-    DeployedRejectionRecovery:
+        compensationRecovery:
+          $ref: "#/components/schemas/DeployedStoreCompensationSummary"
+    DeployedStoreCompensationSummary:
       type: object
       additionalProperties: false
-      required: [caseId, policyVersion, state, steps, updatedAt]
+      required: [trigger, state, updatedAt]
       properties:
-        caseId:
+        trigger:
           type: string
-          format: uuid
-        policyVersion:
-          type: integer
-          format: int64
-          minimum: 1
+          enum: [STORE_REJECTION, CUSTOMER_CANCELLATION]
         state:
           type: string
           enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, MANUAL_REVIEW]
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/DeployedRejectionRecoveryStep"
         updatedAt:
           type: string
           format: date-time
-    DeployedRejectionRecoveryStep:
+    DeployedOperatorCompensationView:
       type: object
       additionalProperties: false
-      required: [type, state, attemptCount, lastErrorCode]
+      required: [compensation]
       properties:
-        type:
-          type: string
-          enum: [PAYMENT, PICKUP, STOCK, COUPON, POINTS, CUSTOMER_NOTIFICATION]
-        state:
-          type: string
-          enum: [PROCESSING, RETRY_SCHEDULED, UNKNOWN, SUCCEEDED, NOT_REQUIRED, MANUAL_REVIEW]
-        attemptCount:
-          type: integer
-          minimum: 0
-        lastErrorCode:
-          oneOf:
-            - type: string
-            - type: "null"
+        compensation:
+          $ref: "./beanflow-v1.yaml#/components/schemas/CompensationSummary"

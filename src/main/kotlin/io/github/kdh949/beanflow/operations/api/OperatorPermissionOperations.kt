@@ -9,6 +9,7 @@ enum class OperatorPermission {
     POINT_ADJUSTMENT,
     POINT_ACCRUAL_POLICY_READ,
     POINT_ACCRUAL_POLICY_WRITE,
+    ORDER_COMPENSATION_READ,
 }
 
 interface OperatorPermissionAuthorization {

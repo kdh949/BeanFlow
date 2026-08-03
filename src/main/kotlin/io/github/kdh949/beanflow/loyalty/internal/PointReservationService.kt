@@ -5,16 +5,20 @@ import io.github.kdh949.beanflow.loyalty.api.PointReservationAllocation
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationResult
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
-import io.github.kdh949.beanflow.loyalty.api.RestorePointsByRejectionCommand
+import io.github.kdh949.beanflow.loyalty.api.RestorePointsAfterTerminationCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -25,8 +29,10 @@ internal class PointReservationService(
     private val reservationRepository: PointReservationJpaRepository,
     private val allocationRepository: PointReservationAllocationJpaRepository,
     private val transactionRepository: PointTransactionJpaRepository,
+    private val partialRefundRestorationRepository: PartialRefundRestorationJpaRepository,
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
+    private val meterRegistry: MeterRegistry,
 ) : PointReservationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReservePointsCommand): PointReservationResult {
@@ -105,56 +111,65 @@ internal class PointReservationService(
     ): ReservationTransitionReport = transition(orderId, sourceReference, now, confirm = false)
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun restoreUsedByRejection(command: RestorePointsByRejectionCommand): ReservationTransitionReport {
-        if (command.sourceReference.isBlank() || command.compensationValidityDays !in 1..365) {
+    override fun restoreUsedAfterTermination(command: RestorePointsAfterTerminationCommand): ReservationTransitionReport {
+        if (command.sourceReference.isBlank() || command.policyVersionId < 1 || command.compensationValidityDays !in 1..365) {
             fail(FailureCode.INVALID_REQUEST, "Point restoration source and validity are invalid")
         }
-        val current =
-            reservationRepository.findByOrderId(command.orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val account =
-            accountRepository.findById(current.pointAccountId).orElse(null)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Used point account is missing")
-        val lockedAccount =
-            accountRepository.findLockedByCustomerId(account.customerId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Used point account is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         if (reservation.state == PointReservationState.RESTORED) {
-            return if (reservation.restorationSourceReference == command.sourceReference) {
+            return if (reservation.restorationSourceReference == command.sourceReference &&
+                reservation.restorationTrigger == command.trigger &&
+                reservation.restorationPolicyVersionId == command.policyVersionId
+            ) {
                 report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
             } else {
-                report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+                sourceConflict(command, "Point restoration metadata conflicts")
             }
         }
         if (reservation.state != PointReservationState.USED) {
             return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
         }
+        val account =
+            accountRepository.findById(reservation.pointAccountId).orElse(null)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Used point account is missing")
+        val lockedAccount =
+            accountRepository.findLockedByCustomerId(account.customerId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Used point account is missing")
         val allocations =
             allocationRepository
-                .findAllByPointReservationIdOrderByPointLotId(reservation.id)
+                .findAllLockedByReservationId(reservation.id)
         val lots =
             lotRepository
                 .findAllLockedByIds(allocations.map { it.pointLotId })
                 .associateBy(PointLotEntity::id)
         allocations.forEach { allocation ->
+            val alreadyRestored = partialRefundRestorationRepository.sumRestoredAmountByAllocationId(allocation.id)
+            if (alreadyRestored !in 0..allocation.amountKrw) {
+                fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Partial-refund point restoration does not tie out")
+            }
+            val remainingAmount = allocation.amountKrw - alreadyRestored
+            if (remainingAmount == 0L) return@forEach
             val originalLot =
                 lots[allocation.pointLotId]
                     ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Used point lot is missing")
             when {
-                command.rejectedAt.isBefore(originalLot.expiresAt) -> {
-                    originalLot.availableAmountKrw += allocation.amountKrw
-                    lockedAccount.availablePointsKrw += allocation.amountKrw
+                command.terminatedAt.isBefore(originalLot.expiresAt) -> {
+                    originalLot.availableAmountKrw = Math.addExact(originalLot.availableAmountKrw, remainingAmount)
+                    lockedAccount.availablePointsKrw = Math.addExact(lockedAccount.availablePointsKrw, remainingAmount)
                     transactionRepository.save(
                         restorationTransaction(
                             reservation,
                             allocation,
                             originalLot.id,
+                            remainingAmount,
                             PointTransactionType.RESTORE,
+                            PartialRefundRestorationDisposition.ORIGINAL_LOT,
                             command,
                         ),
                     )
+                    recordRestorationMetric(command, PartialRefundRestorationDisposition.ORIGINAL_LOT, remainingAmount)
                 }
 
                 command.mode == ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE -> {
@@ -162,28 +177,31 @@ internal class PointReservationService(
                         PointLotEntity(
                             id = identifierSource.next(),
                             pointAccountId = lockedAccount.id,
-                            availableAmountKrw = allocation.amountKrw,
+                            availableAmountKrw = remainingAmount,
                             expiresAt =
-                                command.rejectedAt.plusSeconds(
-                                    command.compensationValidityDays.toLong() * 86_400,
-                                ),
+                                command.terminatedAt.plus(Duration.ofDays(command.compensationValidityDays.toLong())),
                             issuerType = originalLot.issuerType,
                             issuerReference = originalLot.issuerReference,
                             originalPointLotId = originalLot.id,
                             compensationSourceReference =
                                 "${command.sourceReference}:${allocation.id}:lot",
+                            restorationTrigger = command.trigger.name,
+                            restorationPolicyVersionId = command.policyVersionId,
                         )
                     lotRepository.save(compensationLot)
-                    lockedAccount.availablePointsKrw += allocation.amountKrw
+                    lockedAccount.availablePointsKrw = Math.addExact(lockedAccount.availablePointsKrw, remainingAmount)
                     transactionRepository.save(
                         restorationTransaction(
                             reservation,
                             allocation,
                             compensationLot.id,
+                            remainingAmount,
                             PointTransactionType.COMPENSATION,
+                            PartialRefundRestorationDisposition.COMPENSATION_LOT,
                             command,
                         ),
                     )
+                    recordRestorationMetric(command, PartialRefundRestorationDisposition.COMPENSATION_LOT, remainingAmount)
                 }
 
                 else -> {
@@ -192,16 +210,21 @@ internal class PointReservationService(
                             reservation,
                             allocation,
                             originalLot.id,
+                            remainingAmount,
                             PointTransactionType.RESTORE_SKIPPED_EXPIRED,
+                            PartialRefundRestorationDisposition.SKIPPED_EXPIRED,
                             command,
                         ),
                     )
+                    recordRestorationMetric(command, PartialRefundRestorationDisposition.SKIPPED_EXPIRED, 0)
                 }
             }
         }
         reservation.state = PointReservationState.RESTORED
         reservation.restorationSourceReference = command.sourceReference
-        reservation.updatedAt = command.rejectedAt
+        reservation.restorationTrigger = command.trigger
+        reservation.restorationPolicyVersionId = command.policyVersionId
+        reservation.updatedAt = command.terminatedAt
         return report(ReservationTransitionResult.APPLIED, reservation.id)
     }
 
@@ -291,18 +314,67 @@ internal class PointReservationService(
         reservation: PointReservationEntity,
         allocation: PointReservationAllocationEntity,
         pointLotId: UUID,
+        amountKrw: Long,
         type: PointTransactionType,
-        command: RestorePointsByRejectionCommand,
+        disposition: PartialRefundRestorationDisposition,
+        command: RestorePointsAfterTerminationCommand,
     ): PointTransactionEntity =
         PointTransactionEntity(
             id = identifierSource.next(),
             pointAccountId = reservation.pointAccountId,
             pointLotId = pointLotId,
-            amountKrw = allocation.amountKrw,
+            amountKrw = amountKrw,
             type = type,
             sourceReference = "${command.sourceReference}:${allocation.id}:$type",
-            occurredAt = command.rejectedAt,
+            occurredAt = command.terminatedAt,
+            pointReservationAllocationId = allocation.id,
+            restorationTrigger = command.trigger.name,
+            restorationPolicyVersionId = command.policyVersionId,
+            restorationDisposition = disposition.name,
         )
+
+    private fun recordRestorationMetric(
+        command: RestorePointsAfterTerminationCommand,
+        disposition: PartialRefundRestorationDisposition,
+        restoredAmountKrw: Long,
+    ) {
+        afterCommit {
+            val tags =
+                arrayOf(
+                    "benefit_type",
+                    "points",
+                    "trigger",
+                    command.trigger.name.lowercase(),
+                    "disposition",
+                    disposition.name.lowercase(),
+                )
+            meterRegistry.counter("beanflow.benefit.restoration.count", *tags).increment()
+            meterRegistry.summary("beanflow.benefit.restoration.amount", *tags).record(restoredAmountKrw.toDouble())
+        }
+    }
+
+    private fun sourceConflict(
+        command: RestorePointsAfterTerminationCommand,
+        message: String,
+    ): Nothing {
+        meterRegistry
+            .counter(
+                "beanflow.benefit.restoration.source_conflict.count",
+                "benefit_type",
+                "points",
+                "trigger",
+                command.trigger.name.lowercase(),
+            ).increment()
+        fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, message)
+    }
+
+    private fun afterCommit(action: () -> Unit) {
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
+        )
+    }
 
     private fun resultOf(reservation: PointReservationEntity): PointReservationResult =
         PointReservationResult(

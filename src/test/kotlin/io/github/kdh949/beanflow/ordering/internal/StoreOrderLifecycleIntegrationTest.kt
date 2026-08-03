@@ -90,8 +90,8 @@ internal class StoreOrderLifecycleIntegrationTest
                 TRUNCATE TABLE
                     notification_delivery,
                     payment_refund,
-                    operations_rejection_compensation_step,
-                    operations_rejection_compensation_case,
+                    operations_order_compensation_step,
+                    operations_order_compensation_case,
                     identity_store_membership,
                     event_publication
                 CASCADE
@@ -159,12 +159,21 @@ internal class StoreOrderLifecycleIntegrationTest
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
 
-            patchStatus(actorId, orderId, "store-accept-key", "ACCEPTED")
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.replayed").value(false))
-            patchStatus(actorId, orderId, "store-accept-key", "ACCEPTED")
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.replayed").value(true))
+            val first =
+                patchStatus(actorId, orderId, "store-accept-key", "ACCEPTED")
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.replayed").doesNotExist())
+                    .andReturn()
+                    .response
+                    .contentAsString
+            val replay =
+                patchStatus(actorId, orderId, "store-accept-key", "ACCEPTED")
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.replayed").doesNotExist())
+                    .andReturn()
+                    .response
+                    .contentAsString
+            assertThat(replay).isEqualTo(first)
             patchStatus(actorId, orderId, "store-accept-key", "PREPARING")
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
@@ -421,7 +430,10 @@ internal class StoreOrderLifecycleIntegrationTest
             patchStatus(actorId, orderId, "store-rejected-key", "REJECTED", "OUT_OF_STOCK")
                 .andExpect(status().isAccepted)
                 .andExpect(jsonPath("$.order.state").value("REJECTED"))
-                .andExpect(jsonPath("$.rejectionRecovery.state").value("PROCESSING"))
+                .andExpect(jsonPath("$.compensationRecovery.state").value("PROCESSING"))
+                .andExpect(jsonPath("$.compensationRecovery.trigger").value("STORE_REJECTION"))
+                .andExpect(jsonPath("$.compensationRecovery.steps").doesNotExist())
+                .andExpect(jsonPath("$.compensationRecovery.caseId").doesNotExist())
 
             await("rejection listeners to create durable external work") {
                 count("SELECT count(*) FROM payment_refund WHERE order_id = ?", orderId) == 1L &&
@@ -433,15 +445,15 @@ internal class StoreOrderLifecycleIntegrationTest
                     value<String>(
                         "SELECT state FROM inventory_stock_reservation WHERE order_id = ?",
                         orderId,
-                    ) == "RELEASED_BY_REJECTION" &&
+                    ) == "RELEASED_AFTER_TERMINATION" &&
                     value<String>(
                         "SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?",
                         orderId,
-                    ) == "RELEASED_BY_REJECTION"
+                    ) == "RELEASED_AFTER_TERMINATION"
             }
             assertThat(
                 value<String>(
-                    "SELECT state FROM operations_rejection_compensation_case WHERE order_id = ?",
+                    "SELECT state FROM operations_order_compensation_case WHERE order_id = ?",
                     orderId,
                 ),
             ).isEqualTo("PROCESSING")
@@ -455,7 +467,7 @@ internal class StoreOrderLifecycleIntegrationTest
 
             await("rejection compensation case to finish") {
                 value<String>(
-                    "SELECT state FROM operations_rejection_compensation_case WHERE order_id = ?",
+                    "SELECT state FROM operations_order_compensation_case WHERE order_id = ?",
                     orderId,
                 ) == "SUCCEEDED"
             }
@@ -564,7 +576,7 @@ internal class StoreOrderLifecycleIntegrationTest
                 .isEqualTo("REJECTED")
             assertThat(
                 count(
-                    "SELECT count(*) FROM operations_rejection_compensation_case WHERE order_id = ?",
+                    "SELECT count(*) FROM operations_order_compensation_case WHERE order_id = ?",
                     orderId,
                 ),
             ).isEqualTo(1)
@@ -597,8 +609,8 @@ internal class StoreOrderLifecycleIntegrationTest
             executor.shutdown()
 
             assertThat(responses).allMatch { it.status == 200 }
-            assertThat(responses.count { it.body.contains("\"replayed\":false") }).isEqualTo(1)
-            assertThat(responses.count { it.body.contains("\"replayed\":true") }).isEqualTo(99)
+            assertThat(responses.map { it.body }.distinct()).hasSize(1)
+            assertThat(responses.first().body).doesNotContain("replayed")
             assertThat(
                 count(
                     "SELECT count(*) FROM ordering_store_command_idempotency " +

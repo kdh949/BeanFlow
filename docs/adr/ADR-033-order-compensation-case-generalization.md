@@ -56,6 +56,11 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   `OperatorCompensationView`를 반환한다. `CompensationSummary`와 operator-only
   setup issue/ReprocessingCase reference를 감싸며 step 상태, `attemptCount`,
   `lastErrorCode`와 setup detail은 이 경로에서만 노출한다.
+- **Explicit permission amendment (2026-08-03):** 위 endpoint는 coarse
+  `PLATFORM_OPERATOR` role에 더해 active `ORDER_COMPENSATION_READ` grant와
+  `X-Access-Reason`을 요구하고, Case access Audit와 조회 결과를 같은 local transaction에
+  묶는다. role이나 다른 permission을 fallback으로 사용하지 않는다. 권한 vocabulary와
+  감사 실패 규칙은 ADR-069를 따른다.
 - **Store projection amendment (2026-08-01):** `CompensationSummary`는 공용
   schema가 아니라 `OperatorCompensationView` 전용이다. 매장 응답
   `StoreOrderResult.compensationRecovery`는 `trigger`, case `state`와
@@ -127,7 +132,8 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   바뀐다. 기존 거절 회귀 테스트를 새 schema에서 함께 갱신해야 한다.
 - 매장 응답에서 step 배열·`attemptCount`·`lastErrorCode`·`caseId`·policy version이
   사라지므로 매장 화면은 진행 여부만 표시하고 상세 문의는 운영자 경로로 넘긴다.
-- 운영자 조회 endpoint가 신설되어 `PLATFORM_OPERATOR` 인가가 추가된다.
+- 운영자 조회 endpoint가 신설되어 `PLATFORM_OPERATOR` role,
+  `ORDER_COMPENSATION_READ` grant와 감사형 read가 추가된다.
 - `CompensationSummary.trigger`가 노출되므로 매장·운영자 화면이 거절과 취소를
   구분해 표시할 수 있다.
 - 환불 요약과 보상 step 상태가 서로 다른 값을 보일 수 있다. 예를 들어 Refund가
@@ -192,6 +198,19 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   상태가 갈린 관측 횟수
 
 Order, Store, Customer ID는 metric tag로 사용하지 않는다.
+
+## Implementation Checkpoint (2026-08-03)
+
+- pre-release gate 재확인 뒤 V8이 공통 Case, 두 benefit child와 여섯 step의 최종 shape를
+  직접 만들고 deferred constraint가 child/step cardinality를 commit 시점에 검증한다.
+- store rejection transaction은 Order 전이, 두 policy 선택, Case/Audit, persistent event
+  publications와 store idempotency V2 응답을 한 local transaction으로 commit한다.
+- 매장 projection은 trigger/state/updatedAt만 반환한다. 전체 여섯 step은 active
+  `ORDER_COMPENSATION_READ` grant와 `X-Access-Reason`, read Audit을 요구하는 운영자 endpoint에만
+  반환한다.
+- Case/step terminal 상태는 단조롭고 owner transaction은 분리된다. publication exhaustion은
+  중앙 registry가 매핑한 한 step만 변경하며 publication completion attempt를 business
+  `attemptCount`에 합산하지 않는다.
 
 ## Revisit Conditions
 

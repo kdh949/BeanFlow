@@ -1,16 +1,21 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
+import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -20,6 +25,7 @@ internal class PickupReservationService(
     private val reservationRepository: PickupReservationJpaRepository,
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
+    private val meterRegistry: MeterRegistry,
 ) : PickupReservationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReservePickupCommand): UUID {
@@ -98,7 +104,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -140,7 +146,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -185,7 +191,7 @@ internal class PickupReservationService(
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
 
-                PickupReservationState.RELEASED_BY_REJECTION -> {
+                PickupReservationState.RELEASED_AFTER_TERMINATION -> {
                     ReservationTransitionResult.NOT_ELIGIBLE
                 }
             }
@@ -193,35 +199,40 @@ internal class PickupReservationService(
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun releaseConfirmedByRejection(
-        orderId: UUID,
-        now: Instant,
-        sourceReference: String,
-    ): ReservationTransitionReport {
+    override fun releaseConfirmedAfterTermination(command: ReleasePickupAfterTerminationCommand): ReservationTransitionReport {
         val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+            reservationRepository.findByOrderId(command.orderId)
+                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE).also {
+                    recordRestoration(command, ReservationTransitionResult.NOT_ELIGIBLE)
+                }
         val slot =
             slotRepository.findLockedById(current.slotId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed pickup slot is missing")
         val reservation =
-            reservationRepository.findLockedByOrderId(orderId)
+            reservationRepository.findLockedByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        if (reservation.state == PickupReservationState.RELEASED_BY_REJECTION) {
-            return if (reservation.restorationSourceReference == sourceReference) {
-                report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
+        if (reservation.state == PickupReservationState.RELEASED_AFTER_TERMINATION) {
+            return if (reservation.restorationSourceReference == command.sourceReference &&
+                reservation.restorationTrigger == command.trigger
+            ) {
+                report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id).also {
+                    recordRestoration(command, ReservationTransitionResult.ALREADY_APPLIED)
+                }
             } else {
-                report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+                restorationConflict(command, "Pickup termination release metadata conflicts")
             }
         }
         if (reservation.state != PickupReservationState.CONFIRMED) {
-            return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+            restorationConflict(command, "Pickup reservation is not confirmed for termination release")
         }
         slot.releaseConfirmedOne()
-        reservation.state = PickupReservationState.RELEASED_BY_REJECTION
-        reservation.restorationSourceReference = sourceReference
-        reservation.updatedAt = now
-        return report(ReservationTransitionResult.APPLIED, reservation.id)
+        reservation.state = PickupReservationState.RELEASED_AFTER_TERMINATION
+        reservation.restorationSourceReference = command.sourceReference
+        reservation.restorationTrigger = command.trigger
+        reservation.updatedAt = command.terminatedAt
+        return report(ReservationTransitionResult.APPLIED, reservation.id).also {
+            recordRestoration(command, ReservationTransitionResult.APPLIED)
+        }
     }
 
     private fun report(
@@ -233,4 +244,61 @@ internal class PickupReservationService(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
+
+    private fun recordRestoration(
+        command: ReleasePickupAfterTerminationCommand,
+        outcome: ReservationTransitionResult,
+    ) {
+        afterCommit {
+            meterRegistry
+                .counter(
+                    "beanflow.resource.restoration.count",
+                    "owner",
+                    "pickup",
+                    "trigger",
+                    command.trigger.name.lowercase(),
+                    "outcome",
+                    outcome.name.lowercase(),
+                ).increment()
+            if (outcome == ReservationTransitionResult.APPLIED) {
+                meterRegistry
+                    .summary(
+                        "beanflow.resource.restoration.lag",
+                        "owner",
+                        "pickup",
+                        "trigger",
+                        command.trigger.name.lowercase(),
+                    ).record(
+                        Duration
+                            .between(command.terminatedAt, clock.instant())
+                            .seconds
+                            .coerceAtLeast(0)
+                            .toDouble(),
+                    )
+            }
+        }
+    }
+
+    private fun restorationConflict(
+        command: ReleasePickupAfterTerminationCommand,
+        message: String,
+    ): Nothing {
+        meterRegistry
+            .counter(
+                "beanflow.resource.restoration.source_conflict.count",
+                "owner",
+                "pickup",
+                "trigger",
+                command.trigger.name.lowercase(),
+            ).increment()
+        fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, message)
+    }
+
+    private fun afterCommit(action: () -> Unit) {
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
+        )
+    }
 }

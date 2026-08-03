@@ -130,6 +130,14 @@ Campaign, issuance, menu, store, Order와 customer ID는 metric tag로 사용하
 
 - **Not measured:** 보상 쿠폰 사용률과 대상 menu 부재 기간
 
+## Implementation Checkpoint (2026-08-03)
+
+- V22의 issuance-owned terms와 eligible-menu child는 deferred constraint로 보상 issuance당
+  정확한 snapshot shape를 강제하고 update/delete를 거부한다.
+- Promotion 복원은 원 Campaign 조건과 비용 부담을 같은 transaction에서 복제한다. 이후
+  Campaign이 inactive여도 보상 issuance 예약은 live Campaign fallback 없이 자체 snapshot을
+  평가하며, 일반 issuance의 active Campaign 검증은 유지한다.
+
 ## Revisit Conditions
 
 보상 쿠폰의 대상 menu가 사라지는 사례가 유의미하거나, Campaign hard delete,

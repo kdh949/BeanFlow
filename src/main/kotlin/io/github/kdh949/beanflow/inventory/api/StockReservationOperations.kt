@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.inventory.api
 
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import java.time.Instant
 import java.util.UUID
@@ -15,6 +16,13 @@ data class ReserveStockCommand(
     val requirements: List<StockRequirement>,
     val expiresAt: Instant,
     val sourceReference: String,
+)
+
+data class RestoreStockAfterTerminationCommand(
+    val orderId: UUID,
+    val terminatedAt: Instant,
+    val sourceReference: String,
+    val trigger: OrderTerminationTrigger,
 )
 
 interface StockReservationOperations {
@@ -37,9 +45,5 @@ interface StockReservationOperations {
         sourceReference: String,
     ): ReservationTransitionReport
 
-    fun restoreConfirmedByRejection(
-        orderId: UUID,
-        now: Instant,
-        sourceReference: String,
-    ): ReservationTransitionReport
+    fun restoreConfirmedAfterTermination(command: RestoreStockAfterTerminationCommand): ReservationTransitionReport
 }

@@ -62,7 +62,50 @@ production/shared 배포 직전에 같은 inventory를 다시 확인해야 한�
 publication drain, compatibility와 rollback ADR/ExecPlan을 먼저 확정한다.
 
 이 PASS는 migration/event 전략만 허용한다. 부분 환불 allocation, Settlement, 공통
-compensation foundation과 고객 취소 command 구현 완료를 의미하지 않는다.
+compensation foundation과 고객 취소 command 구현 완료를 그 자체로 의미하지 않는다.
+
+## Plan 30 pre-implementation gate revalidation
+
+- **Recorded at:** 2026-08-03
+- **Repository baseline:** local `main`과 `origin/main`이 `52e4320`으로 일치했고 completed
+  Plan 11 outcome `59bd6c2`, Plan 20 outcome `3fea6ea`가 모두 ancestor였다.
+- **Migration writer:** 다른 worktree/branch의 active Plan 30 migration writer가 없었고
+  ADR-072 단일 writer lane을 `feature/order-compensation-foundation`이 획득했다.
+- **Deployment inventory:** GitHub deployment와 environment가 모두 0이고 non-local runtime
+  DB 설정도 없었다. 외부 consumer, rollback artifact, completed/incomplete/default-listener
+  termination V1 publication도 0이었다.
+- **Result:** 모든 항목이 nonzero/unknown이 아닌 explicit 0이므로
+  `CLEAN_CUTOVER_GATE = PASSED`를 유지했다.
+
+이 재검증은 해당 시점의 release strategy evidence다. 최초 non-local 배포 직전에는 같은
+inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover를 적용하지 않는다.
+
+## Plan 30 implementation evidence
+
+- V8은 legacy rejection Case/step 후보를 먼저 세고 0일 때만 공통 Case, trigger, 두 benefit
+  child와 여섯 step의 최종 shape를 만든다.
+- V9는 legacy `RELEASED_BY_REJECTION` 후보를 먼저 세고 0일 때만 Pickup·Stock의 공통
+  termination state와 trigger/source CHECK를 만든다.
+- V22는 legacy Coupon/Point 종료 복원 후보를 먼저 세고 0일 때만 owner metadata,
+  compensation coupon terms와 allocation-aware point restoration shape를 만든다.
+- PostgreSQL migration fixture는 empty full migration, 각 migration별 legacy row 주입 실패,
+  최종 CHECK/FK/UNIQUE/deferred cardinality를 검증한다.
+- producer, annotation listener ID, 중앙 target registry와 실제 publication target은 열 개의
+  Plan 30 mapping으로 일치한다. legacy/default listener shim, V1/V2 이중 발행과 guessed
+  backfill은 없다.
+- `OrderCancelledV1` DTO와 네 owner consumer foundation만 준비됐고 고객 취소 HTTP command,
+  Refund 생성과 production success endpoint는 포함하지 않았다.
+
+### Validation result (2026-08-03)
+
+- `./gradlew test --tests '*Compensation*' --tests '*StoreOrder*'`: Passed, 21초.
+- `./gradlew test --tests '*EventPublication*'`: Passed, 10초.
+- `./gradlew test --tests '*ModularityTests'`: Passed, 2초.
+- `./gradlew clean build`: Passed, 294 tests, failures/errors/skips 0, 1분 26초.
+- `bash scripts/verify-docs.sh`: Passed, target 26/deployed 9 paths, 73 schemas,
+  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
+- `git diff --check`: Passed.
+- Not run: 없음.
 
 ## Plan 10 issuer provenance execution evidence
 

@@ -42,6 +42,11 @@
 `PLATFORM_OPERATOR` role과 active grant를 같은 local transaction에서 확인한다. revoked/missing
 grant는 403, grant/Audit persistence failure는 503이다.
 
+주문 보상 case step 상세 GET은 active `ORDER_COMPENSATION_READ` grant와
+`X-Access-Reason` header를 요구하고 target Case access Audit와 조회를 한 local
+transaction에 묶는다. 다른 policy·point permission이나 `PLATFORM_OPERATOR` role만으로
+통과시키지 않는다.
+
 정책 GET은 `EXPIRED_BENEFIT_POLICY_READ`와 `X-Access-Reason` header를, PATCH는
 `EXPIRED_BENEFIT_POLICY_WRITE`와 request body reason을 요구한다. GET reason은 trim 뒤 1..200자,
 control character 금지이며 current policy heads와 access Audit이 함께 저장된 경우에만 200이다.

@@ -1,8 +1,23 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
+import io.github.kdh949.beanflow.inventory.api.StockRequirement
+import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
+import io.github.kdh949.beanflow.inventory.internal.SellableStockEntity
+import io.github.kdh949.beanflow.inventory.internal.SellableStockJpaRepository
+import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
+import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationTrigger
+import io.github.kdh949.beanflow.operations.api.ExpiredBenefitType
+import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
+import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
+import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
+import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -49,6 +64,10 @@ internal class EventPublicationRecoveryIntegrationTest
         private val publications: IncompleteEventPublications,
         private val recoveryWorker: EventPublicationRecoveryWorker,
         private val failingListener: FailingReadyPublicationListener,
+        private val stockOperations: StockReservationOperations,
+        private val stockRepository: SellableStockJpaRepository,
+        private val compensationOperations: OrderCompensationOperations,
+        private val policies: ExpiredBenefitRestorationPolicyOperations,
         private val jdbcTemplate: JdbcTemplate,
         private val clock: PublicationRecoveryTestClock,
         transactionManager: PlatformTransactionManager,
@@ -59,7 +78,9 @@ internal class EventPublicationRecoveryIntegrationTest
         fun cleanDatabase() {
             await("previous publications to complete") { incompletePublicationCount() == 0L }
             jdbcTemplate.execute(
-                "TRUNCATE TABLE notification_delivery, operations_reprocessing_case, event_publication CASCADE",
+                "TRUNCATE TABLE notification_delivery, operations_reprocessing_case, " +
+                    "operations_order_compensation_case, inventory_stock_reservation, " +
+                    "inventory_sellable_stock, event_publication CASCADE",
             )
             failingListener.reset()
             clock.reset()
@@ -67,6 +88,10 @@ internal class EventPublicationRecoveryIntegrationTest
 
         @AfterEach
         fun completeScriptedPublication() {
+            jdbcTemplate.update(
+                "DELETE FROM event_publication WHERE event_type = ?",
+                OrderCancelledV1::class.java.name,
+            )
             failingListener.allowSuccess()
             if (incompletePublicationCount() > 0) {
                 publications.resubmitIncompletePublications(
@@ -216,6 +241,152 @@ internal class EventPublicationRecoveryIntegrationTest
             }
         }
 
+        @Test
+        fun `mapped compensation publication exhaustion changes only its step without a business attempt`() {
+            val fixture = cancellationWithMissingPickup()
+            await("only pickup publication to remain incomplete") {
+                incompletePublicationCount() == 1L &&
+                    incompletePublicationListenerId() ==
+                    "beanflow.order-compensation.order-cancelled.pickup.v1"
+            }
+            jdbcTemplate.update(
+                "UPDATE event_publication SET completion_attempts = 6 WHERE completion_date IS NULL",
+            )
+
+            recoveryWorker.runOnce()
+            recoveryWorker.runOnce()
+
+            val steps =
+                requireNotNull(compensationOperations.findByOrderId(fixture.orderId))
+                    .steps
+                    .associateBy { it.type }
+            assertThat(steps.getValue(OrderCompensationStepType.PICKUP).state)
+                .isEqualTo(OrderCompensationStepState.MANUAL_REVIEW)
+            assertThat(steps.getValue(OrderCompensationStepType.PICKUP).attemptCount).isZero()
+            assertThat(steps.getValue(OrderCompensationStepType.STOCK).state)
+                .isEqualTo(OrderCompensationStepState.SUCCEEDED)
+            assertThat(steps.getValue(OrderCompensationStepType.COUPON).state)
+                .isEqualTo(OrderCompensationStepState.NOT_REQUIRED)
+            assertThat(steps.getValue(OrderCompensationStepType.POINTS).state)
+                .isEqualTo(OrderCompensationStepState.NOT_REQUIRED)
+            assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isEqualTo(1)
+            assertThat(completedCancellationPublicationCount()).isEqualTo(3)
+        }
+
+        @Test
+        fun `unknown compensation publication target opens unmapped case without mutating steps`() {
+            val fixture = cancellationWithMissingPickup()
+            await("pickup publication failure before unknown target mutation") {
+                incompletePublicationCount() == 1L
+            }
+            val before = requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps
+            jdbcTemplate.update(
+                "UPDATE event_publication SET listener_id = 'legacy.default-listener', completion_attempts = 6 " +
+                    "WHERE completion_date IS NULL",
+            )
+
+            recoveryWorker.runOnce()
+
+            val after = requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps
+            assertThat(after).isEqualTo(before)
+            assertThat(reprocessingReasonCount("PUBLICATION_TARGET_UNMAPPED")).isEqualTo(1)
+            assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isZero()
+            assertThat(completedCancellationPublicationCount()).isEqualTo(3)
+        }
+
+        private fun cancellationWithMissingPickup(): CancellationFixture {
+            val orderId = UUID.randomUUID()
+            val storeId = UUID.randomUUID()
+            val stockId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                stockRepository.save(SellableStockEntity(stockId, storeId, 2))
+                stockOperations.reserve(
+                    ReserveStockCommand(
+                        orderId,
+                        storeId,
+                        listOf(StockRequirement(stockId, 1)),
+                        clock.instant().plusSeconds(300),
+                        "stock:$orderId",
+                    ),
+                )
+                stockOperations.confirm(orderId, "stock:$orderId")
+            }
+            val couponPolicy =
+                policies.current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.COUPON)
+            val pointsPolicy =
+                policies.current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.POINTS)
+            val event =
+                OrderCancelledV1(
+                    envelope =
+                        EventEnvelope(
+                            eventId = UUID.randomUUID(),
+                            eventType = "OrderCancelledV1",
+                            aggregateId = orderId,
+                            aggregateVersion = 8,
+                            occurredAt = clock.instant(),
+                            payloadVersion = 1,
+                            correlationId = "cancel-publication-$orderId",
+                            causationId = "customer-cancellation-command:${UUID.randomUUID()}",
+                        ),
+                    orderId = orderId,
+                    cancelledAt = clock.instant(),
+                    couponRequired = false,
+                    pointsRequired = false,
+                    couponPolicy = couponPolicy.toEventPolicy(),
+                    pointsPolicy = pointsPolicy.toEventPolicy(),
+                )
+            compensationOperations.open(
+                OpenOrderCompensationCaseCommand(
+                    caseId = UUID.randomUUID(),
+                    eventId = event.envelope.eventId,
+                    orderId = orderId,
+                    terminalOrderVersion = event.envelope.aggregateVersion,
+                    customerId = UUID.randomUUID(),
+                    storeId = storeId,
+                    trigger = OrderCompensationTrigger.CUSTOMER_CANCELLATION,
+                    sourceReference = "order:$orderId:customer-cancellation:8",
+                    couponPolicy = couponPolicy,
+                    pointsPolicy = pointsPolicy,
+                    paymentRequired = false,
+                    couponRequired = false,
+                    pointsRequired = false,
+                    correlationId = event.envelope.correlationId,
+                    now = clock.instant(),
+                ),
+            )
+            transactions.executeWithoutResult { eventPublisher.publishEvent(event) }
+            return CancellationFixture(orderId)
+        }
+
+        private fun io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot.toEventPolicy() =
+            BenefitRestorationPolicySnapshotV1(policyVersion, mode.name, compensationValidityDays)
+
+        private fun incompletePublicationListenerId(): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT listener_id FROM event_publication WHERE completion_date IS NULL",
+                    String::class.java,
+                ),
+            )
+
+        private fun completedCancellationPublicationCount(): Long =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM event_publication WHERE event_type = ? AND completion_date IS NOT NULL",
+                    Long::class.java,
+                    OrderCancelledV1::class.java.name,
+                ),
+            )
+
+        private fun reprocessingReasonCount(reason: String): Long =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_reprocessing_case WHERE reason = ?",
+                    Long::class.java,
+                    reason,
+                ),
+            )
+
         private fun incompletePublicationCount(): Long =
             requireNotNull(
                 jdbcTemplate.queryForObject(
@@ -276,6 +447,10 @@ internal class EventPublicationRecoveryIntegrationTest
             }
             check(assertion()) { "Timed out waiting for $description" }
         }
+
+        private data class CancellationFixture(
+            val orderId: UUID,
+        )
     }
 
 @TestConfiguration(proxyBeanMethods = false)

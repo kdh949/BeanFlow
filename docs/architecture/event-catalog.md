@@ -148,12 +148,11 @@ ID, Provider reference, `customerId`, `storeId`와 `reasonCode`는 payload에 �
 flag와 관계없이 항상 존재하고 Case가 참조하는 immutable version과 일치한다.
 consumer는 현재 policy head를 조회하지 않는다.
 
-`OrderRejectedV1`도 ADR-041에 따라 같은 `couponPolicy/pointsPolicy` shape를 목표로
-한다. 다만 기존 단일 `policyVersion/policyMode/policyValidityDays`를 제자리에서
-제거하는 것은 ADR-059 release gate가 보존할 publication·외부 consumer·rollback
-대상이 모두 없음을 입증한 경우에만 허용한다. gate가 실패하면 V1을 변경하지 않고
-forward migration과 compatibility 계획을 먼저 확정한다. 최초 production publication
-이후에는 두 V1 계약을 동결한다.
+2026-08-03 Plan 30 checkpoint에서 `OrderRejectedV1`도 ADR-041의 같은
+`couponPolicy/pointsPolicy` shape로 clean cutover했다. ADR-059 release gate는 구현 직전에도
+보존할 publication·외부 consumer·rollback 대상이 모두 0임을 재확인했다. 구 단일
+`policyVersion/policyMode/policyValidityDays`, compatibility DTO와 V2 이중 발행은 없다.
+최초 production publication 이후에는 두 V1 계약을 동결한다.
 
 `correlationId`는 취소 HTTP 요청의 값을 전파하고 부재하면 서버가 생성한다.
 `causationId`는 `customer-cancellation-command:{cancellationCommandId}`이며
@@ -169,6 +168,25 @@ Tx C1이 생성하는 Refund와 NotificationDelivery는 같은 형식의 `paymen
 아니다. 같은 Order version을 표현하는 event는 event ID가 달라도 owner work를 새로
 만들지 않는다. event ID는 publication과 추적에 사용하고 owner 부수효과의 유일한
 중복 기준으로 사용하지 않는다.
+
+Plan 30의 영속 listener target은 아래 열 개만 허용한다.
+
+| Event | Stable listener ID | Step |
+|---|---|---|
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.payment.v1` | PAYMENT |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.pickup.v1` | PICKUP |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.stock.v1` | STOCK |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.coupon.v1` | COUPON |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.points.v1` | POINTS |
+| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.customer-notification.v1` | CUSTOMER_NOTIFICATION |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.pickup.v1` | PICKUP |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.stock.v1` | STOCK |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.coupon.v1` | COUPON |
+| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.points.v1` | POINTS |
+
+annotation, 중앙 registry와 실제 publication target 집합은 이 표와 정확히 일치해야 한다.
+duplicate registry는 시작 실패다. unknown target은 `PUBLICATION_TARGET_UNMAPPED` 운영 case를
+남기되 비슷한 step이나 Case 전체를 추측해 변경하지 않는다.
 
 Pickup과 Stock consumer는 `OrderCancelledV1`을
 `restorationTrigger = CUSTOMER_CANCELLATION`으로 매핑하고 공통
@@ -193,8 +211,10 @@ publication completion attempt는 owner business attempt가 아니므로 보상 
 `attemptCount`에 합산하지 않는다. 이 규칙은 `OrderCancelledV1`과
 `OrderRejectedV1`에 동일하게 적용한다.
 
-`OrderCancelledV1`은 구현 전 최종 payload를 완성하고 최초 운영 publication부터
-동결한다. 필수 필드 제거, 이름·타입·의미 변경은 `OrderCancelledV2`로 이행한다. 구
+`OrderCancelledV1` public DTO, exact fixture와 네 owner listener는 Plan 30에서 위 최종
+계약으로 구현됐다. producer와 고객 취소 HTTP command는 Plan 40 범위이며 최초 운영
+publication부터 V1을 동결한다. 필수 필드 제거, 이름·타입·의미 변경은
+`OrderCancelledV2`로 이행한다. 구
 consumer가 무시할 수 있고 역직렬화 기본값이 있는 선택 필드만 V1에 추가할 수 있다.
 V1 listener와 legacy target-to-step mapping은 미완료 V1 publication이 없고 승인된
 rollback 기간이 끝날 때까지 유지한다. 이중 발행은 별도 Accepted ADR이 있을 때만

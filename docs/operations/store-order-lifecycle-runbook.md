@@ -94,6 +94,9 @@ Store order 조회 API는 Order와 함께 `trigger`, case `state`, `updatedAt`�
 축약 보상 요약을 반환한다. step 상세, `attemptCount`, `lastErrorCode`, `caseId`와
 policy version은 운영자 전용 `GET /api/v1/operations/orders/{orderId}/compensation`과
 아래 DB 진단에서만 확인한다. DB 진단은 case와 owner별 step을 함께 조회한다.
+운영자 endpoint는 `PLATFORM_OPERATOR` role만으로 허용하지 않는다. active
+`ORDER_COMPENSATION_READ` grant와 비어 있지 않은 `X-Access-Reason`이 모두 필요하며
+Case access Audit 저장이 실패하면 조회도 실패한다.
 
 ```sql
 SELECT c.order_id, c.trigger, c.state AS case_state,
@@ -172,6 +175,8 @@ ORDER BY created_at, id;
 - `beanflow.event.publication.pending.count`
 - `beanflow.event.publication.oldest.age.seconds`
 - `beanflow.event.publication.attempt.max`
+- `beanflow.event.publication.exhaustion.count{event_type,outcome}`
+- `beanflow.order.termination.event.routing_error.count{event_type,consumer}`
 
 publication row를 완료 처리하거나 삭제하지 않는다. `MANUAL_REVIEW`에서는 실패한
 listener의 owner 상태와 source reference를 read-only 확인하고, 승인된 incident
@@ -321,14 +326,32 @@ scripted 설정은 시작 실패하며, 운영 배포에는 실제 `Notification
 `expectedPolicyVersionId`, Idempotency-Key와 reason이 필수다. policy head 또는
 version row를 직접 갱신하거나 과거 version을 수정·삭제하지 않는다.
 
+주문 종료 보상 관측 지표:
+
+- `beanflow.order.termination.event.count{event_type}`
+- `beanflow.order.compensation.case.count{trigger,state}`
+- `beanflow.order.compensation.step.count{trigger,type,state}`
+- `beanflow.order.compensation.policy_snapshot.count{trigger,benefit_type}`
+- `beanflow.order.compensation.lag{trigger}`
+- `beanflow.resource.restoration.count{owner,trigger,outcome}`
+- `beanflow.resource.restoration.source_conflict.count{owner,trigger}`
+- `beanflow.resource.restoration.lag{owner,trigger}`
+- `beanflow.benefit.restoration.count{benefit_type,trigger,disposition}`
+- `beanflow.benefit.restoration.source_conflict.count{benefit_type,trigger}`
+- `beanflow.benefit.restoration.amount{benefit_type,trigger,disposition}`
+
+Order, Customer, Store, Case, reservation, issuance, lot와 policy version ID를 tag로
+추가하지 않는다. `outcome`, `state`, `trigger`, `type`, `benefit_type`, `disposition`은
+코드의 닫힌 enum/mapping만 사용한다.
+
 ## Deployment and worker activation
 
-V7부터 V12 migration은 순서대로 적용돼야 하며 Hibernate는 `validate`만 사용한다.
+V7부터 V22 migration은 순서대로 적용돼야 하며 Hibernate는 `validate`만 사용한다.
 worker를 활성화하기 전에 다음을 확인한다.
 
 1. 기존 `PAID` row가 없거나 `paid_at`, warning과 deadline backfill이 분류됐다.
 2. 실제 Payment와 Notification Provider 설정이 검증됐다.
-3. V7~V12 migration과 PostgreSQL 통합 테스트가 배포 대상 revision에서 통과했다.
+3. V7~V22 migration과 PostgreSQL 통합 테스트가 배포 대상 revision에서 통과했다.
 4. publication, refund, notification backlog 지표와 alert가 준비됐다.
 5. rollback은 migration row 삭제나 상태 직접 변경이 아니라 worker 비활성화와
    incident 절차로 수행한다.

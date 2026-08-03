@@ -2,13 +2,15 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.UUID
 
 internal object CanonicalStoreOrderTransitionPayload {
     fun hash(
+        orderId: UUID,
         targetState: StoreOrderTargetState,
         reason: String?,
     ): String {
-        val canonical = "${targetState.name}|${reason?.trim().orEmpty()}"
+        val canonical = "$orderId|${targetState.name}|${reason?.trim().orEmpty()}"
         return MessageDigest
             .getInstance("SHA-256")
             .digest(canonical.toByteArray(StandardCharsets.UTF_8))

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component
 internal class OrderRejectedRefundListener(
     private val refundService: RejectionRefundService,
 ) {
-    @ApplicationModuleListener
+    @ApplicationModuleListener(id = "beanflow.order-compensation.order-rejected.payment.v1")
     fun on(event: OrderRejectedV1) {
         refundService.request(event)
     }

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.api
 
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import java.time.Instant
 import java.util.UUID
@@ -54,10 +55,12 @@ enum class ExpiredCouponRestorationMode {
     PRESERVE_ORIGINAL_EXPIRY,
 }
 
-data class RestoreCouponByRejectionCommand(
+data class RestoreCouponAfterTerminationCommand(
     val orderId: UUID,
-    val rejectedAt: Instant,
+    val terminatedAt: Instant,
     val sourceReference: String,
+    val trigger: OrderTerminationTrigger,
+    val policyVersionId: Long,
     val mode: ExpiredCouponRestorationMode,
     val compensationValidityDays: Int,
 )
@@ -76,5 +79,5 @@ interface CouponReservationOperations {
         sourceReference: String,
     ): ReservationTransitionReport
 
-    fun restoreUsedByRejection(command: RestoreCouponByRejectionCommand): ReservationTransitionReport
+    fun restoreUsedAfterTermination(command: RestoreCouponAfterTerminationCommand): ReservationTransitionReport
 }

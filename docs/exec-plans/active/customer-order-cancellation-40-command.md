@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/customer-order-cancellation-30-order-compensation-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
@@ -22,11 +22,12 @@
 - 현재 Order에는 결제 거절용 `cancelPendingPayment`만 있고 고객 취소 필드/guard가 없다.
 - `OrderController`에는 cancellations mapping이 없다.
 - 고객 취소 멱등 table, AcceptanceTimeoutWork와 cancellation Audit action이 없다.
-- direct phase predecessor는 Plan 30이다. Plan 30 completion baseline에는 Plan 10/15/20 outcomes가
-  이미 merge돼 있으며 이 plan은 latest main에서 Draft-only로 시작한다.
+- direct phase predecessor인 Plan 30은 공통 Case, owner convergence, stable publication recovery와
+  294-test validation을 완료했다. 이 plan은 해당 completed outcome이 반영된 latest main에서
+  Draft-only로 시작한다.
 - Plan 13 recovery/pending은 V17 owner outcome과 205-test evidence로 completed지만, 이는
-  Plan 16→20→30을 통해 간접 소비되는 upstream input이다. Plan 40의 direct readiness는 여전히
-  active Plan 30 때문에 false다.
+  Plan 16→20→30을 통해 간접 소비되는 upstream input이다. Plan 40의 direct dependency가
+  completed path에 있으므로 `Implementation-Ready=true`다.
 
 ## Definitions
 
@@ -176,8 +177,8 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 
 ## Outcomes & Retrospective
 
-미구현 상태다. completed Plan 13은 upstream recovery input을 제공하지만 Plan 30 completion 뒤
-Draft PR에서만 구현한다. verified outcome 뒤 completion
+미구현 상태다. completed Plan 30의 공통 compensation output을 소비해 latest-main 기반 Draft
+PR에서만 구현한다. verified outcome 뒤 completion
 commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual recovery/release evidence가
 없는 동안 main merge, deployment와 production success path를 활성화하지 않는다.
 
@@ -189,3 +190,5 @@ commit으로 Plan 50 dependency path/ready를 갱신하고, Plan 50의 actual re
   dependency와 Draft-only readiness gate는 변경하지 않았다.
 - 2026-08-03: cause/cancelledAt와 공통 terminal CHECK의 소유권을 Plan 20으로 이동하고 이 계획의
   migration 범위를 reason/detail과 고객 취소 command 불변식으로 축소했다.
+- 2026-08-03: Plan 30이 294-test validation과 completed outcome을 남겨 direct dependency path를
+  completed로 바꾸고 `Implementation-Ready=true`로 전환했다. Draft-only 규칙은 유지한다.

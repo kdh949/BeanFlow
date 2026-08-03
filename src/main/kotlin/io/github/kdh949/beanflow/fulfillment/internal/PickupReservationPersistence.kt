@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -64,7 +65,7 @@ internal enum class PickupReservationState {
     CONFIRMED,
     EXPIRED,
     RELEASED,
-    RELEASED_BY_REJECTION,
+    RELEASED_AFTER_TERMINATION,
 }
 
 @Entity
@@ -89,6 +90,9 @@ internal class PickupReservationEntity(
     var updatedAt: Instant,
     @Column(name = "restoration_source_reference", length = 200)
     var restorationSourceReference: String? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restoration_trigger")
+    var restorationTrigger: OrderTerminationTrigger? = null,
     @Version
     var version: Long = 0,
 )

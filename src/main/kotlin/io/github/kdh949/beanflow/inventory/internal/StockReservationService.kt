@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.inventory.internal
 
 import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
+import io.github.kdh949.beanflow.inventory.api.RestoreStockAfterTerminationCommand
 import io.github.kdh949.beanflow.inventory.api.StockRequirement
 import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -8,10 +9,14 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -21,6 +26,7 @@ internal class StockReservationService(
     private val reservationRepository: StockReservationJpaRepository,
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
+    private val meterRegistry: MeterRegistry,
 ) : StockReservationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReserveStockCommand): List<UUID> {
@@ -94,13 +100,13 @@ internal class StockReservationService(
     ): ReservationTransitionReport = transition(orderId, sourceReference, now, StockTransition.EXPIRE)
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun restoreConfirmedByRejection(
-        orderId: UUID,
-        now: Instant,
-        sourceReference: String,
-    ): ReservationTransitionReport {
-        val current = reservationRepository.findByOrderIdOrderBySellableUnitId(orderId)
-        if (current.isEmpty()) return report(ReservationTransitionResult.NOT_ELIGIBLE)
+    override fun restoreConfirmedAfterTermination(command: RestoreStockAfterTerminationCommand): ReservationTransitionReport {
+        val current = reservationRepository.findByOrderIdOrderBySellableUnitId(command.orderId)
+        if (current.isEmpty()) {
+            return report(ReservationTransitionResult.NOT_ELIGIBLE).also {
+                recordRestoration(command, ReservationTransitionResult.NOT_ELIGIBLE)
+            }
+        }
         val stocks =
             current.sortedBy(StockReservationEntity::sellableUnitId).associate { reservation ->
                 reservation.sellableUnitId to (
@@ -108,24 +114,30 @@ internal class StockReservationService(
                         ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed sellable stock is missing")
                 )
             }
-        val reservations = reservationRepository.findLockedByOrderId(orderId)
+        val reservations = reservationRepository.findLockedByOrderId(command.orderId)
         if (reservations.all {
-                it.state == StockReservationState.RELEASED_BY_REJECTION &&
-                    it.restorationSourceReference == sourceReference
+                it.state == StockReservationState.RELEASED_AFTER_TERMINATION &&
+                    it.restorationSourceReference == command.sourceReference &&
+                    it.restorationTrigger == command.trigger
             }
         ) {
-            return report(ReservationTransitionResult.ALREADY_APPLIED, reservations)
+            return report(ReservationTransitionResult.ALREADY_APPLIED, reservations).also {
+                recordRestoration(command, ReservationTransitionResult.ALREADY_APPLIED)
+            }
         }
         if (reservations.any { it.state != StockReservationState.CONFIRMED }) {
-            return report(ReservationTransitionResult.NOT_ELIGIBLE, reservations)
+            restorationConflict(command, "Stock termination release metadata conflicts")
         }
         reservations.forEach { reservation ->
             stocks.getValue(reservation.sellableUnitId).restoreConfirmed(reservation.quantity)
-            reservation.state = StockReservationState.RELEASED_BY_REJECTION
-            reservation.restorationSourceReference = sourceReference
-            reservation.updatedAt = now
+            reservation.state = StockReservationState.RELEASED_AFTER_TERMINATION
+            reservation.restorationSourceReference = command.sourceReference
+            reservation.restorationTrigger = command.trigger
+            reservation.updatedAt = command.terminatedAt
         }
-        return report(ReservationTransitionResult.APPLIED, reservations)
+        return report(ReservationTransitionResult.APPLIED, reservations).also {
+            recordRestoration(command, ReservationTransitionResult.APPLIED)
+        }
     }
 
     private fun transition(
@@ -202,6 +214,63 @@ internal class StockReservationService(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
+
+    private fun recordRestoration(
+        command: RestoreStockAfterTerminationCommand,
+        outcome: ReservationTransitionResult,
+    ) {
+        afterCommit {
+            meterRegistry
+                .counter(
+                    "beanflow.resource.restoration.count",
+                    "owner",
+                    "stock",
+                    "trigger",
+                    command.trigger.name.lowercase(),
+                    "outcome",
+                    outcome.name.lowercase(),
+                ).increment()
+            if (outcome == ReservationTransitionResult.APPLIED) {
+                meterRegistry
+                    .summary(
+                        "beanflow.resource.restoration.lag",
+                        "owner",
+                        "stock",
+                        "trigger",
+                        command.trigger.name.lowercase(),
+                    ).record(
+                        Duration
+                            .between(command.terminatedAt, clock.instant())
+                            .seconds
+                            .coerceAtLeast(0)
+                            .toDouble(),
+                    )
+            }
+        }
+    }
+
+    private fun restorationConflict(
+        command: RestoreStockAfterTerminationCommand,
+        message: String,
+    ): Nothing {
+        meterRegistry
+            .counter(
+                "beanflow.resource.restoration.source_conflict.count",
+                "owner",
+                "stock",
+                "trigger",
+                command.trigger.name.lowercase(),
+            ).increment()
+        fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, message)
+    }
+
+    private fun afterCommit(action: () -> Unit) {
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
+        )
+    }
 
     private enum class StockTransition {
         CONFIRM,

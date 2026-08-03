@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.api
 
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import java.time.Instant
 import java.util.UUID
@@ -40,10 +41,12 @@ enum class ExpiredPointRestorationMode {
     PRESERVE_ORIGINAL_EXPIRY,
 }
 
-data class RestorePointsByRejectionCommand(
+data class RestorePointsAfterTerminationCommand(
     val orderId: UUID,
-    val rejectedAt: Instant,
+    val terminatedAt: Instant,
     val sourceReference: String,
+    val trigger: OrderTerminationTrigger,
+    val policyVersionId: Long,
     val mode: ExpiredPointRestorationMode,
     val compensationValidityDays: Int,
 )
@@ -62,5 +65,5 @@ interface PointReservationOperations {
         sourceReference: String,
     ): ReservationTransitionReport
 
-    fun restoreUsedByRejection(command: RestorePointsByRejectionCommand): ReservationTransitionReport
+    fun restoreUsedAfterTermination(command: RestorePointsAfterTerminationCommand): ReservationTransitionReport
 }

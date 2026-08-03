@@ -5,9 +5,10 @@ import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
-import io.github.kdh949.beanflow.loyalty.api.RestorePointsByRejectionCommand
+import io.github.kdh949.beanflow.loyalty.api.RestorePointsAfterTerminationCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
@@ -166,16 +167,18 @@ internal class PointReservationRepositoryTest
                 operations.confirm(orderId, "points-order-$orderId")
             }
             val restore =
-                RestorePointsByRejectionCommand(
-                    orderId,
-                    Instant.parse("2029-01-01T00:00:00Z"),
-                    "rejection-points-$orderId",
-                    ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
-                    30,
+                RestorePointsAfterTerminationCommand(
+                    orderId = orderId,
+                    terminatedAt = Instant.parse("2029-01-01T00:00:00Z"),
+                    sourceReference = "rejection-points-$orderId",
+                    trigger = OrderTerminationTrigger.STORE_REJECTION,
+                    policyVersionId = 2,
+                    mode = ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
+                    compensationValidityDays = 30,
                 )
 
-            val first = operations.restoreUsedByRejection(restore)
-            val replay = operations.restoreUsedByRejection(restore)
+            val first = operations.restoreUsedAfterTermination(restore)
+            val replay = operations.restoreUsedAfterTermination(restore)
 
             assertThat(first.result).isEqualTo(ReservationTransitionResult.APPLIED)
             assertThat(replay.result).isEqualTo(ReservationTransitionResult.ALREADY_APPLIED)
@@ -185,10 +188,27 @@ internal class PointReservationRepositoryTest
                 assertThat(account.availablePointsKrw).isEqualTo(100)
                 assertThat(account.reservedPointsKrw).isZero()
                 assertThat(lot.availableAmountKrw).isEqualTo(100)
-                assertThat(reservationRepository.findByOrderId(orderId)?.state)
-                    .isEqualTo(PointReservationState.RESTORED)
-                assertThat(pointTransactionRepository.findAll().map { it.type })
+                val reservation = reservationRepository.findByOrderId(orderId)
+                assertThat(reservation?.state).isEqualTo(PointReservationState.RESTORED)
+                assertThat(reservation?.restorationTrigger).isEqualTo(OrderTerminationTrigger.STORE_REJECTION)
+                assertThat(reservation?.restorationPolicyVersionId).isEqualTo(2)
+                val transactions = pointTransactionRepository.findAll()
+                assertThat(transactions.map { it.type })
                     .containsExactlyInAnyOrder(PointTransactionType.USE, PointTransactionType.RESTORE)
+                val restoration = transactions.single { it.type == PointTransactionType.RESTORE }
+                assertThat(restoration.restorationTrigger).isEqualTo(OrderTerminationTrigger.STORE_REJECTION.name)
+                assertThat(restoration.restorationPolicyVersionId).isEqualTo(2)
+                assertThat(restoration.restorationDisposition).isEqualTo("ORIGINAL_LOT")
+            }
+
+            val conflict =
+                org.assertj.core.api.Assertions.catchThrowable {
+                    operations.restoreUsedAfterTermination(
+                        restore.copy(trigger = OrderTerminationTrigger.CUSTOMER_CANCELLATION),
+                    )
+                }
+            assertThat(conflict).isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.COMPENSATION_SOURCE_CONFLICT)
             }
         }
 
@@ -201,11 +221,13 @@ internal class PointReservationRepositoryTest
                 operations.confirm(orderId, "points-order-$orderId")
             }
 
-            operations.restoreUsedByRejection(
-                RestorePointsByRejectionCommand(
+            operations.restoreUsedAfterTermination(
+                RestorePointsAfterTerminationCommand(
                     orderId = orderId,
-                    rejectedAt = Instant.parse("2031-01-01T00:00:00Z"),
+                    terminatedAt = Instant.parse("2031-01-01T00:00:00Z"),
                     sourceReference = "rejection-points-$orderId",
+                    trigger = OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                    policyVersionId = 4,
                     mode = ExpiredPointRestorationMode.COMPENSATE_WITH_NEW_ISSUANCE,
                     compensationValidityDays = 30,
                 ),
@@ -216,6 +238,49 @@ internal class PointReservationRepositoryTest
                     lotRepository.findAll().single { it.originalPointLotId == fixture.lotId }
                 assertThat(compensation.issuerType).isEqualTo(PointIssuerType.PLATFORM)
                 assertThat(compensation.issuerReference).isEqualTo("platform:test-fixture")
+                assertThat(compensation.restorationTrigger)
+                    .isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION.name)
+                assertThat(compensation.restorationPolicyVersionId).isEqualTo(4)
+            }
+        }
+
+        @Test
+        fun `expired customer cancellation preserve policy records skipped restoration without available points`() {
+            val fixture = insertPoints(available = 100)
+            val orderId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                operations.reserve(command(fixture, orderId, 80, "points-order-$orderId"))
+                operations.confirm(orderId, "points-order-$orderId")
+            }
+
+            val report =
+                operations.restoreUsedAfterTermination(
+                    RestorePointsAfterTerminationCommand(
+                        orderId = orderId,
+                        terminatedAt = Instant.parse("2031-01-01T00:00:00Z"),
+                        sourceReference = "order:$orderId:customer-cancellation:7:points",
+                        trigger = OrderTerminationTrigger.CUSTOMER_CANCELLATION,
+                        policyVersionId = 4,
+                        mode = ExpiredPointRestorationMode.PRESERVE_ORIGINAL_EXPIRY,
+                        compensationValidityDays = 30,
+                    ),
+                )
+
+            assertThat(report.result).isEqualTo(ReservationTransitionResult.APPLIED)
+            transactions.executeWithoutResult {
+                val account = accountRepository.findById(fixture.accountId).orElseThrow()
+                val reservation = requireNotNull(reservationRepository.findByOrderId(orderId))
+                val restoration =
+                    pointTransactionRepository
+                        .findAll()
+                        .single { it.type == PointTransactionType.RESTORE_SKIPPED_EXPIRED }
+                assertThat(account.availablePointsKrw).isEqualTo(20)
+                assertThat(lotRepository.findAll()).hasSize(1)
+                assertThat(reservation.state).isEqualTo(PointReservationState.RESTORED)
+                assertThat(reservation.restorationTrigger).isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION)
+                assertThat(reservation.restorationPolicyVersionId).isEqualTo(4)
+                assertThat(restoration.amountKrw).isEqualTo(80)
+                assertThat(restoration.restorationDisposition).isEqualTo("SKIPPED_EXPIRED")
             }
         }
 

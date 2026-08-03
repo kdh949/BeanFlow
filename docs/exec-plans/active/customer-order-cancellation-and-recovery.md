@@ -172,7 +172,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 9. [정산 입력 snapshot foundation을 만든다](../completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md) — 10, completed
 10. [immutable refund/Loyalty event producer를 만든다](../completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md) — 12, 13, 15, completed
 11. [Settlement foundation과 취소 제외 증적을 만든다](../completed/customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor, completed
-12. [공통 Order compensation foundation을 만든다](customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane
+12. [공통 Order compensation foundation을 만든다](../completed/customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane, completed
 13. [고객 취소 command와 Tx C0/C1을 구현한다](customer-order-cancellation-40-command.md) — 30, Draft only
 14. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack
 
@@ -234,7 +234,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 15 settlement-input snapshot foundation 완료 — V18–V20, immutable snapshot/V2 factory, 229-test build
 - [x] 16 immutable financial event producer 완료 — 세 V1 producer, 243-test build
 - [x] 20 Settlement foundation 완료 — V21, V2 completion/consumer, signed Item query, 취소 제외 Audit, 270-test build
-- [ ] 30 common compensation foundation 완료
+- [x] 30 common compensation foundation 완료 — V8/V9/V22, 공통 Case/owner/stable publication recovery, 294-test build
 - [ ] 40 customer cancellation command 완료
 - [ ] 50 recovery와 release verification 완료
 

@@ -455,6 +455,18 @@ Order, Customer, Store ID와 취소 상세 사유는 metric tag로 사용하지 
 
 - **Not measured:** 고객 취소량, 거절량과 consumer별 처리 지연
 
+## Implementation Checkpoint (2026-08-03)
+
+- `OrderRejectedV1` producer와 여섯 consumer는 two-policy snapshot 계약과 stable listener ID로
+  clean cutover했다. `OrderCancelledV1`은 exact 최소 DTO와 Pickup·Stock·Coupon·Points 네
+  consumer만 준비됐고 producer는 Plan 40 범위로 남겼다.
+- 중앙 registry는 두 event type의 정확한 열 target만 허용한다. duplicate mapping은 시작을
+  실패시키고 unknown target exhaustion은 `PUBLICATION_TARGET_UNMAPPED` 운영 case만 만들며
+  step이나 Case를 추측해 변경하지 않는다.
+- 네 고객 취소 listener는 `order:{orderId}:customer-cancellation:{aggregateVersion}:{step}`을
+  owner source로 사용한다. 같은 source/trigger/policy는 수렴하고 mismatch는 기존 owner 결과를
+  덮어쓰지 않는다.
+
 ## Revisit Conditions
 
 고객 취소와 매장 거절 외에 동일한 보상 대상과 의미를 가진 종료 원인이 여러 개

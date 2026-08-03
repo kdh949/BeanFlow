@@ -169,6 +169,15 @@ pre-release cutover 자체에는 runtime metric을 추가하지 않는다.
 
 - **Not measured:** legacy migration 대비 구현량 감소
 
+## Implementation Checkpoint (2026-08-03)
+
+- 구현 직전 main/Plan 11/Plan 20, migration-writer, GitHub deployment/environment와 V1
+  publication/consumer/rollback inventory를 다시 확인했고 모두 explicit 0이라 gate가 유지됐다.
+- Plan 30은 정확히 V8(공통 Case), V9(Pickup·Stock), V22(Coupon·Points) 세 owned migration을
+  최종 shape로 사용한다. 각 migration은 legacy 후보를 먼저 세고 하나라도 있으면 실패한다.
+- PostgreSQL fixture는 empty full migration과 세 migration별 legacy row 주입 실패를 검증한다.
+  rename shim, guessed backfill, default listener ID, V1/V2 이중 발행과 checksum repair는 없다.
+
 ## Revisit Conditions
 
 release gate가 기존 data/publication/consumer를 하나라도 발견할 때 이 결정을 적용하지
