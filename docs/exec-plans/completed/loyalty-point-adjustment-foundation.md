@@ -104,9 +104,9 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
   terminal idempotency record를 조회한다. record가 없을 때만 credit은 new Lot을 만들고,
   debit은 `expiresAt > now`인 `(expiresAt, pointLotId)` 순서의 selected available Lot을 잠가
   command를 실행하며 Account/Lot/ledger/Audit/outbox/201과 같은 transaction에서 저장한다.
-  서로 다른 account의 같은 key가 동시에 insert되어 UNIQUE가 충돌하면 loser transaction은
-  전부 rollback하고, 별도 read transaction에서 winner의 account/hash를 다시 비교해 stored
-  201 또는 409을 반환한다. 재실행으로 경쟁을 해결하지 않는다.
+  같은 actor의 서로 다른 account 요청도 ADR-069 grant write lock에서 직렬화되므로 후속
+  요청은 먼저 commit된 terminal record를 조회해 stored 201 또는 409을 반환한다. scope UNIQUE는
+  DB 불변식으로 유지하지만 도달 불가능한 insert-race recovery는 두지 않는다.
 - 같은 local transaction이 Account summary, affected Lot, one-or-more PointTransaction,
   terminal IdempotencyRecord, AuditRecord와 PointsAdjustedV1 outbox를 commit한다. external
   Provider, Analytics consumer와 notification은 transaction 밖이다.
@@ -126,15 +126,15 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Failure Semantics
 
-- issuer/expiry 누락, zero amount, 잘못된 role/active grant, debit issuer 포함은 400/403으로
-  명시적 거부한다.
+- issuer/expiry 누락, zero/`Long.MIN_VALUE` amount, 160자를 넘는 reason, 20개를 넘는 evidence,
+  잘못된 role/active grant와 debit issuer 포함은 400/403으로 명시적 거부한다.
 - grant lookup/lock failure는 role-only success 또는 403으로 바꾸지 않고 503이며 command
   write 전에 rollback한다.
 - debit 가능한 Lot 합이 부족하면 `409 POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE`이고
   부분 debit·pending·음수 fallback은 없다.
 - lock contention, DB/Audit/outbox 저장 실패는 503 또는 transaction rollback이며 201·0원
   성공으로 대체하지 않는다. command transaction에는 외부 결과 불명 구간이 없다.
-- idempotency UNIQUE 충돌 뒤 winner record를 읽지 못하면 201/409을 추측하지 않고 503이다.
+- 비멱등 CHECK/FK/UNIQUE 위반은 idempotency replay/409로 오분류하지 않고 503이다.
   retention worker 실패는 due row를 남기고 다음 tick에 재시도하며, 삭제 0건 성공으로
   위장하거나 API 삭제 endpoint를 제공하지 않는다.
 - Plan 10 issuer precheck 또는 Plan 11 grant/Plan 13 ledger evidence가 없으면
@@ -202,14 +202,15 @@ Plan 10/11/13 완료 뒤 최신 migration 번호를 다시 계산한다.
 
 ## Required Tests
 
-- OpenAPI conditional positive/negative request validation and required Idempotency-Key
+- OpenAPI conditional positive/negative request, reason 160/161자, evidence 20/21개,
+  `-Long.MAX_VALUE`/`Long.MIN_VALUE` validation and required Idempotency-Key
 - customer/store/settlement role denial, Platform Operator active grant/reason/evidence, revoked grant
   and grant/Audit DB failure 503
 - credit issuer/expiry snapshot and future boundary `now - 1ns`, `now`, `now + 1ns`
 - debit deterministic multi-Lot selection, reserved/expired Lot exclusion and insufficient rollback
 - Account/Lot/transaction/Audit/outbox/201 commit atomicity and each persistence failure injection
-- same-key same-payload replay, different payload/account conflict, cross-account unique-race
-  rollback/re-read and concurrent debit safety
+- same-key same-payload replay, different payload/account conflict, grant-serialized cross-account
+  winner/409 and concurrent debit safety
 - terminal adjustment idempotency의 90일 경계, keyset chunk 100, worker 중단·재실행과
   cleanup failure의 due row 보존
 - Plan 10 issuer precheck의 empty/verified/unresolvable fixture와 endpoint activation
@@ -269,6 +270,12 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
   `PersistenceException`은 Spring `DataAccessException`으로 자동 번역되지 않았다. 원시
   예외가 HTTP 500으로 새지 않도록 command 경계에서 명시적 503으로 변환하고 전체 rollback을
   failure injection으로 검증했다.
+- 리뷰에서 reason API 500자와 Audit `varchar(160)`, evidence 개수 무제한, OpenAPI의
+  `Long.MIN_VALUE` 허용이 실제 저장·magnitude 경계와 어긋남을 확인했다. API/service/OpenAPI를
+  reason 160자, evidence 최대 20개와 `-Long.MAX_VALUE` 하한으로 통일했다.
+- ADR-069 grant write lock은 같은 actor의 cross-account command를 idempotency insert 전에
+  직렬화한다. 따라서 모든 `DataIntegrityViolationException`을 unique race로 간주하던 분기와
+  실제로 도달하지 않는 rollback/re-read 증적을 제거하고 일반 무결성 실패의 503을 검증한다.
 
 ## Decision Log
 
@@ -282,6 +289,8 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 | 2026-08-01 | Accepted | Analytics event name/version은 `PointsAdjustedV1`/1로 고정 | event catalog 이름만으로 payload를 추측하지 않음 | ADR-068 |
 | 2026-08-01 | Accepted | Loyalty는 `PointsAdjustedV1` producer/outbox만 소유하고 Analytics listener·receipt·projection은 구현하지 않음 | 같은 consumer를 두 plan이 만들지 않게 함 | ADR-068, Analytics plan |
 | 2026-08-04 | Applied existing | 잠금 순서는 PointAccount → `POINT_ADJUSTMENT` grant → terminal idempotency → ordered PointLot으로 고정 | Accepted ADR-069을 우선하고 revoke/command 선형화와 Loyalty lock 순서를 하나의 transaction에서 재현 | ADR-069, 사용자 확인 |
+| 2026-08-04 | Accepted amendment | reason 160자, evidence 1..20개, signed amount 하한 `-Long.MAX_VALUE`로 API와 내부 저장 경계를 통일 | Audit 원자 저장 실패와 무제한 장기 보존 payload를 command 진입에서 차단 | BR-13, BR-30, ADR-066 |
+| 2026-08-04 | Applied existing | 같은 actor cross-account command는 ADR-069 grant lock으로 직렬화하고 도달 불가능한 unique-race recovery를 제거 | 실제 lock graph와 실패 분류·검증 증적 일치 | ADR-066, ADR-069 |
 
 ## Outcomes & Retrospective
 
@@ -311,3 +320,5 @@ target 27/deployed 14 paths, 75 schemas, 32 policies, 75 ADRs, 146 Markdown file
   dependency와 implementation readiness를 닫았다.
 - 2026-08-04: V31, audited command/API, terminal retention, `PointsAdjustedV1` producer와
   운영·release evidence를 완료하고 active plan을 completed로 이동했다.
+- 2026-08-04: 리뷰에서 확인한 입력 경계와 무결성 오류 분류를 보정하고 ADR-069 grant
+  직렬화 모델에 맞춰 unique-race 주장과 도달 불가능한 복구 분기를 제거했다.

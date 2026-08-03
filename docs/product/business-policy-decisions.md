@@ -703,7 +703,10 @@
   `PLATFORM|BRAND|STORE` issuer snapshot과 미래 만료일을 가진 새 PointLot을 만들며,
   음수 보정은 미예약 available PointLot만 선소멸 순서로 줄인다. 어느 보정도
   PointRecoveryPending을 상계하지 않고, Account/Lot/원장/Audit/멱등 응답은 하나의
-  로컬 transaction에서 함께 저장한다.
+  로컬 transaction에서 함께 저장한다. signed amount는 `-9,223,372,036,854,775,807`부터
+  `9,223,372,036,854,775,807`까지에서 0을 제외하며, 사유는 trim 뒤 1..160자다. 증빙
+  reference는 1..20개이고 각 항목은 trim 뒤 1..500자다. 이 경계는 Audit 원자 저장 계약과
+  장기 보존 payload 크기를 command 진입 전에 제한한다.
 - **Rationale:** 고객이 실제로 지불한 가치와 적립 비용을 일치시킨다.
 - **Affected Contexts:** Loyalty, Ordering, Payment, Settlement
 - **Affected Aggregates:** PointAccount, PointLot, PointTransaction, Order, Payment, AuditRecord
@@ -1187,7 +1190,7 @@
   detail은 감사에 복제하지 않는다.
 - **Audited Point Adjustment Amendment (2026-08-01):** 감사형 포인트 조정은
   `POINT_ADJUSTMENT_APPLIED` AuditRecord를 PointAccount target에 append한다. active
-  `PLATFORM_OPERATOR`의 non-blank reason과 evidence reference, signed requested effect,
+  `PLATFORM_OPERATOR`의 1..160자 reason과 1..20개의 evidence reference, signed requested effect,
   before/after Account summary, 생성·차감 Lot ID, 양수 issuer/expiry snapshot만
   whitelist summary에 남기고 raw Idempotency-Key와 불필요한 개인정보는 남기지 않는다.
   Audit source는 adjustment command source와 하나이며, Audit 저장 실패는 Lot/Account/

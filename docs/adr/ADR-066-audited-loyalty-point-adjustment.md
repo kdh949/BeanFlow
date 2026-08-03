@@ -27,8 +27,8 @@ issuer와 만료일은 호출자가 명시적으로 입력한다.
   correction**이다. 일반 적립(`ACCRUAL`), 사용, 만료, 환불 복원, `RECOVERY`,
   PointRecoveryPending과 SettlementAdjustment를 대체하지 않는다.
 - command는 `POST /operations/point-accounts/{accountId}/adjustments`로만 실행한다.
-  활성 `PLATFORM_OPERATOR`의 명시적 `POINT_ADJUSTMENT` permission, non-blank reason,
-  적어도 하나의 evidence reference와 `Idempotency-Key`가 모두 필수다.
+  활성 `PLATFORM_OPERATOR`의 명시적 `POINT_ADJUSTMENT` permission, trim 뒤 1..160자 reason,
+  1..20개의 evidence reference(각 trim 뒤 1..500자)와 `Idempotency-Key`가 모두 필수다.
 - command source는 `actorId + operation + Idempotency-Key`와 canonical payload에서
   서버가 만든 immutable adjustment source다. AuditRecord와 `PointsAdjusted`는 이 command
   source를 사용한다. 각 PointTransaction은 command source와 affected PointLot을
@@ -40,12 +40,13 @@ issuer와 만료일은 호출자가 명시적으로 입력한다.
   직렬화하는 ADR-064 명령 transaction 모델을 사용한다. PointAccount/Lot/
   PointTransaction/IdempotencyRecord/AuditRecord와 최초 response는 하나의 짧은
   로컬 transaction에서 함께 commit하거나 rollback한다.
-- PointAccount lock을 얻은 뒤 같은 scope record를 먼저 확인한다. account와 hash가
-  모두 같으면 저장된 최초 `201` body를 재생하고, 하나라도 다르면 write 전에
-  `409 IDEMPOTENCY_KEY_REUSED`다. 서로 다른 account에 같은 key가 동시에 들어와
-  UNIQUE insert 경쟁이 발생하면 loser의 전체 command transaction을 rollback한 뒤 별도
-  read transaction에서 winner를 비교해 같은 결과를 반환한다. 이 read가 실패하면 명령을
-  재실행하지 않고 `503 DEPENDENCY_UNAVAILABLE`다.
+- PointAccount lock 뒤 ADR-069의 같은 actor `POINT_ADJUSTMENT` grant row를 잠근 다음 scope
+  record를 확인한다. 같은 actor의 서로 다른 account 요청도 grant에서 직렬화되므로 먼저
+  commit한 command의 terminal record를 후속 요청이 조회한다. account와 hash가 모두 같으면
+  저장된 최초 `201` body를 재생하고, 하나라도 다르면 write 전에
+  `409 IDEMPOTENCY_KEY_REUSED`다. scope UNIQUE는 최종 DB 불변식으로 유지하지만 이 잠금 모델에
+  도달할 수 없는 insert-race recovery는 두지 않는다. 다른 CHECK/FK/UNIQUE 위반은 replay나
+  409로 추정하지 않고 전체 rollback과 `503 DEPENDENCY_UNAVAILABLE`로 처리한다.
 
 ### 양수와 음수 조정
 
@@ -54,7 +55,9 @@ issuer와 만료일은 호출자가 명시적으로 입력한다.
 | Credit (`amountKrw > 0`) | 양수 금액, `issuer { issuerType, issuerReference }`, 미래 `expiresAt`, reason, evidence | 입력 issuer snapshot과 expiresAt을 가진 새 PointLot 하나, `balance_effect=CREDIT` `ADJUSTMENT` transaction, Account available 증가 |
 | Debit (`amountKrw < 0`) | 음수 금액, reason, evidence. issuer와 expiresAt은 금지 | Account → `expiresAt > now`인 `(expiresAt, pointLotId)` available Lot 순서로 차감, Lot별 `balance_effect=DEBIT` `ADJUSTMENT` transaction, Account available 감소 |
 
-- `amountKrw = 0`은 금지한다. debit 대상 available Lot 합이 부족하면 부분 차감·음수
+- `amountKrw`는 signed 64-bit 내부 magnitude로 안전하게 표현할 수 있는
+  `-9,223,372,036,854,775,807..9,223,372,036,854,775,807`에서 0을 제외한다. debit 대상
+  available Lot 합이 부족하면 부분 차감·음수
   Account·PointRecoveryPending 생성 없이 `409 POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE`
   으로 전체 transaction을 rollback한다.
 - credit의 issuer type은 `PLATFORM`, `BRAND`, `STORE` 중 하나이고 issuer reference는
@@ -120,9 +123,9 @@ gate evidence를 전제하고 adjustment 전용 forward-only migration으로 다
 
 ### API와 이벤트 계약
 
-- `PointAdjustmentRequest`는 signed nonzero `amountKrw`, `reason`,
-  `evidenceReferences`를 요구한다. 양수일 때만 `issuer`와 `expiresAt`을 required로 하고
-  음수일 때는 둘을 거부한다.
+- `PointAdjustmentRequest`는 위 범위의 signed nonzero `amountKrw`, 1..160자 `reason`,
+  1..20개의 `evidenceReferences`를 요구한다. 각 evidence reference는 1..500자다. 양수일
+  때만 `issuer`와 `expiresAt`을 required로 하고 음수일 때는 둘을 거부한다.
 - 성공 `201 PointAdjustmentResult`는 수정된 PointAccount summary와 실제로 생성한
   하나 이상 PointTransaction을 반환한다. replay 표시는 제공하지 않는다.
 - 공개 PointTransaction의 `amountKrw`는 `balance_effect`를 적용한 signed effect다.
@@ -179,14 +182,14 @@ Lot을 만들거나 차감하는 실제 command와 target Audit을 하나의 tra
 
 ## Required Tests
 
-- role/explicit permission, reason/evidence 누락, zero amount 거부
+- role/explicit permission, reason 160/161자, evidence 20/21개와 signed amount 최솟값 경계
 - credit의 issuer·future expiry required와 debit에서 두 필드 금지
 - credit Lot issuer/expiry snapshot, Account/transaction/audit/201 단일 commit
 - debit FIFO Lot 선택, 부족 가용금액의 전체 rollback과 음수 잔액 부재
 - 같은 key replay body·Audit·transaction 수 불변과 다른 payload/account conflict
-- 서로 다른 account의 같은 key 동시 요청에서 winner만 commit하고 loser rollback 뒤
-  저장된 201 또는 409을 반환하는 경우
-- Audit failure injection의 Account/Lot/transaction/Idempotency 전체 rollback
+- 서로 다른 account의 같은 actor/key 동시 요청이 grant에서 직렬화되어 winner만 commit하고
+  후속 요청이 저장된 201 또는 409을 반환하는 경우
+- Audit failure와 비멱등 CHECK/FK 위반의 503 및 Account/Lot/transaction/Idempotency 전체 rollback
 - `balance_effect` CHECK와 모든 type의 signed public amount projection
 - CREDIT/DEBIT별 PointsAdjusted payload 조건, outbox persistence/Analytics idempotency와
   고객 notification 부재
@@ -201,7 +204,7 @@ current type의 `balance_effect`를 deterministic backfill하고 ADJUSTMENT type
 terminal 201 scope/hash/90-day retention과 immutable row를 DB 제약으로 보호한다.
 
 PostgreSQL 통합 검증은 credit issuer/expiry, debit FIFO·만료·reserved 제외, insufficient
-rollback, replay/different account/payload, concurrent debit/cross-account request와 Account,
+rollback, replay/different account/payload, grant-serialized concurrent debit/cross-account request와 Account,
 Lot, transaction, Audit, outbox, idempotency 각각의 failure rollback을 포함한다. exact
 `PointsAdjustedV1` fixture와 전체 type signed projection도 통과했다. 배포 전 절차와 정확한
 검증 결과는 [runbook](../operations/loyalty-point-adjustment-runbook.md)과
