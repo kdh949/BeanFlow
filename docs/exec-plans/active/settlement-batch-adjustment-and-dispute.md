@@ -223,7 +223,7 @@ breakdown을 넣지 않는다. closed reason/state와 correlation ID만 관측�
 | 2026-08-01 | Accepted | direct phase dependency는 Plan 20과 signed-cursor foundation이며 Plan 10/15 artifact는 merged baseline으로 소비 | Batch list가 공통 codec을 직접 소비하되 ancestor path 중복과 branch-base 추측은 방지 | ADR-070, ADR-072 |
 | 2026-08-01 | Accepted existing | Dispute Context가 SettlementDispute/held amount/decision event를 소유하고 Settlement는 Adjustment command만 제공 | Context Map·용어집·ADR-018과 일치 | ADR-018, Context Map |
 | 2026-08-03 | Ready | Plan 20의 V21 Batch/Item, V2 consumer, signed query와 exclusion evidence를 verified input으로 소비 | 두 direct dependency completion과 migration writer 선행 순서를 확인 | completed Plan 20, ADR-072 |
-| 2026-08-03 | Accepted implementation | Batch가 이전 confirmed Batch의 carry source와 Adjustment `(effectiveAt,id)` high-watermark를 summary에 고정 | Adjustment row를 갱신하지 않고 다음 Batch에서 한 번만 소비하며 재실행 결과를 결정적으로 유지 | ADR-008, ADR-017, V28 |
+| 2026-08-03 | Accepted implementation | Batch가 이전 confirmed Batch의 carry source와 calculation 시각 기반 Adjustment ingestion high-watermark를 summary에 고정 | 늦게 전달된 과거 effective-time Adjustment도 생성 시각 기준 다음 Batch에서 한 번 소비하고 Adjustment row는 갱신하지 않음 | ADR-008, ADR-017, V28~V29 |
 
 ## Outcomes & Retrospective
 

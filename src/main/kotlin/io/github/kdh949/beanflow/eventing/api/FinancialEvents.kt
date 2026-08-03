@@ -97,6 +97,29 @@ data class SettlementItemCreatedV1(
     val netSettlementKrw: Long,
 )
 
+data class SettlementBatchConfirmedV1(
+    val envelope: EventEnvelope,
+    val settlementBatchId: UUID,
+    val settlementDate: LocalDate,
+    val state: String,
+    val netSettlementKrw: Long,
+    val currency: String,
+)
+
+data class SettlementAdjustmentCreatedV1(
+    val envelope: EventEnvelope,
+    val settlementAdjustmentId: UUID,
+    val adjustmentSource: String,
+    val settlementItemId: UUID,
+    val settlementBatchId: UUID,
+    val reasonCode: String,
+    val effectiveAt: Instant,
+    val orderCompletedAt: Instant,
+    val settlementDate: LocalDate,
+    val currency: String,
+    val amountKrw: Long,
+)
+
 interface FinancialEventPublicationOperations {
     fun publish(event: PaymentRefundedV1)
 
@@ -105,6 +128,10 @@ interface FinancialEventPublicationOperations {
     fun publish(event: PointsRestoredV1)
 
     fun publish(event: SettlementItemCreatedV1)
+
+    fun publish(event: SettlementBatchConfirmedV1)
+
+    fun publish(event: SettlementAdjustmentCreatedV1)
 
     fun publish(event: CustomerCancellationRefundSucceededV1)
 

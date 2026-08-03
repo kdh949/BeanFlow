@@ -108,6 +108,7 @@ internal class SettlementLifecycleMigrationTest {
 
         assertThat(indexCount("idx_settlement_batch_store_list")).isOne()
         assertThat(indexCount("idx_settlement_adjustment_next_batch")).isOne()
+        assertThat(indexCount("idx_settlement_adjustment_created_cursor")).isOne()
     }
 
     @Test
