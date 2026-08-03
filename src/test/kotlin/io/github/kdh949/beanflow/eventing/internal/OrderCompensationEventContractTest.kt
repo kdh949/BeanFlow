@@ -10,7 +10,9 @@ import kotlin.reflect.full.memberProperties
 internal class OrderCompensationEventContractTest {
     @Test
     fun `OrderCancelledV1 has the minimized frozen field set`() {
-        assertThat(OrderCancelledV1::class.memberProperties.map { it.name }.toSet())
+        val fields = OrderCancelledV1::class.memberProperties.map { it.name }.toSet()
+
+        assertThat(fields)
             .containsExactlyInAnyOrder(
                 "envelope",
                 "orderId",
@@ -20,6 +22,8 @@ internal class OrderCompensationEventContractTest {
                 "couponPolicy",
                 "pointsPolicy",
             )
+        assertThat(fields)
+            .doesNotContain("reasonCode", "detail", "customerId", "storeId", "paymentId")
     }
 
     @Test

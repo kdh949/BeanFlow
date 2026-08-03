@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
+import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
@@ -14,6 +16,7 @@ internal class GetOrderService(
     private val expiryUseCase: ReservationExpiryUseCase,
     private val orderRepository: OrderJpaRepository,
     private val orderLineRepository: OrderLineJpaRepository,
+    private val cancellationPayments: CustomerCancellationPaymentOperations,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) {
@@ -51,11 +54,28 @@ internal class GetOrderService(
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Order belongs to another customer")
         }
         val lines = orderLineRepository.findAllByOrderIdOrderByLineSequence(orderId)
+        val paymentRecovery =
+            if (order.cancellationCause == OrderCancellationCause.CUSTOMER_REQUEST) {
+                cancellationPayments.findSnapshot(orderId)?.let { snapshot ->
+                    CancellationRefundRecoverySummary(
+                        state = if (snapshot.paymentRecoveryRequired) "REQUESTED" else "NOT_REQUIRED",
+                        approvedAmountKrw = snapshot.approvedAmountKrw,
+                        succeededRefundAmountBeforeCancellationKrw =
+                            snapshot.succeededRefundAmountBeforeCancellationKrw,
+                        cancellationRequestedRefundAmountKrw = snapshot.requestedRefundAmountKrw,
+                        remainingRefundableAmountKrw = snapshot.requestedRefundAmountKrw,
+                        lastUpdatedAt = snapshot.updatedAt,
+                    )
+                } ?: CancellationRefundRecoverySummary(state = "NOT_REQUIRED")
+            } else {
+                null
+            }
         return OrderResponse(
             orderId = order.id,
             storeId = order.storeId,
             state = order.state.name,
             reservationExpiresAt = order.reservationExpiresAt,
+            paymentRecovery = paymentRecovery,
             paidAt = order.paidAt,
             acceptanceWarningAt = order.acceptanceWarningAt,
             acceptanceWarningRequestedAt = order.acceptanceWarningRequestedAt,

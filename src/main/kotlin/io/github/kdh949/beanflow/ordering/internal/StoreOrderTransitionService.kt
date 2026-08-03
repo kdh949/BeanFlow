@@ -154,6 +154,7 @@ internal class StoreOrderTransitionService(
                 responseStatus = status,
                 responseBody = body,
                 createdAt = now,
+                retentionExpiresAt = now.plus(IDEMPOTENCY_RETENTION),
             ),
         )
         return StoreTransitionHttpResult(status, body)
@@ -368,6 +369,7 @@ internal class StoreOrderTransitionService(
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
 
     private companion object {
+        val IDEMPOTENCY_RETENTION: java.time.Duration = java.time.Duration.ofDays(90)
         const val OPERATION = "STORE_ORDER_TRANSITION_V2"
     }
 }

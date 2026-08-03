@@ -19,6 +19,7 @@ internal enum class ReprocessingCaseType {
     NOTIFICATION_DELIVERY,
     EVENT_PUBLICATION,
     SETTLEMENT_LATE_ITEM,
+    ACCEPTANCE_TIMEOUT_WORK,
 }
 
 internal enum class ReprocessingCaseStatus {

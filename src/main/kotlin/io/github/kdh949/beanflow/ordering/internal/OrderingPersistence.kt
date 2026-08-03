@@ -235,7 +235,7 @@ internal class OrderEntity(
                 conflict("Store acceptance deadline has passed")
             }
         }
-        val normalizedDetail = normalizeCancellationDetail(detail)
+        val normalizedDetail = CanonicalCustomerCancellationPayload.normalizeDetail(detail)
         state = OrderState.CANCELLED
         reservationExpiresAt = null
         cancelledAt = now
@@ -255,17 +255,6 @@ internal class OrderEntity(
     }
 
     private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, message)
-
-    private fun normalizeCancellationDetail(detail: String?): String? {
-        val normalized = detail?.trim()?.ifEmpty { null } ?: return null
-        if (normalized.length > 200 || normalized.any(Char::isISOControl)) {
-            throw DomainFailure(
-                FailureCode.INVALID_REQUEST,
-                "Cancellation detail must contain at most 200 non-control characters",
-            )
-        }
-        return normalized
-    }
 
     private companion object {
         val ACCEPTANCE_WARNING_DELAY: Duration = Duration.ofMinutes(2)
@@ -366,6 +355,8 @@ internal class StoreCommandIdempotencyEntity(
     val responseBody: String,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Column(name = "retention_expires_at", nullable = false)
+    val retentionExpiresAt: Instant,
 )
 
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
@@ -439,4 +430,15 @@ internal interface StoreCommandIdempotencyJpaRepository : JpaRepository<StoreCom
         operation: String,
         idempotencyKey: String,
     ): StoreCommandIdempotencyEntity?
+
+    @Query(
+        "select record.id from StoreCommandIdempotencyEntity record " +
+            "where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",
+    )
+    fun findDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    fun countByRetentionExpiresAtLessThanEqual(now: Instant): Long
 }

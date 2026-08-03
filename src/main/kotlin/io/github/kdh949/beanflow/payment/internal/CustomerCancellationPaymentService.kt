@@ -24,6 +24,15 @@ internal class CustomerCancellationPaymentService(
     private val identifiers: IdentifierSource,
     private val jdbcTemplate: JdbcTemplate,
 ) : CustomerCancellationPaymentOperations {
+    @Transactional(readOnly = true)
+    override fun findSnapshot(orderId: UUID): CustomerCancellationPaymentSnapshot? =
+        snapshots.findByOrderId(orderId)?.let { snapshot ->
+            val payment =
+                payments.findById(snapshot.paymentId).orElse(null)
+                    ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Cancellation snapshot payment is missing")
+            snapshot.toApi(payment.type)
+        }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun prepare(command: PrepareCustomerCancellationPaymentCommand): CustomerCancellationPaymentSnapshot {
         snapshots.findByOrderId(command.orderId)?.let { return replay(it, command) }
@@ -160,6 +169,7 @@ internal class CustomerCancellationPaymentService(
             refundId = cancellationRefundId,
             refundSourceReference = refundSourceReference,
             providerIdempotencyKey = providerIdempotencyKey,
+            updatedAt = updatedAt,
         )
 
     private fun fail(

@@ -44,6 +44,7 @@ internal data class OrderResponse(
     val storeId: UUID,
     val state: String,
     val reservationExpiresAt: Instant?,
+    val paymentRecovery: CancellationRefundRecoverySummary?,
     val paidAt: Instant?,
     val acceptanceWarningAt: Instant?,
     val acceptanceWarningRequestedAt: Instant?,

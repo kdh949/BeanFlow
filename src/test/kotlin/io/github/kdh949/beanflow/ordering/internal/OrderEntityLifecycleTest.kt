@@ -104,6 +104,7 @@ class OrderEntityLifecycleTest {
     fun `paid customer cancellation wins only before the acceptance deadline`() {
         val beforeDeadline = pendingOrder().also { it.markPaid(paidAt) }
         val atDeadline = pendingOrder().also { it.markPaid(paidAt) }
+        val afterDeadline = pendingOrder().also { it.markPaid(paidAt) }
 
         beforeDeadline.cancelByCustomer(
             paidAt.plusSeconds(180).minusNanos(1),
@@ -121,7 +122,17 @@ class OrderEntityLifecycleTest {
         }.isInstanceOfSatisfying(DomainFailure::class.java) {
             assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
         }
+        assertThatThrownBy {
+            afterDeadline.cancelByCustomer(
+                paidAt.plusSeconds(180).plusNanos(1),
+                CustomerCancellationReasonCode.WAIT_TOO_LONG,
+                null,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
         assertThat(atDeadline.state).isEqualTo(OrderState.PAID)
+        assertThat(afterDeadline.state).isEqualTo(OrderState.PAID)
     }
 
     @Test

@@ -37,6 +37,21 @@ ALTER TABLE ordering_order
                 AND cancellation_detail IS NULL)
         );
 
+ALTER TABLE ordering_store_command_idempotency
+    ADD COLUMN retention_expires_at timestamptz;
+
+UPDATE ordering_store_command_idempotency
+SET retention_expires_at = created_at + interval '90 days'
+WHERE retention_expires_at IS NULL;
+
+ALTER TABLE ordering_store_command_idempotency
+    ALTER COLUMN retention_expires_at SET NOT NULL,
+    ADD CONSTRAINT chk_store_command_idempotency_retention
+        CHECK (retention_expires_at = created_at + interval '90 days');
+
+CREATE INDEX idx_ordering_store_idempotency_retention
+    ON ordering_store_command_idempotency (retention_expires_at, id);
+
 CREATE TABLE ordering_cancellation_command_idempotency (
     id uuid PRIMARY KEY,
     actor_id uuid NOT NULL,
@@ -120,7 +135,11 @@ CREATE TABLE ordering_acceptance_timeout_work (
 
 CREATE INDEX idx_ordering_acceptance_timeout_work_due
     ON ordering_acceptance_timeout_work (next_attempt_at, id)
-    WHERE state IN ('PENDING', 'CLAIMED');
+    WHERE state = 'PENDING';
+
+CREATE INDEX idx_ordering_acceptance_timeout_work_claim_expiry
+    ON ordering_acceptance_timeout_work (claim_until, id)
+    WHERE state = 'CLAIMED';
 
 CREATE INDEX idx_ordering_acceptance_timeout_work_retention
     ON ordering_acceptance_timeout_work (retention_expires_at, id)

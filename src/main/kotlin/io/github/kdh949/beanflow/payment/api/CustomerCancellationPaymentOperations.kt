@@ -21,6 +21,7 @@ data class CustomerCancellationPaymentSnapshot(
     val refundId: UUID?,
     val refundSourceReference: String?,
     val providerIdempotencyKey: String?,
+    val updatedAt: Instant,
 ) {
     val paymentRecoveryRequired: Boolean
         get() = requestedRefundAmountKrw > 0
@@ -28,4 +29,6 @@ data class CustomerCancellationPaymentSnapshot(
 
 interface CustomerCancellationPaymentOperations {
     fun prepare(command: PrepareCustomerCancellationPaymentCommand): CustomerCancellationPaymentSnapshot
+
+    fun findSnapshot(orderId: UUID): CustomerCancellationPaymentSnapshot?
 }

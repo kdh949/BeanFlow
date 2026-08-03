@@ -22,6 +22,9 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest(
@@ -88,6 +91,60 @@ internal class CustomerCancellationPaymentServiceTest
         }
 
         @Test
+        fun `succeeded and failed prior Refunds allow only the exact remaining amount`() {
+            val orderId = UUID.randomUUID()
+            val payment = externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 3_000)
+            refunds.saveAllAndFlush(
+                listOf(
+                    RefundEntity(
+                        id = UUID.randomUUID(),
+                        paymentId = payment.id,
+                        orderId = orderId,
+                        requestedAmountKrw = 3_000,
+                        succeededAmountKrw = 3_000,
+                        reason = "HISTORICAL_SUCCESS",
+                        state = RefundState.SUCCEEDED,
+                        providerRefundReference = "provider:prior-success:${payment.id}",
+                        providerIdempotencyKey = "refund:prior-success:${payment.id}",
+                        sourceReference = "prior-success:${payment.id}",
+                        attemptCount = 1,
+                        requestAttemptCount = 1,
+                        nextAction = RefundClaimMode.REQUEST,
+                        nextAttemptAt = null,
+                        providerRequestStartedAt = NOW,
+                        createdAt = NOW,
+                        updatedAt = NOW,
+                    ),
+                    RefundEntity(
+                        id = UUID.randomUUID(),
+                        paymentId = payment.id,
+                        orderId = orderId,
+                        requestedAmountKrw = 1_000,
+                        reason = "HISTORICAL_FAILURE",
+                        state = RefundState.FAILED,
+                        providerIdempotencyKey = "refund:prior-failed:${payment.id}",
+                        sourceReference = "prior-failed:${payment.id}",
+                        attemptCount = 1,
+                        requestAttemptCount = 1,
+                        nextAction = RefundClaimMode.REQUEST,
+                        nextAttemptAt = null,
+                        providerRequestStartedAt = NOW,
+                        lastFailureCode = "DECLINED",
+                        createdAt = NOW,
+                        updatedAt = NOW,
+                    ),
+                ),
+            )
+
+            val result = prepare(orderId, cancellationVersion = 10)
+
+            assertThat(result.succeededRefundAmountBeforeCancellationKrw).isEqualTo(3_000)
+            assertThat(result.requestedRefundAmountKrw).isEqualTo(7_000)
+            assertThat(refunds.findBySourceReference("order:$orderId:customer-cancellation:10:payment")?.requestedAmountKrw)
+                .isEqualTo(7_000)
+        }
+
+        @Test
         fun `benefit-only payment records zero snapshot without a Refund`() {
             val orderId = UUID.randomUUID()
             benefitOnlyPayment(orderId)
@@ -103,36 +160,120 @@ internal class CustomerCancellationPaymentServiceTest
         }
 
         @Test
-        fun `unresolved prior Refund rejects cancellation with its explicit failure code`() {
+        fun `every unresolved prior Refund state rejects cancellation with its explicit failure code`() {
+            val unresolved =
+                listOf(
+                    RefundState.REQUESTED,
+                    RefundState.PROCESSING,
+                    RefundState.RETRY_SCHEDULED,
+                    RefundState.UNKNOWN,
+                    RefundState.RECONCILING,
+                    RefundState.MANUAL_REVIEW,
+                )
+
+            unresolved.forEachIndexed { index, state ->
+                val orderId = UUID.randomUUID()
+                val payment = externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 0)
+                refunds.saveAndFlush(unresolvedRefund(payment, orderId, state))
+
+                assertThatThrownBy { prepare(orderId, cancellationVersion = 9L + index) }
+                    .isInstanceOfSatisfying(DomainFailure::class.java) {
+                        assertThat(it.code).isEqualTo(FailureCode.PAYMENT_REFUND_UNRESOLVED)
+                    }
+            }
+
+            assertThat(snapshots.count()).isZero()
+            assertThat(refunds.count()).isEqualTo(unresolved.size.toLong())
+        }
+
+        @Test
+        fun `payment lock serializes a competing Refund before cancellation snapshot`() {
             val orderId = UUID.randomUUID()
             val payment = externalPayment(orderId, approvedAmount = 10_000, succeededRefundAmount = 0)
-            refunds.save(
-                RefundEntity(
-                    id = UUID.randomUUID(),
-                    paymentId = payment.id,
-                    orderId = orderId,
-                    requestedAmountKrw = 1_000,
-                    reason = "STORE_ORDER_REJECTED",
-                    state = RefundState.UNKNOWN,
-                    providerIdempotencyKey = "refund:prior:${payment.id}",
-                    sourceReference = "prior:${payment.id}",
-                    attemptCount = 1,
-                    requestAttemptCount = 1,
-                    lookupAttemptCount = 0,
-                    nextAction = RefundClaimMode.LOOKUP,
-                    nextAttemptAt = NOW,
-                    lastFailureCode = "ACK_LOST",
-                    createdAt = NOW,
-                    updatedAt = NOW,
-                ),
-            )
-
-            assertThatThrownBy { prepare(orderId, cancellationVersion = 9) }
-                .isInstanceOfSatisfying(DomainFailure::class.java) {
-                    assertThat(it.code).isEqualTo(FailureCode.PAYMENT_REFUND_UNRESOLVED)
+            val locked = CountDownLatch(1)
+            val allowCommit = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(2)
+            val competingRefund =
+                executor.submit {
+                    transactions.executeWithoutResult {
+                        requireNotNull(payments.findLockedById(payment.id))
+                        refunds.save(
+                            RefundEntity(
+                                id = UUID.randomUUID(),
+                                paymentId = payment.id,
+                                orderId = orderId,
+                                requestedAmountKrw = 1_000,
+                                reason = "COMPETING_REFUND",
+                                state = RefundState.REQUESTED,
+                                providerIdempotencyKey = "refund:competing:${payment.id}",
+                                sourceReference = "competing:${payment.id}",
+                                attemptCount = 0,
+                                nextAttemptAt = NOW,
+                                createdAt = NOW,
+                                updatedAt = NOW,
+                            ),
+                        )
+                        locked.countDown()
+                        assertThat(allowCommit.await(10, TimeUnit.SECONDS)).isTrue()
+                    }
                 }
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue()
+            val cancellation =
+                executor.submit<Throwable?> {
+                    try {
+                        prepare(orderId, cancellationVersion = 11)
+                        null
+                    } catch (failure: Throwable) {
+                        failure
+                    }
+                }
+            allowCommit.countDown()
+            competingRefund.get(10, TimeUnit.SECONDS)
+            val failure = cancellation.get(10, TimeUnit.SECONDS)
+            executor.shutdown()
+
+            assertThat(failure).isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.PAYMENT_REFUND_UNRESOLVED)
+            }
             assertThat(snapshots.count()).isZero()
             assertThat(refunds.count()).isEqualTo(1)
+        }
+
+        private fun unresolvedRefund(
+            payment: PaymentEntity,
+            orderId: UUID,
+            state: RefundState,
+        ): RefundEntity {
+            val requestAttempts = if (state == RefundState.REQUESTED) 0 else 1
+            val lookupAttempts = if (state == RefundState.RECONCILING) 1 else 0
+            val claimed = state == RefundState.PROCESSING || state == RefundState.RECONCILING
+            val scheduled = state == RefundState.REQUESTED || state == RefundState.RETRY_SCHEDULED || state == RefundState.UNKNOWN
+            return RefundEntity(
+                id = UUID.randomUUID(),
+                paymentId = payment.id,
+                orderId = orderId,
+                requestedAmountKrw = 1_000,
+                reason = "STORE_ORDER_REJECTED",
+                state = state,
+                providerIdempotencyKey = "refund:prior:${payment.id}",
+                sourceReference = "prior:${payment.id}",
+                attemptCount = requestAttempts + lookupAttempts,
+                requestAttemptCount = requestAttempts,
+                lookupAttemptCount = lookupAttempts,
+                nextAction =
+                    if (state == RefundState.UNKNOWN || state == RefundState.RECONCILING) {
+                        RefundClaimMode.LOOKUP
+                    } else {
+                        RefundClaimMode.REQUEST
+                    },
+                nextAttemptAt = NOW.takeIf { scheduled },
+                providerRequestStartedAt = NOW.takeIf { requestAttempts > 0 },
+                claimToken = UUID.randomUUID().takeIf { claimed },
+                claimUntil = NOW.plusSeconds(60).takeIf { claimed },
+                lastFailureCode = "PRIOR_REFUND_UNRESOLVED",
+                createdAt = NOW,
+                updatedAt = NOW,
+            )
         }
 
         private fun prepare(

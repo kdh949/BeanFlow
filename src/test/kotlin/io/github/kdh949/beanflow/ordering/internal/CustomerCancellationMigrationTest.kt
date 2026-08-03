@@ -14,6 +14,10 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
+import java.sql.Timestamp
+import java.time.Duration
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Testcontainers
@@ -45,6 +49,50 @@ internal class CustomerCancellationMigrationTest {
         assertThat(tableCount("ordering_cancellation_command_idempotency")).isOne()
         assertThat(tableCount("ordering_acceptance_timeout_work")).isOne()
         assertThat(tableCount("payment_cancellation_recovery_snapshot")).isOne()
+        assertThat(indexCount("idx_ordering_acceptance_timeout_work_due")).isOne()
+        assertThat(indexCount("idx_ordering_acceptance_timeout_work_claim_expiry")).isOne()
+    }
+
+    @Test
+    fun `V23 backfills store command retention from original creation time`() {
+        val storeId = insertStore()
+        val orderId = insertPlan30PaidOrder(storeId)
+        val createdAt = Instant.now().minus(Duration.ofDays(100)).truncatedTo(ChronoUnit.MICROS)
+        val recordId = UUID.randomUUID()
+        jdbcTemplate.update(
+            """
+            INSERT INTO ordering_store_command_idempotency (
+                id, actor_id, order_id, operation, idempotency_key, payload_hash,
+                response_status, response_body, created_at
+            ) VALUES (?, ?, ?, 'STORE_ORDER_TRANSITION_V2', 'store-key-001', ?, 200, '{}', ?)
+            """.trimIndent(),
+            recordId,
+            UUID.randomUUID(),
+            orderId,
+            "a".repeat(64),
+            Timestamp.from(createdAt),
+        )
+
+        migrateCurrent()
+
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT retention_expires_at FROM ordering_store_command_idempotency WHERE id = ?",
+                Instant::class.java,
+                recordId,
+            ),
+        ).isEqualTo(createdAt.plus(Duration.ofDays(90)))
+        assertThat(
+            jdbcTemplate.queryForObject(
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'ordering_store_command_idempotency'
+                  AND column_name = 'retention_expires_at'
+                  AND is_nullable = 'NO'
+                """.trimIndent(),
+                Long::class.java,
+            ),
+        ).isEqualTo(1)
     }
 
     @Test
@@ -153,6 +201,37 @@ internal class CustomerCancellationMigrationTest {
 
     private fun insertPaidOrder(storeId: UUID): UUID = insertOrder(storeId, "PAID", null, null, null)
 
+    private fun insertPlan30PaidOrder(storeId: UUID): UUID {
+        val orderId = UUID.randomUUID()
+        jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
+        try {
+            val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+            jdbcTemplate.update(
+                """
+                INSERT INTO ordering_order (
+                    id, customer_id, store_id, pickup_slot_id, state,
+                    subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                    currency, reservation_expires_at, paid_at, acceptance_warning_at,
+                    acceptance_deadline_at, created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, 'PAID', 1000, 0, 0, 1000, 'KRW', NULL,
+                          ?, ?, ?, ?, ?, 0)
+                """.trimIndent(),
+                orderId,
+                UUID.randomUUID(),
+                storeId,
+                UUID.randomUUID(),
+                Timestamp.from(now),
+                Timestamp.from(now.plusSeconds(2 * 60)),
+                Timestamp.from(now.plusSeconds(3 * 60)),
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+        } finally {
+            jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
+        }
+        return orderId
+    }
+
     private fun insertOrder(
         storeId: UUID,
         state: String,
@@ -237,6 +316,15 @@ internal class CustomerCancellationMigrationTest {
         requireNotNull(
             jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
+                Long::class.java,
+                name,
+            ),
+        )
+
+    private fun indexCount(name: String): Long =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE indexname = ?",
                 Long::class.java,
                 name,
             ),

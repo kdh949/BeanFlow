@@ -30,6 +30,7 @@ internal class OrderCreationResponseFactory(
                     storeId = order.storeId,
                     state = order.state.name,
                     reservationExpiresAt = order.reservationExpiresAt,
+                    paymentRecovery = null,
                     paidAt = order.paidAt,
                     acceptanceWarningAt = order.acceptanceWarningAt,
                     acceptanceWarningRequestedAt = null,

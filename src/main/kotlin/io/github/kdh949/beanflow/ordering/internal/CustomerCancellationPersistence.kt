@@ -58,6 +58,8 @@ internal interface CancellationCommandIdempotencyJpaRepository : JpaRepository<C
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<UUID>
+
+    fun countByRetentionExpiresAtLessThanEqual(now: Instant): Long
 }
 
 internal enum class AcceptanceTimeoutWorkState {
