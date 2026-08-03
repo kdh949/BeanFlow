@@ -276,7 +276,7 @@ internal class CustomerCancellationTransaction(
         order.cancelByCustomer(now, reasonCode, detail)
         val terminalVersion = order.version + 1
         metrics.rollbackTarget = "notification_delivery"
-        val notification = acceptedNotification(order, identifiers.next(), correlationId, now)
+        val notification = acceptedNotification(order, terminalVersion, identifiers.next(), correlationId, now)
         val sourcePrefix = sourcePrefix(order.id, terminalVersion)
         val audits =
             mutableListOf(
@@ -406,7 +406,7 @@ internal class CustomerCancellationTransaction(
                 ),
             )
         metrics.rollbackTarget = "notification_delivery"
-        val notification = acceptedNotification(order, identifiers.next(), correlationId, now)
+        val notification = acceptedNotification(order, terminalVersion, identifiers.next(), correlationId, now)
         metrics.rollbackTarget = "audit"
         auditOperations.appendAll(
             paidAudits(
@@ -474,6 +474,7 @@ internal class CustomerCancellationTransaction(
 
     private fun acceptedNotification(
         order: OrderEntity,
+        terminalVersion: Long,
         eventId: UUID,
         correlationId: String,
         now: Instant,
@@ -484,6 +485,7 @@ internal class CustomerCancellationTransaction(
                 orderId = order.id,
                 customerId = order.customerId,
                 storeId = order.storeId,
+                orderAggregateVersion = terminalVersion,
                 cancelledAt = now,
                 correlationId = correlationId,
             ),

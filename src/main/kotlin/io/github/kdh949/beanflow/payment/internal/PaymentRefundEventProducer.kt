@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundDelayedV1
+import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundSucceededV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperations
 import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
@@ -24,6 +26,46 @@ internal class PaymentRefundEventProducer(
     private val identifierSource: IdentifierSource,
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun publishCustomerCancellationSucceeded(
+        refund: RefundEntity,
+        payment: PaymentEntity,
+        snapshot: CustomerCancellationPaymentSnapshotEntity,
+        outcomeAt: Instant,
+    ) {
+        validateCustomerCancellation(refund, payment, snapshot)
+        publications.publish(
+            CustomerCancellationRefundSucceededV1(
+                envelope = customerCancellationEnvelope(refund, snapshot, outcomeAt, SUCCEEDED_EVENT_TYPE, "succeeded"),
+                orderId = refund.orderId,
+                customerId = requireNotNull(payment.customerId),
+                orderAggregateVersion = snapshot.cancellationOrderVersion,
+                refundAmountKrw = refund.requestedAmountKrw,
+                outcomeAt = outcomeAt,
+            ),
+        )
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun publishCustomerCancellationDelayed(
+        refund: RefundEntity,
+        payment: PaymentEntity,
+        snapshot: CustomerCancellationPaymentSnapshotEntity,
+        outcomeAt: Instant,
+    ) {
+        validateCustomerCancellation(refund, payment, snapshot)
+        publications.publish(
+            CustomerCancellationRefundDelayedV1(
+                envelope = customerCancellationEnvelope(refund, snapshot, outcomeAt, DELAYED_EVENT_TYPE, "delayed"),
+                orderId = refund.orderId,
+                customerId = requireNotNull(payment.customerId),
+                orderAggregateVersion = snapshot.cancellationOrderVersion,
+                refundAmountKrw = refund.requestedAmountKrw,
+                outcomeAt = outcomeAt,
+            ),
+        )
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     fun publishPartial(
         refund: RefundEntity,
@@ -103,6 +145,42 @@ internal class PaymentRefundEventProducer(
         correlationId = refund.correlationId ?: payment.correlationId,
         causationId = "refund:${refund.id}:succeeded",
     )
+
+    private fun customerCancellationEnvelope(
+        refund: RefundEntity,
+        snapshot: CustomerCancellationPaymentSnapshotEntity,
+        outcomeAt: Instant,
+        eventType: String,
+        outcome: String,
+    ) = EventEnvelope(
+        eventId = identifierSource.next(),
+        eventType = eventType,
+        aggregateId = refund.id,
+        aggregateVersion = Math.addExact(refund.version, 1),
+        occurredAt = outcomeAt,
+        payloadVersion = PAYLOAD_VERSION,
+        correlationId = snapshot.correlationId,
+        causationId = "refund:${refund.id}:customer-cancellation:$outcome",
+    )
+
+    private fun validateCustomerCancellation(
+        refund: RefundEntity,
+        payment: PaymentEntity,
+        snapshot: CustomerCancellationPaymentSnapshotEntity,
+    ) {
+        val expectedSource =
+            "order:${refund.orderId}:customer-cancellation:${snapshot.cancellationOrderVersion}:payment"
+        if (refund.reason != CUSTOMER_CANCELLATION_REASON || refund.orderId != payment.orderId ||
+            refund.paymentId != payment.id || payment.customerId == null ||
+            snapshot.orderId != refund.orderId || snapshot.paymentId != payment.id ||
+            snapshot.cancellationRefundId != refund.id ||
+            snapshot.cancellationRequestedRefundAmountKrw != refund.requestedAmountKrw ||
+            snapshot.refundSourceReference != expectedSource || refund.sourceReference != expectedSource ||
+            snapshot.providerIdempotencyKey != refund.providerIdempotencyKey || refund.requestedAmountKrw <= 0
+        ) {
+            unavailable("Customer cancellation Refund sources do not match")
+        }
+    }
 
     private fun validateContext(
         refund: RefundEntity,
@@ -272,6 +350,9 @@ internal class PaymentRefundEventProducer(
     }
 
     private companion object {
+        const val CUSTOMER_CANCELLATION_REASON = "CUSTOMER_ORDER_CANCELLED"
+        const val SUCCEEDED_EVENT_TYPE = "CustomerCancellationRefundSucceededV1"
+        const val DELAYED_EVENT_TYPE = "CustomerCancellationRefundDelayedV1"
         const val EVENT_TYPE = "PaymentRefundedV1"
         const val PAYLOAD_VERSION = 1
         const val KRW = "KRW"

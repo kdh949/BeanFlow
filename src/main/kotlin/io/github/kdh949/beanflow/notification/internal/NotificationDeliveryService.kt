@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.notification.internal
 
+import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundDelayedV1
+import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundSucceededV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
@@ -47,6 +49,8 @@ internal data class ClaimedNotificationDelivery(
 private data class NewNotificationDelivery(
     val eventId: UUID,
     val eventType: String,
+    val logicalSource: String,
+    val providerIdempotencyKey: String,
     val orderId: UUID,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
@@ -78,6 +82,11 @@ internal class NotificationDeliveryService(
                 NewNotificationDelivery(
                     eventId = command.eventId,
                     eventType = "CustomerOrderCancellationAcceptedV1",
+                    logicalSource =
+                        "order:${command.orderId}:customer-cancellation:" +
+                            "${command.orderAggregateVersion}:accepted-notification",
+                    providerIdempotencyKey =
+                        "notification:customer-cancellation-accepted:${command.orderId}:${command.orderAggregateVersion}",
                     orderId = command.orderId,
                     recipientType = NotificationRecipientType.CUSTOMER,
                     recipientId = command.customerId,
@@ -102,6 +111,9 @@ internal class NotificationDeliveryService(
             NewNotificationDelivery(
                 eventId = event.envelope.eventId,
                 eventType = event.envelope.eventType,
+                logicalSource = genericLogicalSource(event.envelope.eventId, event.storeId, NotificationLogicalChannel.STORE_OPERATIONS),
+                providerIdempotencyKey =
+                    genericProviderKey(event.envelope.eventId, event.storeId, NotificationLogicalChannel.STORE_OPERATIONS),
                 orderId = event.orderId,
                 recipientType = NotificationRecipientType.STORE,
                 recipientId = event.storeId,
@@ -126,6 +138,9 @@ internal class NotificationDeliveryService(
                 NewNotificationDelivery(
                     eventId = event.envelope.eventId,
                     eventType = event.envelope.eventType,
+                    logicalSource = genericLogicalSource(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
+                    providerIdempotencyKey =
+                        genericProviderKey(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
                     orderId = event.orderId,
                     recipientType = NotificationRecipientType.CUSTOMER,
                     recipientId = event.customerId,
@@ -158,6 +173,9 @@ internal class NotificationDeliveryService(
             NewNotificationDelivery(
                 eventId = event.envelope.eventId,
                 eventType = event.envelope.eventType,
+                logicalSource = genericLogicalSource(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
+                providerIdempotencyKey =
+                    genericProviderKey(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
                 orderId = event.orderId,
                 recipientType = NotificationRecipientType.CUSTOMER,
                 recipientId = event.customerId,
@@ -172,6 +190,38 @@ internal class NotificationDeliveryService(
                 correlationId = event.envelope.correlationId,
                 occurredAt = event.envelope.occurredAt,
             ),
+        )
+    }
+
+    @Transactional
+    fun requestCustomerCancellationRefundSucceeded(event: CustomerCancellationRefundSucceededV1) {
+        requestCustomerCancellationRefund(
+            eventId = event.envelope.eventId,
+            eventType = event.envelope.eventType,
+            orderId = event.orderId,
+            customerId = event.customerId,
+            orderVersion = event.orderAggregateVersion,
+            amountKrw = event.refundAmountKrw,
+            outcomeAt = event.outcomeAt,
+            correlationId = event.envelope.correlationId,
+            outcome = "succeeded",
+            template = NotificationTemplate.CUSTOMER_CANCELLATION_REFUND_SUCCEEDED,
+        )
+    }
+
+    @Transactional
+    fun requestCustomerCancellationRefundDelayed(event: CustomerCancellationRefundDelayedV1) {
+        requestCustomerCancellationRefund(
+            eventId = event.envelope.eventId,
+            eventType = event.envelope.eventType,
+            orderId = event.orderId,
+            customerId = event.customerId,
+            orderVersion = event.orderAggregateVersion,
+            amountKrw = event.refundAmountKrw,
+            outcomeAt = event.outcomeAt,
+            correlationId = event.envelope.correlationId,
+            outcome = "delayed",
+            template = NotificationTemplate.CUSTOMER_CANCELLATION_REFUND_DELAYED,
         )
     }
 
@@ -277,12 +327,18 @@ internal class NotificationDeliveryService(
     }
 
     private fun request(command: NewNotificationDelivery): NotificationDeliveryEntity {
-        deliveryRepository
-            .findByEventIdAndRecipientIdAndLogicalChannel(
-                command.eventId,
-                command.recipientId,
-                command.logicalChannel,
-            )?.let { return it }
+        val payloadJson = objectMapper.writeValueAsString(command.payload)
+        deliveryRepository.findByLogicalSource(command.logicalSource)?.let { existing ->
+            if (existing.eventType != command.eventType || existing.orderId != command.orderId ||
+                existing.recipientType != command.recipientType || existing.recipientId != command.recipientId ||
+                existing.logicalChannel != command.logicalChannel || existing.template != command.template ||
+                existing.payloadJson != payloadJson || existing.correlationId != command.correlationId ||
+                existing.providerIdempotencyKey != command.providerIdempotencyKey
+            ) {
+                fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_SOURCE_CONFLICT")
+            }
+            return existing
+        }
         val id = identifierSource.next()
         return deliveryRepository.save(
             NotificationDelivery
@@ -290,19 +346,77 @@ internal class NotificationDeliveryService(
                     id = id,
                     eventId = command.eventId,
                     eventType = command.eventType,
+                    logicalSource = command.logicalSource,
                     orderId = command.orderId,
                     recipientType = command.recipientType,
                     recipientId = command.recipientId,
                     logicalChannel = command.logicalChannel,
                     template = command.template,
-                    payloadJson = objectMapper.writeValueAsString(command.payload),
-                    providerIdempotencyKey =
-                        "notification:${command.eventId}:${command.recipientId}:${command.logicalChannel.name}",
+                    payloadJson = payloadJson,
+                    providerIdempotencyKey = command.providerIdempotencyKey,
                     correlationId = command.correlationId,
                     now = command.occurredAt,
                 ).toEntity(),
         )
     }
+
+    @Suppress("LongParameterList")
+    private fun requestCustomerCancellationRefund(
+        eventId: UUID,
+        eventType: String,
+        orderId: UUID,
+        customerId: UUID,
+        orderVersion: Long,
+        amountKrw: Long,
+        outcomeAt: Instant,
+        correlationId: String,
+        outcome: String,
+        template: NotificationTemplate,
+    ) {
+        request(
+            NewNotificationDelivery(
+                eventId = eventId,
+                eventType = eventType,
+                logicalSource = "order:$orderId:customer-cancellation:$orderVersion:refund-$outcome",
+                providerIdempotencyKey =
+                    "notification:customer-cancellation-refund-$outcome:$orderId:$orderVersion",
+                orderId = orderId,
+                recipientType = NotificationRecipientType.CUSTOMER,
+                recipientId = customerId,
+                logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                template = template,
+                payload =
+                    mapOf(
+                        "orderId" to orderId,
+                        "refundAmountKrw" to amountKrw,
+                        "outcomeAt" to outcomeAt,
+                        "locale" to "ko-KR",
+                    ),
+                correlationId = correlationId,
+                occurredAt = outcomeAt,
+            ),
+        )
+        meterRegistry
+            .counter(
+                "beanflow.notification.cancellation_refund.count",
+                "template",
+                outcome,
+                "outcome",
+                "requested",
+            ).increment()
+    }
+
+    private fun genericLogicalSource(
+        eventId: UUID,
+        recipientId: UUID,
+        channel: NotificationLogicalChannel,
+    ): String = "event:$eventId:recipient:$recipientId:channel:${channel.name}"
+
+    private fun genericProviderKey(
+        eventId: UUID,
+        recipientId: UUID,
+        channel: NotificationLogicalChannel,
+    ): String = "notification:$eventId:$recipientId:${channel.name}"
 
     private fun recordFailure(
         entity: NotificationDeliveryEntity,
@@ -373,6 +487,7 @@ internal class NotificationDeliveryService(
             id = id,
             eventId = eventId,
             eventType = eventType,
+            logicalSource = logicalSource,
             orderId = orderId,
             recipientType = recipientType,
             recipientId = recipientId,
@@ -397,6 +512,7 @@ internal class NotificationDeliveryService(
             id = id,
             eventId = eventId,
             eventType = eventType,
+            logicalSource = logicalSource,
             orderId = orderId,
             recipientType = recipientType,
             recipientId = recipientId,

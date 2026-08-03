@@ -44,4 +44,6 @@ internal class CustomerCancellationPaymentSnapshotEntity(
 
 internal interface CustomerCancellationPaymentSnapshotJpaRepository : JpaRepository<CustomerCancellationPaymentSnapshotEntity, UUID> {
     fun findByOrderId(orderId: UUID): CustomerCancellationPaymentSnapshotEntity?
+
+    fun findByCancellationRefundId(cancellationRefundId: UUID): CustomerCancellationPaymentSnapshotEntity?
 }

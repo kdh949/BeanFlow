@@ -8,6 +8,7 @@ data class RequestCustomerCancellationAcceptedNotificationCommand(
     val orderId: UUID,
     val customerId: UUID,
     val storeId: UUID,
+    val orderAggregateVersion: Long,
     val cancelledAt: Instant,
     val correlationId: String,
 )

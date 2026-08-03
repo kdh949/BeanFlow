@@ -40,6 +40,7 @@ internal data class ClaimedRefund(
 internal class RejectionRefundService(
     private val refundRepository: RefundJpaRepository,
     private val paymentRepository: PaymentJpaRepository,
+    private val cancellationSnapshots: CustomerCancellationPaymentSnapshotJpaRepository,
     private val requestLoader: PaymentProviderRequestLoader,
     private val paymentGateway: PaymentGateway,
     private val compensationOperations: OrderCompensationOperations,
@@ -127,6 +128,10 @@ internal class RejectionRefundService(
         refundId: UUID,
         now: Instant,
     ): ClaimedRefund? {
+        val candidate = refundRepository.findById(refundId).orElse(null) ?: return null
+        val payment =
+            paymentRepository.findLockedById(candidate.paymentId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment for refund is missing")
         val entity = refundRepository.findLockedById(refundId) ?: return null
         val refund = entity.toDomain()
         val token = identifierSource.next()
@@ -138,7 +143,7 @@ internal class RejectionRefundService(
                 if (entity.state == RefundState.PROCESSING || entity.state == RefundState.RECONCILING) {
                     refund.recoverExpiredClaim(now)
                     entity.apply(refund)
-                    if (entity.reason == REASON) {
+                    if (entity.reason in COMPENSATION_REASONS) {
                         recordStep(
                             entity.orderId,
                             if (refund.state == RefundState.MANUAL_REVIEW) {
@@ -149,6 +154,9 @@ internal class RejectionRefundService(
                             "CLAIM_LEASE_EXPIRED",
                             now,
                         )
+                    }
+                    if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                        publishCustomerCancellationDelayed(entity, payment, now)
                     }
                 }
                 return null
@@ -286,6 +294,9 @@ internal class RejectionRefundService(
                     refundEventProducer.publishPartial(entity, payment, context, now)
                 } else {
                     refundEventProducer.publishPreAcceptance(entity, payment, now)
+                    if (entity.reason == CUSTOMER_CANCELLATION_REASON) {
+                        publishCustomerCancellationSucceeded(entity, payment, now)
+                    }
                     recordStep(claim.orderId, OrderCompensationStepState.SUCCEEDED, null, now)
                 }
             }
@@ -293,7 +304,7 @@ internal class RejectionRefundService(
             is GatewayRefundResult.Failed -> {
                 refund.fail(result.code, now)
                 entity.apply(refund)
-                if (entity.reason == REASON) {
+                if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(
                         claim.orderId,
                         OrderCompensationStepState.MANUAL_REVIEW,
@@ -301,12 +312,15 @@ internal class RejectionRefundService(
                         now,
                     )
                 }
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON) {
+                    publishCustomerCancellationDelayed(entity, payment, now)
+                }
             }
 
             is GatewayRefundResult.RetryableFailed -> {
                 refund.recordRetryableRequestFailure(result.code, now)
                 entity.apply(refund)
-                if (entity.reason == REASON) {
+                if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(
                         claim.orderId,
                         if (refund.state == RefundState.MANUAL_REVIEW) {
@@ -317,6 +331,9 @@ internal class RejectionRefundService(
                         normalized(result.code),
                         now,
                     )
+                }
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                    publishCustomerCancellationDelayed(entity, payment, now)
                 }
             }
 
@@ -329,8 +346,11 @@ internal class RejectionRefundService(
                     } else {
                         OrderCompensationStepState.UNKNOWN
                     }
-                if (entity.reason == REASON) {
+                if (entity.reason in COMPENSATION_REASONS) {
                     recordStep(claim.orderId, stepState, normalized(result.code), now)
+                }
+                if (entity.reason == CUSTOMER_CANCELLATION_REASON && refund.state == RefundState.MANUAL_REVIEW) {
+                    publishCustomerCancellationDelayed(entity, payment, now)
                 }
                 meterRegistry.counter("beanflow.payment.refund.unknown.count").increment()
             }
@@ -340,10 +360,52 @@ internal class RejectionRefundService(
                 "beanflow.payment.refund.attempts",
                 "mode",
                 claim.mode.name.lowercase(),
+                "reason",
+                reasonTag(entity.reason),
+                "provider",
+                "configured",
                 "outcome",
                 result.outcomeTag(),
             ).increment()
     }
+
+    private fun publishCustomerCancellationSucceeded(
+        refund: RefundEntity,
+        payment: PaymentEntity,
+        now: Instant,
+    ) {
+        val snapshot = requireCustomerCancellationSnapshot(refund)
+        refundEventProducer.publishCustomerCancellationSucceeded(refund, payment, snapshot, now)
+        meterRegistry.counter("beanflow.event.customer_cancellation_refund.count", "event_type", "succeeded").increment()
+    }
+
+    private fun publishCustomerCancellationDelayed(
+        refund: RefundEntity,
+        payment: PaymentEntity,
+        now: Instant,
+    ) {
+        val snapshot = requireCustomerCancellationSnapshot(refund)
+        refundEventProducer.publishCustomerCancellationDelayed(refund, payment, snapshot, now)
+        meterRegistry.counter("beanflow.event.customer_cancellation_refund.count", "event_type", "delayed").increment()
+    }
+
+    private fun requireCustomerCancellationSnapshot(refund: RefundEntity): CustomerCancellationPaymentSnapshotEntity {
+        val snapshot =
+            cancellationSnapshots.findByCancellationRefundId(refund.id)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Customer cancellation recovery snapshot is missing")
+        if (snapshot.orderId != refund.orderId || snapshot.paymentId != refund.paymentId) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Customer cancellation recovery snapshot conflicts with Refund")
+        }
+        return snapshot
+    }
+
+    private fun reasonTag(reason: String): String =
+        when (reason) {
+            REASON -> "store_rejection"
+            CUSTOMER_CANCELLATION_REASON -> "customer_cancellation"
+            PARTIAL_REFUND -> "partial_refund"
+            else -> "other"
+        }
 
     private fun recordStep(
         orderId: UUID,
@@ -450,6 +512,8 @@ internal class RejectionRefundService(
 
     private companion object {
         const val REASON = "STORE_ORDER_REJECTED"
+        const val CUSTOMER_CANCELLATION_REASON = "CUSTOMER_ORDER_CANCELLED"
         const val PARTIAL_REFUND = "PARTIAL_REFUND"
+        val COMPENSATION_REASONS = setOf(REASON, CUSTOMER_CANCELLATION_REASON)
     }
 }

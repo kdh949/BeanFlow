@@ -35,6 +35,24 @@ data class PaymentRefundedV1(
     val settlementRefundEffect: SettlementRefundEffect? = null,
 )
 
+data class CustomerCancellationRefundSucceededV1(
+    val envelope: EventEnvelope,
+    val orderId: UUID,
+    val customerId: UUID,
+    val orderAggregateVersion: Long,
+    val refundAmountKrw: Long,
+    val outcomeAt: Instant,
+)
+
+data class CustomerCancellationRefundDelayedV1(
+    val envelope: EventEnvelope,
+    val orderId: UUID,
+    val customerId: UUID,
+    val orderAggregateVersion: Long,
+    val refundAmountKrw: Long,
+    val outcomeAt: Instant,
+)
+
 data class PointsAccruedV1(
     val envelope: EventEnvelope,
     val pointTransactionSource: String,
@@ -87,4 +105,8 @@ interface FinancialEventPublicationOperations {
     fun publish(event: PointsRestoredV1)
 
     fun publish(event: SettlementItemCreatedV1)
+
+    fun publish(event: CustomerCancellationRefundSucceededV1)
+
+    fun publish(event: CustomerCancellationRefundDelayedV1)
 }

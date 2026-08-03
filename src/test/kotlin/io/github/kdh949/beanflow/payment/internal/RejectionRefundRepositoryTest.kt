@@ -12,6 +12,8 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
+import io.github.kdh949.beanflow.payment.api.PrepareCustomerCancellationPaymentCommand
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
 import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
@@ -23,6 +25,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
@@ -39,30 +44,112 @@ internal class RejectionRefundRepositoryTest
     @Autowired
     constructor(
         private val refundService: RejectionRefundService,
+        private val cancellationPayments: CustomerCancellationPaymentOperations,
         private val refundRepository: RefundJpaRepository,
         private val paymentRepository: PaymentJpaRepository,
         private val paymentMethodRepository: PaymentMethodJpaRepository,
         private val compensationOperations: OrderCompensationOperations,
         private val gateway: ScriptedTestPaymentGateway,
         private val jdbcTemplate: JdbcTemplate,
+        transactionManager: PlatformTransactionManager,
     ) {
+        private val transactions = TransactionTemplate(transactionManager)
+
         @BeforeEach
         fun cleanDatabase() {
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
                     event_publication,
+                    payment_cancellation_recovery_snapshot,
                     payment_refund,
                     payment_reconciliation,
                     payment_idempotency_record,
                     payment_payment,
                     payment_method,
                     operations_order_compensation_step,
-                    operations_order_compensation_case
+                    operations_order_compensation_case,
+                    ordering_order,
+                    merchant_store
                 CASCADE
                 """.trimIndent(),
             )
             gateway.reset()
+        }
+
+        @Test
+        fun `customer cancellation success records general and dedicated terminal publications`() {
+            val fixture = fixture()
+            val snapshot =
+                transactions.execute {
+                    cancellationPayments.prepare(
+                        PrepareCustomerCancellationPaymentCommand(
+                            orderId = fixture.orderId,
+                            cancellationOrderVersion = 9,
+                            customerReasonCode = "CHANGED_MIND",
+                            correlationId = fixture.envelope.correlationId,
+                            now = NOW,
+                        ),
+                    )
+                }!!
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-customer-refund"))
+
+            val claim = refundService.claimDue(NOW, 10).single()
+            refundService.recordResult(claim, refundService.callProvider(claim), NOW)
+
+            assertThat(refundRepository.findById(snapshot.refundId!!).orElseThrow().state)
+                .isEqualTo(RefundState.SUCCEEDED)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "select count(*) from event_publication where listener_id = " +
+                        "'beanflow.notification.customer-cancellation-refund-succeeded-v1'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+            val payload =
+                jdbcTemplate.queryForObject(
+                    "select serialized_event from event_publication where listener_id = " +
+                        "'beanflow.notification.customer-cancellation-refund-succeeded-v1'",
+                    String::class.java,
+                )!!
+            assertThat(payload).contains("\"orderAggregateVersion\":9", "\"refundAmountKrw\":7000")
+            assertThat(payload).doesNotContain("refundId", "paymentId", "provider", "customerReasonCode")
+        }
+
+        @Test
+        fun `customer cancellation terminal explicit failure records one delayed publication`() {
+            val fixture = fixture()
+            transactions.execute {
+                cancellationPayments.prepare(
+                    PrepareCustomerCancellationPaymentCommand(
+                        orderId = fixture.orderId,
+                        cancellationOrderVersion = 10,
+                        customerReasonCode = "WAIT_TOO_LONG",
+                        correlationId = fixture.envelope.correlationId,
+                        now = NOW,
+                    ),
+                )
+            }
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Failed("DECLINED"))
+
+            val claim = refundService.claimDue(NOW, 10).single()
+            refundService.recordResult(claim, refundService.callProvider(claim), NOW)
+
+            assertThat(refundRepository.findAll().single().state).isEqualTo(RefundState.FAILED)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "select count(*) from event_publication where listener_id = " +
+                        "'beanflow.notification.customer-cancellation-refund-delayed-v1'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "select count(*) from event_publication where listener_id = " +
+                        "'beanflow.notification.customer-cancellation-refund-succeeded-v1'",
+                    Long::class.java,
+                ),
+            ).isZero()
         }
 
         @Test
@@ -156,6 +243,35 @@ internal class RejectionRefundRepositoryTest
             val storeId = UUID.randomUUID()
             val eventId = UUID.randomUUID()
             val methodId = UUID.randomUUID()
+            jdbcTemplate.update(
+                "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
+                storeId,
+            )
+            jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
+            try {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id, state,
+                        subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                        currency, reservation_expires_at, paid_at, acceptance_warning_at,
+                        acceptance_deadline_at, created_at, updated_at, version
+                    ) VALUES (?, ?, ?, ?, 'PAID', 7000, 0, 0, 7000, 'KRW', NULL,
+                              ?, ?, ?, ?, ?, 1)
+                    """.trimIndent(),
+                    orderId,
+                    customerId,
+                    storeId,
+                    UUID.randomUUID(),
+                    Timestamp.from(NOW),
+                    Timestamp.from(NOW.plusSeconds(120)),
+                    Timestamp.from(NOW.plusSeconds(180)),
+                    Timestamp.from(NOW.minusSeconds(60)),
+                    Timestamp.from(NOW),
+                )
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
+            }
             paymentMethodRepository.save(
                 PaymentMethodEntity(
                     id = methodId,
