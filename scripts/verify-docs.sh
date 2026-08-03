@@ -51,7 +51,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-40-command.md"
-  "docs/exec-plans/active/customer-order-cancellation-50-recovery.md"
+  "docs/exec-plans/completed/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/active/loyalty-point-adjustment-foundation.md"
   "docs/exec-plans/completed/signed-cursor-foundation.md"
   "docs/exec-plans/completed/ci-pr-validation.md"

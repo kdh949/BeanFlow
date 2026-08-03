@@ -174,7 +174,7 @@ head에서만 시작하며 둘은 하나의 migration-writer lease를 final comb
 11. [Settlement foundation과 취소 제외 증적을 만든다](../completed/customer-order-cancellation-20-settlement-foundation.md) — 15, 16, cursor, completed
 12. [공통 Order compensation foundation을 만든다](../completed/customer-order-cancellation-30-order-compensation-foundation.md) — 11 policy heads, 20 lane, completed
 13. [고객 취소 command와 Tx C0/C1을 구현한다](../completed/customer-order-cancellation-40-command.md) — 30, completed Draft handoff
-14. [고객 취소 recovery와 운영 수렴을 구현한다](customer-order-cancellation-50-recovery.md) — 40 Draft stack, 구현·검증 완료, combined PR 대기
+14. [고객 취소 recovery와 운영 수렴을 구현한다](../completed/customer-order-cancellation-50-recovery.md) — 40 Draft stack, completed, PR #39 merge 대기
 
 각 계획은 위에 적힌 직접 선행 계획이 자체 Required Tests와 Validation Commands를 통과하고
 Outcomes에 실제 결과를 남긴 뒤에만 시작한다. 이전 milestone 번호만으로 선행조건을 추측하지
@@ -237,7 +237,7 @@ notification, settlement와 setup integrity metric은 각 하위 계획이 정�
 - [x] 30 common compensation foundation 완료 — V8/V9/V22, 공통 Case/owner/stable publication recovery, 294-test build
 - [x] 40 customer cancellation command 완료 — V23, C0/C1/CT, 332-test Draft handoff
 - [x] 50 recovery와 release verification 구현·검증 — V24~V27와 365-test clean build
-- [ ] Plan 40+50 combined main-targeted PR과 Plan 50 completed 이동
+- [x] Plan 40+50 combined main-targeted PR #39와 Plan 50 completed 이동
 
 ## Surprises & Discoveries
 
@@ -277,8 +277,9 @@ implementation-ready가 됐고 Plan 15 completion 뒤 Plan 16의 세 immutable e
 Plan 20은 V1 inventory 0 gate, V21/V2 producer/consumer, signed query와 고객 취소 제외 증적을
 270-test build로 완료했다. Plan 30과 Plan 40은 completed Draft handoff까지 끝났고 Plan 50은 V24~V27,
 recovery, projection, notification, setup repair, terminal Refund single-operator LOOKUP과 운영 문서를
-구현하고 365-test clean build로 검증했다. combined main-targeted PR과 Plan 50 completed 이동 전까지
-고객 취소 command의 production success path는 계속 차단된다.
+구현하고 365-test clean build로 검증했다. 구현 head `19d69f2`를 push해 main 대상 ready PR #39를
+생성하고 Plan 50을 completed path로 이동했다. PR merge 전까지 production success path와 새로운
+migration writer는 계속 차단된다.
 
 ## Revision Notes
 
@@ -308,5 +309,7 @@ recovery, projection, notification, setup repair, terminal Refund single-operato
 - 2026-08-03: Plan 40의 V23/C0/C1/CT와 332-test Draft handoff를 완료하고 Plan 50의 V24~V26,
   recovery/notification/setup repair와 358-test baseline을 검증했다. 이후 ADR-075/V27 terminal
   Refund single-operator LOOKUP과 financial publication consumer 활성화를 추가하고 365-test clean
-  build로 재검증했다. combined release PR 생성 전까지 Plan 50은 active, shared migration-writer lease는
-  held 상태로 유지한다.
+  build로 재검증했다.
+- 2026-08-03: 사용자 승인 뒤 구현 head `19d69f2`를 push해 main 대상 ready PR #39를 생성하고 Plan
+  50을 completed path로 이동했다. main merge/deployment는 없으며 shared migration-writer lease는 PR
+  merge까지 held 상태로 유지한다.

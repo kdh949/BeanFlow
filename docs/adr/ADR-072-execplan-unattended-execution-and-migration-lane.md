@@ -187,8 +187,9 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   publication consumer 활성화 뒤 대상군, 문서/OpenAPI와 365-test clean build를 재검증했다. 첫 전체
   실행은 Docker backend 디스크 고갈과 daemon 종료로 완료되지 않았고 디스크·daemon 복구 뒤 동일
   명령으로 통과했다. final read-only gate에서 `origin/main=5f52320`, remote feature branch/PR/
-  deployment/environment 0을 확인했다. main merge/deployment는 없으며, 승인된 push와 final
-  combined main-targeted PR 생성 및 completed 이동 전까지 Plan 50과 lease를 active/held로 유지한다.
+  deployment/environment 0을 확인했다. 이후 사용자 승인으로 구현 head `19d69f2`를 push하고 main 대상
+  ready PR #39를 생성해 Plan 50을 completed path로 이동했다. main merge/deployment는 없으며 shared
+  migration-writer lease는 PR #39 merge까지 held 상태로 유지한다.
 
 ## Related Decisions
 

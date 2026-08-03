@@ -1,11 +1,11 @@
 # 고객 취소 recovery와 운영 수렴을 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-40-command.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -180,7 +180,7 @@ runbook, test strategy와 quality evidence를 actual behavior와 맞춘다.
 - [x] terminal Refund single-operator LOOKUP recovery
 - [x] retention/operations
 - [x] 전체 release verification
-- [ ] combined PR과 completed 이동
+- [x] combined PR과 completed 이동 — PR #39
 - [x] V27 이후 전체 검증
 
 ## Surprises & Discoveries
@@ -216,9 +216,10 @@ worker/Settlement 즉시 감지, 모든 setup 손상 분류, 감지 증적 저�
 publication consumer 전달을 보강했다. V27 이후 문서/OpenAPI 검증과 대상 test 묶음은 통과했지만
 초기 전체 build는 Docker backend의 디스크 고갈과 daemon 종료로 완료되지 않았다. 디스크 여유 공간과
 daemon을 복구한 뒤 365-test clean build를 failure/error/skip 0으로 재검증했다. final diff/security/
-remote gate에서도 origin/main 불변, remote feature branch/PR/deployment/environment 부재를 확인했다.
-승인된 push와 combined main-targeted PR 생성 전에는 completed 이동, main merge나 deployment를 수행하지
-않는다.
+remote preflight에서도 origin/main 불변, remote feature branch/PR/deployment/environment 부재를
+확인했다. 이후 사용자 승인으로 구현 head `19d69f2`를 push하고 Plan 40+50 전체 diff를 담은 main 대상
+ready PR #39를 생성했다. 이 completion 이동도 같은 PR에 포함한다. main merge나 deployment는 수행하지
+않았으며 shared migration-writer lease는 PR #39 merge까지 유지한다.
 
 ## Revision Notes
 
@@ -228,5 +229,6 @@ remote gate에서도 origin/main 불변, remote feature branch/PR/deployment/env
   production gate는 유지한다.
 - 2026-08-03: V24~V26 구현, owner/Settlement 재검증과 358-test baseline을 완료했다. 이후 ADR-075와
   V27 single-operator terminal reconciliation, 실제 financial publication consumer 전달을 보강했다.
-  V27 이후 365-test clean build와 문서/OpenAPI 검증을 완료했다. combined release PR 생성 전이므로
-  active 상태와 shared migration-writer lease를 유지한다.
+  V27 이후 365-test clean build와 문서/OpenAPI 검증을 완료했다.
+- 2026-08-03: 구현 head `19d69f2`를 push해 main 대상 ready PR #39를 만들고 completed path로 이동했다.
+  main merge/deployment는 없으며 shared migration-writer lease는 PR merge까지 held 상태로 유지한다.

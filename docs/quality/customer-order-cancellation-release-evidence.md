@@ -169,11 +169,12 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   `FAILED`/`MANUAL_REVIEW` Refund를 같은 Provider key의 LOOKUP 한 번으로만 다시 연다. 새 REQUEST,
   수기 성공과 금융 입력은 금지하고 명령 멱등성, Audit, 지연 뒤 실제 성공의 별도 Delivery를 보존한다.
 - **Deployment gate:** 이 증거 작성 시 Plan 40/50 branch의 main merge 또는 non-local deployment는
-  수행하지 않았다. Plan 50 completed 이동과 combined main-targeted PR 전까지 production success
-  endpoint를 배포하지 않는다. V27 이후 final read-only preflight에서 local `main`, `origin/main`과
+  수행하지 않았다. V27 이후 final read-only preflight에서 local `main`, `origin/main`과
   remote `main`이 모두 `5f5232054206b8324e35ca488857e485a59a8fba`임을 확인했다. remote
-  `feature/customer-order-cancellation-command` branch와 이 head의 기존 PR은 없고 GitHub deployment와
-  environment도 각각 0이다.
+  feature branch와 기존 PR, GitHub deployment와 environment는 각각 0이었다. 이후 사용자 승인으로
+  구현 head `19d69f2`를 `feature/customer-order-cancellation-command`에 push하고 Plan 40+50 combined
+  main-targeted ready PR #39를 생성했다. Plan 50 completion 이동은 같은 PR에 포함하며 main merge,
+  deployment와 environment 생성은 수행하지 않았다.
 
 ### V24~V26 validation baseline (2026-08-03)
 
@@ -220,8 +221,8 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   Testcontainers를 포함한다.
 - V27 이후 `git diff --check`: Passed, exit 0. 변경 파일 secret/personal-context/generated-artifact,
   fallback/예외 삼킴, production dependency와 migration inventory 점검도 통과했다.
-- final remote gate: Passed. remote `main=5f52320`, feature branch 0, head PR 0, deployment 0,
-  environment 0이며 main merge/deployment는 수행하지 않았다.
+- final pre-push remote gate: Passed. remote `main=5f52320`, feature branch 0, head PR 0,
+  deployment 0, environment 0이었다. 승인 뒤 feature branch와 ready PR #39만 생성했고 base는 main이다.
 - Not run: 실제 Provider credential을 이용한 외부 E2E, non-local deployment와 production smoke.
   현재 외부 환경·credential·SLA가 없고 Draft-only release gate가 배포를 금지하므로 의도적으로
   실행하지 않았다.
