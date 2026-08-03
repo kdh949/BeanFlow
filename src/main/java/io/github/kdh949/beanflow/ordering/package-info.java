@@ -8,6 +8,7 @@
         "promotion :: api",
         "loyalty :: api",
         "payment :: api",
+        "notification :: api",
         "operations :: api",
         "identity :: api",
         "eventing :: api"

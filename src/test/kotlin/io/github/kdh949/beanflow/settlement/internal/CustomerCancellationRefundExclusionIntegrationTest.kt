@@ -131,7 +131,12 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
         fun `non-customer Order cause keeps the refund exclusion incomplete`() {
             val fixture = fixture()
             jdbcTemplate.update(
-                "UPDATE ordering_order SET cancellation_cause = 'PAYMENT_DECLINED' WHERE id = ?",
+                """
+                UPDATE ordering_order
+                   SET cancellation_cause = 'PAYMENT_DECLINED',
+                       cancellation_reason_code = NULL
+                 WHERE id = ?
+                """.trimIndent(),
                 fixture.orderId,
             )
 
@@ -222,9 +227,10 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, cancelled_at, cancellation_cause,
+                        cancellation_reason_code,
                         created_at, updated_at, version
                     ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
-                              'KRW', NULL, ?, ?, ?, ?, 'CUSTOMER_REQUEST', ?, ?, ?)
+                              'KRW', NULL, ?, ?, ?, ?, 'CUSTOMER_REQUEST', 'OTHER', ?, ?, ?)
                     """.trimIndent(),
                     orderId,
                     customerId,
@@ -287,10 +293,12 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
                     requestedAmountKrw = 1_000,
                     succeededAmountKrw = 1_000,
                     reason = refundReason,
+                    customerReasonCode = if (refundReason == "CUSTOMER_ORDER_CANCELLED") "OTHER" else null,
                     state = RefundState.SUCCEEDED,
                     providerRefundReference = "provider-refund:$refundId",
                     providerIdempotencyKey = "refund-key:$refundId",
                     sourceReference = storedRefundSource ?: source,
+                    correlationId = if (refundReason == "CUSTOMER_ORDER_CANCELLED") "correlation:$orderId" else null,
                     attemptCount = 1,
                     requestAttemptCount = 1,
                     lookupAttemptCount = 0,
