@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md)
+- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/completed/loyalty-point-adjustment-foundation.md)
 
 ## Context
 
@@ -212,6 +212,11 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   mismatch와 point-read Audit failure가 ownership/403/400/503 contract를 각각 지킨다.
 - PointAccount 응답이 Plan 13 summary를 그대로 사용하고 `updatedAt` 또는 임의 0 fallback을
   포함하지 않는지 검증한다.
+- **Point adjustment enforcement evidence (2026-08-04):** endpoint method security는
+  `PLATFORM_OPERATOR` coarse role을 요구하고 Application Service는 PointAccount lock 뒤
+  Operations `requireActive(POINT_ADJUSTMENT)`를 같은 transaction에서 호출한다. customer/store/
+  settlement role, revoked grant는 403이고 grant relation failure는 503이며 어떤 adjustment write도
+  남지 않는 것을 PostgreSQL HTTP 통합 테스트로 검증했다.
 
 ## Metrics
 

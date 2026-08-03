@@ -89,6 +89,12 @@ ADR-054는 같은 target별 granularity를 고객 취소 Tx C0/C1과 후속 owne
 - chunk cleanup 중단·재실행
 - 민감정보 masking/absence
 
+**Point adjustment implementation evidence (2026-08-04):**
+`POINT_ADJUSTMENT_APPLIED`는 Platform Operator, 자유 입력 reason, evidence reference,
+signed effect, before/after Account summary와 affected Lot/transaction ID를 PointAccount target에
+append한다. raw key는 저장하지 않으며 Audit insert failure가 Account/Lot/ledger/idempotency/outbox와
+함께 rollback됨을 storage fault injection으로 검증했다.
+
 ## Metrics
 
 - **Target:** 감사 기록 실패 count와 저장 backlog 관측

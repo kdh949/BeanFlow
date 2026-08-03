@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperations
 import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.PointsAccruedV1
+import io.github.kdh949.beanflow.eventing.api.PointsAdjustedV1
 import io.github.kdh949.beanflow.eventing.api.PointsRestoredV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
 import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
@@ -46,6 +47,11 @@ internal class FinancialEventPublicationService(
     override fun publish(event: PointsRestoredV1) {
         validator.validate(event)
         persist(event, POINTS_RESTORED_TARGETS, event.envelope)
+    }
+
+    override fun publish(event: PointsAdjustedV1) {
+        validator.validate(event)
+        persist(event, POINTS_ADJUSTED_TARGETS, event.envelope)
     }
 
     override fun publish(event: SettlementItemCreatedV1) {
@@ -161,6 +167,7 @@ internal class FinancialEventPublicationService(
             )
         val POINTS_ACCRUED_TARGETS = listOf("beanflow.analytics.points-accrued-v1")
         val POINTS_RESTORED_TARGETS = listOf("beanflow.analytics.points-restored-v1")
+        val POINTS_ADJUSTED_TARGETS = listOf("beanflow.analytics.points-adjusted-v1")
         val SETTLEMENT_ITEM_CREATED_TARGETS = listOf("beanflow.analytics.settlement-item-created-v1")
         val SETTLEMENT_BATCH_CONFIRMED_TARGETS = listOf("beanflow.dispute.settlement-batch-confirmed-v1")
         val SETTLEMENT_ADJUSTMENT_CREATED_TARGETS = listOf("beanflow.analytics.settlement-adjustment-created-v1")
@@ -286,6 +293,24 @@ internal class FinancialEventValidator {
             event.amountKrw < 0 || event.currency != KRW
         ) {
             invalid("PointsRestoredV1 required fields are invalid")
+        }
+    }
+
+    fun validate(event: PointsAdjustedV1) {
+        validateEnvelope(
+            event.envelope,
+            event.envelope.eventType == POINTS_ADJUSTED &&
+                event.envelope.payloadVersion == 1 &&
+                event.envelope.aggregateId == event.accountId &&
+                event.envelope.aggregateVersion > 0 &&
+                event.envelope.causationId == "point-adjustment:${event.adjustmentSource}",
+        )
+        if (event.adjustmentSource.isBlank() || event.adjustmentSource != event.adjustmentSource.trim() ||
+            event.adjustmentSource.length > 240 || event.amountKrw == 0L ||
+            (event.amountKrw > 0 && event.issuerType !in POINT_ISSUER_TYPES) ||
+            (event.amountKrw < 0 && event.issuerType != null)
+        ) {
+            invalid("PointsAdjustedV1 required fields are invalid")
         }
     }
 
@@ -434,6 +459,7 @@ internal class FinancialEventValidator {
         const val PAYMENT_REFUNDED = "PaymentRefundedV1"
         const val POINTS_ACCRUED = "PointsAccruedV1"
         const val POINTS_RESTORED = "PointsRestoredV1"
+        const val POINTS_ADJUSTED = "PointsAdjustedV1"
         const val SETTLEMENT_ITEM_CREATED = "SettlementItemCreatedV1"
         const val SETTLEMENT_BATCH_CONFIRMED = "SettlementBatchConfirmedV1"
         const val SETTLEMENT_ADJUSTMENT_CREATED = "SettlementAdjustmentCreatedV1"
@@ -445,5 +471,6 @@ internal class FinancialEventValidator {
         val ZERO_UUID: UUID = UUID(0, 0)
         val SETTLEMENT_ADJUSTMENT_REASONS = setOf("REFUND_SUCCEEDED", "DISPUTE_ACCEPTED")
         val SETTLEMENT_DISPUTE_TERMINAL_STATES = setOf("ACCEPTED", "REJECTED", "WITHDRAWN")
+        val POINT_ISSUER_TYPES = setOf("PLATFORM", "BRAND", "STORE")
     }
 }

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/active/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
+- **Implementation owners:** [Plan 16](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md), [Settlement input snapshot foundation](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md), [Plan 20](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md), [Settlement lifecycle plan](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md), [Point adjustment plan](../exec-plans/completed/loyalty-point-adjustment-foundation.md), [Analytics plan](../exec-plans/active/analytics-refund-and-late-event-projection.md)
 
 ## Context
 
@@ -263,6 +263,12 @@ partial refunds retain rounding remainder, and a later Merchant terms version do
 target가 `PUBLISHED`로 저장되면 Modulith 2.1 bounded recovery 대상이 되지 않는 것을 확인했다.
 최초 상태를 `FAILED`/attempt 0으로 수정하고 recovery worker가 Notification과 Settlement listener를
 실제로 완료하는 통합 테스트로 검증했다. reserved Analytics target은 기존 filter대로 미완료로 보존한다.
+
+**PointsAdjustedV1 producer evidence (2026-08-04):** Loyalty command transaction이
+PointAccount commit version, immutable adjustment source, child transaction signed effect 합과 CREDIT
+issuer type을 `beanflow.analytics.points-adjusted-v1` target으로 저장한다. DEBIT은 issuer field를
+생략하고 raw actor/evidence/key/issuer reference를 payload에 포함하지 않는다. same command replay는
+publication을 추가하지 않는다. Analytics listener/receipt/projection은 후속 Analytics plan에 남겼다.
 
 ## Metrics
 

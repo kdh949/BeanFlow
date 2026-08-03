@@ -107,6 +107,11 @@ OrderCompensationCase, Refund, NotificationDelivery와 publication을 새로 저
 - 새 명령 설계 review가 직렬화 root·외부 호출 위치·rollback 뒤 부수효과를 명시하지 않으면
   구현을 시작하지 않는다.
 
+**Point adjustment implementation evidence (2026-08-04):** 기존 PointAccount를 먼저 잠그고
+grant, terminal response, Lot/ledger/Audit/outbox를 한 local transaction에 저장한다. Provider
+호출과 `PROCESSING` 상태는 없고 rollback은 terminal row를 남기지 않는다. replay, changed
+account/payload와 동시 debit/cross-account command를 PostgreSQL에서 검증했다.
+
 ## Required Tests
 
 - C1의 Case·Refund·Delivery·publication과 최초 202 response의 단일 local commit

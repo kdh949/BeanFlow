@@ -1,11 +1,11 @@
 # 감사형 Loyalty 포인트 조정 foundation을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-04`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -19,23 +19,16 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Current State
 
-- OpenAPI `PointTransaction` enum에는 `ADJUSTMENT`가 있으나 의미·write API·DB direction
-  표현이 없다.
-- Kotlin `PointTransactionType`과 migration type CHECK에는 `ADJUSTMENT`가 없다.
-- PointLot persistence에는 아직 BR-20 issuer type/reference snapshot이 없다. Plan 10이
-  만료 부분 환불 compensation에 필요한 schema와 legacy issuer precheck/migration gate를
-  먼저 소유하며, 이 계획은 그 gate evidence를 선행조건으로 소비한다.
-- AuditRecord, Idempotency-Key와 PointAccount row lock의 공통 규칙은 존재하지만 manual
-  point adjustment command는 구현되지 않았다.
-- Loyalty에는 이 terminal command의 최초 `201` body를 90일 보존할 idempotency table이나
-  Context-owned retention worker가 없다. Ordering의 retention worker를 다른 Context table에
-  재사용할 수 없다.
-- completed Plan 13 V17은 `ACCRUAL`/`RECOVERY`, PointRecoveryPending과 PointTransaction base
-  contract를 구현했다. 이 계획은 해당 CHECK를 재구현하지 않고 후속 `ADJUSTMENT` vocabulary만
-  단일 migration-writer lease에서 확장한다.
-- current JWT role은 인증의 coarse gate일 뿐 `POINT_ADJUSTMENT` permission source가 아니다.
-  Plan 11이 ADR-069의 Operations `OperatorPermissionGrant`와 public authorization API를 먼저
-  구현해야 한다.
+- deployed OpenAPI와 Controller가 audited adjustment POST, conditional request와 stored
+  `201 PointAdjustmentResult` replay를 제공한다.
+- V31과 Kotlin persistence는 existing transaction의 deterministic `balance_effect`,
+  `ADJUSTMENT` vocabulary/source CHECK와 Loyalty terminal idempotency relation을 제공한다.
+- Plan 10 V14의 immutable PointLot issuer snapshot/precheck, Plan 11 V13의 Operations grant와
+  Plan 13 V17의 recovery ledger를 선행 결과로 소비하며 중복 migration이나 fallback을 만들지 않았다.
+- Application Service는 ADR-069 lock order로 credit/debit, target Audit와
+  `PointsAdjustedV1` outbox를 한 local transaction에 저장한다.
+- Loyalty-owned retention worker가 terminal response를 90일 보존하고 due row를 100건씩
+  정리한다. Analytics consumer/receipt/projection은 active Analytics plan의 후속 책임이다.
 
 ## Definitions
 
@@ -106,20 +99,20 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 - Controller는 authorization principal과 DTO만 Application Service에 전달하고 Loyalty
   Repository를 직접 호출하지 않는다.
-- Application Service는 Operations public authorization API로 actor의 active grant를 같은
-  command transaction에서 확인한 뒤 PointAccount를 잠근다. credit은 new Lot을 만들고,
-  debit은 `expiresAt > now`인 `(expiresAt, pointLotId)`
-  순서의 selected available Lot을 잠근다.
-- PointAccount lock 뒤 terminal idempotency record를 조회한다. record가 없을 때만
-  command를 실행하고 Account/Lot/ledger/Audit/outbox/201과 같은 transaction에서 저장한다.
-  서로 다른 account의 같은 key가 동시에 insert되어 UNIQUE가 충돌하면 loser transaction은
-  전부 rollback하고, 별도 read transaction에서 winner의 account/hash를 다시 비교해 stored
-  201 또는 409을 반환한다. 재실행으로 경쟁을 해결하지 않는다.
+- Application Service는 PointAccount를 먼저 잠그고, 같은 command transaction에서 Operations
+  public authorization API로 actor의 active `POINT_ADJUSTMENT` grant를 잠가 검증한다. 그 뒤
+  terminal idempotency record를 조회한다. record가 없을 때만 credit은 new Lot을 만들고,
+  debit은 `expiresAt > now`인 `(expiresAt, pointLotId)` 순서의 selected available Lot을 잠가
+  command를 실행하며 Account/Lot/ledger/Audit/outbox/201과 같은 transaction에서 저장한다.
+  같은 actor의 서로 다른 account 요청도 ADR-069 grant write lock에서 직렬화되므로 후속
+  요청은 먼저 commit된 terminal record를 조회해 stored 201 또는 409을 반환한다. scope UNIQUE는
+  DB 불변식으로 유지하지만 도달 불가능한 insert-race recovery는 두지 않는다.
 - 같은 local transaction이 Account summary, affected Lot, one-or-more PointTransaction,
   terminal IdempotencyRecord, AuditRecord와 PointsAdjustedV1 outbox를 commit한다. external
   Provider, Analytics consumer와 notification은 transaction 밖이다.
-- lock 순서는 항상 PointAccount → ordered PointLot이다. issuer reference는 immutable
-  value snapshot이므로 Merchant Aggregate를 JPA association으로 로드하지 않는다.
+- lock 순서는 항상 PointAccount → `POINT_ADJUSTMENT` grant → terminal idempotency record →
+  ordered PointLot이다. issuer reference는 immutable value snapshot이므로 Merchant Aggregate를
+  JPA association으로 로드하지 않는다.
 - Analytics listener, receipt, delta/freshness projection은 Analytics plan의 단독 소유다. Loyalty는
   producer transaction/outbox contract만 구현하며 Analytics consumer를 등록하거나 projection table을 만들지 않는다.
 
@@ -133,15 +126,15 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Failure Semantics
 
-- issuer/expiry 누락, zero amount, 잘못된 role/active grant, debit issuer 포함은 400/403으로
-  명시적 거부한다.
+- issuer/expiry 누락, zero/`Long.MIN_VALUE` amount, 160자를 넘는 reason, 20개를 넘는 evidence,
+  잘못된 role/active grant와 debit issuer 포함은 400/403으로 명시적 거부한다.
 - grant lookup/lock failure는 role-only success 또는 403으로 바꾸지 않고 503이며 command
   write 전에 rollback한다.
 - debit 가능한 Lot 합이 부족하면 `409 POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE`이고
   부분 debit·pending·음수 fallback은 없다.
 - lock contention, DB/Audit/outbox 저장 실패는 503 또는 transaction rollback이며 201·0원
   성공으로 대체하지 않는다. command transaction에는 외부 결과 불명 구간이 없다.
-- idempotency UNIQUE 충돌 뒤 winner record를 읽지 못하면 201/409을 추측하지 않고 503이다.
+- 비멱등 CHECK/FK/UNIQUE 위반은 idempotency replay/409로 오분류하지 않고 503이다.
   retention worker 실패는 due row를 남기고 다음 tick에 재시도하며, 삭제 0건 성공으로
   위장하거나 API 삭제 endpoint를 제공하지 않는다.
 - Plan 10 issuer precheck 또는 Plan 11 grant/Plan 13 ledger evidence가 없으면
@@ -209,14 +202,15 @@ Plan 10/11/13 완료 뒤 최신 migration 번호를 다시 계산한다.
 
 ## Required Tests
 
-- OpenAPI conditional positive/negative request validation and required Idempotency-Key
+- OpenAPI conditional positive/negative request, reason 160/161자, evidence 20/21개,
+  `-Long.MAX_VALUE`/`Long.MIN_VALUE` validation and required Idempotency-Key
 - customer/store/settlement role denial, Platform Operator active grant/reason/evidence, revoked grant
   and grant/Audit DB failure 503
 - credit issuer/expiry snapshot and future boundary `now - 1ns`, `now`, `now + 1ns`
 - debit deterministic multi-Lot selection, reserved/expired Lot exclusion and insufficient rollback
 - Account/Lot/transaction/Audit/outbox/201 commit atomicity and each persistence failure injection
-- same-key same-payload replay, different payload/account conflict, cross-account unique-race
-  rollback/re-read and concurrent debit safety
+- same-key same-payload replay, different payload/account conflict, grant-serialized cross-account
+  winner/409 and concurrent debit safety
 - terminal adjustment idempotency의 90일 경계, keyset chunk 100, worker 중단·재실행과
   cleanup failure의 due row 보존
 - Plan 10 issuer precheck의 empty/verified/unresolvable fixture와 endpoint activation
@@ -242,7 +236,7 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 - `beanflow.loyalty.point_adjustment.command.count{direction,outcome}`
 - `beanflow.loyalty.point_adjustment.amount_krw{direction}`
-- `beanflow.loyalty.point_adjustment.issuer_precheck.failure.count{issuer_type}`
+- Plan 10 소유 `beanflow.loyalty.issuer_precheck.count{outcome}` (`EMPTY|VERIFIED|UNRESOLVABLE`)
 - `beanflow.loyalty.point_adjustment.idempotency_retention.count{outcome}`
 
 ## Documentation Updates
@@ -254,13 +248,13 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 
 ## Progress
 
-- [ ] contract/ADR/OpenAPI validation
-- [ ] Plan 10 issuer, Plan 11 grant, Plan 13 ledger prerequisite evidence
-- [ ] persistence and migration
-- [ ] command transaction/idempotency/audit/outbox
-- [ ] endpoint and authorization
-- [ ] producer/concurrency/failure validation and Analytics handoff
-- [ ] full build and documentation evidence
+- [x] contract/ADR/OpenAPI validation
+- [x] Plan 10 issuer, Plan 11 grant, Plan 13 ledger prerequisite evidence
+- [x] persistence and migration
+- [x] command transaction/idempotency/audit/outbox
+- [x] endpoint and authorization
+- [x] producer/concurrency/failure validation and Analytics handoff
+- [x] full build and documentation evidence
 
 ## Surprises & Discoveries
 
@@ -269,6 +263,19 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 - BR-20은 PointLot issuer cost를 요구하지만 current PointLot persistence에는 issuer
   snapshot이 없다. Plan 10의 data precheck 없이 default issuer를 채우면 과거 비용 귀속을
   왜곡하므로 adjustment plan은 그 gate를 다시 구현하지 않고 evidence를 소비한다.
+- 구현 preflight에서 이 plan의 기존 문장이 grant를 PointAccount보다 먼저 잠그도록 서술해
+  ADR-069의 명시적 `PointAccount lock 뒤 grant 검증`과 충돌했다. Accepted ADR을 우선해
+  PointAccount → grant → idempotency → ordered PointLot 순서로 정정했다.
+- Account update의 명시적 `EntityManager.flush()`에서 발생한 Hibernate
+  `PersistenceException`은 Spring `DataAccessException`으로 자동 번역되지 않았다. 원시
+  예외가 HTTP 500으로 새지 않도록 command 경계에서 명시적 503으로 변환하고 전체 rollback을
+  failure injection으로 검증했다.
+- 리뷰에서 reason API 500자와 Audit `varchar(160)`, evidence 개수 무제한, OpenAPI의
+  `Long.MIN_VALUE` 허용이 실제 저장·magnitude 경계와 어긋남을 확인했다. API/service/OpenAPI를
+  reason 160자, evidence 최대 20개와 `-Long.MAX_VALUE` 하한으로 통일했다.
+- ADR-069 grant write lock은 같은 actor의 cross-account command를 idempotency insert 전에
+  직렬화한다. 따라서 모든 `DataIntegrityViolationException`을 unique race로 간주하던 분기와
+  실제로 도달하지 않는 rollback/re-read 증적을 제거하고 일반 무결성 실패의 503을 검증한다.
 
 ## Decision Log
 
@@ -281,13 +288,33 @@ issuer reference, Idempotency-Key와 evidence reference는 tag나 log field에 �
 | 2026-08-01 | Accepted | `POINT_ADJUSTMENT`는 Operations DB grant로 판정하고 role/JWT claim fallback을 금지 | revoke와 permission dependency failure를 명시적으로 보존 | ADR-069 |
 | 2026-08-01 | Accepted | Analytics event name/version은 `PointsAdjustedV1`/1로 고정 | event catalog 이름만으로 payload를 추측하지 않음 | ADR-068 |
 | 2026-08-01 | Accepted | Loyalty는 `PointsAdjustedV1` producer/outbox만 소유하고 Analytics listener·receipt·projection은 구현하지 않음 | 같은 consumer를 두 plan이 만들지 않게 함 | ADR-068, Analytics plan |
+| 2026-08-04 | Applied existing | 잠금 순서는 PointAccount → `POINT_ADJUSTMENT` grant → terminal idempotency → ordered PointLot으로 고정 | Accepted ADR-069을 우선하고 revoke/command 선형화와 Loyalty lock 순서를 하나의 transaction에서 재현 | ADR-069, 사용자 확인 |
+| 2026-08-04 | Accepted amendment | reason 160자, evidence 1..20개, signed amount 하한 `-Long.MAX_VALUE`로 API와 내부 저장 경계를 통일 | Audit 원자 저장 실패와 무제한 장기 보존 payload를 command 진입에서 차단 | BR-13, BR-30, ADR-066 |
+| 2026-08-04 | Applied existing | 같은 actor cross-account command는 ADR-069 grant lock으로 직렬화하고 도달 불가능한 unique-race recovery를 제거 | 실제 lock graph와 실패 분류·검증 증적 일치 | ADR-066, ADR-069 |
 
 ## Outcomes & Retrospective
 
-미구현 상태지만 Plan 10 issuer precheck, Plan 11 ADR-069 grant와 Plan 13 PointTransaction base가
-모두 verified completed input이므로 `Implementation-Ready=true`다. 구현 시작 전 latest main과
-ADR-072 migration-writer lease를 다시 확인하며 Plan 13 CHECK/owner flow를 수정하지 않는다. Analytics
-consumer implementation은 이 plan의 completion condition이 아니라 Analytics plan의 own checkpoint다.
+Plan 10 issuer precheck, Plan 11 ADR-069 grant와 Plan 13 PointTransaction base를 verified completed
+input으로 소비했다. V31은 current type의 deterministic `balance_effect` backfill, `ADJUSTMENT`
+조합 CHECK와 terminal idempotency relation을 추가한다. PostgreSQL 통합 테스트에서 credit/debit,
+FIFO·만료·reserved 제외, replay/conflict, 동시 요청, 모든 owner persistence rollback, retention
+경계와 `PointsAdjustedV1` producer contract가 통과했다. Analytics consumer 구현은 이 plan의
+completion condition이 아니라 Analytics plan의 own checkpoint다. 전체 build와 문서 completion
+evidence를 별도 release evidence와 운영 runbook에 기록했다. focused PointAdjustment/Loyalty와
+Modulith 검증 뒤 최종 `./gradlew clean build`는 417 tests, failures/errors/skips 0으로 통과했다.
+첫 clean build는 Spotless 위반으로 test 전에 중단됐고 formatter 적용 뒤 전체 명령을 다시
+실행했으며, 이 실패와 보정도 evidence에서 숨기지 않았다.
+completed 이동, Analytics successor dependency/readiness 갱신 뒤 `bash scripts/verify-docs.sh`는
+target 27/deployed 14 paths, 75 schemas, 32 policies, 75 ADRs, 146 Markdown files와 24 ExecPlans를
+검증했다.
+
+2026-08-04 review correction은 reason 160/161자, evidence 20/21개,
+`-Long.MAX_VALUE`/`Long.MIN_VALUE`와 non-idempotency CHECK 503의 PostgreSQL HTTP 경계를
+추가했다. focused PointAdjustment/Loyalty와 Modulith 검증은 통과했다. 첫 review
+`clean build`는 변경 범위 밖 Settlement cursor tamper 테스트의 기대 400/실제 200 한 건으로
+실패했고 단독 재실행은 통과했다. 이어서 실행한 최종 `clean build`는 422 tests 전체와
+Spotless, bootJar, PostgreSQL Testcontainers를 2분 40초에 통과했다. 문서·OpenAPI와
+`git diff --check`도 최종 통과했다.
 
 ## Revision Notes
 
@@ -299,3 +326,7 @@ consumer implementation은 이 plan의 completion condition이 아니라 Analyti
   prerequisite로 추가했다.
 - 2026-08-02: completed Plan 13 V17/PointTransaction owner outcome을 반영해 마지막 direct
   dependency와 implementation readiness를 닫았다.
+- 2026-08-04: V31, audited command/API, terminal retention, `PointsAdjustedV1` producer와
+  운영·release evidence를 완료하고 active plan을 completed로 이동했다.
+- 2026-08-04: 리뷰에서 확인한 입력 경계와 무결성 오류 분류를 보정하고 ADR-069 grant
+  직렬화 모델에 맞춰 unique-race 주장과 도달 불가능한 복구 분기를 제거했다.

@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Deployed Contract
   version: 0.2.0
   x-beanflow-contract-status: deployed
-  x-beanflow-contract-date: 2026-08-03
+  x-beanflow-contract-date: 2026-08-04
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings. Components shared with the target
@@ -17,6 +17,7 @@ tags:
   - name: Payment
   - name: Store Orders
   - name: Operations
+  - name: Loyalty
 paths:
   /orders:
     post:
@@ -475,6 +476,45 @@ paths:
             application/json:
               schema:
                 $ref: "./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/point-accounts/{accountId}/adjustments:
+    post:
+      tags: [Operations, Loyalty]
+      operationId: createAuditedPointAdjustment
+      summary: Apply an audited signed point adjustment
+      description: |
+        Requires the PLATFORM_OPERATOR role and an active persistent
+        POINT_ADJUSTMENT grant. Same actor, operation, Idempotency-Key, account,
+        and canonical payload replay the first committed 201 response. Positive
+        amounts require an explicit issuer snapshot and future expiry; negative
+        amounts forbid those fields and consume only unexpired available lots.
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/PointAccountId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/PointAdjustmentRequest"
+      responses:
+        "201":
+          description: Applied adjustment or the replayed first response
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/PointAdjustmentResult"
         "400":
           $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         "401":
