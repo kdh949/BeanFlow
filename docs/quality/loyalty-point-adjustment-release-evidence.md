@@ -4,6 +4,7 @@
 
 - **Recorded at:** 2026-08-04
 - **Implementation commit:** `11e0ffe`
+- **Review correction commits:** `68bd9c8`, `a353197`
 - **Migration:** `V31__create_loyalty_point_adjustment.sql`
 - **Decision:** [ADR-066](../adr/ADR-066-audited-loyalty-point-adjustment.md)
 - **Runbook:** [Audited Loyalty Point Adjustment](../operations/loyalty-point-adjustment-runbook.md)
@@ -36,6 +37,13 @@
   확인했다.
 - same-key/same-payload는 최초 body를 재생하며 Audit, event와 transaction을 추가하지 않는다.
   changed payload/account는 409이고 동시 debit/cross-account 요청에서 한 command만 commit된다.
+  같은 actor의 cross-account 요청은 ADR-069 grant write lock에서 idempotency insert 전에
+  직렬화되며, 도달 불가능한 unique-race recovery는 없다.
+- review correction은 reason을 Audit `varchar(160)`과 같은 1..160자로 맞추고 evidence
+  reference를 1..20개(각 1..500자), signed amount를 `-Long.MAX_VALUE..Long.MAX_VALUE`에서
+  0 제외로 제한한다. DTO/OpenAPI/Application Service가 같은 경계를 사용한다.
+- Audit table의 non-idempotency `23514` CHECK failure injection은 replay/409로 오분류되지
+  않고 HTTP 503과 Account/Lot/ledger/idempotency/Audit/outbox 전체 rollback으로 끝난다.
 - terminal retention은 due 101건을 100+1로 삭제하고 `now` 경계를 포함하며 미래 row를
   보존한다. cleanup failure는 `FAILED`와 null deleted count를 기록하고 due row를 남겨 다음
   실행에서 재시도한다.
@@ -58,6 +66,19 @@
 - completed 이동과 Analytics successor readiness 갱신 뒤 `bash scripts/verify-docs.sh`: Passed,
   target 27/deployed 14 paths, 75 schemas, 32 policies, 75 ADRs, 146 Markdown files와
   24 ExecPlans, exit 0.
+- review correction `./gradlew test --tests '*PointAdjustmentIntegrationTest'`: Passed,
+  PostgreSQL HTTP reason 160/161, evidence 20/21, `-Long.MAX_VALUE`/`Long.MIN_VALUE`,
+  non-idempotency CHECK 503 경계 포함, 24초, exit 0.
+- review correction `./gradlew test --tests '*PointAdjustment*' --tests '*Loyalty*'`: Passed,
+  20초, exit 0. `./gradlew test --tests '*ModularityTests'`: Passed, 3초, exit 0.
+- review correction 첫 `./gradlew clean build`: Failed, 변경 범위 밖
+  `SettlementItemQueryIntegrationTest`의 tampered cursor 기대 400/실제 200 한 건으로
+  422 tests 중 1 failure, exit 1. 해당 단일 테스트 재실행은 14초에 통과했다.
+- review correction 최종 `./gradlew clean build`: Passed, 422 tests, clean compile,
+  Spotless, bootJar와 PostgreSQL Testcontainers 포함, 2분 40초, exit 0.
+- review correction `./gradlew spotlessCheck`, `bash scripts/verify-docs.sh`와
+  `git diff --check`: Passed. 문서 검증은 target 27/deployed 14 paths, 75 schemas,
+  32 policies, 75 ADRs, 146 Markdown files와 24 ExecPlans, exit 0.
 
 ## Deployment limits
 

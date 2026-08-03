@@ -308,6 +308,14 @@ completed 이동, Analytics successor dependency/readiness 갱신 뒤 `bash scri
 target 27/deployed 14 paths, 75 schemas, 32 policies, 75 ADRs, 146 Markdown files와 24 ExecPlans를
 검증했다.
 
+2026-08-04 review correction은 reason 160/161자, evidence 20/21개,
+`-Long.MAX_VALUE`/`Long.MIN_VALUE`와 non-idempotency CHECK 503의 PostgreSQL HTTP 경계를
+추가했다. focused PointAdjustment/Loyalty와 Modulith 검증은 통과했다. 첫 review
+`clean build`는 변경 범위 밖 Settlement cursor tamper 테스트의 기대 400/실제 200 한 건으로
+실패했고 단독 재실행은 통과했다. 이어서 실행한 최종 `clean build`는 422 tests 전체와
+Spotless, bootJar, PostgreSQL Testcontainers를 2분 40초에 통과했다. 문서·OpenAPI와
+`git diff --check`도 최종 통과했다.
+
 ## Revision Notes
 
 - 2026-08-01: documentation consistency audit에서 public ADJUSTMENT enum의 미정의 계약을
