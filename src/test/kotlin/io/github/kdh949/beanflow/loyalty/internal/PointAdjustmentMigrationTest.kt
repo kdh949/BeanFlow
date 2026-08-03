@@ -52,9 +52,10 @@ internal class PointAdjustmentMigrationTest {
         migrateV31()
 
         val actual =
-            jdbcTemplate.query(
-                "SELECT type, balance_effect FROM loyalty_point_transaction ORDER BY type",
-            ) { resultSet, _ -> resultSet.getString("type") to resultSet.getString("balance_effect") }
+            jdbcTemplate
+                .query(
+                    "SELECT type, balance_effect FROM loyalty_point_transaction ORDER BY type",
+                ) { resultSet, _ -> resultSet.getString("type") to resultSet.getString("balance_effect") }
                 .toMap()
         assertThat(actual).containsExactlyInAnyOrderEntriesOf(types)
     }

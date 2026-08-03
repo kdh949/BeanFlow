@@ -50,7 +50,8 @@ internal data class PointAdjustmentRequest(
     val reason: String,
     @field:NotEmpty
     val evidenceReferences: List<
-        @NotBlank @Size(max = 500)
+        @NotBlank
+        @Size(max = 500)
         String,
     >,
 ) {

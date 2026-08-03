@@ -154,7 +154,13 @@ internal class LoyaltyPointAdjustmentIdempotencyRetentionWorker(
             result.oldestDueAt?.let { oldest ->
                 meterRegistry
                     .summary("beanflow.loyalty.point_adjustment.idempotency_retention.oldest_due_age.seconds")
-                    .record(Duration.between(oldest, now).seconds.coerceAtLeast(0).toDouble())
+                    .record(
+                        Duration
+                            .between(oldest, now)
+                            .seconds
+                            .coerceAtLeast(0)
+                            .toDouble(),
+                    )
             }
             if (result.deletedCount > 0) {
                 logger.info(

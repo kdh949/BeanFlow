@@ -202,6 +202,7 @@ private fun PointTransactionType.defaultBalanceEffect(): PointBalanceEffect =
         -> PointBalanceEffect.DEBIT
 
         PointTransactionType.RESTORE_SKIPPED_EXPIRED -> PointBalanceEffect.NONE
+
         PointTransactionType.ADJUSTMENT -> error("Adjustment balance effect must be explicit")
     }
 
@@ -218,6 +219,7 @@ private fun PointTransactionType.allows(effect: PointBalanceEffect): Boolean =
         -> effect == PointBalanceEffect.DEBIT
 
         PointTransactionType.RESTORE_SKIPPED_EXPIRED -> effect == PointBalanceEffect.NONE
+
         PointTransactionType.ADJUSTMENT -> effect == PointBalanceEffect.CREDIT || effect == PointBalanceEffect.DEBIT
     }
 

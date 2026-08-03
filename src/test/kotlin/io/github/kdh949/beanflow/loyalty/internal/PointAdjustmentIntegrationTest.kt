@@ -308,92 +308,100 @@ internal class PointAdjustmentIntegrationTest
         fun `operations endpoint requires platform role key reason evidence and conditional fields`() {
             val accountId = insertAccount(available = 0)
             val success =
-                mockMvc.perform(
-                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                        .with(operatorJwt())
-                        .header("Idempotency-Key", "controller-credit-0001")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(creditRequestJson()),
-                ).andExpect(status().isCreated)
+                mockMvc
+                    .perform(
+                        post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                            .with(operatorJwt())
+                            .header("Idempotency-Key", "controller-credit-0001")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(creditRequestJson()),
+                    ).andExpect(status().isCreated)
                     .andExpect(jsonPath("$.account.accountId").value(accountId.toString()))
                     .andExpect(jsonPath("$.account.availablePointsKrw").value(125))
                     .andExpect(jsonPath("$.transactions[0].amountKrw").value(125))
                     .andReturn()
                     .response
             val replay =
-                mockMvc.perform(
-                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                        .with(operatorJwt())
-                        .header("Idempotency-Key", "controller-credit-0001")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(creditRequestJson()),
-                ).andExpect(status().isCreated)
+                mockMvc
+                    .perform(
+                        post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                            .with(operatorJwt())
+                            .header("Idempotency-Key", "controller-credit-0001")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(creditRequestJson()),
+                    ).andExpect(status().isCreated)
                     .andReturn()
                     .response
             assertThat(replay.contentAsString).isEqualTo(success.contentAsString)
 
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(creditRequestJson()),
-            ).andExpect(status().isBadRequest)
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .header("Idempotency-Key", "controller-invalid-0001")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content("""{"amountKrw":10,"reason":"reason","evidenceReferences":["evidence"]}"""),
-            ).andExpect(status().isBadRequest)
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .header("Idempotency-Key", "controller-invalid-0002")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(
-                        """
-                        {
-                          "amountKrw": -10,
-                          "issuer": {"issuerType": "PLATFORM", "issuerReference": "platform:test"},
-                          "expiresAt": "2030-01-01T00:00:00Z",
-                          "reason": "reason",
-                          "evidenceReferences": ["evidence"]
-                        }
-                        """.trimIndent(),
-                    ),
-            ).andExpect(status().isBadRequest)
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .header("Idempotency-Key", "controller-invalid-0003")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content("""{"amountKrw":-10,"reason":" ","evidenceReferences":[]}"""),
-            ).andExpect(status().isBadRequest)
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .header("Idempotency-Key", "controller-invalid-0004")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(
-                        """{"amountKrw":-10,"reason":"reason","evidenceReferences":["evidence"],"unexpected":true}""",
-                    ),
-            ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                        .with(operatorJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(creditRequestJson()),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "controller-invalid-0001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"amountKrw":10,"reason":"reason","evidenceReferences":["evidence"]}"""),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "controller-invalid-0002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            {
+                              "amountKrw": -10,
+                              "issuer": {"issuerType": "PLATFORM", "issuerReference": "platform:test"},
+                              "expiresAt": "2030-01-01T00:00:00Z",
+                              "reason": "reason",
+                              "evidenceReferences": ["evidence"]
+                            }
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "controller-invalid-0003")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"amountKrw":-10,"reason":" ","evidenceReferences":[]}"""),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "controller-invalid-0004")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """{"amountKrw":-10,"reason":"reason","evidenceReferences":["evidence"],"unexpected":true}""",
+                        ),
+                ).andExpect(status().isBadRequest)
         }
 
         @Test
         fun `customer store and settlement roles cannot call the adjustment endpoint`() {
             val accountId = insertAccount(available = 0)
             listOf("CUSTOMER", "STORE_OWNER", "STORE_STAFF", "SETTLEMENT_OPERATOR").forEach { role ->
-                mockMvc.perform(
-                    post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                        .with(
-                            jwt()
-                                .jwt { it.subject(UUID.randomUUID().toString()).claim("roles", listOf(role)) }
-                                .authorities(SimpleGrantedAuthority("ROLE_$role")),
-                        ).header("Idempotency-Key", "role-denial-${role.lowercase()}")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(creditRequestJson()),
-                ).andExpect(status().isForbidden)
+                mockMvc
+                    .perform(
+                        post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                            .with(
+                                jwt()
+                                    .jwt { it.subject(UUID.randomUUID().toString()).claim("roles", listOf(role)) }
+                                    .authorities(SimpleGrantedAuthority("ROLE_$role")),
+                            ).header("Idempotency-Key", "role-denial-${role.lowercase()}")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(creditRequestJson()),
+                    ).andExpect(status().isForbidden)
             }
             assertThat(count("loyalty_point_transaction")).isZero()
         }
@@ -533,14 +541,13 @@ internal class PointAdjustmentIntegrationTest
         private fun performCredit(
             accountId: UUID,
             key: String,
-        ) =
-            mockMvc.perform(
-                post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
-                    .with(operatorJwt())
-                    .header("Idempotency-Key", key)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(creditRequestJson()),
-            )
+        ) = mockMvc.perform(
+            post("/api/v1/operations/point-accounts/{accountId}/adjustments", accountId)
+                .with(operatorJwt())
+                .header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(creditRequestJson()),
+        )
 
         private fun creditRequestJson(): String =
             """
@@ -681,11 +688,9 @@ internal class PointAdjustmentIntegrationTest
             ).forEach(::dropFailureTrigger)
         }
 
-        private fun lotAvailable(lotId: UUID): Long =
-            long("SELECT available_amount_krw FROM loyalty_point_lot WHERE id = ?", lotId)
+        private fun lotAvailable(lotId: UUID): Long = long("SELECT available_amount_krw FROM loyalty_point_lot WHERE id = ?", lotId)
 
-        private fun count(table: String): Long =
-            jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
+        private fun count(table: String): Long = jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
 
         private fun long(
             sql: String,
