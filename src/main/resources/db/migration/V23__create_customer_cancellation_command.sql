@@ -128,6 +128,47 @@ CREATE INDEX idx_ordering_acceptance_timeout_work_retention
 
 ALTER TABLE payment_refund
     ADD COLUMN customer_reason_code varchar(32),
+    DROP CONSTRAINT chk_payment_refund_partial_command,
+    ADD CONSTRAINT chk_payment_refund_command_shape CHECK (
+        (reason NOT IN ('PARTIAL_REFUND', 'CUSTOMER_ORDER_CANCELLED')
+            AND actor_id IS NULL
+            AND idempotency_key IS NULL
+            AND payload_hash IS NULL
+            AND correlation_id IS NULL
+            AND point_restoration_policy_version_id IS NULL
+            AND point_restoration_policy_trigger IS NULL
+            AND point_restoration_policy_benefit_type IS NULL
+            AND point_restoration_policy_mode IS NULL
+            AND point_restoration_policy_validity_days IS NULL)
+        OR
+        (reason = 'PARTIAL_REFUND'
+            AND actor_id IS NOT NULL
+            AND idempotency_key IS NOT NULL
+            AND length(idempotency_key) BETWEEN 8 AND 128
+            AND payload_hash IS NOT NULL
+            AND length(payload_hash) = 64
+            AND correlation_id IS NOT NULL
+            AND length(btrim(correlation_id)) > 0
+            AND point_restoration_policy_version_id IS NOT NULL
+            AND point_restoration_policy_trigger = 'PARTIAL_REFUND'
+            AND point_restoration_policy_benefit_type = 'POINTS'
+            AND point_restoration_policy_mode IN (
+                'COMPENSATE_WITH_NEW_ISSUANCE', 'PRESERVE_ORIGINAL_EXPIRY'
+            )
+            AND point_restoration_policy_validity_days BETWEEN 1 AND 365)
+        OR
+        (reason = 'CUSTOMER_ORDER_CANCELLED'
+            AND actor_id IS NULL
+            AND idempotency_key IS NULL
+            AND payload_hash IS NULL
+            AND correlation_id IS NOT NULL
+            AND length(btrim(correlation_id)) > 0
+            AND point_restoration_policy_version_id IS NULL
+            AND point_restoration_policy_trigger IS NULL
+            AND point_restoration_policy_benefit_type IS NULL
+            AND point_restoration_policy_mode IS NULL
+            AND point_restoration_policy_validity_days IS NULL)
+    ),
     ADD CONSTRAINT chk_payment_refund_customer_reason CHECK (
         (reason = 'CUSTOMER_ORDER_CANCELLED'
             AND customer_reason_code IN (
