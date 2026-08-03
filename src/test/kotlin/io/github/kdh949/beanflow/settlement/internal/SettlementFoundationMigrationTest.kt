@@ -194,7 +194,24 @@ internal class SettlementFoundationMigrationTest {
             jdbcTemplate.update("DELETE FROM settlement_item WHERE order_id = ?", orderId)
         }.isInstanceOf(DataAccessException::class.java)
             .hasStackTraceContaining("SettlementItem is immutable")
-        jdbcTemplate.update("UPDATE settlement_batch SET state = 'CALCULATED' WHERE id = ?", batchId)
+        jdbcTemplate.update(
+            """
+            UPDATE settlement_batch
+               SET state = 'CALCULATED',
+                   item_count = 1,
+                   gross_paid_krw = 1000,
+                   fee_krw = 50,
+                   benefit_cost_krw = 150,
+                   item_net_settlement_krw = 800,
+                   adjustment_krw = 0,
+                   carry_forward_in_krw = 0,
+                   carry_forward_out_krw = 0,
+                   calculated_at = now(),
+                   version = version + 1
+             WHERE id = ?
+            """.trimIndent(),
+            batchId,
+        )
         assertThatThrownBy {
             insertItem(
                 UUID.randomUUID(),

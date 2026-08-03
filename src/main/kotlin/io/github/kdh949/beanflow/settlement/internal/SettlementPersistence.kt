@@ -24,6 +24,48 @@ internal enum class SettlementBatchState {
     CONFIRMED,
 }
 
+internal data class SettlementBatchCalculation(
+    val itemCount: Int,
+    val grossPaidKrw: Long,
+    val feeKrw: Long,
+    val benefitCostKrw: Long,
+    val itemNetSettlementKrw: Long,
+    val adjustmentKrw: Long,
+    val carryForwardInKrw: Long,
+    val carryForwardSourceBatchId: UUID?,
+    val adjustmentCursorEffectiveAt: Instant?,
+    val adjustmentCursorId: UUID?,
+) {
+    val netSettlementKrw: Long =
+        Math.addExact(
+            Math.addExact(itemNetSettlementKrw, adjustmentKrw),
+            carryForwardInKrw,
+        )
+    val carryForwardOutKrw: Long = minOf(netSettlementKrw, 0)
+
+    init {
+        require(itemCount >= 0) { "SettlementBatch item count must be non-negative" }
+        require(grossPaidKrw >= 0 && feeKrw >= 0 && benefitCostKrw >= 0 && itemNetSettlementKrw >= 0) {
+            "SettlementBatch item summary must be non-negative"
+        }
+        require(
+            itemNetSettlementKrw ==
+                Math.subtractExact(
+                    Math.subtractExact(grossPaidKrw, feeKrw),
+                    benefitCostKrw,
+                ),
+        ) { "SettlementBatch item summary does not tie out" }
+        require(carryForwardInKrw <= 0) { "SettlementBatch carry-forward input must not be positive" }
+        require(
+            (carryForwardSourceBatchId == null && carryForwardInKrw == 0L) ||
+                (carryForwardSourceBatchId != null && carryForwardInKrw < 0L),
+        ) { "SettlementBatch carry-forward source does not match its amount" }
+        require((adjustmentCursorEffectiveAt == null) == (adjustmentCursorId == null)) {
+            "SettlementBatch adjustment cursor must be complete"
+        }
+    }
+}
+
 @Entity
 @Table(name = "settlement_batch")
 internal class SettlementBatchEntity(
@@ -35,16 +77,40 @@ internal class SettlementBatchEntity(
     val settlementDate: LocalDate,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 24)
-    val state: SettlementBatchState = SettlementBatchState.OPEN,
+    var state: SettlementBatchState = SettlementBatchState.OPEN,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Column(name = "item_count")
+    var itemCount: Int? = null,
+    @Column(name = "gross_paid_krw")
+    var grossPaidKrw: Long? = null,
+    @Column(name = "fee_krw")
+    var feeKrw: Long? = null,
+    @Column(name = "benefit_cost_krw")
+    var benefitCostKrw: Long? = null,
+    @Column(name = "item_net_settlement_krw")
+    var itemNetSettlementKrw: Long? = null,
+    @Column(name = "adjustment_krw")
+    var adjustmentKrw: Long? = null,
+    @Column(name = "carry_forward_in_krw")
+    var carryForwardInKrw: Long? = null,
+    @Column(name = "carry_forward_out_krw")
+    var carryForwardOutKrw: Long? = null,
+    @Column(name = "carry_forward_source_batch_id")
+    var carryForwardSourceBatchId: UUID? = null,
+    @Column(name = "adjustment_cursor_effective_at")
+    var adjustmentCursorEffectiveAt: Instant? = null,
+    @Column(name = "adjustment_cursor_id")
+    var adjustmentCursorId: UUID? = null,
+    @Column(name = "calculated_at")
+    var calculatedAt: Instant? = null,
+    @Column(name = "confirmed_at")
+    var confirmedAt: Instant? = null,
     @Version
     var version: Long = 0,
 ) {
     init {
-        require(state == SettlementBatchState.OPEN) {
-            "Plan 20 can create only OPEN SettlementBatch aggregates"
-        }
+        validateState()
     }
 
     fun requireAcceptingItems(
@@ -59,6 +125,95 @@ internal class SettlementBatchEntity(
         }
         require(itemSettlementDate == settlementDate) {
             "SettlementItem date does not match its batch"
+        }
+    }
+
+    fun calculate(
+        summary: SettlementBatchCalculation,
+        calculatedAt: Instant,
+    ) {
+        check(state == SettlementBatchState.OPEN) { "SettlementBatch is not open for calculation" }
+        require(summary.carryForwardSourceBatchId != id) { "SettlementBatch cannot carry from itself" }
+        state = SettlementBatchState.CALCULATED
+        itemCount = summary.itemCount
+        grossPaidKrw = summary.grossPaidKrw
+        feeKrw = summary.feeKrw
+        benefitCostKrw = summary.benefitCostKrw
+        itemNetSettlementKrw = summary.itemNetSettlementKrw
+        adjustmentKrw = summary.adjustmentKrw
+        carryForwardInKrw = summary.carryForwardInKrw
+        carryForwardOutKrw = summary.carryForwardOutKrw
+        carryForwardSourceBatchId = summary.carryForwardSourceBatchId
+        adjustmentCursorEffectiveAt = summary.adjustmentCursorEffectiveAt
+        adjustmentCursorId = summary.adjustmentCursorId
+        this.calculatedAt = calculatedAt
+        validateState()
+    }
+
+    fun confirm(confirmedAt: Instant) {
+        check(state == SettlementBatchState.CALCULATED) { "SettlementBatch is not calculated" }
+        val calculated = requireNotNull(calculatedAt)
+        require(!confirmedAt.isBefore(calculated)) { "SettlementBatch confirmation cannot precede calculation" }
+        state = SettlementBatchState.CONFIRMED
+        this.confirmedAt = confirmedAt
+        validateState()
+    }
+
+    fun netSettlementKrw(): Long? {
+        val itemNet = itemNetSettlementKrw ?: return null
+        return Math.addExact(Math.addExact(itemNet, requireNotNull(adjustmentKrw)), requireNotNull(carryForwardInKrw))
+    }
+
+    private fun validateState() {
+        when (state) {
+            SettlementBatchState.OPEN ->
+                require(
+                    listOf(
+                        itemCount,
+                        grossPaidKrw,
+                        feeKrw,
+                        benefitCostKrw,
+                        itemNetSettlementKrw,
+                        adjustmentKrw,
+                        carryForwardInKrw,
+                        carryForwardOutKrw,
+                        carryForwardSourceBatchId,
+                        adjustmentCursorEffectiveAt,
+                        adjustmentCursorId,
+                        calculatedAt,
+                        confirmedAt,
+                    ).all { it == null },
+                ) { "OPEN SettlementBatch cannot contain a calculated summary" }
+
+            SettlementBatchState.CALCULATED,
+            SettlementBatchState.CONFIRMED,
+            -> {
+                val summary =
+                    SettlementBatchCalculation(
+                        itemCount = requireNotNull(itemCount),
+                        grossPaidKrw = requireNotNull(grossPaidKrw),
+                        feeKrw = requireNotNull(feeKrw),
+                        benefitCostKrw = requireNotNull(benefitCostKrw),
+                        itemNetSettlementKrw = requireNotNull(itemNetSettlementKrw),
+                        adjustmentKrw = requireNotNull(adjustmentKrw),
+                        carryForwardInKrw = requireNotNull(carryForwardInKrw),
+                        carryForwardSourceBatchId = carryForwardSourceBatchId,
+                        adjustmentCursorEffectiveAt = adjustmentCursorEffectiveAt,
+                        adjustmentCursorId = adjustmentCursorId,
+                    )
+                require(carryForwardOutKrw == summary.carryForwardOutKrw) {
+                    "SettlementBatch carry-forward output does not tie out"
+                }
+                val calculated = requireNotNull(calculatedAt)
+                if (state == SettlementBatchState.CALCULATED) {
+                    require(confirmedAt == null) { "CALCULATED SettlementBatch cannot be confirmed" }
+                } else {
+                    val confirmed = requireNotNull(confirmedAt)
+                    require(!confirmed.isBefore(calculated)) {
+                        "SettlementBatch confirmation cannot precede calculation"
+                    }
+                }
+            }
         }
     }
 }
@@ -135,6 +290,57 @@ internal class SettlementItemEntity(
     }
 }
 
+internal enum class SettlementAdjustmentReason {
+    REFUND_SUCCEEDED,
+    DISPUTE_ACCEPTED,
+}
+
+@Entity
+@Immutable
+@Table(name = "settlement_adjustment")
+internal class SettlementAdjustmentEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "store_id", nullable = false)
+    val storeId: UUID,
+    @Column(name = "settlement_item_id", nullable = false)
+    val settlementItemId: UUID,
+    @Column(name = "source_settlement_batch_id", nullable = false)
+    val sourceSettlementBatchId: UUID,
+    @Column(name = "adjustment_source", nullable = false, length = 240)
+    val adjustmentSource: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reason_code", nullable = false, length = 32)
+    val reasonCode: SettlementAdjustmentReason,
+    @Column(name = "effective_at", nullable = false)
+    val effectiveAt: Instant,
+    @Column(name = "order_completed_at", nullable = false)
+    val orderCompletedAt: Instant,
+    @Column(name = "settlement_date", nullable = false)
+    val settlementDate: LocalDate,
+    @Column(nullable = false, length = 3)
+    val currency: String,
+    @Column(name = "amount_krw", nullable = false)
+    val amountKrw: Long,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+) {
+    init {
+        require(adjustmentSource.isNotBlank() && adjustmentSource == adjustmentSource.trim()) {
+            "SettlementAdjustment source must be present"
+        }
+        require(adjustmentSource.length <= 240) { "SettlementAdjustment source is too long" }
+        require(currency == "KRW") { "SettlementAdjustment currency must be KRW" }
+        require(orderCompletedAt.atZone(SEOUL_ZONE_ID).toLocalDate() == settlementDate) {
+            "SettlementAdjustment settlement date must match completion"
+        }
+    }
+
+    private companion object {
+        val SEOUL_ZONE_ID: ZoneId = ZoneId.of("Asia/Seoul")
+    }
+}
+
 internal interface SettlementBatchJpaRepository : JpaRepository<SettlementBatchEntity, UUID> {
     fun findByStoreIdAndSettlementDate(
         storeId: UUID,
@@ -162,4 +368,8 @@ internal interface SettlementItemJpaRepository : JpaRepository<SettlementItemEnt
     fun findByItemSource(itemSource: String): SettlementItemEntity?
 
     fun findByOrderId(orderId: UUID): SettlementItemEntity?
+}
+
+internal interface SettlementAdjustmentJpaRepository : JpaRepository<SettlementAdjustmentEntity, UUID> {
+    fun findByAdjustmentSource(adjustmentSource: String): SettlementAdjustmentEntity?
 }

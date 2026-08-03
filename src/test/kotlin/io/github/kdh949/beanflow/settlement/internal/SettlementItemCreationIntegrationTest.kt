@@ -158,12 +158,19 @@ internal class SettlementItemCreationIntegrationTest
             val event = completionEvent(insertSyntheticCompletedOrder(storeId), storeId, 7)
             jdbcTemplate.update(
                 """
-                INSERT INTO settlement_batch (id, store_id, settlement_date, state, created_at, version)
-                VALUES (?, ?, ?, 'CALCULATED', ?, 0)
+                INSERT INTO settlement_batch (
+                    id, store_id, settlement_date, state, created_at,
+                    item_count, gross_paid_krw, fee_krw, benefit_cost_krw,
+                    item_net_settlement_krw, adjustment_krw,
+                    carry_forward_in_krw, carry_forward_out_krw,
+                    calculated_at, version
+                ) VALUES (?, ?, ?, 'CALCULATED', ?,
+                          0, 0, 0, 0, 0, 0, 0, 0, ?, 0)
                 """.trimIndent(),
                 UUID.randomUUID(),
                 storeId,
                 event.settlementDate,
+                Timestamp.from(event.completedAt),
                 Timestamp.from(event.completedAt),
             )
 
