@@ -190,6 +190,11 @@ PR base가 하나라는 제약과 Flyway 번호 경쟁을 자동화가 추측하
   deployment/environment 0을 확인했다. 이후 사용자 승인으로 구현 head `19d69f2`를 push하고 main 대상
   ready PR #39를 생성해 Plan 50을 completed path로 이동했다. main merge/deployment는 없으며 shared
   migration-writer lease는 PR #39 merge까지 held 상태로 유지한다.
+- **Plan 14 lease evidence (2026-08-06):** latest `main` `0e6f10a`의 Flyway inventory가 V31까지임을
+  확인하고, active worktree에 concurrent migration writer가 없을 때 V32만 추가했다. V32는
+  `loyalty_point_transaction(point_account_id, occurred_at DESC, id DESC)` index만 소유하며 Plan 11
+  grant 또는 Plan 13 recovery schema를 복제하지 않는다. fresh PostgreSQL 17.6 Flyway migration test와
+  fixed-fixture query-plan test가 index definition과 actual index plan을 검증한다.
 
 ## Related Decisions
 

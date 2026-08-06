@@ -188,6 +188,12 @@ endpoint/filter binding, 15분 expiry와 `(completedAt ASC, itemId ASC)` tuple a
 default/max limit, tamper/expiry, 다른 store/Batch scope 재사용과 authorization 재검증 통합 테스트가
 통과했으며 별도 key/secret fallback은 추가하지 않았다.
 
+**Plan 14 endpoint evidence (2026-08-06):** PointAccount ledger는 common codec의 24시간 expiry와
+`point-account-transactions` endpoint/account SHA-256 scope를 사용한다. typed adapter는
+`(occurredAt, transactionId)`를 UTC `Instant`와 lowercase canonical UUID로 검증하고 JDBC keyset
+parameter로 bind한다. PostgreSQL HTTP tests는 default 20, limit 1, tamper와 다른 account cursor의 400을
+검증했다. endpoint는 별도 cursor secret, unsigned/base64 fallback 또는 cursor store를 추가하지 않았다.
+
 ## Metrics
 
 - `beanflow.pagination.cursor.validation.count{endpoint,outcome}`

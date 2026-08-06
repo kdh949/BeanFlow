@@ -217,6 +217,13 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   Operations `requireActive(POINT_ADJUSTMENT)`를 같은 transaction에서 호출한다. customer/store/
   settlement role, revoked grant는 403이고 grant relation failure는 503이며 어떤 adjustment write도
   남지 않는 것을 PostgreSQL HTTP 통합 테스트로 검증했다.
+- **Plan 14 point-account read evidence (2026-08-06):** Loyalty query service가 customer ownership read-only
+  branch와 operator write-capable branch를 분리했다. operator branch는 Operations public
+  `requireActive(POINT_ACCOUNT_READ)` 뒤 projection과 one `POINT_ACCOUNT_READ` target Audit을 같은 local
+  transaction에서 flush한다. PostgreSQL MockMvc tests는 own/other/missing account의 200/403/404,
+  missing·blank reason의 400, role-only 거부, success audit 한 건과 injected Audit failure의 503/no
+  additional audit를 검증했다. Account summary는 Plan 13의 persisted `recoveryPendingKrw`를 그대로
+  반환하며 grant/Audit/ledger failure를 empty body나 role fallback으로 바꾸지 않는다.
 
 ## Metrics
 
