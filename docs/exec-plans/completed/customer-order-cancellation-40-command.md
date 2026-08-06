@@ -26,8 +26,8 @@
 - CT는 deduplicated AcceptanceTimeoutWork와 Audit만 commit하고 409를 반환하며, 4회 bounded
   claim/retry와 source-aware `REJECTED | NOT_APPLICABLE | MANUAL_REVIEW` 수렴을 제공한다.
 - 고객·매장 command idempotency는 90일 terminal 보존과 table별 독립 chunk cleanup을 사용한다.
-- 332-test clean build와 대상군·Modulith 검증이 통과했지만, 이 완료 head는 Plan 50의 Draft
-  parent일 뿐 main merge·deployment·production success endpoint 활성화 대상이 아니다.
+- 이 plan은 Plan 50과 함께 PR #39로 현재 `main`에 병합됐다. source runtime mapping과 계약
+  테스트는 존재하지만 실제 non-local deployment는 증명되지 않았다.
 
 ## Definitions
 
@@ -223,6 +223,8 @@ response, event, Audit, metric과 log에 노출하지 않는다. C0/C1/CT 각 co
   dependency와 Draft-only readiness gate는 변경하지 않았다.
 - 2026-08-03: cause/cancelledAt와 공통 terminal CHECK의 소유권을 Plan 20으로 이동하고 이 계획의
   migration 범위를 reason/detail과 고객 취소 command 불변식으로 축소했다.
+- 2026-08-06: Current State를 현재 `main`의 PR #39 병합 사실과 non-local deployment 미증명
+  상태에 맞췄다. 완료 당시 Draft-only release 기록은 역사적 결과로 유지한다.
 - 2026-08-03: Plan 30이 294-test validation과 completed outcome을 남겨 direct dependency path를
   completed로 바꾸고 `Implementation-Ready=true`로 전환했다. Draft-only 규칙은 유지한다.
 - 2026-08-03: V23과 C0/C1/CT, timeout recovery, idempotency retention을 구현하고 332-test clean

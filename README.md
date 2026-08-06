@@ -20,13 +20,15 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - [비즈니스 정책](docs/product/business-policy-decisions.md)
 - [End-to-End 흐름](docs/product/end-to-end-flow.md)
 - [아키텍처 개요](docs/architecture/architecture-overview.md)
+- [핵심 결정 요약](docs/architecture/decision-summary.md)
+- [Capability Map](docs/architecture/capability-map.md)
 - [실패 의미론](docs/architecture/failure-semantics.md)
 - [의사결정 기록 규칙](docs/decisions/README.md)
 - [테스트 전략](docs/testing/test-strategy.md)
 
 ## 현재 상태
 
-구현됨:
+현재 source에서 구현되고 테스트된 주요 capability:
 
 - 주문 시점 메뉴·옵션·가격 snapshot과 쿠폰 후 포인트 배분
 - 픽업 슬롯·재고·쿠폰·포인트 원자 예약과 5분 lease 만료
@@ -36,34 +38,27 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 늦은 승인 void/refund 복구와 5회 후 `MANUAL_REVIEW`
 - 매장 수락·거절·준비·완료 전이와 2분 경고·3분 timeout
 - 거절 후 영속 publication, 전액 환불, 자원 복원과 알림 복구
+- 고객의 `PENDING_PAYMENT`/미수락 `PAID` 주문 취소와 멱등 응답 재생
+- 부분 환불 allocation, 환불 후 쿠폰·사용 포인트 복원과 적립 포인트 회수
+- 일반 적립 정책의 감사형 조회·변경과 주문 시점 정책 snapshot
+- 감사형 운영자 포인트 증감 조정
+- 정산 Batch/Item 조회, append-only 정산 조정과 이의제기 접수·판정
+- 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
 
-후속 확장:
+현재 source에 없는 capability:
 
 - 실제 PG sandbox adapter
 - 결제수단 등록·폐기 API
+- 인근 매장·메뉴·픽업 슬롯 조회 API
+- PointAccount summary·transaction read API
+- Analytics refund/late-event projection과 외부 dashboard API
 
 검증 예정:
 
 - 지연 Provider 환경의 부하·장애 주입 측정
 
-예정:
-
-- 고객 주문 취소와 부분 환불 allocation 기반
-- 주문 완료 후 포인트 적립
-- 정산, 환불, 정산 조정과 이의제기
-
-고객 주문 취소 readiness:
-
-```text
-READY FOR CONTRACT-BASELINE AND FOUNDATION WORK
-BLOCKED FOR CUSTOMER-CANCELLATION COMMAND
-```
-
-canonical 문서와 목표 계약 정합성 및 clean-cutover fact gate는 완료됐다. 고객 취소
-명령 구현은 부분 환불 allocation, Settlement와 trigger-aware 공통 compensation
-foundation이 닫힐 때까지 차단된다.
-
-아직 측정하지 않은 실제 운영 규모나 프로덕션 안정성을 주장하지 않는다.
+고객 취소 command/recovery orchestration은 완료됐고, PointAccount read는 별도 Active
+ExecPlan이다. 실제 non-local 배포, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
 
 ## 실행 방법
 
@@ -124,23 +119,13 @@ API와 초기 데이터 seed는 아직 없으므로 주문 흐름을 수동 확�
 재고와 토큰 reference만 가진 결제수단 fixture를 별도로 준비해야 한다. PAN, CVC와 전체
 유효기간은 저장하지 않는다.
 
-### 현재 runtime 구현 endpoint
+### 현재 runtime API
 
-```text
-POST /api/v1/orders
-GET  /api/v1/orders/{orderId}
-POST /api/v1/orders/{orderId}/cancellations
-POST /api/v1/orders/{orderId}/payment-confirmations
-POST /api/v1/payments/{paymentId}/refunds
-GET  /api/v1/store-orders/{orderId}
-PATCH /api/v1/store-orders/{orderId}/status
-GET  /api/v1/operations/orders/{orderId}/compensation
-POST /api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations
-POST /api/v1/operations/reprocessing-cases/{caseId}/repair-proposals
-POST /api/v1/operations/reprocessing-repair-proposals/{proposalId}/decisions
-GET  /api/v1/operations/policies/expired-benefit-restoration
-PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}
-```
+현재 source의 전체 `(path, HTTP method)` 목록은
+[Runtime OpenAPI](openapi/beanflow-v1-runtime.yaml)가 canonical이다. Spring
+`RequestMappingHandlerMapping`을 사용하는 `RuntimeOpenApiParityTest`가 모든 `/api/v1`
+Controller mapping과 이 계약의 operation 집합을 양방향으로 비교하므로 README에 endpoint
+목록을 중복 관리하지 않는다. 이 계약은 source 구현 증거이며 실제 배포 증거가 아니다.
 
 ### 목표 OpenAPI 계약
 
@@ -150,13 +135,13 @@ PATCH /api/v1/operations/policies/expired-benefit-restoration/{trigger}/{benefit
 만료 혜택 정책 PATCH의 목표 계약은
 `/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}`다.
 
-현재 구현된 controller mapping과 실제 legacy shape의 기계 판독 가능한 계약은
-[Deployed OpenAPI](openapi/beanflow-v1-deployed.yaml)에 분리한다. target endpoint는 구현,
-보안·실패 계약 테스트와 release gate가 끝난 변경에서만 deployed 계약으로 승격한다.
+현재 구현된 controller mapping과 계약 테스트가 존재하는 shape는 Runtime OpenAPI에
+분리한다. operation을 추가·제거하면 Controller와 Runtime OpenAPI를 같은 변경에서
+갱신해야 하며 parity test가 drift를 차단한다.
 
 ### 미구현 예정 endpoint
 
-목표 OpenAPI 중 현재 runtime에 없는 주요 기능은 다음과 같다.
+목표 OpenAPI 중 현재 runtime에 없는 public operation은 다음과 같다.
 
 ```text
 GET  /api/v1/stores/nearby
@@ -164,9 +149,11 @@ GET  /api/v1/stores/{storeId}/menus
 GET  /api/v1/stores/{storeId}/pickup-slots
 GET  /api/v1/point-accounts/{accountId}
 GET  /api/v1/point-accounts/{accountId}/transactions
-GET  /api/v1/stores/{storeId}/settlements
-POST /api/v1/settlement-items/{itemId}/disputes
 ```
+
+현재 계약 inventory는 target 27 paths/29 operations, runtime 22 paths/24 operations다.
+이는 operation 개수이며 처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 장애 주입,
+실제 배포 smoke test와 SLA는 `Not measured`다.
 
 로컬 PostgreSQL을 위의 일회성 컨테이너로 실행했다면 다음 명령으로 종료한다.
 

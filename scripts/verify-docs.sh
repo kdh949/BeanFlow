@@ -17,6 +17,8 @@ required=(
   "docs/architecture/architecture-overview.md"
   "docs/architecture/ubiquitous-language.md"
   "docs/architecture/context-map.md"
+  "docs/architecture/decision-summary.md"
+  "docs/architecture/capability-map.md"
   "docs/architecture/policy-traceability.md"
   "docs/architecture/aggregate-invariants.md"
   "docs/architecture/transaction-boundaries.md"
@@ -38,7 +40,8 @@ required=(
   "docs/quality/customer-order-cancellation-readiness.md"
   "docs/quality/customer-order-cancellation-release-evidence.md"
   "docs/decisions/customer-order-cancellation-decision-closure.md"
-  "docs/exec-plans/active/customer-order-cancellation-and-recovery.md"
+  "docs/exec-plans/completed/customer-order-cancellation-and-recovery.md"
+  "docs/exec-plans/completed/repository-truth-audit-and-runtime-contract-alignment.md"
   "docs/exec-plans/completed/customer-order-cancellation-00-contract-baseline.md"
   "docs/exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md"
@@ -58,7 +61,7 @@ required=(
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
   "openapi/beanflow-v1.yaml"
-  "openapi/beanflow-v1-deployed.yaml"
+  "openapi/beanflow-v1-runtime.yaml"
   "scripts/ci/classify-changes.sh"
   "scripts/ci/run-and-capture.sh"
   "scripts/ci/requirements-docs.txt"
@@ -362,15 +365,14 @@ if (
     sys.exit(1)
 
 master_plan = (
-    root / 'docs/exec-plans/active/customer-order-cancellation-and-recovery.md'
+    root / 'docs/exec-plans/completed/customer-order-cancellation-and-recovery.md'
 ).read_text(encoding='utf-8')
 if (
-    '[PointLot issuer provenance foundation을 만든다](../completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00'
-    not in master_plan
-    or 'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md) — 00, cursor'
-    in master_plan
+    plan_metadata[plan_paths_by_filename['customer-order-cancellation-and-recovery.md']]['status']
+    != 'COMPLETED'
+    or 'PointAccount read는 고객 취소 command/recovery와 독립된 Active work' not in master_plan
 ):
-    print('Master plan must keep Plan 10 dependent on Plan 00 only.', file=sys.stderr)
+    print('Customer cancellation master must be completed and separate PointAccount read.', file=sys.stderr)
     sys.exit(1)
 execution_dependency_adr = (
     root / 'docs/adr/ADR-072-execplan-unattended-execution-and-migration-lane.md'
@@ -384,8 +386,8 @@ if (
 
 traceability = (root / 'docs/architecture/policy-traceability.md').read_text(encoding='utf-8')
 br14_row = next((line for line in traceability.splitlines() if line.startswith('| BR-14 |')), '')
-if 'Blocked by' not in br14_row:
-    print('BR-14 traceability must expose its implementation prerequisites.', file=sys.stderr)
+if 'Runtime implemented' not in br14_row:
+    print('BR-14 traceability must expose the completed runtime capability.', file=sys.stderr)
     sys.exit(1)
 for br_id, required_record in {
     'BR-18': 'ADR-071',
@@ -404,23 +406,19 @@ if 'CLEAN_CUTOVER_GATE = PASSED' not in readiness:
     sys.exit(1)
 normalized_readiness = re.sub(r'\s+', ' ', readiness)
 required_current_readiness = (
-    'customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md',
-    'customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md',
-    'customer-order-cancellation-12-partial-refund-allocation-and-restoration.md',
-    'ordinary-point-accrual-policy-management.md',
-    'customer-order-cancellation-13-refund-earned-point-recovery-foundation.md',
+    'CUSTOMER_CANCELLATION_RUNTIME = IMPLEMENTED',
+    'customer-order-cancellation-40-command.md',
+    'customer-order-cancellation-50-recovery.md',
+    'settlement-batch-adjustment-and-dispute.md',
+    'loyalty-point-adjustment-foundation.md',
     'customer-order-cancellation-14-point-account-read-vertical-slice.md',
-    'customer-order-cancellation-15-settlement-input-snapshot-foundation.md',
-    'customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md',
-    'customer-order-cancellation-20-settlement-foundation.md',
-    'customer-order-cancellation-30-order-compensation-foundation.md',
-    '11 policy/grants + 12 allocation -> ordinary-accrual policy/snapshot',
-    '11 policy/grants + 13 recovery + signed cursor',
+    'PointAccount read는 별도 Active work',
 )
 if not all(fragment in normalized_readiness for fragment in required_current_readiness):
     print('Customer cancellation readiness is missing the current foundation graph.', file=sys.stderr)
     sys.exit(1)
 for stale_fragment in (
+    'BLOCKED FOR CUSTOMER-CANCELLATION COMMAND',
     '10-partial-refund-allocation-foundation',
     '10/20/30은 00의 계약·migration 전략을 입력으로 독립 진행',
     'partial refund allocation plan이 통과함',
@@ -687,13 +685,13 @@ except ImportError as exc:
 else:
     try:
         target_openapi_path = root / 'openapi/beanflow-v1.yaml'
-        deployed_openapi_path = root / 'openapi/beanflow-v1-deployed.yaml'
+        runtime_openapi_path = root / 'openapi/beanflow-v1-runtime.yaml'
         with target_openapi_path.open(encoding='utf-8') as f:
             spec = yaml.safe_load(f)
         validate(spec, base_uri=target_openapi_path.resolve().as_uri())
-        with deployed_openapi_path.open(encoding='utf-8') as f:
-            deployed_spec = yaml.safe_load(f)
-        validate(deployed_spec, base_uri=deployed_openapi_path.resolve().as_uri())
+        with runtime_openapi_path.open(encoding='utf-8') as f:
+            runtime_spec = yaml.safe_load(f)
+        validate(runtime_spec, base_uri=runtime_openapi_path.resolve().as_uri())
     except Unresolvable as exc:
         print(f'OpenAPI 3.1 validation failed: unresolved reference {exc.ref}', file=sys.stderr)
         sys.exit(1)
@@ -703,103 +701,107 @@ else:
     if spec.get('openapi') != '3.1.0':
         print('OpenAPI version must be 3.1.0.', file=sys.stderr)
         sys.exit(1)
-    if deployed_spec.get('openapi') != '3.1.0':
-        print('Deployed OpenAPI version must be 3.1.0.', file=sys.stderr)
+    if runtime_spec.get('openapi') != '3.1.0':
+        print('Runtime OpenAPI version must be 3.1.0.', file=sys.stderr)
         sys.exit(1)
     if spec.get('info', {}).get('x-beanflow-contract-status') != 'target':
         print('Target OpenAPI must declare x-beanflow-contract-status: target.', file=sys.stderr)
         sys.exit(1)
-    if deployed_spec.get('info', {}).get('x-beanflow-contract-status') != 'deployed':
-        print('Deployed OpenAPI must declare x-beanflow-contract-status: deployed.', file=sys.stderr)
+    if runtime_spec.get('info', {}).get('x-beanflow-contract-status') != 'runtime':
+        print('Runtime OpenAPI must declare x-beanflow-contract-status: runtime.', file=sys.stderr)
         sys.exit(1)
-    if not spec.get('info', {}).get('x-beanflow-contract-date') or not deployed_spec.get('info', {}).get('x-beanflow-contract-date'):
+    if not spec.get('info', {}).get('x-beanflow-contract-date') or not runtime_spec.get('info', {}).get('x-beanflow-contract-date'):
         print('Both OpenAPI contracts must declare x-beanflow-contract-date.', file=sys.stderr)
         sys.exit(1)
 
-    expected_deployed_operations = {
-        ('/orders', 'post'),
-        ('/orders/{orderId}', 'get'),
-        ('/orders/{orderId}/cancellations', 'post'),
-        ('/orders/{orderId}/payment-confirmations', 'post'),
-        ('/payments/{paymentId}/refunds', 'post'),
-        ('/store-orders/{orderId}', 'get'),
-        ('/store-orders/{orderId}/status', 'patch'),
-        ('/operations/orders/{orderId}/compensation', 'get'),
-        ('/operations/orders/{orderId}/customer-cancellation-refund-reconciliations', 'post'),
-        ('/operations/reprocessing-cases/{caseId}/repair-proposals', 'post'),
-        ('/operations/reprocessing-repair-proposals/{proposalId}/decisions', 'post'),
-        ('/operations/policies/expired-benefit-restoration', 'get'),
-        ('/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}', 'patch'),
-        ('/operations/point-accounts/{accountId}/adjustments', 'post'),
-    }
-    actual_deployed_operations = {
+    http_methods = {'get', 'post', 'put', 'patch', 'delete'}
+
+    def resolve_runtime_path_item(path_item):
+        ref = path_item.get('$ref') if isinstance(path_item, dict) else None
+        if ref is None:
+            return path_item
+        prefix = './beanflow-v1.yaml#/'
+        if not ref.startswith(prefix):
+            raise ValueError(f'Runtime path-item reference must target beanflow-v1.yaml: {ref}')
+        node = spec
+        for part in ref[len(prefix):].split('/'):
+            node = node[part.replace('~1', '/').replace('~0', '~')]
+        return node
+
+    runtime_operations = {
         (path, method)
-        for path, path_item in deployed_spec.get('paths', {}).items()
-        for method in path_item
-        if method in {'get', 'post', 'put', 'patch', 'delete'}
+        for path, raw_path_item in runtime_spec.get('paths', {}).items()
+        for method in resolve_runtime_path_item(raw_path_item)
+        if method in http_methods
     }
-    if actual_deployed_operations != expected_deployed_operations:
-        print('Deployed OpenAPI operations do not match the current controller allowlist.', file=sys.stderr)
-        print('Missing:', sorted(expected_deployed_operations - actual_deployed_operations), file=sys.stderr)
-        print('Unexpected:', sorted(actual_deployed_operations - expected_deployed_operations), file=sys.stderr)
+    target_operations = {
+        (path, method)
+        for path, path_item in spec.get('paths', {}).items()
+        for method in path_item
+        if method in http_methods
+    }
+    if not runtime_operations <= target_operations:
+        print('Runtime OpenAPI contains operations outside the accepted target contract.', file=sys.stderr)
+        print('Unexpected:', sorted(runtime_operations - target_operations), file=sys.stderr)
         sys.exit(1)
-    deployed_schemas = deployed_spec.get('components', {}).get('schemas', {})
-    deployed_transition = deployed_schemas.get('DeployedStoreOrderTransitionResult', {})
-    if set(deployed_transition.get('required', [])) != {'order'}:
-        print('Deployed store transition must use the common response wrapper.', file=sys.stderr)
+
+    runtime_schemas = runtime_spec.get('components', {}).get('schemas', {})
+    runtime_transition = runtime_schemas.get('RuntimeStoreOrderTransitionResult', {})
+    if set(runtime_transition.get('required', [])) != {'order'}:
+        print('Runtime store transition must use the common response wrapper.', file=sys.stderr)
         sys.exit(1)
-    deployed_transition_fields = set(deployed_transition.get('properties', {}))
-    if deployed_transition_fields != {'order', 'compensationRecovery'}:
-        print('Deployed store transition compensation projection is incomplete or excessive.', file=sys.stderr)
+    runtime_transition_fields = set(runtime_transition.get('properties', {}))
+    if runtime_transition_fields != {'order', 'compensationRecovery'}:
+        print('Runtime store transition compensation projection is incomplete or excessive.', file=sys.stderr)
         sys.exit(1)
-    deployed_compensation = deployed_schemas.get('DeployedStoreCompensationSummary', {})
-    if set(deployed_compensation.get('required', [])) != {'trigger', 'state', 'updatedAt'}:
-        print('Deployed store compensation summary must remain abbreviated.', file=sys.stderr)
+    runtime_compensation = runtime_schemas.get('RuntimeStoreCompensationSummary', {})
+    if set(runtime_compensation.get('required', [])) != {'trigger', 'state', 'updatedAt'}:
+        print('Runtime store compensation summary must remain abbreviated.', file=sys.stderr)
         sys.exit(1)
-    if set(deployed_compensation.get('properties', {})) != {'trigger', 'state', 'updatedAt'}:
-        print('Deployed store compensation summary exposes operator-only fields.', file=sys.stderr)
+    if set(runtime_compensation.get('properties', {})) != {'trigger', 'state', 'updatedAt'}:
+        print('Runtime store compensation summary exposes operator-only fields.', file=sys.stderr)
         sys.exit(1)
-    deployed_operator_get = deployed_spec['paths']['/operations/orders/{orderId}/compensation']['get']
-    deployed_operator_refs = {
+    runtime_operator_get = runtime_spec['paths']['/operations/orders/{orderId}/compensation']['get']
+    runtime_operator_refs = {
         parameter.get('$ref')
-        for parameter in deployed_operator_get.get('parameters', [])
+        for parameter in runtime_operator_get.get('parameters', [])
         if isinstance(parameter, dict)
     }
-    if deployed_operator_refs != {
+    if runtime_operator_refs != {
         './beanflow-v1.yaml#/components/parameters/OrderId',
         './beanflow-v1.yaml#/components/parameters/AccessReason',
     }:
-        print('Deployed operator compensation GET must require order ID and audited access reason.', file=sys.stderr)
+        print('Runtime operator compensation GET must require order ID and audited access reason.', file=sys.stderr)
         sys.exit(1)
-    deployed_policy_get = deployed_spec['paths']['/operations/policies/expired-benefit-restoration']['get']
-    deployed_policy_get_refs = {
+    runtime_policy_get = runtime_spec['paths']['/operations/policies/expired-benefit-restoration']['get']
+    runtime_policy_get_refs = {
         parameter.get('$ref')
-        for parameter in deployed_policy_get.get('parameters', [])
+        for parameter in runtime_policy_get.get('parameters', [])
         if isinstance(parameter, dict)
     }
-    if deployed_policy_get_refs != {'./beanflow-v1.yaml#/components/parameters/AccessReason'}:
-        print('Deployed policy GET must require the audited access-reason contract.', file=sys.stderr)
+    if runtime_policy_get_refs != {'./beanflow-v1.yaml#/components/parameters/AccessReason'}:
+        print('Runtime policy GET must require the audited access-reason contract.', file=sys.stderr)
         sys.exit(1)
-    deployed_policy_list = deployed_policy_get['responses']['200']['content']['application/json']['schema']
-    if deployed_policy_list.get('minItems') != 5 or deployed_policy_list.get('maxItems') != 5:
-        print('Deployed policy GET must return exactly five heads.', file=sys.stderr)
+    runtime_policy_list = runtime_policy_get['responses']['200']['content']['application/json']['schema']
+    if runtime_policy_list.get('minItems') != 5 or runtime_policy_list.get('maxItems') != 5:
+        print('Runtime policy GET must return exactly five heads.', file=sys.stderr)
         sys.exit(1)
-    deployed_policy_patch = deployed_spec['paths'][
+    runtime_policy_patch = runtime_spec['paths'][
         '/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}'
     ]['patch']
-    deployed_policy_patch_names = {
+    runtime_policy_patch_names = {
         parameter.get('name')
-        for parameter in deployed_policy_patch.get('parameters', [])
+        for parameter in runtime_policy_patch.get('parameters', [])
         if isinstance(parameter, dict) and parameter.get('name')
     }
-    if deployed_policy_patch_names != {'trigger', 'benefitType'}:
-        print('Deployed policy PATCH must expose only the keyed policy path parameters.', file=sys.stderr)
+    if runtime_policy_patch_names != {'trigger', 'benefitType'}:
+        print('Runtime policy PATCH must expose only the keyed policy path parameters.', file=sys.stderr)
         sys.exit(1)
     if {
-        'DeployedExpiredBenefitRestorationPolicy',
-        'DeployedUpdateExpiredBenefitRestorationPolicyRequest',
-    } & set(deployed_schemas):
-        print('Deployed singleton policy schemas must be removed after keyed policy deployment.', file=sys.stderr)
+        'RuntimeExpiredBenefitRestorationPolicy',
+        'RuntimeUpdateExpiredBenefitRestorationPolicyRequest',
+    } & set(runtime_schemas):
+        print('Runtime singleton policy schemas must remain absent after keyed policy implementation.', file=sys.stderr)
         sys.exit(1)
 
     required_paths = {
@@ -1359,11 +1361,11 @@ else:
         print('API conventions must describe the same five expired-benefit policy heads as OpenAPI.', file=sys.stderr)
         sys.exit(1)
     if (
-        '`openapi/beanflow-v1-deployed.yaml`' not in normalized_api_conventions
+        '`openapi/beanflow-v1-runtime.yaml`' not in normalized_api_conventions
         or '`openapi/beanflow-v1.yaml`' not in normalized_api_conventions
         or 'pre-release target' not in normalized_api_conventions
     ):
-        print('API conventions must distinguish deployed and target OpenAPI sources.', file=sys.stderr)
+        print('API conventions must distinguish runtime and target OpenAPI sources.', file=sys.stderr)
         sys.exit(1)
 
     point_transaction = schemas['PointTransaction']
@@ -1898,7 +1900,8 @@ else:
 
     print(
         f'OpenAPI YAML and local contract checks passed '
-        f'(target {len(actual_paths)} paths, deployed {len(deployed_spec["paths"])} paths, '
+        f'(target {len(actual_paths)} paths/{len(target_operations)} operations, '
+        f'runtime {len(runtime_spec["paths"])} paths/{len(runtime_operations)} operations, '
         f'{len(spec["components"]["schemas"])} schemas).'
     )
 

@@ -1,440 +1,111 @@
-# Customer Order Cancellation Readiness Audit
+# Customer Order Cancellation Runtime Readiness
 
-## Audit identity
-
-- **Audited at:** 2026-07-31 Asia/Seoul
-- **Historical audit branch:** `feature/customer-order-cancellation-docs`
-- **Historical audit source SHA:** `04e2b4819a66966952c5436342a05149fd7ac6ee`
-- **Historical audit merge:** PR #17, merge commit
-  `443fe8ff4d41776f1754e5a5c17ab8566e68398d`, merged 2026-07-31
-- **Current reconciliation baseline:** `main`, PR #18 merge commit
-  `783298a9c1b349f7b444d49d25c8b3d4099a5576`
-- **Scope:** 고객 주문 취소·환불 정책, ADR, 아키텍처, API/OpenAPI, migration,
-  Ordering/Payment/Operations/owner/Notification/Settlement 코드, 테스트, active/completed
-  ExecPlan과 관련 Git/PR 이력
-- **Application code changed by this audit:** No
-- **Migration changed by this audit:** No
-
-감사 시작 시 working tree에는 사용자 변경인 `README.md` 실행 안내 확장과 기존 master
-plan의 ADR-059 release gate 완료 체크가 있었다. 실행 안내는 보존했고, evidence가 없는
-release gate 완료 표시는 아래 역사적 판정에 따라 제거했다. 이후 product owner 확인에서
-non-local 환경과 관련 artifact가 모두 없음을 확인해 별도 release evidence로 기록했다.
-
-## Final readiness
-
-```text
-READY FOR CONTRACT-BASELINE AND FOUNDATION WORK
-BLOCKED FOR CUSTOMER-CANCELLATION COMMAND
-```
-
-canonical 문서와 목표 OpenAPI의 취소·환불 의미는 정합화됐고 ADR-059 fact gate도
-명시적 0 증거로 닫혔다. 독립 foundation 작업은 clean-cutover 경로로 진행할 수 있다.
-고객 취소 command 구현은 다음 선행조건이 닫힐 때까지 시작할 수 없다.
-
-1. 환불 적립 포인트 recovery와 immutable financial event foundation 부재
-2. Settlement Context와 consumer 구현 부재
-3. trigger-aware 공통 compensation foundation 부재
-
-현재 release evidence와 판정은
-[customer-order-cancellation-release-evidence.md](customer-order-cancellation-release-evidence.md)에
-기록한다.
-
-고객 취소 Controller/Service를 먼저 구현하면 Accepted 부분 환불, 정산 제외와 202 내구
-의미를 만족할 수 없다.
-
-## Source hierarchy applied
-
-1. 명시적 `Amends`/`Amended by`와 ADR 본문의 대체 문구
-2. Accepted 문서의 merge 시각
-3. active ExecPlan
-4. 같은 변경의 OpenAPI·아키텍처 문서
-5. 현재 코드·migration·테스트
-
-ADR-029~060은 모두 commit `04e2b48` 한 건에서 만들어졌으므로 Git merge 시각만으로
-상호 우선순위를 정할 수 없다. 대신 다음 explicit amendment를 적용했다.
-
-- ADR-038은 ADR-033의 고객 환불 projection과 ADR-037 REQUEST 예산을 보완한다.
-- ADR-044는 ADR-034의 고객 취소 Notification consumer를 Tx C0/C1 직접 Delivery로 바꾼다.
-- ADR-055는 ADR-034의 event payload에서 customer/store/reason을 제거한다.
-- ADR-057은 terminal business response의 replay indicator를 제거한다.
-- ADR-059는 ADR-033의 migration rename/backfill 전략만 조건부 clean cutover로 바꾼다.
-
-## Canonical target contract
-
-- 허용 상태: `PENDING_PAYMENT`, acceptance deadline 전 `PAID`
-- C0: Order·네 예약·target Audit·accepted Delivery·멱등 응답을 한 transaction에
-  commit하고 200, Refund/Case/event 없음
-- C1: Order·Payment snapshot·필요한 Refund·Case/6 step·두 benefit policy·accepted
-  Delivery·target Audit·네 owner publication·멱등 응답을 commit하고 202
-- deadline 이후 PAID: timeout work와 Audit 저장 성공 뒤 409, 저장 실패는 503
-- 선행 성공 부분 환불 허용, 남은 cash와 아직 복원되지 않은 point allocation만 처리;
-  부분 환불은 쿠폰을 복원하지 않고 전체 종료가 원 쿠폰을 한 번 복원
-- request retry 최대 3회, UNKNOWN 이후 request 중단과 lookup 최대 5회
-- 고객 projection: 내부 processing/unknown/reconciling은 `PROCESSING`,
-  failed/manual review/setup incomplete은 `PROCESSING + REFUND_DELAYED`
-- `OrderCancelledV1`: PAID 취소에서 Fulfillment/Inventory/Promotion/Loyalty 네 consumer만
-- Settlement: 미완료 고객 취소에 Item/Adjustment 없이 source-unique NOT_APPLICABLE Audit
-- 선행 Refund 차단 상태: `REQUESTED`, `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`,
-  `RECONCILING`, `MANUAL_REVIEW` 여섯 개. `SUCCEEDED`와 명시 `FAILED`만 허용
-- `NOT_REQUIRED`는 취소 요청액 0만 뜻하고 네 금액은 all-or-nothing으로 반환·생략.
-  네 금액 0은 `BENEFIT_ONLY`뿐이고 `PENDING_PAYMENT`는 네 금액을 생략한다
-- Order projection 분리: 고객 `Order`는 cancelledAt/cancellationCause/
-  cancellationReasonCode, 매장 `StoreOrder`는 cancelledAt/cancellationCause만
-- Compensation projection 분리: 매장은 trigger/state/updatedAt만 담은
-  `StoreCompensationSummary`, 운영자만 여섯 step·attempt·error·caseId·policy version
-
-## Conflict matrix
-
-| Topic | Evidence | Classification | Resolution / blocker |
-|---|---|---|---|
-| release gate 완료 체크와 evidence 부재 | 기존 master plan은 완료 체크, ADR-059/PR #17에는 외부 증거 없음 | `NEEDS_FACT_VERIFICATION` | 역사적 체크 제거·gate 실패 기록 후 운영 상태 evidence를 추가해 현재 `CLEAN_CUTOVER_GATE = PASSED` |
-| 결제 승인 recovery와 고객 취소 환불 recovery schema 공유 | `PaymentConfirmation.recovery`, `Cancellation.paymentRecovery`, `Order.paymentRecovery`가 `PaymentRecoverySummary` 하나를 참조 | `CONTRACT_CONFLICT` | `PaymentApprovalRecoverySummary`와 `CancellationRefundRecoverySummary`로 분리 |
-| ADR-033 forward rename과 ADR-059 clean cutover | ADR-059가 rename/backfill 부분만 명시적으로 대체 | `RESOLVABLE_BY_RECENCY` | ADR-059를 explicit amendment로 기록; gate 전에는 둘 다 실행 금지 |
-| `OrderRejectedV1` 제자리 변경 단정 | BR-14, ADR-034, event catalog가 publication 0을 사실로 단정 | `RESOLVABLE_BY_RECENCY` | ADR-059 조건부 gate에 맞춰 모두 수정 |
-| 내부 Refund 상태의 고객 노출 | ADR-030/033 초기 원천과 ADR-038/050 projection | `RESOLVED_BY_AMENDMENT` | ADR-030/031/033의 reciprocal amendment와 OpenAPI customer enum 교정 |
-| `OrderCancelledV1` reason/customer/store 포함 여부 | BR-14 과거 전달 문구, ADR-034 초기 payload와 ADR-055 | `RESOLVED_BY_AMENDMENT` | Order/Audit/Refund·Provider/event/log 범위와 최소 payload를 일치시킴 |
-| clean-cutover와 legacy compatibility test 범위 | BR-14의 unconditional legacy test와 ADR-059 조건부 gate | `RESOLVED_BY_GATE_PATH` | clean-cutover와 forward-migration Required Tests를 gate 결과별로 분리 |
-| 접수 Notification event consumer 여부 | ADR-034 초기 구조와 ADR-044 | `RESOLVABLE_BY_RECENCY` | C0/C1 직접 Delivery, Notification은 event consumer 아님 |
-| `OrderRejectedV1` Operations consumer 표기 | Event Catalog 표와 실제/목표 Case 직접 생성 경계 | `RESOLVABLE_BY_RECENCY` | Operations를 event consumer에서 제거; Case는 원 transaction에서 생성 |
-| Context Map의 Notification 경계 | 일반 after-commit 서술과 ADR-044의 C0/C1 직접 Delivery | `RESOLVABLE_BY_RECENCY` | 일반 event와 취소 접수 동기 API를 구분 |
-| 처리 중 idempotency의 HTTP 의미 | API convention 일반 문구와 주문 생성 409/취소 lock 직렬화 | `RESOLVABLE_BY_RECENCY` | command별 계약으로 일반 문구를 제한 |
-| Cancellation `orderState` 범위 | OpenAPI가 전체 OrderState 허용, ADR-031은 성공 시 CANCELLED | `IMPLEMENTATION_DRIFT` | OpenAPI를 `const: CANCELLED`로 교정 |
-| detail trim/empty/control 계약 | 정책은 normalize 후 검증, OpenAPI는 raw min/max만 검사 | `RESOLVABLE_BY_RECENCY` | OpenAPI에 normalize 의미와 control-char pattern 반영 |
-| 선행 Refund unresolved 상태 | OpenAPI·closure는 RETRY_SCHEDULED 포함, BR-14·ADR-031·ADR-036·error catalog·transaction boundaries는 누락 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 product owner 확정에 따라 여섯 상태로 통일; ADR-036 clarification과 정책·계약 문서 갱신 |
-| `NOT_REQUIRED` 금액 계약 | OpenAPI는 네 금액 `const: 0` 강제, ADR-036은 요청액 0만 정의(선행 전액 환불 시 승인액 양수) | `CONTRACT_CONFLICT` | 2026-08-01 확정: OpenAPI는 요청액 0과 notice 부재만 강제하고 네 금액을 all-or-nothing으로 계약 |
-| Order 표현의 취소 필드 | ADR-050/030은 취소 시각·원인·reason code 조회를 전제, OpenAPI `Order`(additionalProperties:false)에는 필드 없음 | `CONTRACT_CONFLICT` | 2026-08-01 확정: 고객 `Order`에 세 필드 추가, 매장은 `StoreOrder` projection으로 reason code·`paymentRecovery` 제외 |
-| Refund attempt 상한 | ADR-036은 총 `attempt_count` 상한 6, ADR-038·aggregate invariants·payment runbook은 REQUEST 3 + LOOKUP 5 = 8 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 두 예산은 독립이고 전체 상한은 8; ADR-036 문구를 clarification으로 교정하고 6은 결과 불명 경로 한정으로 남김 |
-| `PENDING_PAYMENT` 네 금액 | ADR-036은 네 금액 모두 0, ADR-031·api conventions·ADR-050은 검증 불가 금액 생략 | `RESOLVED_BY_AMENDMENT` | 2026-08-01 확정: 생략이 canonical이고 네 금액 0은 `BENEFIT_ONLY`뿐; ADR-036과 OpenAPI description 교정 |
-| 매장 보상 step 노출 | authorization matrix·ADR-030·ADR-033 Verification·api conventions는 운영자 전용, OpenAPI·plan 30·runbook·현재 `StoreOrderContracts.kt`는 매장에 여섯 step 노출 | `CONTRACT_CONFLICT` + `IMPLEMENTATION_DRIFT` | 2026-08-01 확정: 매장은 축약 `StoreCompensationSummary`; OpenAPI에 schema 신설하고 plan 30 clean cutover에서 store DTO 축약 |
-| 부분 환불 허용과 현재 전액 거절 Refund | ADR-036 대 기존 `RejectionRefundService` | `FOUNDATION_COMPLETED` | Plan 12/V15가 full/item partial Refund, immutable line/point allocation, independent retry budgets와 Loyalty restoration work를 구현 |
-| Settlement NOT_APPLICABLE와 구현 부재 | ADR-048/BR-16, 역사적 감사 당시 코드·migration에 Settlement 없음 | `FOUNDATION_COMPLETED` | Plan 20의 V21/consumer/source-unique Audit으로 완료 |
-| trigger×benefit 정책과 singleton 구현 | ADR-041 대 V8/Operations singleton policy | `IMPLEMENTATION_DRIFT` | compensation foundation plan 30 |
-| store transition hash/replay 계약 | BR-25/ADR-057 대 hash에서 orderId 누락, V1 operation, replay body mutation | `IMPLEMENTATION_DRIFT` | plan 30의 store regression 범위 |
-| 정책 trace의 Ready 과장 | BR-14/15/16 선행 기반·gate 미반영 | `RESOLVABLE_BY_RECENCY` | prerequisite-blocked로 교정 |
-| active master plan 과대 범위 | 하나의 plan에 schema·command·recovery·Settlement·repair 혼합 | `MISSING_FOUNDATION` | 여섯 하위 ExecPlan으로 분리 |
-
-## Previous audit candidate verification
-
-| Candidate | Verdict | Current evidence and action |
-|---|---|---|
-| compensation clean-cutover release gate 미검증 | `CONFIRMED, THEN CLOSED` | 역사적 repository/PR에는 external evidence가 없었으나 이후 product owner 운영 상태 확인으로 전 항목 0을 기록해 gate passed |
-| 결제 승인 recovery와 취소 환불 recovery schema 혼합 | `FIXED` | 실제로 세 응답이 한 schema를 공유하고 있었으며 OpenAPI schema와 참조를 두 의미로 분리 |
-| 고객 환불 상태를 내부 상태 그대로 노출하는 과거 ADR과 최신 projection 충돌 | `FIXED` | ADR-030/033에 ADR-038/050 amendment 관계와 최신 Decision·Consequences·Required Tests 반영 |
-| 취소 reason code의 persistent event 포함 여부 충돌 | `FIXED` | BR-14/ADR-055에 Order·Audit·Refund/Provider·event·log별 범위를 단일 계약으로 정리 |
-| clean cutover와 legacy event compatibility 요구 충돌 | `FIXED; CLEAN PATH SELECTED` | Required Tests를 조건부 경로로 분리하고 운영 상태 evidence의 전 항목 0에 따라 clean-cutover 경로 선택 |
-| 선행 부분 환불 허용, allocation foundation 부재 | `CONFIRMED, THEN CLOSED` | Plan 12/V15가 request/success line·point allocation과 restoration owner flow를 구현하고 PostgreSQL/MockMvc evidence를 남김 |
-| Settlement `NOT_APPLICABLE` 정책, 구현 부재 | `CONFIRMED, THEN CLOSED` | Plan 20이 최소 Batch/Item과 실제 Order/Refund 기반 exclusion Audit/test를 구현 |
-| store transition hash, operation version, replay body drift | `CONFIRMED` | hash는 state/reason만, operation V1, response replay 시 body 변경 |
-| trigger×benefit 정책과 단일 전역 정책 구현 차이 | `CONFIRMED` | singleton policy head와 단일 case policy |
-| README와 실제 구현 상태 불일치 | `CONFIRMED` | store lifecycle을 예정으로 표기; 이번 감사에서 교정 |
-| policy traceability `Ready`가 선행조건 미반영 | `CONFIRMED` | BR-14/15/16을 prerequisite-blocked로 교정 |
-| 하나의 active ExecPlan이 독립 기능을 과다 포함 | `CONFIRMED` | 여섯 하위 계획으로 분리 |
-
-## Resolved by recency
-
-다음은 새로운 제품 질문 없이 최신 explicit amendment로 닫았다.
-
-- Refund customer projection: ADR-038/050
-- Notification accepted delivery boundary: ADR-044
-- Refund terminal notification events: ADR-045/046
-- primary notification step 단조성: ADR-047
-- event data minimization: ADR-055
-- replay indicator 제거: ADR-057
-- compensation migration 조건: ADR-059
-
-선택 근거 commit은 `04e2b4819a66966952c5436342a05149fd7ac6ee`이며 PR #17의 단일
-commit이다. commit 내부 순서는 explicit amendment 문구로 판단했다.
-
-## User decisions
-
-### Required now
-
-없음. 다음 항목은 이미 Accepted 문서가 명확하므로 다시 묻지 않았다.
-
-- 선행 부분 환불이 있는 주문도 고객 취소 허용
-- Settlement NOT_APPLICABLE을 고객 취소 범위에 포함
-- trigger×benefit 정책과 두 snapshot
-- C0 200/C1 202, 별도 Cancellation Aggregate 없음
-
-clean cutover는 제품 정책 선택이 아니라 운영 사실 gate다. 증거가 없었던 역사적 감사
-시점에는 실패로 처리했고, product owner의 현재 운영 상태 확인을 별도 evidence로
-기록해 전 항목 0을 확인했다.
-
-### Future decision condition
-
-gate가 nonzero evidence를 확인하면 실제 legacy schema/publication/consumer를 바탕으로
-forward migration·compatibility 범위를 정하는 새 Accepted ADR이 필요하다. 현재 확인은
-point-in-time evidence이므로 compensation schema 변경과 최초 non-local 배포 직전에
-inventory를 다시 확인한다.
-
-## Fact-verification gate
-
-| Required fact | Attested evidence | Status |
-|---|---|---|
-| shared/production DB와 compensation table 존재 | non-local 환경과 DB 없음 | Confirmed absent (0) |
-| table row 수 | 대상 DB 없음 | Confirmed absent (0) |
-| completed `OrderRejectedV1`/`OrderCancelledV1` publication | 외부 publication registry 없음 | Confirmed absent (0) |
-| incomplete publication | 외부 publication registry 없음 | Confirmed absent (0) |
-| 외부·독립 consumer | 독립 배포 없음 | Confirmed absent (0) |
-| rollback 대상 binary/data | production 배포·data 없음 | Confirmed absent (0) |
-| migration V8 적용 환경 | 적용 대상 non-local 환경 없음 | Confirmed absent (0) |
+## Current verdict
 
 ```text
 CLEAN_CUTOVER_GATE = PASSED
+CUSTOMER_CANCELLATION_RUNTIME = IMPLEMENTED
+NON_LOCAL_DEPLOYMENT = NOT EVIDENCED
 ```
 
-PR #17에는 review/comment/evidence attachment가 없었으므로 역사적 감사에서는 gate를
-실패로 판정했다. 이후 product owner 확인의 범위와 항목별 0 결과는
-[release-gate evidence](customer-order-cancellation-release-evidence.md)에 기록했다.
-저장소의 local migration과 test fixture는 이 외부 운영 사실 증거로 계산하지 않는다.
+현재 `main`에서 고객 취소 command와 recovery는 구현됐고 source 계약·테스트·quality
+evidence가 존재한다. 이 판정은 현재 source runtime capability에 대한 것으로 실제 non-local
+배포, 운영 smoke test, SLA 또는 production 안정성을 뜻하지 않는다.
 
-## Implementation drift
+역사적 clean-cutover inventory와 attestation은
+[Customer Cancellation Release Evidence](customer-order-cancellation-release-evidence.md)에
+있다. `CLEAN_CUTOVER_GATE = PASSED`는 migration/event 전략을 허용한 시점의 증거이며 현재
+구현 완료 근거는 아래 코드·테스트·완료 ExecPlan이다.
 
-| Area | Current behavior | Target behavior | Primary files |
-|---|---|---|---|
-| Customer command | endpoint/service 없음 | C0/C1/CT와 stored response | `OrderController.kt`, 신규 service/contracts |
-| Order model | Plan 20의 cancelledAt/cause와 terminal CHECK는 있고 customer reason/detail은 없음 | Plan 40이 reason/detail과 cause별 CHECK 추가 | `Order.kt`, `OrderingPersistence.kt`, Plan 40 migration |
-| Refund composition | 공개 부분 Refund는 V15 immutable unit/line allocation을 사용하지만 고객 취소 C1은 미구현 | C1이 remaining cash + 아직 미복원 point allocation을 snapshot | Payment partial Refund API, 신규 cancellation service |
-| Refund recovery | 공통 Refund domain은 REQUEST 3 + LOOKUP 5 독립 예산과 irreversible LOOKUP 전환을 구현 | 고객 취소 work/source와 같은 예산을 연결 | `Refund.kt`, `RejectionRefundService.kt`, 신규 cancellation service |
-| Provider failure | adapter allowlisted `RetryableFailed`와 unknown 전환을 지원하지만 고객 취소 Provider flow는 미연결 | allowlist만 same-key safe request retry | Payment gateway/service, 신규 cancellation flow |
-| Compensation | Plan 30의 trigger-aware Case, 여섯 step과 두 immutable policy child 완료 | Plan 40 C1이 CUSTOMER_CANCELLATION Case 생성 | Operations API/service/persistence, V8 |
-| Store compensation projection | trigger·state·updatedAt만 노출하고 상세는 audited operator view로 분리 | 완료 | `StoreOrderContracts.kt`, `OperatorCompensationController.kt` |
-| Publication failure | stable target registry가 실패 listener 한 step만 manual review, unknown target은 Case 불변 | 완료 | `CompensationPublicationTargetRegistry.kt`, recovery worker |
-| Events | two-policy `OrderRejectedV1`과 최소 `OrderCancelledV1` DTO/네 owner listener 완료, 취소 producer 없음 | Plan 40이 Tx C1 producer만 연결 | `StoreOrderEvents.kt`, producer/listeners |
-| Owner restore | 공통 termination state/source/trigger/policy/disposition과 stable source 완료 | 완료 | four owner APIs/listeners, V9/V22 |
-| Notification | rejection/warning/ready template | accepted/succeeded/delayed logical sources | Notification service/persistence, V11 |
-| Store idempotency | orderId 포함 V2 scope와 stored response replay 완료 | 완료 | store transition files/tests |
-| Setup recovery | 없음 | detector/scanner/case/2인 repair | Payment/Operations, V12 이후 |
-| Tests | Plan 30 compensation/owner/publication/migration suite 완료, command suite 없음 | Plan 40/50 contract·concurrency·failure·restart suite | 신규 module별 tests |
+## Implemented runtime capability
 
-현재 code와 test를 target 문서에 맞춰 되돌리지 않았다. 표에 남은 차이는 Plan 40/50의
-후속 구현 입력이다.
+- `POST /api/v1/orders/{orderId}/cancellations`
+  - `PENDING_PAYMENT`: Order와 예약 자원 해제를 한 transaction으로 commit하고 `200`
+  - 미수락 `PAID`: Order 취소와 durable compensation 시작을 commit하고 `202`
+  - 같은 key/payload는 최초 body를 재생하고 다른 payload는 `409`
+- `GET /api/v1/orders/{orderId}`
+  - 고객용 refund recovery projection을 제공하되 내부 attempt/error/manual-review detail은 숨긴다.
+- `GET /api/v1/operations/orders/{orderId}/compensation`
+  - audited operator grant와 access reason을 요구하고 여섯 step의 운영 상세를 제공한다.
+- `POST /api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations`
+  - 불명 환불을 성공으로 단정하지 않고 durable reconciliation work를 접수한다.
+- `GET/PATCH /api/v1/store-orders/...`
+  - 매장에는 trigger/state/updatedAt만 담은 축약 compensation projection을 제공한다.
 
-## Missing foundations
+전체 operation 목록은
+[Runtime OpenAPI](../../openapi/beanflow-v1-runtime.yaml)가 소유하며
+`RuntimeOpenApiParityTest`가 Spring MVC mapping과 양방향 검증한다.
 
-- [Plan 10 issuer provenance](../exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md):
-  V14의 issuer type/reference immutable snapshot, fail-closed legacy precheck와 allocation DTO가
-  완료됐다. 부분 환불 복원과 정산 비용 귀속은 이 immutable input을 소비할 수 있다.
-- [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md):
-  다섯 policy head와 explicit operator permission source가 V13과 PostgreSQL evidence로 완료됐다.
-- [Plan 12 allocation/restoration](../exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md):
-  V15 immutable line/point request·success allocation, 앞 unit deterministic rounding, Provider 분리와
-  issuer-preserving Loyalty restoration/retry 원장이 완료됐다. Plan 13은 이 owner source를 소비할 수 있다.
-- [Ordinary-accrual policy/snapshot](../exec-plans/completed/ordinary-point-accrual-policy-management.md):
-  V16 GLOBAL/STORE immutable version, verified initial bootstrap, fail-fast startup과 신규 Order의 complete
-  policy/unit snapshot이 구현됐다. policy change 뒤 기존 typed snapshot이 불변인 통합 증거가 있다.
-- [Plan 13 recovery](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md):
-  V17 Payment eligibility work, Loyalty actual `RECOVERY`/PointRecoveryPending과 gross accrual
-  oldest-first offset이 completed owner outcome과 205-test evidence로 구현됐다.
-- [Plan 15 settlement input](../exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md):
-  V18–V20 Merchant terms, coupon burden legs, Loyalty issuer allocation과 exactly-one Order snapshot,
-  V2 factory/validator/fixture가 229-test evidence로 완료됐다. 당시 outbox/cutover/Settlement consumer는
-  없었고 completed Plan 20이 이를 이어받아 구현했다.
-- [Plan 16 financial events](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md):
-  Refund/Loyalty immutable producer와 owner transaction atomicity, replay/failure evidence가 완료됐다.
-- [Plan 20 Settlement](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md):
-  V21 최소 OPEN Batch/immutable Item, V2 completion cutover/consumer, signed Batch Item 조회와
-  실제 Order/Refund evidence 기반 NOT_APPLICABLE Audit이 완료됐다.
-- [Plan 30 compensation](../exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md):
-  V8/V9/V22, trigger-aware Case/two-policy snapshot, owner convergence, 열 stable publication target,
-  축약 store/audited operator projection과 294-test evidence가 완료됐다.
+## Evidence graph
 
-[Signed cursor foundation](../exec-plans/completed/signed-cursor-foundation.md)은 Plan 14/20의 조회 input이며,
-[Plan 14 PointAccount read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)는
-Plan 11/13/cursor 뒤 실행되는 별도 지원 조회 vertical slice다. Plan 14는 command Plan 40의
-선행조건은 아니지만 고객 취소 프로그램의 독립 결과물이다.
+완료된 direct command/recovery evidence:
 
-## Correct implementation order
+- [Plan 40 Customer Cancellation Command](../exec-plans/completed/customer-order-cancellation-40-command.md)
+- [Plan 50 Customer Cancellation Recovery](../exec-plans/completed/customer-order-cancellation-50-recovery.md)
+- [Completed Master Orchestration](../exec-plans/completed/customer-order-cancellation-and-recovery.md)
 
-```text
-00 baseline ──> 10 issuer ──> 15 settlement input
-     └──> 11 policy/grants ──> 12 allocation
+완료된 주요 foundation과 후속 capability:
 
-11 policy/grants + 12 allocation -> ordinary-accrual policy/snapshot
-12 allocation + ordinary-accrual policy/snapshot -> 13 recovery
+- [Partial Refund Allocation and Restoration](../exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
+- [Refund Earned-Point Recovery](../exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
+- [Immutable Refund and Loyalty Events](../exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md)
+- [Settlement Foundation](../exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md)
+- [Order Compensation Foundation](../exec-plans/completed/customer-order-cancellation-30-order-compensation-foundation.md)
+- [Settlement Batch, Adjustment, and Dispute](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md)
+- [Audited Loyalty Point Adjustment](../exec-plans/completed/loyalty-point-adjustment-foundation.md)
 
-11 policy/grants + 13 recovery + signed cursor ──> 14 point-account read
+PointAccount read는 별도 Active work다:
 
-12 allocation + 13 recovery + 15 settlement input ──> 16 immutable events
-15 settlement input + 16 immutable events + signed cursor ──> 20 Settlement
-11 policy/grants + 20 Settlement ──> 30 compensation
-    ─> 40 command (Draft) ─> 50 recovery/release
-```
+- [Plan 14 PointAccount Read Vertical Slice](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
 
-각 plan은 canonical `Depends-On`의 actual outcome이 completed path에 있고
-`Implementation-Ready=true`인 경우에만 시작한다. schema-writing plan은 ADR-072의 단일
-migration-writer lease를 사용한다. Plan 40은 Draft로만 검증하고 Plan 50과 combined release가
-끝나기 전 production success endpoint를 활성화하지 않는다.
+이 두 GET operation의 부재는 customer cancellation command/recovery의 완료 상태를 되돌리지
+않는다.
 
-## Implementation start checklist
+## Protected invariants
 
-- [x] environment inventory가 완전함
-- [x] DB/table/row evidence가 있음
-- [x] completed/incomplete publication evidence가 있음
-- [x] external consumer와 rollback binary evidence가 있음
-- [x] gate 결과에 맞는 migration/event ADR과 ExecPlan이 Accepted임
-- [x] Plan 10 issuer provenance가 통과함
-- [x] Plan 11 policy/grants가 통과함
-- [x] Plan 12 allocation/restoration이 통과함
-- [x] ordinary-accrual policy/snapshot foundation이 통과함
-- [x] Plan 13 recovery/pending이 통과함
-- [x] Plan 15 settlement input이 통과함
-- [x] Plan 16 immutable events가 통과함
-- [x] Plan 20 Settlement foundation이 통과함
-- [x] Plan 30 common compensation이 통과함
-- [x] Plan 40 command Draft와 Plan 50 combined release 절차가 준비됨
-- [x] OpenAPI semantic/local contract 검사가 통과함
-- [x] 기능 branch에서 기존 사용자 변경을 분리·보존함
+- 고객 취소 허용 상태와 acceptance deadline을 벗어나면 state conflict다.
+- `PENDING_PAYMENT`의 네 owner release가 하나라도 실패하면 취소 성공을 반환하지 않는다.
+- `PAID`의 `202`는 환불·복원·알림 완료가 아니며 외부 결과 불명은 durable 상태로 남는다.
+- Refund 요청액, 선행 성공 환불액과 remaining refundable 금액은 snapshot/current 의미를
+  섞지 않는다.
+- `detail`은 API response, event payload, Provider request와 log에 노출하지 않는다.
+- Settlement 확정 금액은 overwrite하지 않고 Adjustment ledger로만 보정한다.
+- Aggregate 간에는 ID와 immutable snapshot을 사용하며 cross-context cascade를 만들지 않는다.
 
-Plan 40은 direct dependency가 completed라 Draft 구현을 시작할 수 있다. Plan 50 actual
-recovery/release evidence 전에는 main merge, deployment 또는 production success endpoint를
-활성화할 수 없다.
+## Validation evidence
 
-## Ordinary-accrual policy/snapshot validation (2026-08-01)
+대표 자동 검증은 다음을 포함한다.
 
-- V16 migration, immutable policy/head/source/header/unit constraints와 legacy marker: **Passed**.
-- verified OIDC initial bootstrap, missing/malformed GLOBAL startup fail-fast와 test-only explicit policy:
-  **Passed**.
-- GLOBAL/STORE current/history/write, READ/WRITE grant, reason/idempotency/Audit, signed cursor와 Store
-  validation: **Passed**.
-- benefit-only/external-payable atomic snapshot, forced snapshot failure rollback와 future-only policy change:
-  **Passed**.
-- `./gradlew clean build`: **Passed**, 193 tests, 0 failures/errors/skips; Spotless와 Modulith 포함.
-- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
-- Plan 13: direct dependencies completed, `Implementation-Ready=true`; predecessor merge 뒤 최신 main에서
-  migration-writer lease를 확인하고 시작한다.
+- `CustomerCancellationCommandIntegrationTest`
+- `CustomerCancellationPaymentServiceTest`
+- `CustomerCancellationCompensationWorkerTest`
+- `CustomerCancellationRefundReconciliationServiceTest`
+- `OrderControllerContractTest`
+- `SettlementDisputeIntegrationTest`
+- `RuntimeOpenApiParityTest`
+- `ModularityTests`
 
-## Plan 12 foundation validation (2026-08-01)
+각 완료 시점의 전체 test count와 명령은 해당 ExecPlan과 release evidence의 역사적 기록이다.
+현재 HEAD 검증 결과는 repository truth audit ExecPlan에 별도로 기록한다.
 
-- V15 empty-schema migration과 legacy Refund fail-closed precheck: **Passed**.
-- Refund/allocation/restoration focused suite: **Passed**, 24 tests. full·연속 partial·rounding,
-  exact replay/conflict, 실패 unit 재사용, Provider transaction 분리, 정책 snapshot, issuer lineage,
-  expiry boundary, Loyalty retry/manual review와 DB upper-bound/overlap을 포함한다.
-- Spring Modulith boundary: **Passed**, 1 test. Ordering coordinator가 Order-first lock과 cross-context
-  orchestration을 소유하고 Payment/Loyalty는 typed API 뒤 owner state만 변경한다.
-- `./gradlew spotlessApply clean build`: **Passed**. 전체 test/check가 통과했다.
-- Plan 13: sole dependency completed, `Implementation-Ready=true`.
-- Plan 16: 이 2026-08-01 checkpoint 당시 Plan 12는 completed이나 Plan 13/15가 active라
-  `Implementation-Ready=false`였다.
+## Remaining work and non-goals
 
-## Plan 13 foundation validation (2026-08-02)
-
-- V17 clean activation/precheck, Payment completion/refund eligibility work와 retry/manual-review:
-  **Passed**.
-- Loyalty full/partial actual recovery, residual pending, oldest-first gross accrual offset와 concurrent
-  non-negative balance: **Passed**.
-- frozen `OrderCompletedV1` normal/pre-completion/out-of-order/replay와 immutable source/version/hash:
-  **Passed**.
-- focused migration/Payment/Loyalty/Ordering/Modulith suite: **Passed**, 32 tests.
-- `./gradlew clean build`: **Passed**, 205 tests, 0 failures/errors/skips.
-- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
-- Plan 14와 Loyalty adjustment: all direct dependencies completed, `Implementation-Ready=true`.
-- Plan 16: Plan 12/13/15가 모두 completed라 `Implementation-Ready=true`.
-
-## Plan 15 settlement-input validation (2026-08-02)
-
-- V18 versioned Merchant terms, overlap/immutability/applicable interval과 concurrent future terms:
-  **Passed**.
-- V19 PLATFORM/STORE/SHARED Campaign burden, CouponReservation final legs/remainder, active legacy
-  Campaign와 reservation stop gate: **Passed**.
-- V20 exactly-one Order snapshot, owner source/hash/formula CHECK, legacy Order stop gate, replay와
-  forced persistence rollback: **Passed**.
-- mixed PLATFORM/BRAND/STORE point allocation, cross-store issuer failure, zero-payable, negative net,
-  Payment mismatch와 exact `OrderCompletedV2` fixture: **Passed**.
-- required scoped suite와 `*ModularityTests`: **Passed**.
-- `./gradlew clean build`: **Passed**, 229 tests, 0 failures/errors/skips; Spotless 포함.
-- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
-- Plan 16: all direct dependencies completed, `Implementation-Ready=true`; Plan 20은 Plan 16과 V1
-  inventory가 남아 `Implementation-Ready=false`.
-
-## Plan 16 immutable-event validation (2026-08-02)
-
-- 세 V1 exact contract, Payment/Loyalty owner result와 persistent publication atomicity: **Passed**.
-- refund disposition/누적 effect, immutable terms change, replay/conflict와 required persistence rollback:
-  **Passed**.
-- focused event suite와 contract/Modulith suite: **Passed**.
-- `./gradlew clean build`: **Passed**, 243 tests, 0 failures/errors/skips; Spotless 포함.
-- `bash scripts/verify-docs.sh`와 `git diff --check`: **Passed**.
-- 새 Flyway migration, consumer, `OrderCompletedV2` producer는 추가하지 않았다.
-- Plan 20은 all direct dependencies completed로 `Implementation-Ready=true`이며 V1 inventory를 내부
-  첫 gate로 검증한다. Analytics는 다른 direct producer dependencies 때문에 false를 유지한다.
-
-## Plan 20 Settlement validation (2026-08-03)
-
-- V1 incomplete publication/deployed consumer inventory 0 gate와 V21 legacy precheck: **Passed**.
-- 최소 OPEN Batch/immutable Item, source/store-date unique, FK/CHECK/immutability trigger와 closed-Batch
-  late-item case: **Passed**.
-- guarded completion/V2 outbox atomicity, separate Settlement consumer, Batch 경쟁과 Item/Audit/publication
-  rollback: **Passed**.
-- signed Batch Item cursor의 ordering/scope/signature/expiry/membership와 OpenAPI contract: **Passed**.
-- 실제 Order/Refund cause/reason/source/version/amount/time, Item 부재와 source-unique exclusion Audit,
-  replay/Audit rollback/publication completion: **Passed**.
-- `./gradlew test --tests '*Settlement*'`와 `./gradlew test --tests '*ModularityTests'`: **Passed**.
-- `./gradlew clean build`: **Passed**, 270 tests, 0 failures/errors; Spotless 포함, 1분 27초.
-- Plan 30과 Settlement lifecycle: 모든 direct dependency가 completed라 `Implementation-Ready=true`.
-- Analytics: Settlement lifecycle과 point-adjustment dependency가 active라
-  `Implementation-Ready=false` 유지.
-
-## Plan 30 common-compensation validation (2026-08-03)
-
-- ADR-059 revalidation, V8/V9/V22 legacy 후보 0 precheck와 empty full migration 최종
-  CHECK/FK/UNIQUE/deferred cardinality: **Passed**.
-- 두 trigger, 여섯 step, 정확히 두 policy child, terminal replay/conflict와
-  `SUCCEEDED`/`NOT_REQUIRED` 단조성: **Passed**.
-- Pickup·Stock 공통 termination release와 Coupon·Points source/trigger/policy/disposition,
-  보상 Coupon immutable terms, 부분 환불 뒤 잔여 Point 복원: **Passed**.
-- 두 V1 exact contract, 열 annotation/registry/실제 target, duplicate startup failure,
-  unknown target Case 불변과 listener별 exhaustion/attempt 분리: **Passed**.
-- 축약 store projection, explicit `ORDER_COMPENSATION_READ`/access reason/read Audit 운영자
-  projection과 store idempotency V2: **Passed**.
-- `./gradlew test --tests '*Compensation*' --tests '*StoreOrder*'`: **Passed**, 21초.
-- `./gradlew test --tests '*EventPublication*'`: **Passed**, 10초.
-- `./gradlew test --tests '*ModularityTests'`: **Passed**, 2초.
-- `./gradlew clean build`: **Passed**, 294 tests, failures/errors/skips 0, 1분 26초.
-- `bash scripts/verify-docs.sh`: **Passed**, target 26/deployed 9 paths, 73 schemas,
-  32 policies, 74 ADRs, 140 Markdown files와 24 ExecPlans.
-- `git diff --check`: **Passed**. Not run 항목 없음.
-- Plan 40: direct dependency completed, `Implementation-Ready=true`; Draft-only/Plan 50 combined
-  release gate 유지.
-
-## Historical audit validation
-
-- `bash scripts/verify-docs.sh`: **Passed**. OpenAPI 3.1 YAML parse, local `$ref`,
-  mutation Idempotency-Key, Error envelope, cancellation semantic assertions,
-  32 policies, 60 ADR index/status entries와 108 Markdown link 검사를 통과했다.
-- `git diff --check`: **Passed**.
-- `./gradlew test --tests '*ModularityTests' --console=plain`: **Passed**.
-- `./gradlew test --tests '*OrderControllerContractTest' --tests '*ModularityTests' --console=plain`:
-  **Blocked by environment**. 12개 중 API contract 11개가 assertion 전 Spring context
-  초기화에서 Docker/Testcontainers provider 미탐지로 실패했다. 같은 실행에서 확인이
-  섞이지 않도록 ModularityTests는 위 명령으로 분리 재실행해 통과했다.
-- full OpenAPI semantic validator: **Not configured**. 저장소의 parse/local/targeted
-  semantic assertions만 실행했다.
-- full build, 전체 Testcontainers suite, Spotless: **Not run**. 애플리케이션 코드를
-  변경하지 않았고 Docker provider가 이용 불가했다.
-
-이전 CI 결과는 이번 감사 결과로 사용하지 않았다.
-
-## Historical contract reconciliation validation (2026-08-01)
-
-- `bash scripts/verify-docs.sh`: **Passed**. 2026-08-01 모순 해소 반영 후 재실행에서
-  19 OpenAPI paths와 59 schemas의 YAML/local reference/targeted semantic 검사, 32
-  policies, 60 ADRs와 109 Markdown files 검사를 통과했다. recovery schema 참조 분리,
-  고객 projection enum, reason data boundary, release-gate 조건부 test path와
-  clean-cutover 운영 상태 evidence 검사를 포함한다. 이 실행은 refund attempt 예산,
-  `PENDING_PAYMENT` 금액 표현과 매장 보상 projection 교정을 포함한 상태다.
-- `git diff --check`: **Passed**.
-- full OpenAPI semantic validator: **Not configured**.
-  `openapi_spec_validator`와 별도 `spectral`/`redocly`/`swagger-cli` executable이 현재
-  환경에 없다. 저장소 검증 스크립트의 PyYAML parse, local `$ref`와 targeted semantic
-  assertions는 통과했다.
-- Gradle/application tests: **Not run**. 이번 변경은 문서, OpenAPI와 문서 검증
-  스크립트에만 한정됐고 Kotlin/test/migration 파일을 변경하지 않았다.
+- Active: PointAccount summary/transaction read vertical slice
+- Active: Analytics refund/late-event projection
+- Active: Nearby Store Discovery
+- Not evidenced: non-local deployment와 rollback binary
+- Not measured: 운영 traffic에서의 처리량, p95/p99 latency, Provider 장애 주입, SLA
+- Non-goal: fake/in-memory/no-op fallback, 실제 PG adapter를 자동 대체하는 local behavior
 
 ## Revisit conditions
 
-- compensation schema 변경 또는 최초 non-local 배포 직전 gate inventory 재확인
-- external/independent consumer 또는 applied production migration이 발견될 때
-- rollback binary 보존 기간이 확정될 때
-- Settlement 범위를 변경하려는 제품 결정이 생길 때
-- 부분 환불 정책 또는 allocation source가 변경될 때
+- 고객 취소 허용 상태, refund projection 또는 compensation ownership 변경
+- external consumer 또는 applied production migration 발견
+- 최초 non-local deployment 직전 clean-cutover inventory 재검증
+- PointAccount read를 customer cancellation command의 선행조건으로 바꾸는 제품 결정
+
+## Revision notes
+
+- 2026-07-31: 계약과 clean-cutover foundation 착수 readiness 감사 작성.
+- 2026-08-06: 현재 `main`의 Plan 40/50, Settlement lifecycle과 loyalty adjustment 완료를
+  반영해 command blocker를 제거하고 PointAccount read를 독립 Active work로 분리했다.

@@ -128,7 +128,7 @@ ADR-063/069/072, authorization matrix, OpenAPI와 Plan 12/14/30 successor eviden
     append-only, head는 expected version CAS다. permission은 Accepted 네 값 외 값을 저장하지 않으며
     role/JWT claim/default seed/cache/direct SQL은 authorization source가 아니다.
   - 영향 모듈·파일: Operations API/internal policy·Audit와 새 permission/bootstrap service,
-    shared Security의 coarse role boundary, `V13`, deployed OpenAPI, PostgreSQL/security tests와
+    shared Security의 coarse role boundary, `V13`, runtime OpenAPI, PostgreSQL/security tests와
     운영 runbook이다. Ordering의 두-policy Case/event 연결은 Plan 30 소유로 남긴다.
   - 트랜잭션·lock: policy HTTP는 active grant row를 먼저 잠그고 policy head/query와 Audit을 같은
     local transaction에서 flush한다. bootstrap identity 검증은 DB context/transaction 전에 끝내고,
@@ -143,7 +143,7 @@ ADR-063/069/072, authorization matrix, OpenAPI와 Plan 12/14/30 successor eviden
   - 테스트 계획: empty database migration seed/constraint, immutable version, forbidden key,
     CAS/replay, role/grant/revoke/regrant, GET reason/Audit, persistence trigger failure, OIDC RSA fixture와
     bootstrap rollback을 PostgreSQL Testcontainers에서 검증한 뒤 지정 Gradle/docs/diff 명령을 실행한다.
-  - 문서 계획: target 계약은 유지하고 실제 controller와 deployed OpenAPI/runbook을 맞춘다. 완료 시
+  - 문서 계획: target 계약은 유지하고 실제 controller와 runtime OpenAPI/runbook을 맞춘다. 완료 시
     Plan 11을 completed로 옮기고 Plan 12/14/30과 point-adjustment direct dependency path/readiness를
     같은 atomic diff에서 갱신한다.
 - [x] 2026-08-01 policy/grant schema
@@ -162,14 +162,14 @@ ADR-063/069/072, authorization matrix, OpenAPI와 Plan 12/14/30 successor eviden
   - `./gradlew test --tests '*BenefitPolicy*' --tests '*OperatorPermission*'`: PASS, 13 tests.
   - `./gradlew test --tests '*ModularityTests'`: PASS, 1 test.
   - `./gradlew clean build`: PASS, 전체 test와 Spotless 포함.
-  - `bash scripts/verify-docs.sh`: PASS, target/deployed OpenAPI, 32 business policies, 72 ADRs,
+  - `bash scripts/verify-docs.sh`: PASS, 당시 target/runtime predecessor OpenAPI, 32 business policies, 72 ADRs,
     133 Markdown files와 23 ExecPlans.
   - `git diff --check`: PASS.
 
 ## Surprises & Discoveries
 
 - current `V8`/JPA는 singleton boolean head, `head + 1` version ID와 role-only 단건 GET/PATCH를
-  구현한다. target OpenAPI는 이미 five-head/keyed PATCH 계약이라 구현·deployed OpenAPI가 Accepted
+  구현한다. target OpenAPI는 이미 five-head/keyed PATCH 계약이라 구현·runtime OpenAPI가 Accepted
   계약보다 뒤처진 drift이며 정책 재결정 사항은 아니다.
 - `operations_audit_record.reason`은 160자지만 policy PATCH target 계약은 500자다. V13에서
   audit reason을 500자로 넓히지 않으면 유효한 요청이 Audit 저장 실패로 503이 되므로 같은 forward

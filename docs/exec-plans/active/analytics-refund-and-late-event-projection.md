@@ -32,8 +32,9 @@ source conflict, 오래된 event가 0, 빈 결과 또는 stale value를 정상 �
   consumer checkpoint다. point-adjustment plan은 producer/outbox contract만 소유한다.
 - completed Plan 16은 Refund allocation/recovery 결과의 Payment·Loyalty event producer와 exact
   replay/conflict/persistence validation을 제공한다. completed Plan 20은 completion/Settlement Item event 기반을,
-  point-adjustment 및 Settlement lifecycle 계획은 나머지 producer를 만든다. 이 계획은
-  활성화할 producer row의 actual event/version contract가 모두 완료된 뒤 시작한다.
+  completed point-adjustment 및 Settlement lifecycle 계획은 나머지 producer를 제공한다. 네 direct
+  dependency의 actual event/version contract와 producer checkpoint는 현재 source에서 모두 완료됐고,
+  Analytics module·migration·listener·freshness projection은 아직 없다.
 - OpenAPI에는 public Analytics query endpoint가 없다. audience/인가/freshness contract를 추정하지 않고
   owner projection, Operations query와 metric/runbook을 먼저 완성한다.
 
@@ -181,8 +182,8 @@ amount, evidence는 metric tag에 넣지 않으며 log에는 closed failure reas
 
 ## Progress
 
-- [ ] producer payload/publication input contract gate — Plan 16 완료, Plan 20/point-adjustment/
-  Settlement lifecycle은 미완료
+- [x] producer payload/publication input contract gate — Plan 16/20, point-adjustment,
+  Settlement lifecycle 완료
 - [ ] Analytics schema, dedup and freshness foundation
 - [ ] completion/refund/adjustment/point metric slice
 - [ ] late event, case approval, checkpointed backfill
@@ -206,10 +207,10 @@ amount, evidence는 metric tag에 넣지 않으며 log에는 closed failure reas
 
 ## Outcomes & Retrospective
 
-미구현 상태다. Plan 16의 `PaymentRefundedV1`, `PointsAccruedV1`, `PointsRestoredV1` producer와
-243-test validation은 완료됐다. Plan 20, point-adjustment, Settlement lifecycle producer는 active이므로
-`Implementation-Ready=false`를 유지하고 listener를 활성화하지 않는다. 완료 시 fixture tie-out,
-seven-day/backfill recovery, freshness failure, measurement 결과를 actual value로 기록한다.
+Analytics 자체는 미구현 상태다. Plan 16/20, point-adjustment와 Settlement lifecycle producer가
+completed이므로 direct dependency gate는 닫혔고 metadata의 `Implementation-Ready=true`와 일치한다.
+완료 시 fixture tie-out, seven-day/backfill recovery, freshness failure, measurement 결과를 actual
+value로 기록한다.
 
 ## Revision Notes
 
@@ -217,3 +218,5 @@ seven-day/backfill recovery, freshness failure, measurement 결과를 actual val
 - 2026-08-01: ADR-068의 event version/payload/producer checkpoint를 Analytics activation gate로 고정.
 - 2026-08-02: Plan 16 dependency를 completed path로 갱신하고 세 financial event producer evidence를
   반영했다. 다른 direct producer dependencies가 남아 readiness는 변경하지 않았다.
+- 2026-08-06: 현재 `main`에서 Plan 20, Settlement lifecycle과 point-adjustment producer 완료를
+  확인해 Current State, Progress와 Outcome의 readiness drift를 정정했다. 구현 범위는 바꾸지 않았다.

@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
@@ -52,6 +53,7 @@ internal class PointAdjustmentIntegrationTest
         private val operations: PointAdjustmentOperations,
         private val jdbcTemplate: JdbcTemplate,
         private val mockMvc: MockMvc,
+        private val clock: Clock,
         private val retentionService: PointAdjustmentIdempotencyRetentionService,
         private val retentionWorker: LoyaltyPointAdjustmentIdempotencyRetentionWorker,
     ) {
@@ -461,7 +463,12 @@ internal class PointAdjustmentIntegrationTest
         @Test
         fun `negative long max succeeds and long min returns bad request over PostgreSQL HTTP`() {
             val acceptedAccount = insertAccount(available = Long.MAX_VALUE)
-            insertLot(acceptedAccount, LOT_LOW, available = Long.MAX_VALUE, expiresAt = NOW.plusSeconds(1))
+            insertLot(
+                acceptedAccount,
+                LOT_LOW,
+                available = Long.MAX_VALUE,
+                expiresAt = clock.instant().plusSeconds(60),
+            )
             val accepted =
                 mockMvc
                     .perform(

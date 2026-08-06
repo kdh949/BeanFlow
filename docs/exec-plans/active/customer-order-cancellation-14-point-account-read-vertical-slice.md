@@ -24,7 +24,7 @@ transaction에서 commit된 경우에만 body를 반환한다.
 
 ## Current State
 
-- target OpenAPI에는 두 GET 계약이 있지만 deployed OpenAPI, Loyalty controller와 query owner는 없다.
+- target OpenAPI에는 두 GET 계약이 있지만 runtime OpenAPI, Loyalty controller와 query owner는 없다.
 - V17의 `loyalty_point_account.recovery_pending_krw`, `PointRecoveryPending`, `ACCRUAL`/
   `RECOVERY` owner transaction과 PostgreSQL tie-out 제약이 completed Plan 13 outcome으로 존재한다.
 - `loyalty_point_transaction`에는 account별 최신순 keyset query를 뒷받침하는
@@ -57,7 +57,7 @@ transaction에서 commit된 경우에만 body를 반환한다.
 - support read의 `X-Access-Reason` validation, grant lock/check와 target Audit commit gate
 - `(occurredAt DESC, transactionId DESC)` keyset query, signed cursor adapter와 20/100 page limit
 - `loyalty_point_transaction(point_account_id, occurred_at DESC, id DESC)` 조회 index migration
-- target OpenAPI/deployed promotion, authorization/error/API documentation과 운영 metric
+- target/Runtime OpenAPI 정합화, authorization/error/API documentation과 운영 metric
 - PostgreSQL Testcontainers, API/security/failure/pagination/실행계획 검증
 
 ### Non-goals
@@ -162,7 +162,7 @@ parameter로 bind하며 문자열 SQL interpolation을 사용하지 않는다.
 - 이 read slice는 domain/integration event를 발행하지 않는다. target access AuditRecord만 support-read
   transaction에 저장한다.
 - implementation과 contract/security/failure tests가 통과한 같은 변경에서 두 endpoint와 필요한
-  component를 deployed OpenAPI로 승격한다.
+  component를 Runtime OpenAPI에 반영한다.
 
 ## Milestones
 
@@ -171,7 +171,7 @@ parameter로 bind하며 문자열 SQL interpolation을 사용하지 않는다.
 2. ledger index migration과 PostgreSQL Query Repository/DTO projection을 구현한다.
 3. customer ownership read-only branch와 400/403/404/503 mapping을 완성한다.
 4. operator role/grant/reason/projection/Audit commit gate를 한 transaction으로 구현한다.
-5. signed keyset cursor와 API contract를 구현하고 target endpoint를 deployed OpenAPI로 승격한다.
+5. signed keyset cursor와 API contract를 구현하고 target endpoint를 Runtime OpenAPI에 반영한다.
 6. 실행계획, 보안/민감정보, Modulith, 전체 build와 문서 검증 evidence를 기록한다.
 
 ## Required Tests
@@ -188,7 +188,7 @@ parameter로 bind하며 문자열 SQL interpolation을 사용하지 않는다.
   mismatch, tamper, unknown key, expiry와 2048자 boundary
 - static dataset 완주 시 누락·중복 0, page 사이 새 row 삽입이 이미 반환한 row를 중복시키지 않음
 - migration index 존재/재실행 실패 의미와 고정 fixture의 `EXPLAIN (ANALYZE, BUFFERS)` actual evidence
-- PostgreSQL Testcontainers, MockMvc/OpenAPI target/deployed contract, Modulith boundary와 fallback 부재
+- PostgreSQL Testcontainers, MockMvc/OpenAPI target/runtime contract, Modulith boundary와 fallback 부재
 
 ## Validation Commands
 
@@ -214,7 +214,7 @@ error code만 노출한다.
 ## Documentation Updates
 
 - ADR-069/070/072 implementation evidence와 dependency completion path
-- target/deployed OpenAPI, API conventions, error catalog와 authorization matrix
+- target/runtime OpenAPI, API conventions, error catalog와 authorization matrix
 - Context Map, aggregate invariants, transaction boundaries와 test strategy
 - performance measurement plan의 point-ledger query 조건/actual evidence
 - 이 ExecPlan의 Progress, Surprises, Outcomes와 completion successor metadata
@@ -225,7 +225,7 @@ error code만 노출한다.
 - [ ] ledger index와 Query Repository/DTO projection
 - [ ] customer ownership read
 - [ ] operator grant/reason/Audit commit gate
-- [ ] signed cursor/API/deployed contract
+- [ ] signed cursor/API/runtime contract
 - [ ] performance/security/failure/full validation evidence
 
 ## Surprises & Discoveries

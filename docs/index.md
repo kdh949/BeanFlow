@@ -13,6 +13,8 @@
 - [Architecture Overview](architecture/architecture-overview.md)
 - [Ubiquitous Language](architecture/ubiquitous-language.md)
 - [Context Map](architecture/context-map.md)
+- [Core Decision Summary](architecture/decision-summary.md)
+- [Capability Map](architecture/capability-map.md)
 - [Business Policy Traceability](architecture/policy-traceability.md)
 - [Aggregate Invariants](architecture/aggregate-invariants.md)
 - [Transaction Boundaries](architecture/transaction-boundaries.md)
@@ -29,7 +31,7 @@
 
 ## API and Security
 
-- [Deployed OpenAPI](../openapi/beanflow-v1-deployed.yaml)
+- [Runtime OpenAPI](../openapi/beanflow-v1-runtime.yaml)
 - [Target OpenAPI](../openapi/beanflow-v1.yaml)
 - [API Conventions](api/api-conventions.md)
 - [Error Catalog](api/error-catalog.md)
@@ -51,7 +53,8 @@
 
 ## Execution Plans
 
-- [Customer Order Cancellation Master](exec-plans/active/customer-order-cancellation-and-recovery.md)
+- [Completed Customer Order Cancellation Master](exec-plans/completed/customer-order-cancellation-and-recovery.md)
+- [Completed Repository Truth Audit](exec-plans/completed/repository-truth-audit-and-runtime-contract-alignment.md)
 - [Cancellation 10 PointLot Issuer Provenance Foundation](exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)
 - [Cancellation 11 Benefit Policy and Operator Grant Foundation](exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)
 - [Cancellation 12 Partial Refund Allocation and Restoration](exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)

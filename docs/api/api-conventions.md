@@ -2,40 +2,20 @@
 
 ## Resource style
 
-아래 목록은 resource naming style 예시다. 공개 API 계약은 상태별로 분리한다.
+공개 API 계약은 역할별로 분리한다.
 
-- `openapi/beanflow-v1-deployed.yaml`: 현재 source에 구현되어 배포 후보가 된 controller
-  mapping과 실제 request/response shape의 원본이다.
+- `openapi/beanflow-v1-runtime.yaml`: 현재 source의 public controller mapping과 이를
+  뒷받침하는 계약 테스트가 존재하는 request/response shape의 원본이다. 실제 non-local
+  배포 증거를 뜻하지 않는다.
 - `openapi/beanflow-v1.yaml`: Accepted ADR과 Active ExecPlan이 지향하는 pre-release target
   계약이다. 이 파일의 operation 존재만으로 현재 배포됐다고 판단하지 않는다.
 
-target operation은 구현·계약·보안·실패 테스트가 통과하고 release gate가 닫힌 변경에서만
-deployed spec으로 승격한다. controller를 제거하거나 shape를 바꾸는 변경은 deployed spec과
-계약 테스트를 같은 변경에서 갱신한다. 두 spec 모두 `x-beanflow-contract-status`와
-`x-beanflow-contract-date`를 가져야 하며, target schema를 외부 참조하는 deployed component는
-문서 검증이 참조 존재를 확인하고 target component 변경 시 deployed 계약도 함께 검토한다.
-
-이 목록은 endpoint catalog로 사용하지 않는다.
-
-```http
-GET  /api/v1/stores/nearby
-GET  /api/v1/stores/{storeId}/menus
-GET  /api/v1/stores/{storeId}/pickup-slots
-
-POST /api/v1/orders
-GET  /api/v1/orders/{orderId}
-POST /api/v1/orders/{orderId}/cancellations
-
-POST /api/v1/orders/{orderId}/payment-confirmations
-POST /api/v1/payments/{paymentId}/refunds
-
-PATCH /api/v1/store-orders/{orderId}/status
-
-GET  /api/v1/point-accounts/{accountId}
-POST /api/v1/operations/point-accounts/{accountId}/adjustments
-GET  /api/v1/stores/{storeId}/settlements
-POST /api/v1/settlement-items/{itemId}/disputes
-```
+target operation은 Controller mapping과 계약·보안·실패 테스트가 함께 존재할 때 runtime
+spec에 반영한다. Controller를 추가·제거하거나 shape를 바꾸는 변경은 runtime spec과 계약
+테스트를 같은 변경에서 갱신한다. 두 spec 모두 `x-beanflow-contract-status`와
+`x-beanflow-contract-date`를 가져야 한다. target schema를 외부 참조하는 runtime path item과
+component는 문서 검증이 참조 존재를 확인한다. Runtime operation inventory는 별도 수동 목록이
+아니라 `RuntimeOpenApiParityTest`가 Spring `RequestMappingHandlerMapping`과 양방향 비교한다.
 
 `POST /settlement-items/{itemId}/disputes`는 Settlement Item 경로를 사용하지만 Dispute Context가
 소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
@@ -293,8 +273,9 @@ reason과 evidence를
   GLOBAL은 현재 expected version이 필수이고, 최초 STORE version은 expected version을 생략한다.
 - STORE `INHERIT_GLOBAL` body에는 policy value를 넣지 않는다. 이 version은 history를 보존하면서
   이후 주문만 current GLOBAL을 선택하게 한다.
-- target 계약은 `openapi/beanflow-v1.yaml`에만 있고 deployment evidence 전에는
-  `openapi/beanflow-v1-deployed.yaml`에 추가하지 않는다.
+- 이 operation들은 Controller와 계약 테스트가 있으므로 target과
+  `openapi/beanflow-v1-runtime.yaml`에 모두 존재한다. 이 사실은 non-local deployment를
+  주장하지 않는다.
 
 ## Payment and asynchronous recovery
 

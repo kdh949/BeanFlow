@@ -7,6 +7,7 @@
 | MD-2026-003 | 2026-08-01 | Signed cursor test context | 공개 test-vector key는 `src/test/resources`의 test application context에만 둔다 | main·local runtime 설정에 secret/fallback을 추가하지 않으면서 통합 테스트가 실제 required key-ring binding을 사용하게 한다 | `src/test/resources/application.yaml`, Cursor tests | test context가 explicit properties로 전환되거나 test vector가 더 이상 필요 없을 때 |
 | MD-2026-004 | 2026-08-01 | Signed cursor canonical JSON writer | codec 내부 기본 ObjectMapper와 insertion-ordered map으로 v1 payload를 직렬화한다 | 전역 Jackson customization이 property order나 whitespace 없는 고정 wire bytes를 바꾸지 않게 한다 | `HmacSignedCursorCodec.kt` | versioned wire contract가 새 codec writer 또는 payload type을 필요로 할 때 |
 | MD-2026-005 | 2026-08-01 | CodeQL Kotlin autobuild heap | CodeQL default setup의 Kotlin compiler daemon heap 상한을 project `gradle.properties`에서 `-Xmx2048m`으로 고정한다 | PR #29의 default autobuild가 `testClasses` 중 Kotlin compiler heap OOM으로 실패했다. analyzer·언어 범위·Gradle JVM을 바꾸지 않고 compiler에만 충분한 상한을 부여한다 | `gradle.properties` | CodeQL standard runner에서 재현된 OOM, 과도한 메모리 압박 또는 build policy 변경이 관측될 때 |
+| MD-2026-006 | 2026-08-06 | Source OpenAPI 역할 명확화 | `beanflow-v1.yaml`은 Accepted target, `beanflow-v1-runtime.yaml`은 현재 source의 Controller mapping과 계약 테스트가 존재하는 계약으로 정의하고 `deployed` 명칭을 제거한다 | 저장소에는 non-local deployment 증거가 없고 기존 파일 설명도 source 구현을 가리켰다. Runtime operation은 `RequestMappingHandlerMapping` parity test로 검증해 별도 수동 allowlist를 두지 않는다 | OpenAPI, README, API conventions, 문서 검증, Runtime parity test | 실제 배포 inventory와 promotion 자동화가 도입되어 source runtime과 별도 deployment 계약이 필요할 때 |
 
 ## ID format
 

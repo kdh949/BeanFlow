@@ -244,7 +244,7 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 
 ## Outcomes & Retrospective
 
-미구현 상태다. signed-cursor dependency가 완료되면 implementation-ready로 승격할 수 있지만,
+미구현 상태다. signed-cursor dependency가 완료되어 metadata와 같이 implementation-ready지만,
 각 target environment의 PostGIS privilege와 empty/exact verified Store profile inventory는 별도
 fail-closed release gate다. gate 실패는 새 제품 결정을 요구하는 모호성이 아니라 정해진 배포 중단
 결과다. 완료 시 coordinate non-retention evidence, spatial failure behavior와 같은 조건의 query
@@ -258,3 +258,5 @@ measurement를 actual value로 기록한다.
   ADR-070 amendment와 signed-cursor foundation으로 고정했다.
 - 2026-08-01: 별도 Merchant StoreDiscoveryProfile, PostgreSQL 17/PostGIS 3.5, exact coverage
   preflight/startup gate와 no-replica Query API boundary를 확정했다.
+- 2026-08-06: completed signed-cursor dependency와 이미 true인 readiness metadata에 맞춰
+  Outcomes의 조건부 표현을 정정했다. 구현 범위는 바꾸지 않았다.
