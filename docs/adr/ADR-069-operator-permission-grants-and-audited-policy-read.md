@@ -224,6 +224,11 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   missing·blank reason의 400, role-only 거부, success audit 한 건과 injected Audit failure의 503/no
   additional audit를 검증했다. Account summary는 Plan 13의 persisted `recoveryPendingKrw`를 그대로
   반환하며 grant/Audit/ledger failure를 empty body나 role fallback으로 바꾸지 않는다.
+- **Plan 14 commit-failure correction (2026-08-06):** transaction proxy 바깥 orchestration이
+  commit-time `TransactionException`을 `DEPENDENCY_UNAVAILABLE`로 번역한다. PostgreSQL
+  `DEFERRABLE INITIALLY DEFERRED` Audit constraint trigger는 method body와 `saveAllAndFlush()` 뒤 실제
+  commit에서 실패하도록 만들며, MockMvc test는 503, 성공 body 및 Audit 부재, failure metric 한 번만
+  기록됨을 검증한다.
 
 ## Metrics
 

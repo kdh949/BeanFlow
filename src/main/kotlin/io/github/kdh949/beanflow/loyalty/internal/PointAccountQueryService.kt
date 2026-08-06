@@ -25,6 +25,7 @@ import jakarta.persistence.PersistenceException
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
+import org.springframework.transaction.TransactionException
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -49,11 +50,14 @@ internal class PointAccountQueryService(
     private val supportReads: SupportPointAccountReadTransaction,
     private val paging: PointTransactionPaging,
     private val metrics: PointAccountReadMetrics,
+    private val observation: PointAccountReadObservation,
 ) : PointAccountQueryOperations {
     override fun get(command: ReadPointAccountCommand): PointAccountView =
-        when (command.actor.type) {
-            PointAccountReadActorType.CUSTOMER -> customerReads.get(command)
-            PointAccountReadActorType.PLATFORM_OPERATOR -> supportReads.get(command)
+        observation.completeTransaction(PointAccountReadOperation.SUMMARY, command.actor.type) {
+            when (command.actor.type) {
+                PointAccountReadActorType.CUSTOMER -> customerReads.get(command)
+                PointAccountReadActorType.PLATFORM_OPERATOR -> supportReads.get(command)
+            }
         }
 
     override fun listTransactions(command: ListPointTransactionsCommand): PointTransactionPage {
@@ -64,9 +68,11 @@ internal class PointAccountQueryService(
                 metrics.record(PointAccountReadOperation.TRANSACTIONS, command.actor.type, failure.toOutcome())
                 throw failure
             }
-        return when (command.actor.type) {
-            PointAccountReadActorType.CUSTOMER -> customerReads.listTransactions(command, prepared)
-            PointAccountReadActorType.PLATFORM_OPERATOR -> supportReads.listTransactions(command, prepared)
+        return observation.completeTransaction(PointAccountReadOperation.TRANSACTIONS, command.actor.type) {
+            when (command.actor.type) {
+                PointAccountReadActorType.CUSTOMER -> customerReads.listTransactions(command, prepared)
+                PointAccountReadActorType.PLATFORM_OPERATOR -> supportReads.listTransactions(command, prepared)
+            }
         }
     }
 }
@@ -355,6 +361,28 @@ internal enum class PointAccountReadOutcome {
 internal class PointAccountReadObservation(
     private val metrics: PointAccountReadMetrics,
 ) {
+    private val completionOutcomeRecorded = ThreadLocal<Boolean>()
+
+    fun <T> completeTransaction(
+        operation: PointAccountReadOperation,
+        actorType: PointAccountReadActorType,
+        block: () -> T,
+    ): T {
+        completionOutcomeRecorded.set(false)
+        return try {
+            block()
+        } catch (failure: TransactionException) {
+            if (completionOutcomeRecorded.get() != true) {
+                metrics.record(operation, actorType, PointAccountReadOutcome.DEPENDENCY_UNAVAILABLE)
+            }
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Point account read transaction could not commit").also {
+                it.initCause(failure)
+            }
+        } finally {
+            completionOutcomeRecorded.remove()
+        }
+    }
+
     fun <T> read(
         operation: PointAccountReadOperation,
         actorType: PointAccountReadActorType,
@@ -366,6 +394,9 @@ internal class PointAccountReadObservation(
                 TransactionSynchronizationManager.registerSynchronization(
                     object : TransactionSynchronization {
                         override fun afterCompletion(status: Int) {
+                            if (completionOutcomeRecorded.get() != null) {
+                                completionOutcomeRecorded.set(true)
+                            }
                             if (status == TransactionSynchronization.STATUS_COMMITTED) {
                                 metrics.record(operation, actorType, PointAccountReadOutcome.SUCCEEDED, pageItems?.invoke(result)?.size)
                             } else {

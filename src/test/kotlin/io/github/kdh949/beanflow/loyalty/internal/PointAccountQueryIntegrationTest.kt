@@ -331,6 +331,26 @@ internal class PointAccountQueryIntegrationTest
             assertThat(meterTagValues).doesNotContain(operatorId.toString(), accountId.toString(), "Customer balance support")
         }
 
+        @Test
+        fun `operator deferred audit commit failure returns 503 without audit or duplicate failure metric`() {
+            val accountId = insertAccount(UUID.randomUUID(), available = 50)
+            grant(operatorId)
+            val failureCountBefore = summaryReadCount("PLATFORM_OPERATOR", "DEPENDENCY_UNAVAILABLE")
+            installDeferredAuditCommitFailureTrigger()
+
+            mockMvc
+                .perform(
+                    get(accountPath(accountId))
+                        .header("X-Access-Reason", "Deferred audit commit failure")
+                        .with(operatorJwt(operatorId)),
+                ).andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.accountId").doesNotExist())
+
+            assertThat(count("operations_audit_record")).isZero()
+            assertThat(summaryReadCount("PLATFORM_OPERATOR", "DEPENDENCY_UNAVAILABLE")).isEqualTo(failureCountBefore + 1.0)
+        }
+
         private fun insertAccount(
             customerId: UUID,
             available: Long,
@@ -469,8 +489,42 @@ internal class PointAccountQueryIntegrationTest
 
         private fun count(table: String): Long = jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
 
+        private fun summaryReadCount(
+            actorType: String,
+            outcome: String,
+        ): Double =
+            meterRegistry
+                .find("beanflow.loyalty.point_account.read.count")
+                .tag("actor_type", actorType)
+                .tag("outcome", outcome)
+                .counter()
+                ?.count() ?: 0.0
+
+        private fun installDeferredAuditCommitFailureTrigger() {
+            jdbcTemplate.execute(
+                """
+                CREATE OR REPLACE FUNCTION test_reject_point_account_audit_at_commit()
+                RETURNS trigger LANGUAGE plpgsql AS ${'$'}${'$'}
+                BEGIN
+                    RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'injected deferred audit commit failure';
+                END;
+                ${'$'}${'$'}
+                """.trimIndent(),
+            )
+            jdbcTemplate.execute(
+                """
+                CREATE CONSTRAINT TRIGGER test_point_account_audit_commit_failure
+                AFTER INSERT ON operations_audit_record
+                DEFERRABLE INITIALLY DEFERRED
+                FOR EACH ROW EXECUTE FUNCTION test_reject_point_account_audit_at_commit()
+                """.trimIndent(),
+            )
+        }
+
         private fun dropAuditFailureTrigger() {
             jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_point_account_audit_failure ON operations_audit_record")
             jdbcTemplate.execute("DROP FUNCTION IF EXISTS test_reject_point_account_audit()")
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_point_account_audit_commit_failure ON operations_audit_record")
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS test_reject_point_account_audit_at_commit()")
         }
     }

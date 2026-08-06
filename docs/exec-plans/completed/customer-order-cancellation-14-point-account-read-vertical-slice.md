@@ -245,6 +245,9 @@ error code만 노출한다.
 - 2026-08-06: clean build를 중복 실행하면 두 Gradle process가 `build/test-results`의 in-progress
   binary를 서로 삭제해 테스트 결과 집계가 실패한다. concurrent build를 종료한 뒤 단일 clean build로
   다시 실행해 code failure와 build-artifact race를 구분했다.
+- 2026-08-06: `saveAllAndFlush()` 실패 검증만으로는 transaction proxy 반환 뒤의 commit failure를
+  포착할 수 없었다. outer orchestration에서 `TransactionException`을 503으로 번역하고 deferred
+  Audit constraint trigger로 Audit rollback과 failure metric 단일 기록을 검증했다.
 
 ## Decision Log
 
@@ -256,6 +259,7 @@ error code만 노출한다.
 | 2026-08-01 | Accepted | permission migration은 Plan 11, ledger 조회 index는 Plan 14 소유 | migration ownership 모순 제거와 keyset query 보강 | ADR-069, ADR-072 |
 | 2026-08-06 | Implemented | V32를 ledger keyset index 단일 owner로 추가 | `limit + 1` JDBC DTO projection이 account별 최신순 tuple을 실제 index로 소비 | ADR-069, ADR-072 |
 | 2026-08-06 | Implemented | support read Audit를 same local transaction commit gate로 유지 | grant/reason/projection/Audit 중 하나라도 실패하면 200이나 unaudited body를 만들지 않음 | ADR-069, failure semantics |
+| 2026-08-06 | Implemented | proxy commit failure를 outer orchestration에서 503으로 번역 | transaction completion callback이 이미 기록한 failure metric과 외부 exception translation metric을 중복하지 않음 | ADR-069, failure semantics |
 | 2026-08-06 | Implemented | PointAccount ledger를 common HMAC cursor typed adapter에 연결 | endpoint/account scope, 24시간 expiry, 20/100 limit을 재구현하지 않고 ADR-070을 소비 | ADR-070 |
 
 ## Outcomes & Retrospective
@@ -275,6 +279,10 @@ selection, full `clean build`, 문서 verifier, `git diff --check`로 수행했�
 32 business policies, 75 ADRs, 150 Markdown files, 25 ExecPlans를 검증했다. common cursor, grant와 Audit
 public API만 module boundary를 넘겼고, cursor secret·Operations internal repository·fallback은 추가하지 않았다.
 
+리뷰 보완으로 transaction proxy가 반환된 뒤 발생하는 Audit commit failure도 outer orchestration에서
+`DEPENDENCY_UNAVAILABLE`로 변환했다. deferred constraint trigger 통합 테스트는 503, 성공 body와 Audit의
+부재, failure metric 정확히 한 번을 검증한다.
+
 ## Revision Notes
 
 - 2026-08-01: 기존 Plan 10의 point-account read scope를 분리했다.
@@ -283,3 +291,5 @@ public API만 module boundary를 넘겼고, cursor secret·Operations internal r
 - 2026-08-02: completed Plan 13 V17/owner outcome을 반영해 direct dependency와 readiness를 갱신했다.
 - 2026-08-06: V32 keyset index, customer/operator read API, runtime OpenAPI, PostgreSQL performance evidence와
   validation 결과를 기록하고 completed path로 이동했다.
+- 2026-08-06: deferred Audit constraint trigger가 만드는 실제 commit-time failure의 503 번역과 metric
+  단일 기록 검증을 추가했다.
