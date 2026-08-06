@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-28
-- **Implementation owner:** [Nearby Store Discovery](../exec-plans/active/nearby-store-discovery.md)
+- **Implementation owner:** [Nearby Store Discovery](../exec-plans/completed/nearby-store-discovery.md)
 
 ## Context
 
@@ -58,7 +58,7 @@
 
 ## Implementation evidence (2026-08-06)
 
-Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다. 메뉴·픽업 슬롯 read endpoint는 아직 없다.
+Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다.
 
 - V33이 PostGIS extension, 별도 `merchant_store_discovery_profile`
   (`store_id` PK/FK, non-blank `name` CHECK, `geography(Point,4326)`)과
@@ -76,10 +76,19 @@ Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다. 메뉴·픽
 - PostGIS/DB 실패는 `beanflow.discovery.spatial.failure{reason}`와 함께 503이며 빈 200,
   Haversine 계산 또는 cache로 대체되지 않는다.
 
+2026-08-07 Milestone 4~5가 메뉴·픽업 슬롯 read endpoint를 같은 경계로 추가했다. Merchant가
+메뉴·옵션을, Fulfillment가 슬롯 잔여 capacity를 public Query API DTO projection으로 제공하고
+Discovery는 HTTP 계약과 응답 투영만 소유한다. 두 read 모두 durable write, event, AuditRecord를
+만들지 않으며 없는 Store는 404, 영속 실패는 503으로 분리한다.
+
 ## Metrics
 
-- **Not measured:** 검색 지연과 데이터 규모. 2026-08-06 시점 기록은 고정 fixture의 index 유/무
-  실행계획 비교뿐이며 latency 목표나 처리량 근거가 아니다.
+- **Measured (2026-08-07):** `scripts/perf/nearby-store-search.sh`의 고정 조건에서 10,000/100,000
+  profile 두 규모의 실행계획과 200회 반복 latency. 두 규모 모두 GiST bounding-box index condition을
+  사용했고 p50은 0.397 ms → 1.850 ms였다. 컨테이너가 emulation으로 실행됐고 비교 기준선이 없어
+  성능 개선이나 SLA를 주장하지 않는다.
+- **Not measured:** native amd64 timing, 동시 부하와 RPS, 부하 시 오류율, 100,000건을 넘는 규모.
+  상세는 [nearby query plan evidence](../quality/nearby-store-discovery-performance-evidence.md).
 
 ## Revisit Conditions
 

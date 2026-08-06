@@ -59,6 +59,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-50-recovery.md"
   "docs/exec-plans/completed/loyalty-point-adjustment-foundation.md"
   "docs/exec-plans/completed/signed-cursor-foundation.md"
+  "docs/exec-plans/completed/nearby-store-discovery.md"
   "docs/exec-plans/completed/ci-pr-validation.md"
   "docs/review/code-review.md"
   "docs/exec-plans/completed/foundation-domain-model.md"
@@ -1748,7 +1749,7 @@ else:
         print('Plan 14 must not claim the Plan 11 permission vocabulary migration.', file=sys.stderr)
         sys.exit(1)
     nearby_plan = (
-        root / 'docs/exec-plans/active/nearby-store-discovery.md'
+        root / 'docs/exec-plans/completed/nearby-store-discovery.md'
     ).read_text(encoding='utf-8')
     required_nearby_decisions = (
         'merchant_store_discovery_profile',

@@ -6,7 +6,7 @@
 
 관련 결정: [BR-28](../product/business-policy-decisions.md), [ADR-020](../adr/ADR-020-nearby-location-privacy.md),
 [ADR-070](../adr/ADR-070-signed-cursor-and-pagination-contract.md),
-[ExecPlan](../exec-plans/active/nearby-store-discovery.md).
+[ExecPlan](../exec-plans/completed/nearby-store-discovery.md).
 
 ## 1. 배포 전 preflight
 
