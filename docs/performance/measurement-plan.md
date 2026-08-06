@@ -36,7 +36,7 @@
 
 ## Initial scenarios
 
-- nearby store search at multiple data sizes
+- nearby store search at multiple data sizes (measured 2026-08-07)
 - order list query and N+1
 - last stock/slot/coupon contention
 - external PG latency with transaction inside versus outside only as controlled experiment
@@ -54,13 +54,18 @@
 
 측정하지 않은 개선율을 작성하지 않는다.
 
-## Nearby store search query plan (2026-08-06)
+## Nearby store search plan and latency (2026-08-07)
 
-- **Measured:** 고정 5,000-profile fixture에서 GiST index 유/무 실행계획.
-  `Seq Scan` + 4,950 row filter → `Index Scan using idx_store_discovery_profile_location`로 바뀌었다.
-- **Not measured:** warm p50/p95/p99, RPS, 오류율, GC/allocation, Hikari, native amd64 timing,
-  multi-page cursor 비용, 5,000건을 넘는 데이터 규모.
-- 단일 관측이고 컨테이너가 emulation으로 실행됐으므로 성능 개선을 주장하지 않는다.
+- **Reproduce:** `scripts/perf/nearby-store-search.sh`. dataset은 `random()`이 아니라 닫힌 식으로
+  생성해 같은 행이 재현되며, 좌표·radius·limit·warm-up·반복 횟수를 코드에 고정했다.
+- **Measured:** 10,000/100,000 profile 두 규모에서 `EXPLAIN (ANALYZE, BUFFERS)`와 200회 반복
+  latency 분포. 두 규모 모두 GiST bounding-box index condition을 사용했고 p50은 0.397 ms →
+  1.850 ms였다. 증가 요인은 전체 행 수가 아니라 반경 안 후보 수(27 → 265)였다.
+- **Not measured:** native amd64 timing, 동시 부하와 RPS, 부하 시 오류율, GC/allocation,
+  connection pool 거동, multi-page cursor 비용, 비균등 분포, 100,000건을 넘는 규모.
+- 비교 가능한 기준선이 없으므로 성능 개선을 주장하지 않는다. 컨테이너는 emulation으로 실행됐다.
+- 첫 실행의 `p50 = 117.936 ms`는 호출마다 새 connection을 여는 측정 결함이었고 원인과 함께
+  evidence 문서에 남겼다.
 - 상세 조건과 실제 값은 [nearby query plan evidence](../quality/nearby-store-discovery-performance-evidence.md)에 있다.
 - **Revisit when:** select list, sort tuple, index 정의, radius 계약, 최대 page size 또는
   PostgreSQL/PostGIS version이 바뀌거나 실제 매장 밀도 분포와 SLO가 생길 때.

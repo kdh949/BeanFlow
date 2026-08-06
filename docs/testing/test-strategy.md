@@ -135,6 +135,22 @@
 - Persistence/performance: PostgreSQL 17/PostGIS 3.5 Testcontainers와
   [고정 5,000-row query-plan evidence](../quality/nearby-store-discovery-performance-evidence.md).
 
+## Store catalogue read suite
+
+- Menu projection: available/unavailable 메뉴와 옵션 조합이 실제 owner flag로 나오고, 판매 불가
+  항목을 `available: true`로 만들지 않는다. 다른 store의 메뉴·옵션은 절대 섞이지 않는다.
+- Pickup slot projection: `(startsAt, pickupSlotId)` 정렬, 종료된 슬롯 제외, 잔여
+  `capacity - reserved - confirmed`와 0 하한, 커밋된 예약 이후 재조회가 줄어든 잔여를 보여준다.
+- Contract: 응답이 `MenuList`/`PickupSlotList` 필드 집합과 정확히 일치하고 write 필드
+  (`storeId`, `version`)를 노출하지 않는다.
+- Failure: 없는 Store 404, 정상적인 빈 목록 200, 주입한 영속 실패 503. 실패를 404나 빈 목록으로
+  바꾸지 않고 원인 제거 뒤 정상 복귀한다.
+- Authorization: 인증된 다섯 역할 모두 200, 미인증 401.
+- Query count: statement counting DataSource로 메뉴 2개·슬롯 1개 statement가 카탈로그 규모와
+  무관함을 고정해 N+1 회귀를 막는다.
+- Measurement: `scripts/perf/nearby-store-search.sh`가 고정 조건으로 두 규모 dataset을 재현하고
+  실행계획과 latency 분포를 기록한다. 일반 suite에서는 `BEANFLOW_BENCHMARK` 없이 실행되지 않는다.
+
 ## Query tests
 
 N+1은 FetchType 이름만으로 판단하지 않는다.
