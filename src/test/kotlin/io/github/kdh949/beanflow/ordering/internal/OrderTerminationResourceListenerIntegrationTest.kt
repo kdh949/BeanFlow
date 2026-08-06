@@ -144,11 +144,21 @@ internal class OrderTerminationResourceListenerIntegrationTest
 
             transactions.executeWithoutResult { eventPublisher.publishEvent(event) }
 
+            // The owner reservation state and the compensation step state are written by different
+            // steps of the listener, so waiting only on the reservation lets the step still be
+            // PROCESSING. Both must be settled before the assertions below run.
             await("cancellation resource listeners") {
                 pickupReservationRepository.findByOrderId(orderId)?.state ==
                     PickupReservationState.RELEASED_AFTER_TERMINATION &&
                     stockReservationRepository.findByOrderIdOrderBySellableUnitId(orderId).singleOrNull()?.state ==
-                    StockReservationState.RELEASED_AFTER_TERMINATION
+                    StockReservationState.RELEASED_AFTER_TERMINATION &&
+                    compensationOperations
+                        .findByOrderId(orderId)
+                        ?.steps
+                        ?.filter { it.type == OrderCompensationStepType.PICKUP || it.type == OrderCompensationStepType.STOCK }
+                        ?.let { steps ->
+                            steps.size == 2 && steps.all { it.state == OrderCompensationStepState.SUCCEEDED }
+                        } == true
             }
             val pickup = requireNotNull(pickupReservationRepository.findByOrderId(orderId))
             val stock = stockReservationRepository.findByOrderIdOrderBySellableUnitId(orderId).single()
