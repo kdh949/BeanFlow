@@ -73,7 +73,10 @@ internal class CustomerCancellationMigrationTest {
             Timestamp.from(createdAt),
         )
 
-        migrateCurrent()
+        // This case asserts V23's own backfill and must seed a store before migrating. Migrating to
+        // head instead would stop at the V33 discovery-profile coverage gate, which is the intended
+        // fail-closed behaviour for a store without a verified profile.
+        flyway(target = "23").migrate()
 
         assertThat(
             jdbcTemplate.queryForObject(

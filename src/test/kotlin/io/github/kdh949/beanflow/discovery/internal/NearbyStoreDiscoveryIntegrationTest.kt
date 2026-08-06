@@ -289,20 +289,26 @@ internal class NearbyStoreDiscoveryIntegrationTest
         }
 
         @Test
-        fun `a spatial query failure is a 503 with no fallback result and no audit record`() {
+        fun `a spatial query failure or timeout is a 503 with no fallback result and no audit record`() {
             insertStore(store(60), "Failure cafe", longitude = 127.0, latitude = 37.5)
-            val failuresBefore = spatialFailureCount()
-            installSpatialFailureTrigger()
 
-            mockMvc
-                .perform(nearby())
-                .andExpect(status().isServiceUnavailable)
-                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
-                .andExpect(jsonPath("$.items").doesNotExist())
+            // 58030 is an I/O error such as a damaged index; 57014 is the cancellation a statement
+            // timeout produces. Both must surface as 503, never as an empty successful page.
+            listOf("58030" to "injected spatial index failure", "57014" to "injected statement timeout").forEach { (state, message) ->
+                val failuresBefore = spatialFailureCount()
+                installSpatialFailureTrigger(state, message)
 
-            assertThat(spatialFailureCount()).isEqualTo(failuresBefore + 1.0)
-            assertThat(count("operations_audit_record")).isZero()
-            dropSpatialFailureTrigger()
+                mockMvc
+                    .perform(nearby())
+                    .andExpect(status().isServiceUnavailable)
+                    .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                    .andExpect(jsonPath("$.items").doesNotExist())
+
+                assertThat(spatialFailureCount()).describedAs(state).isEqualTo(failuresBefore + 1.0)
+                assertThat(count("operations_audit_record")).isZero()
+                dropSpatialFailureTrigger()
+            }
+
             mockMvc.perform(nearby()).andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
         }
 
@@ -398,13 +404,16 @@ internal class NearbyStoreDiscoveryIntegrationTest
          * Makes the spatial read fail the way a broken index or extension would, by replacing the
          * profile table with a view that raises.
          */
-        private fun installSpatialFailureTrigger() {
+        private fun installSpatialFailureTrigger(
+            sqlState: String,
+            message: String,
+        ) {
             jdbcTemplate.execute("ALTER TABLE merchant_store_discovery_profile RENAME TO merchant_store_discovery_profile_actual")
             jdbcTemplate.execute(
                 """
                 CREATE FUNCTION test_reject_nearby_spatial_query()
                 RETURNS SETOF merchant_store_discovery_profile_actual LANGUAGE plpgsql AS ${'$'}${'$'}
-                BEGIN RAISE EXCEPTION USING ERRCODE = '58030', MESSAGE = 'injected spatial index failure'; END;
+                BEGIN RAISE EXCEPTION USING ERRCODE = '$sqlState', MESSAGE = '$message'; END;
                 ${'$'}${'$'}
                 """.trimIndent(),
             )
