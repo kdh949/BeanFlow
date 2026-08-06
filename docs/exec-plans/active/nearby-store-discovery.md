@@ -256,6 +256,20 @@ checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
 - 2026-08-06: profile을 JPA Entity로 매핑하면 `geography` 매핑용 persistence dependency가
   추가로 필요하고 `ddl-auto: validate`와 충돌한다. Merchant가 JDBC native projection만 소유하도록
   해 새 production dependency 없이 Store 쓰기 Entity도 그대로 두었다.
+- 2026-08-06: V33 coverage gate가 `CustomerCancellationMigrationTest`의 V23 backfill 케이스에서
+  실제로 발동했다. 이 케이스는 store를 먼저 넣고 head까지 migrate했기 때문이다. gate는 ADR-020이
+  정한 동작이므로 유지하고, V23을 검증하는 케이스가 V23을 target하도록 정정했다. 이는 gate가
+  기존 store에 대해 실제로 배포를 멈춘다는 첫 실증이다. 앞으로 store를 seed한 뒤 head까지
+  migrate하는 테스트는 profile까지 함께 seed해야 한다.
+- 2026-08-06: 이 workstation의 Docker VM 파일시스템이 가득 차 있어(118G 중 111G 사용, 여유 1.2G)
+  전체 `./gradlew clean build`가 완주하지 못했다. 실패는 모두
+  `ContainerLaunchException … Container exited with code 1`과 그 뒤의 Spring context 실패였고,
+  같은 클래스를 10개 단위로 나눠 실행하면 전부 통과한다. 메모리 문제가 아님은 PostGIS 컨테이너
+  6개 동시 기동(각 45 MiB)으로 확인했다. 원인은 저장소 코드가 아니라 host 자원이다.
+- 2026-08-06: `OrderTerminationResourceListenerIntegrationTest`가 부하 상황에서
+  `expected: SUCCEEDED but was: PROCESSING`으로 한 번 실패했다. 단독 실행에서는 이 branch와
+  `main` 모두 통과한다. emulated container가 느려 async publication timing에 민감해진 것으로
+  보이지만 측정 근거가 없어 이번 변경의 회귀로 단정하지 않는다.
 
 ## Decision Log
 
@@ -294,6 +308,17 @@ Milestone 1~3이 구현·검증됐다. Milestone 4~5는 미구현이다.
   승격했다.
 - 좌표는 request 범위에서만 쓰이고 응답 body, error detail, metric tag, `AuditRecord`에 남지
   않는다. PostGIS 실패는 fallback 없이 503이다.
+
+**검증 상태 (2026-08-06)**
+
+- 통과: `./gradlew test --tests '*Discovery*' --tests '*Merchant*'`,
+  `./gradlew test --tests '*RuntimeOpenApi*' --tests '*ModularityTests'`,
+  `./gradlew clean build -x test`(spotless/compile/assemble), `bash scripts/verify-docs.sh`,
+  `git diff --check`.
+- 통과: 97개 test class 전체를 10개 단위 10개 chunk로 나눈 실행에서 모든 chunk `BUILD SUCCESSFUL`.
+- **미완주:** 단일 `./gradlew clean build`. 이 workstation의 Docker VM 디스크 포화로 컨테이너
+  기동이 실패한다. 저장소 코드 문제가 아니며 CI(`ubuntu-latest`, native amd64)에서 최종 확인이
+  필요하다.
 
 **측정**
 
