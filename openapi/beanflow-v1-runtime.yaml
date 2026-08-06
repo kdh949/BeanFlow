@@ -25,6 +25,10 @@ tags:
 paths:
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
+  /stores/{storeId}/menus:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
+  /stores/{storeId}/pickup-slots:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slots"
   /orders:
     post:
       tags: [Ordering]
