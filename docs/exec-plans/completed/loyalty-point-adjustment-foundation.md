@@ -19,7 +19,7 @@ target AuditRecord, IdempotencyRecord와 최초 응답이 함께 저장되어 �
 
 ## Current State
 
-- deployed OpenAPI와 Controller가 audited adjustment POST, conditional request와 stored
+- runtime OpenAPI와 Controller가 audited adjustment POST, conditional request와 stored
   `201 PointAdjustmentResult` replay를 제공한다.
 - V31과 Kotlin persistence는 existing transaction의 deterministic `balance_effect`,
   `ADJUSTMENT` vocabulary/source CHECK와 Loyalty terminal idempotency relation을 제공한다.

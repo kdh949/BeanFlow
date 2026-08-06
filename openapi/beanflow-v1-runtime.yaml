@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
-  title: BeanFlow API — Deployed Contract
+  title: BeanFlow API — Runtime Contract
   version: 0.2.0
-  x-beanflow-contract-status: deployed
-  x-beanflow-contract-date: 2026-08-04
+  x-beanflow-contract-status: runtime
+  x-beanflow-contract-date: 2026-08-06
   description: |
     Current public controller contract represented by this repository source.
-    It contains only implemented mappings. Components shared with the target
-    contract are referenced explicitly; deployed-only legacy shapes are local.
+    It contains only implemented mappings backed by source contract tests. It is
+    not evidence of a non-local deployment. Components shared with the target
+    contract are referenced explicitly; runtime-only legacy shapes are local.
 servers:
   - url: /api/v1
 security:
@@ -18,6 +19,8 @@ tags:
   - name: Store Orders
   - name: Operations
   - name: Loyalty
+  - name: Settlement
+  - name: Dispute
 paths:
   /orders:
     post:
@@ -217,7 +220,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeployedStoreOrderResult"
+                $ref: "#/components/schemas/RuntimeStoreOrderResult"
         "401":
           $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         "403":
@@ -239,20 +242,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DeployedStoreOrderTransitionRequest"
+              $ref: "#/components/schemas/RuntimeStoreOrderTransitionRequest"
       responses:
         "200":
           description: Synchronous store transition
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeployedStoreOrderTransitionResult"
+                $ref: "#/components/schemas/RuntimeStoreOrderTransitionResult"
         "202":
           description: REJECTED committed while order compensation continues separately
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeployedStoreOrderTransitionResult"
+                $ref: "#/components/schemas/RuntimeStoreOrderTransitionResult"
         "400":
           $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         "401":
@@ -282,7 +285,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeployedOperatorCompensationView"
+                $ref: "#/components/schemas/RuntimeOperatorCompensationView"
         "400":
           $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         "401":
@@ -527,6 +530,22 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/policies/ordinary-point-accrual/global:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1global"
+  /operations/policies/ordinary-point-accrual/global/versions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1global~1versions"
+  /operations/policies/ordinary-point-accrual/stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1stores"
+  /operations/policies/ordinary-point-accrual/stores/{storeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1stores~1{storeId}"
+  /operations/policies/ordinary-point-accrual/stores/{storeId}/versions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1stores~1{storeId}~1versions"
+  /stores/{storeId}/settlements:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements"
+  /stores/{storeId}/settlements/{settlementBatchId}/items:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements~1{settlementBatchId}~1items"
+  /settlement-items/{itemId}/disputes:
+    $ref: "./beanflow-v1.yaml#/paths/~1settlement-items~1{itemId}~1disputes"
 components:
   securitySchemes:
     bearerAuth:
@@ -534,7 +553,7 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
-    DeployedStoreOrderTransitionRequest:
+    RuntimeStoreOrderTransitionRequest:
       type: object
       additionalProperties: false
       required: [targetState]
@@ -547,7 +566,7 @@ components:
             - type: string
               maxLength: 500
             - type: "null"
-    DeployedStoreOrderResult:
+    RuntimeStoreOrderResult:
       type: object
       additionalProperties: false
       required: [order]
@@ -555,8 +574,8 @@ components:
         order:
           $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
         compensationRecovery:
-          $ref: "#/components/schemas/DeployedStoreCompensationSummary"
-    DeployedStoreOrderTransitionResult:
+          $ref: "#/components/schemas/RuntimeStoreCompensationSummary"
+    RuntimeStoreOrderTransitionResult:
       type: object
       additionalProperties: false
       required: [order]
@@ -564,8 +583,8 @@ components:
         order:
           $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
         compensationRecovery:
-          $ref: "#/components/schemas/DeployedStoreCompensationSummary"
-    DeployedStoreCompensationSummary:
+          $ref: "#/components/schemas/RuntimeStoreCompensationSummary"
+    RuntimeStoreCompensationSummary:
       type: object
       additionalProperties: false
       required: [trigger, state, updatedAt]
@@ -579,7 +598,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-    DeployedOperatorCompensationView:
+    RuntimeOperatorCompensationView:
       type: object
       additionalProperties: false
       required: [compensation]

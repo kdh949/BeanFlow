@@ -35,6 +35,8 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
   batch-100 cleanup과 지연 뒤 실제 성공 알림을 포함한다.
 - Plan 30의 stable listener별 owner 수렴과 Plan 20의 Settlement NOT_APPLICABLE consumer를
   combined branch에서 재검증했다.
+- Plan 40/50은 PR #39로 현재 `main`에 병합됐다. Runtime OpenAPI와 Controller mapping은
+  source capability를 증명하지만 실제 non-local deployment evidence는 없다.
 
 ## Definitions
 
@@ -240,3 +242,5 @@ ready PR #39를 생성했다. 이 completion 이동도 같은 PR에 포함한다
   main merge/deployment는 없으며 shared migration-writer lease는 PR merge까지 held 상태로 유지한다.
 - 2026-08-03: PR #39 최초 build의 Linux/JVM 나노초 대 PostgreSQL 마이크로초 불일치를 수정하고
   고정 나노초 회귀 입력, 대상 테스트와 365-test clean build를 재검증했다.
+- 2026-08-06: PR #39가 현재 `main`에 병합된 사실을 Current State에 추가했다. 완료 당시
+  remote/deployment 관측은 역사적 기록으로 유지하며 배포 완료를 새로 주장하지 않는다.

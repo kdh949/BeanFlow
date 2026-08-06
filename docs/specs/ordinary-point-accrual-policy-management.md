@@ -40,7 +40,7 @@ STORE override 단위의 immutable version으로 조회·변경할 수 있게 �
 - Spring Boot 4.1.0, Spring MVC, Method Security
 - Spring Data JPA, PostgreSQL, Flyway
 - Spring Modulith
-- Spring REST Docs and target/deployed OpenAPI split
+- Spring REST Docs and target/runtime OpenAPI split
 - JUnit 5, AssertJ, MockMvc, PostgreSQL Testcontainers
 - existing `SignedCursorCodec` for version/head pagination
 
@@ -98,7 +98,7 @@ src/test/kotlin/io/github/kdh949/beanflow/{operations,ordering}/internal/
   *OrderPointAccrualSnapshot*Test.kt
 
 openapi/beanflow-v1.yaml                     target contract
-openapi/beanflow-v1-deployed.yaml            unchanged until deployment evidence
+openapi/beanflow-v1-runtime.yaml             source-runtime contract (renamed after this spec)
 docs/operations/                              bootstrap runbook
 docs/adr/, docs/product/, docs/architecture/ decision and contract records
 ```
@@ -255,7 +255,8 @@ type/reference and normalized reason. It never exposes idempotency key/hash or r
 ### OpenAPI publication
 
 - Add the paths, schemas, parameters and permission/failure descriptions to `beanflow-v1.yaml`.
-- Do not add them to `beanflow-v1-deployed.yaml` until deployment evidence exists.
+- 이 spec 작성 당시에는 deployment evidence 전 계약에 추가하지 않는 정책이었다. 현재는
+  source mapping을 뜻하는 `beanflow-v1-runtime.yaml`에 구현 operation이 포함된다.
 - Update API conventions, authorization matrix and error descriptions without predicting Plan 13 ledger APIs.
 
 ## Offline Bootstrap Contract

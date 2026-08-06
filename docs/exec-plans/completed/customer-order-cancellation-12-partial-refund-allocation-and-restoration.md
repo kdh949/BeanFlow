@@ -119,7 +119,7 @@ ADR-014/036/061/063/068, OpenAPI/payment runbook과 Plan 13/16/40 evidence를 �
     참조하지 않는다.
   - 예상 변경 파일: Payment/Loyalty/Ordering application API와 service/persistence/controller/worker,
     `V15__*` Flyway migration, Refund/allocation/restoration PostgreSQL·contract·Modulith tests,
-    target/deployed OpenAPI, payment/Loyalty runbook과 관련 ADR/architecture/readiness 문서다. 새 production
+    target/runtime OpenAPI, payment/Loyalty runbook과 관련 ADR/architecture/readiness 문서다. 새 production
     dependency는 필요하지 않다.
   - 트랜잭션 경계와 lock: request transaction은 Payment와 기존 성공 allocation을 고정 순서로 잠근 뒤
     immutable OrderLine/PointReservation allocation과 policy version을 snapshot한다. Provider 호출은 commit

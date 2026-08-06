@@ -3,12 +3,12 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-01
+  x-beanflow-contract-date: 2026-08-06
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
     file is not evidence that it is deployed. The machine-readable contract for
-    currently implemented public controller mappings is beanflow-v1-deployed.yaml.
+    currently implemented public controller mappings is beanflow-v1-runtime.yaml.
 
     All monetary values are integer KRW. All timestamps are ISO-8601 date-time
     values with an offset or UTC designator. A 202 response means processing or

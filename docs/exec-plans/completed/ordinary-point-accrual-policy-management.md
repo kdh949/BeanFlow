@@ -191,7 +191,7 @@ GET은 READ grant, X-Access-Reason과 Audit commit gate, list/history는 signed 
 GLOBAL response와 Store effective response/history는 conditional policy values와 actor/effective metadata를
 노출하고 internal hash/idempotency/evidence는 제외한다.
 
-`beanflow-v1-deployed.yaml`은 deployment evidence 전에는 변경하지 않는다. public integration event는
+당시 source 계약 파일은 deployment evidence 전에는 변경하지 않는다. public integration event는
 추가하거나 변경하지 않는다.
 
 ## Milestones and Implementation Order
@@ -226,7 +226,7 @@ Checkpoint: application tests prove exact selection/version behavior and all per
 - Controller/request/response mapping과 seven target paths를 구현한다.
 - MockMvc/REST Docs/OpenAPI contract tests와 authorization matrix/API docs를 갱신한다.
 
-Checkpoint: target contract and runtime behavior agree; deployed OpenAPI remains unchanged.
+Checkpoint: target contract and runtime behavior agree; 당시 deployment 표기 OpenAPI remains unchanged.
 
 ### Milestone 5 — Ordering snapshot integration
 
@@ -279,7 +279,7 @@ vocabulary and module boundary changes have one owner. No separate migration wri
 - new Order snapshot atomicity, rollback, hash/source conflict and immutability
 - old snapshot unchanged after global/store/inheritance policy changes
 - benefit-only and external-payable Order paths
-- OpenAPI target/deployed split, REST Docs, Modulith and full regression
+- OpenAPI target/runtime split, REST Docs, Modulith and full regression
 
 ## Validation Commands
 
@@ -393,7 +393,7 @@ IDs, rate, validity, issuer reference, actor, reason, token/evidence and idempot
 
 - [x] **Task 8: operator HTTP vertical slice와 target OpenAPI**
   - Acceptance: seven paths, request oneOf/conditional response, role/grant/reason/idempotency/error contracts가
-    runtime과 target OpenAPI에서 일치하고 deployed OpenAPI는 바뀌지 않는다.
+    runtime과 target OpenAPI에서 일치하고 당시 deployment 표기 OpenAPI는 바뀌지 않는다.
   - Verify:
     - `./gradlew test --tests '*OrdinaryPointAccrualPolicyControllerTest'`
     - `bash scripts/verify-docs.sh`
@@ -445,7 +445,7 @@ IDs, rate, validity, issuer reference, actor, reason, token/evidence and idempot
   - Files:
     - `docs/exec-plans/active/ordinary-point-accrual-policy-management.md` → completed path
     - `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`
-    - `docs/exec-plans/active/customer-order-cancellation-and-recovery.md`
+    - `docs/exec-plans/completed/customer-order-cancellation-and-recovery.md`
     - `docs/quality/customer-order-cancellation-readiness.md`
     - `scripts/verify-docs.sh`
 

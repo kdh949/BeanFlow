@@ -31,4 +31,5 @@
 | 권한 우회 | role + ownership | cross-store access test | authorization matrix |
 | 암묵적 fallback | fail-fast and explicit states | startup/dependency failure | failure semantics ADR |
 | 감사 누락·민감정보 저장 | target별 동일 transaction append, 민감 key 거부, retention worker | `AuditRecordTest`, 주문 생성·만료 audit assertion | BR-30, ADR-022, Testcontainers 결과 |
+| Runtime API 문서 drift | Spring `RequestMappingHandlerMapping` inventory와 Runtime OpenAPI exact set parity | `RuntimeOpenApiParityTest`가 `/api/v1` path/method 정규화 뒤 양방향 비교; actuator/error/HEAD/OPTIONS 제외 | Runtime OpenAPI, MVC slice test, verify-docs target/runtime ref 검사 |
 | 문서 drift | contract checks and decision protocol | required file, BR, ADR, link, OpenAPI ref 검사 | ADR/Policy history, verify-docs output |
