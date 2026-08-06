@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
-- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 14 point-account read](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/completed/loyalty-point-adjustment-foundation.md)
+- **Implementation owners:** [Plan 11 policy/grants](../exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md), [ordinary accrual policy/snapshot foundation](../exec-plans/completed/ordinary-point-accrual-policy-management.md), [Plan 14 point-account read](../exec-plans/completed/customer-order-cancellation-14-point-account-read-vertical-slice.md), [Point adjustment plan](../exec-plans/completed/loyalty-point-adjustment-foundation.md)
 
 ## Context
 

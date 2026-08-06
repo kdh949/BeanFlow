@@ -58,13 +58,12 @@ internal class PointAccountQueryMapperTest {
     private fun projection(
         type: String,
         balanceEffect: String,
-    ) =
-        PointTransactionProjection(
-            transactionId = UUID.randomUUID(),
-            type = type,
-            balanceEffect = balanceEffect,
-            amountKrw = 10,
-            occurredAt = Instant.parse("2026-08-06T00:00:00Z"),
-            sourceReference = "query-mapper:${UUID.randomUUID()}",
-        )
+    ) = PointTransactionProjection(
+        transactionId = UUID.randomUUID(),
+        type = type,
+        balanceEffect = balanceEffect,
+        amountKrw = 10,
+        occurredAt = Instant.parse("2026-08-06T00:00:00Z"),
+        sourceReference = "query-mapper:${UUID.randomUUID()}",
+    )
 }

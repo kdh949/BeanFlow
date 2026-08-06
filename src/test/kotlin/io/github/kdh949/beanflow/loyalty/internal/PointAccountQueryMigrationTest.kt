@@ -27,7 +27,12 @@ internal class PointAccountQueryMigrationTest {
     @Test
     fun `V32 creates the descending account ledger keyset index`() {
         val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-        Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate()
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .load()
+            .migrate()
         val indexDefinition =
             JdbcTemplate(dataSource).queryForObject(
                 "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = " +
@@ -101,7 +106,12 @@ internal class PointAccountQueryMigrationTest {
 
     private fun jdbcTemplate(): JdbcTemplate {
         val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-        Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate()
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .load()
+            .migrate()
         return JdbcTemplate(dataSource)
     }
 
@@ -109,17 +119,17 @@ internal class PointAccountQueryMigrationTest {
         jdbcTemplate: JdbcTemplate,
         accountId: UUID,
     ): String =
-        jdbcTemplate.queryForList(
-            """
-            EXPLAIN (ANALYZE, BUFFERS)
-            SELECT id, type, balance_effect, amount_krw, occurred_at, source_reference
-              FROM loyalty_point_transaction
-             WHERE point_account_id = ?
-             ORDER BY occurred_at DESC, id DESC
-             LIMIT $LIMIT
-            """.trimIndent(),
-            String::class.java,
-            accountId,
-        ).joinToString("\n")
-
+        jdbcTemplate
+            .queryForList(
+                """
+                EXPLAIN (ANALYZE, BUFFERS)
+                SELECT id, type, balance_effect, amount_krw, occurred_at, source_reference
+                  FROM loyalty_point_transaction
+                 WHERE point_account_id = ?
+                 ORDER BY occurred_at DESC, id DESC
+                 LIMIT $LIMIT
+                """.trimIndent(),
+                String::class.java,
+                accountId,
+            ).joinToString("\n")
 }

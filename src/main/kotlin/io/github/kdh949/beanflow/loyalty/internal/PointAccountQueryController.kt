@@ -44,15 +44,14 @@ internal class PointAccountQueryController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable accountId: UUID,
         @RequestHeader(value = "X-Access-Reason", required = false) accessReason: String?,
-    ) =
-        queries.get(
-            ReadPointAccountCommand(
-                actor = actor(jwt),
-                accountId = accountId,
-                accessReason = accessReason,
-                now = clock.instant(),
-            ),
-        )
+    ) = queries.get(
+        ReadPointAccountCommand(
+            actor = actor(jwt),
+            accountId = accountId,
+            accessReason = accessReason,
+            now = clock.instant(),
+        ),
+    )
 
     @GetMapping("/{accountId}/transactions")
     fun transactions(

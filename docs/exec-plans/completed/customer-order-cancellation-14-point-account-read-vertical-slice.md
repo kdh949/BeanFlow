@@ -1,11 +1,11 @@
 # PointAccount 지원 조회 vertical slice를 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md`, `docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md`, `docs/exec-plans/completed/signed-cursor-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-06`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -221,12 +221,12 @@ error code만 노출한다.
 
 ## Progress
 
-- [ ] Plan 11/13/signed-cursor outcomes와 migration-writer lease
-- [ ] ledger index와 Query Repository/DTO projection
-- [ ] customer ownership read
-- [ ] operator grant/reason/Audit commit gate
-- [ ] signed cursor/API/runtime contract
-- [ ] performance/security/failure/full validation evidence
+- [x] Plan 11/13/signed-cursor outcomes와 migration-writer lease
+- [x] ledger index와 Query Repository/DTO projection
+- [x] customer ownership read
+- [x] operator grant/reason/Audit commit gate
+- [x] signed cursor/API/runtime contract
+- [x] performance/security/failure/full validation evidence
 
 ## Surprises & Discoveries
 
@@ -238,6 +238,13 @@ error code만 노출한다.
   없어 Plan 14의 `Writes-Migration=true` 근거로 확정했다.
 - 2026-08-02: Plan 13 V17/owner flow와 205-test outcome이 completed path로 이동해 마지막 direct
   dependency가 닫혔다. 구현 시작 시 새 ADR-072 migration-writer lease를 별도로 획득해야 한다.
+- 2026-08-06: ADR-070 common codec은 sort string이 canonical UUID이면 UUID 형식으로, 그 외 값은
+  endpoint adapter가 검증하도록 설계돼 있어 `Instant`와 UUID tuple을 별도 codec 변경 없이 사용할 수 있었다.
+- 2026-08-06: full clean build의 첫 시도는 새 Kotlin 파일의 Spotless violation으로 compile 전 실패했다.
+  `spotlessApply` 후 같은 build를 재실행했고, 포맷 변경은 feature behavior를 바꾸지 않았다.
+- 2026-08-06: clean build를 중복 실행하면 두 Gradle process가 `build/test-results`의 in-progress
+  binary를 서로 삭제해 테스트 결과 집계가 실패한다. concurrent build를 종료한 뒤 단일 clean build로
+  다시 실행해 code failure와 build-artifact race를 구분했다.
 
 ## Decision Log
 
@@ -247,13 +254,26 @@ error code만 노출한다.
 | 2026-08-01 | Accepted | Plan 11, Plan 13과 signed cursor를 direct input으로 사용 | grant, 실제 pending summary와 cursor contract가 모두 필요 | ADR-069, ADR-072 |
 | 2026-08-01 | Accepted | `updatedAt` 제거, `recoveryPendingKrw` 실제 summary 유지 | 근거 없는 timestamp/0 fallback 방지 | ADR-065, ADR-069 |
 | 2026-08-01 | Accepted | permission migration은 Plan 11, ledger 조회 index는 Plan 14 소유 | migration ownership 모순 제거와 keyset query 보강 | ADR-069, ADR-072 |
+| 2026-08-06 | Implemented | V32를 ledger keyset index 단일 owner로 추가 | `limit + 1` JDBC DTO projection이 account별 최신순 tuple을 실제 index로 소비 | ADR-069, ADR-072 |
+| 2026-08-06 | Implemented | support read Audit를 same local transaction commit gate로 유지 | grant/reason/projection/Audit 중 하나라도 실패하면 200이나 unaudited body를 만들지 않음 | ADR-069, failure semantics |
+| 2026-08-06 | Implemented | PointAccount ledger를 common HMAC cursor typed adapter에 연결 | endpoint/account scope, 24시간 expiry, 20/100 limit을 재구현하지 않고 ADR-070을 소비 | ADR-070 |
 
 ## Outcomes & Retrospective
 
-미구현 상태지만 Plan 11 grant, Plan 13 실제 pending/ledger와 signed-cursor가 모두 verified completed
-path에 있어 `Implementation-Ready=true`다. Plan 13의 actual source는 Account summary,
-PointRecoveryPending과 PointTransaction `ACCRUAL|RECOVERY`이며 Plan 14는 이를 변경하지 않고 query
-projection/index만 소유한다. 구현 시작 전 latest main과 단일 migration-writer lease를 다시 확인한다.
+Plan 14는 V32 `idx_point_transaction_account_occurred_id`, JDBC DTO projection, customer ownership
+read-only branch와 audited operator branch를 구현했다. summary는 persisted `availablePointsKrw`와
+`recoveryPendingKrw`만 반환하고, ledger는 public signed effect와 `(occurredAt DESC, transactionId DESC)`
+cursor tuple만 노출한다. runtime OpenAPI parity, PostgreSQL integration/migration tests와 fixed
+5,000-row `EXPLAIN (ANALYZE, BUFFERS)` evidence를 같은 변경에서 추가했다. 5,000-row first-page
+fixture에서 index 없는 plan은 `Seq Scan` 뒤 sort(1.092 ms), V32 plan은 `Index Scan`(0.036 ms)이었으며
+이는 controlled plan evidence일 뿐 SLA가 아니다.
+
+최종 검증은 `*PointAccount*`/`*PointTransaction*`/`*OperatorPermission*`/runtime OpenAPI/Modulith
+selection, full `clean build`, 문서 verifier, `git diff --check`로 수행했다. `./gradlew test --tests
+'*PointAccount*' --tests '*PointTransaction*' --tests '*OperatorPermission*' --tests '*RuntimeOpenApi*'
+--tests '*ModularityTests'`와 `./gradlew clean build`(2m 27s)는 통과했고, `bash scripts/verify-docs.sh`는
+32 business policies, 75 ADRs, 150 Markdown files, 25 ExecPlans를 검증했다. common cursor, grant와 Audit
+public API만 module boundary를 넘겼고, cursor secret·Operations internal repository·fallback은 추가하지 않았다.
 
 ## Revision Notes
 
@@ -261,3 +281,5 @@ projection/index만 소유한다. 구현 시작 전 latest main과 단일 migrat
 - 2026-08-01: Plan 13 dependency, target `updatedAt` 제거, ledger index ownership과 전체
   architecture/failure/test contract를 확정해 self-contained ExecPlan으로 승격했다.
 - 2026-08-02: completed Plan 13 V17/owner outcome을 반영해 direct dependency와 readiness를 갱신했다.
+- 2026-08-06: V32 keyset index, customer/operator read API, runtime OpenAPI, PostgreSQL performance evidence와
+  validation 결과를 기록하고 completed path로 이동했다.

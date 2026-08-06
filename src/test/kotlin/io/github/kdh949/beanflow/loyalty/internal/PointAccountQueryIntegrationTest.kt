@@ -209,14 +209,14 @@ internal class PointAccountQueryIntegrationTest
             )
             val second =
                 mockMvc
-                .perform(
-                    get(transactionPath(accountId))
-                        .param("limit", "1")
-                        .param("cursor", cursor)
-                        .with(customerJwt(customerId)),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
+                    .perform(
+                        get(transactionPath(accountId))
+                            .param("limit", "1")
+                            .param("cursor", cursor)
+                            .with(customerJwt(customerId)),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
                     .andReturn()
             assertThat(transactionIds(second.response.contentAsString))
                 .doesNotContainAnyElementsOf(transactionIds(first.response.contentAsString))
@@ -440,8 +440,7 @@ internal class PointAccountQueryIntegrationTest
                 .jwt { it.subject(customerId.toString()).claim("roles", listOf("CUSTOMER")) }
                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
 
-        private fun operatorJwt(actorId: UUID): RequestPostProcessor =
-            roleJwt(actorId.toString(), "PLATFORM_OPERATOR")
+        private fun operatorJwt(actorId: UUID): RequestPostProcessor = roleJwt(actorId.toString(), "PLATFORM_OPERATOR")
 
         private fun roleJwt(
             subject: String,

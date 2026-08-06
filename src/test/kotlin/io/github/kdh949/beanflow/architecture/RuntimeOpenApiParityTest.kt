@@ -1,8 +1,8 @@
 package io.github.kdh949.beanflow.architecture
 
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
-import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
+import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations

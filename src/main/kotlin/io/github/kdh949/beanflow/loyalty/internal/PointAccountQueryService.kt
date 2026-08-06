@@ -183,8 +183,7 @@ internal class PointAccountReadWorkflow(
     fun get(
         accountId: UUID,
         expectedCustomerId: UUID?,
-    ): PointAccountView =
-        account(accountId, expectedCustomerId).toView()
+    ): PointAccountView = account(accountId, expectedCustomerId).toView()
 
     fun listTransactions(
         accountId: UUID,
@@ -268,6 +267,7 @@ private fun PointTransactionViewType.allows(effect: PointBalanceEffect): Boolean
         -> effect == PointBalanceEffect.DEBIT
 
         PointTransactionViewType.RESTORE_SKIPPED_EXPIRED -> effect == PointBalanceEffect.NONE
+
         PointTransactionViewType.ADJUSTMENT -> effect == PointBalanceEffect.CREDIT || effect == PointBalanceEffect.DEBIT
     }
 
@@ -278,8 +278,7 @@ private fun PointBalanceEffect.toSignedAmount(amount: Long): Long =
         PointBalanceEffect.NONE -> 0
     }
 
-private fun pointTransactionDependency(message: String): Nothing =
-    throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
+private fun pointTransactionDependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 
 @Component
 internal class PointTransactionPaging(
@@ -409,7 +408,8 @@ internal class PointAccountReadMetrics(
             }
         meterRegistry.counter(counter, "actor_type", actorType.name, "outcome", outcome.name).increment()
         if (operation == PointAccountReadOperation.TRANSACTIONS && pageSize != null) {
-            meterRegistry.summary("beanflow.loyalty.point_transaction.page.size", "actor_type", actorType.name)
+            meterRegistry
+                .summary("beanflow.loyalty.point_transaction.page.size", "actor_type", actorType.name)
                 .record(pageSize.toDouble())
         }
     }

@@ -14,9 +14,8 @@
 완료 기록이다. 이 문서는 구현 계약을 새로 정의하지 않고 direct successor들의 결정과
 검증 증거를 찾아가는 입구다.
 
-PointAccount read는 고객 취소 command/recovery와 독립된 Active work다. 따라서 summary와
-transaction 조회가 남아 있다는 이유로 이미 완료된 고객 취소 command/recovery를 Active로
-유지하지 않는다.
+PointAccount read는 고객 취소 command/recovery와 독립된 completed work다. 따라서 summary와
+transaction 조회의 완료가 이미 닫힌 고객 취소 command/recovery의 scope를 바꾸지 않는다.
 
 ## Current State
 
@@ -89,8 +88,9 @@ deployment 증거가 아니다.
 - [Plan 40 Customer Cancellation Command](customer-order-cancellation-40-command.md)
 - [Plan 50 Customer Cancellation Recovery](customer-order-cancellation-50-recovery.md)
 
-독립 후속 작업은
-[Plan 14 PointAccount Read Vertical Slice](../active/customer-order-cancellation-14-point-account-read-vertical-slice.md)다.
+독립 후속 작업이었던
+[Plan 14 PointAccount Read Vertical Slice](customer-order-cancellation-14-point-account-read-vertical-slice.md)는
+customer/operator read와 V32 ledger index evidence로 완료됐다.
 
 ## Progress
 
