@@ -2,6 +2,7 @@
 
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
@@ -13,7 +14,6 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import java.util.UUID
 
 @Testcontainers
@@ -22,7 +22,7 @@ internal class SettlementInputMigrationTest {
         @Container
         @JvmStatic
         val postgres: PostgreSQLContainer<*> =
-            PostgreSQLContainer(DockerImageName.parse("postgres:17.6"))
+            PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
     }
 
     private val jdbcTemplate by lazy {

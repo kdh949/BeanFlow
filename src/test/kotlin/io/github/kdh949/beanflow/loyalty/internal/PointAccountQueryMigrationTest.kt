@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
@@ -8,7 +9,6 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
@@ -17,7 +17,7 @@ import java.util.UUID
 internal class PointAccountQueryMigrationTest {
     companion object {
         @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(DockerImageName.parse("postgres:17.6"))
+        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
 
         const val FIXTURE_TRANSACTION_COUNT = 5_000
         const val LIMIT = 101
