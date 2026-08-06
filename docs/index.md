@@ -46,10 +46,12 @@
 - [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
 - [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
 - [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
+- [Nearby Store Query Plan Evidence](quality/nearby-store-discovery-performance-evidence.md)
 - [Code Review Guide](review/code-review.md)
 - [Settlement Foundation Runbook](operations/settlement-foundation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
+- [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
 
 ## Execution Plans
 
@@ -85,3 +87,4 @@
 - [Customer Order Cancellation and Refund Recovery Runbook](operations/customer-order-cancellation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
+- [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)

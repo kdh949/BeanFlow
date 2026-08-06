@@ -371,6 +371,22 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - operator grant/Audit failure는 503이고 missing/revoked grant is 403이다. ledger cursor is
   `(occurredAt DESC, transactionId DESC)`이며 account scope가 다른 cursor를 재사용하지 않는다.
 
+## Nearby store search
+
+- nearby read는 write가 없는 단일 read-only transaction이다. Discovery가 좌표·radius·limit·cursor를
+  먼저 검증하고, 검증을 통과한 뒤에만 Merchant public Query API를 호출한다. invalid input에서는
+  spatial query를 실행하지 않는다.
+- Merchant Query Repository가 `merchant_store_discovery_profile`과 현재 `merchant_store` state를
+  하나의 PostGIS native projection으로 읽는다. Discovery는 Merchant Entity/Repository를 직접
+  호출하지 않고 영속 복제본이나 동기화 event를 만들지 않는다.
+- 이 transaction은 AuditRecord, domain event, cursor row 어느 것도 저장하지 않는다. cursor는
+  stateless HMAC token이며 응답 직전에 발급한다.
+- 고객 좌표는 transaction 범위의 query value로만 전달하고 응답, error detail, log, trace, metric
+  tag에 넣지 않는다. spatial query 또는 transaction commit 실패는 503이며 빈 결과, cached 결과
+  또는 애플리케이션 거리 계산으로 대체하지 않는다.
+- `merchant_store_discovery_profile` 쓰기는 이번 범위에 없다. Store write use case가 생기면 Store와
+  required profile을 같은 Merchant transaction에서 생성해야 startup coverage gate를 만족한다.
+
 ## Settlement
 
 - `OrderCompletedV2` Settlement consumer는 Ordering producer와 별도의 local transaction에서 immutable

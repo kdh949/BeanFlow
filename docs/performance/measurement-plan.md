@@ -54,6 +54,17 @@
 
 측정하지 않은 개선율을 작성하지 않는다.
 
+## Nearby store search query plan (2026-08-06)
+
+- **Measured:** 고정 5,000-profile fixture에서 GiST index 유/무 실행계획.
+  `Seq Scan` + 4,950 row filter → `Index Scan using idx_store_discovery_profile_location`로 바뀌었다.
+- **Not measured:** warm p50/p95/p99, RPS, 오류율, GC/allocation, Hikari, native amd64 timing,
+  multi-page cursor 비용, 5,000건을 넘는 데이터 규모.
+- 단일 관측이고 컨테이너가 emulation으로 실행됐으므로 성능 개선을 주장하지 않는다.
+- 상세 조건과 실제 값은 [nearby query plan evidence](../quality/nearby-store-discovery-performance-evidence.md)에 있다.
+- **Revisit when:** select list, sort tuple, index 정의, radius 계약, 최대 page size 또는
+  PostgreSQL/PostGIS version이 바뀌거나 실제 매장 밀도 분포와 SLO가 생길 때.
+
 ## Settlement lifecycle measurement (2026-08-03)
 
 - **Measured environment:** Apple Silicon local workstation, Java 21 test worker, PostgreSQL 17.6

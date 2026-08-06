@@ -112,6 +112,29 @@
   only `actor_type` and closed `outcome` tags
 - Persistence/performance: PostgreSQL 17.6 V32 migration and [fixed 5,000-row query-plan evidence](../quality/point-account-read-performance-evidence.md)
 
+## Nearby store Discovery suite
+
+- Contract validation: latitude/longitude `[-90,90]`/`[-180,180]` 경계와 finite plain decimal,
+  missing parameter, radius `1/10000/10001/0`, limit `omitted/1/100/101/0`, cursor `empty/2048/2049`.
+  모든 검증은 spatial query 이전에 실행되고 `INVALID_REQUEST` 400을 반환한다.
+- Canonicalization: `37.5`와 `37.5000`, `0`/`-0`/`0.0`/`0.000`이 같은 filter hash를 만들고
+  radius 또는 좌표를 바꾸면 hash가 달라진다. sort adapter는 unsigned decimal micrometer와
+  lowercase canonical UUID만 round-trip한다.
+- Spatial query: radius 경계 안/밖, 같은 거리의 store-ID tie와 3-page 완주에서 gap/duplicate 0,
+  disabled·pickup-disabled store 제외, floored integer meter 응답.
+- Cursor: 다른 radius/좌표 filter, 다른 endpoint scope, unknown key ID, signature 변조, 만료 token,
+  oversized/empty token이 모두 400이며 첫 page로 조용히 되돌아가지 않는다.
+- Privacy: 응답 body, 400 error body, metric tag와 `operations_audit_record`에 원본 좌표가 없고
+  Discovery read는 audit record와 domain event를 만들지 않는다.
+- Failure: 주입한 spatial 실패가 `DEPENDENCY_UNAVAILABLE` 503과
+  `beanflow.discovery.spatial.failure{reason}`로 관측되고 빈 200이나 local 계산으로 대체되지 않으며,
+  원인 제거 뒤 같은 요청이 정상 결과를 돌려준다.
+- Migration/startup gate: V33 schema와 GiST index, `merchant_store` 컬럼 불변, empty/exact coverage
+  통과, unresolved row의 migration 중단, missing/orphan/blank-name/non-point profile과 extension
+  제거의 startup 실패.
+- Persistence/performance: PostgreSQL 17/PostGIS 3.5 Testcontainers와
+  [고정 5,000-row query-plan evidence](../quality/nearby-store-discovery-performance-evidence.md).
+
 ## Query tests
 
 N+1은 FetchType 이름만으로 판단하지 않는다.

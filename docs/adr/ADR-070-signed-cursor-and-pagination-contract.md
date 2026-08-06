@@ -194,6 +194,21 @@ default/max limit, tamper/expiry, 다른 store/Batch scope 재사용과 authoriz
 parameter로 bind한다. PostgreSQL HTTP tests는 default 20, limit 1, tamper와 다른 account cursor의 400을
 검증했다. endpoint는 별도 cursor secret, unsigned/base64 fallback 또는 cursor store를 추가하지 않았다.
 
+**Nearby endpoint evidence (2026-08-06):** `GET /stores/nearby`는 common codec의 24시간 expiry와
+`stores-nearby` endpoint scope를 사용한다. filter hash는 key 순서가 고정된 canonical JSON
+(`endpoint`, canonical latitude, canonical longitude, integer `radiusMeters`)의 SHA-256이며 raw
+coordinate text는 token에 없다. `37.5`와 `37.5000`, `0`/`-0`/`0.0`/`0.000`이 같은 hash를 만들고
+radius 또는 좌표를 바꾸면 hash가 달라짐을 단위 테스트가 고정한다. typed adapter는
+`(distanceMicrometers, storeId)`를 unsigned decimal과 lowercase canonical UUID로 round-trip
+검증하고 negative, leading-zero, uppercase UUID, arity 불일치를 거부한다. DB range predicate는 raw
+`ST_DWithin`, sort/cursor predicate는 `floor(ST_Distance * 1_000_000)`, 응답은
+`floor(distanceMicrometers / 1_000_000)`이라 표시값과 keyset 값이 분리된다. PostgreSQL 통합
+테스트가 default 20, limit 1/100, `0/101` 400, 같은 거리 store-ID tie의 3-page 완주, 다른 radius
+및 다른 좌표 cursor, 다른 endpoint scope cursor, unknown key ID, signature 변조, 만료 token,
+2049자 token과 빈 cursor의 400을 검증했다. limit과 좌표 검증은 spatial query 이전에 실행된다.
+endpoint는 별도 cursor secret, unsigned/base64 fallback 또는 cursor store를 추가하지 않았다.
+PostgreSQL은 `uuid`를 bytewise로 정렬하므로 tie-break 순서는 canonical hex 문자열 순서다.
+
 ## Metrics
 
 - `beanflow.pagination.cursor.validation.count{endpoint,outcome}`
