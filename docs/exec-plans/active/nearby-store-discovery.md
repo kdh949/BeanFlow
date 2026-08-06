@@ -286,6 +286,8 @@ checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
 | 2026-08-06 | Minor decision | nearby query parameter를 raw `String`으로 받고 Discovery가 직접 검증 | framework conversion 예외 message가 원본 좌표를 error body에 echo하는 것을 차단 | Minor Decision, BR-28 |
 | 2026-08-06 | Minor decision | profile을 JPA Entity가 아닌 Merchant JDBC native projection으로만 읽음 | spatial 매핑용 새 production dependency와 Store 쓰기 Entity 확장을 모두 회피 | Minor Decision, ADR-020 |
 | 2026-08-06 | Minor decision | coordinate query parameter는 plain finite decimal만 허용하고 exponent 표기를 거부 | canonical filter hash를 결정적으로 유지하고 검증 표면을 좁힘 | Minor Decision, ADR-070 |
+| 2026-08-07 | Answered | `GET /stores/{storeId}/pickup-slots`는 `ends_at > now`인 슬롯만 반환한다. read 전용 범위이며 `PickupReservationService.reserve`의 시간 미검증 동작은 이번 범위에서 바꾸지 않는다 | 계약이 "available pickup slots"이고 종료된 슬롯은 픽업할 수 없다. read/write 범위 차이는 문서에 명시해 숨기지 않는다 | Minor Decision, 이 plan, pickup slot runbook |
+| 2026-08-07 | Plan interpretation | `GET /stores/{storeId}/menus`는 store의 메뉴를 모두 반환하고 `available`에 현재 owner state를 그대로 투영한다 | schema가 `available`을 required로 두므로 항상 true면 계약이 무의미하다. `merchant_menu`에 별도 visibility 컬럼이 없어 없는 모델을 추정하지 않는다 | target OpenAPI, `merchant_menu` |
 
 ## Outcomes & Retrospective
 
