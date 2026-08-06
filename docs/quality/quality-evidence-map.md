@@ -23,6 +23,7 @@
 | 슬롯·재고 초과 | reservation, owner row lock, DB constraint | `PickupReservationRepositoryTest`, `StockReservationRepositoryTest`, `ReservationExpiryTest` | PostgreSQL Testcontainers 결과 |
 | 쿠폰 이중 사용 | issuance state, unique constraint | two-order contention | Testcontainers test |
 | 포인트 만료·복원 오류 | PointLot, ledger, Clock | 경계·환불 테스트 | ADR, tie-out |
+| PointAccount ledger query가 account별 최신순 조회에서 전체 정렬로 퇴행 | V32 `(point_account_id, occurred_at DESC, id DESC)` index와 `limit + 1` keyset projection | PostgreSQL 17.6 5,000-row fixed fixture의 index 전후 `EXPLAIN (ANALYZE, BUFFERS)` | [PointAccount query evidence](point-account-read-performance-evidence.md), `PointAccountQueryMigrationTest` |
 | 감사형 포인트 조정의 부분 원장·권한 우회·중복 command | PointAccount→grant→idempotency→ordered Lot lock, terminal 201 replay, Audit/outbox atomicity | `PointAdjustmentIntegrationTest`의 role/grant/replay/concurrency/FIFO와 owner별 fault injection, V31 migration fixture | ADR-066/069, V31, point-adjustment release evidence와 runbook |
 | 확정 정산 변경 | immutable item/batch, adjustment | post-confirm refund/dispute와 DB mutation 거부 | 원장·금액 tie-out |
 | 중복 이벤트 | consumer idempotency | duplicate delivery | module/integration test |

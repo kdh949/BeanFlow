@@ -48,7 +48,7 @@ required=(
   "docs/exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md"
   "docs/exec-plans/completed/ordinary-point-accrual-policy-management.md"
   "docs/exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md"
-  "docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md"
+  "docs/exec-plans/completed/customer-order-cancellation-14-point-account-read-vertical-slice.md"
   "docs/exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md"
   "docs/exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md"
   "docs/exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md"
@@ -370,7 +370,7 @@ master_plan = (
 if (
     plan_metadata[plan_paths_by_filename['customer-order-cancellation-and-recovery.md']]['status']
     != 'COMPLETED'
-    or 'PointAccount read는 고객 취소 command/recovery와 독립된 Active work' not in master_plan
+    or 'PointAccount read는 고객 취소 command/recovery와 독립된 completed work' not in master_plan
 ):
     print('Customer cancellation master must be completed and separate PointAccount read.', file=sys.stderr)
     sys.exit(1)
@@ -412,7 +412,7 @@ required_current_readiness = (
     'settlement-batch-adjustment-and-dispute.md',
     'loyalty-point-adjustment-foundation.md',
     'customer-order-cancellation-14-point-account-read-vertical-slice.md',
-    'PointAccount read는 별도 Active work',
+    'PointAccount read는 customer cancellation command/recovery와 독립적으로 완료됐다',
 )
 if not all(fragment in normalized_readiness for fragment in required_current_readiness):
     print('Customer cancellation readiness is missing the current foundation graph.', file=sys.stderr)
@@ -1725,7 +1725,7 @@ else:
         print('Plan 11 must not require evidence in the expired-benefit policy PATCH body.', file=sys.stderr)
         sys.exit(1)
     plan14 = (
-        root / 'docs/exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md'
+        root / 'docs/exec-plans/completed/customer-order-cancellation-14-point-account-read-vertical-slice.md'
     ).read_text(encoding='utf-8')
     if 'vocabulary constraint만 필요한 forward migration' in plan14:
         print('Plan 14 must consume Plan 11 vocabulary without another grant migration.', file=sys.stderr)

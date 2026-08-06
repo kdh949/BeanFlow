@@ -54,12 +54,11 @@ evidence가 존재한다. 이 판정은 현재 source runtime capability에 대�
 - [Settlement Batch, Adjustment, and Dispute](../exec-plans/completed/settlement-batch-adjustment-and-dispute.md)
 - [Audited Loyalty Point Adjustment](../exec-plans/completed/loyalty-point-adjustment-foundation.md)
 
-PointAccount read는 별도 Active work다:
+PointAccount read는 customer cancellation command/recovery와 독립적으로 완료됐다:
 
-- [Plan 14 PointAccount Read Vertical Slice](../exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
+- [Plan 14 PointAccount Read Vertical Slice](../exec-plans/completed/customer-order-cancellation-14-point-account-read-vertical-slice.md)
 
-이 두 GET operation의 부재는 customer cancellation command/recovery의 완료 상태를 되돌리지
-않는다.
+이 두 GET operation은 customer cancellation command/recovery의 완료 상태를 변경하지 않는다.
 
 ## Protected invariants
 
@@ -109,3 +108,5 @@ PointAccount read는 별도 Active work다:
 - 2026-07-31: 계약과 clean-cutover foundation 착수 readiness 감사 작성.
 - 2026-08-06: 현재 `main`의 Plan 40/50, Settlement lifecycle과 loyalty adjustment 완료를
   반영해 command blocker를 제거하고 PointAccount read를 독립 Active work로 분리했다.
+- 2026-08-06: Plan 14 customer/support PointAccount read와 V32 ledger query index를 completed
+  evidence로 반영했다.

@@ -59,7 +59,7 @@
 - [Cancellation 11 Benefit Policy and Operator Grant Foundation](exec-plans/completed/customer-order-cancellation-11-benefit-policy-and-operator-grant-foundation.md)
 - [Cancellation 12 Partial Refund Allocation and Restoration](exec-plans/completed/customer-order-cancellation-12-partial-refund-allocation-and-restoration.md)
 - [Cancellation 13 Refund Earned-Point Recovery Foundation](exec-plans/completed/customer-order-cancellation-13-refund-earned-point-recovery-foundation.md)
-- [Cancellation 14 PointAccount Read Vertical Slice](exec-plans/active/customer-order-cancellation-14-point-account-read-vertical-slice.md)
+- [Cancellation 14 PointAccount Read Vertical Slice](exec-plans/completed/customer-order-cancellation-14-point-account-read-vertical-slice.md)
 - [Cancellation 15 Settlement Input Snapshot Foundation](exec-plans/completed/customer-order-cancellation-15-settlement-input-snapshot-foundation.md)
 - [Cancellation 16 Immutable Refund and Loyalty Event Producer](exec-plans/completed/customer-order-cancellation-16-immutable-refund-and-loyalty-event-producer.md)
 - [Cancellation 20 Settlement Foundation](exec-plans/completed/customer-order-cancellation-20-settlement-foundation.md)

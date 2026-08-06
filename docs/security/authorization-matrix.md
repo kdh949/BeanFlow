@@ -69,7 +69,9 @@ Application Service는 완전한 고객 취소 원천을 다시 검증한 뒤 �
 금액·Provider 결과·금융 식별자를 입력하거나 새 REQUEST를 보내는 권한은 부여하지 않는다.
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
-header는 optional이고 operator branch에서만 required다.
+header는 optional이고 operator branch에서만 required다. operator branch는 grant 확인, projection과
+`POINT_ACCOUNT_READ` Audit을 하나의 local transaction에서 commit해야만 200을 반환한다. missing/revoked
+grant는 403이고 grant/Audit persistence failure는 503이며 role 또는 다른 permission으로 대체하지 않는다.
 
 first grant와 grant/revoke/regrant는 HTTP role로 실행하지 않는다. offline bootstrap은 controlled
 deployment job의 단기 OIDC workload identity를 required issuer·audience·allowed subject로

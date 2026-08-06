@@ -33,6 +33,8 @@
 - 정산 batch 중단 후 재실행 → 중복 Item 0
 - DB 장애 → 빈 목록 또는 local repository fallback 없음
 - 같은 Platform Operator point adjustment 동시 debit → 하나만 가용 Lot을 차감, 원장·Audit·응답 일치
+- PointAccount support read → `POINT_ACCOUNT_READ` row lock/active grant, normalized access reason,
+  projection과 exactly-one target Audit이 같은 transaction에 commit; audit/projection failure에는 body 없음
 
 ## Customer cancellation release suite
 
@@ -99,6 +101,16 @@
 
 성능 수치는 구현 후 같은 PostgreSQL fixture, 동일 batch와 동시성 조건에서 기준선과
 함께 측정한다. 측정 없이 scanner, lock 또는 payload 성능 개선을 주장하지 않는다.
+
+## PointAccount read suite
+
+- API/security: customer ownership 200/403/404, unauthenticated 401, operator role+active
+  `POINT_ACCOUNT_READ` grant+reason만 200, invalid reason/cursor/limit 400
+- Ledger projection: actual `recoveryPendingKrw`, public signed effect, internal Lot/effect field absence,
+  `(occurredAt DESC, transactionId DESC)` tie order, account-bound signed cursor and `limit + 1`
+- Failure/observability: audit persistence and inconsistent ledger fact are 503 with no success body; metrics use
+  only `actor_type` and closed `outcome` tags
+- Persistence/performance: PostgreSQL 17.6 V32 migration and [fixed 5,000-row query-plan evidence](../quality/point-account-read-performance-evidence.md)
 
 ## Query tests
 
