@@ -216,12 +216,16 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 
 ## Progress
 
-- [ ] PostGIS/container, extension privilege and existing profile preflight/startup gate
-- [ ] Merchant profile migration and owner API
-- [ ] nearby query, cursor and privacy redaction
+- [x] PostGIS/container, extension privilege and existing profile preflight/startup gate
+- [x] Merchant profile migration and owner API
+- [x] nearby query, cursor and privacy redaction
 - [ ] menu/pickup read projections
 - [ ] failure/measurement/runbook evidence
 - [ ] full validation
+
+Milestone 1~3만 완료했다. Milestone 4의 `/stores/{storeId}/menus`와
+`/stores/{storeId}/pickup-slots`, Milestone 5의 data-scale latency baseline은 다음
+checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
 
 ## Surprises & Discoveries
 
@@ -229,6 +233,43 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
   public name이 없다. unsafe default coordinate/name을 막는 preflight/startup gate가 필요하다.
 - 2026-08-01: `merchant_store` 직접 확장은 Context Map의 translation boundary와 충돌하므로 별도
   Merchant `StoreDiscoveryProfile`과 public Query DTO로 소유권을 분리했다.
+- 2026-08-06: `postgis/postgis:17-3.5`에는 `linux/amd64` manifest만 있고 arm64 manifest가 없다
+  (`docker manifest inspect` 확인, `-alpine`/`-master` 태그도 동일). CI runner는 `ubuntu-latest`
+  이므로 native이고, Apple Silicon workstation은 Docker 에뮬레이션으로 같은 image를 실행한다.
+  실측 기동 결과는 `PostgreSQL 17.5`와 `POSTGIS="3.5.2"`이며 `CREATE EXTENSION postgis` 권한도
+  확인했다. multi-arch third-party rebuild로 바꾸면 image 출처가 달라지므로 채택하지 않았다.
+- 2026-08-06: V33이 모든 환경에서 PostGIS를 요구하므로 공통 Testcontainers image를
+  `postgres:17.6`에서 `postgis/postgis:17-3.5`로 교체해야 했다. 12개 migration test가 각자
+  image 이름을 갖고 있어 `BEANFLOW_POSTGRES_IMAGE` 단일 상수로 모았다. 이제 plain PostgreSQL
+  image로는 spatial test가 통과할 수 없다.
+- 2026-08-06: `merchant_store`에는 name/location source가 없고 Store 생성 API도 없다.
+  release evidence의 `shared/production deployment environment = 0`,
+  `production/shared 환경에 적용된 migration = 0`과 함께 empty migration path가 유일하게 근거
+  있는 경로였다. verified dataset이 없으므로 backfill을 시도하지 않았다.
+- 2026-08-06: `ApiExceptionHandler`가 binding/validation 예외 message를 `details[].reason`으로
+  응답에 넣는다. latitude/longitude를 typed parameter로 바인딩하면 conversion 예외 message가
+  원본 좌표를 그대로 echo하므로 BR-28을 위반한다. 그래서 좌표·radius·limit·cursor를 raw
+  `String`으로 받고 Discovery가 직접 검증해 값 없는 `INVALID_REQUEST`만 반환한다.
+- 2026-08-06: PostgreSQL은 `uuid`를 bytewise로 정렬하고 Java `UUID.compareTo`는 signed long
+  기준이라 tie-break 순서가 다르다. keyset 비교와 정렬을 모두 SQL에서 수행하므로 실제 계약은
+  PostgreSQL 순서이고, 테스트 기대값도 canonical hex 문자열 순서로 맞췄다.
+- 2026-08-06: profile을 JPA Entity로 매핑하면 `geography` 매핑용 persistence dependency가
+  추가로 필요하고 `ddl-auto: validate`와 충돌한다. Merchant가 JDBC native projection만 소유하도록
+  해 새 production dependency 없이 Store 쓰기 Entity도 그대로 두었다.
+- 2026-08-06: V33 coverage gate가 `CustomerCancellationMigrationTest`의 V23 backfill 케이스에서
+  실제로 발동했다. 이 케이스는 store를 먼저 넣고 head까지 migrate했기 때문이다. gate는 ADR-020이
+  정한 동작이므로 유지하고, V23을 검증하는 케이스가 V23을 target하도록 정정했다. 이는 gate가
+  기존 store에 대해 실제로 배포를 멈춘다는 첫 실증이다. 앞으로 store를 seed한 뒤 head까지
+  migrate하는 테스트는 profile까지 함께 seed해야 한다.
+- 2026-08-06: 이 workstation의 Docker VM 파일시스템이 가득 차 있어(118G 중 111G 사용, 여유 1.2G)
+  전체 `./gradlew clean build`가 완주하지 못했다. 실패는 모두
+  `ContainerLaunchException … Container exited with code 1`과 그 뒤의 Spring context 실패였고,
+  같은 클래스를 10개 단위로 나눠 실행하면 전부 통과한다. 메모리 문제가 아님은 PostGIS 컨테이너
+  6개 동시 기동(각 45 MiB)으로 확인했다. 원인은 저장소 코드가 아니라 host 자원이다.
+- 2026-08-06: `OrderTerminationResourceListenerIntegrationTest`가 부하 상황에서
+  `expected: SUCCEEDED but was: PROCESSING`으로 한 번 실패했다. 단독 실행에서는 이 branch와
+  `main` 모두 통과한다. emulated container가 느려 async publication timing에 민감해진 것으로
+  보이지만 측정 근거가 없어 이번 변경의 회귀로 단정하지 않는다.
 
 ## Decision Log
 
@@ -241,14 +282,56 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 | 2026-08-01 | Accepted | nearby는 signed-cursor foundation을 소비하고 10km/raw-range/micrometer tuple/decimal-normalized filter hash를 사용 | cursor ownership 중복과 rounded-distance page gap 방지 | ADR-070 |
 | 2026-08-01 | Accepted | 별도 Merchant StoreDiscoveryProfile과 동기 public Query DTO를 사용 | Store Entity 검색 확장과 새 projection 동기화 장애를 모두 피함 | ADR-020, Context Map |
 | 2026-08-01 | Accepted | empty 또는 exact verified profile coverage만 허용하고 unresolved row는 startup 실패 | placeholder·부분 검색 활성화 방지 | ADR-020, failure semantics |
+| 2026-08-06 | Minor decision | 공통 Testcontainers image를 `postgis/postgis:17-3.5`로 고정하고 단일 상수로 모음 | V33이 모든 환경에서 extension을 요구하며 plain image로 spatial test가 통과하면 안 됨 | Minor Decision, `BEANFLOW_POSTGRES_IMAGE` |
+| 2026-08-06 | Minor decision | nearby query parameter를 raw `String`으로 받고 Discovery가 직접 검증 | framework conversion 예외 message가 원본 좌표를 error body에 echo하는 것을 차단 | Minor Decision, BR-28 |
+| 2026-08-06 | Minor decision | profile을 JPA Entity가 아닌 Merchant JDBC native projection으로만 읽음 | spatial 매핑용 새 production dependency와 Store 쓰기 Entity 확장을 모두 회피 | Minor Decision, ADR-020 |
+| 2026-08-06 | Minor decision | coordinate query parameter는 plain finite decimal만 허용하고 exponent 표기를 거부 | canonical filter hash를 결정적으로 유지하고 검증 표면을 좁힘 | Minor Decision, ADR-070 |
 
 ## Outcomes & Retrospective
 
-미구현 상태다. signed-cursor dependency가 완료되어 metadata와 같이 implementation-ready지만,
-각 target environment의 PostGIS privilege와 empty/exact verified Store profile inventory는 별도
-fail-closed release gate다. gate 실패는 새 제품 결정을 요구하는 모호성이 아니라 정해진 배포 중단
-결과다. 완료 시 coordinate non-retention evidence, spatial failure behavior와 같은 조건의 query
-measurement를 actual value로 기록한다.
+Milestone 1~3이 구현·검증됐다. Milestone 4~5는 미구현이다.
+
+**구현된 것 (2026-08-06)**
+
+- V33이 PostGIS extension, `merchant_store_discovery_profile`과 GiST index를 만들고, 검증되지 않은
+  `merchant_store` row가 하나라도 있으면 migration을 중단한다. `merchant_store`에는 검색용 이름,
+  geometry 또는 spatial index가 추가되지 않았다.
+- `StoreDiscoveryProfilePrecheck`가 PostGIS 설치, 양방향 coverage, non-blank name과
+  SRID 4326 point를 startup에서 다시 확인하고 위반 시 애플리케이션 시작을 실패시킨다.
+  readiness DOWN으로 숨기지 않는다.
+- Merchant `StoreDiscoveryQueryOperations`가 spatial native DTO projection을 제공하고, Discovery는
+  Merchant Entity/Repository를 직접 사용하지 않는다. Discovery는 영속 복제본도 동기화 event도
+  만들지 않는다.
+- `GET /api/v1/stores/nearby`가 raw `ST_DWithin` range filter,
+  `floor(ST_Distance * 1_000_000)` micrometer tuple, `(distanceMicrometers, storeId)` keyset과
+  ADR-070 HMAC cursor를 사용하고 응답에는 floored integer meter만 노출한다. Runtime OpenAPI로
+  승격했다.
+- 좌표는 request 범위에서만 쓰이고 응답 body, error detail, metric tag, `AuditRecord`에 남지
+  않는다. PostGIS 실패는 fallback 없이 503이다.
+
+**검증 상태 (2026-08-06)**
+
+- 통과: `./gradlew test --tests '*Discovery*' --tests '*Merchant*'`,
+  `./gradlew test --tests '*RuntimeOpenApi*' --tests '*ModularityTests'`,
+  `./gradlew clean build -x test`(spotless/compile/assemble), `bash scripts/verify-docs.sh`,
+  `git diff --check`.
+- 통과: 97개 test class 전체를 10개 단위 10개 chunk로 나눈 실행에서 모든 chunk `BUILD SUCCESSFUL`.
+- **미완주:** 단일 `./gradlew clean build`. 이 workstation의 Docker VM 디스크 포화로 컨테이너
+  기동이 실패한다. 저장소 코드 문제가 아니며 CI(`ubuntu-latest`, native amd64)에서 최종 확인이
+  필요하다.
+
+**측정**
+
+같은 조건 기준선 없이 성능 개선을 주장하지 않는다. 기록한 값은
+[nearby query plan evidence](../../quality/nearby-store-discovery-performance-evidence.md)의
+index 유/무 실행계획 비교뿐이며 latency SLA나 처리량 수치는 아직 없다.
+
+**남은 작업**
+
+메뉴·픽업 슬롯 read projection, business hours model 결정, data-scale latency baseline과 전체
+validation이 남아 있다. 각 target environment의 PostGIS privilege와 empty/exact verified Store
+profile inventory는 계속 fail-closed release gate이며, gate 실패는 새 제품 결정을 요구하는
+모호성이 아니라 정해진 배포 중단 결과다.
 
 ## Revision Notes
 
@@ -260,3 +343,6 @@ measurement를 actual value로 기록한다.
   preflight/startup gate와 no-replica Query API boundary를 확정했다.
 - 2026-08-06: completed signed-cursor dependency와 이미 true인 readiness metadata에 맞춰
   Outcomes의 조건부 표현을 정정했다. 구현 범위는 바꾸지 않았다.
+- 2026-08-06: Milestone 1~3 구현 결과, PostGIS image architecture와 좌표 error-echo 발견,
+  raw-string parameter binding·JDBC projection·공통 container image 결정을 기록했다.
+  메뉴·슬롯 endpoint와 latency baseline이 남아 plan은 `ACTIVE`를 유지한다.

@@ -31,9 +31,17 @@ import java.time.Instant
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
+    /**
+     * PostgreSQL 17 with PostGIS 3.5. Spatial migrations and the nearby query must never pass on a
+     * plain PostgreSQL image or on an application distance fallback, so the shared container pins
+     * the extension-bearing image and declares compatibility with the PostgreSQL substitute name.
+     */
     @Bean
     @ServiceConnection
-    fun postgresContainer(): PostgreSQLContainer = PostgreSQLContainer(DockerImageName.parse("postgres:17.6"))
+    fun postgresContainer(): PostgreSQLContainer =
+        PostgreSQLContainer(
+            DockerImageName.parse("postgis/postgis:17-3.5").asCompatibleSubstituteFor("postgres"),
+        )
 
     @Bean
     fun testJwtDecoder(): JwtDecoder =

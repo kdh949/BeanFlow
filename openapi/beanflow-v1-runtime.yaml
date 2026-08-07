@@ -14,6 +14,7 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Discovery
   - name: Ordering
   - name: Payment
   - name: Store Orders
@@ -22,6 +23,8 @@ tags:
   - name: Settlement
   - name: Dispute
 paths:
+  /stores/nearby:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /orders:
     post:
       tags: [Ordering]

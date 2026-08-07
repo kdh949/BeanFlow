@@ -37,6 +37,8 @@ required=(
   "docs/testing/definition-of-done.md"
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
+  "docs/quality/nearby-store-discovery-performance-evidence.md"
+  "docs/operations/nearby-store-discovery-runbook.md"
   "docs/quality/customer-order-cancellation-readiness.md"
   "docs/quality/customer-order-cancellation-release-evidence.md"
   "docs/decisions/customer-order-cancellation-decision-closure.md"

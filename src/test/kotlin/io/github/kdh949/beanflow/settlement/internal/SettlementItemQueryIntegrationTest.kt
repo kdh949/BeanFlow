@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.settlement.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.tamperSignedCursorSignature
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -113,7 +114,7 @@ internal class SettlementItemQueryIntegrationTest
                         .with(storeJwt(actorId, "STORE_OWNER")),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            val tampered = firstCursor.dropLast(1) + if (firstCursor.last() == 'a') "b" else "a"
+            val tampered = tamperSignedCursorSignature(firstCursor)
             mockMvc
                 .perform(
                     get(path(storeId, batchId))

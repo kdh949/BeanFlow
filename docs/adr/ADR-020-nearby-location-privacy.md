@@ -56,9 +56,30 @@
 - empty/verified/unresolved Store profile inventory와 startup gate
 - `merchant_store`에 검색용 이름·geometry가 추가되지 않고 별도 profile만 존재함
 
+## Implementation evidence (2026-08-06)
+
+Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다. 메뉴·픽업 슬롯 read endpoint는 아직 없다.
+
+- V33이 PostGIS extension, 별도 `merchant_store_discovery_profile`
+  (`store_id` PK/FK, non-blank `name` CHECK, `geography(Point,4326)`)과
+  `idx_store_discovery_profile_location` GiST index를 만든다. `merchant_store`에는 검색용 이름,
+  geometry 또는 spatial index가 추가되지 않았고 통합 테스트가 그 컬럼 집합을 고정한다.
+- migration은 profile 없는 `merchant_store` row가 하나라도 있으면 중단한다. `StoreDiscoveryProfilePrecheck`가
+  startup에서 PostGIS 설치, 양방향 coverage, non-blank name과 SRID 4326 point를 다시 확인하고
+  위반 시 readiness DOWN이 아니라 애플리케이션 시작을 실패시킨다.
+- Merchant `StoreDiscoveryQueryOperations`가 유일한 접근 경로다. Discovery는 Merchant JPA Entity나
+  Repository를 쓰지 않고 영속 복제본과 동기화 event도 만들지 않는다. Spring Modulith가
+  `discovery -> {shared :: api, merchant :: api}` 경계를 검증한다.
+- 좌표는 raw 문자열로 바인딩돼 Discovery 검증에서만 쓰인다. 검증 실패 메시지는 값을 포함하지
+  않으므로 error body와 log에 원본 좌표가 남지 않는다. 응답, metric tag와 `AuditRecord`에도
+  좌표가 없음을 통합 테스트가 확인한다.
+- PostGIS/DB 실패는 `beanflow.discovery.spatial.failure{reason}`와 함께 503이며 빈 200,
+  Haversine 계산 또는 cache로 대체되지 않는다.
+
 ## Metrics
 
-- **Not measured:** 검색 지연과 데이터 규모
+- **Not measured:** 검색 지연과 데이터 규모. 2026-08-06 시점 기록은 고정 fixture의 index 유/무
+  실행계획 비교뿐이며 latency 목표나 처리량 근거가 아니다.
 
 ## Revisit Conditions
 

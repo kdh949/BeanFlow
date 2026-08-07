@@ -7,6 +7,10 @@
 | OrderLine | 주문 당시 메뉴명, 옵션명, 단가, 수량과 혜택 배분을 보존하는 내부 Entity | Ordering |
 | MenuConfiguration | 정규화한 메뉴·옵션 조합을 가격 snapshot 원천과 sellable unit별 필요 수량에 연결하는 Merchant 소유 구성 | Merchant |
 | Sellable Unit | Inventory가 수량을 소유하는 최소 재고 식별자. 메뉴·옵션 의미는 Merchant의 MenuConfiguration이 번역한다. | Inventory |
+| StoreDiscoveryProfile | Store와 1:1인 Merchant 소유 검색 profile. 검증된 공개 매장명과 `geography(Point,4326)` 위치를 가지며 Store 쓰기 Entity와 분리된다. | Merchant |
+| Precise query coordinate | 한 nearby 요청의 검증과 read query 동안에만 사용하고 어떤 durable record에도 남기지 않는 고객 위·경도 | Discovery |
+| Pickup-capable store | `open`과 `pickupAvailable`이 모두 true인 매장. `open = acceptingOrders`, `pickupAvailable = acceptingOrders && pickupEnabled`로 현재 owner state만 투영한다. | Merchant |
+| Distance micrometer | `floor(ST_Distance(location, queryPoint) * 1_000_000)`인 정렬·cursor 전용 거리 값. 응답의 `distanceMeters`는 이 값을 1,000,000으로 나눈 표시값이며 keyset 값으로 재사용하지 않는다. | Discovery |
 | Order Cancellation | 허용된 Order 상태에서 이후 이행을 중단하는 명령과 그 결과. 결제 승인 후에는 Payment 환불 또는 승인취소가 별도 상태로 추적된다. | Ordering |
 | Store Rejection | `PAID`이고 아직 `ACCEPTED`되지 않은 Order를 매장이 거절하는 전이 | Ordering |
 | Payment Confirmation | 고객이 결제수단 승인을 요청하고 BeanFlow가 그 결과를 Payment에 확정하거나 `UNKNOWN`으로 보존하는 API 명령 | Payment |

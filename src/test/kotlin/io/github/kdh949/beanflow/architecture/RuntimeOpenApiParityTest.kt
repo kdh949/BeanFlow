@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.architecture
 
+import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
@@ -77,6 +78,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var pointAccountQueryOperations: PointAccountQueryOperations
+
+    @MockitoBean
+    private lateinit var nearbyStoreQueryOperations: NearbyStoreQueryOperations
 
     @MockitoBean
     private lateinit var settlementBatchQueryService: SettlementBatchQueryService

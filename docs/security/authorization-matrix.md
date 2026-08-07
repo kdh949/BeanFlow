@@ -8,6 +8,7 @@
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
 | 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
+| 가까운 매장 검색 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
