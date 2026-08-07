@@ -157,10 +157,10 @@ JWT, private key, 좌표는 출력하지 않는다.
 
 ## Progress
 
-- [ ] local-demo profile, prod 충돌 거부와 실행 정의
-- [ ] ephemeral JWKS와 역할별 JWT
+- [x] local-demo profile과 prod 충돌 거부 (실행 정의는 Milestone 4로 이동)
+- [x] ephemeral JWKS와 역할별 JWT
 - [ ] bootstrap과 결정적 멱등 seed
-- [ ] smoke flow와 실패 시나리오
+- [ ] smoke flow, 실행 정의와 실패 시나리오
 - [ ] runbook, evidence, 테스트와 전체 validation
 
 ## Surprises & Discoveries
@@ -178,12 +178,34 @@ JWT, private key, 좌표는 출력하지 않는다.
 |---|---|---|---|---|
 | 2026-08-07 | Accepted | demo fixture는 `local-demo` profile Spring Boot bootstrap CLI가 owner Entity로 단일 transaction에 쓴다 | schema drift 없이 owner 제약과 매핑 검증을 재사용하고 고정 UUID로 멱등하다. SQL seed는 제약 재작성과 drift, public API setup은 생성 endpoint 부재로 불가 | 이 plan |
 | 2026-08-07 | Accepted | `local,local-demo`를 함께 활성화하고 `prod`와의 동시 활성은 startup 실패 | 기존 `local & !prod` sandbox 게이트를 바꾸지 않으면서 prod 격리를 강제한다 | 이 plan, safety guard 테스트 |
+| 2026-08-07 | Accepted | demo 전용 도구(identity server, seed CLI)는 test source set에 둔다 | profile 게이트에 더해 demo 코드가 production 산출물에 아예 포함되지 않는다. Kotlin friend-module 접근으로 owner `internal` Entity는 그대로 재사용할 수 있다 | 이 plan, `build.gradle.kts` task |
 
 ## Outcomes & Retrospective
 
-미구현 상태다.
+Milestone 1~2가 구현·검증됐다. Milestone 3~5는 미구현이다.
+
+**구현된 것 (2026-08-07)**
+
+- `LocalDemoSafetyConfiguration`이 `local-demo` + `prod` 동시 활성과 `local` 없는 단독 활성을
+  startup failure로 만든다. 세 경우를 `LocalDemoSafetyConfigurationTest`가 고정한다.
+- `LocalDemoIdentityServer`가 실행 시 RSA keypair를 만들어 공개 JWK set만 HTTP로 제공하고,
+  역할별 API JWT 5개, bootstrap용 OIDC workload token, cursor HMAC secret을 runtime 디렉터리에
+  `0600`으로 기록한다. Gradle `local-demo-identity-server` task로 실행한다.
+- 실제 기동 확인: `http://127.0.0.1:19999/jwks.json`이 공개 키만 반환했고 private key는 응답과
+  tracked file 어디에도 없다. runtime 산출물은 `.gitignore`로 차단했다.
+- demo 도구는 test source set에 있어 production 산출물에 포함되지 않는다.
+
+**남은 작업**
+
+Milestone 3(정책·권한 bootstrap과 결정적 멱등 seed), Milestone 4(compose 실행 정의,
+`start`/`seed`/`smoke`/`stop` script, 고객→점주→포인트→정산 smoke와 실패 시나리오),
+Milestone 5(runbook, quality evidence, seed 멱등성·부분 실패 rollback·reset guard·secret scan·
+smoke exit code 테스트)가 남았다. 이 범위는 아직 **실행해 검증하지 않았으므로 통과로 기록하지
+않는다.**
 
 ## Revision Notes
 
 - 2026-08-07: local demo 환경과 smoke를 위한 plan 최초 작성. 네 대안을 비교하고 bootstrap CLI를
   선택한 근거를 Decision Log에 기록했다.
+- 2026-08-07: Milestone 1~2를 완료했다. demo 도구를 test source set에 두어 production 산출물
+  격리를 profile 외에 한 겹 더 확보하기로 하고 Decision Log에 추가했다.
