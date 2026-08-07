@@ -104,6 +104,13 @@ tasks.asciidoctor {
 	dependsOn(tasks.test)
 }
 
+tasks.register<JavaExec>("local-demo-identity-server") {
+	group = "application"
+	description = "Serve an ephemeral local-demo JWK set and write run-time demo tokens (never for production)"
+	classpath = sourceSets["test"].runtimeClasspath
+	mainClass.set("io.github.kdh949.beanflow.demo.LocalDemoIdentityServerKt")
+}
+
 tasks.register<JavaExec>("operator-permission-bootstrap") {
 	group = "application"
 	description = "Apply an audited operator permission lifecycle action using OIDC workload identity"
