@@ -387,6 +387,21 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - `merchant_store_discovery_profile` 쓰기는 이번 범위에 없다. Store write use case가 생기면 Store와
   required profile을 같은 Merchant transaction에서 생성해야 startup coverage gate를 만족한다.
 
+## Store catalogue read
+
+- 메뉴와 픽업 슬롯 read는 각각 owner의 read-only transaction 하나다. Discovery는 HTTP 계약과 응답
+  투영만 소유하고 Merchant `StoreMenuQueryOperations`, Fulfillment `PickupSlotQueryOperations`와
+  Merchant `StorePolicyScopeOperations`만 호출한다. 다른 Context의 Repository나 Entity는 쓰지 않는다.
+- Store 존재 확인은 catalogue owner인 Merchant가 수행한다. 없는 Store는 404이고 영속 실패는
+  503이며, 실패를 404나 빈 목록으로 바꾸지 않는다. 메뉴가 없는 Store와 열린 슬롯이 없는 Store는
+  정상적인 빈 목록 200이다.
+- 두 read 모두 write, event, AuditRecord를 만들지 않으므로 멱등 record가 필요 없다. 응답은 조회
+  시점 owner state이며 예약이나 가격 보장이 아니다. 슬롯 잔여 capacity는 조회 직후 동시 예약으로
+  바뀔 수 있고, 실제 예약은 슬롯 row를 잠그고 capacity를 다시 확인하는
+  `PickupReservationOperations.reserve`가 결정한다.
+- 메뉴 projection은 메뉴 목록과 옵션 목록 두 statement, 슬롯 projection은 한 statement로 고정한다.
+  카탈로그 크기에 따라 statement 수가 늘지 않으며 Aggregate 간 JPA 연관관계를 추가하지 않는다.
+
 ## Settlement
 
 - `OrderCompletedV2` Settlement consumer는 Ordering producer와 별도의 local transaction에서 immutable

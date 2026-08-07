@@ -70,7 +70,7 @@
 - [Cancellation 40 Command](exec-plans/completed/customer-order-cancellation-40-command.md)
 - [Completed Cancellation 50 Recovery](exec-plans/completed/customer-order-cancellation-50-recovery.md)
 - [Completed Audited Loyalty Point Adjustment Foundation](exec-plans/completed/loyalty-point-adjustment-foundation.md)
-- [Nearby Store Discovery](exec-plans/active/nearby-store-discovery.md)
+- [Completed Nearby Store Discovery](exec-plans/completed/nearby-store-discovery.md)
 - [Analytics Refund and Late-Event Projection](exec-plans/active/analytics-refund-and-late-event-projection.md)
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)

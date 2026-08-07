@@ -10,6 +10,7 @@
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
 | 가까운 매장 검색 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
+| 매장 픽업 슬롯 조회 | Yes | Yes | Yes | Yes | Yes |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Active explicit `POINT_ACCOUNT_READ` grant + reason | No |

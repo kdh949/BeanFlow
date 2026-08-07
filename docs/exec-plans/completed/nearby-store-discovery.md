@@ -1,11 +1,11 @@
 # 근접 매장 Discovery 조회를 위치정보 보존 없이 제공한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/signed-cursor-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-07`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -219,13 +219,12 @@ request URI query string을 log/trace/metric tag에 넣지 않는다.
 - [x] PostGIS/container, extension privilege and existing profile preflight/startup gate
 - [x] Merchant profile migration and owner API
 - [x] nearby query, cursor and privacy redaction
-- [ ] menu/pickup read projections
-- [ ] failure/measurement/runbook evidence
-- [ ] full validation
+- [x] menu/pickup read projections
+- [x] failure/measurement/runbook evidence
+- [x] full validation
 
-Milestone 1~3만 완료했다. Milestone 4의 `/stores/{storeId}/menus`와
-`/stores/{storeId}/pickup-slots`, Milestone 5의 data-scale latency baseline은 다음
-checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
+Milestone 1~5를 모두 완료했다. 세 read endpoint가 Runtime OpenAPI와 parity를 유지하고,
+두 규모 measurement와 runbook/quality evidence를 실제 값으로 남겼다.
 
 ## Surprises & Discoveries
 
@@ -253,6 +252,18 @@ checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
 - 2026-08-06: PostgreSQL은 `uuid`를 bytewise로 정렬하고 Java `UUID.compareTo`는 signed long
   기준이라 tie-break 순서가 다르다. keyset 비교와 정렬을 모두 SQL에서 수행하므로 실제 계약은
   PostgreSQL 순서이고, 테스트 기대값도 canonical hex 문자열 순서로 맞췄다.
+- 2026-08-07: `merchant_menu`에는 별도 visibility 컬럼이 없어 "currently visible menus" 요약을
+  필터 규칙으로 해석할 근거가 없었다. `available`이 required 필드이므로 전 메뉴를 반환하고 실제
+  owner flag를 투영하기로 하고 MD-2026-011에 기록했다.
+- 2026-08-07: `PickupReservationService.reserve`가 슬롯 시간을 검증하지 않는다는 사실을 확인했다.
+  조회만 `ends_at > now`로 좁히면 read/write 범위가 달라지므로 사용자 결정을 받아 read 범위만
+  좁히고 차이를 MD-2026-010과 runbook에 남겼다.
+- 2026-08-07: nearby benchmark 첫 실행의 `p50 = 117.936 ms`는 `DriverManagerDataSource`가 호출마다
+  새 connection을 여는 측정 결함이었다. 단일 connection 재사용으로 바꾸자 같은 조건에서
+  `p50 = 0.397 ms`가 나왔다. 결함 수치와 원인을 evidence에 함께 남겼다.
+- 2026-08-07: planner는 10,000/100,000 규모 모두에서 plain `Index Scan`이 아니라 GiST
+  `Bitmap Index Scan` 경로를 골랐다. 접근 방식을 강제하는 assertion 대신 index 사용 여부만
+  검증하도록 고쳤고, 수치를 좋게 만들기 위한 index는 추가하지 않았다.
 - 2026-08-06: profile을 JPA Entity로 매핑하면 `geography` 매핑용 persistence dependency가
   추가로 필요하고 `ddl-auto: validate`와 충돌한다. Merchant가 JDBC native projection만 소유하도록
   해 새 production dependency 없이 Store 쓰기 Entity도 그대로 두었다.
@@ -286,10 +297,12 @@ checkpoint에 남아 있으므로 plan은 계속 `ACTIVE`다.
 | 2026-08-06 | Minor decision | nearby query parameter를 raw `String`으로 받고 Discovery가 직접 검증 | framework conversion 예외 message가 원본 좌표를 error body에 echo하는 것을 차단 | Minor Decision, BR-28 |
 | 2026-08-06 | Minor decision | profile을 JPA Entity가 아닌 Merchant JDBC native projection으로만 읽음 | spatial 매핑용 새 production dependency와 Store 쓰기 Entity 확장을 모두 회피 | Minor Decision, ADR-020 |
 | 2026-08-06 | Minor decision | coordinate query parameter는 plain finite decimal만 허용하고 exponent 표기를 거부 | canonical filter hash를 결정적으로 유지하고 검증 표면을 좁힘 | Minor Decision, ADR-070 |
+| 2026-08-07 | Answered | `GET /stores/{storeId}/pickup-slots`는 `ends_at > now`인 슬롯만 반환한다. read 전용 범위이며 `PickupReservationService.reserve`의 시간 미검증 동작은 이번 범위에서 바꾸지 않는다 | 계약이 "available pickup slots"이고 종료된 슬롯은 픽업할 수 없다. read/write 범위 차이는 문서에 명시해 숨기지 않는다 | Minor Decision, 이 plan, pickup slot runbook |
+| 2026-08-07 | Plan interpretation | `GET /stores/{storeId}/menus`는 store의 메뉴를 모두 반환하고 `available`에 현재 owner state를 그대로 투영한다 | schema가 `available`을 required로 두므로 항상 true면 계약이 무의미하다. `merchant_menu`에 별도 visibility 컬럼이 없어 없는 모델을 추정하지 않는다 | target OpenAPI, `merchant_menu` |
 
 ## Outcomes & Retrospective
 
-Milestone 1~3이 구현·검증됐다. Milestone 4~5는 미구현이다.
+Milestone 1~5가 모두 구현·검증됐다.
 
 **구현된 것 (2026-08-06)**
 
@@ -309,29 +322,49 @@ Milestone 1~3이 구현·검증됐다. Milestone 4~5는 미구현이다.
 - 좌표는 request 범위에서만 쓰이고 응답 body, error detail, metric tag, `AuditRecord`에 남지
   않는다. PostGIS 실패는 fallback 없이 503이다.
 
-**검증 상태 (2026-08-06)**
+**추가 구현 (2026-08-07)**
 
-- 통과: `./gradlew test --tests '*Discovery*' --tests '*Merchant*'`,
+- Merchant `StoreMenuQueryOperations`가 메뉴·옵션 DTO projection을, Fulfillment
+  `PickupSlotQueryOperations`가 잔여 capacity projection을 소유한다. Discovery
+  `StoreCatalogController`가 `GET /stores/{storeId}/menus`와
+  `GET /stores/{storeId}/pickup-slots`의 HTTP 계약과 응답 투영만 소유하고 owner public Query API만
+  호출한다. 두 endpoint를 Runtime OpenAPI로 승격해 target과 operation 집합이 정확히 일치한다.
+- 메뉴는 store의 메뉴를 모두 반환하고 `available`에 현재 owner state를 투영한다. 슬롯은 주입된
+  Clock 기준 종료되지 않은 것만 `(startsAt, pickupSlotId)` 순서로 반환하며 잔여 capacity는 SQL에서
+  0 미만이 되지 않는다. 응답은 예약·가격 보장이 아니다.
+- Store 존재 확인은 catalogue owner인 Merchant가 수행한다. 없는 Store는 404, 정상적인 빈 카탈로그는
+  200, 영속 실패는 503이며 실패를 404나 빈 목록으로 바꾸지 않는다.
+- statement counting 회귀 테스트가 메뉴 2개·슬롯 1개 statement를 카탈로그 규모와 무관하게 고정한다.
+
+**검증 상태 (2026-08-07)**
+
+- 통과: `./gradlew test --tests '*Discovery*' --tests '*Merchant*' --tests '*Fulfillment*'`,
   `./gradlew test --tests '*RuntimeOpenApi*' --tests '*ModularityTests'`,
   `./gradlew clean build -x test`(spotless/compile/assemble), `bash scripts/verify-docs.sh`,
   `git diff --check`.
-- 통과: 97개 test class 전체를 10개 단위 10개 chunk로 나눈 실행에서 모든 chunk `BUILD SUCCESSFUL`.
-- **미완주:** 단일 `./gradlew clean build`. 이 workstation의 Docker VM 디스크 포화로 컨테이너
-  기동이 실패한다. 저장소 코드 문제가 아니며 CI(`ubuntu-latest`, native amd64)에서 최종 확인이
-  필요하다.
+- 통과: 전체 test class를 10개 단위 chunk로 나눈 실행에서 모든 chunk `BUILD SUCCESSFUL`.
+- **미완주:** 단일 `./gradlew clean build`. 이 workstation의 Docker VM 디스크 포화(118G 중 111G
+  사용)로 여러 컨테이너가 동시에 살아 있을 때 기동이 실패한다. 저장소 코드 문제가 아니며
+  CI(`ubuntu-latest`, native amd64)에서 최종 확인이 필요하다.
 
 **측정**
 
-같은 조건 기준선 없이 성능 개선을 주장하지 않는다. 기록한 값은
-[nearby query plan evidence](../../quality/nearby-store-discovery-performance-evidence.md)의
-index 유/무 실행계획 비교뿐이며 latency SLA나 처리량 수치는 아직 없다.
+`scripts/perf/nearby-store-search.sh`가 닫힌 식으로 10,000/100,000 profile dataset을 재현하고
+고정 조건에서 실행계획과 200회 반복 latency를 기록한다. 두 규모 모두 GiST bounding-box index
+condition을 사용했고 p50은 0.397 ms → 1.850 ms였다. 비교 가능한 기준선이 없으므로 성능 개선을
+주장하지 않으며, 컨테이너가 emulation으로 실행된 점과 미측정 항목을
+[evidence 문서](../../quality/nearby-store-discovery-performance-evidence.md)에 남겼다.
 
-**남은 작업**
+**남은 작업과 후속 조건**
 
-메뉴·픽업 슬롯 read projection, business hours model 결정, data-scale latency baseline과 전체
-validation이 남아 있다. 각 target environment의 PostGIS privilege와 empty/exact verified Store
-profile inventory는 계속 fail-closed release gate이며, gate 실패는 새 제품 결정을 요구하는
-모호성이 아니라 정해진 배포 중단 결과다.
+- 영업시간·휴일 model은 여전히 미정의다. `open`/`pickupAvailable`은 현재 owner state 투영이며
+  영업시간 정책이 생기면 재검토한다.
+- 픽업 슬롯 조회는 종료된 슬롯을 숨기지만 `PickupReservationOperations.reserve`는 슬롯 시간을
+  검증하지 않는다. read와 write 범위 차이는 MD-2026-010에 기록했고, 쓰기 경로까지 좁히려면 별도
+  제품 결정이 필요하다.
+- 각 target environment의 PostGIS privilege와 empty/exact verified Store profile inventory는 계속
+  fail-closed release gate이며, gate 실패는 새 제품 결정을 요구하는 모호성이 아니라 정해진 배포
+  중단 결과다.
 
 ## Revision Notes
 
@@ -345,4 +378,7 @@ profile inventory는 계속 fail-closed release gate이며, gate 실패는 새 �
   Outcomes의 조건부 표현을 정정했다. 구현 범위는 바꾸지 않았다.
 - 2026-08-06: Milestone 1~3 구현 결과, PostGIS image architecture와 좌표 error-echo 발견,
   raw-string parameter binding·JDBC projection·공통 container image 결정을 기록했다.
-  메뉴·슬롯 endpoint와 latency baseline이 남아 plan은 `ACTIVE`를 유지한다.
+  메뉴·슬롯 endpoint와 latency baseline이 남아 plan은 `ACTIVE`를 유지했다.
+- 2026-08-07: Milestone 4~5를 완료했다. 메뉴·픽업 슬롯 owner projection과 Discovery catalogue
+  endpoint, statement-count 회귀, 재현 가능한 두 규모 measurement를 추가하고 plan을 `COMPLETED`로
+  옮겼다.

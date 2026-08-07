@@ -38,7 +38,8 @@ All source contexts ── idempotent business facts ──> Analytics
 | Identity | API/Application Services | Identity | 인증 actor와 membership 조회 | 요청 시 동기 |
 | Eventing | Ordering과 event consumers | 원본 Context | 중립적인 versioned event 계약 | producer/consumer compile-time 분리 |
 | Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement와 applicable immutable settlement-terms 공개 동기 조회 | 주문 생성 시 현재 메뉴 값과 정확히 하나의 terms version 필요 |
-| Merchant | Discovery | Merchant `StoreDiscoveryProfile` | public Query API의 동기 DTO projection | 검색 응답은 current owner state를 사용 |
+| Merchant | Discovery | Merchant `StoreDiscoveryProfile`, Menu/MenuOption | public Query API의 동기 DTO projection | 검색·메뉴 응답은 current owner state를 사용 |
+| Fulfillment | Discovery | Fulfillment PickupSlot | public Query API의 동기 잔여 capacity DTO projection | 슬롯 응답은 조회 시점 owner state이며 예약 보장이 아님 |
 | Ordering | Fulfillment | Fulfillment | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Inventory | Inventory | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Promotion | Promotion | 검증·예약 API와 CouponReservation final burden-leg DTO | 주문 금액과 정산 입력 확정 전 필요 |
@@ -85,9 +86,9 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 | Identity | actor, role, store membership | actor identity, membership check |
 | Eventing | write data 없음 | versioned integration event 계약 |
 | Merchant | Store, 1:1 `StoreDiscoveryProfile`, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, 검증된 공개 매장명·위치 query, sellable requirement와 applicable settlement-terms lookup |
-| Discovery | durable write data 없음; 사용자 정밀 좌표와 Merchant profile 복제본을 저장하지 않음 | nearby store query와 request-only projection |
+| Discovery | durable write data 없음; 사용자 정밀 좌표와 Merchant/Fulfillment 복제본을 저장하지 않음 | nearby store query, 매장 메뉴·픽업 슬롯 read와 request-only projection |
 | Ordering | Order, OrderLine, `OrderSettlementInputSnapshot`, 주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
-| Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API |
+| Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API, 잔여 capacity slot query |
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
 | Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API, immutable coupon burden leg lookup |
 | Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, issuer allocation lookup, accrual·refund recovery facts, audited point-adjustment command, pending summary/query |
@@ -108,6 +109,11 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 - Discovery는 Merchant 쓰기 Entity를 검색 편의로 직접 확장하거나 Repository를 직접 조회하지
   않는다. Merchant는 별도 `StoreDiscoveryProfile`을 소유하고 public Query API로 DTO projection을
   제공하며, MVP Discovery는 이를 영속 복제하거나 event로 동기화하지 않는다.
+- 메뉴·픽업 슬롯 read도 같은 규칙을 따른다. Merchant가 메뉴·옵션을, Fulfillment가 슬롯 잔여
+  capacity를 각각 public Query API의 DTO projection으로 제공하고 Discovery는 HTTP 계약과 응답
+  투영만 소유한다. Store 존재 확인은 catalogue owner인 Merchant가 답하므로 Fulfillment는 Store
+  식별자 의미를 해석하지 않는다. 목록 조회 편의를 위한 Aggregate 간 JPA 연관관계는 추가하지
+  않는다.
 - Analytics는 원본 거래 상태의 의미를 자체 지표 정의로 변환한다.
 - Operations는 원본 Aggregate를 직접 수정하지 않고 owner Context의 승인된 명령을 호출한다.
   setup 무결성 scanner도 read-only cross-context projection만 사용하고 owner table을
