@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
 import io.github.kdh949.beanflow.shared.api.SignedCursorCodec
 import io.github.kdh949.beanflow.shared.api.SignedCursorScope
+import io.github.kdh949.beanflow.tamperSignedCursorSignature
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
@@ -238,7 +239,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
             listOf(
                 nearby(radiusMeters = "999", cursor = cursor),
                 nearby(latitude = "37.6", cursor = cursor),
-                nearby(cursor = cursor.dropLast(1) + if (cursor.last() == 'a') "b" else "a"),
+                nearby(cursor = tamperSignedCursorSignature(cursor)),
                 nearby(cursor = "v1.test-vector.notbase64json.signature"),
                 nearby(cursor = "x".repeat(2049)),
                 nearby(cursor = ""),

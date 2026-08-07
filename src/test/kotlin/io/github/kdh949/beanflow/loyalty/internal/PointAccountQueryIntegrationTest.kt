@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.tamperSignedCursorSignature
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
@@ -234,7 +235,7 @@ internal class PointAccountQueryIntegrationTest
             mockMvc
                 .perform(
                     get(transactionPath(accountId))
-                        .param("cursor", cursor.dropLast(1) + if (cursor.last() == 'a') "b" else "a")
+                        .param("cursor", tamperSignedCursorSignature(cursor))
                         .with(customerJwt(customerId)),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
