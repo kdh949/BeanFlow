@@ -106,6 +106,11 @@ false인 매장은 슬롯이 있어도 빈 목록을 반환한다. 그 매장의
 
 - 원본 고객 좌표는 어디에도 남지 않는다. 조사를 위해 좌표를 log, trace, metric tag,
   `AuditRecord` 또는 임시 table에 복사하지 않는다.
+- **`org.springframework.jdbc.core.StatementCreatorUtils`를 `TRACE`로 올리지 않는다.** Spring은 이
+  logger에서 bind된 statement parameter를 그대로 기록하므로, TRACE를 켜는 순간 원본 좌표가
+  애플리케이션 로그에 남아 BR-28을 위반한다. `application.yaml`이 이 logger를 `DEBUG`로 고정해
+  전역 TRACE로 실수로 켜지는 것을 막지만, deployment가 level을 덮어쓸 수 있으므로 운영 제약으로도
+  남긴다. 이 위험은 `NearbyCoordinatePrivacyIntegrationTest`가 양방향으로 검증한다.
 - cursor payload, key ID와 filter hash를 log나 metric tag에 기록하지 않는다.
 - PostGIS 장애를 우회하기 위해 애플리케이션 Haversine 계산, in-memory index 또는 cache를
   임시로라도 활성화하지 않는다. 장애는 503으로 노출한 채 원인을 복구한다.

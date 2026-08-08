@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component
  * The migration gate only sees the release it runs in, so startup re-checks the invariant against
  * the live database: PostGIS must be installed, `merchant_store` and
  * `merchant_store_discovery_profile` must cover each other exactly, every name must be non-blank
- * and every location must be a valid SRID 4326 point. A violation fails application startup rather
+ * and every location must be a valid, non-empty SRID 4326 point. `POINT EMPTY` is rejected here as
+ * well as by the table CHECK, because it passes the column type and `ST_IsValid` yet never matches
+ * `ST_DWithin`, leaving the store permanently unsearchable. A violation fails application startup rather
  * than degrading readiness, because a partially searchable store set is not an acceptable product
  * state and no placeholder name or coordinate may be substituted.
  */
@@ -71,6 +73,7 @@ internal class StoreDiscoveryProfilePrecheck(
                          OR location IS NULL
                          OR ST_SRID(location::geometry) <> 4326
                          OR GeometryType(location::geometry) <> 'POINT'
+                         OR ST_IsEmpty(location::geometry)
                          OR NOT ST_IsValid(location::geometry)) AS invalid,
                     (SELECT count(*) FROM merchant_store_discovery_profile) AS profiles
                 """.trimIndent(),

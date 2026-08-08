@@ -1,3 +1,9 @@
+logging:
+  level:
+    # Spring logs every bound statement parameter at TRACE, which would put raw customer
+    # coordinates in the application log and violate BR-28 / ADR-020. The level is pinned here so
+    # turning on broad TRACE logging cannot enable it by accident.
+    org.springframework.jdbc.core.StatementCreatorUtils: DEBUG
 spring:
   application:
     name: beanflow

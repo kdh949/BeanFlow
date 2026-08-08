@@ -24,10 +24,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
 /**
- * Statement-count regression for the catalogue projections.
+ * Statement-count regression for the catalogue projections themselves.
  *
  * The number of SQL statements must not grow with the number of menus, options or slots. The
  * counting data source wraps only this test's connections, so the application context is untouched.
+ *
+ * These are per-repository counts, not endpoint totals: a request also verifies store identity and
+ * availability. `DiscoveryStoreCatalogEndpointQueryCountTest` pins what a whole HTTP request issues.
  */
 @Testcontainers(disabledWithoutDocker = true)
 internal class DiscoveryStoreCatalogQueryCountTest {

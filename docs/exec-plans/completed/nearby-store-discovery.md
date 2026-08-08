@@ -392,3 +392,19 @@ condition을 사용했고 p50은 0.397 ms → 1.850 ms였다. 비교 가능한 �
   [ADR-076](../../adr/ADR-076-store-catalog-read-contract.md)과 BR-05 Slot Reservation Window
   Amendment에 기록했고 MD-2026-010은 `Superseded`다. 이 항목 위의 서술은 그 시점의 기록이므로
   덮어쓰지 않는다.
+- 2026-08-08 (post-merge review remediation, Milestone 1~3 범위): 같은 리뷰의 나머지 지적을
+  반영했다.
+  - V33을 스키마 전용으로 남기고 coverage gate를 V34로 분리했다. 기존 Store가 있는 배포는
+    `target=33` → 검증된 profile 적재 → 나머지 migration의 2단계로 진행한다. 분리 전에는 table
+    생성과 coverage 단언이 한 migration이라 profile을 넣을 수 있는 순간 자체가 없었다.
+  - `POINT EMPTY`를 table CHECK와 startup precheck 양쪽에서 거부한다. column type,
+    `GeometryType()`, `ST_IsValid()`를 모두 통과하지만 `ST_DWithin`에는 절대 잡히지 않아 해당
+    Store가 조용히 검색 불가가 된다.
+  - 좌표 입력 문법을 OpenAPI `type: number, format: double`의 유한 부분집합으로 넓혔다.
+    `1e-7`, `1E2`, `+37.5`는 계약상 유효한데 400으로 거절되고 있었다. filter hash의 canonical
+    form은 그대로 plain decimal이라 `37.5`/`+37.5`/`37.50`/`3.75e1`은 같은 hash로 모인다.
+    MD-2026-008을 개정했다.
+  - 좌표 비노출을 실제 Logback appender capture로 검증한다. 성공·검증 실패·PostGIS 실패 세
+    경로에서 formatted message, argument array, MDC, throwable chain 전체를 검사한다.
+  - endpoint 전체가 발행하는 statement 수를 application data source를 감싸 측정하는 테스트를
+    추가했다. 기존 repository 단위 count는 endpoint 총량이 아니라는 점을 두 테스트 doc에 명시했다.
