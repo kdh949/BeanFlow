@@ -192,7 +192,10 @@ internal class NearbyStoreQueryValidation(
         name: String,
     ): BigDecimal {
         if (raw == null) invalid("$name is required")
-        if (raw.length > MAX_COORDINATE_LENGTH || !DECIMAL_PATTERN.matches(raw)) {
+        // The OpenAPI type is `number, format: double`, so a client may legitimately send an
+        // exponent or a leading `+`. Only the grammar is checked here; the range is a separate
+        // rule below, and neither branch echoes the value.
+        if (raw.length > MAX_COORDINATE_LENGTH || !COORDINATE_INPUT_PATTERN.matches(raw)) {
             invalid("$name must be a finite decimal between ${minimum.toPlainString()} and ${maximum.toPlainString()}")
         }
         val value =
@@ -263,7 +266,15 @@ internal class NearbyStoreQueryValidation(
         val MAX_LONGITUDE: BigDecimal = BigDecimal("180")
         val CURSOR_TTL: Duration = Duration.ofHours(24)
 
-        /** Plain finite decimals only; exponent notation and a leading `+` are rejected. */
+        /**
+         * Accepted coordinate input: the finite subset of `type: number, format: double`. A leading
+         * sign, a fraction and an exponent are all allowed; `NaN`, `Infinity`, hexadecimal and Java
+         * float suffixes are not. The exponent is capped at four digits so a 32-character input
+         * cannot ask for an absurd `BigDecimal` scale.
+         */
+        val COORDINATE_INPUT_PATTERN = Regex("[+-]?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]{1,4})?")
+
+        /** Canonical coordinate form used for the filter hash: a plain finite decimal. */
         val DECIMAL_PATTERN = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?")
         val INTEGER_PATTERN = Regex("-?(0|[1-9][0-9]*)")
         val UNSIGNED_INTEGER_PATTERN = Regex("0|[1-9][0-9]*")

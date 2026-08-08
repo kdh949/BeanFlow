@@ -77,3 +77,4 @@
 | [ADR-073](ADR-073-order-point-accrual-snapshot.md) | Accepted | 주문 시점 일반 적립 snapshot과 frozen V1 trigger boundary |
 | [ADR-074](ADR-074-global-and-store-scoped-point-accrual-policy.md) | Accepted | 전역 기본값과 매장별 일반 적립 정책 우선순위 |
 | [ADR-075](ADR-075-single-operator-cancellation-refund-reconciliation.md) | Accepted | 고객 취소 terminal Refund의 단일 운영자 LOOKUP 재개 |
+| [ADR-076](ADR-076-store-catalog-read-contract.md) | Accepted | 매장 카탈로그 조회 계약과 픽업 슬롯 예약 창 |

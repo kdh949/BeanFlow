@@ -52,6 +52,7 @@
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
+- [Local Demo Runbook](operations/local-demo-runbook.md)
 
 ## Execution Plans
 
@@ -88,3 +89,4 @@
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
+- [Local Demo Runbook](operations/local-demo-runbook.md)

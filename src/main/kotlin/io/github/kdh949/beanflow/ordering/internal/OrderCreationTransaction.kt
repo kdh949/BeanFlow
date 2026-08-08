@@ -70,7 +70,7 @@ internal class OrderCreationTransaction(
     ): StoredHttpResponse {
         validate(command)
         val createdAt = clock.instant()
-        val expiresAt = createdAt.plus(RESERVATION_LEASE)
+        val requestedExpiresAt = createdAt.plus(RESERVATION_LEASE)
         val settlementTerms = storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
         val quotes =
             menuQuoteUseCase.quote(
@@ -79,23 +79,24 @@ internal class OrderCreationTransaction(
             )
         val stockRequirements = aggregateStockRequirements(quotes)
 
-        val pickupReservationId =
+        val pickupReservation =
             pickupOperations.reserve(
                 ReservePickupCommand(
                     orderId = orderId,
                     storeId = command.storeId,
                     pickupSlotId = command.pickupSlotId,
-                    expiresAt = expiresAt,
+                    expiresAt = requestedExpiresAt,
                     sourceReference = pickupSource(orderId),
                 ),
             )
+        val reservationExpiresAt = pickupReservation.expiresAt
         val stockReservationIds =
             stockOperations.reserve(
                 ReserveStockCommand(
                     orderId = orderId,
                     storeId = command.storeId,
                     requirements = stockRequirements,
-                    expiresAt = expiresAt,
+                    expiresAt = reservationExpiresAt,
                     sourceReference = stockSource(orderId),
                 ),
             )
@@ -117,7 +118,7 @@ internal class OrderCreationTransaction(
                         storeId = command.storeId,
                         couponIssuanceId = couponIssuanceId,
                         lines = grossLines,
-                        reservationExpiresAt = expiresAt,
+                        reservationExpiresAt = reservationExpiresAt,
                         sourceReference = couponSource(orderId),
                     ),
                 )
@@ -144,7 +145,7 @@ internal class OrderCreationTransaction(
                         orderId = orderId,
                         customerId = command.customerId,
                         amountKrw = command.pointsToUseKrw,
-                        reservationExpiresAt = expiresAt,
+                        reservationExpiresAt = reservationExpiresAt,
                         sourceReference = pointsSource(orderId),
                     ),
                 )
@@ -172,7 +173,7 @@ internal class OrderCreationTransaction(
                 val pickup =
                     requireApplied(
                         "PICKUP",
-                        pickupOperations.confirm(orderId, pickupSource(orderId)),
+                        pickupOperations.confirm(orderId, clock.instant(), pickupSource(orderId)),
                     )
                 val stock =
                     requireApplied(
@@ -206,6 +207,7 @@ internal class OrderCreationTransaction(
                     quotes = quotes,
                     pricing = pricing,
                     createdAt = createdAt,
+                    reservationExpiresAt = reservationExpiresAt,
                 )
             } else {
                 Order.benefitOnlyPaid(
@@ -246,7 +248,7 @@ internal class OrderCreationTransaction(
             auditFactory.create(
                 command = command,
                 order = order,
-                pickupReservationId = pickupReservationId,
+                pickupReservationId = pickupReservation.reservationId,
                 stockReservationIds = stockReservationIds,
                 coupon = couponQuote,
                 points = pointReservation,

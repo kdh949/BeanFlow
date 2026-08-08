@@ -261,6 +261,9 @@ reason과 evidence를
   configuration, 실제 deployment environment variable 이름, log, test output 또는 운영 fallback에 쓸 수 없다.
 - common `limit`은 optional이며 default 20, minimum 1, maximum 100이다.
 - 응답은 `nextCursor`가 있을 때만 다음 page가 있음을 뜻한다.
+- 매장 카탈로그 조회는 cursor 대신 자체 경계를 쓴다. 픽업 슬롯은 `starts_at`이 지금부터 7일
+  이내인 것만, 메뉴는 한 매장당 메뉴 1,000개·옵션 5,000개까지다. 두 상한 모두 잘라서 반환하지
+  않는다. 메뉴 상한을 넘으면 `503 DEPENDENCY_UNAVAILABLE`로 실패한다. ADR-076이 canonical이다.
 - 일반 포인트 적립 정책의 GLOBAL/STORE history와 STORE head 목록도 같은 signed cursor를 사용한다.
   version history는 `policyVersionId DESC`, STORE head는 `(policyVersionId DESC, storeId DESC)`이며
   cursor는 endpoint, GLOBAL/STORE scope와 optional state filter에 bind된다.

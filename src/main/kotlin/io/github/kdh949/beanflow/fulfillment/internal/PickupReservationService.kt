@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
+import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
@@ -28,7 +29,7 @@ internal class PickupReservationService(
     private val meterRegistry: MeterRegistry,
 ) : PickupReservationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
-    override fun reserve(command: ReservePickupCommand): UUID {
+    override fun reserve(command: ReservePickupCommand): PickupReservationGrant {
         if (command.sourceReference.isBlank()) {
             fail(FailureCode.INVALID_REQUEST, "Pickup reservation source reference is required")
         }
@@ -42,37 +43,48 @@ internal class PickupReservationService(
             if (it.orderId == command.orderId && it.slotId == command.pickupSlotId &&
                 it.state == PickupReservationState.RESERVED
             ) {
-                return it.id
+                return PickupReservationGrant(it.id, it.expiresAt)
             }
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup source reference is already terminal or reused")
         }
         reservationRepository.findByOrderId(command.orderId)?.let {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Order already has a pickup reservation")
         }
+        // BR-05 pickup window: a slot may only be reserved while it has not started. The check runs
+        // under the slot row lock and after the idempotent replay above, so a retry of a reservation
+        // that was accepted in time still resolves to the stored reservation instead of failing.
+        val now = clock.instant()
+        if (!slot.startsAt.isAfter(now)) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup slot has already started")
+        }
+        val expiresAt = minOf(command.expiresAt, slot.startsAt)
+        if (!expiresAt.isAfter(now)) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup reservation lease has already expired")
+        }
         if (slot.reservedCount + slot.confirmedCount >= slot.capacity) {
             fail(FailureCode.PICKUP_SLOT_FULL, "Pickup slot capacity is exhausted")
         }
 
         slot.reserveOne()
-        val now = clock.instant()
         val reservation =
             PickupReservationEntity(
                 id = identifierSource.next(),
                 orderId = command.orderId,
                 slotId = command.pickupSlotId,
                 state = PickupReservationState.RESERVED,
-                expiresAt = command.expiresAt,
+                expiresAt = expiresAt,
                 sourceReference = command.sourceReference,
                 createdAt = now,
                 updatedAt = now,
             )
         reservationRepository.save(reservation)
-        return reservation.id
+        return PickupReservationGrant(reservation.id, reservation.expiresAt)
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
     override fun confirm(
         orderId: UUID,
+        now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
         val current =
@@ -87,12 +99,18 @@ internal class PickupReservationService(
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup confirmation source does not match")
         }
+        // The reservation deadline normally equals the earlier of the Order lease and startsAt.
+        // Check the slot as well so a legacy or manually repaired row with a later deadline can
+        // never turn an already started slot into CONFIRMED.
+        if (!now.isBefore(reservation.expiresAt) || !now.isBefore(slot.startsAt)) {
+            return report(ReservationTransitionResult.NOT_ELIGIBLE, reservation.id)
+        }
         val result =
             when (reservation.state) {
                 PickupReservationState.RESERVED -> {
                     slot.confirmOne()
                     reservation.state = PickupReservationState.CONFIRMED
-                    reservation.updatedAt = clock.instant()
+                    reservation.updatedAt = now
                     ReservationTransitionResult.APPLIED
                 }
 

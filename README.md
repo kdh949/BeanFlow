@@ -44,21 +44,22 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 감사형 운영자 포인트 증감 조정
 - 정산 Batch/Item 조회, append-only 정산 조정과 이의제기 접수·판정
 - 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
+- 인근 매장 검색과 매장 메뉴·픽업 슬롯 조회
+- PointAccount summary·transaction 조회
+- 로컬 데모 환경과 고객→매장→포인트 smoke flow
 
 현재 source에 없는 capability:
 
 - 실제 PG sandbox adapter
 - 결제수단 등록·폐기 API
-- 인근 매장·메뉴·픽업 슬롯 조회 API
-- PointAccount summary·transaction read API
 - Analytics refund/late-event projection과 외부 dashboard API
 
 검증 예정:
 
 - 지연 Provider 환경의 부하·장애 주입 측정
 
-고객 취소 command/recovery orchestration은 완료됐고, PointAccount read는 별도 Active
-ExecPlan이다. 실제 non-local 배포, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
+고객 취소 command/recovery orchestration과 PointAccount read는 완료됐다. 실제 non-local
+배포, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
 
 ## 실행 방법
 
@@ -71,6 +72,21 @@ ExecPlan이다. 실제 non-local 배포, 운영 규모, SLA와 프로덕션 안�
 
 Gradle은 별도 설치하지 않고 저장소의 Wrapper(`./gradlew`)를 사용한다. 첫 실행에는
 Gradle 의존성과 Testcontainers 이미지 다운로드를 위한 네트워크 연결이 필요할 수 있다.
+
+### 로컬 데모 환경 (가장 빠른 확인 방법)
+
+수동 설정 없이 전체 흐름을 보려면 데모 script를 쓴다. PostGIS, ephemeral JWK set endpoint,
+필수 정책 bootstrap, 결정적 fixture, 실제 HTTP smoke까지 한 번에 실행한다.
+
+```bash
+bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
+```
+
+정지와 초기화는 `bash scripts/demo/stop.sh [--reset]`이다. 인증을 끄거나 validation을
+완화하지 않으며, 실행 시 생성한 키 자료는 gitignore된 `.demo-runtime/`에만 존재한다.
+절차와 진단은 [Local Demo Runbook](docs/operations/local-demo-runbook.md)에 있다.
+
+아래 수동 절차는 데모 script 없이 직접 구성할 때 쓴다.
 
 ### PostgreSQL 준비
 
@@ -115,9 +131,9 @@ curl http://localhost:8080/actuator/health
 
 `local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
 `PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 결제수단 등록
-API와 초기 데이터 seed는 아직 없으므로 주문 흐름을 수동 확인하려면 매장·메뉴·슬롯·
-재고와 토큰 reference만 가진 결제수단 fixture를 별도로 준비해야 한다. PAN, CVC와 전체
-유효기간은 저장하지 않는다.
+API는 아직 없다. 수동 구성에서 주문 흐름을 확인하려면 매장·메뉴·슬롯·재고와 토큰
+reference만 가진 결제수단 fixture를 직접 준비해야 하며, 위의 데모 script는 그 fixture를
+결정적으로 만들어 준다. PAN, CVC와 전체 유효기간은 저장하지 않는다.
 
 ### 현재 runtime API
 

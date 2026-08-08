@@ -54,7 +54,6 @@ class Order private constructor(
     val acceptanceDeadlineAt: Instant?,
 ) {
     companion object {
-        private val RESERVATION_LEASE: Duration = Duration.ofMinutes(5)
         private val ACCEPTANCE_WARNING_DELAY: Duration = Duration.ofMinutes(2)
         private val ACCEPTANCE_DEADLINE_DELAY: Duration = Duration.ofMinutes(3)
 
@@ -67,12 +66,16 @@ class Order private constructor(
             quotes: List<MenuLineQuote>,
             pricing: OrderPricing,
             createdAt: Instant,
+            reservationExpiresAt: Instant,
         ): Order {
             if (quotes.size != pricing.lines.size || lineIds.size != quotes.size) {
                 invalid("Quote, pricing and line identifiers must have the same size")
             }
             if (pricing.payable == Krw.ZERO) {
                 invalid("A pending-payment order must have a positive payable amount")
+            }
+            if (!reservationExpiresAt.isAfter(createdAt)) {
+                invalid("A reservation deadline must be after order creation")
             }
             val snapshots = snapshots(lineIds, quotes, pricing)
             return Order(
@@ -87,7 +90,7 @@ class Order private constructor(
                 pointsAppliedKrw = pricing.pointsApplied.value,
                 payableKrw = pricing.payable.value,
                 createdAt = createdAt,
-                reservationExpiresAt = createdAt.plus(RESERVATION_LEASE),
+                reservationExpiresAt = reservationExpiresAt,
                 paidAt = null,
                 acceptanceWarningAt = null,
                 acceptanceDeadlineAt = null,

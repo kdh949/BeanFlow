@@ -20,6 +20,16 @@ internal data class StoreMenuOptionProjection(
 )
 
 /**
+ * The published catalogue bounds (ADR-076). They sit far above any
+ * plausible cafe catalogue and exist so that one store can never make the response unbounded. Each
+ * query asks for one row past its bound: [StoreMenuQueryService] sees the overflow and fails
+ * explicitly rather than returning a silently truncated catalogue.
+ */
+internal const val MAX_STORE_MENUS = 1_000
+
+internal const val MAX_STORE_MENU_OPTIONS = 5_000
+
+/**
  * Reads the store menu catalogue as two flat DTO queries — one for menus and one for every option
  * of those menus — so the number of statements stays constant regardless of how many menus a store
  * has. The write entities keep no association between store, menu and option, and none is added
@@ -36,6 +46,7 @@ internal class StoreMenuQueryRepository(
               FROM merchant_menu
              WHERE store_id = ?
              ORDER BY name, id
+             LIMIT ${MAX_STORE_MENUS + 1}
             """.trimIndent(),
             { resultSet, _ ->
                 StoreMenuProjection(
@@ -49,18 +60,33 @@ internal class StoreMenuQueryRepository(
         )
 
     /**
-     * Options are selected through the store predicate rather than a menu-id list, so one statement
-     * covers every menu of the store.
+     * Options are selected through one owner-scoped lateral query rather than a menu-id list, so one
+     * statement covers every menu of the store. The dependent inner query makes PostgreSQL walk the
+     * `(store_id, id)` menus and then each menu's `(menu_id, name, id)` options; it cannot first
+     * scan every store's options and hash-join them. Each returned menu still exposes its options in
+     * `(name, optionId)` order.
      */
     fun findOptions(storeId: UUID): List<StoreMenuOptionProjection> =
         jdbcTemplate.query(
             """
             SELECT menu_option.menu_id, menu_option.id, menu_option.name,
                    menu_option.additional_price_krw, menu_option.available
-              FROM merchant_menu_option menu_option
-              JOIN merchant_menu menu ON menu.id = menu_option.menu_id
-             WHERE menu.store_id = ?
-             ORDER BY menu_option.name, menu_option.id
+              FROM (
+                  SELECT id
+                    FROM merchant_menu
+                   WHERE store_id = ?
+                   ORDER BY id
+                   LIMIT ${MAX_STORE_MENUS + 1}
+              ) menu
+              CROSS JOIN LATERAL (
+                  SELECT menu_id, id, name, additional_price_krw, available
+                    FROM merchant_menu_option
+                   WHERE menu_id = menu.id
+                   ORDER BY name, id
+                   LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
+              ) menu_option
+             ORDER BY menu.id, menu_option.name, menu_option.id
+             LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
             """.trimIndent(),
             { resultSet, _ ->
                 StoreMenuOptionProjection(

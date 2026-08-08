@@ -35,6 +35,23 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
 이 clarification은 2026-07-28 주문 생성과 예약 lease Feature의 결정 게이트에서
 확정했다.
 
+## Amendment (2026-08-09): 픽업 시작을 포함하는 effective lease
+
+픽업 주문의 외부 결제 예약은 고정 5분만으로는 충분하지 않다. 시작 시각 바로 전의 슬롯을
+예약한 뒤 Provider 응답이 시작 시각을 넘으면, 5분 lease 안이라도 준비 시간이 없는 유료 주문을
+확정하게 된다.
+
+- 주문 생성 transaction은 `min(createdAt + 5분, pickupSlot.startsAt)`을 effective lease로 계산해
+  `Order.reservationExpiresAt`과 슬롯·재고·쿠폰·포인트 예약에 같은 값으로 저장한다.
+- Payment result transaction은 Provider 호출 밖에서 받은 `now`로 due expiry를 먼저 materialize한다.
+  `now >= reservationExpiresAt`이면 `PickupReservation`을 포함한 자원을 확정하지 않는다.
+- 이 경계 뒤에 확인된 Provider approval과 `UNKNOWN` payment lookup approval은 기존 late-approval
+  경로로 들어가며, `EXPIRED` Order를 `PAID`로 되살리거나 슬롯 counter를 늘리지 않는다.
+
+이는 새 grace period나 slot lead-time을 도입하지 않는다. 슬롯 시작 시각은 이미 BR-05와 ADR-076이
+소유한 준비 가능 경계이고, 더 이른 lease를 공통 deadline으로 쓰는 것이 네 예약 자원의 일관성을
+보존한다.
+
 이후 reconciliation에서 Provider 승인이 확인되면:
 
 1. 만료 Order를 `PAID`로 되살리지 않는다.
@@ -87,6 +104,7 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
 - 조회가 시작한 expiry transaction의 owner release 실패와 전체 rollback
 - Provider 승인 후 응답 유실
 - reconciliation이 만료 전·후 도착하는 두 경계
+- Provider 응답과 `UNKNOWN` lookup approval이 슬롯 시작 경계를 넘는 경우의 비확정·void/refund 경로
 - 중복 승인·환불·예약 해제 부작용이 각각 한 번인지 검증
 
 ## Metrics

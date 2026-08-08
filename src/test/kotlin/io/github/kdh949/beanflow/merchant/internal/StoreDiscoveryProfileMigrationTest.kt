@@ -18,7 +18,7 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /**
- * V33 schema, the fail-closed migration and startup coverage gates, and the actual GiST query plan.
+ * V33 schema, the V34 fail-closed coverage gate, the startup gate, and the actual GiST query plan.
  *
  * Every case migrates a database created from `template1`, so `CREATE EXTENSION postgis` really has
  * to run and the migration would fail if the role could not create the extension.
@@ -99,21 +99,76 @@ internal class StoreDiscoveryProfileMigrationTest {
     }
 
     @Test
-    fun `an existing store without a verified profile stops the migration`() {
+    fun `an existing store without a verified profile stops the migration at V34`() {
         val dataSource = database("v33_unresolved_store")
         flyway(dataSource).target("32").load().migrate()
-        insertStore(JdbcTemplate(dataSource), UUID.randomUUID())
+        val jdbcTemplate = JdbcTemplate(dataSource)
+        insertStore(jdbcTemplate, UUID.randomUUID())
 
         assertThatThrownBy { flyway(dataSource).load().migrate() }
             .isInstanceOf(FlywayException::class.java)
             .hasMessageContaining("without a verified StoreDiscoveryProfile")
-        assertThat(
-            count(
-                JdbcTemplate(dataSource),
-                "SELECT count(*) FROM information_schema.tables WHERE table_name = 'merchant_store_discovery_profile'",
-            ),
-        ).isZero()
+        // V33 committed, so the table exists; V34 is the gate that refused. Nothing was backfilled.
+        assertThat(appliedVersions(jdbcTemplate)).contains("33").doesNotContain("34")
+        assertThat(count(jdbcTemplate, "SELECT count(*) FROM merchant_store_discovery_profile")).isZero()
     }
+
+    @Test
+    fun `existing stores can be profiled between V33 and V34 and then migrate cleanly`() {
+        val dataSource = database("v33_profile_loading_window")
+        flyway(dataSource).target("32").load().migrate()
+        val jdbcTemplate = JdbcTemplate(dataSource)
+        val storeIds = List(3) { UUID.randomUUID() }
+        storeIds.forEach { insertStore(jdbcTemplate, it) }
+
+        // This is the deployment procedure: schema first, then the owner-verified load, then the gate.
+        flyway(dataSource).target("33").load().migrate()
+        storeIds.forEachIndexed { index, storeId -> insertProfile(jdbcTemplate, storeId, "Verified store $index") }
+        assertThatCode { flyway(dataSource).load().migrate() }.doesNotThrowAnyException()
+
+        assertThat(appliedVersions(jdbcTemplate)).contains("33", "34")
+        val registry = SimpleMeterRegistry()
+        assertThatCode { precheck(jdbcTemplate, registry).run(DefaultApplicationArguments()) }.doesNotThrowAnyException()
+        assertThat(precheckCount(registry, "VERIFIED")).isOne()
+    }
+
+    @Test
+    fun `an empty point is rejected by the table and by the startup gate`() {
+        val jdbcTemplate = migrated("v33_empty_point")
+        val storeId = UUID.randomUUID()
+        insertStore(jdbcTemplate, storeId)
+
+        // POINT EMPTY satisfies geography(Point,4326), GeometryType() and ST_IsValid(), so only an
+        // explicit emptiness rule keeps it out.
+        assertThatThrownBy { insertEmptyPointProfile(jdbcTemplate, storeId) }
+            .hasMessageContaining("merchant_store_discovery_profile")
+
+        jdbcTemplate.execute(
+            "ALTER TABLE merchant_store_discovery_profile DROP CONSTRAINT merchant_store_discovery_profile_location_check",
+        )
+        insertEmptyPointProfile(jdbcTemplate, storeId)
+
+        assertThatThrownBy { precheck(jdbcTemplate, SimpleMeterRegistry()).run(DefaultApplicationArguments()) }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("1 invalid profile(s)")
+    }
+
+    private fun insertEmptyPointProfile(
+        jdbcTemplate: JdbcTemplate,
+        storeId: UUID,
+    ) = jdbcTemplate.update(
+        """
+        INSERT INTO merchant_store_discovery_profile (store_id, name, location)
+        VALUES (?, 'Empty point store', ST_GeomFromText('POINT EMPTY', 4326)::geography)
+        """.trimIndent(),
+        storeId,
+    )
+
+    private fun appliedVersions(jdbcTemplate: JdbcTemplate): List<String?> =
+        jdbcTemplate.queryForList(
+            "SELECT version FROM flyway_schema_history WHERE success AND version IS NOT NULL",
+            String::class.java,
+        )
 
     @Test
     fun `exact verified coverage passes the startup gate`() {

@@ -13,6 +13,15 @@ data class ReservePickupCommand(
     val sourceReference: String,
 )
 
+/**
+ * Fulfillment calculates the actual reservation deadline while holding the PickupSlot lock. Ordering
+ * must use [expiresAt] for every other resource reservation and its pending-payment Order.
+ */
+data class PickupReservationGrant(
+    val reservationId: UUID,
+    val expiresAt: Instant,
+)
+
 data class ReleasePickupAfterTerminationCommand(
     val orderId: UUID,
     val terminatedAt: Instant,
@@ -21,10 +30,20 @@ data class ReleasePickupAfterTerminationCommand(
 )
 
 interface PickupReservationOperations {
-    fun reserve(command: ReservePickupCommand): UUID
+    /**
+     * Reserves one seat in the slot. Under the slot row lock the slot must still satisfy
+     * `startsAt > now` (BR-05, ADR-076); a started or finished slot fails with
+     * `ORDER_STATE_CONFLICT` and leaves every counter unchanged.
+     *
+     * Replaying the same `sourceReference` returns the existing grant and is not re-validated
+     * against the clock, so a reservation accepted in time stays retryable. The grant expires at
+     * the earlier of the requested Order lease and the slot start.
+     */
+    fun reserve(command: ReservePickupCommand): PickupReservationGrant
 
     fun confirm(
         orderId: UUID,
+        now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport
 

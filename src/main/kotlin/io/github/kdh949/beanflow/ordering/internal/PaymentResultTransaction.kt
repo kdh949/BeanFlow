@@ -199,7 +199,7 @@ internal class PaymentResultTransaction(
         if (order.state != OrderState.PENDING_PAYMENT) {
             throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Order is not eligible for approval")
         }
-        val reports = confirm(order)
+        val reports = confirm(order, now)
         order.markPaid(now)
         val body =
             confirmationBody(
@@ -228,12 +228,15 @@ internal class PaymentResultTransaction(
         }
     }
 
-    private fun confirm(order: OrderEntity): List<Pair<String, ReservationTransitionReport>> {
+    private fun confirm(
+        order: OrderEntity,
+        now: Instant,
+    ): List<Pair<String, ReservationTransitionReport>> {
         val reports = mutableListOf<Pair<String, ReservationTransitionReport>>()
         reports += "PICKUP" to
             requireApplied(
                 "PICKUP",
-                pickupOperations.confirm(order.id, OrderCreationTransaction.pickupSource(order.id)),
+                pickupOperations.confirm(order.id, now, OrderCreationTransaction.pickupSource(order.id)),
             )
         reports += "STOCK" to
             requireApplied(

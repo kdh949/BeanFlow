@@ -28,8 +28,11 @@ internal class NearbyStoreDiscoveryValidationTest {
     fun `textually different but numerically identical coordinates share one filter hash`() {
         val plain = prepare(latitude = "37.5", longitude = "127.0")
         val padded = prepare(latitude = "37.5000", longitude = "127.000")
+        val signed = prepare(latitude = "+37.5", longitude = "+127.0")
+        val exponent = prepare(latitude = "3.75e1", longitude = "1.27E2")
 
-        assertThat(padded.cursorScope.filterHash).isEqualTo(plain.cursorScope.filterHash)
+        assertThat(listOf(padded, signed, exponent).map { it.cursorScope.filterHash })
+            .containsOnly(plain.cursorScope.filterHash)
         assertThat(plain.cursorScope.endpoint).isEqualTo("stores-nearby")
         assertThat(plain.cursorScope.filterHash).matches("[0-9a-f]{64}")
     }
@@ -76,16 +79,36 @@ internal class NearbyStoreDiscoveryValidationTest {
 
     @Test
     fun `latitude and longitude accept the inclusive contract range as finite decimals`() {
-        listOf("90", "-90", "0", "89.999999").forEach { latitude ->
-            assertThat(prepare(latitude = latitude).query.latitude).isEqualTo(BigDecimal(latitude))
+        // Everything `type: number, format: double` can finitely express: sign, fraction, exponent.
+        listOf("90", "-90", "0", "89.999999", "+1", "3.75e1", "-8.9E1").forEach { latitude ->
+            assertThat(prepare(latitude = latitude).query.latitude).isEqualByComparingTo(BigDecimal(latitude))
         }
-        listOf("180", "-180", "0", "-179.999999").forEach { longitude ->
-            assertThat(prepare(longitude = longitude).query.longitude).isEqualTo(BigDecimal(longitude))
+        listOf("180", "-180", "0", "-179.999999", "+127.0", "1.27E2").forEach { longitude ->
+            assertThat(prepare(longitude = longitude).query.longitude).isEqualByComparingTo(BigDecimal(longitude))
         }
 
-        listOf("90.1", "-90.1", "91", "NaN", "Infinity", "-Infinity", "1e2", "+1", ".5", "1.", "", "1".repeat(33))
-            .forEach { latitude -> assertInvalid(latitude = latitude) }
-        listOf("180.1", "-180.1", "181", "NaN", "1E2").forEach { longitude -> assertInvalid(longitude = longitude) }
+        // Out of range, or not a finite number at all. "1e2" is well formed but 100 is not a
+        // latitude, so it fails the range rule rather than the grammar.
+        listOf(
+            "90.1",
+            "-90.1",
+            "91",
+            "1e2",
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "0x1",
+            "37.5f",
+            "1e99999",
+            ".5",
+            "1.",
+            "1e",
+            "1e+",
+            "--1",
+            "",
+            "1".repeat(33),
+        ).forEach { latitude -> assertInvalid(latitude = latitude) }
+        listOf("180.1", "-180.1", "181", "NaN", "1E3").forEach { longitude -> assertInvalid(longitude = longitude) }
         assertInvalid(latitude = null)
         assertInvalid(longitude = null)
     }

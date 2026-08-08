@@ -55,8 +55,14 @@ internal class StoreCatalogQueryService(
     ): List<StorePickupSlotView> =
         observed(StoreCatalogOperation.PICKUP_SLOTS) {
             // Fulfillment owns slots but not store identity, so the catalogue owner answers 404.
-            storeScope.requireExisting(storeId)
-            pickupSlots.listOpenSlots(storeId, now).map(PickupSlotView::toCatalogView)
+            // A store that is not accepting orders, or has pickup disabled, has no reservable slot
+            // at all: order creation rejects every one of them. Listing none keeps ADR-076's
+            // contract that a listed slot is a slot that can be reserved right now.
+            if (storeScope.pickupOrderingAvailable(storeId)) {
+                pickupSlots.listOpenSlots(storeId, now).map(PickupSlotView::toCatalogView)
+            } else {
+                emptyList()
+            }
         }
 
     private fun <T> observed(

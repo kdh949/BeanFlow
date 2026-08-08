@@ -180,7 +180,9 @@ internal class NearbyStoreDiscoveryIntegrationTest
 
         @Test
         fun `invalid coordinates and radii are rejected without echoing the customer coordinate`() {
-            listOf("90.1", "-90.1", "NaN", "1e2", "").forEach { latitude ->
+            // "1e2" is well-formed for `type: number` but out of the latitude range, so it is
+            // rejected by the range rule rather than by the grammar.
+            listOf("90.1", "-90.1", "NaN", "1e2", "0x1", "37.5f", "1e99999", "").forEach { latitude ->
                 mockMvc
                     .perform(nearby(latitude = latitude))
                     .andExpect(status().isBadRequest)
@@ -216,6 +218,43 @@ internal class NearbyStoreDiscoveryIntegrationTest
                     .andReturn()
                     .response.contentAsString
             assertThat(body).doesNotContain("37.123456789", "127.987654321")
+        }
+
+        @Test
+        fun `every finite notation the OpenAPI number type allows is accepted and canonicalised alike`() {
+            insertStore(store(90), "Notation cafe", longitude = 127.0, latitude = 37.5)
+
+            // All four spell the same coordinate pair. `type: number, format: double` permits a
+            // leading sign and an exponent, so none of them may be a 400.
+            val equivalents =
+                listOf(
+                    "37.5" to "127.0",
+                    "+37.5" to "+127.0",
+                    "37.50" to "127.00",
+                    "3.75e1" to "1.27E2",
+                )
+            equivalents.forEach { (latitude, longitude) ->
+                mockMvc
+                    .perform(nearby(latitude = latitude, longitude = longitude, limit = "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].storeId").value(store(90).toString()))
+            }
+
+            // Canonicalisation is what binds a cursor to its filter, so a cursor issued for one
+            // notation must keep working for an equivalent one.
+            insertStore(store(91), "Notation cafe 2", longitude = 127.0001, latitude = 37.5)
+            val cursor =
+                nextCursor(
+                    mockMvc
+                        .perform(nearby(latitude = "37.5", longitude = "127.0", limit = "1"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+                        .response.contentAsString,
+                )
+            mockMvc
+                .perform(nearby(latitude = "3.75e1", longitude = "+127.00", limit = "1", cursor = cursor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].storeId").value(store(91).toString()))
         }
 
         @Test

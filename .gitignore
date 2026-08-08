@@ -41,3 +41,10 @@ out/
 
 ### Kotlin ###
 .kotlin
+
+### BeanFlow local-demo runtime ###
+# Ephemeral key material, JWTs and generated env files. Never commit these.
+.demo-runtime/
+**/demo-identity.env
+**/workload-token.txt
+**/jwks.json

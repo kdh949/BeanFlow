@@ -61,6 +61,10 @@ paths:
       tags: [Discovery]
       operationId: listStoreMenus
       summary: List currently visible menus for a store
+      description: |
+        Returns the current owner catalogue, including unavailable menus and options. A 200 response
+        is a complete list, not a page or a partial result. More than 1,000 menus or 5,000 options
+        yields 503 rather than silently truncating the catalogue.
       parameters:
         - $ref: "#/components/parameters/StoreId"
       responses:
@@ -81,6 +85,11 @@ paths:
       tags: [Discovery]
       operationId: listStorePickupSlots
       summary: List available pickup slots
+      description: |
+        Returns only slots with startsAt > server time and startsAt less than seven days ahead.
+        An existing store that is not currently accepting pickup orders returns a 200 empty list;
+        unknown stores still return 404. A window containing 1,001 matching slots yields 503 rather
+        than a partial list.
       parameters:
         - $ref: "#/components/parameters/StoreId"
       responses:

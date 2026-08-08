@@ -51,6 +51,7 @@ class OrderTest {
                 quotes = listOf(quote),
                 pricing = pricing,
                 createdAt = createdAt,
+                reservationExpiresAt = createdAt.plusSeconds(300),
             )
         mutableOptions.clear()
 
