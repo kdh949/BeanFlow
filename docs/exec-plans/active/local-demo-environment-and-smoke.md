@@ -159,7 +159,7 @@ JWT, private key, 좌표는 출력하지 않는다.
 
 - [x] local-demo profile과 prod 충돌 거부 (실행 정의는 Milestone 4로 이동)
 - [x] ephemeral JWKS와 역할별 JWT
-- [ ] bootstrap과 결정적 멱등 seed
+- [~] bootstrap과 결정적 멱등 seed (정책 bootstrap 실행 확인, seed CLI 작성 완료·아직 성공 실행 못 함)
 - [ ] smoke flow, 실행 정의와 실패 시나리오
 - [ ] runbook, evidence, 테스트와 전체 validation
 
@@ -171,6 +171,24 @@ JWT, private key, 좌표는 출력하지 않는다.
   성립하지 않는다. 편의를 위한 production endpoint 추가는 금지이므로 bootstrap CLI를 택했다.
 - 2026-08-07: README의 "현재 source에 없는 capability"에 nearby·menu·슬롯 조회 API와 PointAccount
   read가 남아 있으나 둘 다 구현돼 있다. 이번 작업에서 정정한다.
+
+- 2026-08-07: Gradle `--args`는 공백으로 토큰을 나눈다. 공백이 있는 정책 `reason` 인자가 세 토큰으로
+  쪼개져 bootstrap이 `INVALID_INPUT`으로 실패했다. CLI가 이미 제공하는 환경변수 계약으로 바꿨다.
+- 2026-08-07: `OidcWorkloadIdentityVerifier`는 쓰기 권한이 있는 신원 파일을 거부한다(`WRITE_PERMISSIONS`).
+  0600으로 쓴 token/JWK 파일이 거부됐고, 검증을 완화하는 대신 0400으로 기록하도록 고쳤다. 이로써
+  demo도 실제 workload identity 검증 경로를 그대로 통과한다.
+- 2026-08-07: Modulith runtime/observability autoconfiguration은 `@SpringBootApplication` 클래스를
+  요구해 CLI 구성에서 실패한다. `spring-modulith-runtime`이 `runtimeOnly`라 컴파일 참조가 불가능하므로
+  이름으로 제외했다.
+- 2026-08-07: test classpath에서 실행하는 identity server JVM이 `build/classes/kotlin/test`를 잠가
+  실행 중에는 재컴파일이 실패한다. 코드를 고칠 때는 `stop.sh`를 먼저 실행해야 한다.
+- 2026-08-08: **미해결 blocker.** `bootRun`이 schema validation으로 시작하지 못한다.
+  `loyalty_point_adjustment_command_idempotency.payload_hash`가 V31에서 `char(64)`로 선언돼 있는데
+  (저장소의 다른 11개 `payload_hash`는 모두 `varchar(64)`), entity는 `@Column(length = 64)`이라
+  Hibernate가 `varchar(64)`를 기대한다. DB에서 `character(64)`임을 직접 확인했다. 그런데 같은
+  `ddl-auto: validate`를 쓰는 `@SpringBootTest`는 통과한다. 이 불일치의 원인은 아직 규명하지 못했다.
+  운영도 `validate`를 쓰므로 이는 demo 전용 문제가 아닐 수 있다. 해결은 migration 추가(ADR-072 lane)
+  또는 entity `columnDefinition` 변경이며 둘 다 이 plan의 범위를 넘는 별도 결정이라 임의로 고치지 않았다.
 
 ## Decision Log
 
