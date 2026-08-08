@@ -111,6 +111,13 @@ tasks.register<JavaExec>("local-demo-identity-server") {
 	mainClass.set("io.github.kdh949.beanflow.demo.LocalDemoIdentityServerKt")
 }
 
+tasks.register<JavaExec>("local-demo-seed") {
+	group = "application"
+	description = "Seed the deterministic local-demo fixture through owner entities (never for production)"
+	classpath = sourceSets["test"].runtimeClasspath
+	mainClass.set("io.github.kdh949.beanflow.demo.LocalDemoSeedCliKt")
+}
+
 tasks.register<JavaExec>("operator-permission-bootstrap") {
 	group = "application"
 	description = "Apply an audited operator permission lifecycle action using OIDC workload identity"
