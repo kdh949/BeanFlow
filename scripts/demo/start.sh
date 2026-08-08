@@ -36,30 +36,31 @@ export_app_env
 log "3/5 bootstrapping the required GLOBAL ordinary point accrual policy"
 # The demo never invents this policy implicitly. It is created by the same audited CLI production
 # would use, verified through the same OIDC workload identity path.
-if ./gradlew --quiet ordinary-accrual-policy-bootstrap --args="\
---rate-bps=100 \
---rounding-mode=FLOOR \
---issuer-type=PLATFORM \
---issuer-reference=local-demo:platform \
---expiry-rule=EXACT_DURATION_FROM_COMPLETION \
---validity-days=365 \
---reason=local-demo environment bootstrap \
---evidence-reference=local-demo:bootstrap \
---correlation-id=local-demo-bootstrap \
---token-file=${DEMO_WORKLOAD_TOKEN_FILE} \
---jwk-set-file=${DEMO_JWKS_FILE} \
---issuer=${BEANFLOW_DEMO_ISSUER} \
---audience=${BEANFLOW_DEMO_WORKLOAD_AUDIENCE} \
---allowed-subjects=${BEANFLOW_DEMO_WORKLOAD_SUBJECT} \
---deployment-run-claim=${BEANFLOW_DEMO_DEPLOYMENT_RUN_CLAIM}" >"${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>&1; then
+# Arguments go through the CLI's environment-variable contract rather than --args: Gradle splits
+# --args on whitespace, which would break any value containing a space.
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_RATE_BPS="100"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ROUNDING_MODE="FLOOR"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ISSUER_TYPE="PLATFORM"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ISSUER_REFERENCE="local-demo:platform"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_EXPIRY_RULE="EXACT_DURATION_FROM_COMPLETION"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_VALIDITY_DAYS="365"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_REASON="local-demo environment bootstrap"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_EVIDENCE_REFERENCE="local-demo:bootstrap"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_CORRELATION_ID="local-demo-bootstrap-$$"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_TOKEN_FILE="$DEMO_WORKLOAD_TOKEN_FILE"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_JWK_SET_FILE="$DEMO_JWKS_FILE"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ISSUER="$BEANFLOW_DEMO_ISSUER"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_AUDIENCE="$BEANFLOW_DEMO_WORKLOAD_AUDIENCE"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ALLOWED_SUBJECTS="$BEANFLOW_DEMO_WORKLOAD_SUBJECT"
+export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_DEPLOYMENT_RUN_CLAIM="$BEANFLOW_DEMO_DEPLOYMENT_RUN_CLAIM"
+
+if ./gradlew --quiet ordinary-accrual-policy-bootstrap >"${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>&1; then
   ok "ordinary accrual policy bootstrap completed"
+elif grep -qiE "ALREADY_INITIALIZED|already" "${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>/dev/null; then
+  ok "ordinary accrual policy already present; continuing"
 else
   tail -30 "${DEMO_RUNTIME_DIR}/policy-bootstrap.log" >&2 || true
-  if grep -qi "already" "${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>/dev/null; then
-    ok "ordinary accrual policy already present; continuing"
-  else
-    fail "Policy bootstrap failed. The demo does not start without the required policy."
-  fi
+  fail "Policy bootstrap failed. The demo does not start without the required policy."
 fi
 
 log "4/5 starting the application with profiles local,local-demo"

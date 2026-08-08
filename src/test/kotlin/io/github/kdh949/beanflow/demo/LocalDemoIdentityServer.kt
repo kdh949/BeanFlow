@@ -127,12 +127,13 @@ fun main(args: Array<String>) {
 
     val key = LocalDemoIdentity.generateKey()
     val publicJwkSet = JWKSet(key.toPublicJWK()).toString()
-    write(runtimeDirectory.resolve("jwks.json"), publicJwkSet)
+    write(runtimeDirectory.resolve("jwks.json"), publicJwkSet, readOnly = true)
 
     val deploymentRun = "local-demo-${Instant.now().epochSecond}"
     write(
         runtimeDirectory.resolve("workload-token.txt"),
         LocalDemoIdentity.signWorkloadToken(key, deploymentRun, Duration.ofHours(12)),
+        readOnly = true,
     )
 
     val environment = StringBuilder()
@@ -166,9 +167,18 @@ fun main(args: Array<String>) {
 private fun write(
     path: Path,
     content: String,
+    readOnly: Boolean = false,
 ) {
+    // A previous run may have left the file read-only, so replace rather than overwrite in place.
+    Files.deleteIfExists(path)
     Files.writeString(path, content)
+    val file = path.toFile()
     // Key material and tokens must not be readable by other local users.
-    runCatching { path.toFile().setReadable(false, false) }
-    runCatching { path.toFile().setReadable(true, true) }
+    file.setReadable(false, false)
+    file.setReadable(true, true)
+    if (readOnly) {
+        // OidcWorkloadIdentityVerifier refuses any identity file that is writable by anyone. The
+        // demo satisfies that requirement instead of relaxing the check.
+        file.setWritable(false, false)
+    }
 }

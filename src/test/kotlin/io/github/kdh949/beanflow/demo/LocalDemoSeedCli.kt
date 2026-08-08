@@ -447,6 +447,14 @@ fun main() {
         SpringApplicationBuilder(LocalDemoSeedApplication::class.java)
             .web(WebApplicationType.NONE)
             .profiles("local", "local-demo")
+            // The Modulith runtime autoconfiguration requires a @SpringBootApplication class, which
+            // a CLI configuration is not. It is excluded by name because spring-modulith-runtime is
+            // a runtimeOnly dependency. Module boundaries stay covered by ModularityTests.
+            .properties(
+                "spring.autoconfigure.exclude=" +
+                    "org.springframework.modulith.runtime.autoconfigure.SpringModulithRuntimeAutoConfiguration," +
+                    "org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration",
+            )
             .build()
     application.setRegisterShutdownHook(false)
     val context =
