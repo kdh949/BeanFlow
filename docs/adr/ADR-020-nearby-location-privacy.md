@@ -67,12 +67,25 @@ Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다.
 - migration은 profile 없는 `merchant_store` row가 하나라도 있으면 중단한다. `StoreDiscoveryProfilePrecheck`가
   startup에서 PostGIS 설치, 양방향 coverage, non-blank name과 SRID 4326 point를 다시 확인하고
   위반 시 readiness DOWN이 아니라 애플리케이션 시작을 실패시킨다.
+- **정정 (2026-08-08):** coverage gate는 V33이 아니라 V34다. 두 단계가 한 migration에 있으면
+  기존 store가 있는 환경에서 profile을 적재할 창 자체가 없어 배포가 불가능했다. V33은 스키마만
+  만들고 V34가 coverage를 단언하므로, 배포는 `target=33` → 검증된 dataset 적재 → 나머지
+  migration이다. 같은 정정에서 `POINT EMPTY`를 table CHECK와 startup precheck 양쪽에서 거부한다.
+  column type, `GeometryType()`, `ST_IsValid()`를 모두 통과하지만 `ST_DWithin`에는 잡히지 않아
+  해당 store가 조용히 검색에서 빠지기 때문이다.
 - Merchant `StoreDiscoveryQueryOperations`가 유일한 접근 경로다. Discovery는 Merchant JPA Entity나
   Repository를 쓰지 않고 영속 복제본과 동기화 event도 만들지 않는다. Spring Modulith가
   `discovery -> {shared :: api, merchant :: api}` 경계를 검증한다.
 - 좌표는 raw 문자열로 바인딩돼 Discovery 검증에서만 쓰인다. 검증 실패 메시지는 값을 포함하지
   않으므로 error body와 log에 원본 좌표가 남지 않는다. 응답, metric tag와 `AuditRecord`에도
   좌표가 없음을 통합 테스트가 확인한다.
+- **보강 (2026-08-08):** 비노출은 이제 root logger에 붙인 Logback appender로 검증한다. 성공,
+  검증 실패, PostGIS 실패 세 경로에서 formatted message, argument array, MDC, throwable chain
+  전체를 검사한다. tracer가 classpath에 없어 span은 존재하지 않으며 MDC가 유일한 요청별 진단
+  context다. 한 가지 남은 경로는 Spring의 `StatementCreatorUtils` TRACE 로깅으로, bind된 좌표를
+  그대로 기록한다. `application.yaml`이 이 logger를 `DEBUG`로 고정하고 runbook이 운영 제약으로
+  금지하지만, deployment가 level을 덮어쓸 수 있으므로 보장이 아니라 제약이다. 테스트가 TRACE에서
+  실제로 노출되는 것과 DEBUG에서 노출되지 않는 것을 양방향으로 고정한다.
 - PostGIS/DB 실패는 `beanflow.discovery.spatial.failure{reason}`와 함께 503이며 빈 200,
   Haversine 계산 또는 cache로 대체되지 않는다.
 

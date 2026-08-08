@@ -10,7 +10,7 @@
 
 ## 1. 배포 전 preflight
 
-V33을 적용하기 전에 target 환경에서 다음을 순서대로 확인한다. 하나라도 실패하면 배포를
+V33·V34를 적용하기 전에 target 환경에서 다음을 순서대로 확인한다. 하나라도 실패하면 배포를
 중단한다. 추정 값이나 placeholder로 진행하지 않는다.
 
 1. **PostGIS 사용 가능 여부와 권한**
@@ -30,11 +30,22 @@ V33을 적용하기 전에 target 환경에서 다음을 순서대로 확인한�
    SELECT count(*) FROM merchant_store;
    ```
 
-   - `0`이면 empty migration path다. 그대로 배포한다.
+   - `0`이면 empty migration path다. 그대로 한 번에 배포한다.
    - `0`이 아니면, 모든 store에 대해 owner가 검증한 non-blank 공개 매장명과 좌표 dataset이
-     있어야 하고 store ID coverage가 정확히 일치해야 한다. 그 dataset을 같은 release의
-     migration에 포함시켜 profile을 함께 insert한다. 하나라도 미해결이면 배포하지 않는다.
+     있어야 하고 store ID coverage가 정확히 일치해야 한다. 하나라도 미해결이면 배포하지 않는다.
      placeholder 이름, `(0,0)`, 임의 좌표, 메뉴 이름, 주문 이력, 외부 geocoder로 채우지 않는다.
+
+     기존 store가 있는 환경은 **2단계 migration**으로 진행한다. V33은 스키마만 만들고 V34가
+     coverage를 검증하므로 그 사이에 profile을 적재할 창이 있다.
+
+     ```bash
+     flyway -target=33 migrate     # 스키마와 GiST index만 적용
+     # 검증된 dataset을 merchant_store_discovery_profile에 insert
+     flyway migrate                # V34 coverage gate 통과 여부로 확인
+     ```
+
+     `-target=33`을 건너뛰고 한 번에 실행하면 V34가 unresolved row를 발견하고 배포를 멈춘다.
+     이는 정상 동작이며, profile을 먼저 적재하라는 뜻이다.
 
 3. **Cursor key ring**
 
@@ -46,10 +57,12 @@ V33을 적용하기 전에 target 환경에서 다음을 순서대로 확인한�
 | 증상 | 원인 | 조치 |
 |---|---|---|
 | `must be owner of database` 또는 `permission denied to create extension "postgis"` | migration role에 extension 생성 권한이 없다 | DBA가 대상 database에 PostGIS를 설치한 뒤 재실행한다. migration에서 extension 요구를 제거하지 않는다 |
-| `Nearby discovery migration found N merchant_store row(s) without a verified StoreDiscoveryProfile` | 검증된 profile source 없이 store가 존재한다 | 배포를 중단한다. owner가 검증한 dataset을 같은 release migration에 추가하거나, 해당 환경에서 nearby 배포를 보류한다 |
+| V34: `Nearby discovery migration found N merchant_store row(s) without a verified StoreDiscoveryProfile` | 검증된 profile 없이 store가 존재한다 | V33은 이미 적용됐으므로 table이 있다. 검증된 dataset을 `merchant_store_discovery_profile`에 적재한 뒤 `flyway migrate`를 다시 실행한다. gate를 지우거나 placeholder로 채우지 않는다 |
 | `type "geography" does not exist` | extension이 다른 schema에 설치돼 `search_path`에 없다 | extension schema를 `search_path`에 포함하거나 `public`에 설치한다 |
+| `violates check constraint "merchant_store_discovery_profile_location_check"` | 적재하려는 좌표가 `POINT EMPTY`다 | 실제 좌표를 확보한다. `POINT EMPTY`는 type과 `ST_IsValid`를 통과하지만 `ST_DWithin`에 절대 잡히지 않아 해당 매장이 조용히 검색 불가가 된다 |
 
-V33은 실패 시 전체가 rollback된다. 부분 적용 상태로 서비스를 시작하지 않는다.
+각 migration은 실패 시 자체적으로 rollback된다. V34가 실패해도 V33은 적용된 상태로 남으며,
+이것이 profile을 적재할 수 있게 하는 의도된 상태다. 부분 적용 상태로 서비스를 시작하지 않는다.
 
 ## 3. Startup 실패
 
