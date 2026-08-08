@@ -14,8 +14,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.sql.Timestamp
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
@@ -30,6 +34,8 @@ internal class PickupReservationRepositoryTest
         private val operations: PickupReservationOperations,
         private val slotRepository: PickupSlotJpaRepository,
         private val reservationRepository: PickupReservationJpaRepository,
+        private val clock: Clock,
+        private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -113,6 +119,78 @@ internal class PickupReservationRepositoryTest
         }
 
         @Test
+        fun `a slot that already started cannot be reserved and leaves every counter unchanged`() {
+            val storeId = UUID.randomUUID()
+            val started = UUID.randomUUID()
+            val finished = UUID.randomUUID()
+            insertSlot(started, storeId, capacity = 2, startsAt = clock.instant().minus(Duration.ofMinutes(1)))
+            insertSlot(finished, storeId, capacity = 2, startsAt = clock.instant().minus(Duration.ofHours(2)))
+
+            listOf(started, finished).forEach { slotId ->
+                val failure =
+                    runCatching {
+                        transactions.executeWithoutResult {
+                            operations.reserve(
+                                ReservePickupCommand(
+                                    orderId = UUID.randomUUID(),
+                                    storeId = storeId,
+                                    pickupSlotId = slotId,
+                                    expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
+                                    sourceReference = "pickup-late-$slotId",
+                                ),
+                            )
+                        }
+                    }.exceptionOrNull()
+                assertThat(failure).isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+                }
+            }
+
+            transactions.executeWithoutResult {
+                listOf(started, finished).forEach { slotId ->
+                    val slot = slotRepository.findById(slotId).orElseThrow()
+                    assertThat(slot.reservedCount).isZero()
+                    assertThat(slot.confirmedCount).isZero()
+                }
+                assertThat(reservationRepository.count()).isZero()
+            }
+        }
+
+        @Test
+        fun `a reservation accepted before the slot started stays replayable after it starts`() {
+            val storeId = UUID.randomUUID()
+            val slotId = UUID.randomUUID()
+            val orderId = UUID.randomUUID()
+            insertSlot(slotId, storeId, capacity = 2)
+            val command =
+                ReservePickupCommand(
+                    orderId = orderId,
+                    storeId = storeId,
+                    pickupSlotId = slotId,
+                    expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
+                    sourceReference = "pickup-order-$orderId",
+                )
+            val first = transactions.execute { operations.reserve(command) }
+
+            // Move the slot into the past instead of sleeping: the retry now happens after the
+            // window closed, which is exactly the case a payment retry hits.
+            val startedAt = clock.instant().minus(Duration.ofMinutes(1))
+            jdbcTemplate.update(
+                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
+                Timestamp.from(startedAt),
+                Timestamp.from(startedAt.plus(Duration.ofMinutes(10))),
+                slotId,
+            )
+
+            val replay = transactions.execute { operations.reserve(command) }
+            assertThat(replay).isEqualTo(first)
+            transactions.executeWithoutResult {
+                assertThat(slotRepository.findById(slotId).orElseThrow().reservedCount).isEqualTo(1)
+                assertThat(reservationRepository.count()).isEqualTo(1)
+            }
+        }
+
+        @Test
         fun `confirmed pickup is released after termination exactly once and metadata conflicts fail`() {
             val storeId = UUID.randomUUID()
             val slotId = UUID.randomUUID()
@@ -182,14 +260,15 @@ internal class PickupReservationRepositoryTest
             id: UUID,
             storeId: UUID,
             capacity: Long,
+            startsAt: Instant = clock.instant().plus(Duration.ofHours(1)),
         ) {
             transactions.executeWithoutResult {
                 slotRepository.saveAndFlush(
                     PickupSlotEntity(
                         id = id,
                         storeId = storeId,
-                        startsAt = Instant.parse("2026-07-28T00:10:00Z"),
-                        endsAt = Instant.parse("2026-07-28T00:20:00Z"),
+                        startsAt = startsAt,
+                        endsAt = startsAt.plus(Duration.ofMinutes(10)),
                         capacity = capacity,
                     ),
                 )

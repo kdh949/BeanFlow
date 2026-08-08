@@ -13,11 +13,12 @@ import java.util.UUID
  */
 interface PickupSlotQueryOperations {
     /**
-     * Returns the store's slots that have not ended yet, ordered by `(startsAt, pickupSlotId)`.
+     * Returns the store's slots that have not started yet, ordered by `(startsAt, pickupSlotId)`.
      *
-     * Slots whose window already closed are excluded because they cannot be picked up. This read
-     * window is narrower than the write path, which does not currently validate slot time.
-     * A slot with no remaining capacity is still returned with `remainingCapacity = 0`.
+     * The window is exactly the window in which [PickupReservationOperations.reserve] accepts a
+     * reservation (BR-05, ADR-076): a slot is listed while `startsAt > now` and stops being listed
+     * at the same instant it stops being reservable. A slot with no remaining capacity is still
+     * returned with `remainingCapacity = 0`.
      *
      * @throws io.github.kdh949.beanflow.shared.api.DomainFailure with `DEPENDENCY_UNAVAILABLE` when
      * persistence fails. A dependency failure is never collapsed into an empty list.

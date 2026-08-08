@@ -8,8 +8,9 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * One flat DTO query per store. Remaining capacity is derived in SQL from the owner counters and
- * floored at zero, so an over-committed slot is reported as full rather than as a negative number.
+ * One flat DTO query per store. Remaining capacity is the raw owner arithmetic: it is not floored,
+ * so a corrupted counter surfaces as a negative number that [PickupSlotQueryService] rejects instead
+ * of being silently rendered as a plausible "full" slot.
  */
 @Repository
 internal class PickupSlotQueryRepository(
@@ -22,10 +23,10 @@ internal class PickupSlotQueryRepository(
         jdbcTemplate.query(
             """
             SELECT id, starts_at, ends_at,
-                   GREATEST(capacity - reserved_count - confirmed_count, 0) AS remaining_capacity
+                   capacity - reserved_count - confirmed_count AS remaining_capacity
               FROM fulfillment_pickup_slot
              WHERE store_id = ?
-               AND ends_at > ?
+               AND starts_at > ?
              ORDER BY starts_at, id
             """.trimIndent(),
             { resultSet, _ ->

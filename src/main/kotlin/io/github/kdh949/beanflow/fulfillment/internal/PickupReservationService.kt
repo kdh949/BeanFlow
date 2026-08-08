@@ -49,12 +49,18 @@ internal class PickupReservationService(
         reservationRepository.findByOrderId(command.orderId)?.let {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Order already has a pickup reservation")
         }
+        // BR-05 pickup window: a slot may only be reserved while it has not started. The check runs
+        // under the slot row lock and after the idempotent replay above, so a retry of a reservation
+        // that was accepted in time still resolves to the stored reservation instead of failing.
+        val now = clock.instant()
+        if (!slot.startsAt.isAfter(now)) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup slot has already started")
+        }
         if (slot.reservedCount + slot.confirmedCount >= slot.capacity) {
             fail(FailureCode.PICKUP_SLOT_FULL, "Pickup slot capacity is exhausted")
         }
 
         slot.reserveOne()
-        val now = clock.instant()
         val reservation =
             PickupReservationEntity(
                 id = identifierSource.next(),

@@ -21,6 +21,14 @@ data class ReleasePickupAfterTerminationCommand(
 )
 
 interface PickupReservationOperations {
+    /**
+     * Reserves one seat in the slot. Under the slot row lock the slot must still satisfy
+     * `startsAt > now` (BR-05, ADR-076); a started or finished slot fails with
+     * `ORDER_STATE_CONFLICT` and leaves every counter unchanged.
+     *
+     * Replaying the same `sourceReference` returns the existing reservation and is not re-validated
+     * against the clock, so a reservation accepted in time stays retryable.
+     */
     fun reserve(command: ReservePickupCommand): UUID
 
     fun confirm(

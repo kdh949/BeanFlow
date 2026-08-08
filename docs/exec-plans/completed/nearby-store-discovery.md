@@ -382,3 +382,10 @@ condition을 사용했고 p50은 0.397 ms → 1.850 ms였다. 비교 가능한 �
 - 2026-08-07: Milestone 4~5를 완료했다. 메뉴·픽업 슬롯 owner projection과 Discovery catalogue
   endpoint, statement-count 회귀, 재현 가능한 두 규모 measurement를 추가하고 plan을 `COMPLETED`로
   옮겼다.
+- 2026-08-08 (post-merge review remediation): 아래 "남은 작업과 후속 조건"의 첫 항목이던
+  read/write 창 불일치가 제품 결정으로 해소됐다. 예약 가능 창은 `startsAt > now`로 확정하고
+  쓰기 경로에 검증을 추가했으며, 조회 predicate를 `ends_at > now`에서 `starts_at > now`로 맞췄다.
+  잔여 capacity의 `GREATEST(..., 0)` clamp도 제거해 손상된 counter가 503으로 드러나게 했다.
+  결정은 [ADR-076](../../adr/ADR-076-pickup-slot-reservation-window.md)과 BR-05 Slot Reservation
+  Window Amendment에 기록했고 MD-2026-010은 `Superseded`다. 이 항목 위의 서술은 그 시점의
+  기록이므로 덮어쓰지 않는다.

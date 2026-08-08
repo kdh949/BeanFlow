@@ -109,7 +109,8 @@ internal class DiscoveryStoreCatalogQueryCountTest {
                     """.trimIndent(),
                     UUID.nameUUIDFromBytes("catalog-count:$storeId:slot:$slotIndex".toByteArray()),
                     storeId,
-                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex))),
+                    // Every slot starts after `now`, which is the window findOpenSlots projects.
+                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 5))),
                     Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 25))),
                     4L,
                 )

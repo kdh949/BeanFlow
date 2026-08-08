@@ -53,4 +53,34 @@ internal class StorePolicyScopeIntegrationTest
                     assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
                 }
         }
+
+        @Test
+        fun `pickup ordering availability is the same condition order creation enforces`() {
+            val open = UUID.randomUUID()
+            val closed = UUID.randomUUID()
+            val pickupDisabled = UUID.randomUUID()
+            storeRepository.saveAndFlush(StoreEntity(open, acceptingOrders = true, pickupEnabled = true))
+            storeRepository.saveAndFlush(StoreEntity(closed, acceptingOrders = false, pickupEnabled = true))
+            storeRepository.saveAndFlush(StoreEntity(pickupDisabled, acceptingOrders = true, pickupEnabled = false))
+
+            assertThat(operations.pickupOrderingAvailable(open)).isTrue()
+            assertThat(operations.pickupOrderingAvailable(closed)).isFalse()
+            assertThat(operations.pickupOrderingAvailable(pickupDisabled)).isFalse()
+            assertThatThrownBy { operations.pickupOrderingAvailable(UUID.randomUUID()) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.RESOURCE_NOT_FOUND)
+                }
+        }
+
+        @Test
+        fun `pickup ordering availability never collapses a dependency failure into false`() {
+            val repository = mock(StoreJpaRepository::class.java)
+            val storeId = UUID.randomUUID()
+            `when`(repository.findById(storeId)).thenThrow(DataAccessResourceFailureException("unavailable"))
+
+            assertThatThrownBy { JpaStorePolicyScopeService(repository).pickupOrderingAvailable(storeId) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+                }
+        }
     }
