@@ -1,11 +1,11 @@
 # 실제 인증과 불변식을 그대로 통과하는 local demo 환경과 smoke를 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/nearby-store-discovery.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-08`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -159,9 +159,9 @@ JWT, private key, 좌표는 출력하지 않는다.
 
 - [x] local-demo profile과 prod 충돌 거부 (실행 정의는 Milestone 4로 이동)
 - [x] ephemeral JWKS와 역할별 JWT
-- [~] bootstrap과 결정적 멱등 seed (정책 bootstrap 실행 확인, seed CLI 작성 완료·아직 성공 실행 못 함)
-- [ ] smoke flow, 실행 정의와 실패 시나리오
-- [ ] runbook, evidence, 테스트와 전체 validation
+- [x] bootstrap과 결정적 멱등 seed
+- [x] smoke flow, 실행 정의와 실패 시나리오
+- [x] runbook, evidence, 테스트와 전체 validation
 
 ## Surprises & Discoveries
 
@@ -182,13 +182,22 @@ JWT, private key, 좌표는 출력하지 않는다.
   이름으로 제외했다.
 - 2026-08-07: test classpath에서 실행하는 identity server JVM이 `build/classes/kotlin/test`를 잠가
   실행 중에는 재컴파일이 실패한다. 코드를 고칠 때는 `stop.sh`를 먼저 실행해야 한다.
-- 2026-08-08: **미해결 blocker.** `bootRun`이 schema validation으로 시작하지 못한다.
-  `loyalty_point_adjustment_command_idempotency.payload_hash`가 V31에서 `char(64)`로 선언돼 있는데
+- 2026-08-08: **해소됨.** `bootRun`이 schema validation으로 시작하지 못했다.
+  `loyalty_point_adjustment_command_idempotency.payload_hash`가 V31에서 `char(64)`로 선언돼 있었고
   (저장소의 다른 11개 `payload_hash`는 모두 `varchar(64)`), entity는 `@Column(length = 64)`이라
-  Hibernate가 `varchar(64)`를 기대한다. DB에서 `character(64)`임을 직접 확인했다. 그런데 같은
-  `ddl-auto: validate`를 쓰는 `@SpringBootTest`는 통과한다. 이 불일치의 원인은 아직 규명하지 못했다.
-  운영도 `validate`를 쓰므로 이는 demo 전용 문제가 아닐 수 있다. 해결은 migration 추가(ADR-072 lane)
-  또는 entity `columnDefinition` 변경이며 둘 다 이 plan의 범위를 넘는 별도 결정이라 임의로 고치지 않았다.
+  Hibernate가 `varchar(64)`를 기대했다. V31이 다른 컬럼과 같은 `varchar(64)`로 정정돼 해소됐고,
+  현재 저장소의 모든 `payload_hash`는 `varchar(64)`다. 같은 조사에서 Hibernate `validate`는 base
+  type만 확인하고 length는 확인하지 않는다는 점을 관측했으므로, 불필요하게 넣었던 entity
+  `length = 32` 변경은 되돌렸다.
+- 2026-08-08: 좌표 비노출을 검증하려고 root logger에 appender를 붙이면서 Spring이
+  `org.springframework.jdbc.core.StatementCreatorUtils` TRACE에서 bind된 statement parameter를
+  그대로 기록한다는 사실을 확인했다. 전역 TRACE를 켜면 원본 좌표가 로그에 남는다.
+  `application.yaml`에서 level을 고정하고 nearby runbook에 운영 제약으로 남겼다. deployment가
+  level을 덮어쓸 수 있으므로 보장이 아니라 제약이며, 테스트가 TRACE 노출과 DEBUG 비노출을
+  양방향으로 고정한다.
+- 2026-08-08: 픽업 슬롯 예약 창을 `startsAt > now`로 좁힌 뒤 `OrderTerminationResourceListener`
+  통합 테스트가 깨졌다. 슬롯을 고정 과거 상수에 시드하고 있었기 때문이다. 이름으로 고른 타깃
+  테스트 실행에서는 전부 빠졌고 전체 `clean build`에서만 드러났다.
 
 ## Decision Log
 
@@ -200,26 +209,63 @@ JWT, private key, 좌표는 출력하지 않는다.
 
 ## Outcomes & Retrospective
 
-Milestone 1~2가 구현·검증됐다. Milestone 3~5는 미구현이다.
+Milestone 1~5가 모두 구현·검증됐다.
 
-**구현된 것 (2026-08-07)**
+**구현된 것**
 
 - `LocalDemoSafetyConfiguration`이 `local-demo` + `prod` 동시 활성과 `local` 없는 단독 활성을
   startup failure로 만든다. 세 경우를 `LocalDemoSafetyConfigurationTest`가 고정한다.
 - `LocalDemoIdentityServer`가 실행 시 RSA keypair를 만들어 공개 JWK set만 HTTP로 제공하고,
-  역할별 API JWT 5개, bootstrap용 OIDC workload token, cursor HMAC secret을 runtime 디렉터리에
-  `0600`으로 기록한다. Gradle `local-demo-identity-server` task로 실행한다.
-- 실제 기동 확인: `http://127.0.0.1:19999/jwks.json`이 공개 키만 반환했고 private key는 응답과
-  tracked file 어디에도 없다. runtime 산출물은 `.gitignore`로 차단했다.
+  역할별 API JWT 5개, bootstrap용 OIDC workload token, cursor HMAC secret을 gitignore된 runtime
+  디렉터리에 기록한다. 신원 파일은 `0400`이며, 이는 검증 우회가 아니라
+  `OidcWorkloadIdentityVerifier`의 쓰기 권한 거부를 통과하기 위한 조건이다.
+- `LocalDemoSeeder`가 고정 UUID fixture 25행을 owner Entity로 단일 transaction에 쓴다. GLOBAL
+  적립 정책이 없으면 default를 만들지 않고 실패한다.
+- `docker-compose.demo.yml`과 `scripts/demo/{start,seed,smoke,stop}.sh`. 모든 대기는 deadline이
+  있는 bounded poll이고 초과는 실패다. `--reset`은 컨테이너의 `POSTGRES_DB`와 runtime 디렉터리
+  경로가 정확히 일치할 때만 삭제한다.
+- smoke는 runtime OpenAPI operation만 실제 HTTP로 호출하고 첫 불일치에서 non-zero exit을 낸다.
 - demo 도구는 test source set에 있어 production 산출물에 포함되지 않는다.
 
-**남은 작업**
+**실행 증거 (2026-08-08)**
 
-Milestone 3(정책·권한 bootstrap과 결정적 멱등 seed), Milestone 4(compose 실행 정의,
-`start`/`seed`/`smoke`/`stop` script, 고객→점주→포인트→정산 smoke와 실패 시나리오),
-Milestone 5(runbook, quality evidence, seed 멱등성·부분 실패 rollback·reset guard·secret scan·
-smoke exit code 테스트)가 남았다. 이 범위는 아직 **실행해 검증하지 않았으므로 통과로 기록하지
-않는다.**
+- `bash scripts/demo/start.sh` → exit 0. PostGIS → JWK set → 정책 bootstrap → 애플리케이션
+  healthy까지 5단계 통과. V33/V34 분리 이후의 fresh migration도 정상 적용됐다.
+- `bash scripts/demo/seed.sh` → 25행 삽입. 즉시 재실행 → **0행 삽입**, 같은 fixture.
+- `bash scripts/demo/smoke.sh` → exit 0, **17단계 전부 통과**. nearby(매장 2곳, demo 매장 존재) →
+  메뉴(판매 불가 1건 포함 2건) → 슬롯 → 주문 생성 201 → 동일 payload 재생이 같은 orderId →
+  payload 변경 409 → 결제 확정 → ACCEPTED/PREPARING/READY/COMPLETED → 주문 조회 `COMPLETED` →
+  포인트 summary·transactions → 401/401/403.
+- 정산은 `warn`으로 보고됐다. **통과로 계산하지 않는다.** 60초 안에 Batch 생성 조건이
+  충족되지 않았고, smoke의 정산 assertion은 실행되지 않았다는 사실을 그대로 출력한다.
+- `bash scripts/demo/stop.sh` → exit 0.
+- `./gradlew test --tests '*Demo*' --tests '*ProviderSafety*' --tests '*ModularityTests'` 통과.
+- `./gradlew clean build` BUILD SUCCESSFUL (497 tests, 1 skipped, 0 failed).
+- `bash scripts/verify-docs.sh`, `./gradlew spotlessCheck`, `git diff --check` 통과.
+
+**Required Tests 대응**
+
+| 요구 | 테스트 |
+|---|---|
+| `prod` + `local-demo` 동시 활성 startup 거부 | `LocalDemoSafetyConfigurationTest` |
+| seed 재실행 동일 결과와 중복 0 | `LocalDemoSeedIntegrationTest` |
+| partial seed 실패 rollback | `LocalDemoSeedIntegrationTest` (마지막 단계에 실패 주입) |
+| reset guard가 다른 DB 이름을 거부 | `LocalDemoScriptGuardTest` (stub docker, 임시 root) |
+| tracked file secret scan | `LocalDemoRepositorySafetyTest` (`git ls-files` 전체) |
+| smoke script의 실패 exit code | `LocalDemoScriptGuardTest` |
+| runtime OpenAPI operation만 호출 | `LocalDemoRepositorySafetyTest` |
+
+추가로 "필수 정책이 없으면 seed가 실패한다"를 `LocalDemoSeedIntegrationTest`가 고정한다.
+
+**증명하지 않은 것**
+
+- smoke **성공** exit code는 위의 실제 실행으로만 확인했고 자동 테스트로 고정하지 않았다.
+  전체 흐름의 성공 응답을 stub으로 흉내 내면 이 plan이 금지한 "실패를 성공으로 위장"을 테스트가
+  스스로 하게 되므로, 실패 경로만 자동화하고 성공은 실행 증거로 남긴다.
+- reset guard의 runtime 디렉터리 조건은 자동 테스트에서 일치 경로만 실행된다. 불일치 경로를
+  실행하려면 실제 삭제 대상 경로를 바꿔야 해 위험하므로 코드 검토로만 확인했다.
+- 정산 Batch 생성 조건이 충족되는 시나리오.
+- 실제 PG·JWK·알림 provider 연동, non-local 배포, 운영 규모와 SLA.
 
 ## Revision Notes
 
@@ -227,3 +273,7 @@ smoke exit code 테스트)가 남았다. 이 범위는 아직 **실행해 검증
   선택한 근거를 Decision Log에 기록했다.
 - 2026-08-07: Milestone 1~2를 완료했다. demo 도구를 test source set에 두어 production 산출물
   격리를 profile 외에 한 겹 더 확보하기로 하고 Decision Log에 추가했다.
+- 2026-08-08: Milestone 3~5를 완료하고 plan을 `COMPLETED`로 옮겼다. bootstrap·seed·smoke·stop을
+  실제로 실행해 증거를 기록하고, Required Tests 7건을 자동 테스트로 고정했다. 자동화하지 않은
+  두 가지(smoke 성공 exit code, reset의 runtime 디렉터리 불일치 경로)와 그 이유를 Outcomes에
+  명시했다. V31 payload_hash blocker는 해소됐다.

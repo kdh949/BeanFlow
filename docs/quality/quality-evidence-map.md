@@ -43,5 +43,12 @@
 | 목록 응답 크기가 매장 데이터에 따라 무경계로 커짐 | 슬롯 7일 horizon, 메뉴 1,000개·옵션 5,000개 published bound, 초과는 잘림이 아니라 503 | horizon 직전·직후 슬롯의 포함·제외, 메뉴 1,001개·옵션 5,001개의 503 | [ADR-076](../adr/ADR-076-store-catalog-read-contract.md), `DiscoveryStoreCatalogIntegrationTest` |
 | 예약할 수 없는 슬롯이 목록에 노출됨 | 조회 창과 예약 창을 `startsAt > now`로 일치, pickup 불가 매장은 빈 목록 | 진행 중·종료 슬롯 제외, 시작한 슬롯 예약의 409와 카운터 불변, 고정 Clock의 `startsAt == now` 경계, 창이 닫힌 뒤 재시도의 기존 예약 반환 | [ADR-076](../adr/ADR-076-store-catalog-read-contract.md), BR-05, `PickupSlotReservationWindowUnitTest`, `PickupReservationRepositoryTest` |
 | 없는 Store와 DB 장애 혼동 | catalogue owner인 Merchant가 존재 확인, 실패는 503으로 분리 | 404/빈 목록 200/주입 실패 503과 복구 후 정상 응답 | failure semantics, `DiscoveryStoreCatalogIntegrationTest` |
+| 데모 편의를 위해 인증·검증이 우회됨 | `local-demo`는 실제 JWKS·JWT 검증과 도메인 불변식을 그대로 통과하고 `prod`와 동시 활성화되면 startup 실패 | `LocalDemoSafetyConfigurationTest`의 세 profile 조합, smoke의 401·401·403 단계 | [Local Demo Runbook](../operations/local-demo-runbook.md), local-demo ExecPlan |
+| demo secret이 저장소에 커밋됨 | 키·JWT는 실행 시 생성해 gitignore된 `.demo-runtime/`에만 기록 | `git ls-files` 전체를 private key·JWT·demo secret 패턴으로 스캔, `.demo-runtime` 추적 부재 | `LocalDemoRepositorySafetyTest` |
+| seed 재실행이 중복을 만들거나 부분 fixture를 남김 | 고정 UUID와 단일 transaction, 존재 시 삽입 생략 | 2회 실행의 삽입 0건·동일 count, 마지막 단계 실패 주입 후 전체 rollback | `LocalDemoSeedIntegrationTest` |
+| 필수 정책이 없을 때 default가 조용히 생성됨 | seed는 GLOBAL 적립 정책 부재를 명시적 실패로 처리 | 정책 head 삭제 후 seed 실패와 fixture·정책 모두 0건 | `LocalDemoSeedIntegrationTest`, local-demo ExecPlan |
+| reset이 데모가 아닌 DB를 삭제함 | 컨테이너의 `POSTGRES_DB`와 runtime 디렉터리 경로를 정확히 일치할 때만 진행 | stub docker로 다른 DB 이름 거절·`compose down` 미호출, 일치 시에만 삭제, 알 수 없는 인자 거절 | `LocalDemoScriptGuardTest` |
+| smoke 실패가 성공처럼 보임 | 첫 불일치에서 non-zero exit, 정산 미생성은 warn으로 별도 보고 | stub HTTP 응답으로 첫 단계 실패 시 exit != 0과 이후 단계 미실행 | `LocalDemoScriptGuardTest` |
+| demo가 runtime에 없는 operation을 호출 | smoke는 runtime OpenAPI 선언 operation만 호출 | smoke의 `call` 목록과 runtime OpenAPI operation 집합 대조, matcher 음성 self-check 포함 | `LocalDemoRepositorySafetyTest`, Runtime OpenAPI |
 | Runtime API 문서 drift | Spring `RequestMappingHandlerMapping` inventory와 Runtime OpenAPI exact set parity | `RuntimeOpenApiParityTest`가 `/api/v1` path/method 정규화 뒤 양방향 비교; actuator/error/HEAD/OPTIONS 제외 | Runtime OpenAPI, MVC slice test, verify-docs target/runtime ref 검사 |
 | 문서 drift | contract checks and decision protocol | required file, BR, ADR, link, OpenAPI ref 검사 | ADR/Policy history, verify-docs output |
