@@ -19,6 +19,7 @@ internal class PickupSlotQueryRepository(
     fun findOpenSlots(
         storeId: UUID,
         now: Instant,
+        horizonEnd: Instant,
     ): List<PickupSlotView> =
         jdbcTemplate.query(
             """
@@ -27,6 +28,7 @@ internal class PickupSlotQueryRepository(
               FROM fulfillment_pickup_slot
              WHERE store_id = ?
                AND starts_at > ?
+               AND starts_at < ?
              ORDER BY starts_at, id
             """.trimIndent(),
             { resultSet, _ ->
@@ -39,5 +41,6 @@ internal class PickupSlotQueryRepository(
             },
             storeId,
             Timestamp.from(now),
+            Timestamp.from(horizonEnd),
         )
 }

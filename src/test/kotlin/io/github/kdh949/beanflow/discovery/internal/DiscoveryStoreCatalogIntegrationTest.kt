@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
+import io.github.kdh949.beanflow.merchant.internal.MAX_STORE_MENUS
+import io.github.kdh949.beanflow.merchant.internal.MAX_STORE_MENU_OPTIONS
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -200,6 +202,71 @@ internal class DiscoveryStoreCatalogIntegrationTest
             assertThat(body).doesNotContain(inProgress.toString())
             assertThat(fieldNames(body, "$.items[0]"))
                 .containsExactlyInAnyOrder("pickupSlotId", "startsAt", "endsAt", "remainingCapacity")
+        }
+
+        @Test
+        fun `a catalogue past the published bound fails explicitly instead of returning truncated rows`() {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
+                SELECT gen_random_uuid(), ?, 'Menu ' || lpad(i::text, 6, '0'), 1000, true, 0
+                  FROM generate_series(1, ?) AS i
+                """.trimIndent(),
+                storeId,
+                MAX_STORE_MENUS + 1,
+            )
+
+            // Truncating to 1,000 would look like a complete catalogue to the caller.
+            mockMvc
+                .perform(get(menuPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
+        fun `an option count past the published bound fails explicitly`() {
+            val menuId = insertMenu(storeId, "Americano", 4_500, available = true)
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available)
+                SELECT gen_random_uuid(), ?, 'Option ' || lpad(i::text, 6, '0'), 100, true
+                  FROM generate_series(1, ?) AS i
+                """.trimIndent(),
+                menuId,
+                MAX_STORE_MENU_OPTIONS + 1,
+            )
+
+            mockMvc
+                .perform(get(menuPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
+        fun `the slot list reaches seven days ahead and stops there`() {
+            val now = clock.instant()
+            val inside = insertSlot(storeId, now.plus(Duration.ofDays(7)).minusSeconds(60), now.plus(Duration.ofDays(7)), capacity = 1)
+            val outside =
+                insertSlot(
+                    storeId,
+                    now.plus(Duration.ofDays(7)).plusSeconds(60),
+                    now.plus(Duration.ofDays(7)).plusSeconds(600),
+                    capacity = 1,
+                )
+
+            val body =
+                mockMvc
+                    .perform(get(slotPath(storeId)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+                    .response.contentAsString
+
+            // The bound is a horizon, not a row limit: everything inside it is returned in full.
+            assertThat(body).contains(inside.toString())
+            assertThat(body).doesNotContain(outside.toString())
         }
 
         @Test

@@ -33,13 +33,16 @@ internal class StoreMenuQueryService(
                 unavailable(failure)
             }
         if (menus.isEmpty()) return emptyList()
+        requireWithinBound(menus.size, MAX_STORE_MENUS, "menus")
 
-        val optionsByMenu =
+        val options =
             try {
-                repository.findOptions(storeId).groupBy(StoreMenuOptionProjection::menuId)
+                repository.findOptions(storeId)
             } catch (failure: DataAccessException) {
                 unavailable(failure)
             }
+        requireWithinBound(options.size, MAX_STORE_MENU_OPTIONS, "menu options")
+        val optionsByMenu = options.groupBy(StoreMenuOptionProjection::menuId)
         return menus.map { menu ->
             StoreMenuView(
                 menuId = menu.menuId,
@@ -55,6 +58,24 @@ internal class StoreMenuQueryService(
                             available = option.available,
                         )
                     },
+            )
+        }
+    }
+
+    /**
+     * The repository asks for one row past the bound, so [actual] exceeding [bound] means the store
+     * really is over the published limit. The read fails instead of returning the truncated rows,
+     * because a client cannot tell a truncated catalogue from a complete one.
+     */
+    private fun requireWithinBound(
+        actual: Int,
+        bound: Int,
+        what: String,
+    ) {
+        if (actual > bound) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Store catalogue exceeds the published bound of $bound $what",
             )
         }
     }

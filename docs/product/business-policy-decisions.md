@@ -120,7 +120,8 @@
   목록에 있는 슬롯은 그 시점에 예약 가능한 슬롯이다. `acceptingOrders && pickupEnabled`가 아닌
   매장은 슬롯이 존재해도 빈 목록을 반환한다. 그 매장의 슬롯은 주문 생성에서 모두 거절되므로
   예약 가능한 슬롯이 없기 때문이며, 매장이 존재하는 한 응답은 200이고 404가 아니다. 메뉴 조회는
-  바뀌지 않는다. 매장별 준비 lead time은 도입하지 않으며,
+  바뀌지 않는다. 슬롯 목록은 지금부터 7일 뒤까지만 반환한다. 행 수 상한이 아니라 시간 창이므로
+  창 안의 결과는 잘리지 않는다. 매장별 준비 lead time은 도입하지 않으며,
   매장은 슬롯 시작 시각 자체로 준비 시간을 표현한다. 이 개정은
   [MD-2026-010](../decisions/minor-decisions.md)을 대체한다.
 - **Rationale:** 결제되지 않은 주문이 장시간 슬롯을 점유하지 않게 하면서 결제 중인 고객의 자리를 보호한다.
@@ -136,7 +137,8 @@
   - 창이 닫힌 뒤의 같은 source 재시도가 기존 예약을 반환
   - 조회 창과 예약 가능 창의 일치
   - pickup 불가 매장의 슬롯 목록이 빈 목록 200이고 404가 아님
-- **ADR Required:** Yes — [ADR-076](../adr/ADR-076-pickup-slot-reservation-window.md)
+  - 7일 horizon 직전·직후 슬롯의 포함·제외
+- **ADR Required:** Yes — [ADR-076](../adr/ADR-076-store-catalog-read-contract.md)
 - **Revisit Conditions:** 결제 승인 이후 매장 거절로 발생하는 슬롯 낭비가 유의미할 때, 또는 매장별 준비 lead time이 데이터 모델에 도입될 때
 
 ## BR-06 매장 수락 제한시간
@@ -1285,7 +1287,7 @@
 |---|---|
 | 금액 표현·반올림·항목별 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
 | 예약 lease와 재고·슬롯 확정 시점 | [ADR-005](../adr/ADR-005-reservation-transaction-strategy.md), [ADR-013](../adr/ADR-013-payment-unknown-reservation-expiry.md) |
-| 픽업 슬롯 예약 가능 창과 조회 창 | [ADR-076](../adr/ADR-076-pickup-slot-reservation-window.md) |
+| 매장 카탈로그 조회 계약과 픽업 슬롯 예약 창 | [ADR-076](../adr/ADR-076-store-catalog-read-contract.md) |
 | 매장 수락 timeout과 보상 흐름 | [ADR-015](../adr/ADR-015-store-acceptance-timeout-compensation.md) |
 | 주문 가격·할인·포인트 스냅샷 | [ADR-004](../adr/ADR-004-order-price-snapshot.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
 | 쿠폰 Campaign 계산 모델 | [ADR-024](../adr/ADR-024-coupon-calculation-model.md) |

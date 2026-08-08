@@ -19,9 +19,14 @@ interface StoreMenuQueryOperations {
      * contract requires the flag on every menu and option. A menu of another store is never
      * returned for [storeId].
      *
+     * The catalogue has a published bound of 1,000 menus and 5,000 options. A store beyond it fails
+     * the read explicitly; the list is never truncated, because a caller cannot distinguish a
+     * truncated catalogue from a complete one.
+     *
      * @throws io.github.kdh949.beanflow.shared.api.DomainFailure with `RESOURCE_NOT_FOUND` when the
-     * store does not exist, or `DEPENDENCY_UNAVAILABLE` when persistence fails. A dependency
-     * failure is never collapsed into absence or an empty list.
+     * store does not exist, or `DEPENDENCY_UNAVAILABLE` when persistence fails or the catalogue
+     * exceeds the published bound. A dependency failure is never collapsed into absence or an empty
+     * list.
      */
     fun listMenus(storeId: UUID): List<StoreMenuView>
 }

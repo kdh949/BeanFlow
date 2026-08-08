@@ -20,6 +20,16 @@ internal data class StoreMenuOptionProjection(
 )
 
 /**
+ * The published catalogue bounds (ADR-076). They sit far above any
+ * plausible cafe catalogue and exist so that one store can never make the response unbounded. Each
+ * query asks for one row past its bound: [StoreMenuQueryService] sees the overflow and fails
+ * explicitly rather than returning a silently truncated catalogue.
+ */
+internal const val MAX_STORE_MENUS = 1_000
+
+internal const val MAX_STORE_MENU_OPTIONS = 5_000
+
+/**
  * Reads the store menu catalogue as two flat DTO queries — one for menus and one for every option
  * of those menus — so the number of statements stays constant regardless of how many menus a store
  * has. The write entities keep no association between store, menu and option, and none is added
@@ -36,6 +46,7 @@ internal class StoreMenuQueryRepository(
               FROM merchant_menu
              WHERE store_id = ?
              ORDER BY name, id
+             LIMIT ${MAX_STORE_MENUS + 1}
             """.trimIndent(),
             { resultSet, _ ->
                 StoreMenuProjection(
@@ -61,6 +72,7 @@ internal class StoreMenuQueryRepository(
               JOIN merchant_menu menu ON menu.id = menu_option.menu_id
              WHERE menu.store_id = ?
              ORDER BY menu_option.name, menu_option.id
+             LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
             """.trimIndent(),
             { resultSet, _ ->
                 StoreMenuOptionProjection(

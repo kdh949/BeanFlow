@@ -85,7 +85,8 @@ readiness만 DOWN으로 두고 계속 실행하지 않는다.
 | `404 RESOURCE_NOT_FOUND` | 해당 Store가 없다 | client가 유효하지 않은 storeId를 쓰고 있다. Store 삭제 여부를 확인한다 |
 | `200`인데 `items`가 비어 있음 | 해당 Store에 메뉴가 없거나, 예약 가능한 슬롯이 없거나, Store가 `accepting_orders`/`pickup_enabled` 중 하나라도 false다 | 정상 응답이다. 장애로 오해하지 않는다. 슬롯 목록이면 `merchant_store`의 두 flag를 먼저 확인한다 |
 | `503 DEPENDENCY_UNAVAILABLE` | `merchant_menu`/`merchant_menu_option` 또는 `fulfillment_pickup_slot` 읽기 실패 | DB 상태와 connection pool을 확인한다. 빈 목록이나 404로 대체하지 않는다 |
-| 슬롯이 보이지 않는다는 문의 | 조회는 `starts_at > now`인 슬롯만 반환한다. 이미 시작한 슬롯은 예약할 수 없으므로 목록에도 없다(ADR-076) | 슬롯 시간대를 확인한다. 진행 중인 슬롯을 다시 보이게 하려면 슬롯 시작 시각 자체를 조정해야 한다 |
+| `503`인데 message가 exceeds the published bound | 해당 매장의 메뉴가 1,000개 또는 옵션이 5,000개를 넘었다 | 잘린 목록을 반환하지 않는 정상 동작이다. 카탈로그를 정리하거나 ADR-076의 bound 상향을 결정한다 |
+| 슬롯이 보이지 않는다는 문의 | 조회는 `starts_at > now`이고 `starts_at < now + 7일`인 슬롯만 반환한다. 이미 시작한 슬롯은 예약할 수 없으므로 목록에도 없다(ADR-076) | 슬롯 시간대를 확인한다. 진행 중인 슬롯을 다시 보이게 하려면 슬롯 시작 시각 자체를 조정해야 한다. 7일보다 먼 슬롯은 창 밖이며 잘린 것이 아니다 |
 | 주문 생성이 `409 ORDER_STATE_CONFLICT`, message가 slot started | 선택한 슬롯이 결제 전에 시작했다 | 정상 동작이다. 고객에게 다른 슬롯 선택을 안내한다. 예약 수·확정 수는 바뀌지 않았다 |
 | 잔여 capacity가 조회 직후 달라짐 | 동시 예약이 반영된 정상 동작 | 응답은 예약 보장이 아니다. 확정은 슬롯 row를 잠그는 예약 API가 수행한다 |
 | `503`인데 DB는 정상 | 잔여 capacity가 음수로 계산됐다. `reserved_count + confirmed_count > capacity`인 손상된 counter다 | 값을 clamp하지 않는다. 해당 `fulfillment_pickup_slot` row를 확인하고 owner counter를 바로잡는다 |
@@ -93,7 +94,7 @@ readiness만 DOWN으로 두고 계속 실행하지 않는다.
 `beanflow.discovery.store_catalog.read.count{operation,outcome}`으로 `MENUS`/`PICKUP_SLOTS`의
 `SUCCEEDED`/`NOT_FOUND`/`DEPENDENCY_UNAVAILABLE`를 관측한다. store ID는 tag로 쓰지 않는다.
 
-**조회 창과 예약 창 (2026-08-08, [ADR-076](../adr/ADR-076-pickup-slot-reservation-window.md)):**
+**조회 창과 예약 창 (2026-08-08, [ADR-076](../adr/ADR-076-store-catalog-read-contract.md)):**
 두 창은 정확히 같다. `PickupReservationOperations.reserve`가 슬롯 row lock 안에서
 `startsAt > now`를 검증하므로, 목록을 거치지 않고 과거 슬롯 ID를 직접 보내도 `ORDER_STATE_CONFLICT`
 로 거절된다. 창이 열려 있을 때 수락된 예약의 같은 source 재시도는 창이 닫힌 뒤에도 기존 예약을

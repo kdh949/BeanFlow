@@ -386,6 +386,9 @@ condition을 사용했고 p50은 0.397 ms → 1.850 ms였다. 비교 가능한 �
   read/write 창 불일치가 제품 결정으로 해소됐다. 예약 가능 창은 `startsAt > now`로 확정하고
   쓰기 경로에 검증을 추가했으며, 조회 predicate를 `ends_at > now`에서 `starts_at > now`로 맞췄다.
   잔여 capacity의 `GREATEST(..., 0)` clamp도 제거해 손상된 counter가 503으로 드러나게 했다.
-  결정은 [ADR-076](../../adr/ADR-076-pickup-slot-reservation-window.md)과 BR-05 Slot Reservation
-  Window Amendment에 기록했고 MD-2026-010은 `Superseded`다. 이 항목 위의 서술은 그 시점의
-  기록이므로 덮어쓰지 않는다.
+  같은 결정에서 카탈로그 조회의 나머지 경계도 닫았다. 슬롯 목록은 7일 horizon,
+  `acceptingOrders && pickupEnabled`가 아닌 매장은 빈 목록, 메뉴는 매장당 1,000개·옵션 5,000개
+  published bound를 넘으면 잘린 목록 대신 503이다. 결정은
+  [ADR-076](../../adr/ADR-076-store-catalog-read-contract.md)과 BR-05 Slot Reservation Window
+  Amendment에 기록했고 MD-2026-010은 `Superseded`다. 이 항목 위의 서술은 그 시점의 기록이므로
+  덮어쓰지 않는다.
