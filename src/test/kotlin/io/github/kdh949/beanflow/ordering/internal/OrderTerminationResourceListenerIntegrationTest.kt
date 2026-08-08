@@ -36,6 +36,8 @@ import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -61,6 +63,7 @@ internal class OrderTerminationResourceListenerIntegrationTest
         private val stockReservationRepository: StockReservationJpaRepository,
         private val eventPublisher: ApplicationEventPublisher,
         private val jdbcTemplate: JdbcTemplate,
+        private val clock: Clock,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -80,8 +83,13 @@ internal class OrderTerminationResourceListenerIntegrationTest
             val storeId = UUID.randomUUID()
             val slotId = UUID.randomUUID()
             val stockId = UUID.randomUUID()
+            // The slot must still be reservable when reserve() runs (BR-05, ADR-076), so it is
+            // placed ahead of the injected Clock. NOW stays the fixed lease and termination time.
+            val slotStartsAt = clock.instant().plus(Duration.ofHours(1))
             transactions.executeWithoutResult {
-                pickupSlotRepository.save(PickupSlotEntity(slotId, storeId, NOW, NOW.plusSeconds(600), 2))
+                pickupSlotRepository.save(
+                    PickupSlotEntity(slotId, storeId, slotStartsAt, slotStartsAt.plusSeconds(600), 2),
+                )
                 stockRepository.save(SellableStockEntity(stockId, storeId, 5))
                 pickupOperations.reserve(
                     ReservePickupCommand(orderId, storeId, slotId, NOW.plusSeconds(600), "pickup:$orderId"),
