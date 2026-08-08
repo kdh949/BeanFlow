@@ -97,7 +97,9 @@ log "customer read-back"
 call "customer order read"  200 GET  "/orders/${ORDER_ID}" "$CUSTOMER_TOKEN"
 python3 -c "
 import json;d=json.load(open('$BODY_FILE'))
-state=d['order']['state']
+# GET /orders/{id} returns the order representation directly, unlike the creation envelope.
+order=d.get('order', d)
+state=order['state']
 assert state=='COMPLETED', 'expected COMPLETED, got %s' % state
 print('       order state %s' % state)
 "

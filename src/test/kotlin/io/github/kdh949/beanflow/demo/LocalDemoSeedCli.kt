@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.demo
 
+import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotEntity
+import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotJpaRepository
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipEntity
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipJpaRepository
@@ -35,14 +37,14 @@ import io.github.kdh949.beanflow.promotion.internal.CampaignJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceEntity
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceState
-import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotEntity
-import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotJpaRepository
 import org.springframework.boot.SpringApplication
 import org.springframework.boot.WebApplicationType
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.boot.persistence.autoconfigure.EntityScan
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Profile
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
@@ -59,7 +61,14 @@ import kotlin.system.exitProcess
 @EnableAutoConfiguration
 @EntityScan("io.github.kdh949.beanflow")
 @EnableJpaRepositories("io.github.kdh949.beanflow")
-internal class LocalDemoSeedApplication
+// No component scan: the seeder is imported explicitly, like the other bootstrap CLIs.
+@Import(LocalDemoSeeder::class)
+internal class LocalDemoSeedApplication {
+    // SharedInfrastructureConfiguration is not component-scanned by this CLI, so the seed provides
+    // the same UTC clock the application uses.
+    @Bean
+    fun seedClock(): Clock = Clock.systemUTC()
+}
 
 /**
  * Writes the deterministic `local-demo` fixture through the owner JPA entities.
@@ -98,7 +107,13 @@ internal class LocalDemoSeeder(
         val now = clock.instant()
         val created = mutableListOf<String>()
 
-        seedStore(LocalDemoFixture.STORE_ID, LocalDemoFixture.STORE_NAME, LocalDemoFixture.STORE_LONGITUDE, LocalDemoFixture.STORE_LATITUDE, created)
+        seedStore(
+            LocalDemoFixture.STORE_ID,
+            LocalDemoFixture.STORE_NAME,
+            LocalDemoFixture.STORE_LONGITUDE,
+            LocalDemoFixture.STORE_LATITUDE,
+            created,
+        )
         seedStore(
             LocalDemoFixture.OTHER_STORE_ID,
             LocalDemoFixture.OTHER_STORE_NAME,
@@ -148,7 +163,9 @@ internal class LocalDemoSeeder(
         created: MutableList<String>,
     ) {
         if (!stores.existsById(storeId)) {
-            stores.save(StoreEntity(id = storeId, acceptingOrders = true, pickupEnabled = true))
+            // Flushed immediately: the profile row below is written with JDBC, which bypasses the
+            // persistence context, so the store must already be visible to its foreign key.
+            stores.saveAndFlush(StoreEntity(id = storeId, acceptingOrders = true, pickupEnabled = true))
             created += "store=$storeId"
         }
         // StoreDiscoveryProfile has no JPA entity by design (MD-2026-009), so it is written with
@@ -453,9 +470,9 @@ fun main() {
             .properties(
                 "spring.autoconfigure.exclude=" +
                     "org.springframework.modulith.runtime.autoconfigure.SpringModulithRuntimeAutoConfiguration," +
-                    "org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration",
-            )
-            .build()
+                    "org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration," +
+                    "org.springframework.modulith.actuator.autoconfigure.ApplicationModulesEndpointConfiguration",
+            ).build()
     application.setRegisterShutdownHook(false)
     val context =
         try {

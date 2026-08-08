@@ -89,7 +89,9 @@ export_app_env() {
   export BEANFLOW_JWK_SET_URI="$BEANFLOW_DEMO_JWKS_URI"
   export SPRING_PROFILES_ACTIVE="local,local-demo"
   export SERVER_PORT="$DEMO_APP_PORT"
-  export BEANFLOW_PAGINATION_CURSOR_HMAC_ACTIVEKEYID="local-demo"
-  export BEANFLOW_PAGINATION_CURSOR_HMAC_KEYS_0_ID="local-demo"
-  export BEANFLOW_PAGINATION_CURSOR_HMAC_KEYS_0_SECRETBASE64URL="$BEANFLOW_DEMO_CURSOR_SECRET"
+  # Relaxed env-var binding strips the hyphen (cursor-hmac -> CURSORHMAC) and indexed list
+  # properties are easy to get wrong, so the key ring is passed as explicit JSON instead.
+  # The datasource is passed explicitly too: the seed CLI is a separate Spring application and
+  # must not depend on placeholder resolution from the main application.yaml.
+  export SPRING_APPLICATION_JSON="{\"spring\":{\"datasource\":{\"url\":\"${DEMO_DB_URL}\",\"username\":\"${DEMO_DB_USER}\",\"password\":\"${DEMO_DB_PASSWORD}\",\"driver-class-name\":\"org.postgresql.Driver\"}},\"beanflow\":{\"pagination\":{\"cursor-hmac\":{\"active-key-id\":\"local-demo\",\"keys\":[{\"id\":\"local-demo\",\"secret-base64-url\":\"${BEANFLOW_DEMO_CURSOR_SECRET}\"}]}}}}"
 }

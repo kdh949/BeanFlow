@@ -13,7 +13,7 @@ load_identity_env
 export_app_env
 
 log "seeding the local-demo fixture"
-if ./gradlew --quiet local-demo-seed >"${DEMO_RUNTIME_DIR}/seed.log" 2>&1; then
+if ./gradlew --no-daemon --quiet local-demo-seed >"${DEMO_RUNTIME_DIR}/seed.log" 2>&1; then
   grep -E '^LOCAL_DEMO_SEED_' "${DEMO_RUNTIME_DIR}/seed.log" || true
   inserted="$(grep -Eo 'inserted=[0-9]+' "${DEMO_RUNTIME_DIR}/seed.log" | head -1 | cut -d= -f2)"
   ok "seed completed (rows inserted this run: ${inserted:-unknown})"

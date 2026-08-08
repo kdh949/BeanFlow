@@ -264,7 +264,7 @@ CREATE TABLE settlement_dispute (
     settlement_item_id uuid NOT NULL REFERENCES settlement_item(id),
     store_id uuid NOT NULL REFERENCES merchant_store(id),
     previous_dispute_id uuid UNIQUE REFERENCES settlement_dispute(id),
-    refile_count smallint NOT NULL DEFAULT 0 CHECK (refile_count IN (0, 1)),
+    refile_count integer NOT NULL DEFAULT 0 CHECK (refile_count IN (0, 1)),
     state varchar(24) NOT NULL
         CHECK (state IN ('FILED', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED', 'WITHDRAWN')),
     expected_adjustment_krw bigint NOT NULL,
