@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
@@ -59,7 +60,7 @@ internal class PickupReservationRepositoryTest
             val results =
                 (1..2)
                     .map { attempt ->
-                        executor.submit<Result<UUID>> {
+                        executor.submit<Result<PickupReservationGrant>> {
                             barrier.await()
                             runCatching {
                                 transactions.execute {
@@ -68,7 +69,7 @@ internal class PickupReservationRepositoryTest
                                             orderId = UUID.randomUUID(),
                                             storeId = storeId,
                                             pickupSlotId = slotId,
-                                            expiresAt = Instant.parse("2026-07-28T00:05:00Z"),
+                                            expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
                                             sourceReference = "pickup-attempt-$attempt",
                                         ),
                                     )
@@ -78,8 +79,8 @@ internal class PickupReservationRepositoryTest
                     }.map { it.get(10, TimeUnit.SECONDS) }
             executor.shutdown()
 
-            assertThat(results.count(Result<UUID>::isSuccess)).isEqualTo(1)
-            val failure = results.single(Result<UUID>::isFailure).exceptionOrNull()
+            assertThat(results.count(Result<PickupReservationGrant>::isSuccess)).isEqualTo(1)
+            val failure = results.single(Result<PickupReservationGrant>::isFailure).exceptionOrNull()
             assertThat(failure).isInstanceOfSatisfying(DomainFailure::class.java) {
                 assertThat(it.code).isEqualTo(FailureCode.PICKUP_SLOT_FULL)
             }
@@ -102,7 +103,7 @@ internal class PickupReservationRepositoryTest
                     orderId = orderId,
                     storeId = storeId,
                     pickupSlotId = slotId,
-                    expiresAt = Instant.parse("2026-07-28T00:05:00Z"),
+                    expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
                     sourceReference = "pickup-order-$orderId",
                 )
 
@@ -191,6 +192,47 @@ internal class PickupReservationRepositoryTest
         }
 
         @Test
+        fun `confirmation rechecks slot start even when a stored reservation deadline is later`() {
+            val storeId = UUID.randomUUID()
+            val slotId = UUID.randomUUID()
+            val orderId = UUID.randomUUID()
+            insertSlot(slotId, storeId, capacity = 2)
+            val source = "pickup-order-$orderId"
+            transactions.executeWithoutResult {
+                operations.reserve(
+                    ReservePickupCommand(
+                        orderId = orderId,
+                        storeId = storeId,
+                        pickupSlotId = slotId,
+                        expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
+                        sourceReference = source,
+                    ),
+                )
+            }
+
+            // Model a legacy/manual row whose slot start changed after reservation. Its stored
+            // reservation deadline is still in the future, so confirm must not rely on it alone.
+            val startedAt = clock.instant().minus(Duration.ofMinutes(1))
+            jdbcTemplate.update(
+                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
+                Timestamp.from(startedAt),
+                Timestamp.from(startedAt.plus(Duration.ofMinutes(10))),
+                slotId,
+            )
+
+            val report = transactions.execute { operations.confirm(orderId, clock.instant(), source) }
+
+            assertThat(report.result).isEqualTo(ReservationTransitionResult.NOT_ELIGIBLE)
+            transactions.executeWithoutResult {
+                val slot = slotRepository.findById(slotId).orElseThrow()
+                assertThat(slot.reservedCount).isEqualTo(1)
+                assertThat(slot.confirmedCount).isZero()
+                assertThat(reservationRepository.findByOrderId(orderId)?.state)
+                    .isEqualTo(PickupReservationState.RESERVED)
+            }
+        }
+
+        @Test
         fun `confirmed pickup is released after termination exactly once and metadata conflicts fail`() {
             val storeId = UUID.randomUUID()
             val slotId = UUID.randomUUID()
@@ -206,7 +248,7 @@ internal class PickupReservationRepositoryTest
                         "pickup-order-$orderId",
                     ),
                 )
-                operations.confirm(orderId, "pickup-order-$orderId")
+                operations.confirm(orderId, clock.instant(), "pickup-order-$orderId")
             }
 
             val first =

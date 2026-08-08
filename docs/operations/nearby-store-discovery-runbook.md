@@ -98,9 +98,9 @@ readiness만 DOWN으로 두고 계속 실행하지 않는다.
 | `404 RESOURCE_NOT_FOUND` | 해당 Store가 없다 | client가 유효하지 않은 storeId를 쓰고 있다. Store 삭제 여부를 확인한다 |
 | `200`인데 `items`가 비어 있음 | 해당 Store에 메뉴가 없거나, 예약 가능한 슬롯이 없거나, Store가 `accepting_orders`/`pickup_enabled` 중 하나라도 false다 | 정상 응답이다. 장애로 오해하지 않는다. 슬롯 목록이면 `merchant_store`의 두 flag를 먼저 확인한다 |
 | `503 DEPENDENCY_UNAVAILABLE` | `merchant_menu`/`merchant_menu_option` 또는 `fulfillment_pickup_slot` 읽기 실패 | DB 상태와 connection pool을 확인한다. 빈 목록이나 404로 대체하지 않는다 |
-| `503`인데 message가 exceeds the published bound | 해당 매장의 메뉴가 1,000개 또는 옵션이 5,000개를 넘었다 | 잘린 목록을 반환하지 않는 정상 동작이다. 카탈로그를 정리하거나 ADR-076의 bound 상향을 결정한다 |
-| 슬롯이 보이지 않는다는 문의 | 조회는 `starts_at > now`이고 `starts_at < now + 7일`인 슬롯만 반환한다. 이미 시작한 슬롯은 예약할 수 없으므로 목록에도 없다(ADR-076) | 슬롯 시간대를 확인한다. 진행 중인 슬롯을 다시 보이게 하려면 슬롯 시작 시각 자체를 조정해야 한다. 7일보다 먼 슬롯은 창 밖이며 잘린 것이 아니다 |
-| 주문 생성이 `409 ORDER_STATE_CONFLICT`, message가 slot started | 선택한 슬롯이 결제 전에 시작했다 | 정상 동작이다. 고객에게 다른 슬롯 선택을 안내한다. 예약 수·확정 수는 바뀌지 않았다 |
+| `503`인데 message가 exceeds the published bound | 해당 매장의 메뉴가 1,000개, 옵션이 5,000개 또는 7일 창 안 슬롯이 1,000개를 넘었다 | 잘린 목록을 반환하지 않는 정상 동작이다. catalogue/slot schedule을 정리하거나 ADR-076의 bound 상향·pagination을 결정한다 |
+| 슬롯이 보이지 않는다는 문의 | 조회는 `starts_at > now`, `starts_at < now + 7일`, Store당 최대 1,000행이다. 이미 시작한 슬롯은 예약할 수 없으므로 목록에도 없다(ADR-076) | 슬롯 시간대를 확인한다. 진행 중인 슬롯을 다시 보이게 하려면 슬롯 시작 시각 자체를 조정해야 한다. 7일보다 먼 슬롯은 창 밖이며, 1,001행은 빈/partial 200이 아니라 503이다 |
+| 주문 생성 또는 결제 확정이 `409 RESERVATION_EXPIRED`/`ORDER_STATE_CONFLICT` | 선택한 슬롯이 예약 또는 확정 전에 시작했고 effective lease가 만료됐다 | 정상 동작이다. 고객에게 다른 슬롯 선택을 안내한다. late Provider approval은 슬롯을 확정하지 않고 reconciliation으로 남는다 |
 | 잔여 capacity가 조회 직후 달라짐 | 동시 예약이 반영된 정상 동작 | 응답은 예약 보장이 아니다. 확정은 슬롯 row를 잠그는 예약 API가 수행한다 |
 | `503`인데 DB는 정상 | 잔여 capacity가 음수로 계산됐다. `reserved_count + confirmed_count > capacity`인 손상된 counter다 | 값을 clamp하지 않는다. 해당 `fulfillment_pickup_slot` row를 확인하고 owner counter를 바로잡는다 |
 
@@ -108,22 +108,24 @@ readiness만 DOWN으로 두고 계속 실행하지 않는다.
 `SUCCEEDED`/`NOT_FOUND`/`DEPENDENCY_UNAVAILABLE`를 관측한다. store ID는 tag로 쓰지 않는다.
 
 **조회 창과 예약 창 (2026-08-08, [ADR-076](../adr/ADR-076-store-catalog-read-contract.md)):**
-두 창은 정확히 같다. `PickupReservationOperations.reserve`가 슬롯 row lock 안에서
+두 창은 예약 **수락** 시점에는 정확히 같다. `PickupReservationOperations.reserve`가 슬롯 row lock 안에서
 `startsAt > now`를 검증하므로, 목록을 거치지 않고 과거 슬롯 ID를 직접 보내도 `ORDER_STATE_CONFLICT`
 로 거절된다. 창이 열려 있을 때 수락된 예약의 같은 source 재시도는 창이 닫힌 뒤에도 기존 예약을
-반환하므로, 결제 재시도가 시간 때문에 실패하지 않는다. `accepting_orders` 또는 `pickup_enabled`가
-false인 매장은 슬롯이 있어도 빈 목록을 반환한다. 그 매장의 슬롯은 주문 생성에서 전부 거절되므로
-목록에 넣으면 같은 불변식이 깨진다. 메뉴 조회는 이 flag의 영향을 받지 않는다.
+반환한다. 그러나 결제 확정은 `min(createdAt + 5분, startsAt)` effective lease 안에서만 가능하다.
+그 뒤의 Provider approval은 슬롯을 확정하지 않고 ADR-013 reconciliation으로 보낸다.
+`accepting_orders` 또는 `pickup_enabled`가 false인 매장은 슬롯이 있어도 빈 목록을 반환한다. 그 매장의
+슬롯은 주문 생성에서 전부 거절되므로 목록에 넣으면 같은 불변식이 깨진다. 메뉴 조회는 이 flag의
+영향을 받지 않는다.
 
 ## 6. 조사 시 금지 사항
 
 - 원본 고객 좌표는 어디에도 남지 않는다. 조사를 위해 좌표를 log, trace, metric tag,
   `AuditRecord` 또는 임시 table에 복사하지 않는다.
-- **`org.springframework.jdbc.core.StatementCreatorUtils`를 `TRACE`로 올리지 않는다.** Spring은 이
-  logger에서 bind된 statement parameter를 그대로 기록하므로, TRACE를 켜는 순간 원본 좌표가
-  애플리케이션 로그에 남아 BR-28을 위반한다. `application.yaml`이 이 logger를 `DEBUG`로 고정해
-  전역 TRACE로 실수로 켜지는 것을 막지만, deployment가 level을 덮어쓸 수 있으므로 운영 제약으로도
-  남긴다. 이 위험은 `NearbyCoordinatePrivacyIntegrationTest`가 양방향으로 검증한다.
+- **`org.springframework.jdbc.core.StatementCreatorUtils`를 `TRACE`/`ALL`로 올리지 않는다.** Spring은
+  이 logger에서 bind된 statement parameter를 그대로 기록한다. deployment configuration이 level을
+  override해 effective TRACE/ALL이면 `JdbcParameterLoggingSafetyConfiguration`이 startup을 실패시킨다.
+  이 guard와 `NearbyCoordinatePrivacyIntegrationTest`가 각각 startup configuration과 실제 logging
+  event를 검증한다.
 - cursor payload, key ID와 filter hash를 log나 metric tag에 기록하지 않는다.
 - PostGIS 장애를 우회하기 위해 애플리케이션 Haversine 계산, in-memory index 또는 cache를
   임시로라도 활성화하지 않는다. 장애는 503으로 노출한 채 원인을 복구한다.

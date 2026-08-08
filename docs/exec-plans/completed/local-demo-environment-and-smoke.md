@@ -277,3 +277,24 @@ Milestone 1~5가 모두 구현·검증됐다.
   실제로 실행해 증거를 기록하고, Required Tests 7건을 자동 테스트로 고정했다. 자동화하지 않은
   두 가지(smoke 성공 exit code, reset의 runtime 디렉터리 불일치 경로)와 그 이유를 Outcomes에
   명시했다. V31 payload_hash blocker는 해소됐다.
+
+## Post-completion remediation (2026-08-09)
+
+PR 46 review가 이 plan의 completion evidence에서 세 가지 false-success를 확인했다. 위의
+"고객→점주→포인트→정산" 및 settlement `warn`은 historical record일 뿐 현재 smoke 계약이 아니다.
+정산 batch의 결정적 생성 조건은 이 plan에 없으므로, core smoke 성공 조건에서 제거했다. 정산이
+필요해지면 독립 fixture와 mandatory probe를 새 plan으로 만들어야 한다.
+
+- fixture는 transaction 없는 3,000 KRW PointAccount/PointLot 대신 0 KRW PointAccount로 시작한다.
+  첫 completion event가 만든 append-only `ACCRUAL` transaction과 50 KRW summary delta를 HTTP로
+  확인한다. 현재 fresh seed는 24행이고 재실행은 0행이다.
+- bootstrap은 exact exit code와 exact terminal result만 판정한다. process stop은 nonce·PID/PGID·cwd가
+  검증된 session만 signal하며, Docker/Compose failure는 runtime key를 지우지 않고 non-zero다.
+- effective JDBC parameter TRACE/ALL configuration은 startup failure다. 이는 raw nearby coordinate
+  logging 위험을 YAML default만으로 허용하지 않는 별도 privacy guard다.
+
+**Actual revalidation (2026-08-09):** existing local-demo data는 reset하지 않았다. `start.sh`는 real
+PostGIS/JWKS/bootstrap/application health까지 성공했고, `seed.sh`는 24행을 삽입한 뒤 재실행에서
+0행을 보고했다. `smoke.sh`는 20개 HTTP assertion을 통과했고 0 KRW/0 transaction baseline에서
+completion `ACCRUAL` 50 KRW 및 account delta를 확인했다. 마지막 `stop.sh`는 owned application과
+identity process group만 종료하고 DB/key material은 보존했다.

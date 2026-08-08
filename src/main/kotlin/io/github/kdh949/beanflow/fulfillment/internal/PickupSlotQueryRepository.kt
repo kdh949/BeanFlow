@@ -7,6 +7,9 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
+/** Published slot-list bound for one Store inside the seven-day window (BR-05, ADR-076). */
+internal const val MAX_STORE_PICKUP_SLOTS = 1_000
+
 /**
  * One flat DTO query per store. Remaining capacity is the raw owner arithmetic: it is not floored,
  * so a corrupted counter surfaces as a negative number that [PickupSlotQueryService] rejects instead
@@ -30,6 +33,7 @@ internal class PickupSlotQueryRepository(
                AND starts_at > ?
                AND starts_at < ?
              ORDER BY starts_at, id
+             LIMIT ${MAX_STORE_PICKUP_SLOTS + 1}
             """.trimIndent(),
             { resultSet, _ ->
                 PickupSlotView(

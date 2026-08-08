@@ -93,6 +93,98 @@ internal class LocalDemoScriptGuardTest {
     }
 
     @Test
+    fun `reset failure keeps run-time key material instead of reporting a false success`() {
+        stubDocker(reportedDatabase = "beanflow_demo", failComposeOperation = "down")
+        val runtimeDirectory = root.resolve(".demo-runtime").also { it.createDirectories() }
+        runtimeDirectory.resolve("jwks.json").writeText("{}")
+
+        val result = run("stop.sh", "--reset")
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("database removal failed")
+        assertThat(result.output).doesNotContain("demo database removed")
+        assertThat(runtimeDirectory.resolve("jwks.json")).exists()
+    }
+
+    @Test
+    fun `reset refuses an unexpected Docker inspect failure instead of treating it as container absence`() {
+        stubDocker(reportedDatabase = "beanflow_demo", failInspect = true)
+        val runtimeDirectory = root.resolve(".demo-runtime").also { it.createDirectories() }
+        runtimeDirectory.resolve("jwks.json").writeText("{}")
+
+        val result = run("stop.sh", "--reset")
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("could not inspect")
+        assertThat(dockerInvocations()).noneMatch { it.contains(" down ") }
+        assertThat(runtimeDirectory.resolve("jwks.json")).exists()
+    }
+
+    @Test
+    fun `ordinary stop propagates Docker failure instead of claiming the database stopped`() {
+        stubDocker(reportedDatabase = "beanflow_demo", failComposeOperation = "stop")
+
+        val result = run("stop.sh")
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("database stop failed")
+        assertThat(result.output).doesNotContain("database container stopped")
+    }
+
+    @Test
+    fun `a stale pid file that points to an unrelated sleep process is never signalled`() {
+        stubDocker(reportedDatabase = "beanflow_demo")
+        val runtimeDirectory = root.resolve(".demo-runtime").also { it.createDirectories() }
+        val unrelated = ProcessBuilder("sleep", "30").directory(root.toFile()).start()
+        runtimeDirectory.resolve("app.pid").writeText("${unrelated.pid()}\n")
+
+        try {
+            val result = run("stop.sh")
+
+            assertThat(result.exitCode).isZero()
+            assertThat(result.output).contains("refusing to signal unverified")
+            assertThat(unrelated.isAlive).isTrue()
+        } finally {
+            unrelated.destroyForcibly()
+            unrelated.waitFor(5, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `bootstrap failure containing already is not mistaken for an initialized policy`() {
+        stubDocker(reportedDatabase = "beanflow_demo")
+        writeIdentityEnv()
+        writeExecutable(
+            root.resolve("gradlew"),
+            """
+            #!/usr/bin/env bash
+            case "${'$'}*" in
+              *local-demo-identity-server*) sleep 3; exit 0 ;;
+              *ordinary-accrual-policy-bootstrap*) printf 'Address already in use\n' >&2; exit 9 ;;
+              *) exit 0 ;;
+            esac
+            """.trimIndent() + "\n",
+        )
+        writeExecutable(
+            stubBin.resolve("curl"),
+            """
+            #!/usr/bin/env bash
+            case "${'$'}{@: -1}" in
+              */jwks.json) printf '{"keys":[]}' ;;
+              */actuator/health) printf '{"status":"UP"}' ;;
+              *) exit 1 ;;
+            esac
+            """.trimIndent() + "\n",
+        )
+
+        val result = run("start.sh")
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("Policy bootstrap failed")
+        assertThat(result.output).doesNotContain("ordinary accrual policy bootstrap completed")
+    }
+
+    @Test
     fun `smoke exits non-zero on the first unexpected status instead of reporting a pass`() {
         writeIdentityEnv()
         // Health answers UP so the script gets past its precondition; the first API call then
@@ -123,7 +215,7 @@ internal class LocalDemoScriptGuardTest {
         assertThat(result.output).contains("[fail]")
         assertThat(result.output).contains("expected 200 got 500")
         // It stopped at the first failure rather than walking the rest of the flow.
-        assertThat(result.output).doesNotContain("smoke flow completed")
+        assertThat(result.output).doesNotContain("core smoke flow completed")
         assertThat(result.output).doesNotContain("create order")
     }
 
@@ -136,19 +228,46 @@ internal class LocalDemoScriptGuardTest {
             OTHER_STORE_OWNER_TOKEN=stub-token
             BEANFLOW_DEMO_JWKS_URI=http://127.0.0.1:1/jwks.json
             BEANFLOW_DEMO_CURSOR_SECRET=stub
+            BEANFLOW_DEMO_ISSUER=http://127.0.0.1:18081
+            BEANFLOW_DEMO_WORKLOAD_AUDIENCE=beanflow-local-demo
+            BEANFLOW_DEMO_WORKLOAD_SUBJECT=local-demo-bootstrap
+            BEANFLOW_DEMO_DEPLOYMENT_RUN_CLAIM=local-demo-run
             """.trimIndent() + "\n",
         )
     }
 
-    private fun stubDocker(reportedDatabase: String) {
+    private fun stubDocker(
+        reportedDatabase: String,
+        failComposeOperation: String? = null,
+        failInspect: Boolean = false,
+    ) {
+        val containerState = root.resolve("demo-container-present")
+        containerState.writeText("present\n")
         writeExecutable(
             stubBin.resolve("docker"),
             """
             #!/usr/bin/env bash
             printf '%s\n' "${'$'}*" >> "${dockerLog.toAbsolutePath()}"
             if [ "${'$'}1" = "inspect" ]; then
+              if [ "$failInspect" = "true" ]; then
+                printf 'injected inspect failure\n' >&2
+                exit 99
+              fi
+              if [ ! -f "${containerState.toAbsolutePath()}" ]; then
+                printf 'Error: No such object: %s\n' "${'$'}{@: -1}" >&2
+                exit 1
+              fi
               printf 'POSTGRES_DB=%s\n' "$reportedDatabase"
               exit 0
+            fi
+            if [ "${'$'}1" = "compose" ]; then
+              if [[ " ${'$'}* " == *" ${failComposeOperation ?: "__never__"} "* ]]; then
+                printf 'injected compose %s failure\n' "${failComposeOperation ?: "__never__"}" >&2
+                exit 99
+              fi
+              if [[ " ${'$'}* " == *" down "* ]]; then
+                rm -f "${containerState.toAbsolutePath()}"
+              fi
             fi
             exit 0
             """.trimIndent() + "\n",

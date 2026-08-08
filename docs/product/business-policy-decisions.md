@@ -70,6 +70,12 @@
   거절하면 Payment를 `FAILED`, Order를 `CANCELLED`로 전환하고 네 예약을 같은
   transaction에서 해제한다. 같은 Order에서 다른 결제수단으로 다시 승인하지 않고
   고객은 새 주문을 생성한다.
+- **Pickup Start Effective-Lease Amendment (2026-08-09):** 픽업 주문의 예약 만료 시각은
+  고정 5분 시각과 `pickupSlot.startsAt` 중 더 이른 시각이다. 이 effective lease를 슬롯·재고·쿠폰·포인트
+  예약과 `Order.reservationExpiresAt`에 같은 값으로 고정한다. 결제 결과를 반영할 때도
+  `now >= reservationExpiresAt`이면 먼저 만료를 materialize하며 슬롯을 확정하지 않는다. 이 시각 뒤의
+  Provider 승인 또는 `UNKNOWN` lookup approval은 주문·예약을 되살리지 않고 기존 late-approval
+  void/refund reconciliation으로 보낸다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
@@ -84,6 +90,7 @@
   - worker 전후 조회가 같은 `EXPIRED` representation을 반환
   - 조회 중 만료 해제 실패 시 503과 전체 rollback
   - 결제와 만료 작업의 동시 실행 테스트
+  - Provider 응답 또는 `UNKNOWN` lookup이 슬롯 시작 경계를 넘을 때 주문 비복구·예약 비확정과 reconciliation
 - **ADR Required:** Yes — 예약 lease와 자원 확정 시점
 - **Revisit Conditions:** 실제 결제 소요시간 p95, 결제 이탈률 또는 자원 점유율 측정 후 조정
 
@@ -124,6 +131,12 @@
   창 안의 결과는 잘리지 않는다. 매장별 준비 lead time은 도입하지 않으며,
   매장은 슬롯 시작 시각 자체로 준비 시간을 표현한다. 이 개정은
   [MD-2026-010](../decisions/minor-decisions.md)을 대체한다.
+- **Confirmation and Catalogue Bound Amendment (2026-08-09):** 슬롯 시작 전 수락된 예약도
+  결제 확정 시점에 effective lease 안에 있어야 한다. 즉 `now >= startsAt`이면 확정 대신 BR-03의
+  만료·late-approval reconciliation을 적용한다. 7일 horizon만으로는 Store별 row 수를 제한하지 못하므로,
+  슬롯 목록은 1,000개 published bound를 추가한다. repository는 1,001행을 읽고 overflow면 잘린 200을
+  반환하지 않고 `DEPENDENCY_UNAVAILABLE`(503)으로 실패한다. V35의 owner-scoped composite index와
+  실행계획 검증은 이 공개 bound에 필요한 DB 작업 경계다.
 - **Rationale:** 결제되지 않은 주문이 장시간 슬롯을 점유하지 않게 하면서 결제 중인 고객의 자리를 보호한다.
 - **Affected Contexts:** Ordering, Fulfillment, Payment, Discovery
 - **Affected Aggregates:** PickupSlot, PickupReservation, Order, Payment
@@ -138,6 +151,8 @@
   - 조회 창과 예약 가능 창의 일치
   - pickup 불가 매장의 슬롯 목록이 빈 목록 200이고 404가 아님
   - 7일 horizon 직전·직후 슬롯의 포함·제외
+  - 1,001개 슬롯 overflow의 503과 partial 목록 부재
+  - 슬롯 시작 경계와 결제 승인·`UNKNOWN` late approval의 경쟁
 - **ADR Required:** Yes — [ADR-076](../adr/ADR-076-store-catalog-read-contract.md)
 - **Revisit Conditions:** 결제 승인 이후 매장 거절로 발생하는 슬롯 낭비가 유의미할 때, 또는 매장별 준비 lead time이 데이터 모델에 도입될 때
 

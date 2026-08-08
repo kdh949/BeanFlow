@@ -1,7 +1,7 @@
 # Local Demo Runbook
 
 `scripts/demo/`의 네 script로 BeanFlow를 로컬에서 기동하고, 결정적 fixture를 넣고, 고객 →
-매장 → 포인트 흐름을 실제 HTTP로 확인하는 방법과 실패 진단을 다룬다.
+매장 → 포인트 적립 흐름을 실제 HTTP로 확인하는 방법과 실패 진단을 다룬다.
 
 이 환경은 **데모와 로컬 확인 전용**이다. 실제 배포, 운영 규모, SLA를 증명하지 않는다.
 관련 결정: [ExecPlan](../exec-plans/completed/local-demo-environment-and-smoke.md),
@@ -26,7 +26,7 @@
 
 ## 2. 사전 요구사항
 
-- Java 21, Docker daemon, `curl`, `python3`
+- Java 21, Docker daemon, `curl`, `python3`, `lsof`, `ps`
 - 사용 포트: `55432`(PostgreSQL), `18081`(JWK set), `18080`(애플리케이션)
 
 ## 3. 실행
@@ -46,7 +46,12 @@ bash scripts/demo/smoke.sh
 5. health endpoint 확인
 
 `seed.sh`는 고정 UUID fixture를 단일 transaction으로 쓴다. 재실행하면 삽입 0건이고 같은
-fixture가 유지된다. `smoke.sh`는 runtime OpenAPI에 선언된 operation만 호출한다.
+fixture가 유지된다. `smoke.sh`는 runtime OpenAPI에 선언된 operation만 호출하고, 완료 주문 뒤
+해당 order의 `ACCRUAL` 원장 source와 50 KRW balance delta를 deadline 안에 확인한다.
+
+bootstrap CLI가 `POLICY_ALREADY_INITIALIZED`라는 정확한 terminal result를 내면, 이전 demo DB가
+남아 deterministic fixture가 성립하지 않는 상태다. `start.sh`는 임의의 `already` 로그를 성공으로
+취급하지 않고 `stop.sh --reset`을 안내하며 실패한다.
 
 ## 4. 키 자료와 secret
 
@@ -69,7 +74,7 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 있는 것 | 없는 것 |
 |---|---|
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
-| 픽업 슬롯 3개, 재고, 포인트 계정과 Lot, 쿠폰 Campaign | 카드번호, CVC, 유효기간 — ADR-021 |
+| 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
 | sandbox token reference만 가진 결제수단 | 실제 개인정보 |
 
 ## 6. 정지와 초기화
@@ -87,6 +92,15 @@ bash scripts/demo/stop.sh --reset    # 데모 DB와 실행 시 키 자료까지 
 
 임의 DB에 `DROP`을 실행하지 않으며 다른 compose stack을 건드리지 않는다.
 
+identity server와 application은 start 때 별도 session/process group leader로 기동한다. PID record에는
+PID·PGID·실행 nonce·repository root가 함께 들어가며, `stop.sh`는 `ps`의 process group, command-line
+nonce, `lsof` cwd를 모두 다시 확인한 경우에만 그 group을 signal한다. stale 또는 다른 checkout의 record는
+삭제만 하고 process에는 signal하지 않으며 전역 `pkill`은 사용하지 않는다.
+
+`stop.sh`와 `stop.sh --reset`은 Docker/Compose 오류를 성공으로 바꾸지 않는다. reset은 `compose down`이
+성공하고 demo container의 부재를 정확히 확인한 뒤에만 `.demo-runtime` key material을 삭제한다. 실패하면
+non-zero로 끝나며 key material을 보존한다.
+
 `LocalDemoScriptGuardTest`가 stub docker와 임시 root로 script를 실제 실행해 첫 번째 guard를
 양방향으로 확인한다. 다른 DB 이름이면 거절하고 `compose down`을 호출하지 않으며, 일치할 때만
 삭제가 진행된다. 두 번째 guard는 불일치 경로를 실행하려면 실제 삭제 대상 경로를 바꿔야 해서
@@ -100,8 +114,9 @@ bash scripts/demo/stop.sh --reset    # 데모 DB와 실행 시 키 자료까지 
 | `Timed out after Ns waiting for ...` | 해당 단계가 deadline 안에 준비되지 않았다 | `.demo-runtime/app.log` 또는 `identity.log`를 본다. deadline 초과는 실패이며 느린 성공이 아니다 |
 | `Seed failed. The transaction rolled back` | fixture 쓰기 중 오류 | `.demo-runtime/seed.log`를 본다. 부분 fixture는 남지 않으므로 원인 수정 후 그대로 재실행한다 |
 | `The GLOBAL ordinary point accrual policy is missing` | `start.sh`의 bootstrap 단계를 건너뛰었다 | `start.sh`를 실행한다. seed는 정책을 대신 만들지 않는다 |
+| `GLOBAL accrual policy is already initialized` | 이전 demo database가 남아 bootstrap result가 deterministic fixture와 다르다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다. 로그의 단어 `already`만으로 성공 처리하지 않는다 |
 | smoke `[fail] ... expected 200 got 500` | 해당 단계의 실제 응답이 계약과 다르다 | 출력된 `correlationId`로 `.demo-runtime/app.log`를 조회한다 |
-| smoke `[warn] no settlement batch within 60s` | 정산 Batch 생성 조건이 이 실행에서 충족되지 않았다 | **통과가 아니다.** 정산 검증이 실행되지 않았다는 보고이며, 필요하면 Batch 생성 조건을 확인한다 |
+| `Timed out waiting for the completion accrual transaction` | 완료 event consumer가 deadline 안에 적립 원장을 만들지 않았거나 source/금액이 정책과 다르다 | `.demo-runtime/app.log`에서 order ID와 event publication/retry state를 확인한다. smoke는 성공으로 끝나지 않는다 |
 | 재컴파일이 `build/classes/kotlin/test` 잠금으로 실패 | identity server JVM이 test classpath를 잡고 있다 | `stop.sh`를 먼저 실행한 뒤 컴파일한다 |
 | Flyway `checksum mismatch` | 기존 데모 DB가 이전 migration 내용으로 만들어졌다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다 |
 
@@ -109,5 +124,5 @@ bash scripts/demo/stop.sh --reset    # 데모 DB와 실행 시 키 자료까지 
 
 - 실제 PG·JWK·알림 provider 연동
 - non-local 배포, 운영 규모, 성능 또는 SLA
-- 정산 Batch 생성 조건이 충족되는 시나리오 — smoke는 조건 미충족을 `warn`으로 보고하고
-  통과로 계산하지 않는다
+- 정산 Batch 생성 조건이 충족되는 시나리오 — core smoke의 계약에는 포함하지 않는다. 재현 가능한
+  batch fixture와 별도 mandatory probe가 생기기 전에는 정산 성공을 주장하지 않는다

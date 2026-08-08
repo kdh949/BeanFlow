@@ -110,6 +110,33 @@ internal class LocalDemoSeedIntegrationTest
             }
         }
 
+        @Test
+        fun `the seed starts the point account at zero without an unaudited lot or transaction`() {
+            transactions.execute { seeder.seed() }
+
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT available_points_krw FROM loyalty_point_account WHERE id = ?",
+                    Long::class.java,
+                    LocalDemoFixture.POINT_ACCOUNT_ID,
+                ),
+            ).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM loyalty_point_lot WHERE point_account_id = ?",
+                    Long::class.java,
+                    LocalDemoFixture.POINT_ACCOUNT_ID,
+                ),
+            ).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM loyalty_point_transaction WHERE point_account_id = ?",
+                    Long::class.java,
+                    LocalDemoFixture.POINT_ACCOUNT_ID,
+                ),
+            ).isZero()
+        }
+
         private fun counts(): Map<String, Long> =
             SEEDED_TABLES
                 .associateWith { table ->
@@ -151,7 +178,6 @@ internal class LocalDemoSeedIntegrationTest
                     "merchant_menu",
                     "inventory_sellable_stock",
                     "fulfillment_pickup_slot",
-                    "loyalty_point_lot",
                     "loyalty_point_account",
                     "merchant_store_settlement_terms",
                     "payment_method",

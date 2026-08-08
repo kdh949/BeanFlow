@@ -86,6 +86,12 @@ Milestone 1~3 구현이 이 결정을 다음과 같이 실현했다.
   그대로 기록한다. `application.yaml`이 이 logger를 `DEBUG`로 고정하고 runbook이 운영 제약으로
   금지하지만, deployment가 level을 덮어쓸 수 있으므로 보장이 아니라 제약이다. 테스트가 TRACE에서
   실제로 노출되는 것과 DEBUG에서 노출되지 않는 것을 양방향으로 고정한다.
+- **Startup Logging Guard Amendment (2026-08-09):** `JdbcParameterLoggingSafetyConfiguration`이
+  startup에서 `StatementCreatorUtils`의 **effective** logger level을 확인한다. TRACE 또는 ALL로
+  override되어 `isTraceEnabled()`이면 application startup을 실패시킨다. 따라서 외부 configuration이
+  `application.yaml`의 DEBUG를 덮어써도 정상 서비스로 기동하지 않는다. root appender privacy test와
+  이 startup guard의 DEBUG/TRACE 양방향 test를 함께 유지한다. 지원하지 않는 in-process logger mutation은
+  runtime control surface로 제공하지 않는다.
 - PostGIS/DB 실패는 `beanflow.discovery.spatial.failure{reason}`와 함께 503이며 빈 200,
   Haversine 계산 또는 cache로 대체되지 않는다.
 

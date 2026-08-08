@@ -7,7 +7,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-require_cmd docker curl
+require_cmd docker curl python3 lsof ps
 
 cd "$DEMO_ROOT"
 mkdir -p "$DEMO_RUNTIME_DIR"
@@ -19,13 +19,13 @@ wait_until 180 "PostgreSQL to accept connections" postgres_ready
 ok "database ready on port ${DEMO_DB_PORT} (database ${DEMO_DB_NAME})"
 
 log "2/5 starting the ephemeral identity server"
-if [ -f "$DEMO_IDENTITY_PID_FILE" ] && kill -0 "$(cat "$DEMO_IDENTITY_PID_FILE")" 2>/dev/null; then
-  ok "identity server already running (pid $(cat "$DEMO_IDENTITY_PID_FILE"))"
+if owned_process_record_is_live "$DEMO_IDENTITY_PID_FILE" "identity server"; then
+  ok "identity server already running in its owned process group"
 else
-  ./gradlew --quiet local-demo-identity-server \
-    --args="${DEMO_IDENTITY_PORT} ${DEMO_RUNTIME_DIR}" \
-    >"$DEMO_IDENTITY_LOG" 2>&1 &
-  echo $! >"$DEMO_IDENTITY_PID_FILE"
+  [ ! -f "$DEMO_IDENTITY_PID_FILE" ] || warn "discarding unverified identity-server process record without signalling it"
+  rm -f "$DEMO_IDENTITY_PID_FILE"
+  start_owned_gradle "$DEMO_IDENTITY_PID_FILE" "identity server" "$DEMO_IDENTITY_LOG" \
+    local-demo-identity-server --args="${DEMO_IDENTITY_PORT} ${DEMO_RUNTIME_DIR}"
   wait_until 240 "the JWK set endpoint" jwks_ready
   ok "identity server listening on http://127.0.0.1:${DEMO_IDENTITY_PORT}/jwks.json"
 fi
@@ -54,21 +54,30 @@ export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_AUDIENCE="$BEANFLOW_DEMO_WORKLOAD_AUDIEN
 export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_ALLOWED_SUBJECTS="$BEANFLOW_DEMO_WORKLOAD_SUBJECT"
 export BEANFLOW_POINT_ACCRUAL_BOOTSTRAP_DEPLOYMENT_RUN_CLAIM="$BEANFLOW_DEMO_DEPLOYMENT_RUN_CLAIM"
 
-if ./gradlew --quiet ordinary-accrual-policy-bootstrap >"${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>&1; then
+set +e
+./gradlew --quiet ordinary-accrual-policy-bootstrap >"${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>&1
+bootstrap_exit=$?
+set -e
+if [ "$bootstrap_exit" -eq 0 ] && grep -Fxq \
+  "operation=INITIALIZE principal=verified-release-principal result=APPLIED" \
+  "${DEMO_RUNTIME_DIR}/policy-bootstrap.log"; then
   ok "ordinary accrual policy bootstrap completed"
-elif grep -qiE "ALREADY_INITIALIZED|already" "${DEMO_RUNTIME_DIR}/policy-bootstrap.log" 2>/dev/null; then
-  ok "ordinary accrual policy already present; continuing"
+elif [ "$bootstrap_exit" -eq 4 ] && grep -Fxq \
+  "operation=INITIALIZE principal=verified-release-principal result=POLICY_ALREADY_INITIALIZED" \
+  "${DEMO_RUNTIME_DIR}/policy-bootstrap.log"; then
+  fail "The GLOBAL accrual policy is already initialized. Run scripts/demo/stop.sh --reset before a deterministic demo run."
 else
   tail -30 "${DEMO_RUNTIME_DIR}/policy-bootstrap.log" >&2 || true
   fail "Policy bootstrap failed. The demo does not start without the required policy."
 fi
 
 log "4/5 starting the application with profiles local,local-demo"
-if [ -f "$DEMO_APP_PID_FILE" ] && kill -0 "$(cat "$DEMO_APP_PID_FILE")" 2>/dev/null; then
-  ok "application already running (pid $(cat "$DEMO_APP_PID_FILE"))"
+if owned_process_record_is_live "$DEMO_APP_PID_FILE" "application"; then
+  ok "application already running in its owned process group"
 else
-  ./gradlew --quiet bootRun >"$DEMO_APP_LOG" 2>&1 &
-  echo $! >"$DEMO_APP_PID_FILE"
+  [ ! -f "$DEMO_APP_PID_FILE" ] || warn "discarding unverified application process record without signalling it"
+  rm -f "$DEMO_APP_PID_FILE"
+  start_owned_gradle "$DEMO_APP_PID_FILE" "application" "$DEMO_APP_LOG" bootRun
 fi
 wait_until 300 "the application health endpoint" app_healthy
 ok "application healthy on http://127.0.0.1:${DEMO_APP_PORT}"

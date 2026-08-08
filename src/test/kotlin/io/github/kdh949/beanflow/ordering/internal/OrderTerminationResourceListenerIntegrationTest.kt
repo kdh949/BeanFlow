@@ -92,7 +92,13 @@ internal class OrderTerminationResourceListenerIntegrationTest
                 )
                 stockRepository.save(SellableStockEntity(stockId, storeId, 5))
                 pickupOperations.reserve(
-                    ReservePickupCommand(orderId, storeId, slotId, NOW.plusSeconds(600), "pickup:$orderId"),
+                    ReservePickupCommand(
+                        orderId,
+                        storeId,
+                        slotId,
+                        clock.instant().plus(Duration.ofMinutes(10)),
+                        "pickup:$orderId",
+                    ),
                 )
                 stockOperations.reserve(
                     ReserveStockCommand(
@@ -103,7 +109,7 @@ internal class OrderTerminationResourceListenerIntegrationTest
                         "stock:$orderId",
                     ),
                 )
-                pickupOperations.confirm(orderId, "pickup:$orderId")
+                pickupOperations.confirm(orderId, clock.instant(), "pickup:$orderId")
                 stockOperations.confirm(orderId, "stock:$orderId")
             }
             val couponPolicy =

@@ -79,8 +79,8 @@ internal class NearbyCoordinatePrivacyIntegrationTest
             )
             originalLevel = rootLogger.level
             // DEBUG is the most verbose level the application is operated at. Spring's JDBC
-            // parameter logging sits at TRACE and is pinned off in application.yaml; that pinning
-            // is asserted separately below.
+            // parameter logging sits at TRACE and startup rejects an effective TRACE override;
+            // this capture keeps the supported runtime level while exercising all request paths.
             rootLogger.level = Level.DEBUG
             appender.list.clear()
             appender.start()
@@ -138,10 +138,12 @@ internal class NearbyCoordinatePrivacyIntegrationTest
         }
 
         /**
-         * Characterises the one way a coordinate can still reach the log: Spring writes every bound
-         * statement parameter at TRACE. `application.yaml` pins that logger to DEBUG so broad TRACE
-         * logging cannot enable it by accident, but a deployment can still override the level, so
-         * this is an operational constraint rather than a guarantee — the runbook says so too.
+         * Characterises the mechanism that makes the startup guard necessary: Spring writes every
+         * bound statement parameter at TRACE. `application.yaml` pins that logger to DEBUG and
+         * JdbcParameterLoggingSafetyConfiguration refuses an effective TRACE/ALL deployment
+         * override before application startup. This test deliberately mutates the logger after
+         * startup to prove the unsafe mechanism remains unsafe; BeanFlow exposes no runtime logger
+         * management endpoint that permits that mutation.
          *
          * The assertion is written both ways on purpose. If a future Spring version stops logging
          * parameter values, the first half fails and the constraint can be dropped instead of being

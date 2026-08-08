@@ -46,7 +46,6 @@ internal object LocalDemoFixture {
         )
 
     val POINT_ACCOUNT_ID: UUID = UUID.fromString("d7000000-0000-4000-8000-000000000001")
-    val POINT_LOT_ID: UUID = UUID.fromString("d7000000-0000-4000-8000-000000000101")
     val SETTLEMENT_TERMS_ID: UUID = UUID.fromString("d8000000-0000-4000-8000-000000000001")
     val PAYMENT_METHOD_ID: UUID = UUID.fromString("d9000000-0000-4000-8000-000000000001")
     val CAMPAIGN_ID: UUID = UUID.fromString("da000000-0000-4000-8000-000000000001")
@@ -61,7 +60,7 @@ internal object LocalDemoFixture {
     const val EXTRA_SHOT_PRICE_KRW = 500L
     const val OAT_MILK_PRICE_KRW = 800L
     const val STOCK_QUANTITY = 500L
-    const val POINT_BALANCE_KRW = 3_000L
+    const val INITIAL_POINT_BALANCE_KRW = 0L
     const val COUPON_DISCOUNT_KRW = 1_000L
     const val SETTLEMENT_FEE_RATE_BPS = 300
 

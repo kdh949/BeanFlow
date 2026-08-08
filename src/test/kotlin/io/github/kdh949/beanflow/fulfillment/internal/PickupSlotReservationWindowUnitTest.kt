@@ -48,7 +48,7 @@ internal class PickupSlotReservationWindowUnitTest {
         val slot = slotStartingAt(NOW.plusNanos(1))
         val service = serviceFor(slot)
 
-        assertThat(service.reserve(command())).isEqualTo(RESERVATION_ID)
+        assertThat(service.reserve(command()).reservationId).isEqualTo(RESERVATION_ID)
         assertThat(slot.reservedCount).isEqualTo(1)
     }
 

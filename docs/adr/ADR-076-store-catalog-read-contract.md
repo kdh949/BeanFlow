@@ -89,6 +89,29 @@ Store가 응답을 무경계로 만들 수 없게 하는 것이다. 지금 저�
 `merchant_menu` row는 migration과 seed로만 생기므로, 쓰기 API가 생기면 같은 bound를 그 경로에서도
 사전에 강제한다.
 
+## Amendment (2026-08-09): 확정 경계와 catalogue DB 작업 상한
+
+예약 시점의 `startsAt > now`만으로는 결제 확정이 시작 뒤에 도착하는 경로를 막지 못한다. 픽업
+reservation의 lease는 BR-03에 따라 `min(createdAt + 5분, startsAt)`이며, payment confirmation은 같은
+effective lease를 다시 확인한다. `now >= startsAt`인 approval은 슬롯을 `CONFIRMED`로 바꾸지 않고
+Order expiry와 late-approval reconciliation으로 진행한다.
+
+7일 horizon도 시간 범위일 뿐 한 Store가 그 안에 만드는 슬롯 수를 제한하지 않는다. 따라서 이전의
+"row limit이 아니라 시간 창" 문구를 다음 계약으로 개정한다.
+
+- 슬롯 목록의 published bound는 Store당 1,000행이다. query는 `LIMIT 1001`로 overflow를 탐지하고,
+  1,001행이 있으면 complete 200 또는 partial 200 대신 `DEPENDENCY_UNAVAILABLE`(503)을 반환한다.
+- V35는 슬롯 `(store_id, starts_at, id)`, 메뉴 `(store_id, name, id)`, 메뉴 ID walk
+  `(store_id, id)`, 옵션 `(menu_id, name, id)` composite index를 추가한다. DTO projection은 write
+  Aggregate association을 늘리지 않는다.
+- 옵션 조회는 owner 메뉴를 outer range로 걷고 각 메뉴의 옵션 index range를 lateral nested loop로
+  읽는다. 최종 `LIMIT 5001` 안의 incremental per-menu sort는 허용하지만 모든 Store option을
+  scan·hash-join·global sort하는 plan은 허용하지 않는다.
+
+`StoreCatalogQueryMigrationTest`는 여러 Store의 누적 fixture에서 V35를 제거한 plan과 다시 만든 plan을
+`EXPLAIN (ANALYZE, BUFFERS)`로 비교한다. 측정 조건과 raw 결과는 quality evidence에 보존하며, 이는
+production SLA 또는 쓰기 비용 측정은 아니다.
+
 ## Alternatives Considered
 
 - **종료 전까지 예약 허용(`endsAt > now`):** read 창을 그대로 두고 write만 좁히는 안이다. 슬롯
@@ -129,6 +152,8 @@ Store가 응답을 무경계로 만들 수 없게 하는 것이다. 지금 저�
   바뀌지 않는다.
 - 7일보다 먼 미래의 슬롯은 목록에 나오지 않는다. 지금 그렇게 운영하는 매장은 없지만, 생기면
   고객이 그 슬롯을 볼 수 없다. 이때는 truncation이 아니라 창 밖이므로 원인이 명확하다.
+- 7일 안이라도 슬롯이 1,000개를 넘는 Store는 슬롯 목록 503을 받는다. 이는 조용한 partial 200보다
+  명시적인 capacity/configuration failure를 택한 결과다.
 - 메뉴 1,000개 또는 옵션 5,000개를 넘는 Store는 메뉴 조회가 503이 된다. 현재 데이터에는 그런
   Store가 없고 메뉴 쓰기 API도 없다. 그런 Store가 생기면 조용히 잘린 목록 대신 명시적 실패가
   보이고, 대응은 bound 상향 또는 pagination 도입이라는 후속 결정이다.
@@ -154,7 +179,12 @@ Store가 응답을 무경계로 만들 수 없게 하는 것이다. 지금 저�
   - `acceptingOrders = false`와 `pickupEnabled = false` Store는 슬롯이 있어도 빈 목록 200이고
     메뉴는 그대로 반환된다.
   - 7일 창 직전 슬롯은 반환하고 직후 슬롯은 반환하지 않는다.
+  - 1,001개 슬롯은 partial 200이 아니라 503.
   - 메뉴 1,001개와 옵션 5,001개는 각각 잘린 목록 200이 아니라 503.
+- `PaymentConfirmationIntegrationTest` — 슬롯 시작 뒤 Provider success 및 `UNKNOWN` late approval이
+  Order/slot을 확정하지 않고 ADR-013 reconciliation으로 남는다.
+- `StoreCatalogQueryMigrationTest` — V35 전후 multi-store `EXPLAIN (ANALYZE, BUFFERS)`의 index plan과
+  global option scan 부재.
 - `StorePolicyScopeIntegrationTest` — `pickupOrderingAvailable`의 세 flag 조합, 없는 Store의 404,
   DataAccess 실패가 `false`가 아니라 503.
 - `DiscoveryStoreCatalogQueryCountTest` — 슬롯 수와 무관하게 statement 1개.

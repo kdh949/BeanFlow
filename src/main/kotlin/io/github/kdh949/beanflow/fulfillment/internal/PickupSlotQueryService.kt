@@ -29,6 +29,7 @@ internal class PickupSlotQueryService(
         try {
             repository
                 .findOpenSlots(storeId, now, now.plus(PICKUP_SLOT_QUERY_HORIZON))
+                .also(::requireWithinBound)
                 .onEach(::requireProjectable)
         } catch (failure: DataAccessException) {
             throw DomainFailure(
@@ -46,6 +47,16 @@ internal class PickupSlotQueryService(
             throw DomainFailure(
                 FailureCode.DEPENDENCY_UNAVAILABLE,
                 "Pickup slot projection is invalid",
+            )
+        }
+    }
+
+    /** The repository asks for one row past the public bound, so a 503 never hides a partial list. */
+    private fun requireWithinBound(slots: List<PickupSlotView>) {
+        if (slots.size > MAX_STORE_PICKUP_SLOTS) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Pickup slot catalogue exceeds the published bound of $MAX_STORE_PICKUP_SLOTS slots",
             )
         }
     }

@@ -8,11 +8,8 @@ import io.github.kdh949.beanflow.identity.internal.StoreMembershipJpaRepository
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipStatus
 import io.github.kdh949.beanflow.inventory.internal.SellableStockEntity
 import io.github.kdh949.beanflow.inventory.internal.SellableStockJpaRepository
-import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.loyalty.internal.PointAccountEntity
 import io.github.kdh949.beanflow.loyalty.internal.PointAccountJpaRepository
-import io.github.kdh949.beanflow.loyalty.internal.PointLotEntity
-import io.github.kdh949.beanflow.loyalty.internal.PointLotJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationEntity
 import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationRequirementEntity
@@ -93,7 +90,6 @@ internal class LocalDemoSeeder(
     private val stock: SellableStockJpaRepository,
     private val pickupSlots: PickupSlotJpaRepository,
     private val pointAccounts: PointAccountJpaRepository,
-    private val pointLots: PointLotJpaRepository,
     private val paymentMethods: PaymentMethodJpaRepository,
     private val campaigns: CampaignJpaRepository,
     private val campaignMenus: CampaignEligibleMenuJpaRepository,
@@ -132,7 +128,7 @@ internal class LocalDemoSeeder(
         seedMenus(created)
         seedStock(created)
         seedPickupSlots(now, created)
-        seedLoyalty(now, created)
+        seedLoyalty(created)
         seedSettlementTerms(now, created)
         seedPaymentMethod(now, created)
         seedCoupon(now, created)
@@ -334,32 +330,19 @@ internal class LocalDemoSeeder(
         }
     }
 
-    private fun seedLoyalty(
-        now: Instant,
-        created: MutableList<String>,
-    ) {
+    private fun seedLoyalty(created: MutableList<String>) {
         if (!pointAccounts.existsById(LocalDemoFixture.POINT_ACCOUNT_ID)) {
             pointAccounts.save(
                 PointAccountEntity(
                     id = LocalDemoFixture.POINT_ACCOUNT_ID,
                     customerId = LocalDemoFixture.CUSTOMER_ID,
-                    availablePointsKrw = LocalDemoFixture.POINT_BALANCE_KRW,
+                    // A balance without its append-only transaction history would make this
+                    // fixture internally inconsistent before the first demo request. The smoke
+                    // flow proves the first real accrual through the production listener.
+                    availablePointsKrw = LocalDemoFixture.INITIAL_POINT_BALANCE_KRW,
                 ),
             )
             created += "pointAccount=${LocalDemoFixture.POINT_ACCOUNT_ID}"
-        }
-        if (!pointLots.existsById(LocalDemoFixture.POINT_LOT_ID)) {
-            pointLots.save(
-                PointLotEntity(
-                    id = LocalDemoFixture.POINT_LOT_ID,
-                    pointAccountId = LocalDemoFixture.POINT_ACCOUNT_ID,
-                    availableAmountKrw = LocalDemoFixture.POINT_BALANCE_KRW,
-                    expiresAt = now.plus(Duration.ofDays(365)),
-                    issuerType = PointIssuerType.PLATFORM,
-                    issuerReference = "local-demo:platform-welcome-points",
-                ),
-            )
-            created += "pointLot=${LocalDemoFixture.POINT_LOT_ID}"
         }
     }
 

@@ -69,6 +69,97 @@ compose() {
   docker compose -p "$DEMO_COMPOSE_PROJECT" -f "$DEMO_COMPOSE_FILE" "$@"
 }
 
+# The Gradle wrapper starts JVM children. A raw PID is not safe enough to own that process tree:
+# PID reuse could otherwise signal another checkout's process. Each demo process therefore becomes
+# the leader of a dedicated session/process group and records a nonce which remains in the Gradle
+# command line. Stop verifies PID, group, cwd and nonce before signalling that group.
+read_owned_process_record() {
+  local record="$1" expected_kind="$2"
+  OWNED_PROCESS_PID=""
+  OWNED_PROCESS_PGID=""
+  OWNED_PROCESS_NONCE=""
+  OWNED_PROCESS_KIND=""
+  OWNED_PROCESS_ROOT=""
+  [ -f "$record" ] || return 1
+
+  local key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+      pid) OWNED_PROCESS_PID="$value" ;;
+      pgid) OWNED_PROCESS_PGID="$value" ;;
+      nonce) OWNED_PROCESS_NONCE="$value" ;;
+      kind) OWNED_PROCESS_KIND="$value" ;;
+      root) OWNED_PROCESS_ROOT="$value" ;;
+      *) return 1 ;;
+    esac
+  done < "$record"
+
+  [[ "$OWNED_PROCESS_PID" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$OWNED_PROCESS_PGID" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$OWNED_PROCESS_NONCE" =~ ^[a-f0-9]{32}$ ]] || return 1
+  [ "$OWNED_PROCESS_KIND" = "$expected_kind" ] || return 1
+  [ "$OWNED_PROCESS_ROOT" = "$DEMO_ROOT" ] || return 1
+}
+
+owned_process_record_is_live() {
+  local record="$1" expected_kind="$2"
+  read_owned_process_record "$record" "$expected_kind" || return 1
+  kill -0 "$OWNED_PROCESS_PID" 2>/dev/null || return 1
+
+  local actual_pgid command cwd
+  actual_pgid="$(ps -o pgid= -p "$OWNED_PROCESS_PID" 2>/dev/null | tr -d '[:space:]')"
+  [ "$actual_pgid" = "$OWNED_PROCESS_PGID" ] || return 1
+  # `start_owned_gradle` makes the leader's PID and PGID identical with setsid(2).
+  [ "$OWNED_PROCESS_PGID" = "$OWNED_PROCESS_PID" ] || return 1
+  command="$(ps -o command= -p "$OWNED_PROCESS_PID" 2>/dev/null)"
+  [[ "$command" == *"beanflowLocalDemoNonce=${OWNED_PROCESS_NONCE}"* ]] || return 1
+  cwd="$(lsof -a -p "$OWNED_PROCESS_PID" -d cwd -Fn 2>/dev/null | awk '/^n/{sub(/^n/, ""); print; exit}')"
+  [ "$cwd" = "$DEMO_ROOT" ] || return 1
+}
+
+start_owned_gradle() {
+  local record="$1" name="$2" log_file="$3"
+  shift 3
+  local nonce launcher_pid pid pgid ready_file
+  nonce="$(python3 -c 'import secrets; print(secrets.token_hex(16))')" || fail "Could not create process ownership nonce for ${name}."
+  ready_file="${record}.starting"
+  rm -f "$ready_file"
+  # The shell can place a background environment-assignment wrapper in the caller's process
+  # group. The Python child therefore writes its post-setsid PID before exec; `$!` is not treated
+  # as proof of ownership.
+  python3 -c \
+    'import os, sys; nonce, ready, command = sys.argv[1:4]; os.environ["DEMO_PROCESS_NONCE"] = nonce; os.setsid(); open(ready, "w", encoding="ascii").write(str(os.getpid())); os.execvp(command, [command, *sys.argv[4:]])' \
+    "$nonce" "$ready_file" ./gradlew "-PbeanflowLocalDemoNonce=${nonce}" --quiet "$@" >"$log_file" 2>&1 &
+  launcher_pid=$!
+
+  # A process may take a moment to create the ownership record immediately after the shell
+  # backgrounds its launcher.
+  local attempts=0
+  while [ "$attempts" -lt 20 ]; do
+    [ -f "$ready_file" ] && break
+    kill -0 "$launcher_pid" 2>/dev/null || break
+    attempts=$((attempts + 1))
+    sleep 0.1
+  done
+  pid="$(cat "$ready_file" 2>/dev/null || true)"
+  rm -f "$ready_file"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail "Could not establish an owned process leader for ${name}."
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+  [ "$pgid" = "$pid" ] || fail \
+    "Could not establish an owned process group for ${name} (pid=${pid}, observed-pgid=${pgid:-none})."
+
+  (
+    umask 077
+    {
+      printf 'pid=%s\n' "$pid"
+      printf 'pgid=%s\n' "$pgid"
+      printf 'nonce=%s\n' "$nonce"
+      printf 'kind=%s\n' "$name"
+      printf 'root=%s\n' "$DEMO_ROOT"
+    } > "$record"
+  )
+}
+
 postgres_ready() {
   docker exec "$DEMO_CONTAINER" pg_isready -U "$DEMO_DB_USER" -d "$DEMO_DB_NAME"
 }

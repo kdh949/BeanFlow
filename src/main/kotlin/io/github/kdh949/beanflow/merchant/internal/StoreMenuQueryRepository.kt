@@ -60,18 +60,32 @@ internal class StoreMenuQueryRepository(
         )
 
     /**
-     * Options are selected through the store predicate rather than a menu-id list, so one statement
-     * covers every menu of the store.
+     * Options are selected through one owner-scoped lateral query rather than a menu-id list, so one
+     * statement covers every menu of the store. The dependent inner query makes PostgreSQL walk the
+     * `(store_id, id)` menus and then each menu's `(menu_id, name, id)` options; it cannot first
+     * scan every store's options and hash-join them. Each returned menu still exposes its options in
+     * `(name, optionId)` order.
      */
     fun findOptions(storeId: UUID): List<StoreMenuOptionProjection> =
         jdbcTemplate.query(
             """
             SELECT menu_option.menu_id, menu_option.id, menu_option.name,
                    menu_option.additional_price_krw, menu_option.available
-              FROM merchant_menu_option menu_option
-              JOIN merchant_menu menu ON menu.id = menu_option.menu_id
-             WHERE menu.store_id = ?
-             ORDER BY menu_option.name, menu_option.id
+              FROM (
+                  SELECT id
+                    FROM merchant_menu
+                   WHERE store_id = ?
+                   ORDER BY id
+                   LIMIT ${MAX_STORE_MENUS + 1}
+              ) menu
+              CROSS JOIN LATERAL (
+                  SELECT menu_id, id, name, additional_price_krw, available
+                    FROM merchant_menu_option
+                   WHERE menu_id = menu.id
+                   ORDER BY name, id
+                   LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
+              ) menu_option
+             ORDER BY menu.id, menu_option.name, menu_option.id
              LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
             """.trimIndent(),
             { resultSet, _ ->

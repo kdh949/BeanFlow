@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Customer -> store -> points -> settlement smoke over the real HTTP API.
+# Customer -> store -> points core smoke over the real HTTP API.
 #
 # Only runtime OpenAPI operations are called; nothing here reads or writes the database directly.
 # Every asynchronous step uses a bounded poll and a missed deadline is a failure, never a pass.
@@ -17,6 +17,8 @@ MENU_ID="d2000000-0000-4000-8000-000000000001"
 OPTION_ID="d3000000-0000-4000-8000-000000000001"
 POINT_ACCOUNT_ID="d7000000-0000-4000-8000-000000000001"
 PAYMENT_METHOD_ID="d9000000-0000-4000-8000-000000000001"
+# The deterministic bootstrap policy is 100 bps FLOOR. The order below is 4,500 + 500 KRW.
+EXPECTED_ACCRUAL_KRW=50
 RUN_ID="$(date +%s)"
 STEP=0
 BODY_FILE="${DEMO_RUNTIME_DIR}/smoke-body.json"
@@ -67,6 +69,15 @@ print(d['items'][0]['pickupSlotId'])
 ")"
 log "using pickup slot ${SLOT_ID}"
 
+log "loyalty baseline"
+call "point account baseline" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_TOKEN"
+POINT_BALANCE_BEFORE="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['availablePointsKrw'])")"
+[[ "$POINT_BALANCE_BEFORE" =~ ^[0-9]+$ ]] || fail "Point account baseline was not a non-negative integer."
+call "point transactions baseline" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}/transactions?limit=100" "$CUSTOMER_TOKEN"
+POINT_TRANSACTION_COUNT_BEFORE="$(python3 -c "import json;print(len(json.load(open('$BODY_FILE'))['items']))")"
+[[ "$POINT_TRANSACTION_COUNT_BEFORE" =~ ^[0-9]+$ ]] || fail "Point ledger baseline could not be read."
+ok "point baseline ${POINT_BALANCE_BEFORE} KRW across ${POINT_TRANSACTION_COUNT_BEFORE} visible transaction(s)"
+
 log "ordering"
 ORDER_KEY="demo-order-${RUN_ID}"
 ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0}"
@@ -104,45 +115,33 @@ assert state=='COMPLETED', 'expected COMPLETED, got %s' % state
 print('       order state %s' % state)
 "
 
-log "loyalty"
-call "point account summary" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_TOKEN"
-call "point transactions"    200 GET "/point-accounts/${POINT_ACCOUNT_ID}/transactions?limit=20" "$CUSTOMER_TOKEN"
+log "loyalty accrual"
+ACCRUAL_SOURCE="order:${ORDER_ID}:completion-accrual:transaction"
+ACCRUAL_DEADLINE=$(( SECONDS + 60 ))
+ACCRUAL_FOUND="no"
+while (( SECONDS < ACCRUAL_DEADLINE )); do
+  call "point accrual poll" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}/transactions?limit=100" "$CUSTOMER_TOKEN"
+  ACCRUAL_STATE="$(python3 -c "import json;d=json.load(open('$BODY_FILE'));matches=[item for item in d['items'] if item['sourceReference']=='$ACCRUAL_SOURCE'];print('FOUND' if len(matches)==1 and matches[0]['type']=='ACCRUAL' and matches[0]['amountKrw']==$EXPECTED_ACCRUAL_KRW else ('MISSING' if not matches else 'INVALID'))")"
+  case "$ACCRUAL_STATE" in
+    FOUND) ACCRUAL_FOUND="yes"; break ;;
+    INVALID) fail "Completion accrual ledger row for ${ORDER_ID} had an unexpected type or amount." ;;
+    MISSING) sleep 2 ;;
+    *) fail "Could not classify completion accrual for ${ORDER_ID}." ;;
+  esac
+done
+[ "$ACCRUAL_FOUND" = "yes" ] || fail "Timed out waiting for the completion accrual transaction for ${ORDER_ID}."
+
+call "point account after accrual" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_TOKEN"
+python3 -c "import json;after=json.load(open('$BODY_FILE'))['availablePointsKrw'];expected=int('$POINT_BALANCE_BEFORE') + $EXPECTED_ACCRUAL_KRW;assert after == expected, 'expected availablePointsKrw %d after accrual, got %d' % (expected, after);print('       completion accrual ${EXPECTED_ACCRUAL_KRW} KRW and point balance delta verified')"
 
 log "authorization failures"
 call "no token is 401"            401 GET "/stores/${STORE_ID}/menus" ""
 call "malformed token is 401"     401 GET "/stores/${STORE_ID}/menus" "not-a-real-jwt"
 call "other store owner denied"   403 GET "/store-orders/${ORDER_ID}" "$OTHER_STORE_OWNER_TOKEN"
 
-log "settlement"
-# Settlement items are produced by an asynchronous consumer, so poll with a deadline rather than
-# assuming the item exists or silently skipping the check.
-SETTLEMENT_DEADLINE=$(( SECONDS + 60 ))
-SETTLEMENT_FOUND="no"
-while (( SECONDS < SETTLEMENT_DEADLINE )); do
-  code="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -m 15 \
-    -H "Authorization: Bearer ${STORE_OWNER_TOKEN}" "${DEMO_APP_BASE_URL}/stores/${STORE_ID}/settlements?limit=20")"
-  if [ "$code" = "200" ] && python3 -c "
-import json,sys;d=json.load(open('$BODY_FILE'))
-sys.exit(0 if d.get('items') else 1)
-" 2>/dev/null; then
-    SETTLEMENT_FOUND="yes"; break
-  fi
-  sleep 2
-done
-if [ "$SETTLEMENT_FOUND" = "yes" ]; then
-  BATCH_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['items'][0]['settlementBatchId'])")"
-  ok "settlement batch ${BATCH_ID} visible"
-  call "settlement items" 200 GET "/stores/${STORE_ID}/settlements/${BATCH_ID}/items?limit=20" "$STORE_OWNER_TOKEN"
-else
-  # A settlement Batch is only created once its own generation conditions are met. Report the fact
-  # rather than claiming the step passed.
-  warn "no settlement batch within 60s; batch creation conditions were not met in this run"
-  warn "this is reported, not suppressed: the smoke flow's settlement assertion did not execute"
-fi
-
 rm -f "$BODY_FILE"
 echo
-ok "smoke flow completed"
+ok "core smoke flow completed"
 cat <<EOF
 
   order            ${ORDER_ID}

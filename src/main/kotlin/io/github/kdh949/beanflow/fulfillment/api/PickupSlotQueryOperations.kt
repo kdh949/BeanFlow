@@ -17,9 +17,10 @@ interface PickupSlotQueryOperations {
      *
      * The lower bound is exactly the bound [PickupReservationOperations.reserve] enforces (BR-05,
      * ADR-076): a slot is listed while `startsAt > now` and stops being listed at the same instant
-     * it stops being reservable. The list also reaches only seven days ahead, so the response is
-     * bounded without truncating: everything inside the window is returned in full. A slot with no
-     * remaining capacity is still returned with `remainingCapacity = 0`.
+     * it stops being reservable. The list reaches only seven days ahead and has a published 1,000
+     * slot bound inside that window. A Store with a 1,001st matching slot fails explicitly rather
+     * than returning a partial list. A slot with no remaining capacity is still returned with
+     * `remainingCapacity = 0`.
      *
      * @throws io.github.kdh949.beanflow.shared.api.DomainFailure with `DEPENDENCY_UNAVAILABLE` when
      * persistence fails. A dependency failure is never collapsed into an empty list.

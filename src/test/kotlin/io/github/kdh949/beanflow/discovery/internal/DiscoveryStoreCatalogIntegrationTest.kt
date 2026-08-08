@@ -225,6 +225,30 @@ internal class DiscoveryStoreCatalogIntegrationTest
         }
 
         @Test
+        fun `a pickup slot list past the published bound fails instead of returning a partial seven day window`() {
+            val now = clock.instant()
+            jdbcTemplate.update(
+                """
+                INSERT INTO fulfillment_pickup_slot (
+                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+                )
+                SELECT gen_random_uuid(), ?, ?::timestamptz + i * interval '5 minutes',
+                       ?::timestamptz + i * interval '5 minutes' + interval '4 minutes', 1, 0, 0, 0
+                  FROM generate_series(1, 1001) AS i
+                """.trimIndent(),
+                storeId,
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+
+            mockMvc
+                .perform(get(slotPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
         fun `an option count past the published bound fails explicitly`() {
             val menuId = insertMenu(storeId, "Americano", 4_500, available = true)
             jdbcTemplate.update(
