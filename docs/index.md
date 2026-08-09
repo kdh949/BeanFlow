@@ -56,6 +56,7 @@
 
 ## Execution Plans
 
+- [Fast Reorder Vertical Slice](exec-plans/active/fast-reorder-vertical-slice.md)
 - [Completed Customer Order Cancellation Master](exec-plans/completed/customer-order-cancellation-and-recovery.md)
 - [Completed Repository Truth Audit](exec-plans/completed/repository-truth-audit-and-runtime-contract-alignment.md)
 - [Cancellation 10 PointLot Issuer Provenance Foundation](exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)
