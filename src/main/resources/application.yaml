@@ -7,6 +7,11 @@ logging:
 spring:
   application:
     name: beanflow
+  profiles:
+    group:
+      toss-sandbox-runtime:
+        - local
+        - toss-sandbox
   datasource:
     url: ${BEANFLOW_DB_URL}
     username: ${BEANFLOW_DB_USERNAME}

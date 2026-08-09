@@ -25,20 +25,24 @@ import java.util.Base64
 internal class TossOneTimePaymentGatewayConfiguration {
     @Bean
     fun tossOneTimePaymentGateway(
-        builder: RestClient.Builder,
         objectMapper: ObjectMapper,
         @Value("\${beanflow.toss.client-key}") clientKey: String,
         @Value("\${beanflow.toss.secret-key}") secretKey: String,
         @Value("\${beanflow.toss.base-url:https://api.tosspayments.com}") baseUrl: String,
     ): PaymentGateway {
-        require(clientKey.startsWith("test_")) { "toss-sandbox requires a Toss test client key" }
-        require(secretKey.startsWith("test_")) { "toss-sandbox requires a Toss test secret key" }
+        require(clientKey.startsWith("test_ck_")) {
+            "toss-sandbox requires a Toss API individual integration test client key (test_ck_)"
+        }
+        require(secretKey.startsWith("test_sk_")) {
+            "toss-sandbox requires a Toss API individual integration test secret key (test_sk_)"
+        }
         require(URI(baseUrl).let { it.scheme == "https" && it.host == "api.tosspayments.com" }) {
             "toss-sandbox requires the official HTTPS Toss API endpoint"
         }
         return TossOneTimePaymentGateway(
             restClient =
-                builder
+                RestClient
+                    .builder()
                     .baseUrl(baseUrl)
                     .requestFactory(
                         JdkClientHttpRequestFactory(

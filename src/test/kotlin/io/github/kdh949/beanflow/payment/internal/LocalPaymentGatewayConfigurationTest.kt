@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.payment.internal
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 internal class LocalPaymentGatewayConfigurationTest {
@@ -45,5 +47,24 @@ internal class LocalPaymentGatewayConfigurationTest {
                     oneTime.currency,
                 ),
             )
+    }
+
+    @Test
+    fun `local toss sandbox composition selects only the real Toss gateway`() {
+        ApplicationContextRunner()
+            .withBean(ObjectMapper::class.java, { ObjectMapper() })
+            .withUserConfiguration(
+                LocalPaymentGatewayConfiguration::class.java,
+                TossOneTimePaymentGatewayConfiguration::class.java,
+            ).withPropertyValues(
+                "spring.profiles.active=local,toss-sandbox",
+                "beanflow.toss.client-key=test_ck_runtime",
+                "beanflow.toss.secret-key=test_sk_runtime",
+                "beanflow.toss.base-url=https://api.tosspayments.com",
+            ).run { context ->
+                assertThat(context).hasNotFailed()
+                assertThat(context).hasSingleBean(PaymentGateway::class.java)
+                assertThat(context.getBean(PaymentGateway::class.java)).isInstanceOf(TossOneTimePaymentGateway::class.java)
+            }
     }
 }
