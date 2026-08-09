@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Customer -> store -> points core smoke over the real HTTP API.
+# Customer -> one-time payment -> store -> points -> refund smoke over the real HTTP API.
 #
 # Only runtime OpenAPI operations are called; nothing here reads or writes the database directly.
 # Every asynchronous step uses a bounded poll and a missed deadline is a failure, never a pass.
@@ -16,9 +16,8 @@ STORE_ID="d1000000-0000-4000-8000-000000000001"
 MENU_ID="d2000000-0000-4000-8000-000000000001"
 OPTION_ID="d3000000-0000-4000-8000-000000000001"
 POINT_ACCOUNT_ID="d7000000-0000-4000-8000-000000000001"
-PAYMENT_METHOD_ID="d9000000-0000-4000-8000-000000000001"
-# The deterministic bootstrap policy is 100 bps FLOOR. The order below is 4,500 + 500 KRW.
-EXPECTED_ACCRUAL_KRW=50
+# The deterministic bootstrap policy is 100 bps FLOOR. The order below is two 5,000 KRW units.
+EXPECTED_ACCRUAL_KRW=100
 RUN_ID="$(date +%s)"
 STEP=0
 BODY_FILE="${DEMO_RUNTIME_DIR}/smoke-body.json"
@@ -33,7 +32,7 @@ call() {
   [ -n "$body" ] && args+=(-H "Content-Type: application/json" -d "$body")
   [ -n "$key" ] && args+=(-H "Idempotency-Key: ${key}")
   local status; status="$(curl "${args[@]}" "${DEMO_APP_BASE_URL}${path}")"
-  if [ "$status" != "$expected" ]; then
+  if [[ "|${expected}|" != *"|${status}|"* ]]; then
     printf '\033[0;31m[fail]\033[0m %-46s expected %s got %s (correlationId=%s)\n' \
       "$name" "$expected" "$status" "$correlation" >&2
     head -c 600 "$BODY_FILE" >&2; echo >&2
@@ -80,9 +79,10 @@ ok "point baseline ${POINT_BALANCE_BEFORE} KRW across ${POINT_TRANSACTION_COUNT_
 
 log "ordering"
 ORDER_KEY="demo-order-${RUN_ID}"
-ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0}"
+ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":2}],\"pointsToUseKrw\":0}"
 call "create order"         201 POST "/orders" "$CUSTOMER_TOKEN" "$ORDER_BODY" "$ORDER_KEY"
 ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['orderId'])")"
+ORDER_LINE_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['lines'][0]['orderLineId'])")"
 log "order ${ORDER_ID}"
 
 # Idempotency: the exact same key and payload must replay the stored response, not create a second order.
@@ -95,8 +95,31 @@ CHANGED_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lin
 call "same key changed payload is 409" 409 POST "/orders" "$CUSTOMER_TOKEN" "$CHANGED_BODY" "$ORDER_KEY"
 
 log "payment"
-call "confirm payment"      200 POST "/orders/${ORDER_ID}/payment-confirmations" "$CUSTOMER_TOKEN" \
-  "{\"paymentMethodId\":\"${PAYMENT_METHOD_ID}\"}" "demo-pay-${RUN_ID}"
+call "payment browser config" 200 GET "/payment-config" "$CUSTOMER_TOKEN"
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d=={'provider':'TOSS_PAYMENTS','sdkVersion':'V2_STANDARD','clientKey':'test_ck_local_scripted'},d"
+
+PAYMENT_ATTEMPT_KEY="demo-payment-attempt-${RUN_ID}"
+call "prepare one-time payment" 200 POST "/orders/${ORDER_ID}/payment-attempts" "$CUSTOMER_TOKEN" "" "$PAYMENT_ATTEMPT_KEY"
+PAYMENT_ID="$(json "d['paymentId']")"
+PROVIDER_ORDER_ID="$(json "d['providerOrderId']")"
+PAYMENT_AMOUNT="$(json "d['amount']['value']")"
+[ "$(json "d['state']")" = "READY" ] || fail "Prepared payment was not READY."
+[ "$(json "d['method']")" = "CARD" ] || fail "Prepared payment did not use Toss Standard CARD method."
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['successUrl']=='${DEMO_FRONTEND_BASE_URL}/app/payments/${PAYMENT_ID}/success';assert d['failUrl']=='${DEMO_FRONTEND_BASE_URL}/app/payments/${PAYMENT_ID}/fail'"
+
+call "prepare replay is idempotent" 200 POST "/orders/${ORDER_ID}/payment-attempts" "$CUSTOMER_TOKEN" "" "$PAYMENT_ATTEMPT_KEY"
+[ "$(json "d['paymentId']")" = "$PAYMENT_ID" ] || fail "Payment preparation replay returned another Payment."
+
+PAYMENT_KEY="demo:${PAYMENT_ID}:approved"
+CONFIRM_BODY="{\"paymentKey\":\"${PAYMENT_KEY}\",\"orderId\":\"${PROVIDER_ORDER_ID}\",\"amount\":${PAYMENT_AMOUNT}}"
+call "confirm one-time payment" 200 POST "/payments/${PAYMENT_ID}/confirmations" "$CUSTOMER_TOKEN" "$CONFIRM_BODY" "demo-confirm-${RUN_ID}"
+[ "$(json "d['approvalState']")" = "APPROVED" ] || fail "One-time payment did not become APPROVED."
+call "exact callback replay" 200 POST "/payments/${PAYMENT_ID}/confirmations" "$CUSTOMER_TOKEN" "$CONFIRM_BODY" "demo-confirm-replay-${RUN_ID}"
+[ "$(json "d['paymentId']")" = "$PAYMENT_ID" ] || fail "Callback replay returned another Payment."
+call "altered callback rejected" 409 POST "/payments/${PAYMENT_ID}/confirmations" "$CUSTOMER_TOKEN" \
+  "{\"paymentKey\":\"${PAYMENT_KEY}\",\"orderId\":\"${PROVIDER_ORDER_ID}\",\"amount\":$((PAYMENT_AMOUNT + 1))}" "demo-confirm-tamper-${RUN_ID}"
+call "approved payment query" 200 GET "/payments/${PAYMENT_ID}" "$CUSTOMER_TOKEN"
+[ "$(json "d['approvalState']")" = "APPROVED" ] || fail "Payment query did not return APPROVED."
 
 log "store fulfilment"
 for target in ACCEPTED PREPARING READY COMPLETED; do
@@ -134,6 +157,47 @@ done
 call "point account after accrual" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_TOKEN"
 python3 -c "import json;after=json.load(open('$BODY_FILE'))['availablePointsKrw'];expected=int('$POINT_BALANCE_BEFORE') + $EXPECTED_ACCRUAL_KRW;assert after == expected, 'expected availablePointsKrw %d after accrual, got %d' % (expected, after);print('       completion accrual ${EXPECTED_ACCRUAL_KRW} KRW and point balance delta verified')"
 
+log "partial and full remaining refund"
+PARTIAL_REFUND_BODY="{\"lineItems\":[{\"orderLineId\":\"${ORDER_LINE_ID}\",\"quantity\":1}],\"reason\":\"local demo partial refund\"}"
+call "partial refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+[ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Partial refund cash state was not SUCCEEDED."
+[ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund amount was not one 5,000 KRW unit."
+
+call "partial refund replay" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+[ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund replay changed the amount."
+call "full remaining refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" \
+  "{\"reason\":\"local demo full remaining refund\"}" "demo-full-refund-${RUN_ID}"
+[ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Full remaining refund cash state was not SUCCEEDED."
+[ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Full remaining refund amount was not 5,000 KRW."
+
+log "unknown confirmation query recovery"
+RECOVERY_ORDER_KEY="demo-recovery-order-${RUN_ID}"
+RECOVERY_ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0}"
+call "create recovery order" 201 POST "/orders" "$CUSTOMER_TOKEN" "$RECOVERY_ORDER_BODY" "$RECOVERY_ORDER_KEY"
+RECOVERY_ORDER_ID="$(json "d['order']['orderId']")"
+call "prepare recovery payment" 200 POST "/orders/${RECOVERY_ORDER_ID}/payment-attempts" "$CUSTOMER_TOKEN" "" "demo-recovery-attempt-${RUN_ID}"
+RECOVERY_PAYMENT_ID="$(json "d['paymentId']")"
+RECOVERY_PROVIDER_ORDER_ID="$(json "d['providerOrderId']")"
+RECOVERY_AMOUNT="$(json "d['amount']['value']")"
+RECOVERY_PAYMENT_KEY="demo:${RECOVERY_PAYMENT_ID}:eventually-approved"
+call "unknown confirmation retained" 202 POST "/payments/${RECOVERY_PAYMENT_ID}/confirmations" "$CUSTOMER_TOKEN" \
+  "{\"paymentKey\":\"${RECOVERY_PAYMENT_KEY}\",\"orderId\":\"${RECOVERY_PROVIDER_ORDER_ID}\",\"amount\":${RECOVERY_AMOUNT}}" "demo-recovery-confirm-${RUN_ID}"
+[ "$(json "d['approvalState']")" = "UNKNOWN" ] || fail "Unknown confirmation was not exposed as UNKNOWN."
+
+RECOVERY_DEADLINE=$(( SECONDS + 60 ))
+RECOVERY_APPROVED="no"
+while (( SECONDS < RECOVERY_DEADLINE )); do
+  call "payment recovery poll" "200|202" GET "/payments/${RECOVERY_PAYMENT_ID}" "$CUSTOMER_TOKEN"
+  RECOVERY_STATE="$(json "d['approvalState']")"
+  case "$RECOVERY_STATE" in
+    APPROVED) RECOVERY_APPROVED="yes"; break ;;
+    UNKNOWN|RECONCILING|APPROVING) sleep 2 ;;
+    *) fail "Unexpected payment recovery state ${RECOVERY_STATE}." ;;
+  esac
+done
+[ "$RECOVERY_APPROVED" = "yes" ] || fail "Timed out waiting for unknown payment lookup recovery."
+ok "unknown confirmation converged to APPROVED by Provider lookup"
+
 log "authorization failures"
 call "no token is 401"            401 GET "/stores/${STORE_ID}/menus" ""
 call "malformed token is 401"     401 GET "/stores/${STORE_ID}/menus" "not-a-real-jwt"
@@ -145,6 +209,9 @@ ok "core smoke flow completed"
 cat <<EOF
 
   order            ${ORDER_ID}
+  payment          ${PAYMENT_ID}
+  recovered order  ${RECOVERY_ORDER_ID}
+  recovered payment ${RECOVERY_PAYMENT_ID}
   store            ${STORE_ID}
   point account    ${POINT_ACCOUNT_ID}
   correlation ids  local-demo-${RUN_ID}-1 .. -${STEP}

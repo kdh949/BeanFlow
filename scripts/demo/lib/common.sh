@@ -26,10 +26,14 @@ export DEMO_WORKLOAD_TOKEN_FILE="${DEMO_RUNTIME_DIR}/workload-token.txt"
 export DEMO_IDENTITY_PORT="18081"
 export DEMO_APP_PORT="18080"
 export DEMO_APP_BASE_URL="http://127.0.0.1:${DEMO_APP_PORT}/api/v1"
+export DEMO_FRONTEND_PORT="4173"
+export DEMO_FRONTEND_BASE_URL="http://127.0.0.1:${DEMO_FRONTEND_PORT}"
 export DEMO_IDENTITY_PID_FILE="${DEMO_RUNTIME_DIR}/identity.pid"
 export DEMO_APP_PID_FILE="${DEMO_RUNTIME_DIR}/app.pid"
+export DEMO_FRONTEND_PID_FILE="${DEMO_RUNTIME_DIR}/frontend.pid"
 export DEMO_IDENTITY_LOG="${DEMO_RUNTIME_DIR}/identity.log"
 export DEMO_APP_LOG="${DEMO_RUNTIME_DIR}/app.log"
+export DEMO_FRONTEND_LOG="${DEMO_RUNTIME_DIR}/frontend.log"
 
 log()  { printf '\033[0;36m[demo]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[0;32m[ ok ]\033[0m %s\n' "$*"; }
@@ -111,8 +115,11 @@ owned_process_record_is_live() {
   [ "$actual_pgid" = "$OWNED_PROCESS_PGID" ] || return 1
   # `start_owned_gradle` makes the leader's PID and PGID identical with setsid(2).
   [ "$OWNED_PROCESS_PGID" = "$OWNED_PROCESS_PID" ] || return 1
-  command="$(ps -o command= -p "$OWNED_PROCESS_PID" 2>/dev/null)"
-  [[ "$command" == *"beanflowLocalDemoNonce=${OWNED_PROCESS_NONCE}"* ]] || return 1
+  command="$(ps eww -o command= -p "$OWNED_PROCESS_PID" 2>/dev/null)"
+  if [[ "$command" != *"beanflowLocalDemoNonce=${OWNED_PROCESS_NONCE}"* ]] &&
+    [[ "$command" != *"DEMO_PROCESS_NONCE=${OWNED_PROCESS_NONCE}"* ]]; then
+    return 1
+  fi
   cwd="$(lsof -a -p "$OWNED_PROCESS_PID" -d cwd -Fn 2>/dev/null | awk '/^n/{sub(/^n/, ""); print; exit}')"
   [ "$cwd" = "$DEMO_ROOT" ] || return 1
 }
@@ -160,12 +167,55 @@ start_owned_gradle() {
   )
 }
 
+start_owned_frontend() {
+  local record="$1" name="$2" log_file="$3"
+  local nonce launcher_pid pid pgid ready_file
+  nonce="$(python3 -c 'import secrets; print(secrets.token_hex(16))')" || fail "Could not create process ownership nonce for ${name}."
+  ready_file="${record}.starting"
+  rm -f "$ready_file"
+  BEANFLOW_API_ORIGIN="http://127.0.0.1:${DEMO_APP_PORT}" \
+    python3 -c \
+      'import os, sys; nonce, ready, command = sys.argv[1:4]; os.environ["DEMO_PROCESS_NONCE"] = nonce; os.setsid(); open(ready, "w", encoding="ascii").write(str(os.getpid())); os.execvp(command, [command, *sys.argv[4:]])' \
+      "$nonce" "$ready_file" npm --prefix "${DEMO_ROOT}/frontend" run dev -- \
+      --host 127.0.0.1 --port "$DEMO_FRONTEND_PORT" --strictPort >"$log_file" 2>&1 &
+  launcher_pid=$!
+
+  local attempts=0
+  while [ "$attempts" -lt 20 ]; do
+    [ -f "$ready_file" ] && break
+    kill -0 "$launcher_pid" 2>/dev/null || break
+    attempts=$((attempts + 1))
+    sleep 0.1
+  done
+  pid="$(cat "$ready_file" 2>/dev/null || true)"
+  rm -f "$ready_file"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail "Could not establish an owned process leader for ${name}."
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+  [ "$pgid" = "$pid" ] || fail \
+    "Could not establish an owned process group for ${name} (pid=${pid}, observed-pgid=${pgid:-none})."
+
+  (
+    umask 077
+    {
+      printf 'pid=%s\n' "$pid"
+      printf 'pgid=%s\n' "$pgid"
+      printf 'nonce=%s\n' "$nonce"
+      printf 'kind=%s\n' "$name"
+      printf 'root=%s\n' "$DEMO_ROOT"
+    } > "$record"
+  )
+}
+
 postgres_ready() {
   docker exec "$DEMO_CONTAINER" pg_isready -U "$DEMO_DB_USER" -d "$DEMO_DB_NAME"
 }
 
 app_healthy() {
   curl -fsS -m 3 "http://127.0.0.1:${DEMO_APP_PORT}/actuator/health" | grep -q '"status":"UP"'
+}
+
+frontend_healthy() {
+  curl -fsS -m 3 "${DEMO_FRONTEND_BASE_URL}/app" | grep -q '<div id="root"></div>'
 }
 
 jwks_ready() {
@@ -184,5 +234,5 @@ export_app_env() {
   # properties are easy to get wrong, so the key ring is passed as explicit JSON instead.
   # The datasource is passed explicitly too: the seed CLI is a separate Spring application and
   # must not depend on placeholder resolution from the main application.yaml.
-  export SPRING_APPLICATION_JSON="{\"spring\":{\"datasource\":{\"url\":\"${DEMO_DB_URL}\",\"username\":\"${DEMO_DB_USER}\",\"password\":\"${DEMO_DB_PASSWORD}\",\"driver-class-name\":\"org.postgresql.Driver\"}},\"beanflow\":{\"pagination\":{\"cursor-hmac\":{\"active-key-id\":\"local-demo\",\"keys\":[{\"id\":\"local-demo\",\"secret-base64-url\":\"${BEANFLOW_DEMO_CURSOR_SECRET}\"}]}}}}"
+  export SPRING_APPLICATION_JSON="{\"spring\":{\"datasource\":{\"url\":\"${DEMO_DB_URL}\",\"username\":\"${DEMO_DB_USER}\",\"password\":\"${DEMO_DB_PASSWORD}\",\"driver-class-name\":\"org.postgresql.Driver\"}},\"beanflow\":{\"checkout\":{\"frontend-base-url\":\"${DEMO_FRONTEND_BASE_URL}\"},\"pagination\":{\"cursor-hmac\":{\"active-key-id\":\"local-demo\",\"keys\":[{\"id\":\"local-demo\",\"secret-base64-url\":\"${BEANFLOW_DEMO_CURSOR_SECRET}\"}]}}}}"
 }
