@@ -121,16 +121,20 @@ internal class PaymentMethodMaintenanceTransactions(
         deactivationId: UUID,
         staleBefore: Instant,
     ) {
+        val paymentMethodId = deactivations.findPaymentMethodIdById(deactivationId) ?: return
+        val method =
+            methods.findLockedById(paymentMethodId)
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method recovery target is missing")
         val work = deactivations.findLockedById(deactivationId) ?: return
+        if (work.paymentMethodId != method.id) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method recovery binding is invalid")
+        }
         if (
             work.status != PaymentMethodDeactivationStatus.PROCESSING ||
             work.claimStartedAt?.isAfter(staleBefore) != false
         ) {
             return
         }
-        val method =
-            methods.findLockedById(work.paymentMethodId)
-                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method recovery target is missing")
         val now = clock.instant()
         if (method.status != PaymentMethodStatus.DEACTIVATED) {
             method.markDeactivationUnknown(now)
@@ -178,7 +182,14 @@ internal class PaymentMethodMaintenanceTransactions(
 
     @Transactional
     fun moveToManualReview(deactivationId: UUID) {
+        val paymentMethodId = deactivations.findPaymentMethodIdById(deactivationId) ?: return
+        val method =
+            methods.findLockedById(paymentMethodId)
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method deadline target is missing")
         val work = deactivations.findLockedById(deactivationId) ?: return
+        if (work.paymentMethodId != method.id) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method deadline binding is invalid")
+        }
         val now = clock.instant()
         if (
             work.status !in
@@ -187,9 +198,6 @@ internal class PaymentMethodMaintenanceTransactions(
         ) {
             return
         }
-        val method =
-            methods.findLockedById(work.paymentMethodId)
-                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method deadline target is missing")
         method.markManualReview(now)
         work.status = PaymentMethodDeactivationStatus.MANUAL_REVIEW
         work.manualReviewReason = "DEACTIVATION_DEADLINE_EXPIRED"

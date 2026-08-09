@@ -159,7 +159,7 @@ tag로 기록한다.
 - [x] 리뷰 스레드와 Accepted source 대조
 - [x] validation credential reflection 회귀 테스트와 수정
 - [x] registration manual-review와 stale cutoff 회귀 테스트와 수정
-- [ ] deactivation lock/convergence 회귀 테스트와 수정
+- [x] deactivation lock/convergence 회귀 테스트와 수정
 - [ ] 전체 검증·push·review thread resolution
 
 ## Surprises & Discoveries

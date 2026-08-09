@@ -93,7 +93,8 @@ provider reference, notification fingerprint와 Payment snapshot을 각각 언�
 - `PaymentMethodApplicationService`와 `PaymentMethodLifecycleTransactions`는 R1/RC/R2, M,
   D1/DC/D2를 분리하고 registration/deactivation Port 호출을 DB transaction 밖에서 수행한다.
 - `PaymentMethodProviderNotificationService`는 검증 완료 입력만 W1/W2로 받고 raw token 대신
-  fingerprint만 inbox에 남긴다. mapped W2는 진행 중 deactivation 원장도 stored 204로 함께 수렴한다.
+  fingerprint만 inbox에 남긴다. mapped W2는 PaymentMethod를 먼저 잠근 뒤 active deactivation
+  원장을 다시 조회해 stored 204로 함께 수렴하고, 뒤 Provider result도 같은 204를 반환한다.
 - `PaymentMethodLifecycleMaintenance`는 재기동 때 5분 cutoff를 지난 stale claim만 외부 재호출 없이
   복구한다. registration은 lookup 부재에 따라 즉시 manual review, deactivation은 unknown으로
   전이하며 fresh claim은 다른 인스턴스의 live Provider call로 보존한다. 96시간 deadline과 90일

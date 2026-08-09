@@ -132,14 +132,14 @@ internal class PaymentMethodProviderNotificationTransactions(
             Any::class.java,
             hash64("payment-method-token:${sha256("${inbox.provider}:$rawTokenReference")}"),
         )
-        val bindings = methods.findAllByProviderAndTokenReference(inbox.provider, rawTokenReference)
+        val bindingIds = methods.findAllIdsByProviderAndTokenReference(inbox.provider, rawTokenReference)
         val now = clock.instant()
-        return if (bindings.size == 1) {
-            val methodId = bindings.single().id
-            val deactivation = deactivations.findActiveLockedByPaymentMethodId(methodId)
+        return if (bindingIds.size == 1) {
+            val methodId = bindingIds.single()
             val method =
                 methods.findLockedById(methodId)
                     ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method notification target is missing")
+            val deactivation = deactivations.findActiveLockedByPaymentMethodId(methodId)
             val before = method.status.name
             method.confirmProviderDeactivated(now)
             if (deactivation != null) {
@@ -172,7 +172,7 @@ internal class PaymentMethodProviderNotificationTransactions(
         } else {
             inbox.status = PaymentProviderNotificationStatus.MANUAL_REVIEW
             inbox.processedAt = now
-            inbox.closedReason = if (bindings.isEmpty()) "TOKEN_BINDING_NOT_FOUND" else "TOKEN_BINDING_AMBIGUOUS"
+            inbox.closedReason = if (bindingIds.isEmpty()) "TOKEN_BINDING_NOT_FOUND" else "TOKEN_BINDING_AMBIGUOUS"
             metrics.notification(inbox.notificationType, "MANUAL_REVIEW")
             PaymentMethodProviderNotificationResult.MANUAL_REVIEW
         }

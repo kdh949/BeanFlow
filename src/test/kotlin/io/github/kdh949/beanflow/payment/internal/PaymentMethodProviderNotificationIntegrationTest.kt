@@ -12,10 +12,15 @@ import org.springframework.context.annotation.Import
 import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestConstructor
+import org.springframework.transaction.support.TransactionTemplate
+import java.security.MessageDigest
 import java.sql.Timestamp
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @SpringBootTest(
     properties = [
@@ -30,6 +35,10 @@ internal class PaymentMethodProviderNotificationIntegrationTest(
     private val notifications: PaymentMethodProviderNotificationService,
     private val maintenance: PaymentMethodLifecycleMaintenance,
     private val adapter: ScriptedPaymentMethodLifecycleAdapter,
+    private val lifecycleTransactions: PaymentMethodLifecycleTransactions,
+    private val transactionTemplate: TransactionTemplate,
+    private val methods: PaymentMethodJpaRepository,
+    private val deactivations: PaymentMethodDeactivationJpaRepository,
     private val jdbcTemplate: JdbcTemplate,
 ) {
     @BeforeEach
@@ -201,6 +210,80 @@ internal class PaymentMethodProviderNotificationIntegrationTest(
     }
 
     @Test
+    fun `notification committed while Provider delete is in flight makes the original result converge to stored 204`() {
+        val customerId = UUID.randomUUID()
+        val methodId = register(customerId, "provider-result-race-register", "issued:provider-result-race")
+        val deleteKey = "provider-result-race-delete"
+        val preparation =
+            lifecycleTransactions.prepareDeactivation(customerId, methodId, deleteKey) as
+                DeactivationPreparation.Claimable
+        val claim = checkNotNull(lifecycleTransactions.claimDeactivation(preparation.deactivationId))
+
+        assertThat(notifications.accept(notification("provider-result-race", token(methodId))))
+            .isEqualTo(PaymentMethodProviderNotificationResult.MAPPED)
+        val originalResult =
+            lifecycleTransactions.completeDeactivation(
+                claim,
+                io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult.Deactivated,
+            )
+
+        assertThat(originalResult.status).isEqualTo(204)
+        assertThat(originalResult.body).isEmpty()
+        assertThat(registration.deactivate(customerId, methodId, deleteKey)).isEqualTo(originalResult)
+        assertThat(adapter.deactivationCalls).hasValue(0)
+        assertThat(deactivationStatus(methodId)).isEqualTo("COMPLETED")
+    }
+
+    @Test
+    fun `notification waits for D1 commit then completes the newly committed work before acknowledging`() {
+        val customerId = UUID.randomUUID()
+        val methodId = register(customerId, "d1-notification-race-register", "issued:d1-notification-race")
+        val token = token(methodId)
+        val deleteKey = "d1-notification-race-delete"
+        val methodLocked = CountDownLatch(1)
+        val allowD1Commit = CountDownLatch(1)
+
+        val d1 =
+            CompletableFuture.runAsync {
+                transactionTemplate.executeWithoutResult {
+                    val method = checkNotNull(methods.findLockedById(methodId))
+                    val now = Instant.now()
+                    method.requestDeactivation(now)
+                    methodLocked.countDown()
+                    check(allowD1Commit.await(5, TimeUnit.SECONDS))
+                    deactivations.saveAndFlush(
+                        PaymentMethodDeactivationEntity(
+                            id = UUID.randomUUID(),
+                            actorId = customerId,
+                            operation = "DEACTIVATE_PAYMENT_METHOD_V1",
+                            idempotencyKey = deleteKey,
+                            customerId = customerId,
+                            paymentMethodId = methodId,
+                            payloadHash = sha256("{\"paymentMethodId\":\"$methodId\"}"),
+                            status = PaymentMethodDeactivationStatus.READY,
+                            firstResponseStatus = 202,
+                            firstResponseBody =
+                                """{"paymentMethodId":"$methodId","state":"PROCESSING","correlationId":"d1-race","updatedAt":"$now"}""",
+                            startedAt = now,
+                            updatedAt = now,
+                        ),
+                    )
+                }
+            }
+        check(methodLocked.await(5, TimeUnit.SECONDS))
+        val w2 = CompletableFuture.supplyAsync { notifications.accept(notification("d1-notification-race", token)) }
+        awaitPaymentMethodLockWait()
+
+        allowD1Commit.countDown()
+        d1.join()
+        assertThat(w2.join()).isEqualTo(PaymentMethodProviderNotificationResult.MAPPED)
+
+        assertThat(deactivationStatus(methodId)).isEqualTo("COMPLETED")
+        assertThat(registration.deactivate(customerId, methodId, deleteKey).status).isEqualTo(204)
+        assertThat(adapter.deactivationCalls).hasValue(0)
+    }
+
+    @Test
     fun `deadline moves unknown deactivation to manual review without another Provider delete`() {
         val customerId = UUID.randomUUID()
         val methodId =
@@ -275,17 +358,23 @@ internal class PaymentMethodProviderNotificationIntegrationTest(
                 "SELECT status FROM payment_method_registration",
                 String::class.java,
             ),
-        ).isEqualTo("REGISTRATION_UNKNOWN")
+        ).isEqualTo("MANUAL_REVIEW")
     }
 
     private fun register(
+        key: String,
+        authKey: String,
+    ): UUID = register(UUID.randomUUID(), key, authKey)
+
+    private fun register(
+        customerId: UUID,
         key: String,
         authKey: String,
     ): UUID =
         methodId(
             registration
                 .register(
-                    RegisterPaymentMethodCommand(UUID.randomUUID(), key, authKey, "Notification card"),
+                    RegisterPaymentMethodCommand(customerId, key, authKey, "Notification card"),
                 ).body,
         )
 
@@ -332,6 +421,39 @@ internal class PaymentMethodProviderNotificationIntegrationTest(
 
     private fun methodVersion(methodId: UUID): Long =
         jdbcTemplate.queryForObject("SELECT version FROM payment_method WHERE id = ?", Long::class.java, methodId)!!
+
+    private fun deactivationStatus(methodId: UUID): String =
+        jdbcTemplate.queryForObject(
+            "SELECT status FROM payment_method_deactivation WHERE payment_method_id = ?",
+            String::class.java,
+            methodId,
+        )!!
+
+    private fun awaitPaymentMethodLockWait() {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            val blocked =
+                jdbcTemplate.queryForObject(
+                    """
+                    SELECT count(*)
+                      FROM pg_stat_activity
+                     WHERE datname = current_database()
+                       AND wait_event_type = 'Lock'
+                       AND query ILIKE '%payment_method%'
+                    """.trimIndent(),
+                    Long::class.java,
+                ) ?: 0
+            if (blocked > 0) return
+            Thread.sleep(10)
+        }
+        throw AssertionError("W2 did not wait for the PaymentMethod row lock")
+    }
+
+    private fun sha256(value: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     private fun inboxStatus(notificationId: String): String =
         jdbcTemplate.queryForObject(

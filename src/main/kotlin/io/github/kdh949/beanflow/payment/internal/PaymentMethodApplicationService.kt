@@ -485,9 +485,11 @@ internal class PaymentMethodLifecycleTransactions(
 
     @Transactional
     fun claimDeactivation(deactivationId: UUID): DeactivationClaim? {
+        val paymentMethodId = deactivations.findPaymentMethodIdById(deactivationId) ?: return null
+        val method = methods.findLockedById(paymentMethodId) ?: unavailable()
         val work = deactivations.findLockedById(deactivationId) ?: return null
+        if (work.paymentMethodId != method.id) unavailable()
         if (work.status != PaymentMethodDeactivationStatus.READY) return null
-        val method = methods.findLockedById(work.paymentMethodId) ?: unavailable()
         val providerReference = method.providerCustomerReference ?: unavailable()
         val now = clock.instant()
         val token = identifiers.next()
@@ -507,9 +509,13 @@ internal class PaymentMethodLifecycleTransactions(
         claim: DeactivationClaim,
         result: PaymentMethodDeactivationProviderResult,
     ): PaymentMethodHttpResult {
-        val work = deactivations.findLockedById(claim.deactivationId) ?: unavailable()
-        requireClaim(work.status == PaymentMethodDeactivationStatus.PROCESSING, work.claimToken, claim.claimToken)
         val method = methods.findLockedById(claim.paymentMethodId) ?: unavailable()
+        val work = deactivations.findLockedById(claim.deactivationId) ?: unavailable()
+        if (work.paymentMethodId != method.id) unavailable()
+        if (work.status == PaymentMethodDeactivationStatus.COMPLETED) {
+            return completedDeactivationResponse(method, work)
+        }
+        requireClaim(work.status == PaymentMethodDeactivationStatus.PROCESSING, work.claimToken, claim.claimToken)
         val now = clock.instant()
         val correlationId = correlationFrom(work)
         val response =
@@ -554,8 +560,12 @@ internal class PaymentMethodLifecycleTransactions(
 
     @Transactional
     fun markDeactivationUnknownAfterPersistenceFailure(claim: DeactivationClaim): PaymentMethodHttpResult {
-        val work = deactivations.findLockedById(claim.deactivationId) ?: unavailable()
         val method = methods.findLockedById(claim.paymentMethodId) ?: unavailable()
+        val work = deactivations.findLockedById(claim.deactivationId) ?: unavailable()
+        if (work.paymentMethodId != method.id) unavailable()
+        if (work.status == PaymentMethodDeactivationStatus.COMPLETED) {
+            return completedDeactivationResponse(method, work)
+        }
         if (work.status == PaymentMethodDeactivationStatus.PROCESSING && work.claimToken == claim.claimToken) {
             val now = clock.instant()
             val response = markUnknown(method, work, now)
@@ -574,6 +584,22 @@ internal class PaymentMethodLifecycleTransactions(
                 correlationId = correlationFrom(work),
             )
             return response
+        }
+        return stored(work)
+    }
+
+    private fun completedDeactivationResponse(
+        method: PaymentMethodEntity,
+        work: PaymentMethodDeactivationEntity,
+    ): PaymentMethodHttpResult {
+        if (
+            method.status != PaymentMethodStatus.DEACTIVATED ||
+            work.firstResponseStatus != 204 ||
+            work.firstResponseBody != "" ||
+            work.terminalAt == null ||
+            work.retentionExpiresAt == null
+        ) {
+            unavailable()
         }
         return stored(work)
     }

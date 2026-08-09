@@ -444,6 +444,15 @@ internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntit
         tokenReference: String,
     ): List<PaymentMethodEntity>
 
+    @Query(
+        "select method.id from PaymentMethodEntity method " +
+            "where method.provider = :provider and method.tokenReference = :tokenReference order by method.id",
+    )
+    fun findAllIdsByProviderAndTokenReference(
+        @Param("provider") provider: String,
+        @Param("tokenReference") tokenReference: String,
+    ): List<UUID>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select method from PaymentMethodEntity method " +

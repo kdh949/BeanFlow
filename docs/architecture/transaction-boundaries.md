@@ -157,7 +157,7 @@ Tx W1: verified provider notification
        + (provider, notificationId) unique inbox accept
 commit
 Tx W2: token fingerprint mapping 0|1|many
-       + token advisory, active deactivation work와 exact PaymentMethod row lock
+       + token advisory, PaymentMethod row lock 뒤 active deactivation work lock
        + monotonic DEACTIVATED/stored 204 or MANUAL_REVIEW inbox result
 commit before Provider 2xx
 ```
@@ -166,6 +166,11 @@ commit before Provider 2xx
   응답하지 않는다. raw token은 같은 delivery의 W2까지 메모리에서만 유지하고, 실패 replay가 다시
   제공한 token으로 non-terminal inbox를 처리한다. 0건/다건 mapping은 owner를 추정하지 않고 inbox를
   manual review에 두며, W2 terminal commit 뒤에만 2xx를 반환한다.
+- D1, DC, D2, deactivation persistence-failure recovery, deadline/startup worker와 W2의 공통 mutation
+  lock order는 `PaymentMethod → deactivation work`다. ID만 아는 경로는 non-locking method ID
+  projection 뒤 method를 잠그고 work를 잠근다. W2도 method lock 뒤 active work를 다시 읽으므로
+  D1의 미커밋 insert를 놓치지 않는다. W2가 Provider result보다 먼저 work를 stored 204로 완료하면
+  뒤 D2는 새 Audit·상태 전이 없이 그 204를 반환한다.
 
 ## Payment approval
 

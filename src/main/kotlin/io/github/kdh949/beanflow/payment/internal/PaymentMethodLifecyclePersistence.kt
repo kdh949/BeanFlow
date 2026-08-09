@@ -217,6 +217,11 @@ internal interface PaymentMethodDeactivationJpaRepository : JpaRepository<Paymen
         @Param("id") id: UUID,
     ): PaymentMethodDeactivationEntity?
 
+    @Query("select deactivation.paymentMethodId from PaymentMethodDeactivationEntity deactivation where deactivation.id = :id")
+    fun findPaymentMethodIdById(
+        @Param("id") id: UUID,
+    ): UUID?
+
     @Query(
         "select deactivation.id from PaymentMethodDeactivationEntity deactivation " +
             "where deactivation.status in (" +
