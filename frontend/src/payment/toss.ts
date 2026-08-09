@@ -1,4 +1,4 @@
-import { loadTossPayments } from "@tosspayments/payment-sdk";
+import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 
 const TOSS_V2_STANDARD_SDK = "https://js.tosspayments.com/v2/standard";
 
@@ -11,18 +11,11 @@ type TossV2PaymentRequest = {
   failUrl: string;
 };
 
-type TossV2 = {
-  payment(input: { customerKey: string }): {
-    requestPayment(input: TossV2PaymentRequest): Promise<void>;
-  };
-};
-
 export async function requestTossStandardPayment(
   clientKey: string,
   attempt: TossV2PaymentRequest & { customerKey: string },
 ) {
-  const loaded = await loadTossPayments(clientKey, { src: TOSS_V2_STANDARD_SDK });
-  const tossPayments = loaded as unknown as TossV2;
+  const tossPayments = await loadTossPayments(clientKey, { src: TOSS_V2_STANDARD_SDK });
   const payment = tossPayments.payment({ customerKey: attempt.customerKey });
   await payment.requestPayment({
     method: attempt.method,
