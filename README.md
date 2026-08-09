@@ -132,10 +132,24 @@ curl http://localhost:8080/actuator/health
 `sub`는 UUID 형식의 고객 ID여야 하고, `roles` claim에 `CUSTOMER`가 포함되어야 한다.
 
 `local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
-`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. `toss-sandbox` profile은
-Toss V2 confirm/query/cancel HTTP adapter와 `test_` key startup guard를 활성화한다. 고객 checkout은
-PaymentMethod를 조회하지 않고 서버가 준비한 일회성 `CARD` Payment Window만 사용한다. 결제수단
-lifecycle API는 별도 관리 경계로 남아 있다. PAN, CVC와 전체 유효기간은 저장하지 않는다.
+`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 실제 Toss 테스트 환경은
+API 개별 연동 키 쌍(`test_ck_`/`test_sk_`)과 전용 profile group으로 기동한다.
+
+```bash
+export TOSS_CLIENT_KEY='test_ck_...'
+export TOSS_SECRET_KEY='test_sk_...'
+export BEANFLOW_FRONTEND_BASE_URL='http://127.0.0.1:4173'
+export SPRING_PROFILES_ACTIVE='toss-sandbox-runtime'
+
+./gradlew bootRun
+```
+
+`toss-sandbox-runtime`은 local 인프라 설정과 `toss-sandbox`를 합성하지만 scripted gateway는
+제외하고 Toss V2 confirm/query/cancel HTTP adapter 하나만 선택한다. Widget 키인
+`test_gck_`/`test_gsk_`, 누락·live 키와 `prod` 중첩은 시작 실패한다. 이 profile에서 기존
+PaymentMethod 등록·폐기는 명시적으로 `Misconfigured`이며 fake 성공으로 대체되지 않는다. 고객
+checkout은 PaymentMethod를 조회하지 않고 서버가 준비한 일회성 `CARD` Payment Window만 사용한다.
+PAN, CVC와 전체 유효기간은 저장하지 않는다.
 
 ### 현재 runtime API
 

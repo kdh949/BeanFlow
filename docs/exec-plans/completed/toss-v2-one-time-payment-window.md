@@ -30,7 +30,8 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 - `frontend/`에 React 19+TypeScript, Runtime OpenAPI 생성 client, `/app`·`/store`·`/ops`, 제공 디자인
   token과 BeanFlow logo 자산이 있다.
 - 전체 Gradle build, frontend checks, local HTTP smoke와 in-app browser 검증이 통과했다.
-- Toss test client/secret key가 없어 실제 sandbox smoke는 `Not run — missing credentials`다.
+- API 개별 연동 Toss test client/secret key로 실제 sandbox auth/confirm/provider query와
+  full·partial cancel을 통과했다. 키와 paymentKey는 증거에 복사하지 않았다.
 
 ## Business Rules and Invariants
 
@@ -113,7 +114,9 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 - [x] (2026-08-10) Payment one-time attempt schema/domain/API와 V38
 - [x] (2026-08-10) Toss confirm/query/cancel adapter와 fault/profile guard
 - [x] (2026-08-10) React/TypeScript route와 Standard Payment Window callback UX
-- [x] (2026-08-10) correctness/accessibility/local-demo/browser 검증; 실제 sandbox는 credential 부재로 Not run
+- [x] (2026-08-10) correctness/accessibility/local-demo/browser 검증
+- [x] (2026-08-10) 실제 Toss Payment Window auth/confirm/provider query/full·partial cancel 검증
+- [x] (2026-08-10) sandbox runtime profile 합성, API/Widget key guard와 callback URL history 정리 회귀 수정
 - [x] (2026-08-10) 최종 문서와 release evidence
 
 ## Surprises & Discoveries
@@ -126,6 +129,15 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
   BeanFlow logo 세 경로만 명시 allowlist로 추가했다.
 - local smoke가 복수 환불의 Provider reference 충돌과 one-time UNKNOWN lookup의 reference 선택 오류를
   발견했다. Provider idempotency key 기반 reference와 transaction-reference 우선 lookup으로 수정했다.
+- `toss-sandbox` 단독 기동은 datasource·OIDC·notification을 제공하지 않고, `local,toss-sandbox`를
+  직접 합치면 legacy PaymentMethod provider safety guard가 scripted overlap으로 기동을 막았다.
+  `toss-sandbox-runtime` group과 명시적 unavailable lifecycle provider로 one-time checkout만 열었다.
+- 처음 제공된 `test_gck_`/`test_gsk_`는 Payment Widget 키라 Standard Payment Window가
+  `NotSupportedWidgetKeyError`로 거부했다. API 개별 연동 `test_ck_`/`test_sk_`만 startup에서 허용한다.
+- 실제 callback에서 paymentKey query가 승인 뒤 URL history에 남는 ADR-080 위반을 발견했다.
+  layout effect로 즉시 제거하고 clean URL reload는 owner status query로 복구하도록 수정했다.
+- Toss 공식 문서는 국내 공개 테스트 카드번호를 제공하지 않는다. 개인 결제정보를 사용하지 않기 위해
+  V2 공식 `sandbox.paymentResult=SUCCESS`를 검증 브라우저에만 임시 적용하고 source에서는 원복했다.
 
 ## Decision Log
 
@@ -135,6 +147,8 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
   key source drift를 막되 실제 MID pair 오류는 Provider가 fail-closed로 판정한다.
 - (2026-08-10) migration V38 writer lane을 이 plan이 소유한다. 다른 active migration plan과 동시에
   실행하지 않는다.
+- (2026-08-10) local actual-Toss 실행은 `toss-sandbox-runtime` group으로만 구성한다. 기존
+  PaymentMethod lifecycle은 fake 성공 대신 명시적 `Misconfigured`로 닫는다.
 
 ## Outcomes & Retrospective
 
@@ -143,12 +157,13 @@ Toss V2 Standard Payment Window를 준비한다. callback은 exact binding과 st
 confirm/query/cancel은 DB transaction 밖에서 실행된다. React 고객·매장·운영 화면은 fixture fallback 없이
 Runtime OpenAPI client로 같은 API를 사용한다.
 
-`./gradlew clean build --stacktrace`는 622 tests(1 skipped), frontend typecheck·7 unit tests·production/Sites
+`./gradlew clean build --stacktrace --no-daemon`은 626 tests(1 skipped), frontend typecheck·9 unit tests·production/Sites
 build와 production dependency audit는 통과했다. local HTTP smoke는 callback replay/tamper, 매장 완료,
 부분·전액 환불과 `UNKNOWN → APPROVED` query 복구를 통과했고 browser는 결제 완료 새로고침과 주문
 추적을 확인했다. 상세 결과는 [release evidence](../../quality/toss-one-time-payment-window-release-evidence.md)에
 있다.
 
-실제 Toss sandbox는 credential 부재로 실행하지 않았다. test key를 받으면 evidence의 명령과 같은
-browser flow로 실제 confirm/query/partial·remaining cancel을 추가하고, 지연 Provider 부하·pool·worker
-처리량은 별도 측정한다.
+실제 Toss sandbox에서 4,500원과 9,000원 결제를 server-to-server confirm했고, 정리된 success URL
+새로고침과 owner status 조회가 `APPROVED`로 수렴했다. 4,500원 전액 취소와 9,000원의 4,500원
+부분 취소·잔액 4,500원 취소는 모두 내부 `SUCCEEDED`였고, Toss 직접 조회는 잔액 0원과 두 `DONE`
+취소를 반환했다. 지연 Provider 부하·connection pool·worker 처리량은 별도 측정 대상으로 남긴다.

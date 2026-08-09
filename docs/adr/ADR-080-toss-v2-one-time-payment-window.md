@@ -87,8 +87,13 @@ Tx C  Payment result + Order/resource transition + idempotent response + Audit c
 ### Provider adapter와 취소
 
 - Toss adapter는 API 개별 연동 test client/secret key 쌍만 `toss-sandbox & !prod`에서 허용한다.
-  client key는 `test_ck_`, secret은 `test_sk_`여야 하며 missing/live/profile overlap은 startup
-  failure다. 키 쌍의 실제 MID 일치는 Provider의 인증 응답으로 fail-closed 검증한다.
+  client key는 `test_ck_`, secret은 `test_sk_`여야 한다. Payment Widget용 `test_gck_`/`test_gsk_`,
+  missing/live/profile overlap은 startup failure다. 키 쌍의 실제 MID 일치는 Provider의 인증 응답으로
+  fail-closed 검증한다.
+- 로컬 실제 호출은 `toss-sandbox-runtime` profile group이 `local`과 `toss-sandbox`를 합성한다.
+  scripted `PaymentGateway`와 scripted PaymentMethod provider는 제외하고 Toss gateway 하나와
+  legacy PaymentMethod 요청을 `Misconfigured`로 끝내는 명시적 unavailable provider를 선택한다.
+  일회성 checkout을 위해 기존 등록 API를 fake 성공으로 대체하지 않는다.
 - Authorization은 UTF-8 `secretKey + ":"`를 Base64 인코딩한 Basic header다.
 - 승인 `POST /v1/payments/confirm`, 조회 `GET /v1/payments/{paymentKey}` 또는
   `GET /v1/payments/orders/{providerOrderId}`, 취소
@@ -160,6 +165,21 @@ Payment는 이미 주문별 승인·불명·reconciliation·late approval과 Ref
 - one-time path의 PaymentMethod repository/Port 호출 0회
 - profile/key guard, Basic colon auth, secret/paymentKey redaction과 HTTP fault matrix
 - mobile/keyboard/focus/status announcement, reload/back과 console/network audit
+
+## Implementation Evidence (2026-08-10)
+
+- 공개 API 개별 연동 test key 쌍으로 `toss-sandbox-runtime`이 `local,toss-sandbox`를 활성화하고
+  health `UP`까지 기동했다. Widget key 쌍은 SDK의 `NotSupportedWidgetKeyError` 관측 뒤 startup
+  guard가 더 이르게 거부하도록 고정했다.
+- 실제 Toss V2 Payment Window가 4,500원과 9,000원 서버 snapshot을 표시했다. 국내 공개 테스트
+  카드가 없으므로 개인 카드 정보를 사용하지 않고 Toss가 제공하는 V2 `sandbox.paymentResult`
+  인증 시뮬레이션을 브라우저 검증에만 임시 적용했다. 이 옵션은 제품 source에 남기지 않았다.
+- Toss가 발급한 테스트 callback을 BeanFlow가 server-to-server confirm해 두 Payment를
+  `APPROVED`로 확정했다. 성공 query는 메모리에 읽힌 직후 browser history에서 제거됐고, 정리된
+  URL 새로고침은 owner status query로 같은 승인 결과에 수렴했다.
+- 4,500원 매장 수락 timeout 전액 취소, 9,000원 결제의 4,500원 부분 취소와 남은 4,500원 취소가
+  모두 Provider `DONE`과 내부 Refund `SUCCEEDED`로 끝났다. Provider 직접 조회는
+  `PARTIAL_CANCELED`, `balanceAmount=0`, 두 cancel 각각 4,500원을 반환했다.
 
 ## Metrics
 

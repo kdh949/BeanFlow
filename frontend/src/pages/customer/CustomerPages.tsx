@@ -14,7 +14,7 @@ import {
   Timer,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { api, ApiRequestError, idempotencyKey, unwrap } from "../../api/client";
@@ -44,6 +44,21 @@ const attemptStorage = {
     }
   },
 };
+
+type PaymentSuccessLocation = Pick<Location, "pathname" | "search" | "hash">;
+type PaymentSuccessHistory = Pick<History, "state" | "replaceState">;
+
+export function clearPaymentSuccessQuery(
+  currentLocation: PaymentSuccessLocation = window.location,
+  currentHistory: PaymentSuccessHistory = window.history,
+) {
+  if (!currentLocation.search) return;
+  currentHistory.replaceState(
+    currentHistory.state,
+    "",
+    `${currentLocation.pathname}${currentLocation.hash}`,
+  );
+}
 
 export function CustomerHomePage() {
   const [searchParams] = useSearchParams();
@@ -327,11 +342,19 @@ export function PaymentSuccessPage() {
   const paymentKey = searchParams.get("paymentKey") ?? "";
   const providerOrderId = searchParams.get("orderId") ?? "";
   const amount = Number(searchParams.get("amount"));
+  const callbackQueryPresent = searchParams.has("paymentKey") || searchParams.has("orderId") || searchParams.has("amount");
+
+  useLayoutEffect(() => clearPaymentSuccessQuery(), []);
 
   const confirm = useCallback(async () => {
     setConfirming(true);
     setError(null);
     try {
+      if (!callbackQueryPresent) {
+        const result = await api.GET("/payments/{paymentId}", { params: { path: { paymentId } } });
+        setPayment(unwrap(result));
+        return;
+      }
       const attempt = attemptStorage.get(paymentId);
       if (attempt && (attempt.providerOrderId !== providerOrderId || attempt.amount.value !== amount)) {
         throw new ApiRequestError(400, "PAYMENT_CALLBACK_MISMATCH", "결제창에서 돌아온 정보가 주문과 일치하지 않습니다.");
@@ -352,7 +375,7 @@ export function PaymentSuccessPage() {
     } finally {
       setConfirming(false);
     }
-  }, [amount, paymentId, paymentKey, providerOrderId]);
+  }, [amount, callbackQueryPresent, paymentId, paymentKey, providerOrderId]);
 
   const refresh = useCallback(async () => {
     try {

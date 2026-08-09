@@ -1,10 +1,10 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.payment.api.DeactivatePaymentMethodProviderCommand
 import io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProvider
 import io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult
 import io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProvider
 import io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult
-import io.github.kdh949.beanflow.payment.api.DeactivatePaymentMethodProviderCommand
 import io.github.kdh949.beanflow.payment.api.RegisterPaymentMethodProviderCommand
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
