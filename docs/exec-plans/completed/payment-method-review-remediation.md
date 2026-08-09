@@ -1,11 +1,11 @@
 # 결제수단 lifecycle 리뷰 결함을 보안·복구·동시성 경계에서 수정한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/payment-method-token-management.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-10`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -160,7 +160,7 @@ tag로 기록한다.
 - [x] validation credential reflection 회귀 테스트와 수정
 - [x] registration manual-review와 stale cutoff 회귀 테스트와 수정
 - [x] deactivation lock/convergence 회귀 테스트와 수정
-- [ ] 전체 검증·push·review thread resolution
+- [x] 전체 검증·push·review thread resolution
 
 ## Surprises & Discoveries
 
@@ -168,6 +168,11 @@ tag로 기록한다.
   선택한 기록이 있다. handler 수정은 결제수단뿐 아니라 공통 입력의 rejected value 반사를 닫는다.
 - 2026-08-10: V37 제약은 registration `MANUAL_REVIEW`의 null retention과 closed reason을 이미 허용해
   즉시 종결에 migration이 필요하지 않다.
+- 2026-08-10: W2가 method lock을 기다리는 동안 미리 조회한 JPA `PaymentMethod`가 stale entity로 남아
+  optimistic locking failure를 만들었다. binding은 식별자 projection으로만 읽고 method lock 획득 뒤
+  aggregate를 다시 로드해야 실제 lock 획득 시점을 linearization point로 삼을 수 있었다.
+- 2026-08-10: 첫 전체 build는 새 Kotlin 두 파일의 Spotless 위반만 탐지해 실패했다. `spotlessApply`로
+  포맷을 적용하고 캐시를 비운 전체 build를 다시 실행해 성공을 확인했다.
 
 ## Decision Log
 
@@ -179,8 +184,22 @@ tag로 기록한다.
 
 ## Outcomes & Retrospective
 
-진행 중이다.
+- 다섯 리뷰 지적은 모두 재현 가능한 결함으로 확인했고 각각 보안, 등록 복구, startup stale cutoff,
+  deactivation 멱등 수렴, W2/D1 lock ordering 수정으로 닫았다.
+- 과길이 `authKey` marker는 400 response body에 나타나지 않으며 validation detail은 field와 closed reason만
+  반환한다.
+- lookup 없는 registration Unknown과 stale startup claim은 추가 Provider 호출 없이 `MANUAL_REVIEW`와
+  delayed 202로 종결된다. fresh claim은 startup recovery 중에도 보존되고 원래 claim이 결과를 저장한다.
+- deactivation mutation은 PaymentMethod→work 잠금 순서를 공유한다. W2가 Provider response보다 먼저
+  완료하거나 D1의 미커밋 insert와 경쟁해도 work와 최초 요청은 exact stored 204로 수렴한다.
+- 집중 결제수단 회귀 테스트, OpenAPI parity, Provider safety, Modulith 구조 검증이 통과했다. 캐시를 비운
+  `./gradlew clean build`는 7분 44초에 608 tests, 0 failures, 0 errors, 1 skipped로 통과했다.
+- `scripts/verify-docs.sh`는 31 paths/34 operations, 88 schemas, 32 business policies, 79 ADRs,
+  167 Markdown files, 31 ExecPlans를 검증했고 `git diff --check`도 통과했다.
+- 실제 Toss sandbox/live Provider 호출과 운영 부하 측정은 이 remediation 범위가 아니어서 실행하지 않았다.
+- 수정 커밋을 PR #48 브랜치에 push했고 대상 review thread 다섯 개를 모두 resolved로 확인했다.
 
 ## Revision Notes
 
 - 2026-08-10: PR #48 리뷰 5건의 재현 근거와 code-only remediation 계획 작성.
+- 2026-08-10: 회귀 테스트, 구현, 전체 검증, 원격 review thread resolution 결과를 기록하고 완료 처리.
