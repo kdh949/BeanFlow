@@ -115,6 +115,32 @@ internal class PaymentMethodControllerIntegrationTest(
     }
 
     @Test
+    fun `registration validation never reflects an oversized authorization credential`() {
+        val customerId = UUID.randomUUID()
+        val marker = "AUTH_KEY_MARKER_MUST_NOT_BE_REFLECTED"
+        val oversizedAuthKey = marker + "x".repeat(300)
+
+        mockMvc
+            .perform(
+                post("/api/v1/payment-methods")
+                    .header("Idempotency-Key", "oversized-auth-key")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"authKey":"$oversizedAuthKey","displayAlias":"Card"}""")
+                    .with(customerJwt(customerId)),
+            ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Request validation failed"))
+            .andExpect(jsonPath("$.details[0].field").value("authKey"))
+            .andExpect(jsonPath("$.details[0].reason").value("INVALID_VALUE"))
+            .andExpect(content().string(not(containsString(marker))))
+            .andExpect(content().string(not(containsString("rejected value"))))
+        org.assertj.core.api.Assertions
+            .assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM payment_method_registration", Long::class.java),
+            ).isZero()
+    }
+
+    @Test
     fun `role and ownership checks return stable authentication authorization and resource codes`() {
         val owner = UUID.randomUUID()
         val other = UUID.randomUUID()

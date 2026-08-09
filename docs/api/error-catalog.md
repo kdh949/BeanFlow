@@ -2,7 +2,7 @@
 
 | Code | HTTP | Retryable | Meaning |
 |---|---:|---:|---|
-| INVALID_REQUEST | 400 | No | 요청 형식 또는 필드 검증 실패. malformed/expired/scope-mismatched cursor와 audited policy read의 invalid access reason을 포함 |
+| INVALID_REQUEST | 400 | No | 요청 형식 또는 필드 검증 실패. malformed/expired/scope-mismatched cursor와 audited policy read의 invalid access reason을 포함. framework validation detail은 선택적 field와 `INVALID_VALUE`, `MISSING_VALUE`, `INVALID_FORMAT`, `MALFORMED_REQUEST` 중 하나만 반환하며 rejected value와 exception message를 반환하지 않음 |
 | ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속 또는 active explicit operator grant 불충족 |
 | RESOURCE_NOT_FOUND | 404 | No | 접근 가능한 리소스 없음 |
 | ORDER_STATE_CONFLICT | 409 | No | 현재 상태에서 명령 불가 |

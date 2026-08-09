@@ -51,9 +51,40 @@ internal class ApiExceptionHandler(
                 code = FailureCode.INVALID_REQUEST.name,
                 message = "Request validation failed",
                 correlationId = correlationIdSource.currentOrCreate(),
-                details = listOf(ErrorDetail(reason = failure.message ?: "Invalid request")),
+                details = safeValidationDetails(failure),
             ),
         )
+
+    private fun safeValidationDetails(failure: Exception): List<ErrorDetail> {
+        val details =
+            when (failure) {
+                is MethodArgumentNotValidException ->
+                    failure.bindingResult.fieldErrors.map { ErrorDetail(field = it.field, reason = "INVALID_VALUE") }
+
+                is ConstraintViolationException ->
+                    failure.constraintViolations.map {
+                        ErrorDetail(field = it.propertyPath.lastOrNull()?.name, reason = "INVALID_VALUE")
+                    }
+
+                is MissingRequestHeaderException ->
+                    listOf(ErrorDetail(field = failure.headerName, reason = "MISSING_VALUE"))
+
+                is MethodArgumentTypeMismatchException ->
+                    listOf(ErrorDetail(field = failure.name, reason = "INVALID_FORMAT"))
+
+                is HandlerMethodValidationException ->
+                    failure.parameterValidationResults.map {
+                        ErrorDetail(field = it.methodParameter.parameterName, reason = "INVALID_VALUE")
+                    }
+
+                is ConversionFailedException -> listOf(ErrorDetail(reason = "INVALID_FORMAT"))
+                is HttpMessageNotReadableException -> listOf(ErrorDetail(reason = "MALFORMED_REQUEST"))
+                else -> listOf(ErrorDetail(reason = "INVALID_VALUE"))
+            }
+        return details
+            .distinct()
+            .sortedWith(compareBy({ it.field ?: "" }, { it.reason }))
+    }
 
     @ExceptionHandler(DataAccessException::class)
     fun persistenceFailure(): ResponseEntity<ErrorResponse> =
