@@ -1,0 +1,27 @@
+import { describe, expect, it, vi } from "vitest";
+import { ApiRequestError, idempotencyKey, unwrap } from "./client";
+
+describe("API client helpers", () => {
+  it("returns successful generated-client data", () => {
+    const response = new Response(null, { status: 200 });
+    expect(unwrap({ data: { ok: true }, response })).toEqual({ ok: true });
+  });
+
+  it("preserves the server correlation ID on an error", () => {
+    const response = new Response(null, { status: 409 });
+    try {
+      unwrap({ error: { code: "IDEMPOTENCY_KEY_REUSED", message: "요청 키가 재사용되었습니다.", correlationId: "corr-42" }, response });
+      expect.fail("unwrap should throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiRequestError);
+      expect(error).toMatchObject({ status: 409, code: "IDEMPOTENCY_KEY_REUSED", correlationId: "corr-42" });
+    }
+  });
+
+  it("keeps one idempotency key per browser session and command scope", () => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
+    expect(idempotencyKey("payment.order-1")).toBe("00000000-0000-4000-8000-000000000001");
+    expect(idempotencyKey("payment.order-1")).toBe("00000000-0000-4000-8000-000000000001");
+    expect(idempotencyKey("payment.order-2")).toBe("00000000-0000-4000-8000-000000000002");
+  });
+});
