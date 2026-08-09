@@ -41,7 +41,7 @@ internal class OrderSnapshotAssembler(
                     line.options
                         .map { it.optionId }
                         .distinct()
-                        .sorted(),
+                        .sortedBy { it.toString() },
                 sellableRequirementsJson = objectMapper.writeValueAsString(line.sellableUnitRequirements),
                 unitPriceKrw = line.unitPriceKrw,
                 quantity = line.quantity,

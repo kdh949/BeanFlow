@@ -24,6 +24,8 @@ internal sealed interface IdempotencyRegistration {
     ) : IdempotencyRegistration
 
     data object InProgress : IdempotencyRegistration
+
+    data object ManualReviewRequired : IdempotencyRegistration
 }
 
 internal enum class OrderCreationOperation(
@@ -97,8 +99,12 @@ internal class OrderIdempotencyService(
                 )
             }
 
-            IdempotencyStatus.PROCESSING, IdempotencyStatus.MANUAL_REVIEW -> {
+            IdempotencyStatus.PROCESSING -> {
                 IdempotencyRegistration.InProgress
+            }
+
+            IdempotencyStatus.MANUAL_REVIEW -> {
+                IdempotencyRegistration.ManualReviewRequired
             }
         }
     }

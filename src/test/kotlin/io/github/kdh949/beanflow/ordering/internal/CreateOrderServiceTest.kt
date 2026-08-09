@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -192,6 +194,38 @@ internal class CreateOrderServiceTest
             assertThat(conflict.body).contains("\"code\":\"IDEMPOTENCY_KEY_REUSED\"")
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isEqualTo(1)
+        }
+
+        @Test
+        fun `manual review is distinct from processing for direct order creation`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val command = fixture.command()
+            val key = "direct-manual-review"
+            jdbcTemplate.update(
+                """
+                INSERT INTO ordering_idempotency_record (
+                    id, actor_id, operation, idempotency_key, payload_hash, status,
+                    intended_order_id, started_at, manual_review_reason,
+                    manual_review_started_at, intended_order_exists
+                ) VALUES (?, ?, 'CREATE_ORDER', ?, ?, 'MANUAL_REVIEW', ?, ?,
+                    'ORDER_NOT_FOUND', ?, false)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                fixture.customerId,
+                key,
+                CanonicalOrderPayload.hash(command),
+                UUID.randomUUID(),
+                Timestamp.from(Instant.parse("2026-08-09T00:00:00Z")),
+                Timestamp.from(Instant.parse("2026-08-09T00:05:00Z")),
+            )
+
+            val response = createOrderUseCase.create(key, command)
+
+            assertThat(response.status).isEqualTo(409)
+            assertThat(response.body).contains("\"code\":\"IDEMPOTENCY_MANUAL_REVIEW_REQUIRED\"")
+            assertThat(response.retryAfterSeconds).isNull()
+            assertNoOrderOrReservation()
         }
 
         private fun assertNoOrderOrReservation() {

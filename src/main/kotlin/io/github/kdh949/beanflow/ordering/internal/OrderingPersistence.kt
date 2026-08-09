@@ -310,7 +310,7 @@ internal class OrderLineEntity(
 
             OptionSelectionSnapshotState.SNAPSHOTTED -> {
                 val snapshot = requireNotNull(normalizedOptionIds) { "Snapshotted option selection requires option IDs" }
-                require(snapshot == snapshot.distinct().sorted()) {
+                require(snapshot == snapshot.distinct().sortedBy { it.toString() }) {
                     "Snapshotted option IDs must be sorted and unique"
                 }
             }
@@ -328,6 +328,12 @@ internal enum class IdempotencyStatus {
     COMPLETED,
     FAILED,
     MANUAL_REVIEW,
+}
+
+internal enum class IdempotencyManualReviewReason {
+    ORDER_FOUND,
+    ORDER_NOT_FOUND,
+    LEGACY_UNSPECIFIED,
 }
 
 @Entity
@@ -362,6 +368,13 @@ internal class IdempotencyRecordEntity(
     var completedAt: Instant? = null,
     @Column(name = "retention_expires_at")
     var retentionExpiresAt: Instant? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "manual_review_reason")
+    var manualReviewReason: IdempotencyManualReviewReason? = null,
+    @Column(name = "manual_review_started_at")
+    var manualReviewStartedAt: Instant? = null,
+    @Column(name = "intended_order_exists")
+    var intendedOrderExists: Boolean? = null,
     @Version
     var version: Long = 0,
 )

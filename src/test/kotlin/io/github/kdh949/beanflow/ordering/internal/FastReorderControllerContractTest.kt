@@ -181,6 +181,39 @@ internal class FastReorderControllerContractTest
                 ).isOne()
         }
 
+        @Test
+        fun `manual review returns a stable non retryable conflict`() {
+            val source = sourceOrder()
+            val key = "reorder-manual-review"
+            val command = source.command()
+            jdbcTemplate.update(
+                """
+                INSERT INTO ordering_idempotency_record (
+                    id, actor_id, operation, idempotency_key, payload_hash, status,
+                    intended_order_id, started_at, manual_review_reason,
+                    manual_review_started_at, intended_order_exists
+                ) VALUES (?, ?, 'REORDER_ORDER_V1', ?, ?, 'MANUAL_REVIEW', ?, ?,
+                    'ORDER_NOT_FOUND', ?, false)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                source.fixture.customerId,
+                key,
+                CanonicalReorderPayload.hash(command),
+                UUID.randomUUID(),
+                Timestamp.from(Instant.parse("2026-08-09T00:00:00Z")),
+                Timestamp.from(Instant.parse("2026-08-09T00:05:00Z")),
+            )
+
+            mockMvc
+                .perform(request(source, key))
+                .andExpect(status().isConflict)
+                .andExpect(header().doesNotExist("Retry-After"))
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_MANUAL_REVIEW_REQUIRED"))
+            org.assertj.core.api.Assertions
+                .assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order"))
+                .isOne()
+        }
+
         private fun sourceOrder(terminal: Boolean = true): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)

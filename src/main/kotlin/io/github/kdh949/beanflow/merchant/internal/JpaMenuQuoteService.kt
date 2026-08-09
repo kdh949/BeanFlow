@@ -49,23 +49,24 @@ internal class JpaMenuQuoteService(
             storeRepository.findById(storeId).orElse(null)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
+        val menuEntities = menuRepository.findAllById(requestedMenuIds)
+        val optionsByMenu = optionRepository.findAllByMenuIdIn(requestedMenuIds).groupBy(MenuOptionEntity::menuId)
+        val configurations = configurationRepository.findAllByMenuIdIn(requestedMenuIds)
+        val configurationsByMenu = configurations.groupBy(MenuConfigurationEntity::menuId)
+        val requirementsByConfiguration =
+            requirementRepository
+                .findAllByMenuConfigurationIdIn(configurations.map(MenuConfigurationEntity::id))
+                .groupBy(MenuConfigurationRequirementEntity::menuConfigurationId)
         val menus =
-            menuRepository.findAllById(requestedMenuIds).associate { menu ->
-                val options = optionRepository.findAllByMenuId(menu.id)
-                val configurations =
-                    configurationRepository.findAllByMenuId(menu.id).map { configuration ->
+            menuEntities.associate { menu ->
+                val configurationsForMenu =
+                    configurationsByMenu[menu.id].orEmpty().map { configuration ->
                         MenuConfigurationDefinition(
-                            optionIds =
-                                configuration.normalizedOptionKey
-                                    .takeIf(String::isNotBlank)
-                                    ?.split(",")
-                                    ?.map(UUID::fromString)
-                                    ?.toSet()
-                                    .orEmpty(),
+                            optionIds = parseNormalizedOptionKey(configuration.normalizedOptionKey),
                             available = configuration.available,
                             requirements =
-                                requirementRepository
-                                    .findAllByMenuConfigurationId(configuration.id)
+                                requirementsByConfiguration[configuration.id]
+                                    .orEmpty()
                                     .map {
                                         SellableUnitRequirement(it.sellableUnitId, it.quantityPerLineUnit)
                                     },
@@ -79,12 +80,31 @@ internal class JpaMenuQuoteService(
                         basePriceKrw = menu.basePriceKrw,
                         available = menu.available,
                         options =
-                            options.map {
+                            optionsByMenu[menu.id].orEmpty().map {
                                 MenuOptionDefinition(it.id, it.name, it.additionalPriceKrw, it.available)
                             },
-                        configurations = configurations,
+                        configurations = configurationsForMenu,
                     )
             }
         return StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled) to menus
     }
+
+    private fun parseNormalizedOptionKey(key: String): Set<UUID> {
+        if (key.isEmpty()) return emptySet()
+        val parsed =
+            try {
+                key.split(",").map(UUID::fromString)
+            } catch (_: IllegalArgumentException) {
+                corruptConfiguration()
+            }
+        val canonical = parsed.distinct().sortedBy(UUID::toString).joinToString(",")
+        if (canonical != key) corruptConfiguration()
+        return parsed.toSet()
+    }
+
+    private fun corruptConfiguration(): Nothing =
+        throw DomainFailure(
+            FailureCode.DEPENDENCY_UNAVAILABLE,
+            "Merchant menu configuration data is unavailable",
+        )
 }

@@ -29,6 +29,7 @@ internal data class OrderIdempotencyReconciliationResult(
 internal class OrderIdempotencyReconciliationService(
     private val records: IdempotencyRecordJpaRepository,
     private val orders: OrderJpaRepository,
+    private val clock: Clock,
 ) {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun reconcile(recordId: UUID): OrderIdempotencyReconciliationResult {
@@ -38,6 +39,14 @@ internal class OrderIdempotencyReconciliationService(
         }
         val orderExists = orders.existsById(record.intendedOrderId)
         record.status = IdempotencyStatus.MANUAL_REVIEW
+        record.manualReviewReason =
+            if (orderExists) {
+                IdempotencyManualReviewReason.ORDER_FOUND
+            } else {
+                IdempotencyManualReviewReason.ORDER_NOT_FOUND
+            }
+        record.manualReviewStartedAt = clock.instant()
+        record.intendedOrderExists = orderExists
         return OrderIdempotencyReconciliationResult(
             operation = record.operation,
             outcome =

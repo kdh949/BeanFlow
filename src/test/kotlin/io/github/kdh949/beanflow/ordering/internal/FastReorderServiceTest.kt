@@ -110,6 +110,53 @@ internal class FastReorderServiceTest
         }
 
         @Test
+        fun `malformed persisted configuration returns and exactly replays dependency unavailable`() {
+            val source = sourceOrder()
+            val orderBefore = count("ordering_order")
+            val pickupBefore = count("fulfillment_pickup_reservation")
+            val stockBefore = count("inventory_stock_reservation")
+            jdbcTemplate.execute(
+                "ALTER TABLE merchant_menu_configuration " +
+                    "DROP CONSTRAINT ck_merchant_menu_configuration_normalized_option_key",
+            )
+            try {
+                jdbcTemplate.update(
+                    "UPDATE merchant_menu_configuration SET normalized_option_key = 'not-a-uuid' WHERE menu_id = ?",
+                    source.fixture.menuId,
+                )
+
+                val first = reorderOrder.reorder("reorder-corrupt-config", source.command())
+                val replay = reorderOrder.reorder("reorder-corrupt-config", source.command())
+
+                assertThat(first.status).isEqualTo(503)
+                assertThat(first.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")
+                assertThat(replay.status).isEqualTo(first.status)
+                assertThat(replay.body).isEqualTo(first.body)
+                assertThat(replay.replay).isTrue()
+                assertThat(count("ordering_order")).isEqualTo(orderBefore)
+                assertThat(count("fulfillment_pickup_reservation")).isEqualTo(pickupBefore)
+                assertThat(count("inventory_stock_reservation")).isEqualTo(stockBefore)
+                assertThat(
+                    jdbcTemplate.queryForObject(
+                        "SELECT status FROM ordering_idempotency_record " +
+                            "WHERE operation = 'REORDER_ORDER_V1' AND idempotency_key = 'reorder-corrupt-config'",
+                        String::class.java,
+                    ),
+                ).isEqualTo("FAILED")
+            } finally {
+                jdbcTemplate.update(
+                    "UPDATE merchant_menu_configuration SET normalized_option_key = '' WHERE menu_id = ?",
+                    source.fixture.menuId,
+                )
+                jdbcTemplate.execute(
+                    "ALTER TABLE merchant_menu_configuration " +
+                        "ADD CONSTRAINT ck_merchant_menu_configuration_normalized_option_key " +
+                        "CHECK (beanflow_is_canonical_uuid_csv(normalized_option_key))",
+                )
+            }
+        }
+
+        @Test
         fun `different request with the same reorder key conflicts before owner work`() {
             val source = sourceOrder()
             val first = reorderOrder.reorder("reorder-reused-01", source.command())

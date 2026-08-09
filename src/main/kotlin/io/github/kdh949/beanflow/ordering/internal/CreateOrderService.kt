@@ -105,6 +105,16 @@ internal class CreateOrderService(
                 )
             }
 
+            IdempotencyRegistration.ManualReviewRequired -> {
+                return errorResponse(
+                    DomainFailure(
+                        FailureCode.IDEMPOTENCY_MANUAL_REVIEW_REQUIRED,
+                        "Automatic processing stopped and this request requires manual review",
+                    ),
+                    correlationId,
+                )
+            }
+
             is IdempotencyRegistration.Acquired -> {
                 try {
                     return orderCreationTransaction.create(
@@ -180,6 +190,7 @@ internal class CreateOrderService(
             when (code) {
                 FailureCode.IDEMPOTENCY_KEY_REUSED -> "key_reused"
                 FailureCode.IDEMPOTENCY_REQUEST_IN_PROGRESS -> "in_progress"
+                FailureCode.IDEMPOTENCY_MANUAL_REVIEW_REQUIRED -> "manual_review_required"
                 else -> null
             }
         idempotencyOutcome?.let {

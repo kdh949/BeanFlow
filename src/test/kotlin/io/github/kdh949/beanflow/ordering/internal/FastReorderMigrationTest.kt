@@ -86,7 +86,41 @@ internal class FastReorderMigrationTest {
             insertLine(orderId, "SNAPSHOTTED", "{}")
         }.isInstanceOf(DataIntegrityViolationException::class.java)
 
+        assertThatThrownBy {
+            insertLine(orderId, "SNAPSHOTTED", "[\"not-a-uuid\"]")
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertLine(orderId, "SNAPSHOTTED", "[1]")
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertLine(orderId, "SNAPSHOTTED", "[\"00000000-0000-0000-0000-00000000000A\"]")
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertLine(
+                orderId,
+                "SNAPSHOTTED",
+                "[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000001\"]",
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertLine(
+                orderId,
+                "SNAPSHOTTED",
+                "[\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000001\"]",
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+
         insertLine(orderId, "SNAPSHOTTED", "[]")
+        insertLine(
+            orderId,
+            "SNAPSHOTTED",
+            "[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\"]",
+        )
+        insertLine(
+            orderId,
+            "SNAPSHOTTED",
+            "[\"7fffffff-ffff-ffff-ffff-ffffffffffff\",\"80000000-0000-0000-0000-000000000000\"]",
+        )
 
         assertThatThrownBy {
             insertTerminalIdempotency(retentionExpiresAt = COMPLETED_AT.plus(Duration.ofDays(89)))
@@ -116,6 +150,42 @@ internal class FastReorderMigrationTest {
         assertThatThrownBy { migrateCurrent() }
             .isInstanceOf(FlywayException::class.java)
             .hasStackTraceContaining("terminal row without completed_at")
+    }
+
+    @Test
+    fun `V36 rejects malformed duplicate and unsorted merchant configuration keys`() {
+        migrateCurrent()
+        val storeId = UUID.randomUUID()
+        val menuId = UUID.randomUUID()
+        jdbcTemplate.update(
+            "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
+            storeId,
+        )
+        jdbcTemplate.update(
+            "INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available) " +
+                "VALUES (?, ?, 'Menu', 1000, true)",
+            menuId,
+            storeId,
+        )
+
+        insertConfiguration(menuId, "")
+        insertConfiguration(menuId, "00000000-0000-0000-0000-000000000001")
+        assertThatThrownBy { insertConfiguration(menuId, "not-a-uuid") }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy { insertConfiguration(menuId, "00000000-0000-0000-0000-00000000000A") }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertConfiguration(
+                menuId,
+                "00000000-0000-0000-0000-000000000001,00000000-0000-0000-0000-000000000001",
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertConfiguration(
+                menuId,
+                "00000000-0000-0000-0000-000000000002,00000000-0000-0000-0000-000000000001",
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
     private fun insertSyntheticOrder(): UUID {
@@ -223,6 +293,19 @@ internal class FastReorderMigrationTest {
             )
         }
         return id
+    }
+
+    private fun insertConfiguration(
+        menuId: UUID,
+        normalizedOptionKey: String,
+    ) {
+        jdbcTemplate.update(
+            "INSERT INTO merchant_menu_configuration (id, menu_id, normalized_option_key, available) " +
+                "VALUES (?, ?, ?, true)",
+            UUID.randomUUID(),
+            menuId,
+            normalizedOptionKey,
+        )
     }
 
     private fun migrateCurrent() {

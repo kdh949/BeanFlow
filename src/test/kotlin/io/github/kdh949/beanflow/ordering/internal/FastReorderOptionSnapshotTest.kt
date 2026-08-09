@@ -13,6 +13,15 @@ internal class FastReorderOptionSnapshotTest {
     fun `snapshotted option IDs accept verified empty and sorted unique selections`() {
         assertThatCode { line(OptionSelectionSnapshotState.SNAPSHOTTED, emptyList()) }
             .doesNotThrowAnyException()
+        assertThatCode {
+            line(
+                OptionSelectionSnapshotState.SNAPSHOTTED,
+                listOf(
+                    UUID.fromString("7fffffff-ffff-ffff-ffff-ffffffffffff"),
+                    UUID.fromString("80000000-0000-0000-0000-000000000000"),
+                ),
+            )
+        }.doesNotThrowAnyException()
         assertThatCode { line(OptionSelectionSnapshotState.SNAPSHOTTED, listOf(first, second)) }
             .doesNotThrowAnyException()
     }
