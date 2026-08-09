@@ -47,6 +47,10 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
   `now >= reservationExpiresAt`이면 `PickupReservation`을 포함한 자원을 확정하지 않는다.
 - 이 경계 뒤에 확인된 Provider approval과 `UNKNOWN` payment lookup approval은 기존 late-approval
   경로로 들어가며, `EXPIRED` Order를 `PAID`로 되살리거나 슬롯 counter를 늘리지 않는다.
+- effective lease는 저장 정밀도인 microsecond로 절사한 값으로 발급한다. `timestamptz`가 담을 수
+  없는 nanosecond를 그대로 돌려주면 같은 예약을 replay했을 때 최초 응답과 다른 deadline이 나오고,
+  네 자원이 공유하는 값이 응답과 저장 사이에서 갈라진다. 절사는 deadline을 1 microsecond 미만
+  앞당기므로 lease를 늘리지 않는다.
 
 이는 새 grace period나 slot lead-time을 도입하지 않는다. 슬롯 시작 시각은 이미 BR-05와 ADR-076이
 소유한 준비 가능 경계이고, 더 이른 lease를 공통 deadline으로 쓰는 것이 네 예약 자원의 일관성을

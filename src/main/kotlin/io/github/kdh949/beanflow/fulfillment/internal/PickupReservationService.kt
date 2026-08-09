@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
@@ -57,7 +58,13 @@ internal class PickupReservationService(
         if (!slot.startsAt.isAfter(now)) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup slot has already started")
         }
-        val expiresAt = minOf(command.expiresAt, slot.startsAt)
+        // The deadline is minted at the precision the store can hold. `timestamptz` keeps
+        // microseconds, so a finer value would come back rounded and a replay of the same
+        // reservation would answer with a different grant than the first call did. Only the
+        // requested lease can be finer — `slot.startsAt` was read from the store and is already
+        // aligned — and truncating moves the deadline earlier by under a microsecond, so it never
+        // extends a lease and never crosses the slot boundary.
+        val expiresAt = minOf(command.expiresAt, slot.startsAt).truncatedTo(ChronoUnit.MICROS)
         if (!expiresAt.isAfter(now)) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup reservation lease has already expired")
         }

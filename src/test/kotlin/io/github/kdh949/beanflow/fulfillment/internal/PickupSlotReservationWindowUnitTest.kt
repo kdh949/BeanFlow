@@ -14,6 +14,7 @@ import org.mockito.Mockito.`when`
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -44,8 +45,10 @@ internal class PickupSlotReservationWindowUnitTest {
     }
 
     @Test
-    fun `a slot starting one nanosecond later is accepted`() {
-        val slot = slotStartingAt(NOW.plusNanos(1))
+    fun `a slot starting one microsecond later is accepted`() {
+        // One microsecond is the smallest gap a stored slot can have: `starts_at` is a
+        // `timestamptz`, so a slot start is always microsecond-aligned when it is read back.
+        val slot = slotStartingAt(NOW.plus(1, ChronoUnit.MICROS))
         val service = serviceFor(slot)
 
         assertThat(service.reserve(command()).reservationId).isEqualTo(RESERVATION_ID)

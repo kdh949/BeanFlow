@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -168,7 +169,10 @@ internal class PickupReservationRepositoryTest
                     orderId = orderId,
                     storeId = storeId,
                     pickupSlotId = slotId,
-                    expiresAt = clock.instant().plus(Duration.ofMinutes(5)),
+                    // Sub-microsecond nanoseconds on purpose. `Clock.systemUTC()` produces them on
+                    // Linux but not on macOS, so a deadline taken straight from the clock would make
+                    // this assertion depend on the host rather than on the behaviour under test.
+                    expiresAt = clock.instant().plus(Duration.ofMinutes(5)).plusNanos(1),
                     sourceReference = "pickup-order-$orderId",
                 )
             val first = transactions.execute { operations.reserve(command) }
@@ -184,7 +188,10 @@ internal class PickupReservationRepositoryTest
             )
 
             val replay = transactions.execute { operations.reserve(command) }
+            // The replay reads the reservation back from PostgreSQL, so this only holds if the
+            // granted deadline was minted at the precision the store can hold.
             assertThat(replay).isEqualTo(first)
+            assertThat(first?.expiresAt).isEqualTo(first?.expiresAt?.truncatedTo(ChronoUnit.MICROS))
             transactions.executeWithoutResult {
                 assertThat(slotRepository.findById(slotId).orElseThrow().reservedCount).isEqualTo(1)
                 assertThat(reservationRepository.count()).isEqualTo(1)
