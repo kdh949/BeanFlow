@@ -18,6 +18,7 @@ internal class CreateOrderServiceTest @Autowired constructor(
 	private val createOrderUseCase: CreateOrderUseCase,
 	private val jdbcTemplate: JdbcTemplate,
 	private val meterRegistry: MeterRegistry,
+	private val orderCreationRetention: OrderCreationIdempotencyRetentionService,
 ) {
 
 	@BeforeEach
@@ -36,6 +37,35 @@ internal class CreateOrderServiceTest @Autowired constructor(
 		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isEqualTo(1)
 		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isEqualTo(1)
 		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isEqualTo(1)
+		val optionSnapshot =
+			jdbcTemplate.queryForMap(
+				"SELECT option_selection_snapshot_state, normalized_option_ids_json::text " +
+					"FROM ordering_order_line",
+			)
+		assertThat(optionSnapshot["option_selection_snapshot_state"]).isEqualTo("SNAPSHOTTED")
+		assertThat(optionSnapshot["normalized_option_ids_json"]).isEqualTo("[]")
+	}
+
+	@Test
+	fun `terminal order creation idempotency is retained until the exact ninety day boundary`() {
+		val fixture = OrderCreationFixture()
+		OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+
+		createOrderUseCase.create("retention-key-01", fixture.command())
+		val retentionExpiresAt =
+			requireNotNull(
+				jdbcTemplate.queryForObject(
+					"SELECT retention_expires_at FROM ordering_idempotency_record",
+					java.time.Instant::class.java,
+				),
+			)
+
+		// PostgreSQL timestamptz stores microseconds, so the representable instant before the boundary is -1µs.
+		assertThat(orderCreationRetention.purgeDue(retentionExpiresAt.minusNanos(1_000), 100).deletedCount).isZero()
+		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_idempotency_record")).isOne()
+		assertThat(orderCreationRetention.purgeDue(retentionExpiresAt, 100).deletedCount).isOne()
+		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_idempotency_record")).isZero()
+		assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isOne()
 	}
 
 	@Test

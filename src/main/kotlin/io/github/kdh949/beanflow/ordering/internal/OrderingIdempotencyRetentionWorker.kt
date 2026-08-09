@@ -53,8 +53,26 @@ internal class CancellationCommandIdempotencyRetentionService(
     }
 }
 
+@Service
+internal class OrderCreationIdempotencyRetentionService(
+    private val records: IdempotencyRecordJpaRepository,
+) {
+    @Transactional
+    fun purgeDue(
+        now: Instant,
+        chunkSize: Int,
+    ): OrderingIdempotencyPurgeResult {
+        require(chunkSize > 0)
+        val ids = records.findDueIds(now, PageRequest.of(0, chunkSize))
+        val oldestDueAt = records.findAllById(ids).mapNotNull(IdempotencyRecordEntity::retentionExpiresAt).minOrNull()
+        if (ids.isNotEmpty()) records.deleteAllByIdInBatch(ids)
+        return OrderingIdempotencyPurgeResult(ids.size, oldestDueAt, records.countByRetentionExpiresAtLessThanEqual(now))
+    }
+}
+
 @Component
 internal class OrderingIdempotencyRetentionWorker(
+    private val orderCreationRecords: OrderCreationIdempotencyRetentionService,
     private val storeRecords: StoreCommandIdempotencyRetentionService,
     private val cancellationRecords: CancellationCommandIdempotencyRetentionService,
     private val clock: Clock,
@@ -63,10 +81,16 @@ internal class OrderingIdempotencyRetentionWorker(
     private val chunkSize: Int,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
+    private val orderCreationBacklog = AtomicLong()
     private val storeBacklog = AtomicLong()
     private val cancellationBacklog = AtomicLong()
 
     init {
+        meterRegistry.gauge(
+            "beanflow.ordering.idempotency.retention.backlog",
+            listOf(io.micrometer.core.instrument.Tag.of("table", TABLE_ORDER_CREATION)),
+            orderCreationBacklog,
+        )
         meterRegistry.gauge(
             "beanflow.ordering.idempotency.retention.backlog",
             listOf(
@@ -95,9 +119,10 @@ internal class OrderingIdempotencyRetentionWorker(
 
     fun runOnce(): Int {
         val now = clock.instant()
+        val orderCreationDeleted = purge(TABLE_ORDER_CREATION, now) { orderCreationRecords.purgeDue(now, chunkSize) }
         val storeDeleted = purge(TABLE_STORE, now) { storeRecords.purgeDue(now, chunkSize) }
         val cancellationDeleted = purge(TABLE_CANCELLATION, now) { cancellationRecords.purgeDue(now, chunkSize) }
-        return storeDeleted + cancellationDeleted
+        return orderCreationDeleted + storeDeleted + cancellationDeleted
     }
 
     private fun purge(
@@ -135,9 +160,15 @@ internal class OrderingIdempotencyRetentionWorker(
             0
         }
 
-    private fun backlog(table: String): AtomicLong = if (table == TABLE_STORE) storeBacklog else cancellationBacklog
+    private fun backlog(table: String): AtomicLong =
+        when (table) {
+            TABLE_ORDER_CREATION -> orderCreationBacklog
+            TABLE_STORE -> storeBacklog
+            else -> cancellationBacklog
+        }
 
     private companion object {
+        const val TABLE_ORDER_CREATION = "order_creation"
         const val TABLE_STORE = "store_command"
         const val TABLE_CANCELLATION = "cancellation_command"
     }

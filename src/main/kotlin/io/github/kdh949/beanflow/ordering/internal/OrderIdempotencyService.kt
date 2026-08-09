@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.sql.Timestamp
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 internal sealed interface IdempotencyRegistration {
@@ -97,7 +98,9 @@ internal class OrderIdempotencyService(
 		record.responseStatus = response.status
 		record.responseBody = response.body
 		record.responseVersion = RESPONSE_VERSION
-		record.completedAt = clock.instant()
+		val completedAt = clock.instant()
+		record.completedAt = completedAt
+		record.retentionExpiresAt = completedAt.plus(TERMINAL_RETENTION)
 	}
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -109,11 +112,14 @@ internal class OrderIdempotencyService(
 		record.responseStatus = response.status
 		record.responseBody = response.body
 		record.responseVersion = RESPONSE_VERSION
-		record.completedAt = clock.instant()
+		val completedAt = clock.instant()
+		record.completedAt = completedAt
+		record.retentionExpiresAt = completedAt.plus(TERMINAL_RETENTION)
 	}
 
 	private companion object {
 		const val OPERATION = "CREATE_ORDER"
 		const val RESPONSE_VERSION = 1
+		val TERMINAL_RETENTION: Duration = Duration.ofDays(90)
 	}
 }

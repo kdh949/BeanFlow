@@ -85,6 +85,8 @@ internal class OrderPointAccrualSnapshotServiceTest
                         UUID.randomUUID(),
                         "Typed snapshot menu",
                         "[]",
+                        OptionSelectionSnapshotState.SNAPSHOTTED,
+                        emptyList(),
                         "[]",
                         100,
                         2,

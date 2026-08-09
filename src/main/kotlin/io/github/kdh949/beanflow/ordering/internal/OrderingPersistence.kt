@@ -13,6 +13,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
@@ -277,6 +279,12 @@ internal class OrderLineEntity(
     val menuName: String,
     @Column(name = "option_names_json", nullable = false, columnDefinition = "text")
     val optionNamesJson: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "option_selection_snapshot_state", nullable = false, length = 32)
+    val optionSelectionSnapshotState: OptionSelectionSnapshotState,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "normalized_option_ids_json", columnDefinition = "jsonb")
+    val normalizedOptionIds: List<UUID>?,
     @Column(name = "sellable_requirements_json", nullable = false, columnDefinition = "text")
     val sellableRequirementsJson: String,
     @Column(name = "unit_price_krw", nullable = false)
@@ -291,7 +299,28 @@ internal class OrderLineEntity(
     val pointsAppliedKrw: Long,
     @Column(name = "cash_payable_krw", nullable = false)
     val cashPayableKrw: Long,
-)
+) {
+    init {
+        when (optionSelectionSnapshotState) {
+            OptionSelectionSnapshotState.LEGACY_UNAVAILABLE ->
+                require(normalizedOptionIds == null) {
+                    "Legacy option selection must not contain inferred option IDs"
+                }
+
+            OptionSelectionSnapshotState.SNAPSHOTTED -> {
+                val snapshot = requireNotNull(normalizedOptionIds) { "Snapshotted option selection requires option IDs" }
+                require(snapshot == snapshot.distinct().sorted()) {
+                    "Snapshotted option IDs must be sorted and unique"
+                }
+            }
+        }
+    }
+}
+
+internal enum class OptionSelectionSnapshotState {
+    LEGACY_UNAVAILABLE,
+    SNAPSHOTTED,
+}
 
 internal enum class IdempotencyStatus {
     PROCESSING,
@@ -330,6 +359,8 @@ internal class IdempotencyRecordEntity(
     val startedAt: Instant,
     @Column(name = "completed_at")
     var completedAt: Instant? = null,
+    @Column(name = "retention_expires_at")
+    var retentionExpiresAt: Instant? = null,
     @Version
     var version: Long = 0,
 )
@@ -422,6 +453,17 @@ internal interface IdempotencyRecordJpaRepository : JpaRepository<IdempotencyRec
         status: IdempotencyStatus,
         startedAt: Instant,
     ): Long
+
+    @Query(
+        "select record.id from IdempotencyRecordEntity record " +
+            "where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",
+    )
+    fun findDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    fun countByRetentionExpiresAtLessThanEqual(now: Instant): Long
 }
 
 internal interface StoreCommandIdempotencyJpaRepository : JpaRepository<StoreCommandIdempotencyEntity, UUID> {

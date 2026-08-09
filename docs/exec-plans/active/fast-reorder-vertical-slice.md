@@ -615,7 +615,10 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 - [x] 2026-08-09: error catalog, authorization matrix, architecture/capability/index와 이 plan 작성.
 - [x] 2026-08-09: Milestone 0 완료. latest main `c7370a8`, clean worktree, completed direct dependency,
   target/runtime drift와 Flyway `V35`를 재확인하고 단독 migration-writer lease로 `V36`을 선택.
-- [ ] Milestone 1: schema와 immutable source identity.
+- [x] 2026-08-09: Milestone 1 완료. `V36__add_fast_reorder_snapshots_and_idempotency_retention.sql`,
+  immutable option snapshot state/JSON, terminal 90일 retention과 독립 purge 경로를 구현하고
+  `*FastReorderMigrationTest`, `*FastReorderOptionSnapshotTest`, `*CreateOrderServiceTest`,
+  `*OrderingIdempotencyRetentionWorkerTest` 18개 테스트 통과.
 - [ ] Milestone 2: shared creation core와 direct-create 회귀 보호.
 - [ ] Milestone 3: source/current item revalidation.
 - [ ] Milestone 4: API, price response와 idempotency.
@@ -640,6 +643,9 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 - 2026-08-09: migration inventory는 main의 V35가 최신이다. detached 과거 discovery worktree의
   V33/V34 변경은 main의 현재 V33~V35와 후속 commit에 의해 대체된 잔여물이라 건드리지 않았고,
   현재 branch를 유일한 latest-main migration writer로 기록했다.
+- 2026-08-09: PostgreSQL `timestamptz`의 저장 정밀도는 마이크로초라 terminal retention의 DB
+  직전 경계는 `-1ns`가 같은 값으로 반올림됐다. 애플리케이션 정책은 정확한 90일 duration을 유지하고,
+  repository 경계 검증은 저장 가능한 직전 값 `-1µs`와 exact boundary를 사용했다.
 
 ## Decision Log
 
@@ -678,3 +684,6 @@ plan을 completed로 이동하지 않는다.
   failure semantics를 닫고 최초 implementation-ready plan 작성.
 - 2026-08-09: 구현 baseline을 latest main `c7370a8`로 갱신하고 V36 migration-writer lease, stale
   detached worktree 비간섭과 pickup-start effective lease drift 정정 근거를 기록.
+- 2026-08-09: Milestone 1 완료. pre-V36 fixture migration, corruption fail-closed, legacy/verified-empty
+  option provenance, 새 direct-create snapshot write와 terminal idempotency exact 90-day purge를
+  PostgreSQL 및 domain test로 검증.
