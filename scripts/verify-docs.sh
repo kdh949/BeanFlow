@@ -658,7 +658,11 @@ for _, name, status in index_entries:
         )
         sys.exit(1)
 
-markdown_files = sorted(root.rglob('*.md'))
+markdown_files = sorted(
+    path
+    for path in root.rglob('*.md')
+    if 'node_modules' not in path.relative_to(root).parts
+)
 link_pattern = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
 broken_links = []
 for path in markdown_files:
