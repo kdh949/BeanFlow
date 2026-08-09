@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BeanFlow API — Runtime Contract
-  version: 0.2.0
+  version: 0.3.0
   x-beanflow-contract-status: runtime
   x-beanflow-contract-date: 2026-08-09
   description: |
@@ -17,6 +17,7 @@ tags:
   - name: Discovery
   - name: Ordering
   - name: Payment
+  - name: Payment Methods
   - name: Store Orders
   - name: Operations
   - name: Loyalty
@@ -168,6 +169,12 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/UnprocessableEntity"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /payment-methods:
+    $ref: "./beanflow-v1.yaml#/paths/~1payment-methods"
+  /payment-methods/{paymentMethodId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1payment-methods~1{paymentMethodId}"
+  /payment-methods/{paymentMethodId}/default:
+    $ref: "./beanflow-v1.yaml#/paths/~1payment-methods~1{paymentMethodId}~1default"
   /payments/{paymentId}/refunds:
     post:
       tags: [Payment]

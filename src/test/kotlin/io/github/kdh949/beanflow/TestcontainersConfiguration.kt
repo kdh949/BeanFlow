@@ -15,6 +15,7 @@ import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyV
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyVersionJpaRepository
 import io.github.kdh949.beanflow.payment.internal.PaymentGateway
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
+import io.github.kdh949.beanflow.payment.internal.ScriptedPaymentMethodLifecycleAdapter
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
@@ -51,6 +52,10 @@ class TestcontainersConfiguration {
 
     @Bean
     internal fun testPaymentGateway(): ScriptedTestPaymentGateway = ScriptedTestPaymentGateway()
+
+    @Bean
+    internal fun testPaymentMethodLifecycleAdapter(): ScriptedPaymentMethodLifecycleAdapter =
+        ScriptedPaymentMethodLifecycleAdapter()
 
     @Bean
     internal fun testNotificationProvider(): ScriptedTestNotificationProvider = ScriptedTestNotificationProvider()

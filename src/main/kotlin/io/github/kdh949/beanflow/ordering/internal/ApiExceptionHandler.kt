@@ -73,10 +73,13 @@ internal class ApiExceptionHandler(
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 
-            FailureCode.PAYMENT_DECLINED -> HttpStatus.UNPROCESSABLE_ENTITY
+            FailureCode.PAYMENT_DECLINED,
+            FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,
+            -> HttpStatus.UNPROCESSABLE_ENTITY
 
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
+            FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,
             -> HttpStatus.SERVICE_UNAVAILABLE
 
             else -> HttpStatus.CONFLICT

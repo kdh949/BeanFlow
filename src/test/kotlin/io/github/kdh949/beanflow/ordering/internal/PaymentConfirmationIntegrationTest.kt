@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.payment.api.PaymentReconciliationOperations
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
+import io.github.kdh949.beanflow.payment.internal.PaymentProviderRequestLoader
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
@@ -48,6 +49,7 @@ internal class PaymentConfirmationIntegrationTest
         private val reconciliationWorker: PaymentReconciliationWorker,
         private val reconciliationOperations: PaymentReconciliationOperations,
         private val gateway: ScriptedTestPaymentGateway,
+        private val providerRequestLoader: PaymentProviderRequestLoader,
         private val jdbcTemplate: JdbcTemplate,
         private val testClock: PickupSlotPaymentDeadlineTestClock,
     ) {
@@ -87,6 +89,21 @@ internal class PaymentConfirmationIntegrationTest
                 value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId),
             ).isEqualTo("APPROVED")
             assertThat(gateway.approvalCalls.get()).isEqualTo(1)
+            val paymentId = value<UUID>("SELECT id FROM payment_payment WHERE order_id = ?", orderId)
+            assertThat(
+                value<Long>("SELECT count(*) FROM payment_provider_request_snapshot WHERE payment_id = ?", paymentId),
+            ).isOne()
+            val snapshotToken =
+                value<String>(
+                    "SELECT token_reference FROM payment_provider_request_snapshot WHERE payment_id = ?",
+                    paymentId,
+                )
+            jdbcTemplate.update(
+                "UPDATE payment_method SET status = 'DEACTIVATED', token_reference = ? WHERE id = ?",
+                "changed-after-payment",
+                paymentMethodId,
+            )
+            assertThat(providerRequestLoader.loadLookup(paymentId).tokenReference).isEqualTo(snapshotToken)
 
             val replay =
                 confirmationService.confirm(
@@ -98,6 +115,32 @@ internal class PaymentConfirmationIntegrationTest
             assertThat(replay.status).isEqualTo(200)
             assertThat(replay.replay).isTrue()
             assertThat(gateway.approvalCalls.get()).isEqualTo(1)
+        }
+
+        @Test
+        fun `provider request loader fails closed when immutable snapshot is missing`() {
+            val customerId = UUID.randomUUID()
+            val methodId = insertPaymentMethod(customerId)
+            val paymentId = UUID.randomUUID()
+            jdbcTemplate.update(
+                """
+                INSERT INTO payment_payment (
+                    id, order_id, customer_id, payment_method_id, type, approval_state,
+                    requested_amount_krw, currency, source_reference, correlation_id,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 'EXTERNAL', 'APPROVING', 1000, 'KRW', ?, 'missing-snapshot', now(), now())
+                """.trimIndent(),
+                paymentId,
+                UUID.randomUUID(),
+                customerId,
+                methodId,
+                "missing-snapshot:$paymentId",
+            )
+
+            assertThatThrownBy { providerRequestLoader.load(paymentId) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+                }
         }
 
         @Test
@@ -468,7 +511,7 @@ internal class PaymentConfirmationIntegrationTest
         }
 
         @Test
-        fun `revoked payment method is rejected before Provider call`() {
+        fun `deactivated payment method is rejected before Provider call`() {
             val fixture = OrderCreationFixture()
             val orderId = pendingOrder(fixture, "payment-method-revoked-order")
             val paymentMethodId = insertPaymentMethod(fixture.customerId, "DEACTIVATED")
@@ -481,7 +524,7 @@ internal class PaymentConfirmationIntegrationTest
                     "payment-method-revoked-key",
                 )
             }.isInstanceOfSatisfying(DomainFailure::class.java) {
-                assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+                assertThat(it.code).isEqualTo(FailureCode.PAYMENT_METHOD_STATE_CONFLICT)
             }
             assertThat(gateway.approvalCalls.get()).isZero()
         }

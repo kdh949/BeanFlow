@@ -58,6 +58,8 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 - 공개 PaymentMethod는 ID, fixed provider, alias, brand, last4, default, 축약 상태와 시각만
   포함한다. token, provider customer reference, authKey/hash, claim, attempt와 raw Provider
   code/message는 응답하지 않는다.
+- 네 lifecycle operation은 Controller와 계약·인가 테스트가 존재하므로 target과
+  `openapi/beanflow-v1-runtime.yaml`에 모두 포함한다. 이 runtime 표시는 non-local 배포 증거가 아니다.
 
 ## Loyalty ledger projection
 

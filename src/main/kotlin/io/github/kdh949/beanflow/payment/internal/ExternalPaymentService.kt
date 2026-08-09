@@ -26,6 +26,7 @@ import java.util.UUID
 internal class ExternalPaymentService(
 	private val paymentRepository: PaymentJpaRepository,
 	private val paymentMethodRepository: PaymentMethodJpaRepository,
+	private val providerRequestSnapshots: PaymentProviderRequestSnapshotStore,
 	private val idempotencyRepository: PaymentIdempotencyJpaRepository,
 	private val reconciliationRepository: PaymentReconciliationJpaRepository,
 	private val jdbcTemplate: JdbcTemplate,
@@ -72,19 +73,19 @@ internal class ExternalPaymentService(
 			return existingPreparation(command)
 		}
 
-		val paymentMethod = paymentMethodRepository.findById(command.paymentMethodId).orElse(null)
+		val paymentMethod = paymentMethodRepository.findLockedById(command.paymentMethodId)
 			?: fail(FailureCode.RESOURCE_NOT_FOUND, "Payment method was not found")
 		if (paymentMethod.customerId != command.actorId) {
 			fail(FailureCode.ACCESS_DENIED, "Payment method belongs to another customer")
 		}
 		if (paymentMethod.status != PaymentMethodStatus.ACTIVE) {
-			fail(FailureCode.ORDER_STATE_CONFLICT, "Payment method is not active")
+			fail(FailureCode.PAYMENT_METHOD_STATE_CONFLICT, "Payment method is not active")
 		}
 		if (paymentRepository.findByOrderId(command.orderId) != null) {
 			fail(FailureCode.ORDER_STATE_CONFLICT, "Order already has a payment")
 		}
 
-		paymentRepository.save(
+		paymentRepository.saveAndFlush(
 			PaymentEntity(
 				id = paymentId,
 				orderId = command.orderId,
@@ -101,6 +102,16 @@ internal class ExternalPaymentService(
 				approvedAt = null,
 				createdAt = command.now,
 				updatedAt = command.now,
+			),
+		)
+		providerRequestSnapshots.create(
+			PaymentProviderRequestSnapshotEntity(
+				paymentId = paymentId,
+				paymentMethodId = paymentMethod.id,
+				provider = paymentMethod.provider,
+				tokenReference = paymentMethod.tokenReference,
+				providerCustomerReference = paymentMethod.providerCustomerReference,
+				createdAt = command.now,
 			),
 		)
 		reconciliationRepository.save(
@@ -331,7 +342,7 @@ internal class ExternalPaymentService(
 @Service
 internal class PaymentProviderRequestLoader(
 	private val paymentRepository: PaymentJpaRepository,
-	private val paymentMethodRepository: PaymentMethodJpaRepository,
+	private val snapshots: PaymentProviderRequestSnapshotStore,
 ) {
 	@Transactional(readOnly = true)
 	fun load(paymentId: UUID): GatewayApprovalRequest {
@@ -340,15 +351,12 @@ internal class PaymentProviderRequestLoader(
 		if (payment.approvalState != PaymentApprovalState.APPROVING) {
 			throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Payment is not awaiting Provider approval")
 		}
-		val method = paymentMethodRepository.findById(requireNotNull(payment.paymentMethodId)).orElse(null)
-			?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method is missing")
-		if (method.status != PaymentMethodStatus.ACTIVE) {
-			throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Payment method is not active")
-		}
+		val snapshot = snapshot(payment)
 		return GatewayApprovalRequest(
 			paymentId = payment.id,
-			provider = method.provider,
-			tokenReference = method.tokenReference,
+			provider = snapshot.provider,
+			tokenReference = snapshot.tokenReference,
+			providerCustomerReference = snapshot.providerCustomerReference,
 			amountKrw = payment.requestedAmountKrw,
 			currency = payment.currency,
 			providerIdempotencyKey = "payment:${payment.id}:approve",
@@ -359,16 +367,30 @@ internal class PaymentProviderRequestLoader(
 	fun loadLookup(paymentId: UUID): GatewayLookupRequest {
 		val payment = paymentRepository.findById(paymentId).orElse(null)
 			?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
-		val method = paymentMethodRepository.findById(requireNotNull(payment.paymentMethodId)).orElse(null)
-			?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method is missing")
+		val snapshot = snapshot(payment)
 		return GatewayLookupRequest(
 			paymentId = payment.id,
-			provider = method.provider,
-			tokenReference = method.tokenReference,
+			provider = snapshot.provider,
+			tokenReference = snapshot.tokenReference,
+			providerCustomerReference = snapshot.providerCustomerReference,
 			providerTransactionReference = payment.providerTransactionReference,
 			amountKrw = payment.requestedAmountKrw,
 			currency = payment.currency,
 		)
+	}
+
+	private fun snapshot(payment: PaymentEntity): PaymentProviderRequestSnapshotEntity {
+		val snapshot = snapshots.findByPaymentId(payment.id)
+			?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment provider request snapshot is missing")
+		if (
+			snapshot.paymentMethodId != payment.paymentMethodId ||
+			snapshot.provider.isBlank() ||
+			snapshot.tokenReference.isBlank() ||
+			(snapshot.provider == "TOSS_PAYMENTS" && snapshot.providerCustomerReference.isNullOrBlank())
+		) {
+			throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment provider request snapshot is invalid")
+		}
+		return snapshot
 	}
 }
 

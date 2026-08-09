@@ -333,9 +333,9 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
 ## Progress
 
 - [x] migration-writer lease 획득과 latest-main precheck
-- [ ] schema/Aggregate/Port/원장 — V37 schema와 persistence mapping 완료, Aggregate·Port 진행 중
-- [ ] 고객 API·signed cursor·인가
-- [ ] Payment request snapshot
+- [x] schema/Aggregate/Port/원장
+- [x] 고객 API·signed cursor·인가
+- [x] Payment request snapshot
 - [ ] provider-neutral inbox·deadline/retention worker·profile guards
 - [ ] required tests/build/docs validation
 - [ ] active→completed 이동과 successor metadata 갱신

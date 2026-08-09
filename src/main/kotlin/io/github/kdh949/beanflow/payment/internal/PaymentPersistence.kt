@@ -104,7 +104,111 @@ internal class PaymentMethodEntity(
     var updatedAt: Instant,
     @Version
     var version: Long = 0,
-)
+) {
+    fun markDefault(now: Instant) {
+        if (status != PaymentMethodStatus.ACTIVE) throw PaymentMethodStateConflict()
+        isDefault = true
+        updatedAt = now
+    }
+
+    fun clearDefault(now: Instant) {
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun requestDeactivation(now: Instant) {
+        if (status != PaymentMethodStatus.ACTIVE) throw PaymentMethodStateConflict()
+        status = PaymentMethodStatus.DEACTIVATION_REQUESTED
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun markDeactivationUnknown(now: Instant) {
+        if (status !in setOf(PaymentMethodStatus.DEACTIVATION_REQUESTED, PaymentMethodStatus.RECONCILING)) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATION_UNKNOWN
+        updatedAt = now
+    }
+
+    fun markReconciling(now: Instant) {
+        if (status != PaymentMethodStatus.DEACTIVATION_UNKNOWN) throw PaymentMethodStateConflict()
+        status = PaymentMethodStatus.RECONCILING
+        updatedAt = now
+    }
+
+    fun markManualReview(now: Instant) {
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.MANUAL_REVIEW
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun confirmDeactivated(now: Instant) {
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+                PaymentMethodStatus.MANUAL_REVIEW,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATED
+        isDefault = false
+        updatedAt = now
+    }
+
+    companion object {
+        private val PROVIDER_REFERENCE_PATTERN = Regex("^bf_[A-Za-z0-9_-]{43}${'$'}")
+        private val LAST_FOUR_PATTERN = Regex("^[0-9]{4}${'$'}")
+
+        fun issueToss(
+            id: UUID,
+            customerId: UUID,
+            tokenReference: String,
+            providerCustomerReference: String,
+            displayAlias: String,
+            cardBrand: String,
+            lastFour: String,
+            now: Instant,
+        ): PaymentMethodEntity {
+            require(tokenReference.isNotBlank() && tokenReference.length <= 200)
+            require(displayAlias.isNotBlank() && displayAlias.length <= 80 && displayAlias == displayAlias.trim())
+            require(displayAlias.none(Char::isISOControl))
+            require(cardBrand.isNotBlank() && cardBrand.length <= 40 && cardBrand == cardBrand.trim())
+            require(LAST_FOUR_PATTERN.matches(lastFour))
+            require(PROVIDER_REFERENCE_PATTERN.matches(providerCustomerReference))
+            return PaymentMethodEntity(
+                id = id,
+                customerId = customerId,
+                provider = "TOSS_PAYMENTS",
+                tokenReference = tokenReference,
+                providerCustomerReference = providerCustomerReference,
+                displayAlias = displayAlias,
+                cardBrand = cardBrand,
+                lastFour = lastFour,
+                isDefault = false,
+                status = PaymentMethodStatus.ACTIVE,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+    }
+}
+
+internal class PaymentMethodStateConflict : RuntimeException("Payment method state does not allow this transition")
 
 internal enum class PaymentIdempotencyStatus {
     PROCESSING,

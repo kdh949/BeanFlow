@@ -808,8 +808,15 @@ else:
     } & set(runtime_schemas):
         print('Runtime singleton policy schemas must remain absent after keyed policy implementation.', file=sys.stderr)
         sys.exit(1)
-    if any(path.startswith('/payment-methods') for path in runtime_spec.get('paths', {})):
-        print('Runtime OpenAPI must not expose PaymentMethod lifecycle before controller contract evidence.', file=sys.stderr)
+    runtime_payment_method_paths = {
+        path for path in runtime_spec.get('paths', {}) if path.startswith('/payment-methods')
+    }
+    if runtime_payment_method_paths != {
+        '/payment-methods',
+        '/payment-methods/{paymentMethodId}',
+        '/payment-methods/{paymentMethodId}/default',
+    }:
+        print('Runtime OpenAPI PaymentMethod lifecycle inventory is incomplete or excessive.', file=sys.stderr)
         sys.exit(1)
 
     required_paths = {
