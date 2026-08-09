@@ -970,9 +970,15 @@ internal class PartialRefundAllocationRepositoryTest
                 )
                 jdbcTemplate.update(
                     """
-                    INSERT INTO ordering_order_line VALUES
-                        (?, ?, 0, ?, 'line-1', '[]', '[]', 1000, 3, 3000, 1, 1000, 1999),
-                        (?, ?, 1, ?, 'line-2', '[]', '[]', 3500, 2, 7000, 1999, 2000, 3001)
+                    INSERT INTO ordering_order_line (
+                        id, order_id, line_sequence, menu_id, menu_name,
+                        option_names_json, sellable_requirements_json,
+                        unit_price_krw, quantity, gross_krw,
+                        coupon_discount_krw, points_applied_krw, cash_payable_krw,
+                        option_selection_snapshot_state, normalized_option_ids_json
+                    ) VALUES
+                        (?, ?, 0, ?, 'line-1', '[]', '[]', 1000, 3, 3000, 1, 1000, 1999, 'LEGACY_UNAVAILABLE', NULL),
+                        (?, ?, 1, ?, 'line-2', '[]', '[]', 3500, 2, 7000, 1999, 2000, 3001, 'LEGACY_UNAVAILABLE', NULL)
                     """.trimIndent(),
                     fixture.firstLineId,
                     fixture.orderId,
@@ -1249,8 +1255,14 @@ internal class PartialRefundAllocationRepositoryTest
                     lineIds.forEachIndexed { index, lineId ->
                         jdbcTemplate.update(
                             """
-                            INSERT INTO ordering_order_line VALUES
-                                (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0)
+                            INSERT INTO ordering_order_line (
+                                id, order_id, line_sequence, menu_id, menu_name,
+                                option_names_json, sellable_requirements_json,
+                                unit_price_krw, quantity, gross_krw,
+                                coupon_discount_krw, points_applied_krw, cash_payable_krw,
+                                option_selection_snapshot_state, normalized_option_ids_json
+                            ) VALUES
+                                (?, ?, ?, ?, ?, '[]', '[]', 1, 1, 1, 0, 1, 0, 'LEGACY_UNAVAILABLE', NULL)
                             """.trimIndent(),
                             lineId,
                             orderId,

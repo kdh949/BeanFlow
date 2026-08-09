@@ -150,7 +150,7 @@ internal class FastReorderService(
     ): StoredHttpResponse =
         try {
             idempotencyService.fail(recordId, response)
-            val code = objectMapper.readTree(response.body).path("code").asText("UNKNOWN")
+            val code = objectMapper.readTree(response.body).path("code").stringValue() ?: "UNKNOWN"
             meterRegistry.counter("beanflow.order.reorder.attempts", "outcome", code).increment()
             log(code, sourceLineCount, 0)
             response
