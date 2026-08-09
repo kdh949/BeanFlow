@@ -88,7 +88,10 @@ internal class OrderingIdempotencyRetentionWorker(
     init {
         meterRegistry.gauge(
             "beanflow.ordering.idempotency.retention.backlog",
-            listOf(io.micrometer.core.instrument.Tag.of("table", TABLE_ORDER_CREATION)),
+            listOf(
+                io.micrometer.core.instrument.Tag
+                    .of("table", TABLE_ORDER_CREATION),
+            ),
             orderCreationBacklog,
         )
         meterRegistry.gauge(

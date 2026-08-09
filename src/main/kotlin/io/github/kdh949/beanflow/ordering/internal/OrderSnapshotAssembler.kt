@@ -37,7 +37,11 @@ internal class OrderSnapshotAssembler(
                 menuName = line.menuName,
                 optionNamesJson = objectMapper.writeValueAsString(line.options.map { it.name }),
                 optionSelectionSnapshotState = OptionSelectionSnapshotState.SNAPSHOTTED,
-                normalizedOptionIds = line.options.map { it.optionId }.distinct().sorted(),
+                normalizedOptionIds =
+                    line.options
+                        .map { it.optionId }
+                        .distinct()
+                        .sorted(),
                 sellableRequirementsJson = objectMapper.writeValueAsString(line.sellableUnitRequirements),
                 unitPriceKrw = line.unitPriceKrw,
                 quantity = line.quantity,

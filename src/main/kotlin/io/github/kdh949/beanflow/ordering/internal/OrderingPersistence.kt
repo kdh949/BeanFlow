@@ -302,10 +302,11 @@ internal class OrderLineEntity(
 ) {
     init {
         when (optionSelectionSnapshotState) {
-            OptionSelectionSnapshotState.LEGACY_UNAVAILABLE ->
+            OptionSelectionSnapshotState.LEGACY_UNAVAILABLE -> {
                 require(normalizedOptionIds == null) {
                     "Legacy option selection must not contain inferred option IDs"
                 }
+            }
 
             OptionSelectionSnapshotState.SNAPSHOTTED -> {
                 val snapshot = requireNotNull(normalizedOptionIds) { "Snapshotted option selection requires option IDs" }

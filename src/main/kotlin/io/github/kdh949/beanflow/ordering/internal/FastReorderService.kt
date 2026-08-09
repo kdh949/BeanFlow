@@ -91,7 +91,7 @@ internal class FastReorderService(
                 registration.response
             }
 
-            IdempotencyRegistration.InProgress ->
+            IdempotencyRegistration.InProgress -> {
                 failure(
                     DomainFailure(
                         FailureCode.IDEMPOTENCY_REQUEST_IN_PROGRESS,
@@ -100,9 +100,11 @@ internal class FastReorderService(
                     ),
                     correlationId,
                 )
+            }
 
-            is IdempotencyRegistration.Acquired ->
+            is IdempotencyRegistration.Acquired -> {
                 executeAcquired(registration.recordId, registration.intendedOrderId, command, correlationId)
+            }
         }
     }
 
@@ -220,8 +222,11 @@ internal class FastReorderService(
     private fun statusOf(code: FailureCode): Int =
         when (code) {
             FailureCode.INVALID_REQUEST -> 400
+
             FailureCode.ACCESS_DENIED -> 403
+
             FailureCode.RESOURCE_NOT_FOUND -> 404
+
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
             -> 503

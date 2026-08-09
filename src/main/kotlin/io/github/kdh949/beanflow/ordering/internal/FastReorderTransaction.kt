@@ -81,9 +81,13 @@ internal class FastReorderTransaction(
             currentCandidates.zip(results).forEach { (candidate, result) ->
                 val line = candidate.first
                 when (result) {
-                    is CurrentMenuLineQuoteResult.Available -> availableQuotes[line.id] = result.quote
-                    is CurrentMenuLineQuoteResult.Unavailable ->
+                    is CurrentMenuLineQuoteResult.Available -> {
+                        availableQuotes[line.id] = result.quote
+                    }
+
+                    is CurrentMenuLineQuoteResult.Unavailable -> {
                         failures += result.failures.map { it.toDetail(line) }
+                    }
                 }
             }
         }

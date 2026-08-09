@@ -184,9 +184,7 @@ internal class FastReorderMigrationTest {
         )
     }
 
-    private fun insertTerminalIdempotency(
-        retentionExpiresAt: Instant? = null,
-    ): UUID {
+    private fun insertTerminalIdempotency(retentionExpiresAt: Instant? = null): UUID {
         val id = UUID.randomUUID()
         if (retentionExpiresAt == null) {
             jdbcTemplate.update(
