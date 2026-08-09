@@ -112,15 +112,40 @@ internal class FastReorderServiceTest @Autowired constructor(
         val source = sourceOrder()
         val first = reorderOrder.reorder("reorder-reused-01", source.command())
 
-        val conflict =
+        val pickupConflict =
             reorderOrder.reorder(
                 "reorder-reused-01",
                 source.command().copy(pickupSlotId = UUID.randomUUID()),
             )
+        val couponConflict =
+            reorderOrder.reorder(
+                "reorder-reused-01",
+                source.command().copy(couponIssuanceId = UUID.randomUUID()),
+            )
+        val pointsConflict =
+            reorderOrder.reorder(
+                "reorder-reused-01",
+                source.command().copy(pointsToUseKrw = 1),
+            )
+        val newOrderId =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM ordering_order WHERE id <> ?",
+                    UUID::class.java,
+                    source.orderId,
+                ),
+            )
+        val sourceConflict =
+            reorderOrder.reorder(
+                "reorder-reused-01",
+                source.command().copy(sourceOrderId = newOrderId),
+            )
 
         assertThat(first.status).isEqualTo(201)
-        assertThat(conflict.status).isEqualTo(409)
-        assertThat(conflict.body).contains("\"code\":\"IDEMPOTENCY_KEY_REUSED\"")
+        listOf(pickupConflict, couponConflict, pointsConflict, sourceConflict).forEach { conflict ->
+            assertThat(conflict.status).isEqualTo(409)
+            assertThat(conflict.body).contains("\"code\":\"IDEMPOTENCY_KEY_REUSED\"")
+        }
         assertThat(count("ordering_order")).isEqualTo(2)
     }
 
