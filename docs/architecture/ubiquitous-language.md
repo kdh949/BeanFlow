@@ -5,6 +5,7 @@
 | Order | 고객이 특정 매장과 픽업 슬롯에 대해 확정한 가격·항목 스냅샷과 상태 | Ordering |
 | Store Order | 별도 Aggregate가 아니라 매장 관점에서 조회·처리하는 Order의 API 표현 | Ordering |
 | OrderLine | 주문 당시 메뉴명, 옵션명, 단가, 수량과 혜택 배분을 보존하는 내부 Entity | Ordering |
+| Fast Reorder | 소유 고객의 terminal source Order에서 메뉴 ID·정규화 option ID·수량만 가져와 현재 조건을 재검증하고 새 Order를 즉시 생성하는 Ordering 명령. 별도 Aggregate나 draft가 아니다. | Ordering |
 | MenuConfiguration | 정규화한 메뉴·옵션 조합을 가격 snapshot 원천과 sellable unit별 필요 수량에 연결하는 Merchant 소유 구성 | Merchant |
 | Sellable Unit | Inventory가 수량을 소유하는 최소 재고 식별자. 메뉴·옵션 의미는 Merchant의 MenuConfiguration이 번역한다. | Inventory |
 | StoreDiscoveryProfile | Store와 1:1인 Merchant 소유 검색 profile. 검증된 공개 매장명과 `geography(Point,4326)` 위치를 가지며 Store 쓰기 Entity와 분리된다. | Merchant |

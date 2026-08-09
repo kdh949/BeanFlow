@@ -54,6 +54,43 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
   `PENDING_PAYMENT`, `PAID`, `ACCEPTED`, `PREPARING`, `READY`는 진행 중 주문의
   중복 생성을 피하기 위해 `409`로 거부한다. terminal source 허용은 과거 상태나
   종료 원인을 새 Order에 복사한다는 뜻이 아니다.
+- request는 required `pickupSlotId`, optional `couponIssuanceId`, required
+  non-negative `pointsToUseKrw`만 가진다. store와 lines는 source Order에서 얻고,
+  payment method는 받지 않는다.
+- 과거 메뉴·옵션 이름·가격, coupon·point allocation, PaymentMethod·Payment·Refund,
+  pickup slot·reservation, 적립·정산 snapshot, Order 상태·원인·deadline·timestamp를
+  새 주문 입력이나 snapshot으로 복사하지 않는다. 인증 customer와 source store identity,
+  정규화한 line 선택만 새 create command를 구성한다.
+- coupon과 points는 request에서 명시한 current selection만 적용한다. coupon 자동 선택,
+  과거 혜택 재사용과 payment 자동 승인은 없다. 외부 결제가 필요한 새 Order는 기존
+  `POST /orders/{orderId}/payment-confirmations`에서 고객이 자신의 active PaymentMethod를
+  별도로 명시한다. BR-11의 BENEFIT_ONLY local 승인 경로는 기존 생성 의미 그대로다.
+- Merchant는 모든 source line의 현재 메뉴·옵션·구성을 source line 순서로 검증한다.
+  하나라도 사용할 수 없으면 전체 `409 REORDER_ITEMS_UNAVAILABLE`와 line별 stable
+  reason을 반환하고 새 Order와 owner reservation을 만들지 않는다. stable reason은
+  `SOURCE_OPTION_SELECTION_UNAVAILABLE`, `MENU_REMOVED`, `MENU_NOT_AVAILABLE`,
+  `OPTION_REMOVED`, `OPTION_NOT_AVAILABLE`, `MENU_CONFIGURATION_NOT_AVAILABLE`다.
+- item failure는 source `lineSequence`, 그 안에서는 위 reason 순서와 option ID 순서로
+  결정적으로 정렬한다. menu 부재처럼 하위 option 검증이 불가능하면 그 line에는 가장
+  상위의 원인 하나만 남긴다. unavailable item 자동 삭제와 부분 재주문은 없다.
+- source Order 상태 부적합은 `409 REORDER_SOURCE_STATE_INVALID`다. 없는 source는
+  `404`, 다른 고객 소유 source는 기존 고객 Order 정책대로 `403`이다. 존재·소유권·상태는
+  Merchant와 reservation owner를 호출하기 전에 Ordering이 검증한다.
+- 빠른 재주문은 결과가 새 Aggregate 생성이므로 ADR-025의 사전등록 모델을 재사용한다.
+  source Order는 immutable 입력이지 새 Order 생성 경쟁을 직렬화하는 target root가
+  아니다. Tx I1은 `REORDER_ORDER_V1` scope와 intended new Order ID를 등록하고, Tx O는
+  source Order를 잠가 소유권·terminal 상태·option snapshot을 읽은 뒤 기존 원자적 주문
+  생성 workflow를 실행하며, Tx I2는 확정 실패 응답을 저장한다.
+- Tx O에서 source read, current Merchant quote, slot→sorted stock→coupon→points 예약,
+  새 Order·모든 immutable snapshot·Audit, 가격 비교와 최초 201 response를 하나의 local
+  transaction으로 commit한다. 재주문을 위한 별도 reservation transaction이나 source
+  read와 create 사이에 성공으로 간주하는 중간 상태를 만들지 않는다.
+- canonical payload는 property 순서를 고정한
+  `sourceOrderId + pickupSlotId + couponIssuanceId(null 포함) + pointsToUseKrw`다.
+  source line은 source Order ID가 가리키는 immutable snapshot이므로 payload에 복제하지
+  않는다. 같은 key·payload의 최초 201/4xx/503을 exact replay하고, `PROCESSING`은
+  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS + Retry-After`, 다른 source/request는
+  `409 IDEMPOTENCY_KEY_REUSED`다.
 
 ## Alternatives Considered
 
@@ -84,11 +121,16 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - target OpenAPI에 새 path와 operation이 추가되지만 구현 전까지 runtime OpenAPI에는
   추가하지 않는다.
 - 성공 시 고객은 이미 생성·예약된 Order를 받으므로 가격 확인 후 확정 단계가 없다.
-- request schema와 실패 상세는 이 ADR의 후속 결정으로 계약을 닫아야 한다.
 - 기존 OrderLine에는 option ID snapshot이 없어 모든 기존 주문을 재주문 가능하게
   backfill할 수 없다. 구현 migration은 snapshot 부재와 옵션 없는 빈 선택을 구분해야 한다.
 - 취소·거절·만료된 source도 재주문할 수 있으므로 client는 새 주문 가능성을 과거
   결과에서 추정하면 안 된다. Merchant와 모든 reservation owner가 현재 상태를 다시 판정한다.
+- direct create와 reorder는 같은 atomic workflow를 사용하지만 operation scope와 response
+  factory가 다르다. 구현은 기존 Tx O의 owner orchestration을 transaction-mandatory 내부
+  boundary로 추출해 두 진입점이 공유하고, 직접 생성의 observable response를 바꾸지 않는다.
+- `ordering_idempotency_record`가 BR-26의 90일 terminal retention을 실제로 집행하지
+  않는 현재 drift가 있다. 구현 migration과 owner worker는 direct create와 reorder row에
+  `retentionExpiresAt`을 materialize하고 PROCESSING/MANUAL_REVIEW를 삭제하지 않아야 한다.
 - `REORDER_ORDER_V1` operation과 terminal response는 BR-26의 90일 보존 정책을 따른다.
 
 ## Verification
@@ -107,6 +149,12 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - 가격 summary와 새 OrderLine/current subtotal의 tie-out
 - 네 terminal source 상태의 허용과 다섯 non-terminal 상태의 409
 - terminal source의 취소·거절·만료 원인과 과거 혜택·결제 상태가 새 Order에 승계되지 않음
+- request의 required slot/points, optional coupon과 payment method 부재
+- 과거 가격·혜택·결제·slot·적립·정산 snapshot 비복사와 current owner 재검증
+- 여러 stale/removed line의 stable reason·결정적 순서와 전체 rollback
+- Tx I1/Tx O/Tx I2 replay, PROCESSING, changed source/request와 failure completion
+- direct create와 reorder의 shared atomic workflow·서로 다른 response 및 operation scope
+- terminal 90일 직전·경계·이후 retention과 PROCESSING/MANUAL_REVIEW 보존
 
 ## Metrics
 

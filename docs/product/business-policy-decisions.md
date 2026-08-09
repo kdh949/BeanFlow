@@ -93,6 +93,14 @@
   `PAID`, `ACCEPTED`, `PREPARING`, `READY`는 진행 중 주문의 우발적 중복을 막기 위해 거부한다.
   terminal 상태는 원 주문의 가격·혜택·결제·환불 결과를 새 주문에 승계한다는 뜻이 아니며 모든 현재
   주문 가능 조건을 다시 검증한다.
+- **Fast Reorder Revalidation Amendment (2026-08-09):** request는 새 `pickupSlotId`, 선택적
+  `couponIssuanceId`와 명시적 `pointsToUseKrw`를 받는다. 과거 메뉴·옵션 이름과 가격, coupon·point
+  allocation, PaymentMethod·Payment·Refund, pickup slot·reservation, 적립·정산 snapshot, 상태와
+  deadline을 복사하지 않는다. 현재 Merchant 이름·가격·판매 상태, Fulfillment slot, Inventory stock,
+  명시적으로 선택한 Coupon과 points를 기존 주문 생성 경계에서 다시 quote·reserve한다. payment method는
+  복사하거나 이 request에서 승인하지 않고 외부 결제가 필요하면 기존 payment-confirmations 명령에서
+  고객이 명시한다. 한 source line이라도 삭제·판매 중지·구성 불가이면 source line 순서의 stable item
+  reason을 포함한 전체 `409`이며 부분 Order나 unavailable item 자동 삭제는 없다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount

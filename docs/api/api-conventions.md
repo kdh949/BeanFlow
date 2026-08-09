@@ -75,6 +75,34 @@ reason과 evidence를
 - 같은 주문 생성 idempotency key/payload replay도 저장된 최초 201 envelope를
   그대로 반환한다.
 
+## Fast reorder
+
+`POST /api/v1/orders/{sourceOrderId}/reorders`는 별도 draft나 Reorder Aggregate를
+만들지 않고 현재 조건으로 새 Order를 즉시 생성한다.
+
+- 호출자는 `CUSTOMER`이며 source Order의 소유 고객이어야 한다. source가 없으면 404,
+  다른 고객 소유이면 403이다.
+- source는 `COMPLETED`, `CANCELLED`, `REJECTED`, `EXPIRED` 중 하나여야 한다.
+  `PENDING_PAYMENT`, `PAID`, `ACCEPTED`, `PREPARING`, `READY`는
+  `409 REORDER_SOURCE_STATE_INVALID`다.
+- 서버는 source line의 `menuId`, 정규화된 `optionIds`, `quantity`만 입력으로 재사용한다.
+  과거 이름·가격·혜택·결제·환불·pickup slot·예약·정산 snapshot은 복사하지 않는다.
+- request body는 새 `pickupSlotId`와 `pointsToUseKrw`를 필수로, 새로 적용할
+  `couponIssuanceId`를 선택적으로 받는다. 결제수단은 받지 않으며 1원 이상 결제는 생성된
+  Order의 기존 payment-confirmation 명령으로 별도 승인한다.
+- Merchant 가격·판매 가능성·MenuConfiguration, Fulfillment slot, Inventory 재고,
+  Promotion coupon, Loyalty point를 기존 주문 생성 transaction에서 모두 다시 검증·예약한다.
+  하나라도 사용할 수 없으면 `409 REORDER_ITEMS_UNAVAILABLE` 또는 기존 owner conflict로
+  전체 실패하며 부분 Order를 만들거나 품목을 자동 삭제하지 않는다.
+- legacy source line에 검증된 정규화 option ID snapshot이 없으면 옵션명이나 현재 Merchant
+  상태로 추론하지 않고 `SOURCE_OPTION_SELECTION_UNAVAILABLE`로 해당 line을 실패시킨다.
+- 201 body는 기존 주문 생성의 상태별 `order`/`payment?` 의미와 required
+  `priceComparison`을 함께 반환한다. 가격 비교는 source/current의 혜택 적용 전 subtotal과
+  가격이 바뀐 line만 포함하며 signed difference는 `current - source`다. coupon·point·payment
+  차이는 가격 변경에 포함하지 않는다.
+- 동일 key/payload replay는 최초 201 또는 확정 실패 status/body를 그대로 반환하며
+  `replayed` 표시를 추가하지 않는다.
+
 ## Customer order cancellation
 
 `POST /api/v1/orders/{orderId}/cancellations`의 성공 표현은 취소 시점 Order 상태에
@@ -146,7 +174,7 @@ reason과 evidence를
 
 ## Idempotency
 
-- 주문 생성, 주문 취소, 결제 승인, 환불, 매장 주문 상태 전이, 감사형 포인트 조정,
+- 주문 생성, 빠른 재주문, 주문 취소, 결제 승인, 환불, 매장 주문 상태 전이, 감사형 포인트 조정,
   이의제기와 운영자 재처리는 `Idempotency-Key`를 요구한다.
 - scope: actorId + operation + key
 - 같은 key + 같은 payload: 기존 결과
@@ -168,6 +196,12 @@ reason과 evidence를
   `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환하며 202나 성공
   representation으로 바꾸지 않는다. 새 실행을 원하면 기존 결과가 확정된 뒤 계약에
   따라 새 key를 사용한다.
+- 빠른 재주문은 주문 생성과 분리된 operation `REORDER_ORDER_V1`을 사용하되 같은
+  사전등록 모델을 쓴다. canonical payload는 `sourceOrderId`, `pickupSlotId`,
+  `couponIssuanceId`(null 포함), `pointsToUseKrw`이고 source line은 immutable source
+  snapshot이므로 hash에 중복 직렬화하지 않는다. 같은 key를 다른 source 또는 request에
+  사용하면 `409 IDEMPOTENCY_KEY_REUSED`, 같은 key/payload가 `PROCESSING`이면
+  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`다.
 - 특정 Aggregate를 대상으로 하는 명령은 대상 식별자를 canonical payload에 포함한다.
   고객 취소와 매장 주문 상태 전이 모두 `orderId`를 포함하므로 같은 key를 다른 주문에
   재사용하면 `409 IDEMPOTENCY_KEY_REUSED`이며 다른 주문의 응답을 재생하지 않는다.

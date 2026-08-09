@@ -3,6 +3,7 @@
 | Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
 |---|---:|---:|---:|---:|---:|
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
+| 빠른 재주문 | Own terminal source only | No | No | No direct reorder | No |
 | 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
 | 고객 주문 취소 | Own and allowed state | No | No | No direct cancellation | No |
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
@@ -99,6 +100,11 @@ JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전�
 고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
 endpoint는 `CUSTOMER` 역할만 허용하고 매장·운영자 role의 호출은 `403`이다.
+
+빠른 재주문도 같은 고객 Order 소유권 정책을 사용한다. `CUSTOMER`만 호출할 수 있고
+source Order가 없으면 404, 다른 고객 소유이면 403이다. 소유권을 확인하기 전에 source
+line·가격·혜택·결제·환불·정산 정보를 노출하지 않는다. 소유권 확인 뒤에도 source의
+개인정보나 과거 결제수단을 응답에 복제하지 않으며 새 Order와 공개 가격 비교만 반환한다.
 
 취소 보상의 step 상태, 시도 횟수와 내부 오류 코드는 운영자 전용이다. 매장에는
 `trigger`, case 상태와 갱신 시각만 담은 축약 보상 요약을 반환하고 step 배열,
