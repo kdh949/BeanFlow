@@ -157,6 +157,10 @@ paths:
         including null, and pointsToUseKrw. Same-key/same-payload terminal retries
         replay the first status and body. A different source or request returns
         IDEMPOTENCY_KEY_REUSED without exposing the first order response.
+        PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After.
+        MANUAL_REVIEW means automatic processing stopped and returns
+        IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without Retry-After; the owner work is
+        not executed again.
       parameters:
         - $ref: "#/components/parameters/SourceOrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1266,8 +1270,10 @@ components:
     OrderCreationConflict:
       description: |
         Order resource conflict, idempotency payload reuse, or an identical
-        idempotent request that is still processing. The latter returns code
-        IDEMPOTENCY_REQUEST_IN_PROGRESS and a Retry-After header.
+        idempotent request that is still processing or requires manual review.
+        PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
+        MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
+        Retry-After and never re-executes the order command.
       headers:
         Retry-After:
           required: false
@@ -1286,6 +1292,8 @@ components:
         Source state, unavailable source item, resource reservation or idempotency
         conflict. REORDER_ITEMS_UNAVAILABLE uses the typed item detail schema.
         IDEMPOTENCY_REQUEST_IN_PROGRESS includes Retry-After.
+        IDEMPOTENCY_MANUAL_REVIEW_REQUIRED never includes Retry-After and does not
+        re-execute the reorder command.
       headers:
         Retry-After:
           required: false

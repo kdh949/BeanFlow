@@ -29,11 +29,17 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
 - 같은 scope·key·canonical payload의 terminal 재요청은 ADR-057에 따라 최초 HTTP
   status와 body를 그대로 재생하고 business response나 header에 replay indicator를
   추가하지 않는다.
+- 같은 key·payload가 `PROCESSING`이면 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와
+  `Retry-After`를 반환한다. stale reconciliation으로 `MANUAL_REVIEW`가 되면 자동 처리는
+  중단됐으므로 `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 `Retry-After` 없이 반환하고
+  owner 작업을 다시 실행하지 않는다.
 - source OrderLine에서는 `menuId`, ID 오름차순의 중복 없는 `optionIds`, `quantity`만
   새 주문 생성 입력으로 복사한다. note, 이름과 가격 snapshot은 복사 입력이 아니다.
 - Ordering은 향후 migration 이후 생성되는 OrderLine에 normalized option ID snapshot을
   보존한다. 기존 line에 검증된 snapshot이 없으면 옵션 이름, sellable requirement 또는
   현재 Merchant state로 ID를 추론하지 않고 재주문 불가로 실패한다.
+- `SNAPSHOTTED` option ID 배열은 각 원소가 canonical UUID 문자열이고 UUID 오름차순이며
+  중복이 없다는 조건을 애플리케이션과 DB CHECK가 함께 보호한다. 검증된 무옵션은 `[]`다.
 - 성공 응답은 기존 `CreateOrderResult`의 상태별 `order`와 선택적 `payment` 의미를
   유지하되 재주문 전용 `ReorderOrderResult`로 가격 비교를 함께 반환한다.
 - 가격 비교는 혜택 적용 전 source/current 가격만 다룬다. required summary는
@@ -131,6 +137,10 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - `ordering_idempotency_record`가 BR-26의 90일 terminal retention을 실제로 집행하지
   않는 현재 drift가 있다. 구현 migration과 owner worker는 direct create와 reorder row에
   `retentionExpiresAt`을 materialize하고 PROCESSING/MANUAL_REVIEW를 삭제하지 않아야 한다.
+- Merchant current batch quote는 source lock 구간에서 menu·option·configuration·requirement를
+  각각 bulk 조회해 catalogue 크기와 무관한 고정 statement 수를 유지한다. 저장된
+  `normalized_option_key`가 canonical UUID CSV가 아니면 item unavailable로 축약하지 않고
+  `503 DEPENDENCY_UNAVAILABLE`로 실패해 terminal response를 저장한다.
 - `REORDER_ORDER_V1` operation과 terminal response는 BR-26의 90일 보존 정책을 따른다.
 
 ## Verification
@@ -153,6 +163,11 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - 과거 가격·혜택·결제·slot·적립·정산 snapshot 비복사와 current owner 재검증
 - 여러 stale/removed line의 stable reason·결정적 순서와 전체 rollback
 - Tx I1/Tx O/Tx I2 replay, PROCESSING, changed source/request와 failure completion
+- Tx I2 저장 실패를 주입한 뒤 PROCESSING 잔류, intended Order 존재/부재의 MANUAL_REVIEW metadata,
+  same-key non-retry 409와 owner 작업 비재실행
+- option snapshot의 malformed UUID·중복·비정렬 DB 거부와 verified no-option `[]` 허용
+- 여러 menu/configuration/requirement의 current batch quote가 고정 5 statement이고 owner key
+  손상 시 503·전체 rollback·exact replay
 - direct create와 reorder의 shared atomic workflow·서로 다른 response 및 operation scope
 - terminal 90일 직전·경계·이후 retention과 PROCESSING/MANUAL_REVIEW 보존
 
@@ -166,7 +181,10 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 ## Revisit Conditions
 
 가격 확인 후 명시적 승인, 장바구니 편집, 장기 유지 quote, 외부 partner용 재주문
-identity 또는 API version 분리가 필요할 때
+identity 또는 API version 분리가 필요할 때. 주문 line 수·line당 option 수의 공개 상한이
+필요하면 관측된 payload/owner 제한과 UX를 근거로 Business Policy를 먼저 Accepted하고
+OpenAPI `maxItems`, request validation과 domain guard를 같은 변경에서 추가한다. 근거 없는 숫자를
+성능 수정에 포함하지 않는다.
 
 ## Related Decisions
 

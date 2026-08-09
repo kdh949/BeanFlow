@@ -632,6 +632,10 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 - [x] 2026-08-09: Milestone 5 완료. bounded metric/log, stuck PROCESSING reconciliation,
   runtime OpenAPI 28 paths/30 operations parity와 release evidence를 확정하고 전체 clean validation을
   통과한 뒤 plan을 completed로 이동.
+- [x] 2026-08-09: post-completion review correction 완료. `MANUAL_REVIEW`를 non-retry 공개 오류로
+  분리하고 metadata를 보존했으며, option provenance와 Merchant normalized key를 DB CHECK로
+  보강했다. Merchant quote를 5-statement bulk 조회로 바꾸고 실제 Tx I2 failure injection,
+  order-found/no-order reconciliation, owner corruption 503 exact replay를 추가했다.
 
 ## Surprises & Discoveries
 
@@ -673,6 +677,15 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   재검증했다.
 - 2026-08-09: 최초 `clean build`는 새 Kotlin 파일 16개의 Spotless 위반으로 test 전 실패했다.
   repository formatter를 적용하고 별도 style commit으로 분리한 뒤 최종 clean build를 통과시켰다.
+- 2026-08-09: stale `PROCESSING`을 `MANUAL_REVIEW`로 바꾼 뒤 registration이 두 상태를 모두
+  `InProgress`로 축약해 같은 key가 `Retry-After`를 영구 반환했다. `MANUAL_REVIEW`는 자동 처리가
+  멈춘 상태로 분리하고 reason/review 시각/intended Order 존재 여부를 저장해야 했다.
+- 2026-08-09: option snapshot JSON CHECK가 배열 타입만 확인하고, Merchant batch quote가 source
+  lock 아래 option/configuration/requirement를 중첩 조회했다. immutable SQL validator와 bulk
+  repository query로 각각 DB 최종 방어선과 고정 5 statement를 확보했다.
+- 2026-08-09: Merchant `normalized_option_key`의 raw UUID parse 예외는 Tx I2 terminal failure 저장
+  경로 밖으로 탈출했다. DB canonical CSV CHECK와 adapter `DEPENDENCY_UNAVAILABLE` 변환을 함께
+  두어 corruption을 500이나 stuck PROCESSING으로 숨기지 않게 했다.
 
 ## Decision Log
 
@@ -697,6 +710,12 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   atomicity를 재사용한다. 기록: ADR-064, ADR-077, transaction boundaries.
 - 2026-08-09: `Implementation-Ready=true`, `Writes-Migration=true`로 판정한다. 정책 미결정은 없지만
   option ID provenance와 Accepted idempotency retention drift를 닫는 migration이 필수이기 때문이다.
+- 2026-08-09: `MANUAL_REVIEW`에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` 409를
+  `Retry-After` 없이 반환한다. 현재 감사 가능한 운영자 해결 command가 없으므로 terminal
+  response를 추정하거나 row를 직접 변경하지 않는다. 기록: ADR-064/077, error catalog, runbook.
+- 2026-08-09: JSONB option snapshot과 Merchant CSV key는 canonical UUID, 오름차순, 중복 없음
+  조건을 immutable DB function/CHECK로 검증한다. Merchant quote는 store/menu/options/configurations/
+  requirements의 5 statement bulk boundary를 사용한다. 기록: ADR-077, V36.
 
 ## Outcomes & Retrospective
 
@@ -712,6 +731,12 @@ menu/option stable item failures, all-or-nothing rollback, pending/benefit-only 
 same-key exact success/failure replay, changed payload conflict와 stuck PROCESSING manual review를
 구현했다. 별도 Reorder Aggregate, 과거 혜택·결제·slot 복제, 부분 생성, 자동 fallback과 새 production
 dependency는 없다.
+
+post-completion correction으로 `MANUAL_REVIEW`는 더 이상 처리 중 응답으로 축약되지 않으며,
+reconciliation metadata와 non-retry 409를 갖는다. option snapshot과 Merchant configuration key의
+canonical UUID 불변식은 DB에서도 보호되고, current Merchant batch quote는 catalogue 크기와 무관한
+5 statement로 고정된다. 손상된 owner row는 503 terminal response로 exact replay되고 Tx I2 저장
+실패는 실제 PostgreSQL trigger fault injection으로 PROCESSING 잔류와 자동 재실행 부재를 검증한다.
 
 target/runtime OpenAPI는 모두 28 paths/30 operations이고 handler parity test가 통과했다. 최종
 `./gradlew clean test`와 `./gradlew clean build`는 각각 561 tests, failures/errors 0, skipped 1로
@@ -738,3 +763,6 @@ retention 처리량은 측정하지 않았다. 따라서 성능 개선이나 운
   reconciliation을 PostgreSQL/MockMvc 지정 테스트로 검증하고 runtime OpenAPI를 28/30으로 승격.
 - 2026-08-09: Milestone 5 완료. 전체 회귀에서 발견한 positional fixture와 Spotless 문제를 닫고
   561-test clean build, 문서 검증, release evidence와 completed 이동으로 implementation outcome 확정.
+- 2026-08-09: review correction으로 manual-review API 의미, DB provenance, Merchant bulk quote와
+  owner corruption, Tx I2 fault injection을 보강하고
+  [Fast Reorder Runbook](../../operations/fast-reorder-runbook.md)을 추가.

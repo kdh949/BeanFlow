@@ -10,6 +10,7 @@
 | REORDER_ITEMS_UNAVAILABLE | 409 | Maybe, after source/current catalogue changes | source line 하나 이상을 검증된 option snapshot과 현재 Merchant 구성으로 전부 재구성할 수 없음. item별 stable reason을 반환하고 부분 Order는 만들지 않음 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |
 | IDEMPOTENCY_REQUEST_IN_PROGRESS | 409 + Retry-After | Yes, same key after delay | 같은 key·payload의 최초 명령이 아직 처리 중이며 새 실행은 하지 않음. 사전등록 모델 명령에만 사용 |
+| IDEMPOTENCY_MANUAL_REVIEW_REQUIRED | 409, no Retry-After | No automatic retry | stale `PROCESSING`의 자동 처리가 중단되어 운영자 확인이 필요함. 같은 key 재요청은 owner 작업을 실행하지 않으며 현재 공식 자동 해결 API가 없음 |
 | MENU_CONFIGURATION_NOT_AVAILABLE | 409 | Maybe | 유효한 메뉴·옵션 구성이 현재 판매 불가 |
 | PICKUP_SLOT_FULL | 409 | Maybe | 슬롯 수용량 없음 |
 | STOCK_NOT_AVAILABLE | 409 | Maybe | 판매 재고 부족 |
@@ -35,6 +36,13 @@
 | DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
+
+주문 생성과 빠른 재주문의 `MANUAL_REVIEW`는 아직 처리 중이라는 뜻이 아니다. 해당
+Idempotency-Key에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retry-After`를 넣지 않는다.
+클라이언트는 같은 key를 polling하지 않으며, 운영자는
+[Fast Reorder Runbook](../operations/fast-reorder-runbook.md)의 읽기 전용 조사 절차를 따른다.
+현재는 감사 가능한 해결 command가 없으므로 DB row를 직접 `COMPLETED`/`FAILED`로 바꾸거나
+terminal response를 추정하지 않는다.
 
 `REORDER_ITEMS_UNAVAILABLE.details`는 source line 순서로 정렬하고 같은 line에서는 reason
 우선순위와 `optionId` 오름차순으로 정렬한다. stable reason은 다음과 같다.

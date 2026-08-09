@@ -61,24 +61,24 @@ cleanup 실패는 성공이나 0건으로 기록하지 않는다. 원인을 해�
 
 ## Stuck idempotency records
 
-다음 조회는 정상 처리 시간을 넘겨 `PROCESSING`에 머문 주문 생성 요청을 찾기 위한
-read-only 진단 예시다. 실제 임계치는 운영 SLO가 정해질 때 별도로 확정한다.
+다음 조회는 configured threshold를 넘겨 `PROCESSING`에 머문 주문 생성·빠른 재주문 요청을
+찾기 위한 read-only 진단 예시다.
 
 ```sql
-SELECT id, actor_id, idempotency_key, intended_order_id, started_at
+SELECT id, operation, intended_order_id, started_at
 FROM ordering_idempotency_record
-WHERE operation = 'CREATE_ORDER'
+WHERE operation IN ('CREATE_ORDER', 'REORDER_ORDER_V1')
   AND status = 'PROCESSING'
 ORDER BY started_at, id;
 ```
 
-`intended_order_id`의 Order 존재 여부와 최초 transaction 결과를 함께 확인한다.
-현재 자동 reconciliation 또는 운영자 mutation API는 **Not configured**다.
-PROCESSING record를 삭제하거나 FAILED/COMPLETED로 직접 변경해 재실행하지 않는다.
-Order가 존재하면 저장 응답 복구가 필요한 incident로, 존재하지 않으면 주문
-transaction 미완료 여부를 확인해야 하는 incident로 분류한다. reconciliation을
-추가할 때는 ADR-025의 crash window 규칙, metric, audit와 fault-injection test를
-함께 구현한다.
+기본 5분 threshold를 넘은 row는 reconciliation worker가 intended Order 존재 여부를 확인하고
+`MANUAL_REVIEW`로 격리한다. 자동 주문 실행이나 terminal response 재구성은 하지 않는다.
+`MANUAL_REVIEW` same-key API는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 `Retry-After` 없이
+반환한다. record를 삭제하거나 FAILED/COMPLETED로 직접 변경하지 않는다. 상세 metadata,
+read-only 조사와 V36 배포 절차는
+[Fast Reorder Idempotency and V36 Runbook](fast-reorder-runbook.md)을 따른다. 공식 운영자
+mutation API는 아직 구성되지 않았다.
 
 ## Configuration assumptions
 

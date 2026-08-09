@@ -196,12 +196,17 @@ reason과 evidence를
   `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환하며 202나 성공
   representation으로 바꾸지 않는다. 새 실행을 원하면 기존 결과가 확정된 뒤 계약에
   따라 새 key를 사용한다.
+- 주문 생성 record가 `MANUAL_REVIEW`이면 자동 처리는 이미 중단됐다.
+  `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retry-After`를 넣지 않으며 같은
+  key로 owner 작업을 다시 실행하지 않는다. 공식 운영자 해결 command가 생기기 전에는
+  terminal body를 추정하거나 DB row를 직접 변경하지 않는다.
 - 빠른 재주문은 주문 생성과 분리된 operation `REORDER_ORDER_V1`을 사용하되 같은
   사전등록 모델을 쓴다. canonical payload는 `sourceOrderId`, `pickupSlotId`,
   `couponIssuanceId`(null 포함), `pointsToUseKrw`이고 source line은 immutable source
   snapshot이므로 hash에 중복 직렬화하지 않는다. 같은 key를 다른 source 또는 request에
   사용하면 `409 IDEMPOTENCY_KEY_REUSED`, 같은 key/payload가 `PROCESSING`이면
-  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`다.
+  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`다. `MANUAL_REVIEW`이면
+  `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`이고 `Retry-After`는 없다.
 - 특정 Aggregate를 대상으로 하는 명령은 대상 식별자를 canonical payload에 포함한다.
   고객 취소와 매장 주문 상태 전이 모두 `orderId`를 포함하므로 같은 key를 다른 주문에
   재사용하면 `409 IDEMPOTENCY_KEY_REUSED`이며 다른 주문의 응답을 재생하지 않는다.

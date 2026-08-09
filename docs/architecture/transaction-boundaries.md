@@ -520,6 +520,10 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - 같은 payload의 후속 요청은 저장된 상태와 응답을 반환하며 작업을 다시 실행하지 않는다.
 - 주문 생성 `COMPLETED`/`FAILED`는 최초 HTTP status/body를 그대로 재생한다.
   `PROCESSING`은 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다.
+- stale reconciliation이 `PROCESSING`을 `MANUAL_REVIEW`로 격리하면 자동 처리는 끝난다.
+  same-key 요청은 `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 `Retry-After` 없이 반환하고
+  Tx O를 다시 열지 않는다. reconciliation은 reason, 시작 시각과 intended Order 존재 여부만
+  기록하며 terminal response를 추정하지 않는다.
 - 빠른 재주문도 `REORDER_ORDER_V1`의 별도 scope로 같은 사전등록 규칙을 적용한다. source
   Order는 immutable 입력이지 결과 root의 직렬화 root가 아니며, 다른 source/request에 같은
   key를 쓰면 `409 IDEMPOTENCY_KEY_REUSED`다.

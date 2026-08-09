@@ -5,9 +5,11 @@
 - **Recorded at:** 2026-08-09
 - **Implementation baseline:** `c7370a8`
 - **Code head before completion evidence:** `4017f01`
+- **Post-completion review correction code head:** `4dc40fc`
 - **Migration:** `V36__add_fast_reorder_snapshots_and_idempotency_retention.sql`
 - **Decision:** [ADR-077](../adr/ADR-077-fast-reorder-order-creation-api-identity.md)
 - **ExecPlan:** [Completed Fast Reorder Vertical Slice](../exec-plans/completed/fast-reorder-vertical-slice.md)
+- **Runbook:** [Fast Reorder Idempotency and V36 Runbook](../operations/fast-reorder-runbook.md)
 
 ## Contract and runtime evidence
 
@@ -28,8 +30,9 @@
 ## Schema, transaction and idempotency evidence
 
 - V36은 기존 OrderLine을 `LEGACY_UNAVAILABLE/null`로 명시하고 future OrderLine을
-  `SNAPSHOTTED`와 JSON option ID 배열로 저장한다. 검증된 무옵션 `[]`과 identity를 알 수 없는 legacy
-  row를 구분하며 이름이나 current catalogue로 option ID를 추론하지 않는다.
+  `SNAPSHOTTED`와 JSON option ID 배열로 저장한다. immutable DB function/CHECK가 각 원소의 canonical
+  UUID, 중복 없음과 오름차순을 검증한다. 검증된 무옵션 `[]`과 identity를 알 수 없는 legacy row를
+  구분하며 이름이나 current catalogue로 option ID를 추론하지 않는다.
 - direct create와 reorder는 같은 Tx O workflow를 사용한다. 새 Order, pickup/stock/coupon/point,
   benefit-only Payment, settlement/point-accrual snapshot, Audit와 최초 201 idempotency response가 같은
   transaction에서 commit 또는 rollback한다.
@@ -38,7 +41,13 @@
   replay하고 다른 source 또는 payload는 owner work 전에 409다.
 - terminal idempotency는 `completed_at + 90 days`까지 보존되고 PROCESSING/MANUAL_REVIEW는 자동
   삭제하지 않는다. threshold를 넘은 PROCESSING은 intended Order 존재만 확인한 뒤 response를
-  재구성하거나 재주문을 자동 실행하지 않고 MANUAL_REVIEW로 격리한다.
+  재구성하거나 재주문을 자동 실행하지 않고 reason, review 시각과 intended Order 존재 여부를 기록해
+  MANUAL_REVIEW로 격리한다. same-key 응답은 non-retry
+  `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`이며 `Retry-After`가 없다.
+- Merchant current batch quote는 store/menu/options/configurations/requirements를 각각 한 번씩 bulk
+  조회해 small/large fixture 모두 5 statement다. `normalized_option_key`도 DB canonical CHECK로
+  보호하며 adapter 방어 경계에서 malformed/non-canonical 값은 `503 DEPENDENCY_UNAVAILABLE`로
+  terminal 저장하고 same-key exact replay한다.
 
 ## Validation result
 
@@ -67,6 +76,24 @@
 - `bash scripts/verify-docs.sh`: Passed, target/runtime 각각 28 paths/30 operations, 83 schemas,
   32 business policies, 77 ADRs, 160 Markdown files와 28 ExecPlans, exit 0.
 - `git diff --check`: Passed, 출력 없음, exit 0.
+
+### Post-completion review correction validation
+
+- 최초 집중 테스트는 새 `ManualReviewRequired` 계약 부재로 test compilation 실패, exit 1이었다.
+- 구현 후 `./gradlew test --tests '*FastReorderMigrationTest' --tests
+  '*JpaMenuQuoteServiceQueryCountTest' --tests '*FastReorderServiceTest' --tests
+  '*FastReorderIdempotencyReconciliationTest' --tests '*FastReorderControllerContractTest' --tests
+  '*CreateOrderServiceTest'`: Passed, 39 tests, failures/errors/skipped 0,
+  `BUILD SUCCESSFUL in 52s`, exit 0.
+- 포맷과 canonical UUID boundary 보강 후 위 집중 대상에 `*RuntimeOpenApiParityTest`를 추가해
+  재실행: Passed, 40 tests, failures/errors/skipped 0, `BUILD SUCCESSFUL in 46s`, exit 0.
+- `bash scripts/verify-docs.sh`: Passed, target/runtime 각각 28 paths/30 operations와 83 schemas,
+  exit 0. Markdown/ADR/ExecPlan inventory 숫자는 이 branch 범위 밖의 동시 worktree 문서를 포함해
+  correction release inventory 근거로 사용하지 않는다.
+- `git diff --check`: Passed, 출력 없음, exit 0.
+- 실제 Tx I2 fault injection은 `FAILED` transition DB trigger가 Tx I2 commit만 실패시키며, 최초 503,
+  Tx O의 Order·pickup/stock reservation·Audit rollback, PROCESSING 잔류와 worker의 자동 비실행을
+  검증한다. intended Order 존재/부재 fixture 모두 metadata를 검증한다.
 
 ## Measurements and limits
 

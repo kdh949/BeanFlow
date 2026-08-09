@@ -281,6 +281,9 @@ PROCESSING -> FAILED
 `PROCESSING -> COMPLETED | FAILED | MANUAL_REVIEW`를 사용한다. `COMPLETED`와
 `FAILED`는 최초 HTTP status/body를 보존하고, stuck reconciliation에서 일부
 부수효과나 결과 불명이 발견될 때만 `MANUAL_REVIEW`로 전환한다.
+`MANUAL_REVIEW`는 처리 중 상태가 아니며 동일 key에는 non-retry
+`IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환한다. reason, review 시작 시각과 intended Order
+존재 여부를 보존하고, 별도 감사형 운영자 command 없이 terminal 상태나 response를 추정하지 않는다.
 
 고객 취소와 매장 전이 command idempotency row는 저장 시점에 terminal이고 별도
 PROCESSING state가 없다. 같은 key/payload에는 최초 status/body를 재생하며 business

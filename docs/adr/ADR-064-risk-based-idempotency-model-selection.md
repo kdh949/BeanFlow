@@ -51,6 +51,11 @@ OrderCompensationCase, Refund, NotificationDelivery와 publication을 새로 저
 사용한다. 명령 트랜잭션 모델에서 rollback된 요청은 멱등 레코드를 남기지 않으며,
 외부 부수효과가 rollback 뒤 재실행될 수 있는 구조를 추가해서는 안 된다.
 
+사전등록 record가 stale threshold를 넘어 `MANUAL_REVIEW`가 되면 자동 처리는 중단된 것이다.
+이를 `PROCESSING`으로 투영하거나 `Retry-After`를 반환하지 않는다. 동일 key는 owner 작업을
+재실행하지 않고 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`로 응답한다. terminal response로
+수렴시키려면 별도의 권한·Audit·검증을 갖춘 운영자 command를 먼저 Accepted 결정으로 추가해야 한다.
+
 ## Alternatives Considered
 
 ### 외부 호출과 새 Aggregate가 모두 있을 때만 사전등록
@@ -121,7 +126,7 @@ account/payload와 동시 debit/cross-account command를 PostgreSQL에서 검증
 - C1의 같은 key 동시 요청에서 하나의 durable work set과 동일 body 재생
 - C1 저장 실패 rollback 뒤 Provider 호출과 persistent publication 부재
 - 주문 생성의 사전등록 `PROCESSING`과 stuck reconciliation
-- 빠른 재주문의 source/request payload conflict, PROCESSING과 terminal exact replay
+- 빠른 재주문의 source/request payload conflict, PROCESSING, non-retry MANUAL_REVIEW와 terminal exact replay
 - 결제 승인 timeout의 unknown/reconciliation과 재승인 방지
 - 새 command 분류 review fixture: root 없음, 외부 호출 있음, 둘 다 없는 local transition
 
