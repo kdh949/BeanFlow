@@ -623,8 +623,12 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   추출하고 direct wrapper의 `CREATE_ORDER` response/idempotency completion을 보존했다.
   `*CreateOrder*`, benefit-only, workflow transaction, controller contract, settlement/accrual snapshot과
   Modulith 지정 테스트 통과.
-- [ ] Milestone 3: source/current item revalidation.
-- [ ] Milestone 4: API, price response와 idempotency.
+- [x] 2026-08-09: Milestone 3 완료. source lock/owner/네 terminal 상태/legacy option provenance와
+  Merchant typed batch revalidation을 구현하고 stable item reason, 원인 억제, 결정적 순서와
+  all-or-nothing rollback을 `*FastReorderMenuQuoteTest`, policy/service test로 검증.
+- [x] 2026-08-09: Milestone 4 완료. customer endpoint, pending/benefit-only price comparison,
+  `REORDER_ORDER_V1` exact replay/conflict/PROCESSING, 동시성·Tx I2 실패 후 stuck reconciliation을
+  구현했다. `*FastReorder*` 전체 지정 테스트와 runtime parity/Modulith 통과.
 - [ ] Milestone 5: observability, runtime promotion과 completion evidence.
 
 ## Surprises & Discoveries
@@ -653,6 +657,14 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   orchestration에 결합돼 있었다. `OrderCreationWorkflow(MANDATORY)`가 HTTP/idempotency를 모르는
   outcome을 반환하게 분리해 direct wrapper의 observable body를 유지하면서 reorder Tx O 재사용 경계를
   만들었다. workflow 단독 호출은 Spring transaction interceptor에서 즉시 실패한다.
+- 2026-08-09: 기존 source의 option provenance가 있더라도 current Merchant의 여러 품목 실패를
+  first-failure 예외로 반환하면 all-or-nothing 이유를 모두 설명할 수 없었다. Merchant 공개 API에
+  Ordering line identity를 넣지 않는 위치 기반 typed batch result를 추가하고 direct `quote`는 기존
+  first-failure 의미를 유지했다.
+- 2026-08-09: Tx I1 뒤 process 중단 또는 Tx I2 저장 실패의 `PROCESSING`을 다시 실행하면 새 Order가
+  중복될 수 있다. threshold를 넘은 record는 intended Order 존재 여부만 확인하고 response를 추정하지
+  않은 채 `MANUAL_REVIEW`로 격리한다. Tx O가 아직 실행 중이면 idempotency complete guard가 실패해
+  같은 transaction의 owner effect를 rollback한다.
 
 ## Decision Log
 
@@ -696,3 +708,6 @@ plan을 completed로 이동하지 않는다.
   PostgreSQL 및 domain test로 검증.
 - 2026-08-09: Milestone 2 완료. shared workflow 추출과 operation enum 제한 뒤 direct create,
   concurrency, benefit-only, API contract, settlement/accrual snapshot, Modulith 회귀를 재검증.
+- 2026-08-09: Milestone 3~4 완료. Merchant typed batch, source policy/provenance, price comparison,
+  customer API, exact replay, same-source concurrency, owner rollback과 stuck PROCESSING manual-review
+  reconciliation을 PostgreSQL/MockMvc 지정 테스트로 검증하고 runtime OpenAPI를 28/30으로 승격.

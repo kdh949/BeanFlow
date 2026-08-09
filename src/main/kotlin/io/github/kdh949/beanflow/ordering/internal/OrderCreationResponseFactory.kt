@@ -22,7 +22,7 @@ internal class OrderCreationResponseFactory(
                 ),
         )
 
-    private fun pending(order: Order) =
+    internal fun pending(order: Order) =
         PendingPaymentOrderCreationResponse(
             order =
                 OrderResponse(
@@ -55,7 +55,7 @@ internal class OrderCreationResponseFactory(
                 ),
         )
 
-    private fun benefitOnly(
+    internal fun benefitOnly(
         order: Order,
         payment: BenefitOnlyPaymentResult,
     ) = BenefitOnlyOrderCreationResponse(

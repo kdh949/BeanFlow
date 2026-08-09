@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.2.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-06
+  x-beanflow-contract-date: 2026-08-09
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -59,6 +59,8 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/OrderCreationConflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/OrderCreationDependencyUnavailable"
+  /orders/{sourceOrderId}/reorders:
+    $ref: "./beanflow-v1.yaml#/paths/~1orders~1{sourceOrderId}~1reorders"
   /orders/{orderId}:
     get:
       tags: [Ordering]

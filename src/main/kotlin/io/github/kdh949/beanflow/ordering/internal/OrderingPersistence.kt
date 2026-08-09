@@ -464,6 +464,16 @@ internal interface IdempotencyRecordJpaRepository : JpaRepository<IdempotencyRec
     ): List<UUID>
 
     fun countByRetentionExpiresAtLessThanEqual(now: Instant): Long
+
+    @Query(
+        "select record.id from IdempotencyRecordEntity record " +
+            "where record.status = io.github.kdh949.beanflow.ordering.internal.IdempotencyStatus.PROCESSING " +
+            "and record.startedAt <= :cutoff order by record.startedAt, record.id",
+    )
+    fun findStuckProcessingIds(
+        @Param("cutoff") cutoff: Instant,
+        pageable: Pageable,
+    ): List<UUID>
 }
 
 internal interface StoreCommandIdempotencyJpaRepository : JpaRepository<StoreCommandIdempotencyEntity, UUID> {

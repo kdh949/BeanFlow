@@ -28,6 +28,31 @@ data class MenuLineQuote(
 	val sellableUnitRequirements: List<SellableUnitRequirement>,
 )
 
+enum class MenuItemUnavailableReason {
+	MENU_REMOVED,
+	MENU_NOT_AVAILABLE,
+	OPTION_REMOVED,
+	OPTION_NOT_AVAILABLE,
+	MENU_CONFIGURATION_NOT_AVAILABLE,
+}
+
+data class MenuItemUnavailability(
+	val reason: MenuItemUnavailableReason,
+	val optionId: UUID? = null,
+)
+
+sealed interface CurrentMenuLineQuoteResult {
+	data class Available(
+		val quote: MenuLineQuote,
+	) : CurrentMenuLineQuoteResult
+
+	data class Unavailable(
+		val failures: List<MenuItemUnavailability>,
+	) : CurrentMenuLineQuoteResult
+}
+
 interface MenuQuoteUseCase {
 	fun quote(storeId: UUID, lines: List<QuoteOrderLine>): List<MenuLineQuote>
+
+	fun quoteCurrentBatch(storeId: UUID, lines: List<QuoteOrderLine>): List<CurrentMenuLineQuoteResult>
 }
