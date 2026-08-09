@@ -50,6 +50,10 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
   만들지 않는다. 쿠폰·포인트·payment 선택·배분 차이는 이 비교에 포함하지 않는다.
 - 가격 변경은 재주문 실패 사유가 아니다. 고객은 line별 비교가 포함된 `201`을 받는
   시점에 이미 새 Order와 예약이 commit되었다는 결과 의미를 유지한다.
+- source Order는 `COMPLETED`, `CANCELLED`, `REJECTED`, `EXPIRED` 중 하나여야 한다.
+  `PENDING_PAYMENT`, `PAID`, `ACCEPTED`, `PREPARING`, `READY`는 진행 중 주문의
+  중복 생성을 피하기 위해 `409`로 거부한다. terminal source 허용은 과거 상태나
+  종료 원인을 새 Order에 복사한다는 뜻이 아니다.
 
 ## Alternatives Considered
 
@@ -83,6 +87,8 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - request schema와 실패 상세는 이 ADR의 후속 결정으로 계약을 닫아야 한다.
 - 기존 OrderLine에는 option ID snapshot이 없어 모든 기존 주문을 재주문 가능하게
   backfill할 수 없다. 구현 migration은 snapshot 부재와 옵션 없는 빈 선택을 구분해야 한다.
+- 취소·거절·만료된 source도 재주문할 수 있으므로 client는 새 주문 가능성을 과거
+  결과에서 추정하면 안 된다. Merchant와 모든 reservation owner가 현재 상태를 다시 판정한다.
 - `REORDER_ORDER_V1` operation과 terminal response는 BR-26의 90일 보존 정책을 따른다.
 
 ## Verification
@@ -99,6 +105,8 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
   정확한 signed line/subtotal difference
 - 쿠폰·포인트 선택 변경이 price-change item을 만들지 않음
 - 가격 summary와 새 OrderLine/current subtotal의 tie-out
+- 네 terminal source 상태의 허용과 다섯 non-terminal 상태의 409
+- terminal source의 취소·거절·만료 원인과 과거 혜택·결제 상태가 새 Order에 승계되지 않음
 
 ## Metrics
 

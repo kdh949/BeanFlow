@@ -88,6 +88,11 @@
   생성하며 가격 변경 자체를 실패로 만들지 않는다. 성공 응답은 혜택 적용 전 가격을 source와 current로
   비교한 line별 변경 목록과 두 subtotal을 필수로 제공한다. 변경 목록은 source line 순서이고 실제 단가가
   달라진 line만 포함한다. 쿠폰·포인트·결제 차이는 가격 변경으로 표시하지 않는다.
+- **Fast Reorder Source-State Amendment (2026-08-09):** source Order가 `COMPLETED`, `CANCELLED`,
+  `REJECTED`, `EXPIRED` 중 하나인 terminal 상태일 때만 빠른 재주문을 허용한다. `PENDING_PAYMENT`,
+  `PAID`, `ACCEPTED`, `PREPARING`, `READY`는 진행 중 주문의 우발적 중복을 막기 위해 거부한다.
+  terminal 상태는 원 주문의 가격·혜택·결제·환불 결과를 새 주문에 승계한다는 뜻이 아니며 모든 현재
+  주문 가능 조건을 다시 검증한다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
