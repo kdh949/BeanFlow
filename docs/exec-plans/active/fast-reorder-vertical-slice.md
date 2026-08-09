@@ -42,9 +42,11 @@ migration-writer lease를 확보하지 못하면 시작할 수 없다.
 
 ## Current State
 
-계획 작성 기준은 2026-08-09의 `main`, 기준 HEAD `e427226`이다. 이 HEAD 뒤 이 문서를 포함한
-정책·계약 문서 commit이 추가될 수 있으므로 구현자는 시작 직후 현재 `HEAD`, worktree와 최신
-Flyway 번호를 다시 기록한다.
+구현 기준은 2026-08-09의 최신 `main`, HEAD `c7370a8`이다. 깨끗한 worktree에서
+`feature/fast-reorder-vertical-slice`를 만들었고 Flyway inventory는 `V35`까지다. 다른 최신-main
+migration writer가 없음을 확인해 이 branch가 repository-wide writer lease를 보유하고 다음 번호
+`V36`을 사용한다. detached 과거 discovery worktree의 V33/V34 변경은 현재 main의 후속 migration과
+commit으로 대체된 잔여물이며 수정하거나 lease holder로 간주하지 않는다.
 
 현재 구현 증거는 다음과 같다.
 
@@ -168,7 +170,8 @@ ADR-064, ADR-077, `docs/api/api-conventions.md`, `docs/api/error-catalog.md`,
   하나라도 실패하면 기존 주문 생성 원자성에 따라 전체 rollback한다.
 - 새 Order 가격·coupon·point·payable·allocation은 기존 KRW 계산과 tie-out 규칙을 그대로 쓴다.
 - payable이 0이면 기존 benefit-only branch가 같은 Tx O에서 Payment 승인과 reservation confirm을
-  수행한다. 1원 이상이면 `PENDING_PAYMENT`와 5분 lease다.
+  수행한다. 1원 이상이면 `PENDING_PAYMENT`이고 effective reservation deadline은 Accepted BR-03과
+  현재 Fulfillment owner 계약대로 `min(createdAt + 5분, pickupSlot.startsAt)`이다.
 - price comparison은 source line gross 합과 current line gross 합을 사용한다. `hasPriceChanges`는
   line unit price 또는 line gross가 하나라도 달라졌을 때 true다. no-change는 difference 0과 빈
   `items`다.
@@ -610,7 +613,8 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   source states 확정.
 - [x] 2026-08-09: BR amendment, ADR-077, ADR-004/064 amendment와 target OpenAPI 작성.
 - [x] 2026-08-09: error catalog, authorization matrix, architecture/capability/index와 이 plan 작성.
-- [ ] Milestone 0: implementation baseline 재확인과 migration-writer lease 확보.
+- [x] 2026-08-09: Milestone 0 완료. latest main `c7370a8`, clean worktree, completed direct dependency,
+  target/runtime drift와 Flyway `V35`를 재확인하고 단독 migration-writer lease로 `V36`을 선택.
 - [ ] Milestone 1: schema와 immutable source identity.
 - [ ] Milestone 2: shared creation core와 direct-create 회귀 보호.
 - [ ] Milestone 3: source/current item revalidation.
@@ -629,6 +633,13 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   가져야 한다. 따라서 정책 단계에서는 target만 28/30으로 늘리고 runtime은 27/29로 유지했다.
 - 2026-08-09: source Order가 기존 root여도 새 Order 생성 경쟁을 직렬화하는 target root는 아니다.
   ADR-064에 따라 command-transaction 모델이 아니라 preregistration 모델을 사용한다.
+- 2026-08-09: 계획의 “5분 lease” 문구가 BR-03의 pickup-start effective deadline amendment를
+  생략하고 있었다. 현재 생성 구현은 Fulfillment reserve 결과의 clamp된 `expiresAt`을 downstream
+  owner와 Order에 사용하므로 코드 conflict는 없고, 재주문도 같은 shared workflow를 재사용하도록
+  계획 문구를 `min(createdAt + 5분, pickupSlot.startsAt)`으로 정정했다.
+- 2026-08-09: migration inventory는 main의 V35가 최신이다. detached 과거 discovery worktree의
+  V33/V34 변경은 main의 현재 V33~V35와 후속 commit에 의해 대체된 잔여물이라 건드리지 않았고,
+  현재 branch를 유일한 latest-main migration writer로 기록했다.
 
 ## Decision Log
 
@@ -665,3 +676,5 @@ plan을 completed로 이동하지 않는다.
 
 - 2026-08-09: 공개 제품 문맥과 사용자 승인으로 빠른 재주문 정책·API·data revalidation boundary·
   failure semantics를 닫고 최초 implementation-ready plan 작성.
+- 2026-08-09: 구현 baseline을 latest main `c7370a8`로 갱신하고 V36 migration-writer lease, stale
+  detached worktree 비간섭과 pickup-start effective lease drift 정정 근거를 기록.
