@@ -113,6 +113,7 @@ internal class PartialRefundAllocationRepositoryTest
                     payment_refund,
                     payment_reconciliation,
                     payment_idempotency_record,
+                    payment_provider_request_snapshot,
                     payment_payment,
                     payment_method,
                     promotion_coupon_reservation,
@@ -1078,6 +1079,17 @@ internal class PartialRefundAllocationRepositoryTest
                     fixture.customerId,
                     methodId,
                     "provider-payment:${fixture.paymentId}",
+                    Timestamp.from(NOW),
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO payment_provider_request_snapshot (
+                        payment_id, payment_method_id, provider, token_reference,
+                        provider_customer_reference, created_at
+                    ) VALUES (?, ?, 'SCRIPTED', 'token', NULL, ?)
+                    """.trimIndent(),
+                    fixture.paymentId,
+                    methodId,
                     Timestamp.from(NOW),
                 )
                 jdbcTemplate.update(

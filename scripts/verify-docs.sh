@@ -808,6 +808,16 @@ else:
     } & set(runtime_schemas):
         print('Runtime singleton policy schemas must remain absent after keyed policy implementation.', file=sys.stderr)
         sys.exit(1)
+    runtime_payment_method_paths = {
+        path for path in runtime_spec.get('paths', {}) if path.startswith('/payment-methods')
+    }
+    if runtime_payment_method_paths != {
+        '/payment-methods',
+        '/payment-methods/{paymentMethodId}',
+        '/payment-methods/{paymentMethodId}/default',
+    }:
+        print('Runtime OpenAPI PaymentMethod lifecycle inventory is incomplete or excessive.', file=sys.stderr)
+        sys.exit(1)
 
     required_paths = {
         '/stores/nearby',
@@ -817,6 +827,9 @@ else:
         '/orders/{orderId}',
         '/orders/{orderId}/cancellations',
         '/orders/{orderId}/payment-confirmations',
+        '/payment-methods',
+        '/payment-methods/{paymentMethodId}',
+        '/payment-methods/{paymentMethodId}/default',
         '/payments/{paymentId}/refunds',
         '/store-orders/{orderId}/status',
         '/point-accounts/{accountId}',
@@ -869,6 +882,9 @@ else:
         ('/orders', 'post'),
         ('/orders/{orderId}/cancellations', 'post'),
         ('/orders/{orderId}/payment-confirmations', 'post'),
+        ('/payment-methods', 'post'),
+        ('/payment-methods/{paymentMethodId}', 'delete'),
+        ('/payment-methods/{paymentMethodId}/default', 'put'),
         ('/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
@@ -1274,6 +1290,7 @@ else:
     expected_cursor_operations = {
         'GET /stores/nearby',
         'GET /point-accounts/{accountId}/transactions',
+        'GET /payment-methods',
         'GET /stores/{storeId}/settlements',
         'GET /stores/{storeId}/settlements/{settlementBatchId}/items',
         'GET /operations/policies/ordinary-point-accrual/global/versions',
@@ -1304,6 +1321,77 @@ else:
     if cursor_operations != expected_cursor_operations:
         print('Cursor operation inventory is stale; update the shared pagination contract.', file=sys.stderr)
         sys.exit(1)
+    payment_method_operations = {
+        ('/payment-methods', 'get'): {'200', '400', '401', '403', '503'},
+        ('/payment-methods', 'post'): {'200', '201', '202', '400', '401', '403', '409', '422', '503'},
+        ('/payment-methods/{paymentMethodId}', 'delete'): {'202', '204', '400', '401', '403', '404', '409', '503'},
+        ('/payment-methods/{paymentMethodId}/default', 'put'): {'200', '400', '401', '403', '404', '409', '503'},
+    }
+    for (path, method), expected_responses in payment_method_operations.items():
+        operation = spec['paths'][path][method]
+        if set(operation.get('responses', {})) != expected_responses:
+            print(f'{method.upper()} {path} PaymentMethod response contract is incomplete.', file=sys.stderr)
+            sys.exit(1)
+    register_request = schemas['RegisterPaymentMethodRequest']
+    if (
+        register_request.get('additionalProperties') is not False
+        or set(register_request.get('required', [])) != {'authKey', 'displayAlias'}
+        or set(register_request.get('properties', {})) != {'authKey', 'displayAlias'}
+    ):
+        print('PaymentMethod registration request must expose only authKey and displayAlias.', file=sys.stderr)
+        sys.exit(1)
+    register_alias = register_request['properties']['displayAlias']
+    normalized_register_alias_description = re.sub(r'\s+', ' ', register_alias.get('description', ''))
+    if (
+        {'minLength', 'maxLength'} & set(register_alias)
+        or register_alias.get('pattern') != r'^[^\u0000-\u001F\u007F]*$'
+        or 'server trims this value' not in normalized_register_alias_description
+        or 'requires 1 to 80 characters' not in normalized_register_alias_description
+        or 'control characters are rejected' not in normalized_register_alias_description
+    ):
+        print('PaymentMethod displayAlias must validate length after trim and reject raw control characters.', file=sys.stderr)
+        sys.exit(1)
+    payment_method = schemas['PaymentMethod']
+    expected_payment_method_fields = {
+        'paymentMethodId',
+        'provider',
+        'displayAlias',
+        'cardBrand',
+        'lastFour',
+        'isDefault',
+        'status',
+        'noticeCode',
+        'createdAt',
+        'updatedAt',
+    }
+    if (
+        payment_method.get('additionalProperties') is not False
+        or set(payment_method.get('properties', {})) != expected_payment_method_fields
+        or set(payment_method.get('required', [])) != expected_payment_method_fields - {'noticeCode'}
+    ):
+        print('Public PaymentMethod projection is incomplete or exposes extra fields.', file=sys.stderr)
+        sys.exit(1)
+    forbidden_payment_method_fields = {
+        'cardNumber',
+        'pan',
+        'cvc',
+        'expiryMonth',
+        'expiryYear',
+        'birthDate',
+        'cardPassword',
+        'tokenReference',
+        'providerCustomerReference',
+        'authKeyHash',
+    }
+    for schema_name in (
+        'RegisterPaymentMethodRequest',
+        'PaymentMethod',
+        'PaymentMethodRegistration',
+        'PaymentMethodDeactivation',
+    ):
+        if forbidden_payment_method_fields & set(schemas[schema_name].get('properties', {})):
+            print(f'{schema_name} exposes forbidden payment credential fields.', file=sys.stderr)
+            sys.exit(1)
     point_account_get = spec['paths']['/point-accounts/{accountId}']['get']
     point_account_parameter_refs = {
         parameter.get('$ref')

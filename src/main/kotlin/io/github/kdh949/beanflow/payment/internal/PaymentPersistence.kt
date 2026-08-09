@@ -67,7 +67,11 @@ internal class PaymentEntity(
 
 internal enum class PaymentMethodStatus {
     ACTIVE,
-    REVOKED,
+    DEACTIVATION_REQUESTED,
+    DEACTIVATION_UNKNOWN,
+    RECONCILING,
+    MANUAL_REVIEW,
+    DEACTIVATED,
 }
 
 @Entity
@@ -81,12 +85,16 @@ internal class PaymentMethodEntity(
     val provider: String,
     @Column(name = "token_reference", nullable = false)
     val tokenReference: String,
+    @Column(name = "provider_customer_reference")
+    val providerCustomerReference: String? = null,
     @Column(name = "display_alias", nullable = false)
     val displayAlias: String,
     @Column(name = "card_brand", nullable = false)
     val cardBrand: String,
     @Column(name = "last_four", nullable = false, length = 4)
     val lastFour: String,
+    @Column(name = "is_default", nullable = false)
+    var isDefault: Boolean = false,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var status: PaymentMethodStatus,
@@ -96,7 +104,130 @@ internal class PaymentMethodEntity(
     var updatedAt: Instant,
     @Version
     var version: Long = 0,
-)
+) {
+    fun markDefault(now: Instant) {
+        if (status != PaymentMethodStatus.ACTIVE) throw PaymentMethodStateConflict()
+        isDefault = true
+        updatedAt = now
+    }
+
+    fun clearDefault(now: Instant) {
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun requestDeactivation(now: Instant) {
+        if (status != PaymentMethodStatus.ACTIVE) throw PaymentMethodStateConflict()
+        status = PaymentMethodStatus.DEACTIVATION_REQUESTED
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun markDeactivationUnknown(now: Instant) {
+        if (status !in setOf(PaymentMethodStatus.DEACTIVATION_REQUESTED, PaymentMethodStatus.RECONCILING)) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATION_UNKNOWN
+        updatedAt = now
+    }
+
+    fun markReconciling(now: Instant) {
+        if (status != PaymentMethodStatus.DEACTIVATION_UNKNOWN) throw PaymentMethodStateConflict()
+        status = PaymentMethodStatus.RECONCILING
+        updatedAt = now
+    }
+
+    fun markManualReview(now: Instant) {
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.MANUAL_REVIEW
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun confirmDeactivated(now: Instant) {
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+                PaymentMethodStatus.MANUAL_REVIEW,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATED
+        isDefault = false
+        updatedAt = now
+    }
+
+    fun confirmProviderDeactivated(now: Instant) {
+        if (status == PaymentMethodStatus.DEACTIVATED) return
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.ACTIVE,
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+                PaymentMethodStatus.MANUAL_REVIEW,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATED
+        isDefault = false
+        updatedAt = now
+    }
+
+    companion object {
+        private val PROVIDER_REFERENCE_PATTERN = Regex("^bf_[A-Za-z0-9_-]{43}${'$'}")
+        private val LAST_FOUR_PATTERN = Regex("^[0-9]{4}${'$'}")
+
+        fun issueToss(
+            id: UUID,
+            customerId: UUID,
+            tokenReference: String,
+            providerCustomerReference: String,
+            displayAlias: String,
+            cardBrand: String,
+            lastFour: String,
+            now: Instant,
+        ): PaymentMethodEntity {
+            require(tokenReference.isNotBlank() && tokenReference.length <= 200)
+            require(displayAlias.isNotBlank() && displayAlias.length <= 80 && displayAlias == displayAlias.trim())
+            require(displayAlias.none(Char::isISOControl))
+            require(cardBrand.isNotBlank() && cardBrand.length <= 40 && cardBrand == cardBrand.trim())
+            require(LAST_FOUR_PATTERN.matches(lastFour))
+            require(PROVIDER_REFERENCE_PATTERN.matches(providerCustomerReference))
+            return PaymentMethodEntity(
+                id = id,
+                customerId = customerId,
+                provider = "TOSS_PAYMENTS",
+                tokenReference = tokenReference,
+                providerCustomerReference = providerCustomerReference,
+                displayAlias = displayAlias,
+                cardBrand = cardBrand,
+                lastFour = lastFour,
+                isDefault = false,
+                status = PaymentMethodStatus.ACTIVE,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+    }
+}
+
+internal class PaymentMethodStateConflict : RuntimeException("Payment method state does not allow this transition")
 
 internal enum class PaymentIdempotencyStatus {
     PROCESSING,
@@ -292,7 +423,46 @@ internal interface PaymentJpaRepository : JpaRepository<PaymentEntity, UUID> {
     fun findOldestUnknownUpdatedAt(): Instant?
 }
 
-internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntity, UUID>
+internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select method from PaymentMethodEntity method where method.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): PaymentMethodEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select method from PaymentMethodEntity method " +
+            "where method.customerId = :customerId order by method.id",
+    )
+    fun findAllLockedByCustomerId(
+        @Param("customerId") customerId: UUID,
+    ): List<PaymentMethodEntity>
+
+    fun findAllByProviderAndTokenReference(
+        provider: String,
+        tokenReference: String,
+    ): List<PaymentMethodEntity>
+
+    @Query(
+        "select method.id from PaymentMethodEntity method " +
+            "where method.provider = :provider and method.tokenReference = :tokenReference order by method.id",
+    )
+    fun findAllIdsByProviderAndTokenReference(
+        @Param("provider") provider: String,
+        @Param("tokenReference") tokenReference: String,
+    ): List<UUID>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select method from PaymentMethodEntity method " +
+            "where method.provider = :provider and method.tokenReference = :tokenReference order by method.id",
+    )
+    fun findAllLockedByProviderAndTokenReference(
+        @Param("provider") provider: String,
+        @Param("tokenReference") tokenReference: String,
+    ): List<PaymentMethodEntity>
+}
 
 internal interface PaymentIdempotencyJpaRepository : JpaRepository<PaymentIdempotencyEntity, UUID> {
     fun findByPaymentId(paymentId: UUID): PaymentIdempotencyEntity?

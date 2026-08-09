@@ -18,6 +18,8 @@ import io.github.kdh949.beanflow.ordering.internal.GetOrderService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
 import io.github.kdh949.beanflow.ordering.internal.PaymentConfirmationService
 import io.github.kdh949.beanflow.ordering.internal.StoreOrderTransitionService
+import io.github.kdh949.beanflow.payment.internal.PaymentMethodApplicationService
+import io.github.kdh949.beanflow.payment.internal.PaymentMethodQueryService
 import io.github.kdh949.beanflow.settlement.internal.SettlementBatchQueryService
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemQueryService
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
@@ -50,6 +52,12 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var paymentConfirmationService: PaymentConfirmationService
+
+    @MockitoBean
+    private lateinit var paymentMethodApplicationService: PaymentMethodApplicationService
+
+    @MockitoBean
+    private lateinit var paymentMethodQueryService: PaymentMethodQueryService
 
     @MockitoBean
     private lateinit var customerCancellationService: CustomerCancellationService

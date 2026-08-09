@@ -9,8 +9,10 @@
 - 실제 가맹점 계좌 지급
 - 전자금융 또는 카드 보안 규제 준수 완료 주장
 - 실제 PG 운영 계약
+- 복수 결제수단 provider routing
 
 PG는 명시적인 mock/sandbox Adapter로 실패와 reconciliation을 검증한다.
+scripted local adapter는 제품 provider나 운영 fallback이 아니다.
 
 ## Product scope
 

@@ -20,6 +20,15 @@ transaction 또는 connection을 유지하지 않는다.
 Payment 승인 fact의 after-commit 발행은 Tx2가 이미 확정한 예약을 다시 변경하는
 수단이 아니라 Settlement 등 후속 소비자를 위한 사실 전달로 한정한다.
 
+2026-08-09 PaymentMethod lifecycle amendment:
+
+- Payment 승인 Tx1은 검증·잠근 ACTIVE PaymentMethod에서 비공개 immutable
+  `PaymentProviderRequestSnapshot`을 Payment·멱등 레코드와 함께 저장한다.
+- Tx1 commit 뒤 Provider approve/lookup/recovery는 current PaymentMethod가 아니라 snapshot을
+  사용한다. 뒤에 deactivation이 commit돼도 이미 시작된 Payment fact를 소급 취소하지 않는다.
+- deactivation Tx D1이 먼저 commit하면 새 Payment Tx1은 snapshot과 Payment를 만들지 않는다.
+- snapshot 또는 binding 누락을 current PaymentMethod 읽기나 default 결제수단으로 보정하지 않는다.
+
 ## Alternatives Considered
 
 - 외부 호출을 DB 트랜잭션 내부에서 실행
@@ -57,3 +66,4 @@ Provider가 원자적 callback 또는 다른 보장 방식을 제공할 때
 - [ADR-009](ADR-009-explicit-failure-semantics.md)
 - [ADR-013](ADR-013-payment-unknown-reservation-expiry.md)
 - [ADR-015](ADR-015-store-acceptance-timeout-compensation.md)
+- [ADR-079](ADR-079-payment-method-token-management.md)

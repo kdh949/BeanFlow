@@ -79,3 +79,5 @@
 | [ADR-075](ADR-075-single-operator-cancellation-refund-reconciliation.md) | Accepted | 고객 취소 terminal Refund의 단일 운영자 LOOKUP 재개 |
 | [ADR-076](ADR-076-store-catalog-read-contract.md) | Accepted | 매장 카탈로그 조회 계약과 픽업 슬롯 예약 창 |
 | [ADR-077](ADR-077-fast-reorder-order-creation-api-identity.md) | Accepted | 빠른 재주문의 새 Order 생성과 API identity |
+| [ADR-078](ADR-078-toss-payments-sandbox-gateway-adapter.md) | Accepted | 토스페이먼츠 sandbox PaymentGateway adapter |
+| [ADR-079](ADR-079-payment-method-token-management.md) | Accepted | 결제수단 등록·조회·폐기 lifecycle과 Provider Port |

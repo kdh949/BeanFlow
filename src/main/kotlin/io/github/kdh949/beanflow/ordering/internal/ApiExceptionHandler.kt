@@ -51,9 +51,53 @@ internal class ApiExceptionHandler(
                 code = FailureCode.INVALID_REQUEST.name,
                 message = "Request validation failed",
                 correlationId = correlationIdSource.currentOrCreate(),
-                details = listOf(ErrorDetail(reason = failure.message ?: "Invalid request")),
+                details = safeValidationDetails(failure),
             ),
         )
+
+    private fun safeValidationDetails(failure: Exception): List<ErrorDetail> {
+        val details =
+            when (failure) {
+                is MethodArgumentNotValidException -> {
+                    failure.bindingResult.fieldErrors.map { ErrorDetail(field = it.field, reason = "INVALID_VALUE") }
+                }
+
+                is ConstraintViolationException -> {
+                    failure.constraintViolations.map {
+                        ErrorDetail(field = it.propertyPath.lastOrNull()?.name, reason = "INVALID_VALUE")
+                    }
+                }
+
+                is MissingRequestHeaderException -> {
+                    listOf(ErrorDetail(field = failure.headerName, reason = "MISSING_VALUE"))
+                }
+
+                is MethodArgumentTypeMismatchException -> {
+                    listOf(ErrorDetail(field = failure.name, reason = "INVALID_FORMAT"))
+                }
+
+                is HandlerMethodValidationException -> {
+                    failure.parameterValidationResults.map {
+                        ErrorDetail(field = it.methodParameter.parameterName, reason = "INVALID_VALUE")
+                    }
+                }
+
+                is ConversionFailedException -> {
+                    listOf(ErrorDetail(reason = "INVALID_FORMAT"))
+                }
+
+                is HttpMessageNotReadableException -> {
+                    listOf(ErrorDetail(reason = "MALFORMED_REQUEST"))
+                }
+
+                else -> {
+                    listOf(ErrorDetail(reason = "INVALID_VALUE"))
+                }
+            }
+        return details
+            .distinct()
+            .sortedWith(compareBy({ it.field ?: "" }, { it.reason }))
+    }
 
     @ExceptionHandler(DataAccessException::class)
     fun persistenceFailure(): ResponseEntity<ErrorResponse> =
@@ -73,10 +117,13 @@ internal class ApiExceptionHandler(
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 
-            FailureCode.PAYMENT_DECLINED -> HttpStatus.UNPROCESSABLE_ENTITY
+            FailureCode.PAYMENT_DECLINED,
+            FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,
+            -> HttpStatus.UNPROCESSABLE_ENTITY
 
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
+            FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,
             -> HttpStatus.SERVICE_UNAVAILABLE
 
             else -> HttpStatus.CONFLICT

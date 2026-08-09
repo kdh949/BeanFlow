@@ -37,6 +37,22 @@ Behavior:
 - correlation ID 제공
 - 외부 결과가 불명확하면 reconciliation 생성
 
+#### PaymentMethod registration and deactivation
+
+- registration/deactivation Port는 성공, contract-test로 무부수효과가 확인된 거절, 결과불명,
+  설정 결함을 닫힌 결과로 분리한다. 미등록 code·5xx·timeout·파싱 실패·필수 성공값 누락은
+  `Unknown`이며 raw Provider message를 공개 오류나 로그로 전달하지 않는다.
+- registration claim 뒤 결과가 불명확하면 일회성 authKey를 다시 보내거나 token·표시값을
+  추정하지 않는다. lookup 없는 Toss 결과와 stale interrupted claim은 추가 외부 호출 없이 같은
+  result/recovery transaction에서 즉시 `MANUAL_REVIEW`로 종결하고 고객에게는
+  `PROCESSING + REGISTRATION_DELAYED`만 투영한다.
+- deactivation Tx D1 commit부터 새 결제를 차단한다. claim 뒤 결과불명은 DELETE를 다시 보내거나
+  not-found를 성공으로 간주하지 않고 검증된 `BILLING_DELETED`를 최대 96시간 기다린다. 기한 뒤
+  `MANUAL_REVIEW`이며 `ACTIVE` fallback과 hard delete는 없다.
+- credential·인증·계약·필수 설정 결함은 고객 거절이 아닌
+  `PAYMENT_METHOD_PROVIDER_UNAVAILABLE` 또는 startup failure다. required Port 부재·다중 adapter와
+  profile 충돌을 scripted/fake/no-op으로 대체하지 않는다.
+
 #### Immutable settlement input
 
 - Order 생성은 applicable Merchant fee-contract version, Promotion reservation의 final

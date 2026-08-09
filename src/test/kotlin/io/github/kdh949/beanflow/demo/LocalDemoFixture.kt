@@ -6,7 +6,7 @@ import java.util.UUID
  * Deterministic identifiers for the `local-demo` fixture.
  *
  * Every value is synthetic. There is no real person, no customer location, no card number and no
- * CVC anywhere in this fixture; the payment method carries only an opaque sandbox token reference
+ * CVC anywhere in this fixture; the payment method carries only an opaque scripted token reference
  * whose suffix tells the local gateway which result to return.
  */
 internal object LocalDemoFixture {
@@ -65,9 +65,9 @@ internal object LocalDemoFixture {
     const val SETTLEMENT_FEE_RATE_BPS = 300
 
     /**
-     * Sandbox token reference. The local gateway keys its result off the suffix, so this is an
+     * Scripted token reference. The local gateway keys its result off the suffix, so this is an
      * explicit instruction to approve — never card data.
      */
-    const val SANDBOX_TOKEN_REFERENCE = "sandbox-token:local-demo:approved"
-    const val PAYMENT_PROVIDER = "local-sandbox"
+    const val SCRIPTED_TOKEN_REFERENCE = "scripted-token:local-demo:approved"
+    const val PAYMENT_PROVIDER = "local-scripted"
 }

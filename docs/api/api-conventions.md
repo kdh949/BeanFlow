@@ -36,6 +36,31 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 - `503 Service Unavailable`: 필수 의존성 일시 장애
 - 외부 결과 불명은 API 계약에 명시된 pending/unknown 표현 사용
 
+## PaymentMethod lifecycle
+
+- `GET /api/v1/payment-methods`는 `CUSTOMER` 자신의 `ACTIVE`와 deactivation pending method만
+  반환한다. terminal tombstone은 숨기고 내부 `MANUAL_REVIEW`는 공개 상태
+  `DEACTIVATION_PENDING`과 선택적 `DEACTIVATION_DELAYED` notice로 축약한다.
+- 목록은 common HMAC cursor, default 20·maximum 100과
+  `(isDefault DESC, createdAt DESC, paymentMethodId DESC)`를 사용한다. customer scope는 cursor에
+  서명되고 매 요청 인가를 다시 수행한다. default·상태 변경 사이의 snapshot은 보장하지 않는다.
+- `POST /api/v1/payment-methods` request는 `authKey`, `displayAlias`만 허용하고 unknown field를
+  거부한다. provider는 `TOSS_PAYMENTS`로 고정하며 PAN, CVC, expiry, 생년월일, 카드 비밀번호와
+  내부 provider reference를 어떤 공개 schema에도 넣지 않는다.
+- 등록 `201`은 새 PaymentMethod commit, `200`은 exact ACTIVE binding 수렴이 확인된 경우뿐이다. 결과 불명·
+  수동 조사 중은 `202 PaymentMethodRegistration`, 명시적 무부수효과 거절은 422, Provider 설정·
+  인증 결함은 503이다. 202를 등록 성공으로 해석하지 않는다.
+- `DELETE /api/v1/payment-methods/{paymentMethodId}`는 Tx D1 commit부터 신규 결제를 막는다.
+  Provider detach와 Tx D2가 확인되면 204, 그 전에는 `202 PaymentMethodDeactivation`이다. 202를
+  Provider token 폐기 성공으로 해석하지 않는다.
+- `PUT /api/v1/payment-methods/{paymentMethodId}/default`는 body가 없고 ACTIVE owner method만
+  허용한다. default는 표시 선호이며 결제 승인에서 누락된 `paymentMethodId`를 보충하지 않는다.
+- 공개 PaymentMethod는 ID, fixed provider, alias, brand, last4, default, 축약 상태와 시각만
+  포함한다. token, provider customer reference, authKey/hash, claim, attempt와 raw Provider
+  code/message는 응답하지 않는다.
+- 네 lifecycle operation은 Controller와 계약·인가 테스트가 존재하므로 target과
+  `openapi/beanflow-v1-runtime.yaml`에 모두 포함한다. 이 runtime 표시는 non-local 배포 증거가 아니다.
+
 ## Loyalty ledger projection
 
 - Plan 13 V17/owner transaction이 `recoveryPendingKrw`, `ACCRUAL`과 `RECOVERY` storage contract를
@@ -174,7 +199,8 @@ reason과 evidence를
 
 ## Idempotency
 
-- 주문 생성, 빠른 재주문, 주문 취소, 결제 승인, 환불, 매장 주문 상태 전이, 감사형 포인트 조정,
+- 주문 생성, 빠른 재주문, 주문 취소, 결제 승인, 결제수단 등록·default 지정·폐기, 환불,
+  매장 주문 상태 전이, 감사형 포인트 조정,
   이의제기와 운영자 재처리는 `Idempotency-Key`를 요구한다.
 - scope: actorId + operation + key
 - 같은 key + 같은 payload: 기존 결과
@@ -185,6 +211,10 @@ reason과 evidence를
 - 외부 결과가 non-terminal `UNKNOWN`인 Payment 승인·환불은 새 Provider 호출 없이
   현재 durable representation을 반환하는 예외다. 이 경우에도 replay indicator는
   없다.
+- PaymentMethod 등록과 폐기의 same-key replay도 새 Provider 호출 없이 최초 terminal response
+  또는 현재 202 representation을 반환한다. 등록 unknown은 일회성 authKey를 다시 보내지 않고,
+  폐기 unknown은 DELETE를 다시 보내지 않는다. default command의 terminal 200 replay는 현재
+  default를 다시 변경하지 않는다.
 - 처리 중인 키는 부작용을 다시 실행하지 않는다. Payment처럼 현재 durable
   representation 계약이 있는 명령만 그 representation을 반환하고, 주문 생성은 아래의
   `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`, 고객 취소는 Order row lock 직렬화 규칙을

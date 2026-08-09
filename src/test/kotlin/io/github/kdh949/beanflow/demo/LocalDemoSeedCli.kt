@@ -375,10 +375,10 @@ internal class LocalDemoSeeder(
                 id = LocalDemoFixture.PAYMENT_METHOD_ID,
                 customerId = LocalDemoFixture.CUSTOMER_ID,
                 provider = LocalDemoFixture.PAYMENT_PROVIDER,
-                // Opaque sandbox reference only. No PAN, no CVC, no track data.
-                tokenReference = LocalDemoFixture.SANDBOX_TOKEN_REFERENCE,
-                displayAlias = "Demo sandbox card",
-                cardBrand = "SANDBOX",
+                // Opaque scripted reference only. No PAN, no CVC, no track data.
+                tokenReference = LocalDemoFixture.SCRIPTED_TOKEN_REFERENCE,
+                displayAlias = "Demo scripted card",
+                cardBrand = "SCRIPTED",
                 lastFour = "0000",
                 status = PaymentMethodStatus.ACTIVE,
                 createdAt = now,
