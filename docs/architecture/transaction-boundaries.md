@@ -89,10 +89,84 @@ Tx I2: Tx O의 확정 실패 status/body를 idempotency FAILED로 저장
 - `COMPLETED`/`FAILED`는 최초 status/body와 함께 90일 retention 만료 시각을 갖는다.
   `PROCESSING`/`MANUAL_REVIEW`는 자동 정리하지 않는다.
 
+## PaymentMethod lifecycle
+
+```text
+Tx R1: actor + REGISTER_PAYMENT_METHOD_V1 + key unique arbitration
+       + canonical payload hash/authKey SHA-256
+       + intended PaymentMethod ID + fixed TOSS provider
+       + one CSPRNG provider customer reference + READY work
+commit
+Tx RC: READY work -> PROCESSING + claim token/time
+commit
+External registration Port once
+Tx R2 issued: token fingerprint advisory lock
+              + exact binding check + PaymentMethod ACTIVE
+              + registration terminal 201 response
+Tx R2 rejected: terminal 422 response
+Tx R2 unknown: REGISTRATION_UNKNOWN or MANUAL_REVIEW + current 202 response
+```
+
+- raw authKey는 R1 payload hash 입력과 external request 메모리에서만 존재하고 DB·관측 데이터에
+  저장하지 않는다. claim 이전 process loss만 같은 logical operation이 다시 claim한다. claim 뒤
+  timeout·응답 유실·process loss는 authKey를 다시 보내지 않는다.
+- registration result는 provider+token fingerprint transaction advisory lock 뒤 cross-owner row를
+  확인한다. exact ACTIVE owner/reference/alias/brand/last4만 기존 resource로 수렴하고 다른 binding은
+  overwrite·reactivation 없이 `MANUAL_REVIEW`다.
+- `Misconfigured`가 외부 side effect 부재를 확인한 경우만 503으로 같은 key 재시도를 허용한다.
+  다른 key의 같은 customer/provider/authKey hash는 Provider 호출 전에 거부한다.
+- 위 재시도는 registration 전용 `MISCONFIGURED_RETRYABLE -> PROCESSING` 전이다. deactivation
+  Misconfigured는 manual review로 가고 DELETE를 다시 호출하지 않는다.
+
+```text
+Tx M: customer-scope advisory lock
+      + target ACTIVE PaymentMethod lock
+      + previous default/target deterministic ID-order locks
+      + default swap + terminal command 200 response
+commit
+```
+
+- 새 PaymentMethod는 default가 아니다. default replay는 현재 선호를 다시 실행하지 않고 저장된 최초
+  200을 반환한다. default는 Payment 승인 대상 추론에 쓰지 않는다.
+
+```text
+Tx D1: owner PaymentMethod lock + command arbitration
+       + DEACTIVATION_REQUESTED + is_default=false + READY work
+commit
+Tx DC: READY work -> PROCESSING + claim token/time
+commit
+External deactivation Port once
+Tx D2 success: DEACTIVATED + terminal 204
+Tx D2 unknown: DEACTIVATION_UNKNOWN + unknown_at + deadline(unknown_at+96h)
+Deadline worker: due unknown -> MANUAL_REVIEW, no Provider call
+```
+
+- D1 commit부터 새 Payment 준비와 목록의 active 선택에서 제외한다. Provider latency 동안 DB
+  transaction/connection을 유지하지 않는다. claim 뒤 DELETE는 timeout·응답 유실·result 저장 실패를
+  포함해 자동 재호출하지 않고 not-found를 성공으로 추정하지 않는다.
+- terminal command 원장은 90일 뒤 bounded keyset worker가 정리할 수 있다. unknown/reconciling/manual
+  work와 inbox는 운영 해소 전 정리하지 않는다.
+
+```text
+Tx W1: verified provider notification
+       + (provider, notificationId) unique inbox accept
+commit
+Tx W2: token fingerprint mapping 0|1|many
+       + exact PaymentMethod row lock
+       + monotonic DEACTIVATED or MANUAL_REVIEW inbox result
+commit before Provider 2xx
+```
+
+- 인증·서명 실패와 malformed transport는 W1에 들어오지 않는다. W1 또는 W2 commit 실패를 2xx로
+  응답하지 않는다. raw token은 같은 delivery의 W2까지 메모리에서만 유지하고, 실패 replay가 다시
+  제공한 token으로 non-terminal inbox를 처리한다. 0건/다건 mapping은 owner를 추정하지 않고 inbox를
+  manual review에 두며, W2 terminal commit 뒤에만 2xx를 반환한다.
+
 ## Payment approval
 
 ```text
-Tx 1: Order/PaymentMethod 검증 + Payment APPROVING + IdempotencyRecord 저장
+Tx 1: Order/PaymentMethod 검증 + Payment APPROVING + IdempotencyRecord
+      + immutable PaymentProviderRequestSnapshot 저장
 commit
 External PG approval
 Tx 2 approved: Order lock + 네 예약 확정 + Order PAID + Payment APPROVED + Audit
@@ -101,6 +175,9 @@ Tx 2 unknown: Payment UNKNOWN + reconciliation schedule
 ```
 
 - DB connection을 Provider latency 동안 점유하지 않는다.
+- Tx1과 deactivation Tx D1은 같은 PaymentMethod row lock으로 직렬화한다. Tx1이 먼저 commit하면
+  approve/lookup/late recovery는 current PaymentMethod를 다시 읽지 않고 snapshot만 사용한다. D1이
+  먼저 commit하면 Payment와 snapshot을 만들지 않는다.
 - timeout은 `UNKNOWN`일 수 있다.
 - PG 성공 후 Tx 2 실패는 reconciliation으로 복구한다.
 - Tx1에서 최초 reconciliation due 시각을 함께 저장해 PG 성공 후 Tx2 전체 실패도

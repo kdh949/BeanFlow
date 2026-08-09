@@ -21,6 +21,7 @@ tags:
   - name: Discovery
   - name: Ordering
   - name: Payment
+  - name: Payment Methods
   - name: Store Orders
   - name: Operations
   - name: Loyalty
@@ -338,6 +339,173 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /payment-methods:
+    get:
+      tags: [Payment Methods]
+      operationId: listPaymentMethods
+      summary: List the authenticated customer's usable payment methods
+      description: |
+        CUSTOMER only. Returns the caller's ACTIVE and deactivation-pending
+        methods; terminal DEACTIVATED tombstones are excluded. Internal token,
+        provider customer reference, expiry, attempt and failure fields are never
+        returned. Results are ordered by isDefault DESC, createdAt DESC and
+        paymentMethodId DESC. The signed cursor is bound to the authenticated
+        customer. A default or lifecycle change between pages is not a snapshot;
+        clients refresh the first page for the latest preference.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Owned payment methods visible in the customer list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethodPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    post:
+      tags: [Payment Methods]
+      operationId: registerPaymentMethod
+      summary: Register a provider-window-authorized payment method
+      description: |
+        CUSTOMER only. The request accepts a one-time authKey returned by the
+        Provider payment window and a customer display alias. It never accepts
+        PAN, CVC, expiry, birth date or card password. Provider is fixed to
+        TOSS_PAYMENTS and cannot be selected by the caller.
+
+        Idempotency scope is actor ID, REGISTER_PAYMENT_METHOD_V1 and
+        Idempotency-Key. The canonical payload contains fixed provider, SHA-256
+        of authKey without storing the raw key, and normalized displayAlias.
+        Same-key/same-payload retries return the first terminal response or the
+        current 202 representation without a new Provider call. Reusing the key
+        for another payload or the same authKey under another key returns 409.
+        An unknown Provider result is never retried with the one-time authKey.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterPaymentMethodRequest"
+      responses:
+        "200":
+          description: Provider issuance resolved to the exact existing active binding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethod"
+        "201":
+          description: Provider issuance and local PaymentMethod commit are confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethod"
+        "202":
+          description: |
+            Registration outcome is unresolved or under manual investigation.
+            This is not a registered payment method and does not permit payment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethodRegistration"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /payment-methods/{paymentMethodId}:
+    delete:
+      tags: [Payment Methods]
+      operationId: deactivatePaymentMethod
+      summary: Deactivate an owned payment method and detach its Provider token
+      description: |
+        CUSTOMER only. Tx D1 first marks the owned method unavailable for new
+        payments, clears its default flag and stores durable work. The Provider
+        DELETE runs once outside that transaction. Only confirmed Provider success
+        and Tx D2 return 204. Timeout, response loss, parse failure or result-store
+        failure returns 202 and never triggers an automatic second DELETE. A
+        verified BILLING_DELETED notification may converge the method; otherwise
+        the operation is retained for manual review after 96 hours.
+
+        Idempotency scope is actor ID, DEACTIVATE_PAYMENT_METHOD_V1 and
+        Idempotency-Key. Same-key/same-target replay returns the original 204 or
+        current 202 representation without another Provider call. Using that key
+        for another target returns 409.
+      parameters:
+        - $ref: "#/components/parameters/PaymentMethodId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Provider detachment is unresolved; the method already rejects new payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethodDeactivation"
+        "204":
+          description: Provider detachment and local terminal deactivation are confirmed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /payment-methods/{paymentMethodId}/default:
+    put:
+      tags: [Payment Methods]
+      operationId: setDefaultPaymentMethod
+      summary: Set an owned active payment method as the display default
+      description: |
+        CUSTOMER only. This command has no request body. It atomically clears the
+        previous default and marks this ACTIVE method as default under a
+        customer-scoped lock. The preference is never used to infer an omitted
+        paymentMethodId during payment confirmation.
+
+        Same actor, operation, Idempotency-Key and target replays the original 200
+        without changing a newer preference. Reusing the key for another target
+        returns IDEMPOTENCY_KEY_REUSED.
+      parameters:
+        - $ref: "#/components/parameters/PaymentMethodId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Default preference committed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentMethod"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /payments/{paymentId}/refunds:
@@ -1144,6 +1312,12 @@ components:
     PaymentId:
       in: path
       name: paymentId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    PaymentMethodId:
+      in: path
+      name: paymentMethodId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -2379,6 +2553,111 @@ components:
       properties:
         paymentMethodId:
           $ref: "#/components/schemas/Identifier"
+    RegisterPaymentMethodRequest:
+      type: object
+      additionalProperties: false
+      required: [authKey, displayAlias]
+      properties:
+        authKey:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: One-time opaque authorization key returned by the Provider payment window
+        displayAlias:
+          type: string
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+          description: The server trims this value, then requires 1 to 80 characters; control characters are rejected
+    PaymentMethod:
+      type: object
+      additionalProperties: false
+      required:
+        [paymentMethodId, provider, displayAlias, cardBrand, lastFour, isDefault, status, createdAt, updatedAt]
+      properties:
+        paymentMethodId:
+          $ref: "#/components/schemas/Identifier"
+        provider:
+          type: string
+          const: TOSS_PAYMENTS
+        displayAlias:
+          type: string
+          minLength: 1
+          maxLength: 80
+        cardBrand:
+          type: string
+          minLength: 1
+          maxLength: 40
+        lastFour:
+          type: string
+          pattern: '^[0-9]{4}$'
+        isDefault:
+          type: boolean
+        status:
+          type: string
+          enum: [ACTIVE, DEACTIVATION_PENDING]
+        noticeCode:
+          type: string
+          const: DEACTIVATION_DELAYED
+          description: Present only when automatic deactivation recovery has stopped for manual investigation
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+      allOf:
+        - if:
+            required: [noticeCode]
+          then:
+            properties:
+              status:
+                const: DEACTIVATION_PENDING
+    PaymentMethodPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentMethod"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    PaymentMethodRegistration:
+      type: object
+      additionalProperties: false
+      required: [paymentMethodId, state, correlationId, updatedAt]
+      properties:
+        paymentMethodId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          const: PROCESSING
+        noticeCode:
+          type: string
+          const: REGISTRATION_DELAYED
+          description: Present when automatic resolution has stopped and operator investigation is required
+        correlationId:
+          type: string
+          minLength: 1
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+    PaymentMethodDeactivation:
+      type: object
+      additionalProperties: false
+      required: [paymentMethodId, state, correlationId, updatedAt]
+      properties:
+        paymentMethodId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          const: PROCESSING
+        noticeCode:
+          type: string
+          const: DEACTIVATION_DELAYED
+          description: Present after the 96-hour automatic webhook convergence window has ended
+        correlationId:
+          type: string
+          minLength: 1
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
     PaymentConfirmation:
       type: object
       additionalProperties: false

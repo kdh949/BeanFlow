@@ -100,7 +100,7 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
 | Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API, immutable coupon burden leg lookup |
 | Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, issuer allocation lookup, accrual·refund recovery facts, audited point-adjustment command, pending summary/query |
-| Payment | Payment, Refund와 line allocation, PaymentCancellationRecoverySnapshot, PaymentMethod, 결제 명령 IdempotencyRecord | approval/refund command and facts |
+| Payment | Payment, immutable Provider request snapshot, Refund와 line allocation, PaymentCancellationRecoverySnapshot, PaymentMethod, lifecycle command/work, ProviderNotificationInbox, 결제 명령 IdempotencyRecord | approval/refund and PaymentMethod lifecycle command/query facts |
 | Settlement | SettlementItem, SettlementBatch, SettlementAdjustment | settlement query, adjustment command |
 | Dispute | SettlementDispute와 Held Amount | dispute workflow and decision fact |
 | Notification | NotificationDelivery | delivery status/failure fact |

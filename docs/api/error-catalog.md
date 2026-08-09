@@ -20,6 +20,13 @@
 | RESERVATION_EXPIRED | 409 | No | 결제 전 예약 lease 만료 |
 | PAYMENT_DECLINED | 422 | Depends | Provider가 명시적으로 거절 |
 | PAYMENT_RESULT_UNKNOWN | 202 representation | Poll | 승인 결과 불명, reconciliation 중이며 확정 실패가 아님 |
+| PAYMENT_METHOD_REGISTRATION_REJECTED | 422 | Yes, new authKey and key | Provider가 side effect 부재를 확인한 등록 거절. 같은 authKey는 재사용하지 않음 |
+| PAYMENT_METHOD_REGISTRATION_UNKNOWN | 202 representation | Same-key read only | 등록 결과 불명 또는 수동 조사 중. 같은 authKey로 Provider를 다시 호출하지 않으며 등록 성공이 아님 |
+| PAYMENT_METHOD_DEACTIVATION_UNKNOWN | 202 representation | Same-key read only | Provider 폐기 결과 불명. 결제수단은 이미 신규 결제에 사용할 수 없고 DELETE를 재호출하지 않음 |
+| PAYMENT_METHOD_STATE_CONFLICT | 409 | No until state changes | ACTIVE가 아닌 결제수단의 default 지정·신규 승인 또는 허용되지 않은 lifecycle 명령 |
+| PAYMENT_METHOD_AUTHORIZATION_REUSED | 409 | No | 같은 customer/provider/authKey hash가 다른 Idempotency-Key로 재사용되어 Provider 호출 전에 거부됨 |
+| PAYMENT_METHOD_TOKEN_CONFLICT | 409 | Operator | Provider token의 owner/reference/표시 metadata/state가 exact ACTIVE binding과 달라 overwrite·재활성화 없이 수동 검토 필요 |
+| PAYMENT_METHOD_PROVIDER_UNAVAILABLE | 503 | Yes, same key after correction | Provider credential·인증·계약·필수 설정 결함. 고객 거절이나 fake fallback이 아님 |
 | PAYMENT_REFUND_UNKNOWN | 202 representation | Poll | 환불 결과 불명, reconciliation 중이며 성공 환불액에 아직 포함하지 않음 |
 | PAYMENT_REFUND_EXCEEDED | 409 | No | 누적 환불이 승인액 초과 |
 | PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
@@ -82,6 +89,13 @@ Idempotency-Key로 다시 요청할 수 있다.
 반환하는 경우가 아니다. command가 접수됐지만 외부 결과가 불명확한 경우 202 body의
 상태와 correlation ID로 표현한다. 같은 idempotency key/payload의 polling 성격 재시도는
 새 Provider 부작용을 만들지 않는다.
+
+`PAYMENT_METHOD_REGISTRATION_UNKNOWN`과 `PAYMENT_METHOD_DEACTIVATION_UNKNOWN`도 Error
+envelope의 확정 실패가 아니다. 각각 target OpenAPI의 202 진행 representation으로 반환한다.
+등록 202는 사용할 수 있는 PaymentMethod가 생겼다는 뜻이 아니며, 폐기 202는 Provider token 폐기
+확정을 뜻하지 않지만 Tx D1 뒤 신규 결제에는 이미 사용할 수 없다. notice는 내부 attempt·failure·
+manual-review 상태를 노출하지 않는다. `PAYMENT_METHOD_PROVIDER_UNAVAILABLE`은 raw Provider
+code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은 key로만 재시도한다.
 
 정산 이의제기 409는 DB 장애를 business conflict로 바꾼 결과가 아니다. 같은 Item 접수는
 Item advisory lock으로 직렬화하고, 같은 actor·operation·Idempotency-Key는 별도 advisory

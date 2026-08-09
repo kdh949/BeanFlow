@@ -1220,15 +1220,243 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** BeanFlow는 원본 카드번호, CVC, 전체 유효기간을 저장하지 않는다. PG가 발급한 payment method token reference, provider, 사용자 식별자, 표시용 별칭, 카드 브랜드, 마지막 4자리만 저장한다.
+- **Public Registration Boundary Amendment (2026-08-09):** 고객용 결제수단 등록은
+  Provider 결제창이 발급한 일회성 `authKey`를 받는 방식으로 한정한다. BeanFlow의 고객용
+  API는 카드번호, 유효기간, 생년월일, 카드 비밀번호와 CVC를 입력 필드로 받지 않는다.
+  서버는 `authKey`를 registration Port로 전달해 opaque token을 발급받으며, 휴대폰
+  본인인증 등 Provider 결제창의 소유 확인 절차를 우회하지 않는다. 카드 원문을 받는 API
+  방식은 MVP 공개 계약과 운영 코드의 Non-goal이다. 자동 sandbox 검증에 필요한 합성
+  입력은 고객용 API와 분리된 테스트 전용 계약에서만 다루며, 그 profile gate와 입력 수명은
+  ADR-079가 별도로 확정한다.
+- **MVP Provider Scope Amendment (2026-08-09):** 결제수단 lifecycle의 제품 외부
+  provider는 `TOSS_PAYMENTS` 하나다. 고객 request는 provider routing을 선택하지 않으며 서버가
+  이 고정 provider의 registration/deactivation Port를 사용한다. scripted local adapter는
+  명시적 local/test capability일 뿐 고객에게 선택·표시되는 제품 provider가 아니고 운영
+  fallback으로 활성화하지 않는다. 두 번째 외부 provider나 provider routing은 별도 Business
+  Policy·ADR·migration·failure contract 없이 추가하지 않는다.
+  신규 public registration은 Application Service에서 다른 provider를 거부한다. 기존 test/local
+  provider row는 migration이 값을 rewrite하지 않지만 제품 provider 또는 lifecycle 목록 대상이
+  아니다.
+- **Display Metadata Amendment (2026-08-09):** 카드 표시용 저장·응답 필드는
+  `displayAlias`, `cardBrand`, `lastFour`로 닫는다. 고객 등록 request는 `authKey`와 trim 뒤
+  1..80자이고 control character가 없는 `displayAlias`만 받는다. `cardBrand`와 `lastFour`는
+  Provider의 검증된 발급 결과만 원천으로 사용하며 각각 trim 뒤 1..40자와 숫자 4자리다.
+  Provider 결과가 누락·형식 불일치이면 빈 값, `UNKNOWN`, token 파싱 또는 고객 입력으로
+  보정해 등록 성공을 만들지 않는다.
+
+  expiry month/year는 함께 전체 유효기간을 구성하므로 저장·응답하지 않는다. 카드번호,
+  CVC, 생년월일, 카드 비밀번호, token reference와 provider customer reference도 어떤 공개
+  schema에도 넣지 않는다. alias·brand·last4는 identity·인가·unique 조건이 아니며 중복
+  표시값을 허용한다.
+- **Customer Default Method Amendment (2026-08-09):** 고객은 자신의 `ACTIVE`
+  PaymentMethod 중 최대 하나를 default로 지정할 수 있다. default는 클라이언트 표시·선택
+  선호이며 identity·인가 근거나 승인 대상 자동 결정 규칙이 아니다. 결제 승인 request는
+  계속 `paymentMethodId`를 명시해야 하고 서버는 누락을 default로 보충하지 않는다.
+
+  DB는 `is_default`와 customer별 active default 최대 하나를 partial unique/check로 보호하고,
+  registration·default 변경·deactivation은 같은 customer-scope lock으로 직렬화한다. default
+  결제수단의 deactivation Tx D1은 `is_default=false`를 함께 commit하지만 다른 결제수단을
+  자동 승격하지 않는다. 목록은 default를 먼저, 나머지는 `createdAt DESC,
+  paymentMethodId DESC`로 정렬한다. 새 PaymentMethod는 항상 `isDefault=false`다. 고객은
+  `Idempotency-Key`가 필요한 `PUT /api/v1/payment-methods/{paymentMethodId}/default`로만
+  ACTIVE 결제수단을 default로 지정한다. request body와 별도 clear command는 두지 않는다.
+  같은 key·같은 target replay는 최초 200을 재생하고 다시 default를 바꾸지 않으며, 같은 key를
+  다른 target에 쓰면 `409 IDEMPOTENCY_KEY_REUSED`다.
+- **Provider Reference Amendment (2026-08-09):** provider가 승인을 위해 token reference와
+  함께 요구하는 non-sensitive 참조 값은 위 목록에 더해 저장할 수 있다. 다음을 모두
+  만족해야 한다.
+  - 원본 카드번호, CVC, 전체 유효기간 중 어느 것도 담지 않는다. 저장 금지 목록은 그대로다.
+  - provider가 유추 가능한 값을 금지하면 사용자 식별자, 이메일, 전화번호에서 파생하지 않은
+    무작위 값으로 생성한다.
+  - API 응답, 로그, trace, metric tag와 AuditRecord에 노출하지 않는다.
+  - 결제수단 identity가 아니다. member/provider/token reference unique 제약을 대체하거나
+    확장하지 않으며, 객체 수준 인가의 근거로 사용하지 않는다.
+  - provider가 실제로 요구하는 값만 저장하고 선제적으로 만들지 않는다.
+
+  최초 대상은 토스페이먼츠 자동결제의 `customerKey`다. 이 값 없이는 발급된 빌링키로 승인
+  자체가 불가능하므로, 저장하지 않으면 sandbox 검증 경로가 존재할 수 없다.
+  저장 컬럼은 `payment_method.provider_customer_reference varchar(200)`다. 기존 row와 참조 값을
+  요구하지 않는 provider를 위해 물리 컬럼은 nullable이지만, DB CHECK와 Application Service는
+  `provider = TOSS_PAYMENTS`일 때 trim 뒤 non-blank를 필수로 하고 다른 provider에는 null만
+  허용한다. 이 DB branch는 legacy local/test row의 무손실 migration을 위한 것이며 신규 제품
+  provider 허용을 뜻하지 않는다. 다른 provider가 이 컬럼을 쓰려면 별도 결정과 migration으로
+  허용 목록을 넓힌다.
+  이 컬럼에는 unique index를 추가하지 않고 기존
+  `(customer_id, provider, token_reference)` unique를 유지한다.
+
+  값은 PaymentMethod registration Application Service의 CSPRNG factory가 등록 시도당 한 번
+  생성한다. 외부 발급 호출 전에 registration 멱등 원장에 고정하고, 성공 시 같은 값을
+  PaymentMethod에 복사한다. retry마다 재생성하거나 adapter가 임의 default를 만들지 않는다.
+- **Test Card Amendment (2026-08-09):** PG sandbox에서 결제수단 token을 자동 발급받는
+  통합테스트는 `src/test`의 test harness가 Toss registration adapter를 직접 호출한다. 공개·내부
+  HTTP endpoint와 운영 Application Service는 만들지 않는다. harness는 `toss-sandbox` profile,
+  `prod` 부재, `test_sk_` secret 확인과 별도 synthetic-issuance enable 조건이 모두 참일 때만
+  실행한다. 조건이 맞지 않으면 실제 Provider를 호출하지 않고 명시적으로 실패한다.
+
+  Provider가 카드 API 발급에 요구하는 합성 카드번호·유효기간·생년월일·카드 비밀번호는
+  실행 시점 메모리에서 만들고 전송만 허용한다. CVC는 생성하거나 전송하지 않는다. 합성 값은
+  소스·fixture·설정·seed에 기록하지 않고 발급 응답 직후 폐기하며 Entity·로그·trace·metric·
+  AuditRecord·API schema에 남기지 않는다. 실제 사람의 카드·신원 값을 입력하거나 수집하지
+  않는다. 이 예외는 고객용 `authKey` 등록 계약을 넓히지 않는다.
+- **Provider Deactivation Amendment (2026-08-09):** 고객의 결제수단 DELETE는 local row를
+  숨기는 데서 끝나지 않고 Provider token 폐기까지 요청한다. 소유권·상태·멱등성을 검증한
+  로컬 transaction에서 `DEACTIVATION_REQUESTED`와 복구 work를 먼저 저장하고, 그 commit
+  시점부터 새 결제 선택을 차단한다. Provider deactivation Port는 transaction 밖에서 호출한다.
+  확인된 성공만 soft terminal `DEACTIVATED`로 전이한다. timeout, 응답 유실, 결과 저장 실패는
+  성공·확정 실패나 `ACTIVE`로 추정하지 않고 `DEACTIVATION_UNKNOWN` 또는 `RECONCILING`으로
+  보존한다. bounded 복구가 소진되면 `MANUAL_REVIEW`로 전환한다. row와 token reference는
+  진행 중 복구·감사에 필요하므로 이 경로에서 hard delete하지 않는다.
+- **External Deactivation Notification Amendment (2026-08-09):** Provider가 보낸 검증된
+  token 폐기 알림은 provider-neutral inbox에 먼저 멱등 수락한 뒤 단일 PaymentMethod를 잠가
+  `DEACTIVATED`로 단조 전이한다. `ACTIVE`, deactivation 진행·불명·수동 검토 상태에서 모두
+  적용할 수 있지만 이미 시작된 Payment fact를 소급 변경하거나 결제수단을 재활성화하지 않는다.
+  토스의 최초 event type은 `BILLING_DELETED`다.
+
+  transport 인증·서명 검증 실패는 business event로 수락하지 않는다. 검증된 알림이 정확히
+  하나의 PaymentMethod에 매핑되지 않으면 token 소유자를 추정하거나 임의 row를 폐기하지 않고
+  inbox를 `MANUAL_REVIEW`로 보존한다. raw payload, token reference와 provider customer
+  reference는 로그·trace·metric tag·AuditRecord에 남기지 않는다. 같은 delivery 안에서 inbox
+  수락과 단일 mapping 또는 manual-review 결과가 각각 내구 commit된 뒤에만 2xx를 응답한다.
+  어느 DB 저장이라도 실패하면 non-2xx로 재전송을 유도하며, raw token은 W2까지 메모리에서만
+  유지하고 replay가 다시 제공한 값으로 non-terminal inbox를 처리한다. provider-neutral inbox·
+  상태 전이와 migration은 결제수단 lifecycle이, 토스 transport·인증과 mapping은 ADR-078
+  ExecPlan이 소유한다.
+- **In-flight Payment Amendment (2026-08-09):** Payment 승인 Tx1과 PaymentMethod
+  deactivation Tx D1은 같은 PaymentMethod row lock으로 경쟁한다. Tx1이 먼저 commit하면
+  Provider, token reference와 provider customer reference의 내부 전용 immutable
+  `PaymentProviderRequestSnapshot`을 Payment·멱등 레코드와 함께 저장한다. 이후 승인 요청,
+  lookup과 late-approval recovery는 current PaymentMethod 상태·값을 다시 읽지 않고 이 snapshot만
+  사용한다. snapshot은 API·로그·trace·metric tag·Audit에 노출하지 않는다.
+
+  Tx1 뒤 deactivation이 commit돼도 이미 시작된 Payment fact와 Order lease·late-approval 정책은
+  소급 변경하지 않고 기존 승인·reconciliation을 계속한다. deactivation은 이후 새 Payment
+  준비만 차단한다. D1이 먼저 commit하면 Payment 준비는 Provider 호출과 Payment 생성 없이
+  거부한다. deactivation이 진행 Payment를 취소하거나 Provider approval과 병합하지 않는다.
+  snapshot 누락·불일치는 current PaymentMethod fallback 없이 명시적 setup failure다.
+- **Duplicate Token Binding Amendment (2026-08-09):** registration result의 provider
+  token은 비가역 token fingerprint 기반 transaction advisory lock으로 직렬화한 뒤 기존 binding을
+  검사한다. 기존 `ACTIVE` PaymentMethod의 owner, provider, token reference, provider customer
+  reference, display alias, card brand와 last4가 모두 같을 때만 기존 resource로 멱등 수렴한다.
+  새 command는 기존 resource를 `200`으로 반환한다. `isDefault` 같은 lifecycle 선호는 비교 대상이
+  아니며 기존 값을 변경하지 않는다.
+
+  다른 owner, provider customer reference 또는 표시 metadata가 다르거나 기존 row가
+  deactivation 진행·불명·terminal·수동 검토이면 token이 같아도 overwrite·alias 갱신·재활성화하지
+  않고 등록 결과를 conflict/manual review로 보존한다. 기존
+  `(customer_id, provider, token_reference)` unique는 유지하며 provider customer reference를
+  identity에 넣지 않는다. migration은 provider+token이 여러 owner에 걸친 기존 row를 발견하면
+  임의 병합하지 않고 중단한다.
+- **Registration Idempotency Amendment (2026-08-09):** 고객 등록 POST는
+  `actorId + REGISTER_PAYMENT_METHOD_V1 + Idempotency-Key` scope의 사전등록 모델을 사용한다.
+  canonical payload는 fixed provider, raw 값을 저장하지 않은 `authKey` SHA-256과 정규화한
+  `displayAlias`다. 같은 key·같은 payload는 새 Provider 호출 없이 최초 terminal response 또는
+  현재 non-terminal representation을 반환하고, 다른 payload는
+  `409 IDEMPOTENCY_KEY_REUSED`다. customer/provider/authKey hash unique는 다른 key로 같은
+  authKey를 재사용해도 Provider 호출 전에 거부한다.
+
+  Tx R1은 intended PaymentMethod ID, CSPRNG provider customer reference, payload hash와
+  registration work를 먼저 commit한다. claim transaction 뒤 Provider registration은 DB
+  transaction 밖에서 claim당 한 번 호출한다. timeout·응답 유실·parsing failure와 claim 뒤
+  process loss는 `REGISTRATION_UNKNOWN`이며 일회성 authKey를 다시 보내지 않는다. 해당
+  Provider에 lookup 계약이 없으면 추가 Provider 상호작용 없이 `MANUAL_REVIEW`로 종결한다.
+  성공·token·표시 metadata를 추정하지 않고 raw authKey·hash·provider reference를 응답·로그·
+  trace·metric tag·Audit에 남기지 않는다. terminal 등록 원장은 90일, UNKNOWN·MANUAL_REVIEW는
+  운영 해소 전까지 정리하지 않는다.
+- **Deactivation Idempotency Amendment (2026-08-09):** 고객 폐기는
+  `actorId + DEACTIVATE_PAYMENT_METHOD_V1 + Idempotency-Key` scope로 중재한다. canonical
+  payload는 소유권 검증 뒤의 `paymentMethodId` 하나다. 같은 key·target은 새 상태 전이와
+  Provider 호출 없이 최초 terminal response 또는 현재 non-terminal representation을 반환하고,
+  같은 key·다른 target은 `409 IDEMPOTENCY_KEY_REUSED`다.
+
+  Tx D1은 `DEACTIVATION_REQUESTED`, default 해제, deactivation work와 멱등 상태를 commit한다.
+  짧은 claim transaction 뒤 Provider DELETE는 DB transaction 밖에서 한 번만 호출한다. claim
+  전 process loss는 같은 logical operation이 claim할 수 있지만, claim 뒤 timeout·응답 유실·
+  parsing failure·process loss와 Provider 성공 뒤 result 저장 실패에서는 DELETE를 자동 재호출하지
+  않는다. 토스가 DELETE 멱등키나 결과 조회를 보장하지 않으므로 성공·not-found를 추정하지 않고
+  `BILLING_DELETED`를 기다린다. 최초 `DEACTIVATION_UNKNOWN` 판정 시각부터 96시간 안에
+  검증된 알림이 없으면 `MANUAL_REVIEW`로 전환하며 `ACTIVE`로 되돌리지 않는다. 이 창은 토스의
+  공식 최대 webhook 재전송 창 약 3일 19시간에 5시간 여유를 더한다. terminal 원장은 90일,
+  UNKNOWN·MANUAL_REVIEW는 운영 해소 전까지 정리하지 않는다.
+- **Provider Port Outcome Amendment (2026-08-09):** registration Port는 닫힌
+  `Issued`, `RejectedWithoutEffect`, `Unknown`, `Misconfigured` 결과를, deactivation Port는
+  `Deactivated`, `RejectedWithoutEffect`, `Unknown`, `Misconfigured` 결과를 반환한다.
+  `Issued`만 opaque token과 검증된 brand·last4를 포함하고 `Deactivated`는 Provider의 확인된
+  성공만 나타낸다. `RejectedWithoutEffect`는 adapter contract test로 side effect 부재가
+  입증된 allowlist code에만 허용한다.
+
+  timeout·연결 실패·응답 유실·5xx·파싱 실패·필수 성공 필드 누락과 allowlist 밖 code는
+  `Unknown`이다. credential·인증·계약·필수 설정 결함은 고객 거절로 축소하지 않고
+  `Misconfigured`로 운영에 노출한다. 예외는 프로그래밍 결함과 호출 계약 위반에만 사용하고
+  정상적인 Provider 실패 분류를 예외로 숨기지 않는다. 공개 API는 raw Provider code/message,
+  token과 provider reference를 응답하지 않는다.
+
+  registration `Misconfigured`가 side effect 부재를 확인한 경우만 설정 수정 뒤 같은 key가 새
+  claim으로 authKey를 다시 보낼 수 있다. `Unknown`에서는 금지한다. deactivation
+  `RejectedWithoutEffect`와 `Misconfigured`는 이미 D1이 commit된 command를 `MANUAL_REVIEW`로
+  보내며 DELETE를 다시 보내지 않는다. 고객에게는 202 pending/delayed로 투영한다.
+- **Provider Adapter Activation Amendment (2026-08-09):** registration/deactivation의
+  scripted adapter는 `(local | test) & !toss-sandbox & !prod` 조건에서만 명시적으로 활성화한다. Toss sandbox
+  adapter는 `toss-sandbox`, `!prod`, `test_sk_` secret 조건에서만 활성화한다. 합성 카드 발급은
+  이 조건에 별도 enable flag까지 더한 `src/test` harness 전용이다.
+
+  `prod`에는 이 결정으로 lifecycle Provider adapter를 제공하지 않는다. lifecycle Controller와
+  Application Service가 활성인데 해당 Port 구현이 없거나, adapter가 둘 이상이거나, sandbox와
+  scripted 조건이 겹치거나, `live_sk_`가 들어오면 startup을 실패시킨다. Bean 부재나 Provider
+  실패를 `@ConditionalOnMissingBean` scripted/fake/no-op adapter로 자동 대체하지 않는다. local
+  scripted 결과는 테스트 capability일 뿐 제품 Provider 선택·API provider 값·운영 fallback이
+  아니다.
 - **Rationale:** 민감 결제정보의 저장 책임을 피하고 PG tokenization 경계를 명확히 한다.
 - **Affected Contexts:** Payment, Identity
 - **Affected Aggregates:** PaymentMethod
 - **Required Tests:**
   - 다른 사용자의 결제수단 사용 거부
   - 민감 필드가 Entity·로그·API에 존재하지 않는지 검증
+  - 고객용 등록 schema가 `authKey` 외의 카드번호·유효기간·생년월일·카드 비밀번호·CVC를
+    받지 않으며 unknown field를 거부함
+  - 공개·운영 profile에 카드 원문 기반 등록 endpoint와 request DTO가 없음
+  - 고객 request로 임의 provider를 선택할 수 없고 제품 row가 `TOSS_PAYMENTS`로 고정됨
+  - 운영 profile에서 scripted local adapter 선택과 Provider 미설정의 startup failure
+  - alias 길이·control character, brand 길이와 last4 숫자 4자리 경계
+  - Provider 표시 결과 누락·불일치에서 placeholder·token 파싱·고객값 fallback 없는 명시적 실패
+  - Entity·OpenAPI·response에 expiry month/year와 내부 token/provider customer reference 부재
+  - customer별 active default 0..1, 동시 등록·default 변경·deactivation의 unique 수렴
+  - default 폐기 시 원자적 해제와 다른 결제수단 자동 승격 부재
+  - 결제 승인 request의 paymentMethodId 누락을 default로 보충하지 않음
+  - default PUT의 same-key replay·cross-target conflict와 오래된 retry의 현재 default 비변경
+  - test harness가 네 gate 중 하나라도 불충족하면 합성 값 생성과 Provider 호출 없이 실패함
+  - 합성 카드번호·유효기간·생년월일·카드 비밀번호가 source·fixture·설정·seed·DB·관측
+    데이터에 없고 발급 뒤 참조가 남지 않음
+  - 공개·내부 HTTP route에서 synthetic issuance를 호출할 수 없음
+  - DELETE 의도 commit 뒤 Provider 호출 전·중 신규 결제 선택 거부
+  - Provider 폐기 성공, timeout·응답 유실과 Provider 성공 뒤 DB result 저장 실패의 상태 수렴
+  - `DEACTIVATION_UNKNOWN/RECONCILING/MANUAL_REVIEW`를 성공이나 `ACTIVE`로 투영하지 않음
+  - 검증된 `BILLING_DELETED` 중복·지연·순서 역전의 단일 `DEACTIVATED` 전이
+  - 서명 실패·W1/W2 DB 실패·0건/다건 mapping에서 무변경과 명시적 실패·수동 검토,
+    W2 terminal commit 전 2xx 부재
+  - webhook 처리에서 raw payload·token·provider customer reference 비노출
+  - Payment Tx1·deactivation Tx D1 동시 실행의 먼저 commit한 경계와 단일 snapshot
+  - deactivation 뒤 기존 APPROVING/UNKNOWN/RECONCILING Payment의 같은 snapshot 수렴
+  - snapshot 누락·불일치에서 current PaymentMethod fallback·새 승인 부재
+  - 같은 token의 exact ACTIVE binding 재처리와 다른 owner/reference/metadata/state 충돌
+  - token fingerprint lock 아래 동시 registration의 단일 row와 overwrite·재활성화 부재
+  - same-key/same-payload 등록 replay, cross-payload·cross-key same-authKey conflict
+  - Provider 호출 claim 전·후 process loss와 timeout에서 authKey 재전송·성공 추정 부재
+  - lookup 미지원 unknown의 Provider 추가 호출 없는 MANUAL_REVIEW와 retention guard
+  - 폐기 same-key replay·cross-target conflict와 claim 뒤 Provider DELETE 재호출 부재
+  - 폐기 timeout·응답 유실 뒤 96시간 내 `BILLING_DELETED` 수렴 또는 기한 만료 MANUAL_REVIEW
+  - registration/deactivation Port 닫힌 결과 전 행과 미등록 code의 Unknown fail-closed
+  - 설정·인증 결함의 고객 거절 변환 부재와 raw Provider message 비노출
+  - local/test, toss-sandbox, prod profile 조합의 단일 adapter 또는 fail-start
+  - Port 부재·다중 bean·live key에서 scripted/fake/no-op 자동 fallback 부재
   - 폐기된 token 사용 거부
   - Provider token 중복 등록 정책
-- **ADR Required:** Yes — 결제수단 tokenization과 저장 금지 데이터
+  - provider 참조 값이 API 응답·로그·metric tag·AuditRecord에 없음
+  - provider 참조 값의 무작위 생성과 사용자 식별자·이메일·전화번호 비파생
+  - `TOSS_PAYMENTS` row의 참조 값 필수, 다른 provider row의 null 강제와 legacy backfill 불필요
+  - 등록 retry·timeout 전후 같은 registration 시도의 provider 참조 값 불변
+  - provider 참조 값 일치가 다른 member의 결제수단 사용을 허용하지 않음
+  - 참조 값을 요구하는 provider에서 값이 없으면 Provider 호출 없이 명시적 실패
+- **ADR Required:** Yes — 결제수단 tokenization과 저장 금지 데이터, [ADR-079](../adr/ADR-079-payment-method-token-management.md)
 - **Revisit Conditions:** 실제 PG sandbox 계약과 인증 범위가 확정될 때
 
 ## BR-30 감사 로그 대상

@@ -18,7 +18,7 @@
 | 인가 | 역할·매장 소속 검사가 그대로 동작한다. smoke가 401·401·403을 명시적으로 확인한다 |
 | 도메인 불변식 | 예약 lease, capacity, 멱등성, 상태 전이 모두 production 코드 경로다 |
 | 필수 정책 | GLOBAL 일반 적립 정책은 production과 같은 감사형 bootstrap CLI가 OIDC workload identity 검증을 통과해 만든다. seed는 정책이 없으면 실패하고 default를 만들지 않는다 |
-| 결제 | `local` sandbox adapter가 sandbox token reference의 suffix로 결과를 정한다. PAN·CVC·유효기간은 어디에도 없다 |
+| 결제 | `local` scripted adapter가 token reference의 suffix로 결과를 정한다. 외부 sandbox를 호출하지 않으며 PAN·CVC·유효기간은 어디에도 없다 |
 | 실패 | 모든 대기는 deadline이 있는 bounded poll이고, 초과는 실패다. smoke는 첫 실패에서 0이 아닌 exit code로 끝난다 |
 
 `local-demo`는 `prod`와 함께 활성화될 수 없다. 동시에 켜면 startup이 실패한다

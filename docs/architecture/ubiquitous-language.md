@@ -42,7 +42,9 @@
 | Held Amount | 이의제기 대상 예상 조정액. 확정 Batch를 변경하지 않고 SettlementDispute가 참조하며 판정 결과에 따라 Adjustment로 확정되거나 해제된다. | Dispute |
 | NotificationDelivery | 이벤트·수신자·채널별 실제 발송 상태 | Notification |
 | IdempotencyRecord | `actorId + operation + key` 범위의 payload hash, 처리 상태와 재사용 응답을 보존하는 기록 | 호출 대상 Context |
-| PaymentMethod | 원본 카드정보가 아닌 PG token reference와 표시용 비민감 메타데이터 | Payment |
+| PaymentMethod | 원본 카드정보가 아닌 PG token lifecycle, 고객 표시 metadata와 default 선호를 소유하는 Aggregate. provider/customer reference는 내부 전용이며 인가 근거가 아니다. | Payment |
+| PaymentProviderRequestSnapshot | Payment 시작 시 PaymentMethod에서 고정한 immutable Provider 요청 입력. 이후 method 폐기와 무관하게 기존 Payment만 수렴시킨다. | Payment |
+| ProviderNotificationInbox | 인증을 통과한 Provider lifecycle 알림을 notification ID로 멱등 수락하고 단일 PaymentMethod mapping 결과를 보존하는 원장 | Payment |
 | Idempotency | 같은 의도의 중복 요청 또는 이벤트가 부작용을 한 번만 만들게 하는 성질 | Cross-cutting |
 | Outbox | 원본 DB 트랜잭션과 함께 발행할 이벤트를 영속화하는 패턴 | Cross-cutting |
 | AuditRecord | 금액·권한·상태의 수동 또는 중요 변경을 주체·사유와 함께 기록하는 append-only 기록 | Operations |

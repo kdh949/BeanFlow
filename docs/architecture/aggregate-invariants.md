@@ -20,9 +20,9 @@
 | PointReservation | 주문별 PointLot allocation과 lease | 주문당 active 예약 하나, allocation 합계=예약 총액, 예약 시 유효한 allocation은 주문 lease까지 확정 가능, 복원 source/trigger/policy 일치 | `orderId`, `pointAccountId`, `pointLotId` |
 | PointRecoveryPending | 환불 적립 포인트의 미회수 잔액과 후속 적립 상계 | refund source당 account별 하나, `PENDING` remaining 양수, `SETTLED` remaining 0, account summary와 tie-out | `pointAccountId`, refund source ID |
 | PointAdjustmentCommandIdempotency | 감사형 포인트 조정의 terminal response 재생 | actor/operation/key unique, account/hash match일 때만 201 replay, 90일 retention | `actorId`, `pointAccountId` |
-| Payment | 승인·불명·환불 | 동일 키 중복 승인 금지, 누적 환불 ≤ 승인액 | `orderId` |
+| Payment | 승인·불명·환불과 immutable Provider request snapshot | 동일 키 중복 승인 금지, 누적 환불 ≤ 승인액, external Payment당 snapshot 하나이며 Provider 입력은 생성 뒤 update/delete 금지 | `orderId`, `paymentMethodId` |
 | Refund | 외부 환불 요청·조회·결과 | source/key 불변, request≤3, lookup≤5, Unknown 뒤 REQUEST 금지, 성공액은 요청액과 일치 | `paymentId`, `orderId` |
-| PaymentMethod | PG token reference와 표시 정보 | 원본 카드번호·CVC·전체 유효기간 금지, 사용자와 provider token 범위 중복 금지 | `memberId` |
+| PaymentMethod | PG token lifecycle·표시 정보·고객 default 선호 | 원본 카드번호·CVC·전체 유효기간 금지, owner/provider/token exact binding, customer별 ACTIVE default 0..1, deactivation 상태는 신규 결제 금지, 재활성화·hard delete 금지 | `memberId` |
 | IdempotencyRecord | 명령 중복 실행 방지와 응답 재사용 | 같은 scope·key에 payload hash 하나, 처리 중/UNKNOWN은 정리 금지, terminal response는 만료 시각까지 보존 | `actorId`, target ID |
 | SettlementItem | 완료 주문 단위의 불변 정산 명세 | Order/source당 하나, KRW 금액·수수료·혜택·순정산 tie-out, 서울 완료일 일치, OPEN Batch에만 귀속, update/delete 금지 | `orderId`, `settlementBatchId`, `storeId` |
 | SettlementBatch | 서울 완료일·매장별 Item 귀속, 집계·확정 | store/date당 하나, Item은 OPEN Batch에만 귀속, `OPEN → CALCULATED → CONFIRMED`, summary·이월 tie-out, 확정 후 직접 수정 금지 | `storeId`, 이전 confirmed Batch ID |
@@ -78,7 +78,11 @@
 | `PaymentRepository` | Payment | provider transaction key and order/payment intent unique | unique + guarded transition |
 | `RefundRepository` | Refund | source/provider key unique, reason/state check, request·lookup·total attempt tie-out | Payment row lock + claim lease + guarded transition |
 | `PaymentCancellationRecoveryRepository` | PaymentCancellationRecoverySnapshot | order/payment당 하나, approved = prior succeeded + cancellation requested, requested 양수일 때 Refund 필수 | unique/FK/check + Payment row lock |
-| `PaymentMethodRepository` | PaymentMethod | member/provider/token reference unique | unique |
+| `PaymentMethodRepository` | PaymentMethod | customer/provider/token reference unique, TOSS provider reference 필수, ACTIVE default customer당 0..1, lifecycle CHECK | customer advisory + token fingerprint advisory + row lock + unique/check |
+| `PaymentMethodRegistrationRepository` | registration command/work | actor/operation/key와 customer/provider/authKey hash unique, raw authKey 부재, claim/result/retention 상태 tie-out | insert-first unique + expiring claim + guarded transition |
+| `PaymentMethodDeactivationRepository` | deactivation command/work | actor/operation/key unique, PaymentMethod당 active work 하나, DELETE claim 뒤 재호출 금지, unknown deadline 96시간 | PaymentMethod row lock + unique + guarded transition |
+| `PaymentMethodDefaultCommandRepository` | default terminal response | actor/operation/key unique, same target/hash만 200 replay, terminal 90일 | customer advisory + deterministic row lock + unique |
+| `ProviderNotificationInboxRepository` | 검증된 provider-neutral 폐기 알림 | provider/notification ID unique, token mapping 0/1/many 명시, terminal 90일·manual 해소 전 보존 | insert-first unique + PaymentMethod row lock |
 | `IdempotencyRecordRepository` | IdempotencyRecord | actor/operation/key unique, terminal `retention_expires_at` 필수와 non-terminal null CHECK | insert-first unique arbitration + terminal keyset retention worker |
 | `PointAdjustmentCommandIdempotencyRepository` | PointAdjustmentCommandIdempotency | actor/operation/key unique, account/hash match에만 201 replay, terminal response 90일 retention | PointAccount lock + unique-conflict rollback/re-read + keyset retention worker |
 | `SettlementItemRepository` | SettlementItem | order/source unique, 금액 공식과 서울 완료일, update/delete 금지, Batch store/date/OPEN 일치 | unique + CHECK + FK + insert/mutation trigger |

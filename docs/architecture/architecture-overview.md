@@ -72,6 +72,11 @@ Bounded Context 수는 배포 서비스 수와 같지 않다.
 
 - PG, 알림, 시간, UUID와 이벤트 발행을 Port로 추상화한다.
 - mock/fake Adapter는 test 또는 명시적 local profile에서만 활성화한다.
+- 외부 HTTP를 호출하는 sandbox Adapter도 명시적 sandbox profile과 `!prod`에서만 활성화하고
+  test credential prefix를 검증한다. scripted local, external sandbox와 향후 live Adapter를 같은
+  fallback 축으로 취급하지 않는다.
+- 필요한 Port가 없거나 adapter 조건이 겹치면 시작을 실패시킨다. `@ConditionalOnMissingBean`
+  scripted/fake/no-op fallback은 두지 않는다.
 - 외부 호출을 장시간 DB 트랜잭션 안에서 수행하지 않는다.
 - timeout은 실패와 구분된 unknown 상태가 필요할 수 있다.
 

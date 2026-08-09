@@ -4,6 +4,8 @@
 |---|---:|---:|---:|---:|---:|
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 빠른 재주문 | Own terminal source only | No | No | No direct reorder | No |
+| 내 결제수단 등록·목록 | Own only | No | No | No public support endpoint | No |
+| 내 결제수단 default 지정·폐기 | Own active/lifecycle-allowed method | No | No | No direct command | No |
 | 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
 | 고객 주문 취소 | Own and allowed state | No | No | No direct cancellation | No |
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
@@ -100,6 +102,25 @@ JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전�
 고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
 endpoint는 `CUSTOMER` 역할만 허용하고 매장·운영자 role의 호출은 `403`이다.
+
+PaymentMethod lifecycle endpoint도 `CUSTOMER` 역할과 authenticated actor의 owner ID를 모두
+요구한다. 목록 query는 owner predicate를 Repository/Query Repository에 포함하고, 등록은 owner를
+request body에서 받지 않는다. default·폐기 target이 없으면 404, 다른 고객 소유이면 403이며
+소유권을 확인하기 전에 alias·brand·last4·상태·default 여부를 노출하지 않는다. provider customer
+reference, token, authKey/hash와 표시 metadata는 인가 근거가 아니고 owner ID를 대체하지 않는다.
+legacy local/test provider row는 lifecycle resource scope 밖이라 owner에게도 목록에서 제외하고 target
+command는 404다.
+
+결제 승인 Tx1은 Order owner와 같은 customer의 `ACTIVE` PaymentMethod를 row lock 아래 검증한다.
+Tx1이 먼저 commit한 Payment는 내부 immutable request snapshot으로 계속 수렴하지만, 이 snapshot은
+새로운 PaymentMethod 접근 권한이나 lifecycle command 권한을 만들지 않는다. deactivation Tx D1이
+먼저 commit하면 뒤 승인 준비는 Payment와 snapshot을 만들지 않고
+`PAYMENT_METHOD_STATE_CONFLICT`로 실패한다.
+
+Platform Operator에게 PaymentMethod 공개 목록·default·폐기 권한을 암묵적으로 부여하지 않는다.
+운영 조사와 manual-review 해소 command가 필요하면 별도 permission, 최소 projection, 접근 사유와
+Audit 계약을 먼저 결정한다. 현재 role, 다른 Operations grant와 DB 조회 장애를 support fallback으로
+사용하지 않는다.
 
 빠른 재주문도 같은 고객 Order 소유권 정책을 사용한다. `CUSTOMER`만 호출할 수 있고
 source Order가 없으면 404, 다른 고객 소유이면 403이다. 소유권을 확인하기 전에 source

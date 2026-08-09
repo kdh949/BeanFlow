@@ -105,10 +105,18 @@ beanflow:
 | `GET /point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 endpoint |
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
+| `GET /payment-methods` | `(isDefault DESC, createdAt DESC, paymentMethodId DESC)` | authenticated customer ID와 endpoint |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
 base64 parsing을 만들지 않는다.
+
+2026-08-09 PaymentMethod amendment: PaymentMethod typed cursor는 `isDefault`를 `1|0`,
+`createdAt`을 UTC ISO-8601 Instant, ID를 lowercase canonical UUID로 고정해 세 값을 string array로
+인코딩한다. endpoint identifier는 `payment-methods`, filter hash는 endpoint와 authenticated
+customer ID의 canonical UUID로 계산한다. 매 요청 customer 인가를 다시 수행하며 다른 customer의
+cursor는 400이다. default 또는 lifecycle 상태가 page 요청 사이 바뀌면 snapshot consistency를
+보장하지 않으므로 client는 최신 first page를 다시 읽는다.
 
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고
