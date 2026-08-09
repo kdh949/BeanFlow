@@ -40,6 +40,7 @@ OrderCompensationCase, Refund, NotificationDelivery와 publication을 새로 저
 | 명령 | 모델 | 근거 |
 |---|---|---|
 | 주문 생성 | 사전등록 | 기존 Order root가 없고 생성 경쟁을 먼저 arbitration해야 함 |
+| 빠른 재주문 | 사전등록 | source Order는 immutable 입력이고 결과인 새 Order root가 아직 없어 기존 주문 생성 Tx I1/Tx O/Tx I2를 재사용해야 함 |
 | 결제 승인 | 사전등록 | 외부 Provider 결과가 불명일 수 있음 |
 | 매장 주문 상태 전이 | 명령 트랜잭션 | 기존 Order lock과 로컬 guarded transition |
 | 고객 취소 C0 | 명령 트랜잭션 | 기존 Order lock, 로컬 해제·Audit·Delivery와 최초 200 commit |
@@ -49,6 +50,11 @@ OrderCompensationCase, Refund, NotificationDelivery와 publication을 새로 저
 `IDEMPOTENCY_REQUEST_IN_PROGRESS`와 stuck-record reconciliation은 사전등록 모델에만
 사용한다. 명령 트랜잭션 모델에서 rollback된 요청은 멱등 레코드를 남기지 않으며,
 외부 부수효과가 rollback 뒤 재실행될 수 있는 구조를 추가해서는 안 된다.
+
+사전등록 record가 stale threshold를 넘어 `MANUAL_REVIEW`가 되면 자동 처리는 중단된 것이다.
+이를 `PROCESSING`으로 투영하거나 `Retry-After`를 반환하지 않는다. 동일 key는 owner 작업을
+재실행하지 않고 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`로 응답한다. terminal response로
+수렴시키려면 별도의 권한·Audit·검증을 갖춘 운영자 command를 먼저 Accepted 결정으로 추가해야 한다.
 
 ## Alternatives Considered
 
@@ -103,6 +109,8 @@ OrderCompensationCase, Refund, NotificationDelivery와 publication을 새로 저
   최초 200/202 body를 저장한다.
 - 같은 C1 key·payload 재요청은 Case, Refund, Delivery, publication을 다시 만들지 않는다.
 - 주문 생성은 기존 root 없이 같은 key의 동시 요청을 사전등록 unique record로 arbitration한다.
+- 빠른 재주문은 source Order를 target root로 오인하지 않고 `REORDER_ORDER_V1` 사전등록과
+  기존 원자적 주문 생성 transaction으로 새 Order 하나를 만든다.
 - 결제 승인 Provider timeout은 `PROCESSING`/`UNKNOWN`과 reconciliation으로 남는다.
 - 새 명령 설계 review가 직렬화 root·외부 호출 위치·rollback 뒤 부수효과를 명시하지 않으면
   구현을 시작하지 않는다.
@@ -118,6 +126,7 @@ account/payload와 동시 debit/cross-account command를 PostgreSQL에서 검증
 - C1의 같은 key 동시 요청에서 하나의 durable work set과 동일 body 재생
 - C1 저장 실패 rollback 뒤 Provider 호출과 persistent publication 부재
 - 주문 생성의 사전등록 `PROCESSING`과 stuck reconciliation
+- 빠른 재주문의 source/request payload conflict, PROCESSING, non-retry MANUAL_REVIEW와 terminal exact replay
 - 결제 승인 timeout의 unknown/reconciliation과 재승인 방지
 - 새 command 분류 review fixture: root 없음, 외부 호출 있음, 둘 다 없는 local transition
 
@@ -146,3 +155,4 @@ Order, customer, store ID와 `Idempotency-Key`는 metric tag로 사용하지 않
 - [ADR-035](ADR-035-paid-cancellation-transaction-boundary.md)
 - [ADR-056](ADR-056-ordering-idempotency-retention-worker.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
+- [ADR-077](ADR-077-fast-reorder-order-creation-api-identity.md)

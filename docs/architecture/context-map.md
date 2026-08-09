@@ -64,6 +64,14 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 경우에도 다른 Context의 Repository를 직접 호출하지 않고 공개 Application API만
 사용한다.
 
+빠른 재주문은 Ordering이 소유한 terminal source Order를 읽는 명령이며 별도 Reorder
+Aggregate나 read model을 만들지 않는다. Ordering은 source의 `menuId`, 검증된 정규화 option ID
+snapshot과 `quantity`만 기존 주문 생성 application boundary의 입력으로 변환한다. 이후
+Merchant/Fulfillment/Inventory/Promotion/Loyalty 상호작용과 settlement/accrual snapshot 생성은
+일반 주문 생성과 같은 현재 owner 계약 및 원자적 transaction을 사용한다. source Order lock은
+복제할 snapshot과 소유권·상태를 확정하기 위한 것이며, 새 Order 생성 멱등성의 직렬화 root로
+간주하지 않는다.
+
 2026-08-03 Plan 20 outcome에서 위 Merchant/Promotion/Loyalty 동기 경계는 주문 생성 local
 transaction 안의 `OrderSettlementInputSnapshot`으로 고정되고, guarded completion은 matching
 Payment approval과 snapshot만 사용해 `OrderCompletedV2` outbox를 저장한다. Settlement는 별도
@@ -87,7 +95,7 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 | Eventing | write data 없음 | versioned integration event 계약 |
 | Merchant | Store, 1:1 `StoreDiscoveryProfile`, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, 검증된 공개 매장명·위치 query, sellable requirement와 applicable settlement-terms lookup |
 | Discovery | durable write data 없음; 사용자 정밀 좌표와 Merchant/Fulfillment 복제본을 저장하지 않음 | nearby store query, 매장 메뉴·픽업 슬롯 read와 request-only projection |
-| Ordering | Order, OrderLine, `OrderSettlementInputSnapshot`, 주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
+| Ordering | Order, 검증된 정규화 option ID를 포함한 OrderLine snapshot, `OrderSettlementInputSnapshot`, 주문 생성·재주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
 | Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API, 잔여 capacity slot query |
 | Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
 | Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API, immutable coupon burden leg lookup |

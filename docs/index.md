@@ -43,6 +43,7 @@
 - [Definition of Done](testing/definition-of-done.md)
 - [Measurement Plan](performance/measurement-plan.md)
 - [Quality Evidence Map](quality/quality-evidence-map.md)
+- [Fast Reorder Release Evidence](quality/fast-reorder-release-evidence.md)
 - [Customer Order Cancellation Readiness](quality/customer-order-cancellation-readiness.md)
 - [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
 - [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
@@ -56,6 +57,7 @@
 
 ## Execution Plans
 
+- [Completed Fast Reorder Vertical Slice](exec-plans/completed/fast-reorder-vertical-slice.md)
 - [Completed Customer Order Cancellation Master](exec-plans/completed/customer-order-cancellation-and-recovery.md)
 - [Completed Repository Truth Audit](exec-plans/completed/repository-truth-audit-and-runtime-contract-alignment.md)
 - [Cancellation 10 PointLot Issuer Provenance Foundation](exec-plans/completed/customer-order-cancellation-10-point-lot-issuer-provenance-foundation.md)

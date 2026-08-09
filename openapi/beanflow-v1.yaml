@@ -3,7 +3,7 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-06
+  x-beanflow-contract-date: 2026-08-09
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
@@ -137,6 +137,58 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/OrderCreationConflict"
+        "503":
+          $ref: "#/components/responses/OrderCreationDependencyUnavailable"
+  /orders/{sourceOrderId}/reorders:
+    post:
+      tags: [Ordering]
+      operationId: reorderOrder
+      summary: Create a new order from a terminal source order
+      description: |
+        The owning customer may use a COMPLETED, CANCELLED, REJECTED or EXPIRED
+        source order. The server copies only menu IDs, normalized option IDs and
+        quantities, then revalidates current Merchant prices and availability and
+        uses the existing atomic reservation workflow. It never copies historical
+        benefits, payment, pickup slot or settlement snapshots. Any unavailable
+        source item fails the whole request; no partial order is created.
+
+        Idempotency scope is actor ID, REORDER_ORDER_V1 and Idempotency-Key. The
+        canonical payload contains sourceOrderId, pickupSlotId, couponIssuanceId
+        including null, and pointsToUseKrw. Same-key/same-payload terminal retries
+        replay the first status and body. A different source or request returns
+        IDEMPOTENCY_KEY_REUSED without exposing the first order response.
+        PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After.
+        MANUAL_REVIEW means automatic processing stopped and returns
+        IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without Retry-After; the owner work is
+        not executed again.
+      parameters:
+        - $ref: "#/components/parameters/SourceOrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderOrderRequest"
+      responses:
+        "201":
+          description: |
+            The new Order, every required reservation and immutable snapshot, the
+            price comparison and the first idempotent response are committed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReorderOrderResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReorderConflict"
         "503":
           $ref: "#/components/responses/OrderCreationDependencyUnavailable"
   /orders/{orderId}:
@@ -1082,6 +1134,13 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
+    SourceOrderId:
+      in: path
+      name: sourceOrderId
+      required: true
+      description: Terminal Order whose immutable menu and option selections are reused
+      schema:
+        $ref: "#/components/schemas/Identifier"
     PaymentId:
       in: path
       name: paymentId
@@ -1211,8 +1270,10 @@ components:
     OrderCreationConflict:
       description: |
         Order resource conflict, idempotency payload reuse, or an identical
-        idempotent request that is still processing. The latter returns code
-        IDEMPOTENCY_REQUEST_IN_PROGRESS and a Retry-After header.
+        idempotent request that is still processing or requires manual review.
+        PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
+        MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
+        Retry-After and never re-executes the order command.
       headers:
         Retry-After:
           required: false
@@ -1226,6 +1287,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    ReorderConflict:
+      description: |
+        Source state, unavailable source item, resource reservation or idempotency
+        conflict. REORDER_ITEMS_UNAVAILABLE uses the typed item detail schema.
+        IDEMPOTENCY_REQUEST_IN_PROGRESS includes Retry-After.
+        IDEMPOTENCY_MANUAL_REVIEW_REQUIRED never includes Retry-After and does not
+        re-execute the reorder command.
+      headers:
+        Retry-After:
+          required: false
+          description: |
+            Delay before retrying the same Idempotency-Key. Present for
+            IDEMPOTENCY_REQUEST_IN_PROGRESS.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/Error"
+              - $ref: "#/components/schemas/ReorderItemsUnavailableError"
     UnprocessableEntity:
       description: Provider explicitly declined a syntactically valid command
       content:
@@ -1296,6 +1379,47 @@ components:
         reason:
           type: string
           minLength: 1
+    ReorderItemsUnavailableError:
+      type: object
+      additionalProperties: false
+      required: [code, message, correlationId, details]
+      properties:
+        code:
+          const: REORDER_ITEMS_UNAVAILABLE
+        message:
+          type: string
+          minLength: 1
+        correlationId:
+          type: string
+          minLength: 1
+        details:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ReorderItemFailureDetail"
+    ReorderItemFailureDetail:
+      type: object
+      additionalProperties: false
+      required: [sourceOrderLineId, lineSequence, menuId, reason]
+      properties:
+        sourceOrderLineId:
+          $ref: "#/components/schemas/Identifier"
+        lineSequence:
+          type: integer
+          minimum: 0
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        optionId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          enum:
+            - SOURCE_OPTION_SELECTION_UNAVAILABLE
+            - MENU_REMOVED
+            - MENU_NOT_AVAILABLE
+            - OPTION_REMOVED
+            - OPTION_NOT_AVAILABLE
+            - MENU_CONFIGURATION_NOT_AVAILABLE
     PageInfo:
       type: object
       additionalProperties: false
@@ -1433,6 +1557,98 @@ components:
         quantity:
           type: integer
           minimum: 1
+    ReorderOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [pickupSlotId, pointsToUseKrw]
+      properties:
+        pickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        couponIssuanceId:
+          $ref: "#/components/schemas/Identifier"
+        pointsToUseKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    ReorderOrderResult:
+      oneOf:
+        - $ref: "#/components/schemas/PendingPaymentReorderOrderCreation"
+        - $ref: "#/components/schemas/BenefitOnlyReorderOrderCreation"
+    PendingPaymentReorderOrderCreation:
+      type: object
+      additionalProperties: false
+      required: [order, priceComparison]
+      properties:
+        order:
+          $ref: "#/components/schemas/PendingPaymentOrder"
+        priceComparison:
+          $ref: "#/components/schemas/ReorderPriceComparison"
+    BenefitOnlyReorderOrderCreation:
+      type: object
+      additionalProperties: false
+      required: [order, payment, priceComparison]
+      properties:
+        order:
+          $ref: "#/components/schemas/BenefitOnlyPaidOrder"
+        payment:
+          $ref: "#/components/schemas/BenefitOnlyPayment"
+        priceComparison:
+          $ref: "#/components/schemas/ReorderPriceComparison"
+    ReorderPriceComparison:
+      type: object
+      additionalProperties: false
+      required:
+        - hasPriceChanges
+        - sourceSubtotalKrw
+        - currentSubtotalKrw
+        - subtotalDifferenceKrw
+        - items
+      properties:
+        hasPriceChanges:
+          type: boolean
+        sourceSubtotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currentSubtotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        subtotalDifferenceKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
+        items:
+          type: array
+          description: Changed lines only, ordered by source lineSequence
+          items:
+            $ref: "#/components/schemas/ReorderLinePriceChange"
+    ReorderLinePriceChange:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceOrderLineId
+        - lineSequence
+        - menuId
+        - quantity
+        - sourceUnitPriceKrw
+        - currentUnitPriceKrw
+        - sourceLineGrossKrw
+        - currentLineGrossKrw
+        - lineDifferenceKrw
+      properties:
+        sourceOrderLineId:
+          $ref: "#/components/schemas/Identifier"
+        lineSequence:
+          type: integer
+          minimum: 0
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        quantity:
+          type: integer
+          minimum: 1
+        sourceUnitPriceKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currentUnitPriceKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        sourceLineGrossKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currentLineGrossKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        lineDifferenceKrw:
+          $ref: "#/components/schemas/SignedMoneyKrw"
     CreateOrderResult:
       oneOf:
         - $ref: "#/components/schemas/PendingPaymentOrderCreation"

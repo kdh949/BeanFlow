@@ -84,6 +84,8 @@ internal class OrderPointAccrualSnapshotPersistenceTest
                         UUID.randomUUID(),
                         "Snapshot menu",
                         "[]",
+                        OptionSelectionSnapshotState.SNAPSHOTTED,
+                        emptyList(),
                         "[]",
                         100,
                         2,

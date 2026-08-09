@@ -7,7 +7,7 @@
 | StoreSettlementTerms | store별 versioned 수수료 계약 | applicable version 하나, fee rate `0..10000`, immutable history와 overlap 금지 | `storeId` |
 | Menu | 메뉴·옵션·가격·판매 상태 | 음수 가격 금지, 유효 옵션만 선택 | `storeId` |
 | MenuConfiguration | 주문 가능한 메뉴·옵션 구성과 재고 요구량 | 정규화한 option ID 집합은 메뉴 안에서 유일하고 sellable unit별 필요 수량은 양수 | `menuId`, `sellableUnitId` |
-| Order | 항목 스냅샷, 금액과 상태 | 결제 시작 후 항목·금액 불변, settlement input snapshot exactly one/tie-out, 허용 전이만 가능, `CANCELLED`는 취소 시각·원인 필수이고 그 외 상태에서는 취소 필드 부재 | IDs |
+| Order | 항목 스냅샷, 금액과 상태 | 결제 시작 후 항목·금액 불변, 새 line은 정규화 option ID snapshot 필수, settlement input snapshot exactly one/tie-out, 허용 전이만 가능, `CANCELLED`는 취소 시각·원인 필수이고 그 외 상태에서는 취소 필드 부재 | IDs |
 | PickupSlot | 시간 구간과 수용량 | 예약+확정 수량 ≤ capacity | `storeId` |
 | PickupReservation | 주문의 슬롯 점유 | 주문당 활성 예약 하나, 만료 후 확정 불가, 종료 복원 state·trigger·source 일치 | `orderId`, `slotId` |
 | SellableStock | 판매 단위 수량 | 가용·예약·확정 수량 음수 금지 | `storeId`, `menuOptionId` |
@@ -23,7 +23,7 @@
 | Payment | 승인·불명·환불 | 동일 키 중복 승인 금지, 누적 환불 ≤ 승인액 | `orderId` |
 | Refund | 외부 환불 요청·조회·결과 | source/key 불변, request≤3, lookup≤5, Unknown 뒤 REQUEST 금지, 성공액은 요청액과 일치 | `paymentId`, `orderId` |
 | PaymentMethod | PG token reference와 표시 정보 | 원본 카드번호·CVC·전체 유효기간 금지, 사용자와 provider token 범위 중복 금지 | `memberId` |
-| IdempotencyRecord | 명령 중복 실행 방지와 응답 재사용 | 같은 scope·key에 payload hash 하나, 처리 중/UNKNOWN은 정리 금지 | `actorId`, target ID |
+| IdempotencyRecord | 명령 중복 실행 방지와 응답 재사용 | 같은 scope·key에 payload hash 하나, 처리 중/UNKNOWN은 정리 금지, terminal response는 만료 시각까지 보존 | `actorId`, target ID |
 | SettlementItem | 완료 주문 단위의 불변 정산 명세 | Order/source당 하나, KRW 금액·수수료·혜택·순정산 tie-out, 서울 완료일 일치, OPEN Batch에만 귀속, update/delete 금지 | `orderId`, `settlementBatchId`, `storeId` |
 | SettlementBatch | 서울 완료일·매장별 Item 귀속, 집계·확정 | store/date당 하나, Item은 OPEN Batch에만 귀속, `OPEN → CALCULATED → CONFIRMED`, summary·이월 tie-out, 확정 후 직접 수정 금지 | `storeId`, 이전 confirmed Batch ID |
 | SettlementAdjustment | 확정 후 보정 | confirmed Item/Batch만 대상, signed KRW, source/reason unique, update/delete 금지, 미완료 고객 취소 환불 제외 증적으로 사용 금지 | Item/Batch/store IDs |
@@ -46,6 +46,7 @@
 ## Aggregate size rules
 
 - `OrderLine`은 Order 내부 Entity이며 별도 Repository를 만들지 않는다.
+- `Fast Reorder`는 명령이고 별도 Aggregate나 Repository가 아니다.
 - `SettlementBatch`가 모든 Item을 JPA 컬렉션으로 소유하지 않는다.
 - `PointAccount`가 모든 PointLot을 컬렉션으로 로딩하지 않는다.
 - `PointReservation`은 필요한 allocation만 소유하며 PointLot은 ID로 참조한다.
@@ -60,7 +61,7 @@
 | `StoreSettlementTermsRepository` | StoreSettlementTerms | immutable version/source, fee `0..10000`, store interval overlap 금지 | store advisory lock + applicable interval query |
 | `MenuRepository` | Menu | non-negative integer KRW price, unique store/menu code | optimistic version |
 | `MenuConfigurationRepository` | MenuConfiguration | unique menu/normalized-option-set, positive sellable requirement | optimistic version |
-| `OrderRepository` | Order | order number unique, non-negative totals, cancellation timestamp/cause/reason-code/detail과 state 조합 CHECK | optimistic version + guarded transition |
+| `OrderRepository` | Order | order number unique, non-negative totals, cancellation timestamp/cause/reason-code/detail과 state 조합 CHECK, OrderLine option snapshot state와 nullable JSON 조합 CHECK | optimistic version + guarded transition |
 | `OrderSettlementInputSnapshotRepository` | OrderSettlementInputSnapshot | order당 exactly one, owner source FK, fee/coupon/point/benefit/net 공식·hash tie-out, update/delete 금지 | Order 생성 local transaction + order unique FK |
 | `PickupSlotRepository` | PickupSlot | unique store/time range, non-negative capacity | conditional update or row lock |
 | `PickupReservationRepository` | PickupReservation | active order reservation unique, 종료 복원 state/trigger/source CHECK | unique/partial index + row lock |
@@ -78,7 +79,7 @@
 | `RefundRepository` | Refund | source/provider key unique, reason/state check, request·lookup·total attempt tie-out | Payment row lock + claim lease + guarded transition |
 | `PaymentCancellationRecoveryRepository` | PaymentCancellationRecoverySnapshot | order/payment당 하나, approved = prior succeeded + cancellation requested, requested 양수일 때 Refund 필수 | unique/FK/check + Payment row lock |
 | `PaymentMethodRepository` | PaymentMethod | member/provider/token reference unique | unique |
-| `IdempotencyRecordRepository` | IdempotencyRecord | actor/operation/key unique | insert-first unique arbitration |
+| `IdempotencyRecordRepository` | IdempotencyRecord | actor/operation/key unique, terminal `retention_expires_at` 필수와 non-terminal null CHECK | insert-first unique arbitration + terminal keyset retention worker |
 | `PointAdjustmentCommandIdempotencyRepository` | PointAdjustmentCommandIdempotency | actor/operation/key unique, account/hash match에만 201 replay, terminal response 90일 retention | PointAccount lock + unique-conflict rollback/re-read + keyset retention worker |
 | `SettlementItemRepository` | SettlementItem | order/source unique, 금액 공식과 서울 완료일, update/delete 금지, Batch store/date/OPEN 일치 | unique + CHECK + FK + insert/mutation trigger |
 | `SettlementBatchRepository` | SettlementBatch | store/date unique, summary/carry/시각 all-or-none, Item은 OPEN guard, confirmed mutation 금지 | unique + row lock + DB transition/mutation trigger |
@@ -103,3 +104,8 @@ MenuConfiguration을 조회한다. 요청의 OrderLine 순서는 금액 배분 �
 정규화하지 않는다. 여러 line이 같은 sellable unit을 요구하면 Ordering은
 `quantityPerLineUnit * lineQuantity`를 overflow 없이 합산한 뒤 Inventory에 한 번
 예약 요청한다.
+
+새 OrderLine은 정규화된 option ID 배열을 이름 snapshot과 별도로 저장한다. 빈 배열은
+검증된 무옵션 선택이고, legacy migration state는 검증된 ID snapshot이 없다는 뜻이므로 서로
+구분한다. legacy line의 옵션명이나 sellable requirement를 option ID로 역추론하지 않으며 해당
+line의 빠른 재주문은 `SOURCE_OPTION_SELECTION_UNAVAILABLE`로 실패한다.

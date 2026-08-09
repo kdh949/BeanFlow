@@ -6,8 +6,11 @@
 | ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속 또는 active explicit operator grant 불충족 |
 | RESOURCE_NOT_FOUND | 404 | No | 접근 가능한 리소스 없음 |
 | ORDER_STATE_CONFLICT | 409 | No | 현재 상태에서 명령 불가 |
+| REORDER_SOURCE_STATE_INVALID | 409 | No | source Order가 `COMPLETED`, `CANCELLED`, `REJECTED`, `EXPIRED`가 아니어서 빠른 재주문 불가 |
+| REORDER_ITEMS_UNAVAILABLE | 409 | Maybe, after source/current catalogue changes | source line 하나 이상을 검증된 option snapshot과 현재 Merchant 구성으로 전부 재구성할 수 없음. item별 stable reason을 반환하고 부분 Order는 만들지 않음 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |
 | IDEMPOTENCY_REQUEST_IN_PROGRESS | 409 + Retry-After | Yes, same key after delay | 같은 key·payload의 최초 명령이 아직 처리 중이며 새 실행은 하지 않음. 사전등록 모델 명령에만 사용 |
+| IDEMPOTENCY_MANUAL_REVIEW_REQUIRED | 409, no Retry-After | No automatic retry | stale `PROCESSING`의 자동 처리가 중단되어 운영자 확인이 필요함. 같은 key 재요청은 owner 작업을 실행하지 않으며 현재 공식 자동 해결 API가 없음 |
 | MENU_CONFIGURATION_NOT_AVAILABLE | 409 | Maybe | 유효한 메뉴·옵션 구성이 현재 판매 불가 |
 | PICKUP_SLOT_FULL | 409 | Maybe | 슬롯 수용량 없음 |
 | STOCK_NOT_AVAILABLE | 409 | Maybe | 판매 재고 부족 |
@@ -33,6 +36,30 @@
 | DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
+
+주문 생성과 빠른 재주문의 `MANUAL_REVIEW`는 아직 처리 중이라는 뜻이 아니다. 해당
+Idempotency-Key에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retry-After`를 넣지 않는다.
+클라이언트는 같은 key를 polling하지 않으며, 운영자는
+[Fast Reorder Runbook](../operations/fast-reorder-runbook.md)의 읽기 전용 조사 절차를 따른다.
+현재는 감사 가능한 해결 command가 없으므로 DB row를 직접 `COMPLETED`/`FAILED`로 바꾸거나
+terminal response를 추정하지 않는다.
+
+`REORDER_ITEMS_UNAVAILABLE.details`는 source line 순서로 정렬하고 같은 line에서는 reason
+우선순위와 `optionId` 오름차순으로 정렬한다. stable reason은 다음과 같다.
+
+| Item reason | Meaning |
+|---|---|
+| `SOURCE_OPTION_SELECTION_UNAVAILABLE` | legacy source line에 검증된 정규화 option ID snapshot이 없음 |
+| `MENU_REMOVED` | source `menuId`가 현재 Merchant에 존재하지 않음 |
+| `MENU_NOT_AVAILABLE` | 현재 Menu가 주문 가능 상태가 아님 |
+| `OPTION_REMOVED` | snapshot의 `optionId`가 현재 Menu에 존재하지 않음 |
+| `OPTION_NOT_AVAILABLE` | 현재 Option이 주문 가능 상태가 아님 |
+| `MENU_CONFIGURATION_NOT_AVAILABLE` | 현재 정규화 메뉴·옵션 조합의 판매 가능한 MenuConfiguration이 없음 |
+
+menu 자체가 사라지거나 판매 중지된 line은 그 상위 원인 하나만 반환한다. 이 오류와 기존
+`PICKUP_SLOT_FULL`, `STOCK_NOT_AVAILABLE`, `COUPON_NOT_AVAILABLE`,
+`POINT_BALANCE_INSUFFICIENT`는 DB/owner 조회 장애를 의미하지 않는다. owner 조회나 저장 실패는
+`503 DEPENDENCY_UNAVAILABLE`이며 빈 item 목록, 현재값 추정 또는 부분 재주문으로 바꾸지 않는다.
 
 `SETTLEMENT_INPUT_UNAVAILABLE`은 일시 DB 장애만 뜻하는 `DEPENDENCY_UNAVAILABLE`과
 구분한다. Merchant 계약, Campaign burden, PointLot issuer/allocation 또는 immutable snapshot

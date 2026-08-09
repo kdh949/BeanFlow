@@ -1,8 +1,11 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import com.fasterxml.jackson.annotation.JsonAnySetter
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderLineCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.ReorderOrderCommand
+import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
@@ -42,11 +45,25 @@ data class CreateOrderLineRequest(
     val quantity: Long,
 )
 
+data class ReorderOrderRequest(
+    val pickupSlotId: UUID,
+    val couponIssuanceId: UUID?,
+    @field:Min(0)
+    val pointsToUseKrw: Long,
+) {
+    @JsonAnySetter
+    fun rejectUnknownField(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        @Suppress("UNUSED_PARAMETER") value: Any?,
+    ): Unit = throw IllegalArgumentException("Unknown reorder request field")
+}
+
 @Validated
 @RestController
 @RequestMapping("/api/v1/orders")
 internal class OrderController(
     private val createOrderUseCase: CreateOrderUseCase,
+    private val reorderOrderUseCase: ReorderOrderUseCase,
     private val getOrderService: GetOrderService,
     private val paymentConfirmationService: PaymentConfirmationService,
     private val customerCancellationService: CustomerCancellationService,
@@ -71,6 +88,34 @@ internal class OrderController(
                             request.lines.map {
                                 CreateOrderLineCommand(it.menuId, it.optionIds, it.quantity)
                             },
+                        couponIssuanceId = request.couponIssuanceId,
+                        pointsToUseKrw = request.pointsToUseKrw,
+                    ),
+            )
+        val response =
+            ResponseEntity
+                .status(result.status)
+                .contentType(MediaType.APPLICATION_JSON)
+        result.retryAfterSeconds?.let { response.header(HttpHeaders.RETRY_AFTER, it.toString()) }
+        return response.body(result.body)
+    }
+
+    @PostMapping("/{sourceOrderId}/reorders")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun reorder(
+        @AuthenticationPrincipal jwt: Jwt,
+        @PathVariable sourceOrderId: UUID,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @Valid @RequestBody request: ReorderOrderRequest,
+    ): ResponseEntity<String> {
+        val result =
+            reorderOrderUseCase.reorder(
+                idempotencyKey = idempotencyKey,
+                command =
+                    ReorderOrderCommand(
+                        customerId = customerId(jwt),
+                        sourceOrderId = sourceOrderId,
+                        pickupSlotId = request.pickupSlotId,
                         couponIssuanceId = request.couponIssuanceId,
                         pointsToUseKrw = request.pointsToUseKrw,
                     ),

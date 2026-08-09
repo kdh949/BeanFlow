@@ -76,6 +76,31 @@
   `now >= reservationExpiresAt`이면 먼저 만료를 materialize하며 슬롯을 확정하지 않는다. 이 시각 뒤의
   Provider 승인 또는 `UNKNOWN` lookup approval은 주문·예약을 되살리지 않고 기존 late-approval
   void/refund reconciliation으로 보낸다.
+- **Fast Reorder Result Amendment (2026-08-09):** 빠른 재주문 성공은 재검증 가능한 draft나 quote를
+  별도 생성하는 것이 아니라 기존 주문 생성 경계를 통해 즉시 새 `Order`를 생성한다. 새 Order와 필요한
+  예약·snapshot·멱등 응답이 모두 commit된 뒤에만 `201 Created`를 반환한다. `Reorder`를 별도
+  Aggregate로 만들지 않는다. 따라서 고객은 성공 응답 전에 현재 가격을 별도로 승인하는 단계를 갖지 않는다.
+- **Fast Reorder Source Amendment (2026-08-09):** source Order에서는 `menuId`, ID 오름차순으로
+  정규화된 `optionIds`, `quantity`만 새 주문 입력으로 복사한다. 과거 또는 현재의 note를 복사하지 않으며
+  빠른 재주문을 위해 새 note 계약을 도입하지 않는다. 검증된 option ID snapshot이 없는 기존 OrderLine은
+  옵션 이름, 현재 메뉴 또는 sellable requirement로 추론하지 않고 재주문 불가로 명시적으로 실패한다.
+- **Fast Reorder Price-Change Amendment (2026-08-09):** 재주문은 현재 Merchant 가격으로 새 Order를
+  생성하며 가격 변경 자체를 실패로 만들지 않는다. 성공 응답은 혜택 적용 전 가격을 source와 current로
+  비교한 line별 변경 목록과 두 subtotal을 필수로 제공한다. 변경 목록은 source line 순서이고 실제 단가가
+  달라진 line만 포함한다. 쿠폰·포인트·결제 차이는 가격 변경으로 표시하지 않는다.
+- **Fast Reorder Source-State Amendment (2026-08-09):** source Order가 `COMPLETED`, `CANCELLED`,
+  `REJECTED`, `EXPIRED` 중 하나인 terminal 상태일 때만 빠른 재주문을 허용한다. `PENDING_PAYMENT`,
+  `PAID`, `ACCEPTED`, `PREPARING`, `READY`는 진행 중 주문의 우발적 중복을 막기 위해 거부한다.
+  terminal 상태는 원 주문의 가격·혜택·결제·환불 결과를 새 주문에 승계한다는 뜻이 아니며 모든 현재
+  주문 가능 조건을 다시 검증한다.
+- **Fast Reorder Revalidation Amendment (2026-08-09):** request는 새 `pickupSlotId`, 선택적
+  `couponIssuanceId`와 명시적 `pointsToUseKrw`를 받는다. 과거 메뉴·옵션 이름과 가격, coupon·point
+  allocation, PaymentMethod·Payment·Refund, pickup slot·reservation, 적립·정산 snapshot, 상태와
+  deadline을 복사하지 않는다. 현재 Merchant 이름·가격·판매 상태, Fulfillment slot, Inventory stock,
+  명시적으로 선택한 Coupon과 points를 기존 주문 생성 경계에서 다시 quote·reserve한다. payment method는
+  복사하거나 이 request에서 승인하지 않고 외부 결제가 필요하면 기존 payment-confirmations 명령에서
+  고객이 명시한다. 한 source line이라도 삭제·판매 중지·구성 불가이면 source line 순서의 stable item
+  reason을 포함한 전체 `409`이며 부분 Order나 unavailable item 자동 삭제는 없다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount

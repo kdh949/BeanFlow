@@ -12,13 +12,15 @@ import java.time.ZoneOffset
 internal class OrderingIdempotencyRetentionWorkerTest {
     @Test
     fun `store purge failure does not suppress cancellation purge`() {
+        val orderCreation = mock<OrderCreationIdempotencyRetentionService>()
         val store = mock<StoreCommandIdempotencyRetentionService>()
         val cancellation = mock<CancellationCommandIdempotencyRetentionService>()
         val registry = SimpleMeterRegistry()
         `when`(store.purgeDue(NOW, 100)).thenThrow(IllegalStateException("store unavailable"))
         `when`(cancellation.purgeDue(NOW, 100))
             .thenReturn(OrderingIdempotencyPurgeResult(3, NOW.minusSeconds(10), 7))
-        val worker = worker(store, cancellation, registry)
+        `when`(orderCreation.purgeDue(NOW, 100)).thenReturn(OrderingIdempotencyPurgeResult(0, null, 0))
+        val worker = worker(orderCreation, store, cancellation, registry)
 
         assertThat(worker.runOnce()).isEqualTo(3)
         assertThat(
@@ -39,13 +41,15 @@ internal class OrderingIdempotencyRetentionWorkerTest {
 
     @Test
     fun `cancellation purge failure does not roll back store purge`() {
+        val orderCreation = mock<OrderCreationIdempotencyRetentionService>()
         val store = mock<StoreCommandIdempotencyRetentionService>()
         val cancellation = mock<CancellationCommandIdempotencyRetentionService>()
         val registry = SimpleMeterRegistry()
         `when`(store.purgeDue(NOW, 100))
             .thenReturn(OrderingIdempotencyPurgeResult(2, NOW.minusSeconds(20), 0))
         `when`(cancellation.purgeDue(NOW, 100)).thenThrow(IllegalStateException("cancellation unavailable"))
-        val worker = worker(store, cancellation, registry)
+        `when`(orderCreation.purgeDue(NOW, 100)).thenReturn(OrderingIdempotencyPurgeResult(0, null, 0))
+        val worker = worker(orderCreation, store, cancellation, registry)
 
         assertThat(worker.runOnce()).isEqualTo(2)
         assertThat(
@@ -65,10 +69,12 @@ internal class OrderingIdempotencyRetentionWorkerTest {
     }
 
     private fun worker(
+        orderCreation: OrderCreationIdempotencyRetentionService,
         store: StoreCommandIdempotencyRetentionService,
         cancellation: CancellationCommandIdempotencyRetentionService,
         registry: SimpleMeterRegistry,
     ) = OrderingIdempotencyRetentionWorker(
+        orderCreationRecords = orderCreation,
         storeRecords = store,
         cancellationRecords = cancellation,
         clock = Clock.fixed(NOW, ZoneOffset.UTC),

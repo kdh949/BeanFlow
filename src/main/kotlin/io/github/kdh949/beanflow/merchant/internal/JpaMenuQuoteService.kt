@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.merchant.api.CurrentMenuLineQuoteResult
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
@@ -16,53 +17,94 @@ import java.util.UUID
 
 @Service
 internal class JpaMenuQuoteService(
-	private val storeRepository: StoreJpaRepository,
-	private val menuRepository: MenuJpaRepository,
-	private val optionRepository: MenuOptionJpaRepository,
-	private val configurationRepository: MenuConfigurationJpaRepository,
-	private val requirementRepository: MenuConfigurationRequirementJpaRepository,
+    private val storeRepository: StoreJpaRepository,
+    private val menuRepository: MenuJpaRepository,
+    private val optionRepository: MenuOptionJpaRepository,
+    private val configurationRepository: MenuConfigurationJpaRepository,
+    private val requirementRepository: MenuConfigurationRequirementJpaRepository,
 ) : MenuQuoteUseCase {
+    private val calculator = MenuQuoteCalculator()
 
-	private val calculator = MenuQuoteCalculator()
+    override fun quote(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): List<MenuLineQuote> {
+        val (store, menus) = loadDefinitions(storeId, lines)
+        return calculator.quote(store = store, menus = menus, lines = lines)
+    }
 
-	override fun quote(storeId: UUID, lines: List<QuoteOrderLine>): List<MenuLineQuote> {
-		val store = storeRepository.findById(storeId).orElse(null)
-			?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
-		val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
-		val menus = menuRepository.findAllById(requestedMenuIds).associate { menu ->
-			val options = optionRepository.findAllByMenuId(menu.id)
-			val configurations = configurationRepository.findAllByMenuId(menu.id).map { configuration ->
-				MenuConfigurationDefinition(
-					optionIds = configuration.normalizedOptionKey
-						.takeIf(String::isNotBlank)
-						?.split(",")
-						?.map(UUID::fromString)
-						?.toSet()
-						.orEmpty(),
-					available = configuration.available,
-					requirements = requirementRepository
-						.findAllByMenuConfigurationId(configuration.id)
-						.map {
-							SellableUnitRequirement(it.sellableUnitId, it.quantityPerLineUnit)
-						},
-				)
-			}
-			menu.id to MenuDefinition(
-				id = menu.id,
-				storeId = menu.storeId,
-				name = menu.name,
-				basePriceKrw = menu.basePriceKrw,
-				available = menu.available,
-				options = options.map {
-					MenuOptionDefinition(it.id, it.name, it.additionalPriceKrw, it.available)
-				},
-				configurations = configurations,
-			)
-		}
-		return calculator.quote(
-			store = StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled),
-			menus = menus,
-			lines = lines,
-		)
-	}
+    override fun quoteCurrentBatch(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): List<CurrentMenuLineQuoteResult> {
+        val (store, menus) = loadDefinitions(storeId, lines)
+        return calculator.quoteCurrentBatch(store = store, menus = menus, lines = lines)
+    }
+
+    private fun loadDefinitions(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): Pair<StoreDefinition, Map<UUID, MenuDefinition>> {
+        val store =
+            storeRepository.findById(storeId).orElse(null)
+                ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
+        val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
+        val menuEntities = menuRepository.findAllById(requestedMenuIds)
+        val optionsByMenu = optionRepository.findAllByMenuIdIn(requestedMenuIds).groupBy(MenuOptionEntity::menuId)
+        val configurations = configurationRepository.findAllByMenuIdIn(requestedMenuIds)
+        val configurationsByMenu = configurations.groupBy(MenuConfigurationEntity::menuId)
+        val requirementsByConfiguration =
+            requirementRepository
+                .findAllByMenuConfigurationIdIn(configurations.map(MenuConfigurationEntity::id))
+                .groupBy(MenuConfigurationRequirementEntity::menuConfigurationId)
+        val menus =
+            menuEntities.associate { menu ->
+                val configurationsForMenu =
+                    configurationsByMenu[menu.id].orEmpty().map { configuration ->
+                        MenuConfigurationDefinition(
+                            optionIds = parseNormalizedOptionKey(configuration.normalizedOptionKey),
+                            available = configuration.available,
+                            requirements =
+                                requirementsByConfiguration[configuration.id]
+                                    .orEmpty()
+                                    .map {
+                                        SellableUnitRequirement(it.sellableUnitId, it.quantityPerLineUnit)
+                                    },
+                        )
+                    }
+                menu.id to
+                    MenuDefinition(
+                        id = menu.id,
+                        storeId = menu.storeId,
+                        name = menu.name,
+                        basePriceKrw = menu.basePriceKrw,
+                        available = menu.available,
+                        options =
+                            optionsByMenu[menu.id].orEmpty().map {
+                                MenuOptionDefinition(it.id, it.name, it.additionalPriceKrw, it.available)
+                            },
+                        configurations = configurationsForMenu,
+                    )
+            }
+        return StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled) to menus
+    }
+
+    private fun parseNormalizedOptionKey(key: String): Set<UUID> {
+        if (key.isEmpty()) return emptySet()
+        val parsed =
+            try {
+                key.split(",").map(UUID::fromString)
+            } catch (_: IllegalArgumentException) {
+                corruptConfiguration()
+            }
+        val canonical = parsed.distinct().sortedBy(UUID::toString).joinToString(",")
+        if (canonical != key) corruptConfiguration()
+        return parsed.toSet()
+    }
+
+    private fun corruptConfiguration(): Nothing =
+        throw DomainFailure(
+            FailureCode.DEPENDENCY_UNAVAILABLE,
+            "Merchant menu configuration data is unavailable",
+        )
 }

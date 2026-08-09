@@ -12,6 +12,7 @@ import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundR
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.CustomerCancellationService
 import io.github.kdh949.beanflow.ordering.internal.GetOrderService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
@@ -40,6 +41,9 @@ internal class RuntimeOpenApiParityTest(
 ) {
     @MockitoBean
     private lateinit var createOrderUseCase: CreateOrderUseCase
+
+    @MockitoBean
+    private lateinit var reorderOrderUseCase: ReorderOrderUseCase
 
     @MockitoBean
     private lateinit var getOrderService: GetOrderService
