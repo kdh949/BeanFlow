@@ -1498,8 +1498,6 @@
 - **ADR Required:** Yes
 - **Revisit Conditions:** 별도 감사 저장소, 계약·규제 보존 기간 또는 legal hold 요구가 생길 때
 
----
-
 # F. 분석·재집계 정책
 
 ## BR-31 환불의 매출 지표 반영 기준
@@ -1534,6 +1532,40 @@
 
 ---
 
+# G. 고객 결제 제품 정책
+
+## BR-33 고객 일회성 결제창과 서버 승인
+
+- **Status:** Accepted for MVP
+- **Decision:** 고객의 1원 이상 선주문은 Toss Web SDK V2 Standard Payment Window의
+  one-time `CARD` 통합결제창으로 인증한다. 서버가 Order snapshot에서 amount(KRW),
+  providerOrderId, opaque customerKey와 orderName을 생성·고정하고 브라우저는 그 값을
+  그대로 사용한다. success callback의 paymentKey/orderId/amount는 서버가 Payment 시도와
+  exact match를 확인한 뒤 `/v1/payments/confirm`으로 승인한다. fail callback은 승인 API를
+  호출하지 않는다. 기존 PaymentMethod는 등록·조회·폐기 lifecycle만 유지하며 checkout
+  인증 소스, 기본 선택 또는 fallback이 아니다. billing, Payment Widget, BrandPay,
+  가상계좌와 지급대행은 MVP 결제 범위가 아니다.
+- **Failure Policy:** Provider confirm을 시작한 뒤 timeout·응답 유실·5xx·파싱 실패 또는
+  로컬 결과 commit 실패가 발생하면 성공/거절로 추정하거나 새 key로 승인하지 않는다.
+  같은 Payment의 stable key와 paymentKey/providerOrderId 조회로 수렴하고 유한 예산 뒤에도
+  불명확하면 `MANUAL_REVIEW`다.
+- **Rationale:** 비구독 주문을 자동결제 계약에서 분리하고, 고객 브라우저 인증과 서버의
+  금액·주문 검증 및 기존 Payment reconciliation을 함께 유지하기 위함이다.
+- **Affected Contexts:** Ordering, Payment, Settlement, Loyalty, Operations, Customer Web
+- **Affected Aggregates:** Order, Payment, Refund, SettlementAdjustment, PointReservation
+- **Required Tests:**
+  - prepare replay와 Order당 동시 Payment 시도
+  - callback amount/orderId/paymentKey 위변조·교차 owner·replay
+  - fail callback의 Provider confirm 0회
+  - confirm timeout/응답 유실/Provider 성공 뒤 local commit 실패와 조회 수렴
+  - 고객 전액 취소와 점주·운영자 부분 환불의 금액·정산·포인트 tie-out
+  - one-time 경로의 PaymentMethod 조회/Port 호출 0회
+- **ADR Required:** Yes — [ADR-080](../adr/ADR-080-toss-v2-one-time-payment-window.md)
+- **Revisit Conditions:** 결제수단 UI 제품, Payment Widget/BrandPay, verified webhook 또는
+  다중 Provider routing 요구가 확정될 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -1545,7 +1577,8 @@
 7. 모든 재시도 가능 명령은 `BR-25`, `BR-26`을 따른다.
 8. 외부 알림과 운영 복구는 `BR-27`, `BR-30`을 따른다.
 9. 위치 검색은 `BR-28`, 결제수단은 `BR-29`를 따른다.
-10. 분석 Read Model은 `BR-31`, `BR-32`를 따른다.
+10. 고객 일회성 결제는 `BR-33`을 따르고 PaymentMethod lifecycle과 분리한다.
+11. 분석 Read Model은 `BR-31`, `BR-32`를 따른다.
 
 ---
 
@@ -1570,6 +1603,7 @@
 | 알림 retry·수동 복구 | [ADR-019](../adr/ADR-019-notification-retry-and-manual-recovery.md) |
 | 위치정보 최소 보존 | [ADR-020](../adr/ADR-020-nearby-location-privacy.md), [ADR-070](../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 결제수단 tokenization | [ADR-021](../adr/ADR-021-payment-method-tokenization.md) |
+| 고객 일회성 결제창·callback·승인 | [ADR-080](../adr/ADR-080-toss-v2-one-time-payment-window.md) |
 | 감사 로그 | [ADR-022](../adr/ADR-022-audit-record.md) |
 | 매출 지표와 late event 재집계 | [ADR-023](../adr/ADR-023-analytics-refund-and-late-events.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md) |
 

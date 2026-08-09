@@ -2,6 +2,11 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-09
+- **Amended by:** [ADR-080](ADR-080-toss-v2-one-time-payment-window.md)
+
+> 2026-08-10: PaymentMethod lifecycle과 공개 관리 API는 보존하지만 일회성 checkout의
+> 인증 소스, 기본 선택 또는 fallback으로 사용하지 않는다. ADR-080의 Payment attempt가
+> Standard Payment Window 준비·callback·승인·조회·취소를 소유한다.
 
 ## Context
 

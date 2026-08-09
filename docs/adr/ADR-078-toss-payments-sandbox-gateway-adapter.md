@@ -1,7 +1,12 @@
 # ADR-078: 토스페이먼츠 sandbox PaymentGateway adapter
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-09
+- **Superseded by:** [ADR-080](ADR-080-toss-v2-one-time-payment-window.md)
+
+> 2026-08-10: 자동결제·빌링키 기반 승인/등록/폐기와 해당 sandbox 구현 경로는
+> 일회성 Standard Payment Window 결정으로 대체됐다. 이 문서는 당시의 검토 이력으로만
+> 남기며 active 구현 계약이 아니다.
 
 ## Context
 
