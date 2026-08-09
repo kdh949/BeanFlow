@@ -17,6 +17,7 @@ import tools.jackson.databind.ObjectMapper
 import java.net.URI
 import java.net.http.HttpClient
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Duration
 import java.util.Base64
 
@@ -149,6 +150,7 @@ internal class TossOneTimePaymentGateway(
 
     override fun lookupRefund(
         request: GatewayLookupRequest,
+        amountKrw: Long,
         providerIdempotencyKey: String,
     ): GatewayRefundResult =
         try {
@@ -167,7 +169,8 @@ internal class TossOneTimePaymentGateway(
                     .path("cancels")
                     .filter { cancel ->
                         cancel.path("cancelStatus").asText() == "DONE" &&
-                            cancel.path("cancelAmount").asLong(-1) == request.amountKrw
+                            cancel.path("cancelAmount").asLong(-1) == amountKrw &&
+                            cancel.path("cancelReason").asText("") == refundReason(providerIdempotencyKey)
                     }
             if (matches.size != 1) {
                 GatewayRefundResult.Unknown("TOSS_REFUND_LOOKUP_AMBIGUOUS")
@@ -198,7 +201,8 @@ internal class TossOneTimePaymentGateway(
             val paymentKey =
                 request.providerTransactionReference
                     ?: return GatewayRefundResult.Unknown("TOSS_CANCEL_PAYMENT_KEY_MISSING")
-            val payload = linkedMapOf<String, Any>("cancelReason" to "BeanFlow order adjustment")
+            val reason = refundReason(providerIdempotencyKey)
+            val payload = linkedMapOf<String, Any>("cancelReason" to reason)
             amountKrw?.let { payload["cancelAmount"] = it }
             val body =
                 restClient
@@ -210,7 +214,7 @@ internal class TossOneTimePaymentGateway(
                     .retrieve()
                     .body(String::class.java)
                     ?: return GatewayRefundResult.Unknown("TOSS_EMPTY_CANCEL_RESPONSE")
-            cancelResult(parse(body), amountKrw)
+            cancelResult(parse(body), amountKrw, reason)
         } catch (failure: RestClientResponseException) {
             GatewayRefundResult.Unknown("TOSS_CANCEL_${safeCode(failure)}")
         } catch (_: ResourceAccessException) {
@@ -264,21 +268,32 @@ internal class TossOneTimePaymentGateway(
     private fun cancelResult(
         payment: JsonNode,
         requestedAmountKrw: Long?,
+        expectedReason: String,
     ): GatewayRefundResult {
-        val cancels = payment.path("cancels").filter { it.path("cancelStatus").asText() == "DONE" }
-        val match =
-            if (requestedAmountKrw == null) {
-                cancels.lastOrNull()
-            } else {
-                cancels.lastOrNull { it.path("cancelAmount").asLong(-1) == requestedAmountKrw }
+        val matches =
+            payment.path("cancels").filter { cancel ->
+                cancel.path("cancelStatus").asText() == "DONE" &&
+                    cancel.path("cancelReason").asText("") == expectedReason &&
+                    (requestedAmountKrw == null || cancel.path("cancelAmount").asLong(-1) == requestedAmountKrw)
             }
-        val reference = match?.path("transactionKey")?.asText("").orEmpty()
+        if (matches.size != 1) {
+            return GatewayRefundResult.Unknown("TOSS_CANCEL_RESULT_AMBIGUOUS")
+        }
+        val reference = matches.single().path("transactionKey").asText("")
         return if (reference.isBlank()) {
             GatewayRefundResult.Unknown("TOSS_CANCEL_REFERENCE_MISSING")
         } else {
             GatewayRefundResult.Succeeded(reference)
         }
     }
+
+    private fun refundReason(providerIdempotencyKey: String): String = "BeanFlow refund [bf:${sha256(providerIdempotencyKey).take(24)}]"
+
+    private fun sha256(value: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(value.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     private fun confirmationFailure(failure: RestClientResponseException): ProviderPaymentResult {
         val code = safeCode(failure)

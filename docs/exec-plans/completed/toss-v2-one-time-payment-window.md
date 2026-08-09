@@ -117,6 +117,7 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 - [x] (2026-08-10) correctness/accessibility/local-demo/browser 검증
 - [x] (2026-08-10) 실제 Toss Payment Window auth/confirm/provider query/full·partial cancel 검증
 - [x] (2026-08-10) sandbox runtime profile 합성, API/Widget key guard와 callback URL history 정리 회귀 수정
+- [x] (2026-08-10) 리뷰 후 환불 operation marker, 만료 prepare, fail callback 상태 조회와 submit intent 회귀 수정
 - [x] (2026-08-10) 최종 문서와 release evidence
 
 ## Surprises & Discoveries
@@ -136,6 +137,11 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
   `NotSupportedWidgetKeyError`로 거부했다. API 개별 연동 `test_ck_`/`test_sk_`만 startup에서 허용한다.
 - 실제 callback에서 paymentKey query가 승인 뒤 URL history에 남는 ADR-080 위반을 발견했다.
   layout effect로 즉시 제거하고 clean URL reload는 owner status query로 복구하도록 수정했다.
+- 환불 조회가 원 승인 총액과 마지막 취소만 사용해 동일 금액 복수 환불과 부분 환불 응답 유실을
+  구분하지 못했다. 실제 claim 금액과 비가역 operation marker를 최초 응답·조회에 공통 적용했다.
+- one-time prepare의 기존 READY replay 검증이 만료 materialization보다 먼저 실행됐고, 같은
+  transaction에서 만료 뒤 예외를 던지면 owner 해제가 rollback될 수 있었다. prepare transaction은
+  만료를 정상 결과로 commit하고 외부 service가 `RESERVATION_EXPIRED`를 반환하도록 분리했다.
 - Toss 공식 문서는 국내 공개 테스트 카드번호를 제공하지 않는다. 개인 결제정보를 사용하지 않기 위해
   V2 공식 `sandbox.paymentResult=SUCCESS`를 검증 브라우저에만 임시 적용하고 source에서는 원복했다.
 
@@ -157,7 +163,7 @@ Toss V2 Standard Payment Window를 준비한다. callback은 exact binding과 st
 confirm/query/cancel은 DB transaction 밖에서 실행된다. React 고객·매장·운영 화면은 fixture fallback 없이
 Runtime OpenAPI client로 같은 API를 사용한다.
 
-`./gradlew clean build --stacktrace --no-daemon`은 626 tests(1 skipped), frontend typecheck·9 unit tests·production/Sites
+`./gradlew clean build --stacktrace --no-daemon`은 리뷰 수정 후 637 tests(1 skipped), frontend typecheck·17 unit tests·production/Sites
 build와 production dependency audit는 통과했다. local HTTP smoke는 callback replay/tamper, 매장 완료,
 부분·전액 환불과 `UNKNOWN → APPROVED` query 복구를 통과했고 browser는 결제 완료 새로고침과 주문
 추적을 확인했다. 상세 결과는 [release evidence](../../quality/toss-one-time-payment-window-release-evidence.md)에

@@ -89,6 +89,7 @@ internal interface PaymentGateway {
 
     fun lookupRefund(
         request: GatewayLookupRequest,
+        amountKrw: Long,
         providerIdempotencyKey: String,
     ): GatewayRefundResult
 }

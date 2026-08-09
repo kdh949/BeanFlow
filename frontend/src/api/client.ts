@@ -61,3 +61,30 @@ export function idempotencyKey(scope: string): string {
   sessionStorage.setItem(storageKey, created);
   return created;
 }
+
+/**
+ * Keeps one key only for the lifetime of a single unresolved submit intent.
+ * A network retry of the same payload reuses the key; success or an explicit
+ * draft change rotates it so a later logical command cannot replay an old one.
+ */
+export class SubmissionIntent {
+  private fingerprint: string | null = null;
+  private key: string | null = null;
+
+  keyFor(fingerprint: string): string {
+    if (this.fingerprint !== fingerprint || this.key === null) {
+      this.fingerprint = fingerprint;
+      this.key = crypto.randomUUID();
+    }
+    return this.key;
+  }
+
+  rotate() {
+    this.fingerprint = null;
+    this.key = null;
+  }
+
+  complete() {
+    this.rotate();
+  }
+}

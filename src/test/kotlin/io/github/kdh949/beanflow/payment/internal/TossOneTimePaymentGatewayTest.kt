@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -84,15 +85,17 @@ internal class TossOneTimePaymentGatewayTest {
 
     @Test
     fun `full cancel omits amount while partial cancel sends the exact server amount`() {
+        val fullReason = refundReason("cancel-full-idempotency")
+        val partialReason = refundReason("cancel-partial-idempotency")
         responses +=
             StubResponse(
                 200,
-                """{"status":"CANCELED","cancels":[{"cancelAmount":1000,"cancelStatus":"DONE","transactionKey":"cancel-full"}]}""",
+                """{"status":"CANCELED","cancels":[{"cancelAmount":1000,"cancelReason":"$fullReason","cancelStatus":"DONE","transactionKey":"cancel-full"}]}""",
             )
         responses +=
             StubResponse(
                 200,
-                """{"status":"PARTIAL_CANCELED","cancels":[{"cancelAmount":400,"cancelStatus":"DONE","transactionKey":"cancel-partial"}]}""",
+                """{"status":"PARTIAL_CANCELED","cancels":[{"cancelAmount":400,"cancelReason":"$partialReason","cancelStatus":"DONE","transactionKey":"cancel-partial"}]}""",
             )
         val lookup = lookupRequest()
 
@@ -106,8 +109,95 @@ internal class TossOneTimePaymentGatewayTest {
         assertThat(captured[0].path).isEqualTo("/v1/payments/pay-key/cancel")
         assertThat(captured[0].body).doesNotContain("cancelAmount")
         assertThat(captured[0].idempotencyKey).isEqualTo("cancel-full-idempotency")
-        assertThat(ObjectMapper().readTree(captured[1].body).path("cancelAmount").asLong()).isEqualTo(400)
+        assertThat(ObjectMapper().readTree(captured[0].body).path("cancelReason").asText()).isEqualTo(fullReason)
+        val partialBody = ObjectMapper().readTree(captured[1].body)
+        assertThat(partialBody.path("cancelAmount").asLong()).isEqualTo(400)
+        assertThat(partialBody.path("cancelReason").asText()).isEqualTo(partialReason)
+        assertThat(captured[1].body).doesNotContain("cancel-partial-idempotency")
         assertThat(captured[1].idempotencyKey).isEqualTo("cancel-partial-idempotency")
+    }
+
+    @Test
+    fun `partial refund lookup recovers an unknown operation by exact amount and marker`() {
+        val key = "refund-partial-unknown"
+        responses +=
+            StubResponse(
+                200,
+                """{"cancels":[{"cancelAmount":400,"cancelReason":"${refundReason(
+                    key,
+                )}","cancelStatus":"DONE","transactionKey":"refund-partial"}]}""",
+            )
+
+        val result = gateway.lookupRefund(lookupRequest(), 400, key)
+
+        assertThat(result).isEqualTo(GatewayRefundResult.Succeeded("refund-partial"))
+    }
+
+    @Test
+    fun `same amount refunds are distinguished by their operation marker`() {
+        val currentKey = "refund-same-amount-two"
+        responses +=
+            StubResponse(
+                200,
+                """
+                {"cancels":[
+                    {"cancelAmount":400,"cancelReason":"${refundReason(currentKey)}","cancelStatus":"DONE","transactionKey":"refund-two"},
+                    {"cancelAmount":400,"cancelReason":"${refundReason(
+                    "refund-same-amount-one",
+                )}","cancelStatus":"DONE","transactionKey":"refund-one"}
+                ]}
+                """.trimIndent(),
+            )
+
+        val result = gateway.lookupRefund(lookupRequest(), 400, currentKey)
+
+        assertThat(result).isEqualTo(GatewayRefundResult.Succeeded("refund-two"))
+    }
+
+    @Test
+    fun `unrelated full cancel cannot satisfy a partial refund lookup`() {
+        val key = "refund-partial-with-full-cancel"
+        responses +=
+            StubResponse(
+                200,
+                """
+                {"cancels":[
+                    {"cancelAmount":400,"cancelReason":"${refundReason(key)}","cancelStatus":"DONE","transactionKey":"refund-partial"},
+                    {"cancelAmount":1000,"cancelReason":"${refundReason(
+                    "unrelated-full-cancel",
+                )}","cancelStatus":"DONE","transactionKey":"cancel-full"}
+                ]}
+                """.trimIndent(),
+            )
+
+        val result = gateway.lookupRefund(lookupRequest(), 400, key)
+
+        assertThat(result).isEqualTo(GatewayRefundResult.Succeeded("refund-partial"))
+    }
+
+    @Test
+    fun `same refund idempotency key replay selects the same cancellation`() {
+        val key = "refund-replay-key"
+        val response =
+            StubResponse(
+                200,
+                """
+                {"cancels":[
+                    {"cancelAmount":400,"cancelReason":"${refundReason(key)}","cancelStatus":"DONE","transactionKey":"refund-replayed"},
+                    {"cancelAmount":400,"cancelReason":"${refundReason(
+                    "another-operation",
+                )}","cancelStatus":"DONE","transactionKey":"refund-other"}
+                ]}
+                """.trimIndent(),
+            )
+        responses += response
+        responses += response
+
+        val first = gateway.requestRefund(lookupRequest(), 400, key)
+        val replay = gateway.requestRefund(lookupRequest(), 400, key)
+
+        assertThat(first).isEqualTo(GatewayRefundResult.Succeeded("refund-replayed"))
+        assertThat(replay).isEqualTo(first)
     }
 
     @Test
@@ -153,6 +243,14 @@ internal class TossOneTimePaymentGatewayTest {
             amountKrw = 1_000,
             currency = "KRW",
         )
+
+    private fun refundReason(providerIdempotencyKey: String): String = "BeanFlow refund [bf:${sha256(providerIdempotencyKey).take(24)}]"
+
+    private fun sha256(value: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(value.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     private fun handle(exchange: HttpExchange) {
         requests +=

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { clearPaymentSuccessQuery, failureMessage } from "./CustomerPages";
+import { clearPaymentSuccessQuery, failureMessage, orderTimelineModel } from "./CustomerPages";
+import type { components } from "../../api/schema";
 
 describe("Toss payment failure copy", () => {
   it("maps known public SDK codes to customer copy", () => {
@@ -48,5 +49,28 @@ describe("Toss payment success callback URL", () => {
       { pathname: "/app/payments/payment-id/success", search: "", hash: "" },
       history,
     );
+  });
+});
+
+describe("order timeline state mapping", () => {
+  type OrderState = components["schemas"]["OrderState"];
+  const expected: Record<OrderState, ReturnType<typeof orderTimelineModel>["kind"]> = {
+    PENDING_PAYMENT: "pending",
+    PAID: "progress",
+    ACCEPTED: "progress",
+    PREPARING: "progress",
+    READY: "progress",
+    COMPLETED: "progress",
+    EXPIRED: "terminal",
+    CANCELLED: "terminal",
+    REJECTED: "terminal",
+  };
+
+  it("maps every OpenAPI OrderState without activating paid for pending or terminal orders", () => {
+    for (const [state, kind] of Object.entries(expected) as Array<[OrderState, typeof expected[OrderState]]>) {
+      const model = orderTimelineModel(state);
+      expect(model.kind).toBe(kind);
+      if (kind !== "progress") expect(model.activeIndex).toBeNull();
+    }
   });
 });

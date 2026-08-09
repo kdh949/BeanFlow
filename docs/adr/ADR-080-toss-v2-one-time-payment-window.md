@@ -100,6 +100,13 @@ Tx C  Payment result + Order/resource transition + idempotent response + Audit c
   `POST /v1/payments/{paymentKey}/cancel`만 구현한다.
 - 전액 취소는 `cancelAmount`를 보내지 않고, 부분 취소만 snapshot이 정한 현금 금액을 보낸다.
   기존 Refund/SettlementAdjustment/Point restoration owner와 배분 규칙을 바꾸지 않는다.
+- **Refund operation identity amendment (2026-08-10):** 각 논리 환불·취소 작업은 stable
+  Provider idempotency key의 SHA-256 앞 24 hex를 포함한 짧은 `cancelReason` marker를 보낸다.
+  원 key는 reason, 응답, 로그에 복사하지 않는다. 최초 취소 응답과 응답 유실 뒤 조회는 모두
+  `cancelStatus=DONE`, 실제 `ClaimedRefund.amountKrw`, 동일 marker가 정확히 한 건 일치할 때만 그
+  `transactionKey`를 현재 Refund의 Provider reference로 확정한다. 같은 금액의 마지막 취소나 원
+  승인 총액만으로 선택하지 않으며 0건·복수 건·marker 누락은 `UNKNOWN`으로 남긴다. 전액 late
+  void도 금액 대신 동일 marker로 자신의 취소 한 건을 식별한다.
 - Adapter 결과는 Approved, Declined/TerminalFailed, RetryableFailed, Unknown의 닫힌 합으로
   번역한다. 등록되지 않은 Provider code는 fail-closed다. local/test scripted adapter는
   명시적 profile 전용이며 운영 fallback이 아니다.
@@ -161,6 +168,8 @@ Payment는 이미 주문별 승인·불명·reconciliation·late approval과 Ref
 - confirm timeout/response loss, Provider success 뒤 Tx C failure와 query convergence
 - 만료 뒤 late approval의 void/refund 및 manual review
 - customer full cancellation과 owner partial refund의 provider key·금액·멱등성
+- 부분 환불 `UNKNOWN` 조회, 동일 금액 복수 환불, 무관한 전액 취소 공존과 동일 key replay의
+  상태·금액·operation marker exact match
 - SettlementAdjustment, Point restoration/recovery와 기존 snapshot tie-out
 - one-time path의 PaymentMethod repository/Port 호출 0회
 - profile/key guard, Basic colon auth, secret/paymentKey redaction과 HTTP fault matrix

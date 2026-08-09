@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import java.sql.Timestamp
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -34,12 +35,14 @@ internal class OneTimeCheckoutIntegrationTest
         private val checkoutService: OneTimeCheckoutService,
         private val reconciliationWorker: PaymentReconciliationWorker,
         private val gateway: ScriptedTestPaymentGateway,
+        private val testClock: PickupSlotPaymentDeadlineTestClock,
         private val jdbcTemplate: JdbcTemplate,
     ) {
         @BeforeEach
         fun setUp() {
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             gateway.reset()
+            testClock.reset()
         }
 
         @Test
@@ -69,6 +72,51 @@ internal class OneTimeCheckoutIntegrationTest
 
             val replay = checkoutService.prepare(fixture.customerId, orderId, "one-time-prepare-key")
             assertThat(replay).isEqualTo(prepared)
+        }
+
+        @Test
+        fun `expired order without an attempt materializes reservations and returns reservation expired`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "one-time-expired-without-attempt")
+            testClock.set(value<Timestamp>("SELECT reservation_expires_at FROM ordering_order WHERE id = ?", orderId).toInstant())
+
+            assertThatThrownBy {
+                checkoutService.prepare(fixture.customerId, orderId, "one-time-expired-without-attempt-key")
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.RESERVATION_EXPIRED)
+            }
+
+            assertExpiredOrderAndReservations(orderId)
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isZero()
+            assertNoProviderCalls()
+        }
+
+        @Test
+        fun `expired order with a ready attempt materializes reservations instead of replaying it`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "one-time-expired-with-ready-attempt")
+            val prepared =
+                checkoutService.prepare(
+                    fixture.customerId,
+                    orderId,
+                    "one-time-expired-with-ready-attempt-key",
+                )
+            testClock.set(value<Timestamp>("SELECT reservation_expires_at FROM ordering_order WHERE id = ?", orderId).toInstant())
+
+            assertThatThrownBy {
+                checkoutService.prepare(
+                    fixture.customerId,
+                    orderId,
+                    "one-time-expired-with-ready-attempt-key",
+                )
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.RESERVATION_EXPIRED)
+            }
+
+            assertExpiredOrderAndReservations(orderId)
+            assertThat(value<String>("SELECT state FROM payment_one_time_attempt WHERE payment_id = ?", prepared.paymentId))
+                .isEqualTo("READY")
+            assertNoProviderCalls()
         }
 
         @Test
@@ -203,6 +251,24 @@ internal class OneTimeCheckoutIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
             return value("SELECT id FROM ordering_order")
+        }
+
+        private fun assertExpiredOrderAndReservations(orderId: UUID) {
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
+                .isEqualTo("EXPIRED")
+            assertThat(value<String>("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
+                .isEqualTo("EXPIRED")
+        }
+
+        private fun assertNoProviderCalls() {
+            assertThat(gateway.approvalCalls.get()).isZero()
+            assertThat(gateway.oneTimeConfirmationCalls.get()).isZero()
+            assertThat(gateway.lookupCalls.get()).isZero()
+            assertThat(gateway.voidCalls.get()).isZero()
+            assertThat(gateway.refundCalls.get()).isZero()
+            assertThat(gateway.rejectionRefundCalls.get()).isZero()
+            assertThat(gateway.rejectionRefundLookupCalls.get()).isZero()
         }
 
         private inline fun <reified T : Any> value(

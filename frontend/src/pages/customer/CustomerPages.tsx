@@ -14,10 +14,10 @@ import {
   Timer,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
-import { api, ApiRequestError, idempotencyKey, unwrap } from "../../api/client";
+import { api, ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge, SuccessMark } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
@@ -29,6 +29,7 @@ type PickupSlot = components["schemas"]["PickupSlot"];
 type Order = components["schemas"]["Order"];
 type Payment = components["schemas"]["PaymentConfirmation"];
 type Attempt = components["schemas"]["OneTimePaymentAttempt"];
+type OrderState = components["schemas"]["OrderState"];
 
 const attemptStorage = {
   save(attempt: Attempt) {
@@ -161,6 +162,7 @@ export function StoreCatalogPage() {
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
+  const orderSubmission = useRef(new SubmissionIntent());
 
   const load = useCallback(async () => {
     setError(null);
@@ -180,22 +182,28 @@ export function StoreCatalogPage() {
 
   async function createOrder() {
     if (!selectedMenu || !selectedSlot) return;
+    const body = {
+      storeId,
+      pickupSlotId: selectedSlot,
+      lines: [{ menuId: selectedMenu.menuId, optionIds: [], quantity }],
+      pointsToUseKrw: 0,
+    };
+    const fingerprint = JSON.stringify(body);
     setSubmitting(true);
     setError(null);
     try {
       const result = await api.POST("/orders", {
-        params: { header: { "Idempotency-Key": idempotencyKey(`order.${storeId}.${selectedSlot}`) } },
-        body: {
-          storeId,
-          pickupSlotId: selectedSlot,
-          lines: [{ menuId: selectedMenu.menuId, optionIds: [], quantity }],
-          pointsToUseKrw: 0,
-        },
+        params: { header: { "Idempotency-Key": orderSubmission.current.keyFor(fingerprint) } },
+        body,
       });
       const created = unwrap(result);
       const order = created.order as Order;
+      orderSubmission.current.complete();
       navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.orderId}`);
     } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
+        orderSubmission.current.rotate();
+      }
       setError(failure);
     } finally {
       setSubmitting(false);
@@ -216,7 +224,10 @@ export function StoreCatalogPage() {
             disabled={!menu.available}
             aria-pressed={selectedMenu?.menuId === menu.menuId}
             className={`menu-card ${selectedMenu?.menuId === menu.menuId ? "is-selected" : ""}`}
-            onClick={() => setSelectedMenu(menu)}
+            onClick={() => {
+              if (selectedMenu?.menuId !== menu.menuId) orderSubmission.current.rotate();
+              setSelectedMenu(menu);
+            }}
           >
             <span className="menu-icon"><Coffee size={25} /></span>
             <span><strong>{menu.name}</strong><small>{won.format(menu.basePriceKrw)}</small></span>
@@ -227,13 +238,24 @@ export function StoreCatalogPage() {
       {selectedMenu ? (
         <section className="selection-panel surface-card">
           <div className="selection-row"><span>수량</span><span className="stepper">
-            <button type="button" aria-label="수량 줄이기" onClick={() => setQuantity((value) => Math.max(1, value - 1))}><Minus size={16} /></button>
+            <button type="button" aria-label="수량 줄이기" onClick={() => setQuantity((value) => {
+              const next = Math.max(1, value - 1);
+              if (next !== value) orderSubmission.current.rotate();
+              return next;
+            })}><Minus size={16} /></button>
             <strong>{quantity}</strong>
-            <button type="button" aria-label="수량 늘리기" onClick={() => setQuantity((value) => Math.min(20, value + 1))}><Plus size={16} /></button>
+            <button type="button" aria-label="수량 늘리기" onClick={() => setQuantity((value) => {
+              const next = Math.min(20, value + 1);
+              if (next !== value) orderSubmission.current.rotate();
+              return next;
+            })}><Plus size={16} /></button>
           </span></div>
           <div><span className="field-label">픽업 시간</span><div className="slot-grid">
             {slots?.map((slot) => (
-              <button key={slot.pickupSlotId} type="button" aria-pressed={selectedSlot === slot.pickupSlotId} className={selectedSlot === slot.pickupSlotId ? "is-selected" : ""} onClick={() => setSelectedSlot(slot.pickupSlotId)}>
+              <button key={slot.pickupSlotId} type="button" aria-pressed={selectedSlot === slot.pickupSlotId} className={selectedSlot === slot.pickupSlotId ? "is-selected" : ""} onClick={() => {
+                if (selectedSlot !== slot.pickupSlotId) orderSubmission.current.rotate();
+                setSelectedSlot(slot.pickupSlotId);
+              }}>
                 <strong>{new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</strong>
                 <small>{slot.remainingCapacity}잔 가능</small>
               </button>
@@ -419,9 +441,51 @@ export function PaymentSuccessPage() {
 export function PaymentFailPage() {
   const { paymentId = "" } = useParams();
   const [searchParams] = useSearchParams();
-  const code = searchParams.get("code") ?? "PAYMENT_AUTH_FAILED";
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(true);
+  const code = publicFailureCode(searchParams.get("code") ?? "PAYMENT_AUTH_FAILED");
   const message = failureMessage(code);
-  const attempt = attemptStorage.get(paymentId);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await api.GET("/payments/{paymentId}", { params: { path: { paymentId } } });
+      setPayment(unwrap(result));
+      setError(null);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoading(false);
+    }
+  }, [paymentId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!payment || !["APPROVING", "UNKNOWN", "RECONCILING"].includes(payment.approvalState)) return;
+    const timer = window.setTimeout(() => void load(), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [load, payment]);
+
+  if (loading && !payment) return <LoadingState label="결제 상태를 확인하는 중" />;
+  if (error && !payment) return <div className="customer-page result-page"><ErrorState error={error} retry={() => void load()} /></div>;
+  if (!payment) return null;
+  if (payment.approvalState === "APPROVED") {
+    return <Navigate replace to={`/app/payments/${paymentId}/success`} />;
+  }
+  if (["APPROVING", "UNKNOWN", "RECONCILING", "MANUAL_REVIEW"].includes(payment.approvalState)) {
+    return (
+      <div className="customer-page result-page">
+        <span className="pending-mark"><RefreshCw className="spin" size={30} /></span>
+        <span className="eyebrow">PAYMENT CHECK</span>
+        <h1>결제 결과를 확인하고 있어요</h1>
+        <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
+        <StatusBadge state={payment.approvalState} />
+        {error ? <ErrorState error={error} retry={() => void load()} /> : null}
+        <Link className="button button-secondary button-block" to={`/app/orders/${payment.orderId}`}>주문 상태 보기</Link>
+      </div>
+    );
+  }
+  const retryable = payment.approvalState === "READY";
   return (
     <div className="customer-page result-page">
       <span className="failure-mark"><XCircle size={36} /></span>
@@ -429,7 +493,9 @@ export function PaymentFailPage() {
       <h1>결제를 완료하지 못했어요</h1>
       <p>{message}</p>
       <code className="failure-code">{code}</code>
-      <Link className="button button-primary button-block button-xl" to={attempt ? `/app/checkout/${attempt.orderId}` : "/app/orders"}>주문서로 돌아가기</Link>
+      <Link className="button button-primary button-block button-xl" to={retryable ? `/app/checkout/${payment.orderId}` : `/app/orders/${payment.orderId}`}>
+        {retryable ? "주문서로 돌아가기" : "주문 상태 보기"}
+      </Link>
       <Link className="text-link" to="/app/help">도움이 필요해요</Link>
     </div>
   );
@@ -442,6 +508,12 @@ export function failureMessage(code: string) {
     REJECT_CARD_COMPANY: "카드사에서 승인을 거절했습니다. 카드사에 확인하거나 다른 수단을 이용해 주세요.",
   };
   return messages[code] ?? "결제 인증을 마치지 못했습니다. 주문서에서 안전하게 다시 시도할 수 있어요.";
+}
+
+export function publicFailureCode(code: string) {
+  return ["PAY_PROCESS_CANCELED", "PAY_PROCESS_ABORTED", "REJECT_CARD_COMPANY"].includes(code)
+    ? code
+    : "PAYMENT_AUTH_FAILED";
 }
 
 export function OrderLookupPage() {
@@ -496,12 +568,38 @@ export function OrderTrackingPage() {
   );
 }
 
-function OrderTimeline({ state }: { state: string }) {
-  const stages = ["PAID", "ACCEPTED", "PREPARING", "READY", "COMPLETED"];
-  const activeIndex = Math.max(0, stages.indexOf(state));
+export type OrderTimelineModel = {
+  kind: "pending" | "progress" | "terminal";
+  activeIndex: number | null;
+  terminalLabel?: string;
+};
+
+export function orderTimelineModel(state: OrderState): OrderTimelineModel {
+  switch (state) {
+    case "PENDING_PAYMENT": return { kind: "pending", activeIndex: null };
+    case "PAID": return { kind: "progress", activeIndex: 0 };
+    case "ACCEPTED": return { kind: "progress", activeIndex: 1 };
+    case "PREPARING": return { kind: "progress", activeIndex: 2 };
+    case "READY": return { kind: "progress", activeIndex: 3 };
+    case "COMPLETED": return { kind: "progress", activeIndex: 4 };
+    case "CANCELLED": return { kind: "terminal", activeIndex: null, terminalLabel: "취소된 주문입니다" };
+    case "REJECTED": return { kind: "terminal", activeIndex: null, terminalLabel: "매장에서 거절한 주문입니다" };
+    case "EXPIRED": return { kind: "terminal", activeIndex: null, terminalLabel: "결제 시간이 만료된 주문입니다" };
+    default: {
+      const unreachable: never = state;
+      return unreachable;
+    }
+  }
+}
+
+function OrderTimeline({ state }: { state: OrderState }) {
+  const model = orderTimelineModel(state);
+  if (model.kind === "terminal") {
+    return <div className="terminal-order-state" role="status"><XCircle size={21} /><strong>{model.terminalLabel}</strong></div>;
+  }
   return <ol className="order-timeline">
     {["결제 완료", "주문 접수", "제조 중", "픽업 준비", "픽업 완료"].map((label, index) => (
-      <li key={label} className={index <= activeIndex ? "is-active" : ""}><span>{index < activeIndex ? <Check size={15} /> : index + 1}</span><strong>{label}</strong></li>
+      <li key={label} className={model.activeIndex !== null && index <= model.activeIndex ? "is-active" : ""}><span>{model.activeIndex !== null && index < model.activeIndex ? <Check size={15} /> : index + 1}</span><strong>{label}</strong></li>
     ))}
   </ol>;
 }

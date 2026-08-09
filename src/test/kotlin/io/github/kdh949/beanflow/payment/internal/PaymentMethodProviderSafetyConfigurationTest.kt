@@ -69,6 +69,17 @@ internal class PaymentMethodProviderSafetyConfigurationTest {
     }
 
     @Test
+    fun `toss sandbox profile overlapping production fails startup`() {
+        ApplicationContextRunner()
+            .withUserConfiguration(PaymentMethodProviderSafetyConfiguration::class.java)
+            .withPropertyValues("spring.profiles.active=prod,toss-sandbox")
+            .run { context ->
+                assertThat(context.startupFailure)
+                    .hasMessage("Payment method lifecycle provider profiles overlap with prod")
+            }
+    }
+
+    @Test
     fun `multiple providers and profile overlap fail startup`() {
         ApplicationContextRunner()
             .withUserConfiguration(

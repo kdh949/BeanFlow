@@ -29,6 +29,14 @@ internal data class OneTimePaymentConfirmationRequest(
     val amount: Long,
 )
 
+internal sealed interface OneTimePaymentPreparationResult {
+    data class Ready(
+        val attempt: OneTimePaymentAttemptView,
+    ) : OneTimePaymentPreparationResult
+
+    data object Expired : OneTimePaymentPreparationResult
+}
+
 @Service
 internal class OneTimeCheckoutService(
     private val preparation: OneTimePaymentPreparationTransaction,
@@ -46,15 +54,26 @@ internal class OneTimeCheckoutService(
         customerId: UUID,
         orderId: UUID,
         idempotencyKey: String,
-    ): OneTimePaymentAttemptView =
-        preparation.prepare(
-            customerId = customerId,
-            orderId = orderId,
-            idempotencyKey = idempotencyKey,
-            callbackBaseUrl = frontendBaseUrl,
-            correlationId = correlationIdSource.currentOrCreate(),
-            now = clock.instant(),
-        )
+    ): OneTimePaymentAttemptView {
+        val result =
+            preparation.prepare(
+                customerId = customerId,
+                orderId = orderId,
+                idempotencyKey = idempotencyKey,
+                callbackBaseUrl = frontendBaseUrl,
+                correlationId = correlationIdSource.currentOrCreate(),
+                now = clock.instant(),
+            )
+        return when (result) {
+            is OneTimePaymentPreparationResult.Ready -> {
+                result.attempt
+            }
+
+            OneTimePaymentPreparationResult.Expired -> {
+                throw DomainFailure(FailureCode.RESERVATION_EXPIRED, "Order reservation lease has expired")
+            }
+        }
+    }
 
     fun confirm(
         customerId: UUID,
@@ -124,7 +143,7 @@ internal class OneTimePaymentPreparationTransaction(
         callbackBaseUrl: String,
         correlationId: String,
         now: java.time.Instant,
-    ): OneTimePaymentAttemptView {
+    ): OneTimePaymentPreparationResult {
         val order =
             orders.findLockedById(orderId)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
@@ -147,15 +166,15 @@ internal class OneTimePaymentPreparationTransaction(
                 expiresAt = deadline,
                 now = now,
             )
-        payments.existing(command)?.let { return it }
         if (order.state == OrderState.PENDING_PAYMENT && !now.isBefore(deadline)) {
             expiryUseCase.expireIfDue(orderId, now)
-            throw DomainFailure(FailureCode.RESERVATION_EXPIRED, "Order reservation lease has expired")
+            return OneTimePaymentPreparationResult.Expired
         }
+        payments.existing(command)?.let { return OneTimePaymentPreparationResult.Ready(it) }
         if (order.state != OrderState.PENDING_PAYMENT || order.payableKrw <= 0) {
             throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Order is not eligible for one-time payment")
         }
-        return payments.prepare(command)
+        return OneTimePaymentPreparationResult.Ready(payments.prepare(command))
     }
 
     private fun orderName(orderId: UUID): String {

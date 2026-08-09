@@ -336,9 +336,14 @@ internal class RejectionRefundRepositoryTest
                 NOW.plusSeconds(10),
             )
 
-            assertThat(refundRepository.findAll().single().state).isEqualTo(RefundState.SUCCEEDED)
+            val reconciled = refundRepository.findAll().single()
+            val payment = paymentRepository.findByOrderId(event.orderId)!!
+            assertThat(reconciled.state).isEqualTo(RefundState.SUCCEEDED)
+            assertThat(reconciled.succeededAmountKrw).isEqualTo(7_000)
+            assertThat(payment.succeededRefundAmountKrw).isEqualTo(7_000)
             assertThat(gateway.rejectionRefundCalls.get()).isEqualTo(1)
             assertThat(gateway.rejectionRefundLookupCalls.get()).isEqualTo(1)
+            assertThat(gateway.lastRejectionRefundLookupAmountKrw.get()).isEqualTo(7_000)
         }
 
         @Test

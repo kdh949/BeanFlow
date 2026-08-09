@@ -10,10 +10,10 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
-import { api, idempotencyKey, unwrap } from "../../api/client";
+import { api, ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
@@ -170,17 +170,27 @@ export function OpsRefundPage() {
   const [result, setResult] = useState<Refund | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const refundSubmission = useRef(new SubmissionIntent());
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const normalizedPaymentId = paymentId.trim();
+    const body = { reason: reason.trim(), lineItems: partial ? [{ orderLineId: orderLineId.trim(), quantity }] : undefined };
+    const fingerprint = JSON.stringify({ paymentId: normalizedPaymentId, ...body });
     setLoading(true); setError(null); setResult(null);
     try {
       const response = await api.POST("/payments/{paymentId}/refunds", {
-        params: { path: { paymentId: paymentId.trim() }, header: { "Idempotency-Key": idempotencyKey(`refund.${paymentId.trim()}.${partial ? `${orderLineId.trim()}.${quantity}` : "full"}`) } },
-        body: { reason: reason.trim(), lineItems: partial ? [{ orderLineId: orderLineId.trim(), quantity }] : undefined },
+        params: { path: { paymentId: normalizedPaymentId }, header: { "Idempotency-Key": refundSubmission.current.keyFor(fingerprint) } },
+        body,
       });
       setResult(unwrap(response));
-    } catch (failure) { setError(failure); } finally { setLoading(false); }
+      refundSubmission.current.complete();
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
+        refundSubmission.current.rotate();
+      }
+      setError(failure);
+    } finally { setLoading(false); }
   }
 
   return <div className="console-page narrow-console-page">

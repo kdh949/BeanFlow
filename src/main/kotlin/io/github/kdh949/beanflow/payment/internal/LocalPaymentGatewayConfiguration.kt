@@ -81,6 +81,7 @@ internal class LocalPaymentGatewayConfiguration {
 
             override fun lookupRefund(
                 request: GatewayLookupRequest,
+                amountKrw: Long,
                 providerIdempotencyKey: String,
             ): GatewayRefundResult = GatewayRefundResult.Succeeded(localRefundReference(providerIdempotencyKey))
         }

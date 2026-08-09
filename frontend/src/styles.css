@@ -305,6 +305,7 @@ code {
 .order-timeline li > span { width: 27px; height: 27px; z-index: 1; border: 1px solid var(--border-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-app); font-size: var(--fs-micro); }
 .order-timeline li.is-active { color: var(--text-strong); }
 .order-timeline li.is-active > span { border-color: var(--caramel-500); background: var(--caramel-500); color: var(--espresso-900); }
+.terminal-order-state { margin: var(--sp-5) 0; padding: var(--sp-4); display: flex; align-items: center; gap: var(--sp-3); border: 1px solid #f3c7c6; border-radius: var(--radius-card); background: var(--danger-bg); color: var(--danger-fg); }
 .order-summary { display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--fs-body-sm); }
 .order-summary span { color: var(--text-muted); }
 .order-summary .summary-total { padding-top: var(--sp-4); border-top: 1px solid var(--divider); color: var(--text-strong); }

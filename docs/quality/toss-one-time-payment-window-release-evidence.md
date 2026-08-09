@@ -20,6 +20,9 @@ PaymentMethod lifecycle, billing, BrandPay, 가상계좌와 payout은 범위 밖
   뒤 Toss confirm을 transaction 밖에서 호출하고, timeout/응답 유실은 `UNKNOWN`과 query work로 남긴다.
 - Toss adapter는 `secretKey + ":"` Basic credential, stable `Idempotency-Key`, official
   confirm/payment/cancel endpoint, connect 3초·read 8초 deadline과 closed error classification을 사용한다.
+- 환불·취소 `cancelReason`에는 Provider idempotency key 원문 대신 SHA-256 기반의 짧은 operation
+  marker를 넣는다. 최초 응답과 조회는 `DONE + 실제 환불 금액 + marker` exact match만 현재 Refund의
+  `transactionKey`로 수락하고, 같은 금액의 마지막 취소나 원 승인 총액으로 선택하지 않는다.
 - `toss-sandbox-runtime`은 `local,toss-sandbox`를 합성하면서 scripted gateway를 제외한다. API 개별
   연동 `test_ck_`/`test_sk_`만 허용하고 Widget `test_gck_`/`test_gsk_`, live·missing key는 시작 실패한다.
   legacy PaymentMethod provider는 fake 성공이 아니라 명시적 `Misconfigured`다.
@@ -32,13 +35,13 @@ PaymentMethod lifecycle, billing, BrandPay, 가상계좌와 payout은 범위 밖
 
 | 검증 | 결과 |
 |---|---|
-| `./gradlew clean build --stacktrace --no-daemon` | PASS — 626 tests, 1 skipped, Spotless/check/build 포함, 8분 48초 |
+| `./gradlew clean build --stacktrace --no-daemon` | PASS — 637 tests, 1 skipped, Spotless/check/build 포함, 리뷰 수정 후 8분 30초 |
 | `OneTimePaymentMigrationTest` | PASS — V38 clean migrate, constraints, immutable/delete guard |
-| `OneTimeCheckoutIntegrationTest` | PASS — prepare/replay, confirm, tamper, concurrency, UNKNOWN lookup recovery |
-| `TossOneTimePaymentGatewayTest` | PASS — Basic auth, idempotency, confirm/query/cancel와 failure 분류 |
+| `OneTimeCheckoutIntegrationTest` | PASS — prepare/replay, 만료 materialization, confirm, tamper, concurrency, UNKNOWN lookup recovery |
+| `TossOneTimePaymentGatewayTest` | PASS — Basic auth, idempotency, confirm/query/cancel, 동일 금액 refund marker와 failure 분류 |
 | `LocalPaymentGatewayConfigurationTest` | PASS — lookup reference 보존과 복수 refund reference 분리 |
 | `npm run typecheck` | PASS |
-| `npm test` | PASS — 3 files, 9 tests |
+| `npm test` | PASS — 4 files, 17 tests; callback query/status, submit intent와 전체 OrderState mapping 포함 |
 | `npm run build` | PASS — TypeScript, Vite production bundle, Sites package |
 | `npm run test:sites` | PASS — 4 tests |
 | `npm audit --omit=dev` | PASS — 0 vulnerabilities |
@@ -88,6 +91,9 @@ credential과 paymentKey 원문은 source, 문서, commit, PR과 애플리케이
 - 9,000원 결제는 1잔 4,500원 부분 취소와 남은 4,500원 취소가 각각 REQUEST 1회,
   Refund `SUCCEEDED`였다. Toss 직접 조회는 `PARTIAL_CANCELED`, `balanceAmount=0`, 4,500원
   `DONE` cancel 두 건을 반환했다.
+- 후속 리뷰 수정은 위 실제 sandbox transport에서 확인한 `cancels.cancelReason`, `cancelAmount`,
+  `cancelStatus`, `transactionKey` 계약을 stub HTTP adapter test로 고정했다. 같은 금액 두 건, 무관한
+  전액 취소 공존, 응답 유실 lookup과 동일 key replay를 각각 독립 검증한다.
 
 ```bash
 export TOSS_CLIENT_KEY='test_ck_...'

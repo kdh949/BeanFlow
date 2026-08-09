@@ -23,7 +23,7 @@ internal class LocalPaymentGatewayConfigurationTest {
     @Test
     fun `refund references replay by Provider idempotency key and differ between refund commands`() {
         val first = gateway.requestRefund(lookup, 5_000, "refund-key-one")
-        val replay = gateway.lookupRefund(lookup, "refund-key-one")
+        val replay = gateway.lookupRefund(lookup, 5_000, "refund-key-one")
         val second = gateway.requestRefund(lookup, 5_000, "refund-key-two")
 
         assertThat(first).isEqualTo(replay)
