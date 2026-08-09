@@ -76,7 +76,6 @@
 - `bash scripts/verify-docs.sh`: Passed, target/runtime 각각 28 paths/30 operations, 83 schemas,
   32 business policies, 77 ADRs, 160 Markdown files와 28 ExecPlans, exit 0.
 - `git diff --check`: Passed, 출력 없음, exit 0.
-
 ### Post-completion review correction validation
 
 - 최초 집중 테스트는 새 `ManualReviewRequired` 계약 부재로 test compilation 실패, exit 1이었다.
@@ -91,6 +90,10 @@
   exit 0. Markdown/ADR/ExecPlan inventory 숫자는 이 branch 범위 밖의 동시 worktree 문서를 포함해
   correction release inventory 근거로 사용하지 않는다.
 - `git diff --check`: Passed, 출력 없음, exit 0.
+- `./gradlew clean build`: Passed, 121 suites/568 tests, failures/errors 0, skipped 1,
+  `BUILD SUCCESSFUL in 7m 56s`, exit 0. Spotless, main/test compile, bootJar와 PostgreSQL
+  Testcontainers를 포함한다. 종료 시 기존 Modulith publication registry shutdown 경고가 있었지만
+  build 실패나 test failure는 아니었다.
 - 실제 Tx I2 fault injection은 `FAILED` transition DB trigger가 Tx I2 commit만 실패시키며, 최초 503,
   Tx O의 Order·pickup/stock reservation·Audit rollback, PROCESSING 잔류와 worker의 자동 비실행을
   검증한다. intended Order 존재/부재 fixture 모두 metadata를 검증한다.
@@ -98,7 +101,8 @@
 ## Measurements and limits
 
 - 검증 환경은 macOS arm64, Java/Gradle wrapper 9.6.1과 Docker Testcontainers의 PostgreSQL이다.
-  전체 suite는 120 test suites, 561 tests였고 1개 benchmark 성격의 기존 test가 skipped 상태다.
+  최초 완료 baseline은 120 suites/561 tests였고 review correction 뒤 clean build는
+  121 suites/568 tests다. 두 실행 모두 benchmark 성격의 기존 test 1개가 skipped 상태다.
 - 측정한 계약 inventory는 target/runtime 각각 28 paths/30 operations다. 테스트 시간은 위 명령의
   Gradle wall time이며 production latency나 throughput이 아니다.
 - 실제 non-local migration/deployment, external Provider 장애 주입, production traffic과
