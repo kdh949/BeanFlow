@@ -1,11 +1,11 @@
 # 빠른 재주문으로 현재 조건의 새 Order를 원자적으로 생성한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/order-creation-and-reservation-lease.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-09`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 이 문서는 living document이며 구현 중
 `Progress`, `Surprises & Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 계속
@@ -629,7 +629,9 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 - [x] 2026-08-09: Milestone 4 완료. customer endpoint, pending/benefit-only price comparison,
   `REORDER_ORDER_V1` exact replay/conflict/PROCESSING, 동시성·Tx I2 실패 후 stuck reconciliation을
   구현했다. `*FastReorder*` 전체 지정 테스트와 runtime parity/Modulith 통과.
-- [ ] Milestone 5: observability, runtime promotion과 completion evidence.
+- [x] 2026-08-09: Milestone 5 완료. bounded metric/log, stuck PROCESSING reconciliation,
+  runtime OpenAPI 28 paths/30 operations parity와 release evidence를 확정하고 전체 clean validation을
+  통과한 뒤 plan을 completed로 이동.
 
 ## Surprises & Discoveries
 
@@ -665,6 +667,12 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   중복될 수 있다. threshold를 넘은 record는 intended Order 존재 여부만 확인하고 response를 추정하지
   않은 채 `MANUAL_REVIEW`로 격리한다. Tx O가 아직 실행 중이면 idempotency complete guard가 실패해
   같은 transaction의 owner effect를 rollback한다.
+- 2026-08-09: V36 뒤 열 목록 없는 기존 환불 test fixture의 positional insert가 새 option snapshot
+  열에 명시적 null을 넣어 NOT NULL 제약에 실패했다. production schema를 느슨하게 하지 않고 fixture가
+  원래 의미인 `LEGACY_UNAVAILABLE/null`을 명시하도록 고쳤으며 해당 19개 통합 테스트와 전체 suite를
+  재검증했다.
+- 2026-08-09: 최초 `clean build`는 새 Kotlin 파일 16개의 Spotless 위반으로 test 전 실패했다.
+  repository formatter를 적용하고 별도 style commit으로 분리한 뒤 최종 clean build를 통과시켰다.
 
 ## Decision Log
 
@@ -692,10 +700,27 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 
 ## Outcomes & Retrospective
 
-아직 구현하지 않았다. 완료 시 실제 migration filename, 새/수정 source와 test, runtime operation 수,
-실행한 모든 validation의 정확한 결과, 측정값과 미측정 항목을 기록한다. 성공 경로만 통과하거나
-runtime OpenAPI가 target과 일치하지 않거나 legacy/item/idempotency/rollback test가 남아 있으면 이
-plan을 completed로 이동하지 않는다.
+`V36__add_fast_reorder_snapshots_and_idempotency_retention.sql`이 future OrderLine의 normalized option
+ID provenance와 legacy explicit state, 주문 생성 terminal idempotency의 exact 90-day retention을
+추가했다. direct create owner orchestration은 HTTP와 idempotency를 모르는
+`OrderCreationWorkflow(MANDATORY)`로 분리됐고 direct/reorder wrapper가 같은 Tx O atomicity를
+재사용한다.
+
+customer 전용 빠른 재주문 endpoint는 source의 menu ID, normalized option IDs, quantity만 현재
+조건으로 다시 quote/reserve한다. 허용 네 terminal state, missing/other-owner privacy, current
+menu/option stable item failures, all-or-nothing rollback, pending/benefit-only 201 price comparison,
+same-key exact success/failure replay, changed payload conflict와 stuck PROCESSING manual review를
+구현했다. 별도 Reorder Aggregate, 과거 혜택·결제·slot 복제, 부분 생성, 자동 fallback과 새 production
+dependency는 없다.
+
+target/runtime OpenAPI는 모두 28 paths/30 operations이고 handler parity test가 통과했다. 최종
+`./gradlew clean test`와 `./gradlew clean build`는 각각 561 tests, failures/errors 0, skipped 1로
+통과했으며 build는 Spotless, compile, bootJar와 PostgreSQL Testcontainers를 포함했다. 상세 command,
+최초 실패와 배포 한계는 [Fast Reorder Release Evidence](../../quality/fast-reorder-release-evidence.md)에
+보존한다.
+
+실제 non-local migration/deployment, production traffic, 외부 Provider 장애 주입과 p95/p99·lock wait·
+retention 처리량은 측정하지 않았다. 따라서 성능 개선이나 운영 SLA는 주장하지 않는다.
 
 ## Revision Notes
 
@@ -711,3 +736,5 @@ plan을 completed로 이동하지 않는다.
 - 2026-08-09: Milestone 3~4 완료. Merchant typed batch, source policy/provenance, price comparison,
   customer API, exact replay, same-source concurrency, owner rollback과 stuck PROCESSING manual-review
   reconciliation을 PostgreSQL/MockMvc 지정 테스트로 검증하고 runtime OpenAPI를 28/30으로 승격.
+- 2026-08-09: Milestone 5 완료. 전체 회귀에서 발견한 positional fixture와 Spotless 문제를 닫고
+  561-test clean build, 문서 검증, release evidence와 completed 이동으로 implementation outcome 확정.
