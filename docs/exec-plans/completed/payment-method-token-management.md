@@ -1,11 +1,11 @@
 # 결제수단 token lifecycle 구현
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-10`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -336,9 +336,9 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
 - [x] schema/Aggregate/Port/원장
 - [x] 고객 API·signed cursor·인가
 - [x] Payment request snapshot
-- [ ] provider-neutral inbox·deadline/retention worker·profile guards
-- [ ] required tests/build/docs validation
-- [ ] active→completed 이동과 successor metadata 갱신
+- [x] provider-neutral inbox·deadline/retention worker·profile guards
+- [x] required tests/build/docs validation
+- [x] active→completed 이동과 successor metadata 갱신
 
 ## Surprises & Discoveries
 
@@ -354,6 +354,10 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
   보장하지 않는다. webhook은 실패 시 약 3일 19시간까지 재전송하므로 96시간 창을 정했다.
 - 2026-08-09: local demo가 외부 HTTP를 호출하지 않는 adapter를 sandbox라고 불렀다. scripted와
   external sandbox 용어를 분리했다.
+- 2026-08-10: 최초 전체 clean build에서 migration 뒤 직접 Payment를 삽입하던 partial-refund와
+  rejection-refund fixture 21건이 immutable Provider request snapshot 누락으로 실패했다. current
+  PaymentMethod fallback을 되살리지 않고 두 fixture가 snapshot을 함께 만들도록 수정했으며, 해당
+  26 tests와 최종 604-test clean build가 통과했다.
 
 ## Decision Log
 
@@ -377,12 +381,33 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
 
 ## Outcomes & Retrospective
 
-미시작이다. 계약과 구현 범위는 닫혔고 direct ExecPlan dependency가 없어
-`Implementation-Ready=true`다. 다만 migration writer lease가 없으면 실행할 수 없다. 완료 시 실제
-schema 번호, 테스트 수, command 결과, build와 문서 검증 결과를 기록한다. 성능·Provider latency는
-아직 측정하지 않았다.
+V37이 PaymentMethod lifecycle, provider customer reference, command/inbox 원장과 immutable Payment
+request snapshot을 추가했다. registration/list/default/deactivation API, provider-neutral lifecycle와
+verified notification Port, explicit local/test scripted adapter, startup/profile guard, deadline/retention
+worker와 Audit/closed-tag metric이 runtime에 존재한다. Runtime OpenAPI는 target과 같은 31 paths/34
+operations이며 실제 Toss HTTP·sandbox transport는 추가하지 않았다.
+
+검증 결과는 다음과 같다.
+
+- `./gradlew test --tests '*PaymentMethod*' --tests '*PaymentConfirmation*' --tests '*Reconciliation*'`:
+  PASS, 58 tests, 1분 20초.
+- `./gradlew test --tests '*RuntimeOpenApi*' --tests '*ProviderSafety*' --tests '*ModularityTests'`:
+  PASS, 8 tests, 6초.
+- 최초 `./gradlew clean build`: 604 tests 중 21건 실패. 모두 migration 이후 직접 만든 external Payment
+  fixture의 request snapshot 누락이었으며 제품 fallback 없이 fixture를 수정했다.
+- `./gradlew test --tests '*PartialRefundAllocationRepositoryTest' --tests '*RejectionRefundRepositoryTest'`:
+  PASS, 26 tests, 54초.
+- 최종 `./gradlew clean build`: PASS, 604 tests, 1 skipped, Spotless/check/package 포함, 8분 36초.
+- `bash scripts/verify-docs.sh`: PASS, target/runtime 31 paths/34 operations, 88 schemas, 32 policies,
+  79 ADRs, 166 Markdown files와 30 ExecPlans.
+- `git diff --check`: PASS.
+
+Provider 호출 latency, 부하, 실제 sandbox/배포 smoke와 SLA는 측정하지 않았다. 후속 Toss adapter
+plan이 실제 transport, authoritative webhook 인증·stable notification ID mapping과 그 실측을 소유한다.
 
 ## Revision Notes
 
 - 2026-08-09: Accepted BR-29/ADR-021/078/079, target OpenAPI, security/privacy와 transaction 계약에서
   최초 implementation-ready 계획 작성.
+- 2026-08-10: V37과 provider-neutral lifecycle 구현·Runtime OpenAPI·전체 검증을 완료하고 completed로
+  이동했다. Toss HTTP adapter와 webhook transport는 후속 plan에 남겼다.

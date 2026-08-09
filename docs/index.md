@@ -76,7 +76,7 @@
 - [Completed Audited Loyalty Point Adjustment Foundation](exec-plans/completed/loyalty-point-adjustment-foundation.md)
 - [Completed Nearby Store Discovery](exec-plans/completed/nearby-store-discovery.md)
 - [Analytics Refund and Late-Event Projection](exec-plans/active/analytics-refund-and-late-event-projection.md)
-- [PaymentMethod Token Management](exec-plans/active/payment-method-token-management.md)
+- [PaymentMethod Token Management](exec-plans/completed/payment-method-token-management.md)
 - [Toss Payments Sandbox Gateway Adapter](exec-plans/active/toss-payments-sandbox-gateway-adapter.md)
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)

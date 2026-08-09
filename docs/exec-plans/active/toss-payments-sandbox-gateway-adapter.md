@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `false`
-> **Depends-On:** `docs/exec-plans/active/payment-method-token-management.md`
+> **Depends-On:** `docs/exec-plans/completed/payment-method-token-management.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -32,22 +32,19 @@ test와 실측 결과로 남는다.
   `@Profile("local & !prod")`이다. `prod`에는 bean이 없어 context 기동이 실패한다.
 - `GatewayRefundResult.RetryableFailed`를 만들어내는 adapter는 없다. ADR-038이 요구한
   "adapter가 소유하는 재시도 허용 code 목록"은 존재하지 않는다.
-- `PaymentMethodEntity`의 컬럼은 `customer_id`, `provider`, `token_reference`,
-  `display_alias`, `card_brand`, `last_four`이며 provider 참조 값을 담을 자리가 없다.
-- **결제수단 등록 경로는 아직 runtime에 존재하지 않는다.** Accepted target OpenAPI에는
-  `/payment-methods` lifecycle 계약이 추가됐지만, `PaymentMethodEntity(...)`를 생성하는 runtime
-  코드는 test와 `LocalDemoSeedCli`뿐이다. 따라서 유효한 provider token을 가진 PaymentMethod를
-  만드는 운영 경로는 선행 lifecycle plan이 구현해야 한다.
+- V37과 runtime lifecycle은 `PaymentMethodEntity`의 provider customer reference, 상태/default 제약,
+  command/inbox 원장과 immutable Payment request snapshot을 구현했다.
+- 결제수단 GET/POST/DELETE/default PUT이 Runtime OpenAPI와 Controller에 존재하고, provider-neutral
+  registration/deactivation Port와 explicit local/test scripted adapter가 구현됐다. 실제 Toss token을
+  발급·폐기하는 HTTP adapter는 여전히 이 계획의 범위다.
 - **PaymentMethod의 lifecycle·스키마·등록/폐기 계약은
-  [`payment-method-token-management`](payment-method-token-management.md)
+  [`payment-method-token-management`](../completed/payment-method-token-management.md)
   ExecPlan이 소유한다.** 이 계획은 provider 참조 값 컬럼과 registration Port 계약을 다시 만들지
   않고, 선행 결과 위에서 그 Port의 토스 빌링키 발급 구현과 승인·취소·조회를 제공한다. direct
-  dependency는 canonical metadata에 기입했으며, 그 plan이 completed path로 이동하고 Outcomes
-  evidence를 남긴 뒤에만
-  `Implementation-Ready`를 `true`로 올린다.
+  dependency는 canonical metadata의 completed path에 기입했고 선행 Outcomes evidence도 존재한다.
 - HTTP client 의존성은 추가할 필요가 없다. `spring-boot-starter-webmvc`가 이미 들어와 있다.
 - ADR-078과 BR-29·ADR-021의 2026-08-09 amendment는 ADR-079와 함께 `Accepted`다. 남은 gate는
-  선행 plan의 실제 구현·검증 완료와 `BILLING_DELETED` transport의 authoritative 인증 계약 확인이다.
+  `BILLING_DELETED` transport의 authoritative 인증 계약 확인이다.
   현재 공식 webhook 가이드는 event/retry는 설명하지만 signature 계약을 확인시키지 못했으므로
   이 계획을 dependency 완료만으로 자동 ready로 올리지 않는다.
 
@@ -378,9 +375,8 @@ sandbox 실호출 test는 키가 있을 때만 실행하고, 키가 없으면 sk
 
 ## Outcomes & Retrospective
 
-미시작이다. ADR-078과 amendment는 Accepted지만 선행 `payment-method-token-management`
-plan이 active이고 authoritative webhook 인증·stable ID mapping도 미확인이라
-`Implementation-Ready=false`다. 선행 plan completion commit은 dependency path만 갱신하고, source
+미시작이다. ADR-078과 amendment, 선행 `payment-method-token-management` 구현·검증은 완료됐지만
+authoritative webhook 인증·stable ID mapping이 미확인이라 `Implementation-Ready=false`다. source
 gate가 별도로 닫힌 뒤 readiness를 재평가한다. 완료 시 실제 관측한 provider code, 시나리오별 통과 결과와 provider
 호출 latency를 측정값으로 기록한다. 측정하지 않은 값은 `Not measured`로 남긴다.
 
@@ -392,3 +388,5 @@ gate가 별도로 닫힌 뒤 readiness를 재평가한다. 완료 시 실제 관
   토스 빌링키 발급 구현은 이 plan에 남기고 port 확장을 마일스톤 1로 분리했다.
 - 2026-08-09: 선행 lifecycle plan 경로를 canonical `Depends-On`에 기입하고 Accepted 결정·금액/통화
   domain 판정·registration/deactivation Port 경계를 정합화했다.
+- 2026-08-10: 선행 lifecycle plan 완료에 따라 dependency와 Current State를 completed 구현으로
+  갱신했다. webhook 인증·stable ID gate가 남아 readiness는 `false`로 유지했다.
