@@ -8,7 +8,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestConstructor
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
@@ -16,6 +20,8 @@ import java.util.UUID
 internal class PaymentMethodApplicationServiceIntegrationTest(
     private val service: PaymentMethodApplicationService,
     private val adapter: ScriptedPaymentMethodLifecycleAdapter,
+    private val transactions: PaymentMethodLifecycleTransactions,
+    private val maintenance: PaymentMethodLifecycleMaintenance,
     private val jdbcTemplate: JdbcTemplate,
 ) {
     @BeforeEach
@@ -23,6 +29,7 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
         jdbcTemplate.execute(
             """
             TRUNCATE TABLE
+                operations_audit_record,
                 payment_method_default_command,
                 payment_method_deactivation,
                 payment_method_registration,
@@ -65,6 +72,26 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
                 "%$authKey%",
             ),
         ).isZero()
+        assertThat(
+            jdbcTemplate.queryForObject(
+                """
+                SELECT count(*) FROM operations_audit_record
+                 WHERE before_summary LIKE ? OR after_summary LIKE ?
+                    OR source_reference LIKE ? OR reason LIKE ?
+                """.trimIndent(),
+                Long::class.java,
+                "%$authKey%",
+                "%$authKey%",
+                "%$authKey%",
+                "%$authKey%",
+            ),
+        ).isZero()
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM operations_audit_record WHERE action LIKE 'PAYMENT_METHOD_%'",
+                Long::class.java,
+            ),
+        ).isOne()
     }
 
     @Test
@@ -135,9 +162,10 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
             )
         val unknownId =
             paymentMethodId(
-                service.register(
-                    command(customerId, "register-key-9", "deactivate-unknown:pending", "Pending"),
-                ).body,
+                service
+                    .register(
+                        command(customerId, "register-key-9", "deactivate-unknown:pending", "Pending"),
+                    ).body,
             )
 
         val confirmed = service.deactivate(customerId, confirmedId, "deactivate-key-1")
@@ -164,6 +192,173 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
         ).isEqualTo(96L * 60L * 60L)
     }
 
+    @Test
+    fun `startup recovery closes claims interrupted by process loss without another provider call`() {
+        val registration =
+            transactions.prepareRegistration(
+                normalized(UUID.randomUUID(), "recovery-register-key", 'a', 'b', "Recovery"),
+            ) as RegistrationPreparation.Claimable
+        transactions.claimRegistration(registration.registrationId)
+
+        val customerId = UUID.randomUUID()
+        val methodId =
+            paymentMethodId(
+                service.register(command(customerId, "recovery-method-key", "issued:recovery", "Recovery method")).body,
+            )
+        val deactivation =
+            transactions.prepareDeactivation(customerId, methodId, "recovery-deactivate-key") as
+                DeactivationPreparation.Claimable
+        transactions.claimDeactivation(deactivation.deactivationId)
+        val registrationCallsBeforeRecovery = adapter.registrationCalls.get()
+        val deactivationCallsBeforeRecovery = adapter.deactivationCalls.get()
+
+        maintenance.recoverInterruptedClaims()
+
+        assertThat(status("payment_method_registration", "id", registration.registrationId))
+            .isEqualTo("REGISTRATION_UNKNOWN")
+        assertThat(status("payment_method_deactivation", "id", deactivation.deactivationId))
+            .isEqualTo("DEACTIVATION_UNKNOWN")
+        assertThat(methodStatus(methodId)).isEqualTo("DEACTIVATION_UNKNOWN")
+        assertThat(adapter.registrationCalls).hasValue(registrationCallsBeforeRecovery)
+        assertThat(adapter.deactivationCalls).hasValue(deactivationCallsBeforeRecovery)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                """
+                SELECT extract(epoch FROM (manual_review_at - unknown_at))::bigint
+                  FROM payment_method_deactivation WHERE id = ?
+                """.trimIndent(),
+                Long::class.java,
+                deactivation.deactivationId,
+            ),
+        ).isEqualTo(96L * 60L * 60L)
+    }
+
+    @Test
+    fun `issued result converges to an exact active binding with stored 200 response`() {
+        val customerId = UUID.randomUUID()
+        val preparation =
+            transactions.prepareRegistration(
+                normalized(customerId, "exact-binding-key", 'c', 'd', "Exact card"),
+            ) as RegistrationPreparation.Claimable
+        val claim = checkNotNull(transactions.claimRegistration(preparation.registrationId))
+        val existingId = UUID.randomUUID()
+        insertMethod(
+            id = existingId,
+            customerId = customerId,
+            tokenReference = "exact-binding-token",
+            providerCustomerReference = claim.providerCustomerReference,
+            alias = "Exact card",
+            brand = "VISA",
+            lastFour = "4242",
+        )
+
+        val response =
+            transactions.completeRegistration(
+                claim,
+                io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult.Issued(
+                    tokenReference = "exact-binding-token",
+                    cardBrand = "VISA",
+                    lastFour = "4242",
+                ),
+            )
+
+        assertThat(response.status).isEqualTo(200)
+        assertThat(paymentMethodId(response.body)).isEqualTo(existingId)
+        assertThat(status("payment_method_registration", "id", preparation.registrationId))
+            .isEqualTo("COMPLETED")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT first_response_status FROM payment_method_registration WHERE id = ?",
+                Int::class.java,
+                preparation.registrationId,
+            ),
+        ).isEqualTo(200)
+    }
+
+    @Test
+    fun `concurrent cross owner issued results produce one binding and one conflict`() {
+        val first =
+            transactions.prepareRegistration(
+                normalized(UUID.randomUUID(), "cross-owner-first", 'e', 'f', "First owner"),
+            ) as RegistrationPreparation.Claimable
+        val second =
+            transactions.prepareRegistration(
+                normalized(UUID.randomUUID(), "cross-owner-second", '1', '2', "Second owner"),
+            ) as RegistrationPreparation.Claimable
+        val firstClaim = checkNotNull(transactions.claimRegistration(first.registrationId))
+        val secondClaim = checkNotNull(transactions.claimRegistration(second.registrationId))
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+
+        fun complete(claim: RegistrationClaim) =
+            CompletableFuture.supplyAsync {
+                ready.countDown()
+                start.await()
+                transactions.completeRegistration(
+                    claim,
+                    io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult.Issued(
+                        tokenReference = "cross-owner-shared-token",
+                        cardBrand = "VISA",
+                        lastFour = "4242",
+                    ),
+                )
+            }
+
+        val firstResult = complete(firstClaim)
+        val secondResult = complete(secondClaim)
+        ready.await()
+        start.countDown()
+
+        assertThat(listOf(firstResult.join().status, secondResult.join().status)).containsExactlyInAnyOrder(201, 409)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM payment_method WHERE token_reference = 'cross-owner-shared-token'",
+                Long::class.java,
+            ),
+        ).isOne()
+        assertThat(
+            jdbcTemplate.queryForList(
+                "SELECT status FROM payment_method_registration WHERE id IN (?, ?)",
+                String::class.java,
+                first.registrationId,
+                second.registrationId,
+            ),
+        ).containsExactlyInAnyOrder("COMPLETED", "MANUAL_REVIEW")
+    }
+
+    @Test
+    fun `concurrent default changes leave exactly one active default`() {
+        val customerId = UUID.randomUUID()
+        val firstId = paymentMethodId(service.register(command(customerId, "concurrent-register-1", "issued:default-1", "One")).body)
+        val secondId = paymentMethodId(service.register(command(customerId, "concurrent-register-2", "issued:default-2", "Two")).body)
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+
+        fun changeDefault(
+            methodId: UUID,
+            key: String,
+        ) = CompletableFuture.supplyAsync {
+            ready.countDown()
+            start.await()
+            service.setDefault(customerId, methodId, key)
+        }
+
+        val firstResult = changeDefault(firstId, "concurrent-default-1")
+        val secondResult = changeDefault(secondId, "concurrent-default-2")
+        ready.await()
+        start.countDown()
+
+        assertThat(firstResult.join().status).isEqualTo(200)
+        assertThat(secondResult.join().status).isEqualTo(200)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM payment_method WHERE customer_id = ? AND is_default = true AND status = 'ACTIVE'",
+                Long::class.java,
+                customerId,
+            ),
+        ).isOne()
+    }
+
     private fun command(
         customerId: UUID,
         key: String,
@@ -171,15 +366,57 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
         alias: String,
     ) = RegisterPaymentMethodCommand(customerId, key, authKey, alias)
 
-    private fun paymentMethodId(body: String): UUID =
-        UUID.fromString(Regex("\"paymentMethodId\":\"([^\"]+)\"").find(body)!!.groupValues[1])
+    private fun paymentMethodId(body: String): UUID = UUID.fromString(Regex("\"paymentMethodId\":\"([^\"]+)\"").find(body)!!.groupValues[1])
 
     private fun methodStatus(methodId: UUID): String =
         jdbcTemplate.queryForObject("SELECT status FROM payment_method WHERE id = ?", String::class.java, methodId)!!
 
+    private fun normalized(
+        customerId: UUID,
+        key: String,
+        authorizationHashCharacter: Char,
+        payloadHashCharacter: Char,
+        alias: String,
+    ) = NormalizedRegistrationCommand(
+        customerId = customerId,
+        idempotencyKey = key,
+        authorizationKeyHash = authorizationHashCharacter.toString().repeat(64),
+        payloadHash = payloadHashCharacter.toString().repeat(64),
+        displayAlias = alias,
+    )
+
+    private fun insertMethod(
+        id: UUID,
+        customerId: UUID,
+        tokenReference: String,
+        providerCustomerReference: String,
+        alias: String,
+        brand: String,
+        lastFour: String,
+    ) {
+        val now = Timestamp.from(Instant.now())
+        jdbcTemplate.update(
+            """
+            INSERT INTO payment_method (
+                id, customer_id, provider, token_reference, provider_customer_reference,
+                display_alias, card_brand, last_four, is_default, status, created_at, updated_at, version
+            ) VALUES (?, ?, 'TOSS_PAYMENTS', ?, ?, ?, ?, ?, false, 'ACTIVE', ?, ?, 0)
+            """.trimIndent(),
+            id,
+            customerId,
+            tokenReference,
+            providerCustomerReference,
+            alias,
+            brand,
+            lastFour,
+            now,
+            now,
+        )
+    }
+
     private fun status(
         table: String,
         keyColumn: String,
-        key: String,
+        key: Any,
     ): String = jdbcTemplate.queryForObject("SELECT status FROM $table WHERE $keyColumn = ?", String::class.java, key)!!
 }

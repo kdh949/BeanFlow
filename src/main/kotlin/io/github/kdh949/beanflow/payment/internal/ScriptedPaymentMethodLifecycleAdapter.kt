@@ -18,6 +18,7 @@ internal class ScriptedPaymentMethodLifecycleAdapter :
     PaymentMethodDeactivationProvider {
     val registrationCalls = AtomicInteger()
     val deactivationCalls = AtomicInteger()
+
     @Volatile
     var observedActiveTransaction: Boolean = false
 
@@ -25,12 +26,17 @@ internal class ScriptedPaymentMethodLifecycleAdapter :
         registrationCalls.incrementAndGet()
         observedActiveTransaction = observedActiveTransaction || TransactionSynchronizationManager.isActualTransactionActive()
         return when {
-            command.authorizationKey.startsWith("rejected:") ->
+            command.authorizationKey.startsWith("rejected:") -> {
                 PaymentMethodRegistrationProviderResult.RejectedWithoutEffect
+            }
 
-            command.authorizationKey.startsWith("unknown:") -> PaymentMethodRegistrationProviderResult.Unknown
-            command.authorizationKey.startsWith("misconfigured:") ->
+            command.authorizationKey.startsWith("unknown:") -> {
+                PaymentMethodRegistrationProviderResult.Unknown
+            }
+
+            command.authorizationKey.startsWith("misconfigured:") -> {
                 PaymentMethodRegistrationProviderResult.Misconfigured
+            }
 
             else -> {
                 val digest = sha256(command.authorizationKey)
@@ -54,14 +60,21 @@ internal class ScriptedPaymentMethodLifecycleAdapter :
         deactivationCalls.incrementAndGet()
         observedActiveTransaction = observedActiveTransaction || TransactionSynchronizationManager.isActualTransactionActive()
         return when {
-            command.tokenReference.startsWith("scripted_rejected_") ->
+            command.tokenReference.startsWith("scripted_rejected_") -> {
                 PaymentMethodDeactivationProviderResult.RejectedWithoutEffect
+            }
 
-            command.tokenReference.startsWith("scripted_unknown_") -> PaymentMethodDeactivationProviderResult.Unknown
-            command.tokenReference.startsWith("scripted_misconfigured_") ->
+            command.tokenReference.startsWith("scripted_unknown_") -> {
+                PaymentMethodDeactivationProviderResult.Unknown
+            }
+
+            command.tokenReference.startsWith("scripted_misconfigured_") -> {
                 PaymentMethodDeactivationProviderResult.Misconfigured
+            }
 
-            else -> PaymentMethodDeactivationProviderResult.Deactivated
+            else -> {
+                PaymentMethodDeactivationProviderResult.Deactivated
+            }
         }
     }
 
@@ -82,6 +95,5 @@ internal class ScriptedPaymentMethodLifecycleAdapter :
 @Profile("(local | test) & !toss-sandbox & !prod")
 internal class ScriptedPaymentMethodLifecycleConfiguration {
     @Bean
-    fun scriptedPaymentMethodLifecycleAdapter(): ScriptedPaymentMethodLifecycleAdapter =
-        ScriptedPaymentMethodLifecycleAdapter()
+    fun scriptedPaymentMethodLifecycleAdapter(): ScriptedPaymentMethodLifecycleAdapter = ScriptedPaymentMethodLifecycleAdapter()
 }

@@ -96,6 +96,14 @@ internal interface PaymentMethodRegistrationJpaRepository : JpaRepository<Paymen
     fun findLockedById(
         @Param("id") id: UUID,
     ): PaymentMethodRegistrationEntity?
+
+    @Query(
+        "select registration.id from PaymentMethodRegistrationEntity registration " +
+            "where registration.status = " +
+            "io.github.kdh949.beanflow.payment.internal.PaymentMethodRegistrationStatus.PROCESSING " +
+            "order by registration.claimStartedAt, registration.id",
+    )
+    fun findInterruptedClaimIds(pageable: Pageable): List<UUID>
 }
 
 @Entity
@@ -216,6 +224,24 @@ internal interface PaymentMethodDeactivationJpaRepository : JpaRepository<Paymen
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<UUID>
+
+    @Query(
+        "select deactivation.id from PaymentMethodDeactivationEntity deactivation " +
+            "where deactivation.status = " +
+            "io.github.kdh949.beanflow.payment.internal.PaymentMethodDeactivationStatus.PROCESSING " +
+            "order by deactivation.claimStartedAt, deactivation.id",
+    )
+    fun findInterruptedClaimIds(pageable: Pageable): List<UUID>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select deactivation from PaymentMethodDeactivationEntity deactivation " +
+            "where deactivation.paymentMethodId = :paymentMethodId and deactivation.status <> " +
+            "io.github.kdh949.beanflow.payment.internal.PaymentMethodDeactivationStatus.COMPLETED",
+    )
+    fun findActiveLockedByPaymentMethodId(
+        @Param("paymentMethodId") paymentMethodId: UUID,
+    ): PaymentMethodDeactivationEntity?
 }
 
 internal enum class PaymentProviderNotificationStatus {
@@ -254,8 +280,7 @@ internal class PaymentProviderNotificationInboxEntity(
     var version: Long = 0,
 )
 
-internal interface PaymentProviderNotificationInboxJpaRepository :
-    JpaRepository<PaymentProviderNotificationInboxEntity, UUID> {
+internal interface PaymentProviderNotificationInboxJpaRepository : JpaRepository<PaymentProviderNotificationInboxEntity, UUID> {
     fun findByProviderAndNotificationId(
         provider: String,
         notificationId: String,

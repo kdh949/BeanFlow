@@ -73,8 +73,7 @@ internal class PaymentMethodController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable paymentMethodId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ): ResponseEntity<String> =
-        application.deactivate(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
+    ): ResponseEntity<String> = application.deactivate(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
 
     @PutMapping("/{paymentMethodId}/default")
     @PreAuthorize("hasRole('CUSTOMER')")
@@ -82,8 +81,7 @@ internal class PaymentMethodController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable paymentMethodId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ): ResponseEntity<String> =
-        application.setDefault(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
+    ): ResponseEntity<String> = application.setDefault(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
 
     private fun PaymentMethodHttpResult.toResponse(): ResponseEntity<String> =
         if (status == 204) {

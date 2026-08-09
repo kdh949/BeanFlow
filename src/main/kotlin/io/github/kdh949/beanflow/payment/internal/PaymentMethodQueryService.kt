@@ -100,11 +100,11 @@ internal class PaymentMethodQueryService(
                     append(
                         """
 
-                           AND (
-                               (CASE WHEN is_default THEN 1 ELSE 0 END) < ?
-                               OR ((CASE WHEN is_default THEN 1 ELSE 0 END) = ? AND created_at < ?)
-                               OR ((CASE WHEN is_default THEN 1 ELSE 0 END) = ? AND created_at = ? AND id < ?)
-                           )
+                        AND (
+                            (CASE WHEN is_default THEN 1 ELSE 0 END) < ?
+                            OR ((CASE WHEN is_default THEN 1 ELSE 0 END) = ? AND created_at < ?)
+                            OR ((CASE WHEN is_default THEN 1 ELSE 0 END) = ? AND created_at = ? AND id < ?)
+                        )
                         """.trimIndent(),
                     )
                 }

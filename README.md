@@ -51,7 +51,6 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 현재 source에 없는 capability:
 
 - 실제 PG sandbox adapter
-- 결제수단 등록·폐기 API
 - Analytics refund/late-event projection과 외부 dashboard API
 
 검증 예정:
@@ -130,10 +129,11 @@ curl http://localhost:8080/actuator/health
 `sub`는 UUID 형식의 고객 ID여야 하고, `roles` claim에 `CUSTOMER`가 포함되어야 한다.
 
 `local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
-`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 결제수단 등록
-API는 아직 없다. 수동 구성에서 주문 흐름을 확인하려면 매장·메뉴·슬롯·재고와 토큰
-reference만 가진 결제수단 fixture를 직접 준비해야 하며, 위의 데모 script는 그 fixture를
-결정적으로 만들어 준다. PAN, CVC와 전체 유효기간은 저장하지 않는다.
+`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 결제수단 lifecycle API는
+provider-neutral Port와 explicit local/test scripted adapter까지 구현됐고 실제 Toss HTTP는 호출하지
+않는다. 수동 주문 흐름에는 매장·메뉴·슬롯·재고와 opaque scripted token reference만 가진 결제수단이
+필요하며, 위의 데모 script는 `local-scripted` fixture를 결정적으로 만든다. PAN, CVC와 전체
+유효기간은 저장하지 않는다.
 
 ### 현재 runtime API
 
@@ -155,19 +155,9 @@ Controller mapping과 이 계약의 operation 집합을 양방향으로 비교�
 분리한다. operation을 추가·제거하면 Controller와 Runtime OpenAPI를 같은 변경에서
 갱신해야 하며 parity test가 drift를 차단한다.
 
-### 미구현 예정 endpoint
+### 계약 inventory
 
-목표 OpenAPI 중 현재 runtime에 없는 public operation은 다음과 같다.
-
-```text
-GET  /api/v1/stores/nearby
-GET  /api/v1/stores/{storeId}/menus
-GET  /api/v1/stores/{storeId}/pickup-slots
-GET  /api/v1/point-accounts/{accountId}
-GET  /api/v1/point-accounts/{accountId}/transactions
-```
-
-현재 계약 inventory는 target 27 paths/29 operations, runtime 22 paths/24 operations다.
+현재 target과 runtime의 public operation inventory는 일치하며 31 paths/34 operations다.
 이는 operation 개수이며 처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 장애 주입,
 실제 배포 smoke test와 SLA는 `Not measured`다.
 

@@ -5,8 +5,8 @@ import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.payment.api.PaymentReconciliationOperations
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
-import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.github.kdh949.beanflow.payment.internal.PaymentProviderRequestLoader
+import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat

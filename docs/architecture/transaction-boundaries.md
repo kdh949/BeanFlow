@@ -109,7 +109,8 @@ Tx R2 unknown: REGISTRATION_UNKNOWN or MANUAL_REVIEW + current 202 response
 
 - raw authKey는 R1 payload hash 입력과 external request 메모리에서만 존재하고 DB·관측 데이터에
   저장하지 않는다. claim 이전 process loss만 같은 logical operation이 다시 claim한다. claim 뒤
-  timeout·응답 유실·process loss는 authKey를 다시 보내지 않는다.
+  timeout·응답 유실은 authKey를 다시 보내지 않는다. 재기동 recovery는 이전 프로세스가 남긴
+  `PROCESSING` claim을 Provider 재호출 없이 `REGISTRATION_UNKNOWN`으로 전이한다.
 - registration result는 provider+token fingerprint transaction advisory lock 뒤 cross-owner row를
   확인한다. exact ACTIVE owner/reference/alias/brand/last4만 기존 resource로 수렴하고 다른 binding은
   overwrite·reactivation 없이 `MANUAL_REVIEW`다.
@@ -139,6 +140,7 @@ External deactivation Port once
 Tx D2 success: DEACTIVATED + terminal 204
 Tx D2 unknown: DEACTIVATION_UNKNOWN + unknown_at + deadline(unknown_at+96h)
 Deadline worker: due unknown -> MANUAL_REVIEW, no Provider call
+Startup recovery: interrupted PROCESSING -> DEACTIVATION_UNKNOWN, no Provider call
 ```
 
 - D1 commit부터 새 Payment 준비와 목록의 active 선택에서 제외한다. Provider latency 동안 DB
@@ -152,8 +154,8 @@ Tx W1: verified provider notification
        + (provider, notificationId) unique inbox accept
 commit
 Tx W2: token fingerprint mapping 0|1|many
-       + exact PaymentMethod row lock
-       + monotonic DEACTIVATED or MANUAL_REVIEW inbox result
+       + token advisory, active deactivation work와 exact PaymentMethod row lock
+       + monotonic DEACTIVATED/stored 204 or MANUAL_REVIEW inbox result
 commit before Provider 2xx
 ```
 

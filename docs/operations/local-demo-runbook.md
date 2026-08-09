@@ -75,7 +75,7 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 |---|---|
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
 | 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
-| sandbox token reference만 가진 결제수단 | 실제 개인정보 |
+| scripted token reference만 가진 결제수단 | 실제 개인정보 |
 
 ## 6. 정지와 초기화
 

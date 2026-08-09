@@ -170,6 +170,25 @@ internal class PaymentMethodEntity(
         updatedAt = now
     }
 
+    fun confirmProviderDeactivated(now: Instant) {
+        if (status == PaymentMethodStatus.DEACTIVATED) return
+        if (
+            status !in
+            setOf(
+                PaymentMethodStatus.ACTIVE,
+                PaymentMethodStatus.DEACTIVATION_REQUESTED,
+                PaymentMethodStatus.DEACTIVATION_UNKNOWN,
+                PaymentMethodStatus.RECONCILING,
+                PaymentMethodStatus.MANUAL_REVIEW,
+            )
+        ) {
+            throw PaymentMethodStateConflict()
+        }
+        status = PaymentMethodStatus.DEACTIVATED
+        isDefault = false
+        updatedAt = now
+    }
+
     companion object {
         private val PROVIDER_REFERENCE_PATTERN = Regex("^bf_[A-Za-z0-9_-]{43}${'$'}")
         private val LAST_FOUR_PATTERN = Regex("^[0-9]{4}${'$'}")
@@ -423,6 +442,16 @@ internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntit
     fun findAllByProviderAndTokenReference(
         provider: String,
         tokenReference: String,
+    ): List<PaymentMethodEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select method from PaymentMethodEntity method " +
+            "where method.provider = :provider and method.tokenReference = :tokenReference order by method.id",
+    )
+    fun findAllLockedByProviderAndTokenReference(
+        @Param("provider") provider: String,
+        @Param("tokenReference") tokenReference: String,
     ): List<PaymentMethodEntity>
 }
 

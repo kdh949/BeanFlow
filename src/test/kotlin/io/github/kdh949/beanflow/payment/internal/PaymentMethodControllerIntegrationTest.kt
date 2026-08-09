@@ -39,6 +39,7 @@ internal class PaymentMethodControllerIntegrationTest(
         jdbcTemplate.execute(
             """
             TRUNCATE TABLE
+                operations_audit_record,
                 payment_method_default_command,
                 payment_method_deactivation,
                 payment_method_registration,
@@ -107,9 +108,10 @@ internal class PaymentMethodControllerIntegrationTest(
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
-        org.assertj.core.api.Assertions.assertThat(
-            jdbcTemplate.queryForObject("SELECT count(*) FROM payment_method_registration", Long::class.java),
-        ).isZero()
+        org.assertj.core.api.Assertions
+            .assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM payment_method_registration", Long::class.java),
+            ).isZero()
     }
 
     @Test
@@ -147,11 +149,12 @@ internal class PaymentMethodControllerIntegrationTest(
         val other = UUID.randomUUID()
         val firstId = register(customerId, "cursor-register-1", "issued:cursor-1", "First")
         register(customerId, "cursor-register-2", "issued:cursor-2", "Second")
-        mockMvc.perform(
-            put("/api/v1/payment-methods/{id}/default", firstId)
-                .header("Idempotency-Key", "cursor-default-key")
-                .with(customerJwt(customerId)),
-        ).andExpect(status().isOk)
+        mockMvc
+            .perform(
+                put("/api/v1/payment-methods/{id}/default", firstId)
+                    .header("Idempotency-Key", "cursor-default-key")
+                    .with(customerJwt(customerId)),
+            ).andExpect(status().isOk)
 
         val firstPage =
             mockMvc
@@ -163,7 +166,9 @@ internal class PaymentMethodControllerIntegrationTest(
                 .contentAsString
         val cursor = Regex("\"nextCursor\":\"([^\"]+)\"").find(firstPage)!!.groupValues[1]
 
-        org.assertj.core.api.Assertions.assertThat(queries.list(customerId, cursor, "1").items).hasSize(1)
+        org.assertj.core.api.Assertions
+            .assertThat(queries.list(customerId, cursor, "1").items)
+            .hasSize(1)
 
         mockMvc
             .perform(
@@ -222,8 +227,7 @@ internal class PaymentMethodControllerIntegrationTest(
     private fun roleJwt(
         subject: String,
         role: String,
-    ) =
-        jwt()
-            .jwt { it.subject(subject).claim("roles", listOf(role)) }
-            .authorities(SimpleGrantedAuthority("ROLE_$role"))
+    ) = jwt()
+        .jwt { it.subject(subject).claim("roles", listOf(role)) }
+        .authorities(SimpleGrantedAuthority("ROLE_$role"))
 }

@@ -44,6 +44,5 @@ internal class ScriptedPaymentMethodLifecycleAdapterTest {
             providerCustomerReference = providerReference,
         )
 
-    private fun deactivation(token: String) =
-        DeactivatePaymentMethodProviderCommand(token, providerReference)
+    private fun deactivation(token: String) = DeactivatePaymentMethodProviderCommand(token, providerReference)
 }

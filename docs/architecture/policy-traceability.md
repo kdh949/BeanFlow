@@ -42,7 +42,7 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 | BR-26 | IdempotencyRecord, CancellationCommandIdempotency, StoreCommandIdempotency, PointAdjustmentCommandIdempotency | non-terminal 보존, terminal+90일 정리 | Context/table별 독립 keyset chunk, `(retention_expires_at, id)` index, store backfill | ADR-007, ADR-032, ADR-056, ADR-066 | Implemented |
 | BR-27 | NotificationDelivery, ReprocessingCase | 접수·환불 성공·지연 알림, retry 1m/5m/30m→MANUAL_REVIEW | logical source unique, 접수 tx commit gate, 후속 terminal result publication | ADR-019, ADR-044, ADR-045, ADR-046, ADR-047 | Ready |
 | BR-28 | Discovery Query Model, Merchant StoreDiscoveryProfile, SignedCursorCodec | nearby search only, raw coordinate 비보존 | request-only coordinate; response/error/log/metric/Audit redaction, raw range/micrometer keyset tuple, PostGIS 실패 503 | ADR-020, ADR-070 | Runtime implemented (nearby only; menu/pickup-slot 미구현) |
-| BR-29 | PaymentMethod, lifecycle command/work, ProviderNotificationInbox, PaymentProviderRequestSnapshot | authKey 등록·owner 목록·default·soft deactivation·96시간 webhook 수렴, 이미 시작된 Payment snapshot 승인 | owner/provider/token exact binding, ACTIVE default 0..1, registration/deactivation 사전 원장·단일 외부 시도, sensitive fields absent, 참조 값은 identity·인가·노출 대상 아님 | ADR-006, ADR-007, ADR-021, ADR-078, ADR-079 | Contract ready; active implementation plan requires migration-writer lease |
+| BR-29 | PaymentMethod, lifecycle command/work, ProviderNotificationInbox, PaymentProviderRequestSnapshot | authKey 등록·owner 목록·default·soft deactivation·96시간 webhook 수렴, 이미 시작된 Payment snapshot 승인 | owner/provider/token exact binding, ACTIVE default 0..1, registration/deactivation 사전 원장·단일 외부 시도, sensitive fields absent, 참조 값은 identity·인가·노출 대상 아님 | ADR-006, ADR-007, ADR-021, ADR-078, ADR-079 | Runtime implemented (provider-neutral lifecycle + explicit local/test scripted adapter; Toss HTTP는 후속 plan) |
 | BR-30 | AuditRecord | 주문 생성·만료·고객 취소·정산 제외·setup 탐지/복구·감사형 point adjustment target별 append-only, manual reason, 서울 달력 5년 보존 | owner/consumer tx 원자성, action/target/source unique, 2인 actor 분리, adjustment command Audit atomicity, chunk retention | ADR-022, ADR-048, ADR-051, ADR-052, ADR-053, ADR-054, ADR-058, ADR-066 | Ready |
 | BR-31 | Analytics Read Model | refund-day and original-completion-day metrics | event/refund reference unique | ADR-023 | Ready |
 | BR-32 | Analytics Read Model, ReprocessingCase | ≤7일 idempotent rebuild, 초과 BACKFILL_REQUIRED | source event/day unique, approved chunk backfill | ADR-023 | Ready |
@@ -55,5 +55,5 @@ Aggregate 또는 Read Model에서 보호되고, 어떤 상태·E2E 단계·트�
 2. OpenAPI는 아직 구현하지 않은 내부 schema를 예측하지 않고 위 표에서 확정된 최소
    금액, 시간, 상태, idempotency와 오류 의미만 계약한다.
 3. PaymentMethod lifecycle의 live Provider와 prod activation은 legal retention·고객 탈퇴·계약
-   정책이 없으므로 금지한다. active lifecycle plan은 provider-neutral core와 explicit local/test
-   adapter까지만 구현하고 Toss sandbox 구현은 선행 plan 완료 뒤 ADR-078 plan이 소유한다.
+   정책이 없으므로 금지한다. 구현된 lifecycle은 provider-neutral core와 explicit local/test
+   adapter까지만 제공하고 Toss sandbox 구현은 ADR-078 plan이 소유한다.

@@ -12,7 +12,6 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.dao.DataAccessException
-import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
@@ -44,6 +43,7 @@ internal class PaymentMethodApplicationService(
     private val registrationProvider: PaymentMethodRegistrationProvider,
     private val deactivationProvider: PaymentMethodDeactivationProvider,
     private val metrics: PaymentMethodLifecycleMetrics,
+    private val objectMapper: ObjectMapper,
 ) {
     fun register(command: RegisterPaymentMethodCommand): PaymentMethodHttpResult {
         val normalized = normalize(command)
@@ -53,12 +53,13 @@ internal class PaymentMethodApplicationService(
         val registrationId = (prepared as RegistrationPreparation.Claimable).registrationId
         val claim = transactions.claimRegistration(registrationId) ?: return transactions.registrationResponse(registrationId)
         val providerResult =
-            registrationProvider.register(
-                RegisterPaymentMethodProviderCommand(
-                    authorizationKey = command.authorizationKey,
-                    providerCustomerReference = claim.providerCustomerReference,
-                ),
-            ).validated()
+            registrationProvider
+                .register(
+                    RegisterPaymentMethodProviderCommand(
+                        authorizationKey = command.authorizationKey,
+                        providerCustomerReference = claim.providerCustomerReference,
+                    ),
+                ).validated()
         metrics.provider("REGISTER", providerResult.metricOutcome())
         return try {
             transactions.completeRegistration(claim, providerResult)
@@ -134,7 +135,7 @@ internal class PaymentMethodApplicationService(
             this
         }
 
-    private fun jsonString(value: String): String = ObjectMapper().writeValueAsString(value)
+    private fun jsonString(value: String): String = objectMapper.writeValueAsString(value)
 
     private fun invalid(message: String): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, message)
 
@@ -145,9 +146,13 @@ internal class PaymentMethodApplicationService(
 }
 
 internal sealed interface RegistrationPreparation {
-    data class Respond(val response: PaymentMethodHttpResult) : RegistrationPreparation
+    data class Respond(
+        val response: PaymentMethodHttpResult,
+    ) : RegistrationPreparation
 
-    data class Claimable(val registrationId: UUID) : RegistrationPreparation
+    data class Claimable(
+        val registrationId: UUID,
+    ) : RegistrationPreparation
 }
 
 internal data class RegistrationClaim(
@@ -157,9 +162,13 @@ internal data class RegistrationClaim(
 )
 
 internal sealed interface DeactivationPreparation {
-    data class Respond(val response: PaymentMethodHttpResult) : DeactivationPreparation
+    data class Respond(
+        val response: PaymentMethodHttpResult,
+    ) : DeactivationPreparation
 
-    data class Claimable(val deactivationId: UUID) : DeactivationPreparation
+    data class Claimable(
+        val deactivationId: UUID,
+    ) : DeactivationPreparation
 }
 
 internal data class DeactivationClaim(
@@ -191,6 +200,7 @@ internal class PaymentMethodLifecycleTransactions(
     private val jdbcTemplate: JdbcTemplate,
     private val clock: Clock,
     private val metrics: PaymentMethodLifecycleMetrics,
+    private val audits: PaymentMethodAuditWriter,
 ) {
     @Transactional
     fun prepareRegistration(command: NormalizedRegistrationCommand): RegistrationPreparation {
@@ -203,7 +213,9 @@ internal class PaymentMethodLifecycleTransactions(
             )
         if (existing != null) {
             if (existing.payloadHash != command.payloadHash) return RegistrationPreparation.Respond(idempotencyReused())
-            return if (existing.status in setOf(PaymentMethodRegistrationStatus.READY, PaymentMethodRegistrationStatus.MISCONFIGURED_RETRYABLE)) {
+            return if (existing.status in
+                setOf(PaymentMethodRegistrationStatus.READY, PaymentMethodRegistrationStatus.MISCONFIGURED_RETRYABLE)
+            ) {
                 RegistrationPreparation.Claimable(existing.id)
             } else {
                 RegistrationPreparation.Respond(stored(existing))
@@ -275,9 +287,13 @@ internal class PaymentMethodLifecycleTransactions(
         val registration = registrations.findLockedById(claim.registrationId) ?: unavailable()
         requireClaim(registration.status == PaymentMethodRegistrationStatus.PROCESSING, registration.claimToken, claim.claimToken)
         val now = clock.instant()
+        val correlationId = correlationFrom(registration)
         val response =
             when (result) {
-                is PaymentMethodRegistrationProviderResult.Issued -> completeIssued(registration, result, now)
+                is PaymentMethodRegistrationProviderResult.Issued -> {
+                    completeIssued(registration, result, now)
+                }
+
                 PaymentMethodRegistrationProviderResult.RejectedWithoutEffect -> {
                     registration.status = PaymentMethodRegistrationStatus.REJECTED
                     registration.terminalAt = now
@@ -305,6 +321,17 @@ internal class PaymentMethodLifecycleTransactions(
         registration.firstResponseStatus = response.status
         registration.firstResponseBody = response.body
         registration.updatedAt = now
+        audits.customer(
+            actorId = registration.customerId,
+            action = "PAYMENT_METHOD_REGISTRATION_${registration.status.name}",
+            targetType = "PAYMENT_METHOD_REGISTRATION",
+            targetId = registration.intendedPaymentMethodId,
+            occurredAt = now,
+            beforeState = "PROCESSING",
+            afterState = registration.status.name,
+            sourceReference = "payment-method-registration:${registration.id}:${claim.claimToken}",
+            correlationId = correlationId,
+        )
         metrics.command("REGISTER", registration.status.name)
         return response
     }
@@ -325,6 +352,17 @@ internal class PaymentMethodLifecycleTransactions(
                 )
             registration.firstResponseStatus = response.status
             registration.firstResponseBody = response.body
+            audits.customer(
+                actorId = registration.customerId,
+                action = "PAYMENT_METHOD_REGISTRATION_UNKNOWN",
+                targetType = "PAYMENT_METHOD_REGISTRATION",
+                targetId = registration.intendedPaymentMethodId,
+                occurredAt = now,
+                beforeState = "PROCESSING",
+                afterState = "REGISTRATION_UNKNOWN",
+                sourceReference = "payment-method-registration:${registration.id}:${claim.claimToken}:persistence",
+                correlationId = correlationFrom(registration),
+            )
             return response
         }
         return stored(registration)
@@ -356,9 +394,10 @@ internal class PaymentMethodLifecycleTransactions(
         methods.flush()
         target.markDefault(now)
         val response = PaymentMethodHttpResult(200, paymentMethodBody(target))
+        val defaultCommandId = identifiers.next()
         defaultCommands.saveAndFlush(
             PaymentMethodDefaultCommandEntity(
-                id = identifiers.next(),
+                id = defaultCommandId,
                 actorId = customerId,
                 operation = DEFAULT_OPERATION,
                 idempotencyKey = idempotencyKey,
@@ -371,6 +410,16 @@ internal class PaymentMethodLifecycleTransactions(
                 terminalAt = now,
                 retentionExpiresAt = now.plus(RETENTION),
             ),
+        )
+        audits.customer(
+            actorId = customerId,
+            action = "PAYMENT_METHOD_DEFAULT_SET",
+            targetType = "PAYMENT_METHOD",
+            targetId = paymentMethodId,
+            occurredAt = now,
+            beforeState = "ACTIVE",
+            afterState = "ACTIVE_DEFAULT",
+            sourceReference = "payment-method-default:$defaultCommandId",
         )
         metrics.command("SET_DEFAULT", "COMPLETED")
         return response
@@ -417,6 +466,17 @@ internal class PaymentMethodLifecycleTransactions(
                 updatedAt = now,
             )
         deactivations.saveAndFlush(work)
+        audits.customer(
+            actorId = customerId,
+            action = "PAYMENT_METHOD_DEACTIVATION_REQUESTED",
+            targetType = "PAYMENT_METHOD",
+            targetId = paymentMethodId,
+            occurredAt = now,
+            beforeState = "ACTIVE",
+            afterState = "DEACTIVATION_REQUESTED",
+            sourceReference = "payment-method-deactivation:${work.id}:requested",
+            correlationId = correlationFrom(work),
+        )
         metrics.command("DEACTIVATE", "READY")
         return DeactivationPreparation.Claimable(work.id)
     }
@@ -449,6 +509,7 @@ internal class PaymentMethodLifecycleTransactions(
         requireClaim(work.status == PaymentMethodDeactivationStatus.PROCESSING, work.claimToken, claim.claimToken)
         val method = methods.findLockedById(claim.paymentMethodId) ?: unavailable()
         val now = clock.instant()
+        val correlationId = correlationFrom(work)
         val response =
             when (result) {
                 PaymentMethodDeactivationProviderResult.Deactivated -> {
@@ -459,16 +520,32 @@ internal class PaymentMethodLifecycleTransactions(
                     PaymentMethodHttpResult(204, "")
                 }
 
-                PaymentMethodDeactivationProviderResult.Unknown -> markUnknown(method, work, now, "PROVIDER_RESULT_UNKNOWN")
-                PaymentMethodDeactivationProviderResult.RejectedWithoutEffect ->
-                    markManual(method, work, now, "PROVIDER_REJECTED_WITHOUT_EFFECT")
+                PaymentMethodDeactivationProviderResult.Unknown -> {
+                    markUnknown(method, work, now)
+                }
 
-                PaymentMethodDeactivationProviderResult.Misconfigured ->
+                PaymentMethodDeactivationProviderResult.RejectedWithoutEffect -> {
+                    markManual(method, work, now, "PROVIDER_REJECTED_WITHOUT_EFFECT")
+                }
+
+                PaymentMethodDeactivationProviderResult.Misconfigured -> {
                     markManual(method, work, now, "PROVIDER_MISCONFIGURED")
+                }
             }
         work.firstResponseStatus = response.status
         work.firstResponseBody = response.body
         work.updatedAt = now
+        audits.customer(
+            actorId = work.customerId,
+            action = "PAYMENT_METHOD_DEACTIVATION_${work.status.name}",
+            targetType = "PAYMENT_METHOD",
+            targetId = work.paymentMethodId,
+            occurredAt = now,
+            beforeState = "DEACTIVATION_REQUESTED",
+            afterState = method.status.name,
+            sourceReference = "payment-method-deactivation:${work.id}:result",
+            correlationId = correlationId,
+        )
         metrics.command("DEACTIVATE", work.status.name)
         return response
     }
@@ -479,10 +556,21 @@ internal class PaymentMethodLifecycleTransactions(
         val method = methods.findLockedById(claim.paymentMethodId) ?: unavailable()
         if (work.status == PaymentMethodDeactivationStatus.PROCESSING && work.claimToken == claim.claimToken) {
             val now = clock.instant()
-            val response = markUnknown(method, work, now, "RESULT_PERSISTENCE_FAILURE")
+            val response = markUnknown(method, work, now)
             work.firstResponseStatus = response.status
             work.firstResponseBody = response.body
             work.updatedAt = now
+            audits.customer(
+                actorId = work.customerId,
+                action = "PAYMENT_METHOD_DEACTIVATION_UNKNOWN",
+                targetType = "PAYMENT_METHOD",
+                targetId = work.paymentMethodId,
+                occurredAt = now,
+                beforeState = "DEACTIVATION_REQUESTED",
+                afterState = method.status.name,
+                sourceReference = "payment-method-deactivation:${work.id}:persistence",
+                correlationId = correlationFrom(work),
+            )
             return response
         }
         return stored(work)
@@ -506,7 +594,10 @@ internal class PaymentMethodLifecycleTransactions(
             }
         val response =
             when {
-                exact != null -> PaymentMethodHttpResult(200, paymentMethodBody(exact))
+                exact != null -> {
+                    PaymentMethodHttpResult(200, paymentMethodBody(exact))
+                }
+
                 bindings.isEmpty() -> {
                     val method =
                         PaymentMethodEntity.issueToss(
@@ -541,7 +632,11 @@ internal class PaymentMethodLifecycleTransactions(
         lock: Boolean = false,
     ): PaymentMethodEntity {
         val method = if (lock) methods.findLockedById(paymentMethodId) else methods.findById(paymentMethodId).orElse(null)
-        if (method == null || method.provider != PROVIDER) throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Payment method was not found")
+        if (method == null ||
+            method.provider != PROVIDER
+        ) {
+            throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Payment method was not found")
+        }
         if (method.customerId != customerId) throw DomainFailure(FailureCode.ACCESS_DENIED, "Payment method belongs to another customer")
         return method
     }
@@ -550,7 +645,6 @@ internal class PaymentMethodLifecycleTransactions(
         method: PaymentMethodEntity,
         work: PaymentMethodDeactivationEntity,
         now: Instant,
-        reason: String,
     ): PaymentMethodHttpResult {
         method.markDeactivationUnknown(now)
         work.status = PaymentMethodDeactivationStatus.DEACTIVATION_UNKNOWN
@@ -646,8 +740,7 @@ internal class PaymentMethodLifecycleTransactions(
             },
         )
 
-    private fun PaymentMethodEntity.publicStatus(): String =
-        if (status == PaymentMethodStatus.ACTIVE) "ACTIVE" else "DEACTIVATION_PENDING"
+    private fun PaymentMethodEntity.publicStatus(): String = if (status == PaymentMethodStatus.ACTIVE) "ACTIVE" else "DEACTIVATION_PENDING"
 
     private fun idempotencyReused() = error(409, FailureCode.IDEMPOTENCY_KEY_REUSED)
 
@@ -731,6 +824,20 @@ internal class PaymentMethodLifecycleMetrics(
     ) {
         meterRegistry.counter("beanflow.payment_method.provider", "operation", operation, "outcome", outcome).increment()
     }
+
+    fun work(
+        kind: String,
+        state: String,
+    ) {
+        meterRegistry.counter("beanflow.payment_method.work", "kind", kind, "state", state).increment()
+    }
+
+    fun notification(
+        type: String,
+        outcome: String,
+    ) {
+        meterRegistry.counter("beanflow.payment_method.notification", "type", type, "outcome", outcome).increment()
+    }
 }
 
 private fun PaymentMethodRegistrationProviderResult.metricOutcome(): String =
@@ -761,7 +868,7 @@ private fun sha256(value: String): String =
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 
-private fun hash64(value: String): Long {
+internal fun hash64(value: String): Long {
     val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
     var result = 0L
     repeat(Long.SIZE_BYTES) { index -> result = (result shl 8) or (digest[index].toLong() and 0xff) }
