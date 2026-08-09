@@ -111,7 +111,7 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
     }
 
     @Test
-    fun `unknown and rejection are explicit and unknown replay never resends auth key`() {
+    fun `unknown registration closes to manual review and replay never resends auth key`() {
         val customerId = UUID.randomUUID()
         val unknownCommand = command(customerId, "register-key-4", "unknown:one-time", "Unknown card")
 
@@ -121,12 +121,26 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
             service.register(command(customerId, "register-key-5", "rejected:one-time", "Rejected card"))
 
         assertThat(unknown.status).isEqualTo(202)
+        assertThat(unknown.body).contains("REGISTRATION_DELAYED")
         assertThat(unknownReplay).isEqualTo(unknown)
         assertThat(rejected.status).isEqualTo(422)
         assertThat(rejected.body).contains("PAYMENT_METHOD_REGISTRATION_REJECTED")
         assertThat(adapter.registrationCalls).hasValue(2)
         assertThat(status("payment_method_registration", "idempotency_key", "register-key-4"))
-            .isEqualTo("REGISTRATION_UNKNOWN")
+            .isEqualTo("MANUAL_REVIEW")
+        assertThat(
+            jdbcTemplate.queryForMap(
+                """
+                SELECT manual_review_reason, retention_expires_at
+                  FROM payment_method_registration
+                 WHERE idempotency_key = 'register-key-4'
+                """.trimIndent(),
+            ),
+        ).containsEntry("manual_review_reason", "PROVIDER_RESULT_UNKNOWN")
+            .containsEntry("retention_expires_at", null)
+        assertThat(maintenance.cleanupTerminal(Instant.now().plusSeconds(365L * 24L * 60L * 60L))).isOne()
+        assertThat(status("payment_method_registration", "idempotency_key", "register-key-4"))
+            .isEqualTo("MANUAL_REVIEW")
     }
 
     @Test
@@ -193,7 +207,7 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
     }
 
     @Test
-    fun `startup recovery closes claims interrupted by process loss without another provider call`() {
+    fun `startup recovery closes only stale claims without another provider call`() {
         val registration =
             transactions.prepareRegistration(
                 normalized(UUID.randomUUID(), "recovery-register-key", 'a', 'b', "Recovery"),
@@ -211,11 +225,26 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
         transactions.claimDeactivation(deactivation.deactivationId)
         val registrationCallsBeforeRecovery = adapter.registrationCalls.get()
         val deactivationCallsBeforeRecovery = adapter.deactivationCalls.get()
+        jdbcTemplate.update(
+            "UPDATE payment_method_registration SET claim_started_at = now() - interval '6 minutes' WHERE id = ?",
+            registration.registrationId,
+        )
+        jdbcTemplate.update(
+            "UPDATE payment_method_deactivation SET claim_started_at = now() - interval '6 minutes' WHERE id = ?",
+            deactivation.deactivationId,
+        )
 
         maintenance.recoverInterruptedClaims()
 
         assertThat(status("payment_method_registration", "id", registration.registrationId))
-            .isEqualTo("REGISTRATION_UNKNOWN")
+            .isEqualTo("MANUAL_REVIEW")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT first_response_body FROM payment_method_registration WHERE id = ?",
+                String::class.java,
+                registration.registrationId,
+            ),
+        ).contains("REGISTRATION_DELAYED")
         assertThat(status("payment_method_deactivation", "id", deactivation.deactivationId))
             .isEqualTo("DEACTIVATION_UNKNOWN")
         assertThat(methodStatus(methodId)).isEqualTo("DEACTIVATION_UNKNOWN")
@@ -231,6 +260,46 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
                 deactivation.deactivationId,
             ),
         ).isEqualTo(96L * 60L * 60L)
+    }
+
+    @Test
+    fun `startup recovery preserves another instance fresh claims and their results`() {
+        val registration =
+            transactions.prepareRegistration(
+                normalized(UUID.randomUUID(), "fresh-register-key", '7', '8', "Fresh registration"),
+            ) as RegistrationPreparation.Claimable
+        val registrationClaim = checkNotNull(transactions.claimRegistration(registration.registrationId))
+
+        val customerId = UUID.randomUUID()
+        val methodId =
+            paymentMethodId(
+                service.register(command(customerId, "fresh-method-key", "issued:fresh", "Fresh method")).body,
+            )
+        val deactivation =
+            transactions.prepareDeactivation(customerId, methodId, "fresh-deactivate-key") as
+                DeactivationPreparation.Claimable
+        val deactivationClaim = checkNotNull(transactions.claimDeactivation(deactivation.deactivationId))
+
+        maintenance.recoverInterruptedClaims()
+
+        assertThat(status("payment_method_registration", "id", registration.registrationId)).isEqualTo("PROCESSING")
+        assertThat(status("payment_method_deactivation", "id", deactivation.deactivationId)).isEqualTo("PROCESSING")
+        assertThat(
+            transactions.completeRegistration(
+                registrationClaim,
+                io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult.Issued(
+                    tokenReference = "fresh-registration-token",
+                    cardBrand = "VISA",
+                    lastFour = "4242",
+                ),
+            ).status,
+        ).isEqualTo(201)
+        assertThat(
+            transactions.completeDeactivation(
+                deactivationClaim,
+                io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult.Deactivated,
+            ).status,
+        ).isEqualTo(204)
     }
 
     @Test

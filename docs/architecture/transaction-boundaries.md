@@ -104,13 +104,16 @@ Tx R2 issued: token fingerprint advisory lock
               + exact binding check + PaymentMethod ACTIVE
               + registration terminal 201 response
 Tx R2 rejected: terminal 422 response
-Tx R2 unknown: REGISTRATION_UNKNOWN or MANUAL_REVIEW + current 202 response
+Tx R2 unknown: lookup 미지원이면 MANUAL_REVIEW + delayed 202 response
 ```
 
 - raw authKey는 R1 payload hash 입력과 external request 메모리에서만 존재하고 DB·관측 데이터에
   저장하지 않는다. claim 이전 process loss만 같은 logical operation이 다시 claim한다. claim 뒤
-  timeout·응답 유실은 authKey를 다시 보내지 않는다. 재기동 recovery는 이전 프로세스가 남긴
-  `PROCESSING` claim을 Provider 재호출 없이 `REGISTRATION_UNKNOWN`으로 전이한다.
+  timeout·응답 유실은 authKey를 다시 보내지 않는다. lookup이 없는 현재 Port의 Unknown과
+  result 저장 실패는 같은 result/recovery transaction에서 즉시 `MANUAL_REVIEW`로 종결한다.
+  재기동 recovery는 `claim_started_at <= startupNow - claimStaleAfter`인 실제 stale `PROCESSING`만
+  Provider 재호출 없이 `MANUAL_REVIEW`로 전이하고 fresh claim은 다른 인스턴스의 live call로 보존한다.
+  기본 `claimStaleAfter`는 5분이며 실제 adapter의 전체 timeout과 grace 합보다 길어야 한다.
 - registration result는 provider+token fingerprint transaction advisory lock 뒤 cross-owner row를
   확인한다. exact ACTIVE owner/reference/alias/brand/last4만 기존 resource로 수렴하고 다른 binding은
   overwrite·reactivation 없이 `MANUAL_REVIEW`다.

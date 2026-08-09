@@ -80,7 +80,7 @@ Payment의 표시 상태 `PARTIALLY_REFUNDED`와 `REFUNDED`는 성공한 Refund 
 registration work: READY -> PROCESSING -> COMPLETED(201)
                                |-> REJECTED(422)
                                |-> MISCONFIGURED_RETRYABLE -> PROCESSING
-                               |-> REGISTRATION_UNKNOWN -> MANUAL_REVIEW
+                               |-> REGISTRATION_UNKNOWN -(lookup 미지원, 같은 Tx)-> MANUAL_REVIEW
 
 PaymentMethod: ACTIVE -> DEACTIVATION_REQUESTED
                     -> DEACTIVATION_UNKNOWN -> MANUAL_REVIEW
@@ -93,7 +93,9 @@ ACTIVE | DEACTIVATION_REQUESTED | DEACTIVATION_UNKNOWN
 ```
 
 - registration `Issued`만 PaymentMethod `ACTIVE`를 만든다. raw authKey는 저장하지 않고 claim 뒤
-  결과불명에서는 Provider registration을 재호출하지 않는다.
+  결과불명에서는 Provider registration을 재호출하지 않는다. 현재 lookup Port가 없으므로 direct
+  Unknown, result 저장 실패와 stale startup claim은 고객 delayed 202를 보존한 채 즉시
+  `MANUAL_REVIEW`로 종결한다.
 - `MISCONFIGURED_RETRYABLE`은 side effect 부재가 확인되고 설정이 수정된 same-key registration에만
   새 claim을 허용한다. deactivation에는 이 재호출 상태가 없다.
 - `DEACTIVATION_REQUESTED`부터 신규 Payment 선택을 거부하며 default를 해제한다. 확인된 Provider

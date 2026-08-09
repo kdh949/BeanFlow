@@ -64,7 +64,7 @@ internal class PaymentMethodApplicationService(
         return try {
             transactions.completeRegistration(claim, providerResult)
         } catch (_: DataAccessException) {
-            transactions.markRegistrationUnknownAfterPersistenceFailure(claim)
+            transactions.markRegistrationManualAfterPersistenceFailure(claim)
         }
     }
 
@@ -302,12 +302,13 @@ internal class PaymentMethodLifecycleTransactions(
                 }
 
                 PaymentMethodRegistrationProviderResult.Unknown -> {
-                    registration.status = PaymentMethodRegistrationStatus.REGISTRATION_UNKNOWN
+                    registration.status = PaymentMethodRegistrationStatus.MANUAL_REVIEW
+                    registration.manualReviewReason = "PROVIDER_RESULT_UNKNOWN"
                     pendingRegistration(
                         registration.intendedPaymentMethodId,
                         correlationFrom(registration),
                         now,
-                        notice = false,
+                        notice = true,
                     )
                 }
 
@@ -337,29 +338,30 @@ internal class PaymentMethodLifecycleTransactions(
     }
 
     @Transactional
-    fun markRegistrationUnknownAfterPersistenceFailure(claim: RegistrationClaim): PaymentMethodHttpResult {
+    fun markRegistrationManualAfterPersistenceFailure(claim: RegistrationClaim): PaymentMethodHttpResult {
         val registration = registrations.findLockedById(claim.registrationId) ?: unavailable()
         if (registration.status == PaymentMethodRegistrationStatus.PROCESSING && registration.claimToken == claim.claimToken) {
             val now = clock.instant()
-            registration.status = PaymentMethodRegistrationStatus.REGISTRATION_UNKNOWN
+            registration.status = PaymentMethodRegistrationStatus.MANUAL_REVIEW
+            registration.manualReviewReason = "PROVIDER_RESULT_PERSISTENCE_FAILED"
             registration.updatedAt = now
             val response =
                 pendingRegistration(
                     registration.intendedPaymentMethodId,
                     correlationFrom(registration),
                     now,
-                    notice = false,
+                    notice = true,
                 )
             registration.firstResponseStatus = response.status
             registration.firstResponseBody = response.body
             audits.customer(
                 actorId = registration.customerId,
-                action = "PAYMENT_METHOD_REGISTRATION_UNKNOWN",
+                action = "PAYMENT_METHOD_REGISTRATION_MANUAL_REVIEW",
                 targetType = "PAYMENT_METHOD_REGISTRATION",
                 targetId = registration.intendedPaymentMethodId,
                 occurredAt = now,
                 beforeState = "PROCESSING",
-                afterState = "REGISTRATION_UNKNOWN",
+                afterState = "MANUAL_REVIEW",
                 sourceReference = "payment-method-registration:${registration.id}:${claim.claimToken}:persistence",
                 correlationId = correlationFrom(registration),
             )

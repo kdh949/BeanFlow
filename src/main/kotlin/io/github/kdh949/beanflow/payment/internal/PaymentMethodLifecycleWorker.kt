@@ -10,8 +10,10 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -21,15 +23,24 @@ internal class PaymentMethodLifecycleMaintenance(
     private val clock: Clock,
     @Value("\${beanflow.payment-method.maintenance.batch-size:50}")
     private val batchSize: Int,
+    @Value("\${beanflow.payment-method.maintenance.claim-stale-after:PT5M}")
+    private val claimStaleAfter: Duration,
 ) {
+    init {
+        require(!claimStaleAfter.isZero && !claimStaleAfter.isNegative) {
+            "PaymentMethod claim stale threshold must be positive"
+        }
+    }
+
     @EventListener(ApplicationReadyEvent::class)
     fun recoverInterruptedClaims() {
+        val staleBefore = clock.instant().minus(claimStaleAfter)
         while (true) {
-            val registrationIds = transactions.interruptedRegistrationClaimIds(batchSize)
-            val deactivationIds = transactions.interruptedDeactivationClaimIds(batchSize)
+            val registrationIds = transactions.interruptedRegistrationClaimIds(staleBefore, batchSize)
+            val deactivationIds = transactions.interruptedDeactivationClaimIds(staleBefore, batchSize)
             if (registrationIds.isEmpty() && deactivationIds.isEmpty()) return
-            registrationIds.forEach(transactions::recoverInterruptedRegistrationClaim)
-            deactivationIds.forEach(transactions::recoverInterruptedDeactivationClaim)
+            registrationIds.forEach { transactions.recoverInterruptedRegistrationClaim(it, staleBefore) }
+            deactivationIds.forEach { transactions.recoverInterruptedDeactivationClaim(it, staleBefore) }
         }
     }
 
@@ -59,38 +70,64 @@ internal class PaymentMethodMaintenanceTransactions(
     private val methods: PaymentMethodJpaRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val clock: Clock,
+    private val objectMapper: ObjectMapper,
     private val metrics: PaymentMethodLifecycleMetrics,
     private val audits: PaymentMethodAuditWriter,
 ) {
     @Transactional(readOnly = true)
-    fun interruptedRegistrationClaimIds(batchSize: Int): List<UUID> = registrations.findInterruptedClaimIds(PageRequest.of(0, batchSize))
+    fun interruptedRegistrationClaimIds(
+        staleBefore: Instant,
+        batchSize: Int,
+    ): List<UUID> = registrations.findInterruptedClaimIds(staleBefore, PageRequest.of(0, batchSize))
 
     @Transactional(readOnly = true)
-    fun interruptedDeactivationClaimIds(batchSize: Int): List<UUID> = deactivations.findInterruptedClaimIds(PageRequest.of(0, batchSize))
+    fun interruptedDeactivationClaimIds(
+        staleBefore: Instant,
+        batchSize: Int,
+    ): List<UUID> = deactivations.findInterruptedClaimIds(staleBefore, PageRequest.of(0, batchSize))
 
     @Transactional
-    fun recoverInterruptedRegistrationClaim(registrationId: UUID) {
+    fun recoverInterruptedRegistrationClaim(
+        registrationId: UUID,
+        staleBefore: Instant,
+    ) {
         val registration = registrations.findLockedById(registrationId) ?: return
-        if (registration.status != PaymentMethodRegistrationStatus.PROCESSING) return
+        if (
+            registration.status != PaymentMethodRegistrationStatus.PROCESSING ||
+            registration.claimStartedAt?.isAfter(staleBefore) != false
+        ) {
+            return
+        }
         val now = clock.instant()
-        registration.status = PaymentMethodRegistrationStatus.REGISTRATION_UNKNOWN
+        registration.status = PaymentMethodRegistrationStatus.MANUAL_REVIEW
+        registration.manualReviewReason = "PROVIDER_CALL_INTERRUPTED"
         registration.updatedAt = now
+        registration.firstResponseStatus = 202
+        registration.firstResponseBody = registrationDelayedBody(registration, now)
         audits.system(
-            action = "PAYMENT_METHOD_REGISTRATION_UNKNOWN",
+            action = "PAYMENT_METHOD_REGISTRATION_MANUAL_REVIEW",
             targetType = "PAYMENT_METHOD",
             targetId = registration.intendedPaymentMethodId,
             occurredAt = now,
             beforeState = "PROCESSING",
-            afterState = "REGISTRATION_UNKNOWN",
+            afterState = "MANUAL_REVIEW",
             sourceReference = "payment-method-registration:${registration.id}:startup-recovery",
         )
-        metrics.work("REGISTRATION", "REGISTRATION_UNKNOWN")
+        metrics.work("REGISTRATION", "MANUAL_REVIEW")
     }
 
     @Transactional
-    fun recoverInterruptedDeactivationClaim(deactivationId: UUID) {
+    fun recoverInterruptedDeactivationClaim(
+        deactivationId: UUID,
+        staleBefore: Instant,
+    ) {
         val work = deactivations.findLockedById(deactivationId) ?: return
-        if (work.status != PaymentMethodDeactivationStatus.PROCESSING) return
+        if (
+            work.status != PaymentMethodDeactivationStatus.PROCESSING ||
+            work.claimStartedAt?.isAfter(staleBefore) != false
+        ) {
+            return
+        }
         val method =
             methods.findLockedById(work.paymentMethodId)
                 ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Payment method recovery target is missing")
@@ -112,6 +149,25 @@ internal class PaymentMethodMaintenanceTransactions(
             sourceReference = "payment-method-deactivation:${work.id}:startup-recovery",
         )
         metrics.work("DEACTIVATION", "DEACTIVATION_UNKNOWN")
+    }
+
+    private fun registrationDelayedBody(
+        registration: PaymentMethodRegistrationEntity,
+        now: Instant,
+    ): String {
+        val correlationId =
+            checkNotNull(
+                objectMapper.readTree(checkNotNull(registration.firstResponseBody)).path("correlationId").stringValue(),
+            )
+        return objectMapper.writeValueAsString(
+            linkedMapOf(
+                "paymentMethodId" to registration.intendedPaymentMethodId,
+                "state" to "PROCESSING",
+                "noticeCode" to "REGISTRATION_DELAYED",
+                "correlationId" to correlationId,
+                "updatedAt" to now,
+            ),
+        )
     }
 
     @Transactional(readOnly = true)

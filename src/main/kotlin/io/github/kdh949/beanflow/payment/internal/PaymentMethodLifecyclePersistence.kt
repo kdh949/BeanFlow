@@ -101,9 +101,13 @@ internal interface PaymentMethodRegistrationJpaRepository : JpaRepository<Paymen
         "select registration.id from PaymentMethodRegistrationEntity registration " +
             "where registration.status = " +
             "io.github.kdh949.beanflow.payment.internal.PaymentMethodRegistrationStatus.PROCESSING " +
+            "and registration.claimStartedAt <= :staleBefore " +
             "order by registration.claimStartedAt, registration.id",
     )
-    fun findInterruptedClaimIds(pageable: Pageable): List<UUID>
+    fun findInterruptedClaimIds(
+        @Param("staleBefore") staleBefore: Instant,
+        pageable: Pageable,
+    ): List<UUID>
 }
 
 @Entity
@@ -229,9 +233,13 @@ internal interface PaymentMethodDeactivationJpaRepository : JpaRepository<Paymen
         "select deactivation.id from PaymentMethodDeactivationEntity deactivation " +
             "where deactivation.status = " +
             "io.github.kdh949.beanflow.payment.internal.PaymentMethodDeactivationStatus.PROCESSING " +
+            "and deactivation.claimStartedAt <= :staleBefore " +
             "order by deactivation.claimStartedAt, deactivation.id",
     )
-    fun findInterruptedClaimIds(pageable: Pageable): List<UUID>
+    fun findInterruptedClaimIds(
+        @Param("staleBefore") staleBefore: Instant,
+        pageable: Pageable,
+    ): List<UUID>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
