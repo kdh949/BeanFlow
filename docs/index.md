@@ -77,7 +77,7 @@
 - [Completed Nearby Store Discovery](exec-plans/completed/nearby-store-discovery.md)
 - [Analytics Refund and Late-Event Projection](exec-plans/active/analytics-refund-and-late-event-projection.md)
 - [PaymentMethod Token Management](exec-plans/completed/payment-method-token-management.md)
-- [Toss V2 One-Time Payment Window](exec-plans/active/toss-v2-one-time-payment-window.md)
+- [Toss V2 One-Time Payment Window](exec-plans/completed/toss-v2-one-time-payment-window.md)
 - [Superseded Toss Billing Sandbox Plan](exec-plans/completed/toss-payments-sandbox-gateway-adapter-superseded.md)
 - [Completed Payment Confirmation and Reconciliation](exec-plans/completed/payment-confirmation-and-reconciliation.md)
 - [Completed Foundation Plan](exec-plans/completed/foundation-domain-model.md)

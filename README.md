@@ -33,6 +33,7 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 주문 시점 메뉴·옵션·가격 snapshot과 쿠폰 후 포인트 배분
 - 픽업 슬롯·재고·쿠폰·포인트 원자 예약과 5분 lease 만료
 - 주문 생성 멱등성, 감사 기록과 `BENEFIT_ONLY` 결제
+- Toss V2 Standard 일회성 결제창 준비·callback 승인·상태 조회
 - 외부 결제 승인 Tx1/Provider/Tx2 분리
 - 명시 거절 취소·예약 해제, `UNKNOWN` 조회 reconciliation
 - 늦은 승인 void/refund 복구와 5회 후 `MANUAL_REVIEW`
@@ -46,11 +47,11 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
 - 인근 매장 검색과 매장 메뉴·픽업 슬롯 조회
 - PointAccount summary·transaction 조회
-- 로컬 데모 환경과 고객→매장→포인트 smoke flow
+- React/TypeScript 고객·매장·운영 콘솔과 Runtime OpenAPI 생성 client
+- 로컬 데모 환경과 고객→결제→매장→포인트→부분/전액 환불 smoke flow
 
 현재 source에 없는 capability:
 
-- 실제 PG sandbox adapter
 - Analytics refund/late-event projection과 외부 dashboard API
 
 검증 예정:
@@ -75,7 +76,7 @@ Gradle 의존성과 Testcontainers 이미지 다운로드를 위한 네트워크
 ### 로컬 데모 환경 (가장 빠른 확인 방법)
 
 수동 설정 없이 전체 흐름을 보려면 데모 script를 쓴다. PostGIS, ephemeral JWK set endpoint,
-필수 정책 bootstrap, 결정적 fixture, 실제 HTTP smoke까지 한 번에 실행한다.
+필수 정책 bootstrap, Spring API, React frontend, 결정적 fixture와 실제 HTTP smoke까지 한 번에 실행한다.
 
 ```bash
 bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
@@ -84,6 +85,8 @@ bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smo
 정지와 초기화는 `bash scripts/demo/stop.sh [--reset]`이다. 인증을 끄거나 validation을
 완화하지 않으며, 실행 시 생성한 키 자료는 gitignore된 `.demo-runtime/`에만 존재한다.
 절차와 진단은 [Local Demo Runbook](docs/operations/local-demo-runbook.md)에 있다.
+기동 뒤 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`에서
+확인한다. 화면의 로컬 인증 연결 폼에는 `.demo-runtime/demo-identity.env`의 역할별 JWT를 입력한다.
 
 아래 수동 절차는 데모 script 없이 직접 구성할 때 쓴다.
 
@@ -129,11 +132,10 @@ curl http://localhost:8080/actuator/health
 `sub`는 UUID 형식의 고객 ID여야 하고, `roles` claim에 `CUSTOMER`가 포함되어야 한다.
 
 `local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
-`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 결제수단 lifecycle API는
-provider-neutral Port와 explicit local/test scripted adapter까지 구현됐고 실제 Toss HTTP는 호출하지
-않는다. 수동 주문 흐름에는 매장·메뉴·슬롯·재고와 opaque scripted token reference만 가진 결제수단이
-필요하며, 위의 데모 script는 `local-scripted` fixture를 결정적으로 만든다. PAN, CVC와 전체
-유효기간은 저장하지 않는다.
+`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. `toss-sandbox` profile은
+Toss V2 confirm/query/cancel HTTP adapter와 `test_` key startup guard를 활성화한다. 고객 checkout은
+PaymentMethod를 조회하지 않고 서버가 준비한 일회성 `CARD` Payment Window만 사용한다. 결제수단
+lifecycle API는 별도 관리 경계로 남아 있다. PAN, CVC와 전체 유효기간은 저장하지 않는다.
 
 ### 현재 runtime API
 
@@ -157,7 +159,7 @@ Controller mapping과 이 계약의 operation 집합을 양방향으로 비교�
 
 ### 계약 inventory
 
-현재 target과 runtime의 public operation inventory는 일치하며 31 paths/34 operations다.
+현재 target과 runtime의 public operation inventory는 일치하며 34 paths/37 operations다.
 이는 operation 개수이며 처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 장애 주입,
 실제 배포 smoke test와 SLA는 `Not measured`다.
 

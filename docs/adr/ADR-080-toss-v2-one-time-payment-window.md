@@ -188,4 +188,3 @@ owner와 API를 다시 검토한다.
 - [ADR-038](ADR-038-retryable-refund-failure-and-customer-projection.md)
 - [ADR-078](ADR-078-toss-payments-sandbox-gateway-adapter.md)
 - [ADR-079](ADR-079-payment-method-token-management.md)
-

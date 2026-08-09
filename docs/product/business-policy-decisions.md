@@ -98,8 +98,9 @@
   allocation, PaymentMethod·Payment·Refund, pickup slot·reservation, 적립·정산 snapshot, 상태와
   deadline을 복사하지 않는다. 현재 Merchant 이름·가격·판매 상태, Fulfillment slot, Inventory stock,
   명시적으로 선택한 Coupon과 points를 기존 주문 생성 경계에서 다시 quote·reserve한다. payment method는
-  복사하거나 이 request에서 승인하지 않고 외부 결제가 필요하면 기존 payment-confirmations 명령에서
-  고객이 명시한다. 한 source line이라도 삭제·판매 중지·구성 불가이면 source line 순서의 stable item
+  복사하거나 이 request에서 승인하지 않고 외부 결제가 필요하면 BR-33의 일회성
+  `POST /orders/{orderId}/payment-attempts`로 Toss 결제창을 준비한다. 한 source line이라도
+  삭제·판매 중지·구성 불가이면 source line 순서의 stable item
   reason을 포함한 전체 `409`이며 부분 Order나 unavailable item 자동 삭제는 없다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment

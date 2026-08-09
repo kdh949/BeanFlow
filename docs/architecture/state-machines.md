@@ -63,6 +63,22 @@ READY -> APPROVED  (BENEFIT_ONLY only, no external call)
 
 `UNKNOWN`은 terminal failure가 아니다.
 
+일회성 checkout에서는 `OneTimePaymentAttempt`가 같은 승인 생명주기를 다음처럼 명시한다.
+
+```text
+READY -> CONFIRMING -> APPROVED | FAILED
+CONFIRMING -> UNKNOWN -> RECONCILING
+RECONCILING -> APPROVED | FAILED | MANUAL_REVIEW
+```
+
+- `READY`는 callback snapshot이 아직 claim되지 않은 상태다.
+- `CONFIRMING`부터 paymentKey와 callback hash가 고정된다. exact replay는 같은 결과를 읽고
+  다른 payload는 상태를 바꾸지 않고 거부한다.
+- `UNKNOWN`과 `RECONCILING`은 같은 paymentKey의 Provider query만 허용한다. 새 confirm과
+  PaymentMethod fallback은 없다.
+- one-time attempt의 provider order/customer/order name/amount/currency/callback URL은 prepare 뒤
+  immutable이며 DB trigger와 CHECK/UNIQUE 제약으로 보호한다.
+
 Order가 이미 `EXPIRED` 또는 `CANCELLED`인 뒤 승인 사실이 확인되면 Payment는
 `RECONCILING`에 남고 별도 `LATE_VOID -> LATE_REFUND` recovery 상태가
 `SUCCEEDED` 또는 `MANUAL_REVIEW`에 도달한다. 이 경로는 Order 상태를 바꾸지 않는다.

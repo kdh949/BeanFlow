@@ -68,9 +68,9 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
   새 주문 입력이나 snapshot으로 복사하지 않는다. 인증 customer와 source store identity,
   정규화한 line 선택만 새 create command를 구성한다.
 - coupon과 points는 request에서 명시한 current selection만 적용한다. coupon 자동 선택,
-  과거 혜택 재사용과 payment 자동 승인은 없다. 외부 결제가 필요한 새 Order는 기존
-  `POST /orders/{orderId}/payment-confirmations`에서 고객이 자신의 active PaymentMethod를
-  별도로 명시한다. BR-11의 BENEFIT_ONLY local 승인 경로는 기존 생성 의미 그대로다.
+  과거 혜택 재사용과 payment 자동 승인은 없다. 외부 결제가 필요한 새 Order는 ADR-080의
+  `POST /orders/{orderId}/payment-attempts`로 일회성 결제창을 준비하며 PaymentMethod를 복사하거나
+  인증 소스로 사용하지 않는다. BR-11의 BENEFIT_ONLY local 승인 경로는 기존 생성 의미 그대로다.
 - Merchant는 모든 source line의 현재 메뉴·옵션·구성을 source line 순서로 검증한다.
   하나라도 사용할 수 없으면 전체 `409 REORDER_ITEMS_UNAVAILABLE`와 line별 stable
   reason을 반환하고 새 Order와 owner reservation을 만들지 않는다. stable reason은

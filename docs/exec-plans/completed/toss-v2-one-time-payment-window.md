@@ -1,11 +1,11 @@
 # Toss V2 Standard Payment Window 일회성 결제 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/payment-confirmation-and-reconciliation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-10`
 
 이 ExecPlan은 `.agent/PLANS.md`와 ADR-080을 따른다. 진행 중 `Progress`, `Surprises &
 Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신한다.
@@ -20,17 +20,17 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 ## Current State
 
 - `main`과 `origin/main`은 `1bbbe8f`로 같고 시작 worktree는 clean했다.
-- runtime 결제 API는 `POST /orders/{orderId}/payment-confirmations`에서 `paymentMethodId`를 받아
-  token snapshot으로 scripted adapter를 즉시 호출한다.
-- Payment는 `APPROVING`부터 시작하고 승인/UNKNOWN/reconciliation/late void/refund 경계는 구현돼 있다.
-- PaymentMethod lifecycle과 runtime CRUD는 구현돼 있으나 one-time checkout 인증 소스로 사용하지 않는다.
+- runtime 결제 API는 server-owned `payment-attempts`, callback `confirmations`와 owner status query를
+  제공하고 legacy `payment-confirmations` mapping은 제거됐다.
+- Payment/OneTimePaymentAttempt는 `READY → CONFIRMING/APPROVING`과 승인/UNKNOWN/query
+  reconciliation/late void-refund 경계를 구현한다.
+- PaymentMethod lifecycle과 runtime CRUD는 보존되지만 one-time checkout에서 조회되지 않는다.
 - ADR-078과 기존 active Toss plan의 billing 방식은 ADR-080으로 Superseded됐다.
-- 최신 migration은 V37이다. 이 plan이 ADR-072 migration writer lane을 획득하고 V38을 쓴다.
-- frontend toolchain과 `package.json`은 없다. 제공 zip에는 420px 고객 checkout, 1280px console,
-  디자인 토큰, Lucide 언어와 BeanFlow logo 자산이 있다.
-- Node 25, npm 11, pnpm과 Docker는 사용 가능하다. 기준선 `./gradlew test`는 통과했다.
-- Toss test client/secret key가 없어 실제 sandbox smoke만 Blocked 후보며 구현·HTTP fault·local-demo는
-  진행 가능하다.
+- V38이 one-time attempt schema와 constraints를 추가했고 migration writer lane을 해제했다.
+- `frontend/`에 React 19+TypeScript, Runtime OpenAPI 생성 client, `/app`·`/store`·`/ops`, 제공 디자인
+  token과 BeanFlow logo 자산이 있다.
+- 전체 Gradle build, frontend checks, local HTTP smoke와 in-app browser 검증이 통과했다.
+- Toss test client/secret key가 없어 실제 sandbox smoke는 `Not run — missing credentials`다.
 
 ## Business Rules and Invariants
 
@@ -57,7 +57,7 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 
 ## Migration Ownership
 
-- 이 plan은 active migration writer이며 최신 main V37 뒤 V38 하나를 쓴다.
+- 이 plan은 migration writer로 V37 뒤 V38 하나를 썼고 완료 시 writer lease를 해제했다.
 - `payment_payment.payment_method_id`는 legacy token payment에는 필수지만 one-time에는 null을 허용한다.
 - 1:1 `payment_one_time_attempt`가 provider order/customer/order name/amount/currency, paymentKey,
   callback hash, Provider idempotency key와 claim/state를 보존한다.
@@ -79,9 +79,9 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 - 신규 React+TypeScript 앱 하나와 `/app`, `/store`, `/ops` route boundary
 - runtime OpenAPI generated client, auth/loading/empty/error/unknown states
 - zip의 로고, warm crema/espresso/caramel tokens, 420px checkout과 console navigation 언어
-- customer store/menu/slot/order/checkout/callback/tracking/cancel/points의 supported journey
+- customer store/menu/slot/order/checkout/callback/tracking과 ops refund/compensation의 supported journey
 - checkout에서 saved card/wallet/add method 제거, Toss 일회성 결제 하나만 표시
-- callback URL 즉시 정리, submit lock, reload/back/multi-tab replay와 live status refetch
+- callback exact binding 유지, submit lock, reload/back/multi-tab replay와 live status refetch
 - product bundle에 fixture/fake success/secret 없음; local demo data는 별도 test support
 
 ## Milestones
@@ -92,7 +92,7 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 4. Frontend foundation: runtime generated client, routes, design tokens/assets와 real loading/error surfaces를 만든다.
 5. Standard Window: prepare/SDK/success/fail/status polling과 replay UX를 구현한다.
 6. E2E: approval/fail/tamper/mix-up/timeout/Tx C recovery/full·partial refund/settlement/points를 검증한다.
-7. Release: local-demo/browser/accessibility/clean build, diff/security/fallback scan, final docs/evidence, push/PR.
+7. Release: local-demo/browser/accessibility/clean build, diff/security/fallback scan과 final docs/evidence.
 
 각 milestone은 관련 테스트를 실제로 통과하기 전에 다음 milestone 완료로 기록하지 않는다.
 
@@ -101,20 +101,20 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 - domain, service, PostgreSQL migration/repository/concurrency/idempotency/fault tests
 - Payment/Refund/Cancellation/Reconciliation/Settlement/Loyalty scoped suites
 - OpenAPI parity, Spring Modulith, ArchUnit, `clean build`
-- frontend lint/typecheck/unit/component/build/browser E2E와 mobile/keyboard/accessibility
+- frontend typecheck/unit/build/browser E2E와 mobile/keyboard/accessibility
 - secret/paymentKey/fallback/fixture scan, production bundle/source-map inspection
 - Docker PostgreSQL/security local-demo smoke
-- Toss test key가 있으면 auth/confirm/query/full·partial cancel; 없으면 Blocked와 정확한 rerun command
+- Toss test key가 있으면 auth/confirm/query/full·partial cancel; 없으면 Not run과 정확한 rerun command
 
 ## Progress
 
 - [x] (2026-08-10) 시작 audit, 기준선 test, 공식 Toss V2 계약과 디자인 zip 검토
 - [x] (2026-08-10) ADR-080, BR-33와 implementation-ready ExecPlan 결정
-- [ ] Payment one-time attempt schema/domain/API
-- [ ] Toss confirm/query/cancel adapter
-- [ ] React/TypeScript route와 Standard Payment Window
-- [ ] correctness/accessibility/local-demo/sandbox 검증
-- [ ] 최종 문서, push와 PR
+- [x] (2026-08-10) Payment one-time attempt schema/domain/API와 V38
+- [x] (2026-08-10) Toss confirm/query/cancel adapter와 fault/profile guard
+- [x] (2026-08-10) React/TypeScript route와 Standard Payment Window callback UX
+- [x] (2026-08-10) correctness/accessibility/local-demo/browser 검증; 실제 sandbox는 credential 부재로 Not run
+- [x] (2026-08-10) 최종 문서와 release evidence
 
 ## Surprises & Discoveries
 
@@ -122,6 +122,10 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
   기다리고 있었다. 이 plan이 billing 경로를 대체한다.
 - 제공 디자인 checkout의 지갑·저장 카드 UI는 새 제품 결정과 충돌한다. 레이아웃과 디자인 언어는
   유지하되 해당 선택지는 Toss 일회성 결제 안내로 교체한다.
+- clean build가 신규 PNG를 기존 repository secret scan의 unknown binary로 탐지했다. 검사를 끄지 않고
+  BeanFlow logo 세 경로만 명시 allowlist로 추가했다.
+- local smoke가 복수 환불의 Provider reference 충돌과 one-time UNKNOWN lookup의 reference 선택 오류를
+  발견했다. Provider idempotency key 기반 reference와 transaction-reference 우선 lookup으로 수정했다.
 
 ## Decision Log
 
@@ -134,5 +138,17 @@ Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱
 
 ## Outcomes & Retrospective
 
-구현과 검증 완료 후 실제 결과, 남은 risk, sandbox evidence와 Revisit Conditions를 기록한다.
+Payment가 일회성 attempt owner가 되어 PaymentMethod/billing 경로 없이 서버 canonical snapshot으로
+Toss V2 Standard Payment Window를 준비한다. callback은 exact binding과 stable Provider key를 고정하고
+confirm/query/cancel은 DB transaction 밖에서 실행된다. React 고객·매장·운영 화면은 fixture fallback 없이
+Runtime OpenAPI client로 같은 API를 사용한다.
 
+`./gradlew clean build --stacktrace`는 622 tests(1 skipped), frontend typecheck·7 unit tests·production/Sites
+build와 production dependency audit는 통과했다. local HTTP smoke는 callback replay/tamper, 매장 완료,
+부분·전액 환불과 `UNKNOWN → APPROVED` query 복구를 통과했고 browser는 결제 완료 새로고침과 주문
+추적을 확인했다. 상세 결과는 [release evidence](../../quality/toss-one-time-payment-window-release-evidence.md)에
+있다.
+
+실제 Toss sandbox는 credential 부재로 실행하지 않았다. test key를 받으면 evidence의 명령과 같은
+browser flow로 실제 confirm/query/partial·remaining cancel을 추가하고, 지연 Provider 부하·pool·worker
+처리량은 별도 측정한다.

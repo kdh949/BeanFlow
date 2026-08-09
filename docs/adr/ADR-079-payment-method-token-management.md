@@ -72,8 +72,9 @@ lifecycle 계약과 후속 구현이 먼저 필요하다.
 - 고객은 자신의 `ACTIVE` PaymentMethod 중 최대 하나를 default로 지정할 수 있다. 공개
   representation은 `isDefault`를 포함한다.
 - default는 UI 선호 metadata다. identity, 객체 수준 인가, Provider 요청과 결제 승인 대상
-  추론에 사용하지 않는다. `POST /orders/{orderId}/payment-confirmations`는 계속 명시적
-  `paymentMethodId`를 요구하며 누락을 default로 보충하지 않는다.
+  추론에 사용하지 않는다. ADR-080 이후 고객 one-time checkout은 PaymentMethod를 읽지 않고
+  `POST /orders/{orderId}/payment-attempts`의 서버 snapshot으로만 결제를 준비한다. 이 조항의
+  legacy `payment-confirmations` 의미는 신규 runtime 경로에서 superseded됐다.
 - DB는 `is_default` boolean, `is_default=true`이면 `status=ACTIVE`인 CHECK와 customer별 active
   default 최대 하나인 partial unique index로 보호한다. 0개 상태는 허용한다.
 - registration, default 변경과 deactivation은 같은 customer-scope advisory lock 뒤 필요한
