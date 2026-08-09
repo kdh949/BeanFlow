@@ -68,6 +68,7 @@ internal class RejectionRefundRepositoryTest
                     payment_refund,
                     payment_reconciliation,
                     payment_idempotency_record,
+                    payment_provider_request_snapshot,
                     payment_payment,
                     payment_method,
                     operations_order_compensation_step,
@@ -424,6 +425,17 @@ internal class RejectionRefundRepositoryTest
                     createdAt = NOW,
                     updatedAt = NOW,
                 ),
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO payment_provider_request_snapshot (
+                    payment_id, payment_method_id, provider, token_reference,
+                    provider_customer_reference, created_at
+                ) VALUES (?, ?, 'SCRIPTED', 'token', NULL, ?)
+                """.trimIndent(),
+                paymentId,
+                methodId,
+                Timestamp.from(NOW),
             )
             val policy =
                 ExpiredBenefitRestorationPolicySnapshot(

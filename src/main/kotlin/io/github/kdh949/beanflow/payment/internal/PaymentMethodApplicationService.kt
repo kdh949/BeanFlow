@@ -680,10 +680,14 @@ internal class PaymentMethodLifecycleTransactions(
         )
 
     private fun correlationFrom(registration: PaymentMethodRegistrationEntity): String =
-        objectMapper.readTree(checkNotNull(registration.firstResponseBody)).path("correlationId").asText()
+        checkNotNull(
+            objectMapper.readTree(checkNotNull(registration.firstResponseBody)).path("correlationId").stringValue(),
+        )
 
     private fun correlationFrom(deactivation: PaymentMethodDeactivationEntity): String =
-        objectMapper.readTree(checkNotNull(deactivation.firstResponseBody)).path("correlationId").asText()
+        checkNotNull(
+            objectMapper.readTree(checkNotNull(deactivation.firstResponseBody)).path("correlationId").stringValue(),
+        )
 
     private fun pendingRegistration(
         methodId: UUID,
