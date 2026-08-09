@@ -29,6 +29,11 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
 - 같은 scope·key·canonical payload의 terminal 재요청은 ADR-057에 따라 최초 HTTP
   status와 body를 그대로 재생하고 business response나 header에 replay indicator를
   추가하지 않는다.
+- source OrderLine에서는 `menuId`, ID 오름차순의 중복 없는 `optionIds`, `quantity`만
+  새 주문 생성 입력으로 복사한다. note, 이름과 가격 snapshot은 복사 입력이 아니다.
+- Ordering은 향후 migration 이후 생성되는 OrderLine에 normalized option ID snapshot을
+  보존한다. 기존 line에 검증된 snapshot이 없으면 옵션 이름, sellable requirement 또는
+  현재 Merchant state로 ID를 추론하지 않고 재주문 불가로 실패한다.
 
 ## Alternatives Considered
 
@@ -61,6 +66,8 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - 성공 시 고객은 이미 생성·예약된 Order를 받으므로 가격 확인 후 확정 단계가 없다.
 - request schema, 가격 변경 표시, source line snapshot과 실패 상세는 이 ADR의 후속
   결정으로 계약을 닫아야 한다.
+- 기존 OrderLine에는 option ID snapshot이 없어 모든 기존 주문을 재주문 가능하게
+  backfill할 수 없다. 구현 migration은 snapshot 부재와 옵션 없는 빈 선택을 구분해야 한다.
 - `REORDER_ORDER_V1` operation과 terminal response는 BR-26의 90일 보존 정책을 따른다.
 
 ## Verification
@@ -71,6 +78,8 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - 같은 key와 다른 source Order 또는 request field의 409와 첫 응답 미노출
 - 새 Order·owner 예약·snapshot commit 전 201 부재
 - Reorder Aggregate, table과 repository 부재
+- source line의 normalized option ID·수량 복사와 note 부재
+- option ID snapshot이 없는 기존 line의 명시적 실패와 이름·현재값 추론 부재
 
 ## Metrics
 

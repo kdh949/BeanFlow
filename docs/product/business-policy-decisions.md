@@ -80,6 +80,10 @@
   별도 생성하는 것이 아니라 기존 주문 생성 경계를 통해 즉시 새 `Order`를 생성한다. 새 Order와 필요한
   예약·snapshot·멱등 응답이 모두 commit된 뒤에만 `201 Created`를 반환한다. `Reorder`를 별도
   Aggregate로 만들지 않는다. 따라서 고객은 성공 응답 전에 현재 가격을 별도로 승인하는 단계를 갖지 않는다.
+- **Fast Reorder Source Amendment (2026-08-09):** source Order에서는 `menuId`, ID 오름차순으로
+  정규화된 `optionIds`, `quantity`만 새 주문 입력으로 복사한다. 과거 또는 현재의 note를 복사하지 않으며
+  빠른 재주문을 위해 새 note 계약을 도입하지 않는다. 검증된 option ID snapshot이 없는 기존 OrderLine은
+  옵션 이름, 현재 메뉴 또는 sellable requirement로 추론하지 않고 재주문 불가로 명시적으로 실패한다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
