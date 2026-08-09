@@ -67,7 +67,11 @@ internal class PaymentEntity(
 
 internal enum class PaymentMethodStatus {
     ACTIVE,
-    REVOKED,
+    DEACTIVATION_REQUESTED,
+    DEACTIVATION_UNKNOWN,
+    RECONCILING,
+    MANUAL_REVIEW,
+    DEACTIVATED,
 }
 
 @Entity
@@ -81,12 +85,16 @@ internal class PaymentMethodEntity(
     val provider: String,
     @Column(name = "token_reference", nullable = false)
     val tokenReference: String,
+    @Column(name = "provider_customer_reference")
+    val providerCustomerReference: String? = null,
     @Column(name = "display_alias", nullable = false)
     val displayAlias: String,
     @Column(name = "card_brand", nullable = false)
     val cardBrand: String,
     @Column(name = "last_four", nullable = false, length = 4)
     val lastFour: String,
+    @Column(name = "is_default", nullable = false)
+    var isDefault: Boolean = false,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var status: PaymentMethodStatus,
@@ -292,7 +300,27 @@ internal interface PaymentJpaRepository : JpaRepository<PaymentEntity, UUID> {
     fun findOldestUnknownUpdatedAt(): Instant?
 }
 
-internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntity, UUID>
+internal interface PaymentMethodJpaRepository : JpaRepository<PaymentMethodEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select method from PaymentMethodEntity method where method.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): PaymentMethodEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select method from PaymentMethodEntity method " +
+            "where method.customerId = :customerId order by method.id",
+    )
+    fun findAllLockedByCustomerId(
+        @Param("customerId") customerId: UUID,
+    ): List<PaymentMethodEntity>
+
+    fun findAllByProviderAndTokenReference(
+        provider: String,
+        tokenReference: String,
+    ): List<PaymentMethodEntity>
+}
 
 internal interface PaymentIdempotencyJpaRepository : JpaRepository<PaymentIdempotencyEntity, UUID> {
     fun findByPaymentId(paymentId: UUID): PaymentIdempotencyEntity?

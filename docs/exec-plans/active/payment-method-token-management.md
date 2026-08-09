@@ -332,8 +332,8 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
 
 ## Progress
 
-- [ ] migration-writer lease 획득과 latest-main precheck
-- [ ] schema/Aggregate/Port/원장
+- [x] migration-writer lease 획득과 latest-main precheck
+- [ ] schema/Aggregate/Port/원장 — V37 schema와 persistence mapping 완료, Aggregate·Port 진행 중
 - [ ] 고객 API·signed cursor·인가
 - [ ] Payment request snapshot
 - [ ] provider-neutral inbox·deadline/retention worker·profile guards
@@ -342,6 +342,9 @@ PostgreSQL Testcontainers가 실제로 실행되지 않았거나 Docker가 없�
 
 ## Surprises & Discoveries
 
+- 2026-08-09: latest main의 마지막 migration은 V36이었고 다른 Codex task의 활성 migration writer가
+  없음을 확인했다. 이 task가 lease를 획득해 V37을 사용하며, inactive worktree의 미완성 migration은
+  변경하지 않는다.
 - 2026-08-09: 기존 Payment request loader가 승인/lookup 때마다 current PaymentMethod를 읽어 D1 이후
   진행 Payment가 실패할 수 있었다. Tx1 immutable snapshot이 lifecycle 구현의 선행 불변식이 됐다.
 - 2026-08-09: 현재 PaymentMethod 생성 경로는 test/local demo뿐이라 기존 TOSS row의 Provider

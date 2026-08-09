@@ -471,7 +471,7 @@ internal class PaymentConfirmationIntegrationTest
         fun `revoked payment method is rejected before Provider call`() {
             val fixture = OrderCreationFixture()
             val orderId = pendingOrder(fixture, "payment-method-revoked-order")
-            val paymentMethodId = insertPaymentMethod(fixture.customerId, "REVOKED")
+            val paymentMethodId = insertPaymentMethod(fixture.customerId, "DEACTIVATED")
 
             assertThatThrownBy {
                 confirmationService.confirm(
