@@ -76,6 +76,10 @@
   `now >= reservationExpiresAt`이면 먼저 만료를 materialize하며 슬롯을 확정하지 않는다. 이 시각 뒤의
   Provider 승인 또는 `UNKNOWN` lookup approval은 주문·예약을 되살리지 않고 기존 late-approval
   void/refund reconciliation으로 보낸다.
+- **Fast Reorder Result Amendment (2026-08-09):** 빠른 재주문 성공은 재검증 가능한 draft나 quote를
+  별도 생성하는 것이 아니라 기존 주문 생성 경계를 통해 즉시 새 `Order`를 생성한다. 새 Order와 필요한
+  예약·snapshot·멱등 응답이 모두 commit된 뒤에만 `201 Created`를 반환한다. `Reorder`를 별도
+  Aggregate로 만들지 않는다. 따라서 고객은 성공 응답 전에 현재 가격을 별도로 승인하는 단계를 갖지 않는다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
 - **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
 - **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
