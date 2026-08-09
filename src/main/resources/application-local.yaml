@@ -1,3 +1,7 @@
 beanflow:
+  checkout:
+    frontend-base-url: http://localhost:5173
+  toss:
+    client-key: test_ck_local_scripted
   notification:
     provider: scripted

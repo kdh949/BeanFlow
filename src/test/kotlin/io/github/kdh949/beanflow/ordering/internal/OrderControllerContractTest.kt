@@ -26,7 +26,7 @@ import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
-@SpringBootTest
+@SpringBootTest(properties = ["beanflow.toss.client-key=test_ck_contract"])
 internal class OrderControllerContractTest
     @Autowired
     constructor(
@@ -103,6 +103,16 @@ internal class OrderControllerContractTest
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.correlationId").isNotEmpty)
                 .andExpect(jsonPath("$.details").isArray)
+        }
+
+        @Test
+        fun `customer reads the Toss V2 Standard browser configuration`() {
+            mockMvc
+                .perform(get("/api/v1/payment-config").with(customerJwt(UUID.randomUUID())))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.provider").value("TOSS_PAYMENTS"))
+                .andExpect(jsonPath("$.sdkVersion").value("V2_STANDARD"))
+                .andExpect(jsonPath("$.clientKey").value("test_ck_contract"))
         }
 
         @Test
@@ -197,18 +207,20 @@ internal class OrderControllerContractTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             createThroughHttp(fixture, "contract-payment-order")
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
-            val paymentMethodId = insertPaymentMethod(fixture.customerId)
-            paymentGateway.enqueueApproval(
+            paymentGateway.enqueueOneTimeConfirmation(
                 ProviderPaymentResult.Approved("provider-contract-approved", 1_000, "KRW"),
             )
 
+            val paymentId = preparePayment(orderId, fixture.customerId, "contract-payment-prepare")
+            val providerOrderId = providerOrderId(paymentId)
+
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/payments/{paymentId}/confirmations", paymentId)
                         .with(customerJwt(fixture.customerId))
                         .header("Idempotency-Key", "contract-payment-key")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .content("""{"paymentKey":"contract-approved","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.paymentId").isString)
                 .andExpect(jsonPath("$.orderId").value(orderId.toString()))
@@ -223,16 +235,17 @@ internal class OrderControllerContractTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, unknownFixture)
             createThroughHttp(unknownFixture, "contract-payment-unknown-order")
             var orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
-            var paymentMethodId = insertPaymentMethod(unknownFixture.customerId)
-            paymentGateway.enqueueApproval(ProviderPaymentResult.Unknown("TIMEOUT"))
+            paymentGateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Unknown("TIMEOUT"))
+            var paymentId = preparePayment(orderId, unknownFixture.customerId, "contract-payment-unknown-prepare")
+            var providerOrderId = providerOrderId(paymentId)
 
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/payments/{paymentId}/confirmations", paymentId)
                         .with(customerJwt(unknownFixture.customerId))
                         .header("Idempotency-Key", "contract-payment-unknown")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .content("""{"paymentKey":"contract-unknown","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isAccepted)
                 .andExpect(jsonPath("$.approvalState").value("UNKNOWN"))
                 .andExpect(jsonPath("$.recovery.state").value("REQUESTED"))
@@ -242,16 +255,17 @@ internal class OrderControllerContractTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, declinedFixture)
             createThroughHttp(declinedFixture, "contract-payment-declined-order")
             orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
-            paymentMethodId = insertPaymentMethod(declinedFixture.customerId)
-            paymentGateway.enqueueApproval(ProviderPaymentResult.Declined("DO_NOT_HONOR"))
+            paymentGateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Declined("DO_NOT_HONOR"))
+            paymentId = preparePayment(orderId, declinedFixture.customerId, "contract-payment-declined-prepare")
+            providerOrderId = providerOrderId(paymentId)
 
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/payments/{paymentId}/confirmations", paymentId)
                         .with(customerJwt(declinedFixture.customerId))
                         .header("Idempotency-Key", "contract-payment-declined")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .content("""{"paymentKey":"contract-declined","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isUnprocessableContent)
                 .andExpect(jsonPath("$.code").value("PAYMENT_DECLINED"))
         }
@@ -262,19 +276,16 @@ internal class OrderControllerContractTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             createThroughHttp(fixture, "contract-payment-owner-order")
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
-            val paymentMethodId = insertPaymentMethod(fixture.customerId)
 
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/orders/{orderId}/payment-attempts", orderId)
                         .with(customerJwt(UUID.randomUUID()))
-                        .header("Idempotency-Key", "contract-payment-owner")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .header("Idempotency-Key", "contract-payment-owner"),
                 ).andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
             org.assertj.core.api.Assertions
-                .assertThat(paymentGateway.approvalCalls.get())
+                .assertThat(paymentGateway.oneTimeConfirmationCalls.get())
                 .isZero()
         }
 
@@ -319,25 +330,36 @@ internal class OrderControllerContractTest
                 .jwt { it.subject(customerId.toString()) }
                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
 
-        private fun insertPaymentMethod(customerId: UUID): UUID {
-            val id = UUID.randomUUID()
-            val now = Timestamp.from(Instant.now())
-            jdbcTemplate.update(
-                """
-                INSERT INTO payment_method (
-                    id, customer_id, provider, token_reference, display_alias, card_brand,
-                    last_four, status, created_at, updated_at, version
-                )
-                VALUES (?, ?, 'SCRIPTED', ?, 'Contract test', 'TEST', '4242', 'ACTIVE', ?, ?, 0)
-                """.trimIndent(),
-                id,
-                customerId,
-                "test-token:$id",
-                now,
-                now,
+        private fun preparePayment(
+            orderId: UUID,
+            customerId: UUID,
+            key: String,
+        ): UUID {
+            mockMvc
+                .perform(
+                    post("/api/v1/orders/{orderId}/payment-attempts", orderId)
+                        .with(customerJwt(customerId))
+                        .header("Idempotency-Key", key),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.providerOrderId").isString)
+                .andExpect(jsonPath("$.amount.value").value(1_000))
+            return requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM payment_payment WHERE order_id = ?",
+                    UUID::class.java,
+                    orderId,
+                ),
             )
-            return id
         }
+
+        private fun providerOrderId(paymentId: UUID): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT provider_order_id FROM payment_one_time_attempt WHERE payment_id = ?",
+                    String::class.java,
+                    paymentId,
+                ),
+            )
 
         private fun makeDue(orderId: UUID) {
             val dueAt = Timestamp.from(Instant.now().minusSeconds(1))

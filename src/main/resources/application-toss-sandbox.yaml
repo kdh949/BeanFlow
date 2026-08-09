@@ -1,0 +1,7 @@
+beanflow:
+  checkout:
+    frontend-base-url: ${BEANFLOW_FRONTEND_BASE_URL}
+  toss:
+    client-key: ${TOSS_CLIENT_KEY}
+    secret-key: ${TOSS_SECRET_KEY}
+    base-url: https://api.tosspayments.com

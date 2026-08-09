@@ -776,26 +776,36 @@ internal class PaymentSetupRepairIntegrationTest
             orderId: UUID,
             customerId: UUID,
         ) {
-            val paymentMethodId = UUID.randomUUID()
-            val now = Timestamp.from(Instant.now())
-            jdbcTemplate.update(
-                "INSERT INTO payment_method (id, customer_id, provider, token_reference, display_alias, card_brand, " +
-                    "last_four, status, created_at, updated_at, version) " +
-                    "VALUES (?, ?, 'SCRIPTED', ?, 'Repair test', 'TEST', '4242', 'ACTIVE', ?, ?, 0)",
-                paymentMethodId,
-                customerId,
-                "token:$paymentMethodId",
-                now,
-                now,
-            )
-            paymentGateway.enqueueApproval(ProviderPaymentResult.Approved("provider:$orderId", 1_000, "KRW"))
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/orders/{orderId}/payment-attempts", orderId)
                         .with(customerJwt(customerId))
-                        .header("Idempotency-Key", "payment-$orderId")
+                        .header("Idempotency-Key", "prepare-$orderId"),
+                ).andExpect(status().isOk)
+            val paymentId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT id FROM payment_payment WHERE order_id = ?",
+                        UUID::class.java,
+                        orderId,
+                    ),
+                )
+            val providerOrderId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT provider_order_id FROM payment_one_time_attempt WHERE payment_id = ?",
+                        String::class.java,
+                        paymentId,
+                    ),
+                )
+            paymentGateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("provider:$orderId", 1_000, "KRW"))
+            mockMvc
+                .perform(
+                    post("/api/v1/payments/{paymentId}/confirmations", paymentId)
+                        .with(customerJwt(customerId))
+                        .header("Idempotency-Key", "confirm-$orderId")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .content("""{"paymentKey":"test:$orderId","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isOk)
         }
 

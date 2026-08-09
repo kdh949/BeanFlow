@@ -16,11 +16,22 @@ internal data class GatewayApprovalRequest(
 internal data class GatewayLookupRequest(
     val paymentId: UUID,
     val provider: String,
-    val tokenReference: String,
+    val tokenReference: String?,
     val providerCustomerReference: String?,
     val providerTransactionReference: String?,
+    val providerOrderId: String? = null,
     val amountKrw: Long,
     val currency: String,
+)
+
+internal data class GatewayOneTimeConfirmationRequest(
+    val paymentId: UUID,
+    val provider: String,
+    val providerOrderId: String,
+    val paymentKey: String,
+    val amountKrw: Long,
+    val currency: String,
+    val providerIdempotencyKey: String,
 )
 
 internal sealed interface GatewayRecoveryResult {
@@ -54,6 +65,8 @@ internal sealed interface GatewayRefundResult {
 
 internal interface PaymentGateway {
     fun approve(request: GatewayApprovalRequest): ProviderPaymentResult
+
+    fun confirmOneTime(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult
 
     fun lookup(request: GatewayLookupRequest): ProviderPaymentResult
 

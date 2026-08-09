@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 internal class ScriptedTestPaymentGateway : PaymentGateway {
     private val approvals = ConcurrentLinkedQueue<ProviderPaymentResult>()
+    private val oneTimeConfirmations = ConcurrentLinkedQueue<ProviderPaymentResult>()
     private val approvalFailures = ConcurrentLinkedQueue<ProviderTransportFailure>()
     private val lookups = ConcurrentLinkedQueue<ProviderPaymentResult>()
     private val voids = ConcurrentLinkedQueue<GatewayRecoveryResult>()
@@ -17,6 +18,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
     private val rejectionRefunds = ConcurrentLinkedQueue<GatewayRefundResult>()
     private val rejectionRefundLookups = ConcurrentLinkedQueue<GatewayRefundResult>()
     val approvalCalls = AtomicInteger()
+    val oneTimeConfirmationCalls = AtomicInteger()
     val lookupCalls = AtomicInteger()
     val voidCalls = AtomicInteger()
     val refundCalls = AtomicInteger()
@@ -27,6 +29,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
 
     fun reset() {
         approvals.clear()
+        oneTimeConfirmations.clear()
         approvalFailures.clear()
         lookups.clear()
         voids.clear()
@@ -34,6 +37,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
         rejectionRefunds.clear()
         rejectionRefundLookups.clear()
         approvalCalls.set(0)
+        oneTimeConfirmationCalls.set(0)
         lookupCalls.set(0)
         voidCalls.set(0)
         refundCalls.set(0)
@@ -45,6 +49,10 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
 
     fun enqueueApproval(vararg results: ProviderPaymentResult) {
         approvals.addAll(results)
+    }
+
+    fun enqueueOneTimeConfirmation(vararg results: ProviderPaymentResult) {
+        oneTimeConfirmations.addAll(results)
     }
 
     fun enqueueApprovalFailure(message: String) {
@@ -80,6 +88,13 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
         nextApprovalBlock.getAndSet(null)?.awaitRelease()
         approvalFailures.poll()?.let { throw it }
         return approvals.poll() ?: ProviderPaymentResult.Unknown("TEST_UNSCRIPTED")
+    }
+
+    override fun confirmOneTime(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult {
+        oneTimeConfirmationCalls.incrementAndGet()
+        nextApprovalBlock.getAndSet(null)?.awaitRelease()
+        approvalFailures.poll()?.let { throw it }
+        return oneTimeConfirmations.poll() ?: ProviderPaymentResult.Unknown("TEST_UNSCRIPTED")
     }
 
     override fun lookup(request: GatewayLookupRequest): ProviderPaymentResult {

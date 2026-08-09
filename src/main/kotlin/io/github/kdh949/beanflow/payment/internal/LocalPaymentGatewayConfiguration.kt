@@ -30,8 +30,27 @@ internal class LocalPaymentGatewayConfiguration {
                     }
                 }
 
+            override fun confirmOneTime(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult =
+                when {
+                    request.paymentKey.endsWith(":approved") -> {
+                        ProviderPaymentResult.Approved(
+                            request.paymentKey,
+                            request.amountKrw,
+                            request.currency,
+                        )
+                    }
+
+                    request.paymentKey.endsWith(":declined") -> {
+                        ProviderPaymentResult.Declined("SCRIPTED_DECLINED")
+                    }
+
+                    else -> {
+                        ProviderPaymentResult.Unknown("SCRIPTED_UNKNOWN")
+                    }
+                }
+
             override fun lookup(request: GatewayLookupRequest): ProviderPaymentResult =
-                if (request.tokenReference.endsWith(":eventually-approved")) {
+                if (request.tokenReference?.endsWith(":eventually-approved") == true) {
                     ProviderPaymentResult.Approved(
                         request.providerTransactionReference ?: "sandbox-${request.paymentId}",
                         request.amountKrw,

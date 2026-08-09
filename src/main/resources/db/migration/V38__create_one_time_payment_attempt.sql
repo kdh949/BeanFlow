@@ -17,6 +17,14 @@ ALTER TABLE payment_payment
                 AND benefit_snapshot_reference IS NULL)
         );
 
+ALTER TABLE payment_reconciliation
+    DROP CONSTRAINT payment_reconciliation_status_check,
+    ADD CONSTRAINT payment_reconciliation_status_check
+        CHECK (status IN (
+            'WAITING', 'SCHEDULED', 'PROCESSING', 'RETRY_SCHEDULED',
+            'SUCCEEDED', 'MANUAL_REVIEW'
+        ));
+
 CREATE TABLE payment_one_time_attempt (
     payment_id uuid PRIMARY KEY REFERENCES payment_payment(id),
     provider_order_id varchar(64) NOT NULL
