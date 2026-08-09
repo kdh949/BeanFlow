@@ -19,6 +19,10 @@
 - 위치 기능은 PostGIS 이미지 또는 확장을 실제로 사용한다.
 - 외부 PG·알림은 성공, 명시 거절, timeout, malformed response, ACK 유실을 재현 가능한 Adapter로 테스트한다.
 - 운영 profile에서 fake Adapter가 활성화되지 않는 startup test를 둔다.
+- 저장되는 시각을 만드는 시계는 microsecond보다 정밀한 값을 내지 않는다. `timestamptz`는 microsecond로
+  반올림하므로 더 정밀한 값은 읽을 때 달라지고, 멈춘 시계에서는 `now`에 예약한 작업이 `<= now` 조회에
+  영원히 걸리지 않을 수 있다. `Instant.now()`가 macOS에서는 microsecond, Linux에서는 nanosecond라
+  이 결함은 개발 머신에서 드러나지 않는다. `FixedTestClockPrecisionTest`가 두 test clock을 고정한다.
 
 ## Risk-first examples
 

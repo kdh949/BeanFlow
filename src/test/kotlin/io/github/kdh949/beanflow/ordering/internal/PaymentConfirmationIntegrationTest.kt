@@ -24,6 +24,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -754,15 +755,27 @@ internal class PickupSlotPaymentDeadlineTestConfiguration {
     fun pickupSlotPaymentDeadlineTestClock(): PickupSlotPaymentDeadlineTestClock = PickupSlotPaymentDeadlineTestClock()
 }
 
-internal class PickupSlotPaymentDeadlineTestClock : Clock() {
-    private val current = AtomicReference(Instant.now())
+/**
+ * A clock that does not move, so a test controls every instant the application sees.
+ *
+ * It reads at microsecond precision on purpose. Work is scheduled at `now` and claimed with
+ * `nextAttemptAt <= now`, and PostgreSQL rounds a `timestamptz` to microseconds on the way in. A
+ * finer instant can therefore come back *later* than the clock still reports, leaving work that was
+ * scheduled for right now permanently not due. A moving clock hides this; a fixed one cannot.
+ * `Instant.now()` is microsecond-aligned on macOS and nanosecond-precise on Linux, so without this
+ * the outcome would depend on the host.
+ */
+internal class PickupSlotPaymentDeadlineTestClock(
+    private val source: () -> Instant = Instant::now,
+) : Clock() {
+    private val current = AtomicReference(storable(source()))
 
     fun reset() {
-        current.set(Instant.now())
+        current.set(storable(source()))
     }
 
     fun set(now: Instant) {
-        current.set(now)
+        current.set(storable(now))
     }
 
     override fun getZone(): ZoneId = ZoneOffset.UTC
@@ -770,4 +783,8 @@ internal class PickupSlotPaymentDeadlineTestClock : Clock() {
     override fun withZone(zone: ZoneId): Clock = this
 
     override fun instant(): Instant = current.get()
+
+    private companion object {
+        fun storable(instant: Instant): Instant = instant.truncatedTo(ChronoUnit.MICROS)
+    }
 }
