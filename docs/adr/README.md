@@ -78,3 +78,4 @@
 | [ADR-074](ADR-074-global-and-store-scoped-point-accrual-policy.md) | Accepted | 전역 기본값과 매장별 일반 적립 정책 우선순위 |
 | [ADR-075](ADR-075-single-operator-cancellation-refund-reconciliation.md) | Accepted | 고객 취소 terminal Refund의 단일 운영자 LOOKUP 재개 |
 | [ADR-076](ADR-076-store-catalog-read-contract.md) | Accepted | 매장 카탈로그 조회 계약과 픽업 슬롯 예약 창 |
+| [ADR-077](ADR-077-fast-reorder-order-creation-api-identity.md) | Accepted | 빠른 재주문의 새 Order 생성과 API identity |
