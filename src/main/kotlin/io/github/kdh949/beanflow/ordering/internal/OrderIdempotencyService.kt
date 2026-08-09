@@ -23,6 +23,13 @@ internal sealed interface IdempotencyRegistration {
 	data object InProgress : IdempotencyRegistration
 }
 
+internal enum class OrderCreationOperation(
+	val value: String,
+) {
+	DIRECT("CREATE_ORDER"),
+	REORDER("REORDER_ORDER_V1"),
+}
+
 @Service
 internal class OrderIdempotencyService(
 	private val jdbcTemplate: JdbcTemplate,
@@ -34,6 +41,7 @@ internal class OrderIdempotencyService(
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	fun register(
 		actorId: UUID,
+		operation: OrderCreationOperation,
 		idempotencyKey: String,
 		payloadHash: String,
 		intendedOrderId: UUID,
@@ -50,7 +58,7 @@ internal class OrderIdempotencyService(
 			""".trimIndent(),
 			recordId,
 			actorId,
-			OPERATION,
+			operation.value,
 			idempotencyKey,
 			payloadHash,
 			intendedOrderId,
@@ -62,7 +70,7 @@ internal class OrderIdempotencyService(
 
 		val existing = repository.findByActorIdAndOperationAndIdempotencyKey(
 			actorId,
-			OPERATION,
+			operation.value,
 			idempotencyKey,
 		) ?: throw DomainFailure(
 			FailureCode.DEPENDENCY_UNAVAILABLE,
@@ -118,7 +126,6 @@ internal class OrderIdempotencyService(
 	}
 
 	private companion object {
-		const val OPERATION = "CREATE_ORDER"
 		const val RESPONSE_VERSION = 1
 		val TERMINAL_RETENTION: Duration = Duration.ofDays(90)
 	}

@@ -76,6 +76,7 @@ internal class CreateOrderService(
             try {
                 idempotencyService.register(
                     actorId = command.customerId,
+                    operation = OrderCreationOperation.DIRECT,
                     idempotencyKey = idempotencyKey,
                     payloadHash = payloadHash,
                     intendedOrderId = intendedOrderId,

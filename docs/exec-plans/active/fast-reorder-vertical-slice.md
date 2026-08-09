@@ -619,7 +619,10 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
   immutable option snapshot state/JSON, terminal 90일 retention과 독립 purge 경로를 구현하고
   `*FastReorderMigrationTest`, `*FastReorderOptionSnapshotTest`, `*CreateOrderServiceTest`,
   `*OrderingIdempotencyRetentionWorkerTest` 18개 테스트 통과.
-- [ ] Milestone 2: shared creation core와 direct-create 회귀 보호.
+- [x] 2026-08-09: Milestone 2 완료. owner orchestration을 `MANDATORY` `OrderCreationWorkflow`로
+  추출하고 direct wrapper의 `CREATE_ORDER` response/idempotency completion을 보존했다.
+  `*CreateOrder*`, benefit-only, workflow transaction, controller contract, settlement/accrual snapshot과
+  Modulith 지정 테스트 통과.
 - [ ] Milestone 3: source/current item revalidation.
 - [ ] Milestone 4: API, price response와 idempotency.
 - [ ] Milestone 5: observability, runtime promotion과 completion evidence.
@@ -646,6 +649,10 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 - 2026-08-09: PostgreSQL `timestamptz`의 저장 정밀도는 마이크로초라 terminal retention의 DB
   직전 경계는 `-1ns`가 같은 값으로 반올림됐다. 애플리케이션 정책은 정확한 90일 duration을 유지하고,
   repository 경계 검증은 저장 가능한 직전 값 `-1µs`와 exact boundary를 사용했다.
+- 2026-08-09: 기존 `OrderCreationTransaction`은 HTTP response와 idempotency completion까지 owner
+  orchestration에 결합돼 있었다. `OrderCreationWorkflow(MANDATORY)`가 HTTP/idempotency를 모르는
+  outcome을 반환하게 분리해 direct wrapper의 observable body를 유지하면서 reorder Tx O 재사용 경계를
+  만들었다. workflow 단독 호출은 Spring transaction interceptor에서 즉시 실패한다.
 
 ## Decision Log
 
@@ -687,3 +694,5 @@ plan을 completed로 이동하지 않는다.
 - 2026-08-09: Milestone 1 완료. pre-V36 fixture migration, corruption fail-closed, legacy/verified-empty
   option provenance, 새 direct-create snapshot write와 terminal idempotency exact 90-day purge를
   PostgreSQL 및 domain test로 검증.
+- 2026-08-09: Milestone 2 완료. shared workflow 추출과 operation enum 제한 뒤 direct create,
+  concurrency, benefit-only, API contract, settlement/accrual snapshot, Modulith 회귀를 재검증.
