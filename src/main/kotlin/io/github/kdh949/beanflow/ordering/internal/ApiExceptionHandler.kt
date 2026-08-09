@@ -58,28 +58,41 @@ internal class ApiExceptionHandler(
     private fun safeValidationDetails(failure: Exception): List<ErrorDetail> {
         val details =
             when (failure) {
-                is MethodArgumentNotValidException ->
+                is MethodArgumentNotValidException -> {
                     failure.bindingResult.fieldErrors.map { ErrorDetail(field = it.field, reason = "INVALID_VALUE") }
+                }
 
-                is ConstraintViolationException ->
+                is ConstraintViolationException -> {
                     failure.constraintViolations.map {
                         ErrorDetail(field = it.propertyPath.lastOrNull()?.name, reason = "INVALID_VALUE")
                     }
+                }
 
-                is MissingRequestHeaderException ->
+                is MissingRequestHeaderException -> {
                     listOf(ErrorDetail(field = failure.headerName, reason = "MISSING_VALUE"))
+                }
 
-                is MethodArgumentTypeMismatchException ->
+                is MethodArgumentTypeMismatchException -> {
                     listOf(ErrorDetail(field = failure.name, reason = "INVALID_FORMAT"))
+                }
 
-                is HandlerMethodValidationException ->
+                is HandlerMethodValidationException -> {
                     failure.parameterValidationResults.map {
                         ErrorDetail(field = it.methodParameter.parameterName, reason = "INVALID_VALUE")
                     }
+                }
 
-                is ConversionFailedException -> listOf(ErrorDetail(reason = "INVALID_FORMAT"))
-                is HttpMessageNotReadableException -> listOf(ErrorDetail(reason = "MALFORMED_REQUEST"))
-                else -> listOf(ErrorDetail(reason = "INVALID_VALUE"))
+                is ConversionFailedException -> {
+                    listOf(ErrorDetail(reason = "INVALID_FORMAT"))
+                }
+
+                is HttpMessageNotReadableException -> {
+                    listOf(ErrorDetail(reason = "MALFORMED_REQUEST"))
+                }
+
+                else -> {
+                    listOf(ErrorDetail(reason = "INVALID_VALUE"))
+                }
             }
         return details
             .distinct()

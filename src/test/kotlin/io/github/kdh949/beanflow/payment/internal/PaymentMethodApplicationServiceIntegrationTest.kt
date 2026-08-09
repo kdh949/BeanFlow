@@ -285,20 +285,22 @@ internal class PaymentMethodApplicationServiceIntegrationTest(
         assertThat(status("payment_method_registration", "id", registration.registrationId)).isEqualTo("PROCESSING")
         assertThat(status("payment_method_deactivation", "id", deactivation.deactivationId)).isEqualTo("PROCESSING")
         assertThat(
-            transactions.completeRegistration(
-                registrationClaim,
-                io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult.Issued(
-                    tokenReference = "fresh-registration-token",
-                    cardBrand = "VISA",
-                    lastFour = "4242",
-                ),
-            ).status,
+            transactions
+                .completeRegistration(
+                    registrationClaim,
+                    io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult.Issued(
+                        tokenReference = "fresh-registration-token",
+                        cardBrand = "VISA",
+                        lastFour = "4242",
+                    ),
+                ).status,
         ).isEqualTo(201)
         assertThat(
-            transactions.completeDeactivation(
-                deactivationClaim,
-                io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult.Deactivated,
-            ).status,
+            transactions
+                .completeDeactivation(
+                    deactivationClaim,
+                    io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult.Deactivated,
+                ).status,
         ).isEqualTo(204)
     }
 
