@@ -34,6 +34,22 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
 - Ordering은 향후 migration 이후 생성되는 OrderLine에 normalized option ID snapshot을
   보존한다. 기존 line에 검증된 snapshot이 없으면 옵션 이름, sellable requirement 또는
   현재 Merchant state로 ID를 추론하지 않고 재주문 불가로 실패한다.
+- 성공 응답은 기존 `CreateOrderResult`의 상태별 `order`와 선택적 `payment` 의미를
+  유지하되 재주문 전용 `ReorderOrderResult`로 가격 비교를 함께 반환한다.
+- 가격 비교는 혜택 적용 전 source/current 가격만 다룬다. required summary는
+  `hasPriceChanges`, `sourceSubtotalKrw`, `currentSubtotalKrw`, signed
+  `subtotalDifferenceKrw`와 `items`를 가진다. `items`에는 단가가 달라진 line만 source
+  `lineSequence` 순서로 포함한다.
+- 각 변경 item은 `sourceOrderLineId`, `lineSequence`, `menuId`, `quantity`,
+  `sourceUnitPriceKrw`, `currentUnitPriceKrw`, `sourceLineGrossKrw`,
+  `currentLineGrossKrw`, signed `lineDifferenceKrw`를 가진다. 차이는 항상 current에서
+  source를 뺀 값이다. 변경이 없으면 `hasPriceChanges=false`, subtotal difference 0과 빈
+  `items`를 반환한다.
+- source 값은 immutable OrderLine snapshot에서, current 값은 실제 새 Order에 저장한
+  Merchant quote에서 가져온다. 가격 비교와 새 Order snapshot이 다르면 성공 응답을
+  만들지 않는다. 쿠폰·포인트·payment 선택·배분 차이는 이 비교에 포함하지 않는다.
+- 가격 변경은 재주문 실패 사유가 아니다. 고객은 line별 비교가 포함된 `201`을 받는
+  시점에 이미 새 Order와 예약이 commit되었다는 결과 의미를 유지한다.
 
 ## Alternatives Considered
 
@@ -64,8 +80,7 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - target OpenAPI에 새 path와 operation이 추가되지만 구현 전까지 runtime OpenAPI에는
   추가하지 않는다.
 - 성공 시 고객은 이미 생성·예약된 Order를 받으므로 가격 확인 후 확정 단계가 없다.
-- request schema, 가격 변경 표시, source line snapshot과 실패 상세는 이 ADR의 후속
-  결정으로 계약을 닫아야 한다.
+- request schema와 실패 상세는 이 ADR의 후속 결정으로 계약을 닫아야 한다.
 - 기존 OrderLine에는 option ID snapshot이 없어 모든 기존 주문을 재주문 가능하게
   backfill할 수 없다. 구현 migration은 snapshot 부재와 옵션 없는 빈 선택을 구분해야 한다.
 - `REORDER_ORDER_V1` operation과 terminal response는 BR-26의 90일 보존 정책을 따른다.
@@ -80,6 +95,10 @@ source Order를 URI에서 명확히 식별하면서도 결과와 원자성은 �
 - Reorder Aggregate, table과 repository 부재
 - source line의 normalized option ID·수량 복사와 note 부재
 - option ID snapshot이 없는 기존 line의 명시적 실패와 이름·현재값 추론 부재
+- 가격 동일 시 빈 변경 목록과 0 difference, 가격 상승·하락 시 source line 순서의
+  정확한 signed line/subtotal difference
+- 쿠폰·포인트 선택 변경이 price-change item을 만들지 않음
+- 가격 summary와 새 OrderLine/current subtotal의 tie-out
 
 ## Metrics
 
