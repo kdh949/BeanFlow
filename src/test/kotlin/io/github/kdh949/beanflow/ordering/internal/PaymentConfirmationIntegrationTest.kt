@@ -14,16 +14,24 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, PickupSlotPaymentDeadlineTestConfiguration::class)
 @SpringBootTest(
     properties = [
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
@@ -41,11 +49,13 @@ internal class PaymentConfirmationIntegrationTest
         private val reconciliationOperations: PaymentReconciliationOperations,
         private val gateway: ScriptedTestPaymentGateway,
         private val jdbcTemplate: JdbcTemplate,
+        private val testClock: PickupSlotPaymentDeadlineTestClock,
     ) {
         @BeforeEach
         fun setUp() {
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             gateway.reset()
+            testClock.reset()
         }
 
         @Test
@@ -254,6 +264,93 @@ internal class PaymentConfirmationIntegrationTest
                 ),
             ).isEqualTo("SUCCEEDED")
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+        }
+
+        @Test
+        fun `Provider approval crossing pickup start expires the order instead of confirming the slot`() {
+            val fixture = OrderCreationFixture()
+            val pickupStartsAt = Instant.parse("2030-01-01T00:00:00Z")
+            testClock.set(pickupStartsAt.minusNanos(1))
+            val orderId = pendingOrderForPickupStart(fixture, "payment-pickup-start-approval", pickupStartsAt)
+            val paymentMethodId = insertPaymentMethod(fixture.customerId)
+            val block = gateway.blockNextApproval()
+            gateway.enqueueApproval(ProviderPaymentResult.Approved("provider-after-pickup-start", 1_000, "KRW"))
+            val executor = Executors.newSingleThreadExecutor()
+
+            try {
+                val confirmation =
+                    executor.submit<io.github.kdh949.beanflow.ordering.api.StoredHttpResponse> {
+                        confirmationService.confirm(
+                            fixture.customerId,
+                            orderId,
+                            paymentMethodId,
+                            "payment-pickup-start-key",
+                        )
+                    }
+                assertThat(block.awaitStarted()).isTrue()
+                testClock.set(pickupStartsAt)
+                block.release()
+
+                assertThat(confirmation.get(10, TimeUnit.SECONDS).status).isEqualTo(202)
+            } finally {
+                block.release()
+                executor.shutdownNow()
+            }
+
+            assertThat(
+                value<Instant>("SELECT reservation_expires_at FROM ordering_order WHERE id = ?", orderId),
+            ).isEqualTo(pickupStartsAt)
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(
+                value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId),
+            ).isEqualTo("EXPIRED")
+            assertThat(
+                value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId),
+            ).isEqualTo("RECONCILING")
+        }
+
+        @Test
+        fun `UNKNOWN lookup approval crossing pickup start stays expired and enters late reconciliation`() {
+            val fixture = OrderCreationFixture()
+            val pickupStartsAt = Instant.parse("2030-01-01T00:00:00Z")
+            testClock.set(pickupStartsAt.minusNanos(1))
+            val orderId = pendingOrderForPickupStart(fixture, "payment-pickup-start-unknown", pickupStartsAt)
+            val paymentMethodId = insertPaymentMethod(fixture.customerId)
+            gateway.enqueueApproval(ProviderPaymentResult.Unknown("RESPONSE_LOST"))
+
+            assertThat(
+                confirmationService
+                    .confirm(
+                        fixture.customerId,
+                        orderId,
+                        paymentMethodId,
+                        "payment-pickup-start-unknown-key",
+                    ).status,
+            ).isEqualTo(202)
+            testClock.set(pickupStartsAt)
+            jdbcTemplate.update(
+                "UPDATE payment_reconciliation SET next_attempt_at = ? WHERE kind = 'APPROVAL_LOOKUP' " +
+                    "AND payment_id = (SELECT id FROM payment_payment WHERE order_id = ?)",
+                Timestamp.from(pickupStartsAt.minusSeconds(1)),
+                orderId,
+            )
+            gateway.enqueueLookup(ProviderPaymentResult.Approved("provider-late-lookup", 1_000, "KRW"))
+
+            assertThat(reconciliationWorker.runOnce()).isEqualTo(1)
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(
+                value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId),
+            ).isEqualTo("EXPIRED")
+            assertThat(
+                value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId),
+            ).isEqualTo("RECONCILING")
+            assertThat(
+                value<Long>(
+                    "SELECT count(*) FROM payment_reconciliation WHERE kind = 'LATE_VOID' " +
+                        "AND payment_id = (SELECT id FROM payment_payment WHERE order_id = ?)",
+                    orderId,
+                ),
+            ).isEqualTo(1)
         }
 
         @Test
@@ -580,6 +677,22 @@ internal class PaymentConfirmationIntegrationTest
             return value("SELECT id FROM ordering_order")
         }
 
+        private fun pendingOrderForPickupStart(
+            fixture: OrderCreationFixture,
+            key: String,
+            pickupStartsAt: Instant,
+        ): UUID {
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            jdbcTemplate.update(
+                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
+                Timestamp.from(pickupStartsAt),
+                Timestamp.from(pickupStartsAt.plusSeconds(600)),
+                fixture.pickupSlotId,
+            )
+            assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
+            return value("SELECT id FROM ordering_order")
+        }
+
         private fun insertPaymentMethod(
             customerId: UUID,
             status: String = "ACTIVE",
@@ -634,3 +747,44 @@ internal class PaymentConfirmationIntegrationTest
             vararg args: Any,
         ): T = requireNotNull(jdbcTemplate.queryForObject(sql, T::class.java, *args))
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class PickupSlotPaymentDeadlineTestConfiguration {
+    @Bean
+    @Primary
+    fun pickupSlotPaymentDeadlineTestClock(): PickupSlotPaymentDeadlineTestClock = PickupSlotPaymentDeadlineTestClock()
+}
+
+/**
+ * A clock that does not move, so a test controls every instant the application sees.
+ *
+ * It reads at microsecond precision on purpose. Work is scheduled at `now` and claimed with
+ * `nextAttemptAt <= now`, and PostgreSQL rounds a `timestamptz` to microseconds on the way in. A
+ * finer instant can therefore come back *later* than the clock still reports, leaving work that was
+ * scheduled for right now permanently not due. A moving clock hides this; a fixed one cannot.
+ * `Instant.now()` is microsecond-aligned on macOS and nanosecond-precise on Linux, so without this
+ * the outcome would depend on the host.
+ */
+internal class PickupSlotPaymentDeadlineTestClock(
+    private val source: () -> Instant = Instant::now,
+) : Clock() {
+    private val current = AtomicReference(storable(source()))
+
+    fun reset() {
+        current.set(storable(source()))
+    }
+
+    fun set(now: Instant) {
+        current.set(storable(now))
+    }
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = this
+
+    override fun instant(): Instant = current.get()
+
+    private companion object {
+        fun storable(instant: Instant): Instant = instant.truncatedTo(ChronoUnit.MICROS)
+    }
+}

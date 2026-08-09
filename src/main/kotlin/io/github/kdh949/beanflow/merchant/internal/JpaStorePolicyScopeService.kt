@@ -27,4 +27,18 @@ internal class JpaStorePolicyScopeService(
             throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         }
     }
+
+    @Transactional(readOnly = true)
+    override fun pickupOrderingAvailable(storeId: UUID): Boolean {
+        val store =
+            try {
+                storeRepository.findById(storeId).orElse(null)
+            } catch (failure: DataAccessException) {
+                throw DomainFailure(
+                    FailureCode.DEPENDENCY_UNAVAILABLE,
+                    "Store policy scope could not be verified",
+                ).also { it.initCause(failure) }
+            } ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
+        return store.acceptingOrders && store.pickupEnabled
+    }
 }

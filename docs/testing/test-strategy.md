@@ -19,6 +19,10 @@
 - 위치 기능은 PostGIS 이미지 또는 확장을 실제로 사용한다.
 - 외부 PG·알림은 성공, 명시 거절, timeout, malformed response, ACK 유실을 재현 가능한 Adapter로 테스트한다.
 - 운영 profile에서 fake Adapter가 활성화되지 않는 startup test를 둔다.
+- 저장되는 시각을 만드는 시계는 microsecond보다 정밀한 값을 내지 않는다. `timestamptz`는 microsecond로
+  반올림하므로 더 정밀한 값은 읽을 때 달라지고, 멈춘 시계에서는 `now`에 예약한 작업이 `<= now` 조회에
+  영원히 걸리지 않을 수 있다. `Instant.now()`가 macOS에서는 microsecond, Linux에서는 nanosecond라
+  이 결함은 개발 머신에서 드러나지 않는다. `FixedTestClockPrecisionTest`가 두 test clock을 고정한다.
 
 ## Risk-first examples
 
@@ -125,13 +129,16 @@
 - Cursor: 다른 radius/좌표 filter, 다른 endpoint scope, unknown key ID, signature 변조, 만료 token,
   oversized/empty token이 모두 400이며 첫 page로 조용히 되돌아가지 않는다.
 - Privacy: 응답 body, 400 error body, metric tag와 `operations_audit_record`에 원본 좌표가 없고
-  Discovery read는 audit record와 domain event를 만들지 않는다.
+  Discovery read는 audit record와 domain event를 만들지 않는다. root logger에 붙인 Logback
+  appender가 성공·검증 실패·PostGIS 실패 경로에서 formatted message, argument array, MDC,
+  throwable chain을 모두 검사한다. Spring `StatementCreatorUtils` TRACE 로깅은 실제로 좌표를
+  노출하므로 그 사실과 DEBUG에서의 비노출을 양방향으로 고정한다.
 - Failure: 주입한 spatial 실패가 `DEPENDENCY_UNAVAILABLE` 503과
   `beanflow.discovery.spatial.failure{reason}`로 관측되고 빈 200이나 local 계산으로 대체되지 않으며,
   원인 제거 뒤 같은 요청이 정상 결과를 돌려준다.
 - Migration/startup gate: V33 schema와 GiST index, `merchant_store` 컬럼 불변, empty/exact coverage
-  통과, unresolved row의 migration 중단, missing/orphan/blank-name/non-point profile과 extension
-  제거의 startup 실패.
+  통과, unresolved row의 V34 중단과 V33~V34 사이 profile 적재 후 정상 통과,
+  missing/orphan/blank-name/non-point/`POINT EMPTY` profile과 extension 제거의 startup 실패.
 - Persistence/performance: PostgreSQL 17/PostGIS 3.5 Testcontainers와
   [고정 5,000-row query-plan evidence](../quality/nearby-store-discovery-performance-evidence.md).
 

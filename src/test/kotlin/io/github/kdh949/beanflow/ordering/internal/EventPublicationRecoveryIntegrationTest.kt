@@ -40,6 +40,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -463,11 +464,19 @@ internal class PublicationFailureTestConfiguration {
     fun failingReadyPublicationListener(): FailingReadyPublicationListener = FailingReadyPublicationListener()
 }
 
-internal class PublicationRecoveryTestClock : Clock() {
-    private val current = AtomicReference(Instant.now())
+/**
+ * A clock the test moves by hand. Like [PickupSlotPaymentDeadlineTestClock] it reads at microsecond
+ * precision, because PostgreSQL rounds a `timestamptz` to microseconds and this test claims due work
+ * without advancing the clock first; a finer instant could be stored as later than the clock reports
+ * and leave that work permanently not due.
+ */
+internal class PublicationRecoveryTestClock(
+    private val source: () -> Instant = Instant::now,
+) : Clock() {
+    private val current = AtomicReference(source().truncatedTo(ChronoUnit.MICROS))
 
     fun reset() {
-        current.set(Instant.now())
+        current.set(source().truncatedTo(ChronoUnit.MICROS))
     }
 
     fun advance(duration: Duration) {

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.fulfillment.internal.PICKUP_SLOT_QUERY_HORIZON
 import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotQueryRepository
 import io.github.kdh949.beanflow.merchant.internal.StoreMenuQueryRepository
 import org.assertj.core.api.Assertions.assertThat
@@ -23,10 +24,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
 /**
- * Statement-count regression for the catalogue projections.
+ * Statement-count regression for the catalogue projections themselves.
  *
  * The number of SQL statements must not grow with the number of menus, options or slots. The
  * counting data source wraps only this test's connections, so the application context is untouched.
+ *
+ * These are per-repository counts, not endpoint totals: a request also verifies store identity and
+ * availability. `DiscoveryStoreCatalogEndpointQueryCountTest` pins what a whole HTTP request issues.
  */
 @Testcontainers(disabledWithoutDocker = true)
 internal class DiscoveryStoreCatalogQueryCountTest {
@@ -42,6 +46,7 @@ internal class DiscoveryStoreCatalogQueryCountTest {
         private val smallStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000001")
         private val largeStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000002")
         private val now: Instant = Instant.parse("2026-08-07T00:00:00Z")
+        private val horizonEnd: Instant = now.plus(PICKUP_SLOT_QUERY_HORIZON)
 
         @BeforeAll
         @JvmStatic
@@ -109,7 +114,8 @@ internal class DiscoveryStoreCatalogQueryCountTest {
                     """.trimIndent(),
                     UUID.nameUUIDFromBytes("catalog-count:$storeId:slot:$slotIndex".toByteArray()),
                     storeId,
-                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex))),
+                    // Every slot starts after `now`, which is the window findOpenSlots projects.
+                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 5))),
                     Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 25))),
                     4L,
                 )
@@ -138,12 +144,12 @@ internal class DiscoveryStoreCatalogQueryCountTest {
 
     @Test
     fun `pickup slot projection uses a single statement regardless of slot count`() {
-        val small = countStatements { slotRepository.findOpenSlots(smallStore, now) }
-        val large = countStatements { slotRepository.findOpenSlots(largeStore, now) }
+        val small = countStatements { slotRepository.findOpenSlots(smallStore, now, horizonEnd) }
+        val large = countStatements { slotRepository.findOpenSlots(largeStore, now, horizonEnd) }
 
         assertThat(small).isOne()
         assertThat(large).isOne()
-        assertThat(slotRepository.findOpenSlots(largeStore, now)).hasSize(40)
+        assertThat(slotRepository.findOpenSlots(largeStore, now, horizonEnd)).hasSize(40)
     }
 
     @Test

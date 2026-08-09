@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
+import io.github.kdh949.beanflow.merchant.internal.MAX_STORE_MENUS
+import io.github.kdh949.beanflow.merchant.internal.MAX_STORE_MENU_OPTIONS
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -159,9 +161,12 @@ internal class DiscoveryStoreCatalogIntegrationTest
         }
 
         @Test
-        fun `pickup slots return open windows in time order with non negative remaining capacity`() {
+        fun `pickup slots return reservable windows in time order with non negative remaining capacity`() {
             val now = clock.instant()
             val ended = insertSlot(storeId, now.minus(Duration.ofHours(2)), now.minus(Duration.ofHours(1)), capacity = 5)
+            // Already started but not yet finished. It is excluded because BR-05 no longer allows
+            // reserving it, so listing it would advertise a slot the write path would reject.
+            val inProgress = insertSlot(storeId, now.minus(Duration.ofMinutes(5)), now.plus(Duration.ofMinutes(25)), capacity = 5)
             val soon = insertSlot(storeId, now.plus(Duration.ofMinutes(30)), now.plus(Duration.ofMinutes(60)), capacity = 4)
             val later = insertSlot(storeId, now.plus(Duration.ofHours(3)), now.plus(Duration.ofHours(4)), capacity = 2)
             val full =
@@ -181,7 +186,8 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .andExpect(jsonPath("$.items.length()").value(3))
                 .andExpect(jsonPath("$.items[0].pickupSlotId").value(soon.toString()))
                 .andExpect(jsonPath("$.items[0].remainingCapacity").value(4))
-                // Capacity is fully taken by reserved plus confirmed counts, so the slot is zero, not negative.
+                // Reserved plus confirmed exactly exhausts capacity, so the arithmetic itself is zero.
+                // Nothing clamps it; a negative value would be a corrupted counter and fails the read.
                 .andExpect(jsonPath("$.items[1].pickupSlotId").value(full.toString()))
                 .andExpect(jsonPath("$.items[1].remainingCapacity").value(0))
                 .andExpect(jsonPath("$.items[2].pickupSlotId").value(later.toString()))
@@ -193,8 +199,152 @@ internal class DiscoveryStoreCatalogIntegrationTest
                     .andReturn()
                     .response.contentAsString
             assertThat(body).doesNotContain(ended.toString())
+            assertThat(body).doesNotContain(inProgress.toString())
             assertThat(fieldNames(body, "$.items[0]"))
                 .containsExactlyInAnyOrder("pickupSlotId", "startsAt", "endsAt", "remainingCapacity")
+        }
+
+        @Test
+        fun `a catalogue past the published bound fails explicitly instead of returning truncated rows`() {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
+                SELECT gen_random_uuid(), ?, 'Menu ' || lpad(i::text, 6, '0'), 1000, true, 0
+                  FROM generate_series(1, ?) AS i
+                """.trimIndent(),
+                storeId,
+                MAX_STORE_MENUS + 1,
+            )
+
+            // Truncating to 1,000 would look like a complete catalogue to the caller.
+            mockMvc
+                .perform(get(menuPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
+        fun `a pickup slot list past the published bound fails instead of returning a partial seven day window`() {
+            val now = clock.instant()
+            jdbcTemplate.update(
+                """
+                INSERT INTO fulfillment_pickup_slot (
+                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+                )
+                SELECT gen_random_uuid(), ?, ?::timestamptz + i * interval '5 minutes',
+                       ?::timestamptz + i * interval '5 minutes' + interval '4 minutes', 1, 0, 0, 0
+                  FROM generate_series(1, 1001) AS i
+                """.trimIndent(),
+                storeId,
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+
+            mockMvc
+                .perform(get(slotPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
+        fun `an option count past the published bound fails explicitly`() {
+            val menuId = insertMenu(storeId, "Americano", 4_500, available = true)
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available)
+                SELECT gen_random_uuid(), ?, 'Option ' || lpad(i::text, 6, '0'), 100, true
+                  FROM generate_series(1, ?) AS i
+                """.trimIndent(),
+                menuId,
+                MAX_STORE_MENU_OPTIONS + 1,
+            )
+
+            mockMvc
+                .perform(get(menuPath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+        }
+
+        @Test
+        fun `the slot list reaches seven days ahead and stops there`() {
+            val now = clock.instant()
+            val inside = insertSlot(storeId, now.plus(Duration.ofDays(7)).minusSeconds(60), now.plus(Duration.ofDays(7)), capacity = 1)
+            val outside =
+                insertSlot(
+                    storeId,
+                    now.plus(Duration.ofDays(7)).plusSeconds(60),
+                    now.plus(Duration.ofDays(7)).plusSeconds(600),
+                    capacity = 1,
+                )
+
+            val body =
+                mockMvc
+                    .perform(get(slotPath(storeId)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+                    .response.contentAsString
+
+            // The bound is a horizon, not a row limit: everything inside it is returned in full.
+            assertThat(body).contains(inside.toString())
+            assertThat(body).doesNotContain(outside.toString())
+        }
+
+        @Test
+        fun `a store that cannot take pickup orders lists no slot even though slots exist`() {
+            val closed = UUID.fromString("30000000-0000-0000-0000-000000000003")
+            val pickupDisabled = UUID.fromString("30000000-0000-0000-0000-000000000004")
+            insertStore(closed, acceptingOrders = false)
+            insertStore(pickupDisabled, pickupEnabled = false)
+            val now = clock.instant()
+            listOf(closed, pickupDisabled).forEach {
+                insertSlot(it, now.plus(Duration.ofHours(1)), now.plus(Duration.ofHours(2)), capacity = 5)
+                insertMenu(it, "Americano", 4_500, available = true)
+            }
+
+            listOf(closed, pickupDisabled).forEach { unavailable ->
+                // Every one of these slots would be rejected at order creation, so none is listed.
+                mockMvc
+                    .perform(get(slotPath(unavailable)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(0))
+                // The store exists, so this is 200 with an empty list, never 404.
+                mockMvc
+                    .perform(get(menuPath(unavailable)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+            }
+        }
+
+        @Test
+        fun `a corrupted counter is reported as 503 instead of a clamped remaining capacity`() {
+            val now = clock.instant()
+            insertSlot(storeId, now.plus(Duration.ofHours(1)), now.plus(Duration.ofHours(2)), capacity = 1)
+            mockMvc
+                .perform(get(slotPath(storeId)).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].remainingCapacity").value(1))
+
+            // The table's own CHECK keeps reserved + confirmed <= capacity, so an over-committed
+            // counter can only be simulated. The query must not clamp it into a plausible zero.
+            installCorruptedCounterView()
+            try {
+                mockMvc
+                    .perform(get(slotPath(storeId)).with(customerJwt()))
+                    .andExpect(status().isServiceUnavailable)
+                    .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                    .andExpect(jsonPath("$.items").doesNotExist())
+            } finally {
+                dropFailureView("fulfillment_pickup_slot")
+            }
+
+            mockMvc
+                .perform(get(slotPath(storeId)).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].remainingCapacity").value(1))
         }
 
         @Test
@@ -281,11 +431,16 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .jwt { it.subject(UUID.randomUUID().toString()).claim("roles", listOf(role)) }
                 .authorities(SimpleGrantedAuthority("ROLE_$role"))
 
-        private fun insertStore(storeId: UUID) =
-            jdbcTemplate.update(
-                "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
-                storeId,
-            )
+        private fun insertStore(
+            storeId: UUID,
+            acceptingOrders: Boolean = true,
+            pickupEnabled: Boolean = true,
+        ) = jdbcTemplate.update(
+            "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, ?, ?, 0)",
+            storeId,
+            acceptingOrders,
+            pickupEnabled,
+        )
 
         private fun insertMenu(
             storeId: UUID,
@@ -374,6 +529,19 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 """.trimIndent(),
             )
             jdbcTemplate.execute("CREATE VIEW $table AS SELECT * FROM test_reject_$table()")
+        }
+
+        /** Swaps the slot table for a view whose confirmed count exceeds capacity. */
+        private fun installCorruptedCounterView() {
+            jdbcTemplate.execute("ALTER TABLE fulfillment_pickup_slot RENAME TO fulfillment_pickup_slot_actual")
+            jdbcTemplate.execute(
+                """
+                CREATE VIEW fulfillment_pickup_slot AS
+                SELECT id, store_id, starts_at, ends_at, capacity, reserved_count,
+                       confirmed_count + capacity + 1 AS confirmed_count, version
+                  FROM fulfillment_pickup_slot_actual
+                """.trimIndent(),
+            )
         }
 
         private fun dropFailureView(table: String) {

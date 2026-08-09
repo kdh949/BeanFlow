@@ -382,3 +382,29 @@ condition을 사용했고 p50은 0.397 ms → 1.850 ms였다. 비교 가능한 �
 - 2026-08-07: Milestone 4~5를 완료했다. 메뉴·픽업 슬롯 owner projection과 Discovery catalogue
   endpoint, statement-count 회귀, 재현 가능한 두 규모 measurement를 추가하고 plan을 `COMPLETED`로
   옮겼다.
+- 2026-08-08 (post-merge review remediation): 아래 "남은 작업과 후속 조건"의 첫 항목이던
+  read/write 창 불일치가 제품 결정으로 해소됐다. 예약 가능 창은 `startsAt > now`로 확정하고
+  쓰기 경로에 검증을 추가했으며, 조회 predicate를 `ends_at > now`에서 `starts_at > now`로 맞췄다.
+  잔여 capacity의 `GREATEST(..., 0)` clamp도 제거해 손상된 counter가 503으로 드러나게 했다.
+  같은 결정에서 카탈로그 조회의 나머지 경계도 닫았다. 슬롯 목록은 7일 horizon,
+  `acceptingOrders && pickupEnabled`가 아닌 매장은 빈 목록, 메뉴는 매장당 1,000개·옵션 5,000개
+  published bound를 넘으면 잘린 목록 대신 503이다. 결정은
+  [ADR-076](../../adr/ADR-076-store-catalog-read-contract.md)과 BR-05 Slot Reservation Window
+  Amendment에 기록했고 MD-2026-010은 `Superseded`다. 이 항목 위의 서술은 그 시점의 기록이므로
+  덮어쓰지 않는다.
+- 2026-08-08 (post-merge review remediation, Milestone 1~3 범위): 같은 리뷰의 나머지 지적을
+  반영했다.
+  - V33을 스키마 전용으로 남기고 coverage gate를 V34로 분리했다. 기존 Store가 있는 배포는
+    `target=33` → 검증된 profile 적재 → 나머지 migration의 2단계로 진행한다. 분리 전에는 table
+    생성과 coverage 단언이 한 migration이라 profile을 넣을 수 있는 순간 자체가 없었다.
+  - `POINT EMPTY`를 table CHECK와 startup precheck 양쪽에서 거부한다. column type,
+    `GeometryType()`, `ST_IsValid()`를 모두 통과하지만 `ST_DWithin`에는 절대 잡히지 않아 해당
+    Store가 조용히 검색 불가가 된다.
+  - 좌표 입력 문법을 OpenAPI `type: number, format: double`의 유한 부분집합으로 넓혔다.
+    `1e-7`, `1E2`, `+37.5`는 계약상 유효한데 400으로 거절되고 있었다. filter hash의 canonical
+    form은 그대로 plain decimal이라 `37.5`/`+37.5`/`37.50`/`3.75e1`은 같은 hash로 모인다.
+    MD-2026-008을 개정했다.
+  - 좌표 비노출을 실제 Logback appender capture로 검증한다. 성공·검증 실패·PostGIS 실패 세
+    경로에서 formatted message, argument array, MDC, throwable chain 전체를 검사한다.
+  - endpoint 전체가 발행하는 statement 수를 application data source를 감싸 측정하는 테스트를
+    추가했다. 기존 repository 단위 count는 endpoint 총량이 아니라는 점을 두 테스트 doc에 명시했다.
