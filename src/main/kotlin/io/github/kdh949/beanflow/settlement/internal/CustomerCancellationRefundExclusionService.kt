@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
@@ -91,6 +92,7 @@ internal class CustomerCancellationRefundExclusionService(
                     AppendAuditRecordCommand(
                         actorId = SYSTEM_ACTOR,
                         actorType = AuditActorType.SYSTEM,
+                        category = AuditCategory.SETTLEMENT_AND_DISPUTE,
                         action = AUDIT_ACTION,
                         targetType = AUDIT_TARGET_TYPE,
                         targetId = event.refundId,

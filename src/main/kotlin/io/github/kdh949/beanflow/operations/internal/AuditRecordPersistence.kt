@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
+import io.github.kdh949.beanflow.operations.api.RetentionClass
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -8,10 +10,7 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.Immutable
-import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
@@ -26,6 +25,9 @@ internal class AuditRecordEntity(
     @Enumerated(EnumType.STRING)
     @Column(name = "actor_type", nullable = false)
     val actorType: AuditActorType,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "audit_category", nullable = false)
+    val category: AuditCategory,
     @Column(nullable = false)
     val action: String,
     @Column(name = "target_type", nullable = false)
@@ -46,6 +48,11 @@ internal class AuditRecordEntity(
     val sourceReference: String,
     @Column(name = "retention_expires_at", nullable = false)
     val retentionExpiresAt: Instant,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "retention_class", nullable = false)
+    val retentionClass: RetentionClass,
+    @Column(name = "retention_policy_version_id", nullable = false)
+    val retentionPolicyVersionId: Long,
 )
 
 internal interface AuditRecordJpaRepository : JpaRepository<AuditRecordEntity, UUID> {
@@ -55,13 +62,4 @@ internal interface AuditRecordJpaRepository : JpaRepository<AuditRecordEntity, U
         targetId: UUID,
         sourceReference: String,
     ): Boolean
-
-    @Query(
-        "select record.id from AuditRecordEntity record " +
-            "where record.retentionExpiresAt <= :now order by record.retentionExpiresAt, record.id",
-    )
-    fun findDueIds(
-        @Param("now") now: Instant,
-        pageable: Pageable,
-    ): List<UUID>
 }

@@ -11,9 +11,62 @@ enum class AuditActorType {
     SYSTEM,
 }
 
+enum class AuditCategory {
+    FINANCIAL_TRANSACTION,
+    ORDER_AND_FULFILLMENT,
+    SETTLEMENT_AND_DISPUTE,
+    SECURITY_AND_PERMISSION,
+    OPERATIONS_POLICY,
+    PII_ACCESS,
+}
+
+enum class RetentionPolicyCategory {
+    FINANCIAL_TRANSACTION,
+    ORDER_AND_FULFILLMENT,
+    SETTLEMENT_AND_DISPUTE,
+    SECURITY_AND_PERMISSION,
+    OPERATIONS_POLICY,
+    PII_ACCESS,
+    SUPPORT_CASE,
+    DELIVERY_CONTACT,
+    CURRENT_LOCATION,
+    PROVIDER_RAW_WEBHOOK,
+}
+
+enum class RetentionClass {
+    FINANCIAL_AUDIT,
+    SUPPORT_CASE,
+    PII_ACCESS_AUDIT,
+    DELIVERY_CONTACT,
+    CURRENT_LOCATION,
+    PROVIDER_RAW_WEBHOOK,
+}
+
+enum class RetentionDurationBasis {
+    SEOUL_CALENDAR_YEARS,
+    SEOUL_CALENDAR_YEARS_FROM_CASE_CLOSE,
+    EXACT_DAYS_FROM_TERMINAL,
+    EXACT_HOURS_FROM_EVENT,
+    EXACT_DAYS_FROM_RECEIPT,
+}
+
+data class RetentionPolicyVersionSnapshot(
+    val policyVersionId: Long,
+    val category: RetentionPolicyCategory,
+    val retentionClass: RetentionClass,
+    val durationBasis: RetentionDurationBasis,
+    val durationValue: Int,
+)
+
+interface RetentionPolicyOperations {
+    /** Reads and locks the current immutable version in the caller's local transaction. */
+    fun current(category: RetentionPolicyCategory): RetentionPolicyVersionSnapshot
+}
+
 data class AppendAuditRecordCommand(
     val actorId: String,
     val actorType: AuditActorType,
+    val category: AuditCategory,
     val action: String,
     val targetType: String,
     val targetId: UUID,

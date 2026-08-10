@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperation
 import io.github.kdh949.beanflow.eventing.api.SettlementBatchConfirmedV1
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -130,6 +131,7 @@ internal class SettlementBatchLifecycleService(
                     AppendAuditRecordCommand(
                         actorId = SYSTEM_ACTOR,
                         actorType = AuditActorType.SYSTEM,
+                        category = AuditCategory.SETTLEMENT_AND_DISPUTE,
                         action = "SETTLEMENT_BATCH_CONFIRMED",
                         targetType = "SETTLEMENT_BATCH",
                         targetId = batch.id,

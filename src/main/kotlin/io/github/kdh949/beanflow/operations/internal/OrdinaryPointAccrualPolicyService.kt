@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.operations.internal
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
@@ -261,6 +262,7 @@ internal class OrdinaryPointAccrualPolicyService(
                 AppendAuditRecordCommand(
                     actorId = command.actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.OPERATIONS_POLICY,
                     action = "POINT_ACCRUAL_POLICY_CHANGED",
                     targetType = "POINT_ACCRUAL_POLICY_HEAD",
                     targetId = command.scopeReference,

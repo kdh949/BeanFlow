@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.CustomerCancellationRefundReconciliationOperations
 import io.github.kdh949.beanflow.operations.api.InspectPaymentCancellationSetupCommand
@@ -106,6 +107,7 @@ internal class CustomerCancellationRefundReconciliationService(
                 AppendAuditRecordCommand(
                     actorId = command.actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = AUDIT_ACTION,
                     targetType = "ORDER",
                     targetId = command.orderId,

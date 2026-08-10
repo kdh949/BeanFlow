@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.operations.internal
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.ListOrdinaryPointAccrualPolicyVersionsCommand
 import io.github.kdh949.beanflow.operations.api.ListStorePointAccrualPolicyHeadsCommand
@@ -178,6 +179,7 @@ internal class OrdinaryPointAccrualPolicyQueryService(
                         AppendAuditRecordCommand(
                             actorId = actorId.toString(),
                             actorType = AuditActorType.PLATFORM_OPERATOR,
+                            category = AuditCategory.OPERATIONS_POLICY,
                             action = "POINT_ACCRUAL_POLICY_READ",
                             targetType = endpoint,
                             targetId = targetId,

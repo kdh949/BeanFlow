@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.eventing.api.FinancialEventPublicationOperation
 import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchView
@@ -79,6 +80,7 @@ internal class SettlementAdjustmentService(
                     AppendAuditRecordCommand(
                         actorId = SYSTEM_ACTOR,
                         actorType = AuditActorType.SYSTEM,
+                        category = AuditCategory.SETTLEMENT_AND_DISPUTE,
                         action = "SETTLEMENT_ADJUSTMENT_CREATED",
                         targetType = "SETTLEMENT_ADJUSTMENT",
                         targetId = adjustment.id,

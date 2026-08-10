@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
@@ -106,6 +107,7 @@ internal class PaymentCancellationSetupIntegrityService(
                     AppendAuditRecordCommand(
                         actorId = SYSTEM_ACTOR,
                         actorType = AuditActorType.SYSTEM,
+                        category = AuditCategory.FINANCIAL_TRANSACTION,
                         action = ACTION,
                         targetType = TARGET_TYPE,
                         targetId = command.orderId,

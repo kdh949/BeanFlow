@@ -13,6 +13,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointTransactionView
 import io.github.kdh949.beanflow.loyalty.api.PointTransactionViewType
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
@@ -383,6 +384,7 @@ internal class PointAdjustmentTransaction(
         return AppendAuditRecordCommand(
             actorId = command.actorId.toString(),
             actorType = AuditActorType.PLATFORM_OPERATOR,
+            category = AuditCategory.FINANCIAL_TRANSACTION,
             action = "POINT_ADJUSTMENT_APPLIED",
             targetType = "POINT_ACCOUNT",
             targetId = command.pointAccountId,

@@ -10,6 +10,7 @@ import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificati
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot
@@ -532,6 +533,7 @@ internal class CustomerCancellationTransaction(
                 AppendAuditRecordCommand(
                     actorId = "SYSTEM",
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.ORDER_AND_FULFILLMENT,
                     action = "ACCEPTANCE_TIMEOUT_WORK_REQUESTED",
                     targetType = "ACCEPTANCE_TIMEOUT_WORK",
                     targetId = work.id,
@@ -727,6 +729,7 @@ internal class CustomerCancellationTransaction(
     ) = AppendAuditRecordCommand(
         actorId = customerId.toString(),
         actorType = AuditActorType.CUSTOMER,
+        category = AuditCategory.ORDER_AND_FULFILLMENT,
         action = action,
         targetType = targetType,
         targetId = targetId,

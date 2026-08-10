@@ -10,6 +10,7 @@ import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.operations.api.SettlementDisputeReprocessingCaseOperations
@@ -265,6 +266,7 @@ internal class SettlementDisputeFilingService(
         AppendAuditRecordCommand(
             actorId = actorId.toString(),
             actorType = AuditActorType.STORE_OWNER,
+            category = AuditCategory.SETTLEMENT_AND_DISPUTE,
             action = "SETTLEMENT_DISPUTE_FILED",
             targetType = "SETTLEMENT_DISPUTE",
             targetId = id,
@@ -476,6 +478,7 @@ internal class SettlementDisputeDecisionService(
         AppendAuditRecordCommand(
             actorId = SYSTEM_ACTOR,
             actorType = AuditActorType.SYSTEM,
+            category = AuditCategory.SETTLEMENT_AND_DISPUTE,
             action = "SETTLEMENT_DISPUTE_DECIDED",
             targetType = "SETTLEMENT_DISPUTE",
             targetId = id,

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.CompensationBenefitPolicyReference
 import io.github.kdh949.beanflow.operations.api.CompensationStep
@@ -67,6 +68,7 @@ internal class OperatorCompensationQueryService(
                 AppendAuditRecordCommand(
                     actorId = command.actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = "ORDER_COMPENSATION_READ",
                     targetType = "ORDER_COMPENSATION_CASE",
                     targetId = beanCase.caseId,
