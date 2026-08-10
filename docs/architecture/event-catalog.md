@@ -248,3 +248,7 @@ rollback 기간이 끝날 때까지 유지한다. 이중 발행은 별도 Accept
   기준은 BR-16의 `OrderCompleted`이고, payment/refund fact는 금액 입력과 조정에 사용한다.
 - event consumer 실패는 publication을 완료 처리하지 않으며 retry count, last failure와
   manual recovery 경로를 보존한다.
+
+Support, Delivery와 Retention의 신규 event vocabulary와 최소 envelope는
+[Support event catalog](support-event-catalog.md)에 기록한다. 구현 Stage는 owner source/version
+멱등키와 PII-free payload를 확정한 뒤 해당 target/runtime 계약을 갱신한다.

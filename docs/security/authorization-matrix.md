@@ -146,3 +146,14 @@ Order 표현은 역할별로 분리한다. 고객용 `Order`는 `cancelledAt`,
 evidence reference와 Idempotency-Key가 없으면 실행할 수 없다. issuer와 만료는
 양수 adjustment의 immutable 비용·가치 snapshot이며 actor나 customer에서 추론하지
 않는다(ADR-066).
+
+## Support planning matrix
+
+Support role은 coarse bundle일 뿐이다. 모든 Support request는 active persistent permission,
+Case state/assignment, Subject/object relation, purpose-bound verification, field grant 또는 exact
+approval revision과 owner state/version을 결합한다. unknown 조합은 DENIED다. R3 requester,
+Support Manager, Operations reviewer와 executor separation을 서버와 DB 제약으로 검증한다.
+
+정확한 capability 표와 negative fixture 계획은 [Support role matrix](support-role-permission-matrix.md),
+[object authorization](support-object-level-authorization.md),
+[planned test strategy](../testing/support-test-strategy.md)를 따른다.

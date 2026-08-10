@@ -29,6 +29,11 @@ Dispute ── accepted adjustment command ──> Settlement
 
 All transaction contexts ── failures/audit facts ──> Operations
 All source contexts ── idempotent business facts ──> Analytics
+
+Identity / Merchant / Delivery ── masked profile and subject DTOs ──> Support
+Transaction Contexts ── timeline facts and typed commands ──> Support
+Support ── Case-bound typed command; never Repository/table access ──> owner Context
+Support <── investigation reference and decision ──> Operations
 ```
 
 ## Relationship rules
@@ -57,6 +62,8 @@ All source contexts ── idempotent business facts ──> Analytics
 | Settlement | Dispute | Settlement / Dispute | confirmed Item·Batch view와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 별도 Settlement transaction의 명시적 명령 |
 | Transaction Contexts | Operations | 원본 Context | failure/audit fact와 reconciliation case | eventual, 원본 상태 보존 |
 | Transaction contexts | Analytics | 원본 Context | idempotent event | eventual, 재집계 가능 |
+| Owner Contexts | Support | Owner Context | masked DTO/query projection과 typed command result | 조회는 요청 시, 변경은 owner local transaction |
+| Support | Operations | Support / Operations | immutable request/investigation references | eventual handoff; approval은 exact revision에 귀속 |
 
 Operations로 향하는 두 경로를 구분한다. 사후 관측인 failure/reconciliation case는
 eventual이지만, 주문 종료 transaction이 만드는 보상 Case와 target AuditRecord는 원

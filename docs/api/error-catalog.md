@@ -97,6 +97,42 @@ envelope의 확정 실패가 아니다. 각각 target OpenAPI의 202 진행 repr
 manual-review 상태를 노출하지 않는다. `PAYMENT_METHOD_PROVIDER_UNAVAILABLE`은 raw Provider
 code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은 key로만 재시도한다.
 
+## Proposed Support error-code candidates
+
+| Code | HTTP/representation | Retry | Meaning |
+|---|---:|---|---|
+| SUPPORT_CASE_NOT_ACTIVE | 409 | after reopen | resolved/closed Case에서 일반 작업 시도 |
+| SUPPORT_CASE_NOT_ASSIGNED | 403 | after assignment | privileged action의 current assignee 불일치 |
+| SUPPORT_SUBJECT_NOT_LINKED | 403 | after link | Case와 target Subject 관계 없음 |
+| INSUFFICIENT_VERIFICATION | 403 | after step-up | purpose/action에 필요한 level 미달 |
+| VERIFICATION_EXPIRED | 409 | new session | 만료된 session |
+| VERIFICATION_LOCKED | 409 | after lock policy | attempt limit/replay lock |
+| DATA_ACCESS_GRANT_REQUIRED | 403 | after grant | raw field grant 없음 |
+| DATA_ACCESS_GRANT_EXPIRED | 403 | new grant | 만료/철회/소진 grant |
+| FIELD_SCOPE_NOT_ALLOWED | 403 | no | grant보다 넓은 필드 또는 R4 |
+| AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |
+| SUPPORT_ACTION_DENIED | 403/422 | after state/policy change | server policy denial |
+| SUPPORT_ACTION_APPROVAL_REQUIRED | 409 representation | after approval | 실행 전 approval 필요 |
+| SELF_APPROVAL_NOT_ALLOWED | 403 | different reviewer | requester가 review 시도 |
+| SEPARATION_OF_DUTIES_VIOLATION | 403 | distinct actor | reviewer step/executor 충돌 |
+| APPROVAL_EXPIRED | 409 | new revision/review | 승인 expiry |
+| APPROVAL_STALE | 409 | re-evaluate | payload/policy/verification/target version 변경 |
+| REQUEST_REVISION_MISMATCH | 409 | latest revision | 실행 revision 불일치 |
+| PICKUP_SLOT_UNAVAILABLE | 409 | choose slot | new slot capacity 불가; old slot 유지 |
+| POST_ACCEPTANCE_RESOLUTION_REQUIRED | 409 | create resolution | direct change가 허용되지 않는 lifecycle |
+| COMPENSATION_LIMIT_EXCEEDED | 422 | investigation/policy | rolling/band 한도 |
+| DUPLICATE_COMPENSATION | 409 | no | terminal duplicate incident benefit |
+| COMPENSATION_INVESTIGATION_REQUIRED | 409 representation | Operations handoff | high/exceptional 보상 |
+| PROFILE_FIELD_IMMUTABLE | 422 | adjustment workflow | R0/R4 direct change 금지 |
+| DELIVERY_PROVIDER_OUTCOME_UNKNOWN | 202 representation | reconcile/poll | Provider 결과 불명; 새 dispatch 금지 |
+| DELIVERY_STATE_CONFLICT | 409 | reconcile | 역순/terminal conflict |
+| LEGAL_HOLD_ACTIVE | 409 | after release | retention deletion이 scoped hold에 차단됨 |
+| RETENTION_DELETE_PARTIALLY_FAILED | 202/503 representation | worker/operator | 일부 component 삭제 실패 |
+
+These codes are planning candidates, not stable runtime codes and not present in target/runtime OpenAPI. Each owning
+Stage must validate whether the code, HTTP status and representation are endpoint-specific and promote only the typed
+subset it implements. Similar-looking provider/DB failures must not be collapsed into a business conflict.
+
 정산 이의제기 409는 DB 장애를 business conflict로 바꾼 결과가 아니다. 같은 Item 접수는
 Item advisory lock으로 직렬화하고, 같은 actor·operation·Idempotency-Key는 별도 advisory
 lock과 terminal 응답으로 수렴한다. persistence, Audit 또는 persistent publication 실패는

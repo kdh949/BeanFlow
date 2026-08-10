@@ -103,6 +103,18 @@
 애플리케이션 사전 조회만으로 보호하지 않는다. owner summary row lock/version,
 source-reference Unique Constraint와 같은 트랜잭션 최종 방어를 함께 사용한다.
 
+## Support planning additions
+
+- SupportCase는 active/closed, assignment와 append-only history를 보호한다.
+- VerificationSession은 Case+Subject+Purpose에, DataAccessGrant는 operator+Case+Subject+field+reason+expiry에 묶인다.
+- ActionRequest revision과 ApprovalStep은 exact payload/policy/verification/aggregate version을 snapshot하며 actor separation을 DB와 service 양쪽에서 지킨다.
+- CompensationRequest는 immutable policy와 cost responsibility, one-benefit execution, duplicate/rolling-limit key를 보호한다.
+- PostAcceptanceResolutionCase는 trigger Order fact를 변경하지 않고 partial/unknown resolution을 별도 상태로 유지한다.
+- DeliveryFulfillment는 canonical monotonic lifecycle과 Provider sync를 분리한다.
+- LegalHold는 scoped/reviewed/expiring이며 deletion component success를 조작하지 않는다.
+
+세부 책임과 후보 제약은 [Support aggregate invariants](support-aggregate-invariants.md)를 따른다.
+
 주문 요청의 `optionIds`는 중복을 거부한 뒤 ID 오름차순으로 정규화하여
 MenuConfiguration을 조회한다. 요청의 OrderLine 순서는 금액 배분 계약이므로
 정규화하지 않는다. 여러 line이 같은 sellable unit을 요구하면 Ordering은

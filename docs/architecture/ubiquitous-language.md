@@ -51,5 +51,11 @@
 | Operator Permission Grant | 활성 Platform Operator가 특정 privileged operation을 실행·조회할 수 있게 하는 Operations-owned explicit grant. JWT role 또는 claim의 fallback이 아니다. | Operations |
 | Verified Release Principal | controlled deployment job의 단기 OIDC workload identity를 required issuer·audience·allowed subject로 검증한 bootstrap 주체. application JWT, role 또는 static secret으로 대체하지 않는다. | Operations / Delivery |
 | ReprocessingCase | 자동 재시도 범위를 벗어난 실패 또는 승인된 backfill을 추적하는 운영 case | Operations |
+| SupportCase | 하나의 문의·사건과 상담 진행 상태를 추적하는 Aggregate | Support |
+| VerificationSession | 특정 Case·Subject·Purpose에 묶인 등록 채널 통제 확인 결과 | Support |
+| DataAccessGrant | 상담원·Case·Subject·필드·사유·만료에 귀속한 원문 열람 권한 | Support |
+| PostAcceptanceResolutionCase | 제조·준비·완료 사실을 되돌리지 않는 환불·보상·정산 해결 Case | Support |
+| DeliveryFulfillment | Provider와 독립적인 표준 배달 생명주기 | Delivery |
+| LegalHold | 사건·범주에 한정되고 재검토·만료되는 삭제 유예 | Operations |
 | Analytics Read Model | 원본 거래 사실을 지표 정의에 따라 멱등 집계한 조회 전용 모델 | Analytics |
 | Terminal State | 해당 Aggregate에서 더 이상 정상 상태 전이가 없는 상태. 다른 Aggregate의 후속 처리 완료를 의미하지 않는다. | Context별 |

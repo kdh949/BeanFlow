@@ -7,6 +7,8 @@
 - [Business Policy Decisions](product/business-policy-decisions.md)
 - [End-to-End Flow](product/end-to-end-flow.md)
 - [Non-goals](product/non-goals.md)
+- [Customer Support Overview](product/support-overview.md)
+- [Support Product Policies](product/support-case-policy.md)
 
 ## Architecture
 
@@ -21,6 +23,10 @@
 - [State Machines](architecture/state-machines.md)
 - [Event Catalog](architecture/event-catalog.md)
 - [Failure Semantics](architecture/failure-semantics.md)
+- [Support Context Map](architecture/support-context-map.md)
+- [Support Requirement Traceability](architecture/support-requirement-traceability.md)
+- [Personal Data Classification](architecture/personal-data-classification.md)
+- [Retention and Deletion Architecture](architecture/retention-and-deletion.md)
 
 ## Decisions
 
@@ -35,8 +41,13 @@
 - [Target OpenAPI](../openapi/beanflow-v1.yaml)
 - [API Conventions](api/api-conventions.md)
 - [Error Catalog](api/error-catalog.md)
+- [Customer Support Draft API Surface](api/support-api-surface.md)
 - [Authorization Matrix](security/authorization-matrix.md)
 - [PaymentMethod Data Handling](security/payment-method-data-handling.md)
+- [Support Role/Permission Matrix](security/support-role-permission-matrix.md)
+- [Support PII Controls](security/support-pii-controls.md)
+- [Support Threat Model](security/support-threat-model.md)
+- [Support Console Browser Controls](security/support-console-browser-controls.md)
 
 ## Quality
 
@@ -50,6 +61,8 @@
 - [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
 - [Nearby Store Query Plan Evidence](quality/nearby-store-discovery-performance-evidence.md)
 - [Code Review Guide](review/code-review.md)
+- [Support Repository Audit](quality/support-repository-audit-2026-08-10.md)
+- [Support Planned Test Strategy](testing/support-test-strategy.md)
 - [Settlement Foundation Runbook](operations/settlement-foundation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
@@ -76,6 +89,9 @@
 - [Completed Audited Loyalty Point Adjustment Foundation](exec-plans/completed/loyalty-point-adjustment-foundation.md)
 - [Completed Nearby Store Discovery](exec-plans/completed/nearby-store-discovery.md)
 - [Analytics Refund and Late-Event Projection](exec-plans/active/analytics-refund-and-late-event-projection.md)
+- [Completed Support S00 Audit and Repair](exec-plans/completed/customer-support-s00-documentation-contracts.md)
+- [Support S10 Retention/Audit/Permission](exec-plans/active/customer-support-s10-retention-audit-permission.md)
+- [Support Program Orchestration](exec-plans/active/customer-support-program-orchestration.md)
 - [PaymentMethod Token Management](exec-plans/completed/payment-method-token-management.md)
 - [Toss V2 One-Time Payment Window](exec-plans/completed/toss-v2-one-time-payment-window.md)
 - [Superseded Toss Billing Sandbox Plan](exec-plans/completed/toss-payments-sandbox-gateway-adapter-superseded.md)
@@ -96,3 +112,5 @@
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
 - [Local Demo Runbook](operations/local-demo-runbook.md)
+- [Support Planned Operational Procedures](operations/support-planned-operational-procedures.md)
+- [Planned Support Observability](operations/observability.md)

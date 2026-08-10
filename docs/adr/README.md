@@ -82,3 +82,14 @@
 | [ADR-078](ADR-078-toss-payments-sandbox-gateway-adapter.md) | Superseded | 토스페이먼츠 sandbox PaymentGateway adapter |
 | [ADR-079](ADR-079-payment-method-token-management.md) | Accepted | 결제수단 등록·조회·폐기 lifecycle과 Provider Port |
 | [ADR-080](ADR-080-toss-v2-one-time-payment-window.md) | Accepted | Toss V2 일회성 결제창과 Payment 시도 경계 |
+| [ADR-081](ADR-081-support-context-case-and-query-boundary.md) | Accepted | Support Context, Case 중심 privileged action과 query boundary |
+| [ADR-082](ADR-082-masked-purpose-bound-support-access.md) | Accepted | 기본 마스킹, staged verification과 purpose-bound PII access |
+| [ADR-083](ADR-083-personal-data-encryption-and-blind-index.md) | Proposed | 개인데이터 암호화와 keyed blind index |
+| [ADR-084](ADR-084-support-action-authorization-and-separation.md) | Accepted | risk-based Support action, exact approval binding과 Operations handoff |
+| [ADR-085](ADR-085-lifecycle-aware-support-order-resolution.md) | Accepted | 주문 생명주기별 Support 변경과 post-acceptance resolution |
+| [ADR-086](ADR-086-versioned-goodwill-compensation.md) | Accepted | versioned risk compensation과 goodwill source 분리 |
+| [ADR-087](ADR-087-field-risk-and-purpose-specific-profile-change.md) | Accepted | R0-R4 field risk와 목적별 profile change |
+| [ADR-088](ADR-088-canonical-delivery-provider-boundary.md) | Accepted | canonical DeliveryFulfillment, Provider ACL과 reconciliation |
+| [ADR-089](ADR-089-purpose-based-retention-legal-hold-and-deletion.md) | Accepted | 목적별 retention, expiring LegalHold와 deletion replay |
+| [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Proposed | Support Console frontend/trust boundary와 non-persistent sensitive state |
+| [ADR-091](ADR-091-support-migration-queue-metadata.md) | Rejected | queue priority를 direct ExecPlan dependency로 표현하는 metadata 제안 |
