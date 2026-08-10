@@ -1622,3 +1622,35 @@
 - [ ] 결제·알림·정산 장애 복구 시나리오가 정의됐는가
 - [ ] 실제 측정하지 않은 성능 결과가 문서에 포함되지 않았는가
 - [ ] 모든 정책에 Revisit Conditions가 존재하는가
+
+---
+
+# Support Policy Decision Register (2026-08-10)
+
+이 register의 수치와 기간은 별도 표기가 없으면 **Initial policy / Assumption**이다.
+개인정보·전자상거래·위치정보 관련 항목은 **Legal review required before production**이며
+법규 준수 완료를 뜻하지 않는다.
+
+| ID | Status | Decision | Primary record |
+|---|---|---|---|
+| SP-01 | Accepted | lightweight hybrid SupportCase와 Support/Operations 책임 분리 | [overview](support-overview.md), ADR-081 |
+| SP-02 | Accepted | masked-by-default, reason/field/time-bound reveal와 Audit-before-reveal | [verification](support-verification-policy.md), ADR-082 |
+| SP-03 | Accepted | UNVERIFIED/BASIC/ENHANCED; BREAK_GLASS는 별도 path | [verification](support-verification-policy.md), ADR-082 |
+| SP-04 | Accepted | server risk decision은 ALLOWED/APPROVAL_REQUIRED/DENIED, unknown 조합 DENIED | [action](support-action-policy.md), ADR-084 |
+| SP-05 | Accepted | lifecycle-aware direct order change와 post-acceptance resolution 분리 | [order](support-order-change-policy.md), ADR-085 |
+| SP-06 | Accepted | immutable versioned compensation; refund/restoration/correction/goodwill 분리 | [compensation](support-compensation-policy.md), ADR-086 |
+| SP-07 | Initial assumption | LOW ≤3,000원, MEDIUM ≤10,000원, HIGH ≤30,000원, 그 초과/무근거는 exceptional이라는 initial band | [compensation](support-compensation-policy.md) |
+| SP-08 | Accepted | R0-R4 field class와 purpose-specific profile workflow | [profile](support-profile-change-policy.md), ADR-087 |
+| SP-09 | Accepted | R3는 distinct requester, Support Manager, Operations reviewer와 agent execution | [profile](support-profile-change-policy.md), ADR-084 |
+| SP-10 | Accepted | exceptional compensation은 Operations 조사 후 agent에게 반환 | [compensation](support-compensation-policy.md), ADR-084 |
+| SP-11 | Accepted | canonical DeliveryFulfillment + Provider adapter/inbox/reconciliation, silent failover 금지 | [delivery](delivery-support-policy.md), ADR-088 |
+| SP-12 | Accepted initial policy | transaction 5y, Case 3y, PII Audit 2y, contact 90d, location 24h, raw webhook 7d의 Initial retention | [retention](support-retention-policy.md), ADR-089 |
+| SP-13 | Accepted | financial Audit 5y는 PII Audit 2y로 대체하지 않음; active PII와 legal-minimum record 분리 | [retention](support-retention-policy.md), ADR-089 |
+| SP-14 | Accepted scope / Proposed boundary | Support Console은 최종 scope다. 별도 app, 기존 app 통합, server-rendered boundary는 credential/CORS/CSRF/trust/deployment 결정 전 Proposed다. | ADR-090 |
+| SP-15 | Accepted | 자체 rider/call-center/rules-engine/premature Elasticsearch와 bulk export는 비목표 | [non-goals](non-goals.md) |
+
+## Support implementation gates
+
+- ADR-083의 key provider/rotation 결정이 Accepted되기 전 S30은 ready가 아니다.
+- S10과 다른 migration-writing plan의 실행 순서는 별도 scheduling decision이다. 실행 시 ADR-072의 실제 lease evidence가 필요하다.
+- R3, exceptional compensation, Delivery와 retention automation은 threat model, owner model, OpenAPI와 failure tests가 확정되기 전 노출하지 않는다.

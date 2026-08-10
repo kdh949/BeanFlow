@@ -24,8 +24,13 @@
 
 ## Inventory totals and gaps
 
+Planned gaps: Support and Delivery have no current source module, Aggregate or runtime operation. Their staged
+ownership is recorded in the [Support repository audit](../quality/support-repository-audit-2026-08-10.md),
+[draft API inventory](../api/support-api-surface.md), [ADR-081](../adr/ADR-081-support-context-case-and-query-boundary.md)
+and [ADR-088](../adr/ADR-088-canonical-delivery-provider-boundary.md). Draft inventory is not implementation evidence.
+
 - Runtime: 34 paths, 37 operations. Spring MVC와의 exact parity는
   `RuntimeOpenApiParityTest`가 검증한다.
 - Accepted target: 34 paths, 37 operations.
-- Target-only operations: 없음.
+- Target-only operations: none. The separate draft inventory contains 55 planned Support/Delivery/LegalHold operations.
 - 실제 non-local deployment, SLA, production traffic과 Provider 장애 주입은 이 표의 증거가 아니다.

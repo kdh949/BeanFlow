@@ -219,6 +219,12 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 
 ## Test requirements
 
+Customer Support adds these explicit outcomes: Audit failure returns no raw PII/high-risk success;
+verification timeout is pending/unknown; partial approval cannot execute; pickup reschedule failure preserves
+the old slot; post-acceptance partial effects stay partial; unknown compensation responsibility has no cost-owner
+fallback; Delivery timeout blocks silent cross-provider failover; deletion component failure stays partial and
+backup restore reapplies deletion decisions.
+
 새 failure path는 다음을 검토한다.
 
 - 실패가 사용자에게 어떤 상태·오류로 보이는가

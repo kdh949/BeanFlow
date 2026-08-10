@@ -346,6 +346,11 @@ Ordering retention worker가 table별 독립 chunk로 정리한다.
 
 ## Reprocessing case
 
+SupportCase, VerificationSession, DataAccessGrant, ActionRequest, Approval and Resolution target states are
+defined in [Support State Machines](support-state-machines.md). Canonical Delivery lifecycle and independent
+ProviderSyncStatus are defined in [Delivery State Machine](delivery-state-machine.md). These are planning
+contracts, not current runtime states.
+
 ```text
 OPEN -> RUNNING -> RESOLVED
 RUNNING -> RETRY_SCHEDULED | MANUAL_REVIEW

@@ -183,6 +183,10 @@
 
 ## Query tests
 
+Customer Support and Delivery implementation stages use the consolidated
+[planned Support Test Strategy](support-test-strategy.md). It contains future coverage only; no Support test or load
+evidence exists until an owning Stage records named tests and exact results.
+
 N+1은 FetchType 이름만으로 판단하지 않는다.
 
 1. 필요한 API 필드 정의

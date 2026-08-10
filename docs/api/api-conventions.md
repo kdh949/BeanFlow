@@ -23,6 +23,19 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 
 ## Status codes
 
+### Support draft surface
+
+The 55 planned Support/Delivery/LegalHold operations are kept in
+[`support-api-surface.md`](support-api-surface.md) as `DRAFT`, not in either canonical OpenAPI file. An owning Stage
+adds endpoint-specific request, response/page, error and security schemas to target OpenAPI only when its model is
+implementable. Runtime OpenAPI still requires a matching Controller, contract, authorization and failure tests.
+
+Exact phone/email input uses a POST body. Sensitive successful responses carry
+`Cache-Control: no-store`; errors must not echo or retain raw PII. State-changing commands require
+`Idempotency-Key`, same-key/changed-payload is 409, and execution re-evaluates current policy/version.
+An endpoint may reuse ADR-070 only after its Stage records the exact typed filters and stable sort tuple. No Support
+cursor contract is accepted by S00.
+
 - `200 OK`: 조회 또는 동기 처리 결과
 - `201 Created`: 새 리소스 생성
 - `202 Accepted`: 비동기 처리 접수이며 완료가 아님
