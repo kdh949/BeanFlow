@@ -12,16 +12,20 @@ scheduling, plan-authoring gate와 release evidence만 관리한다.
 
 ## Purpose / Big Picture
 
-Customer Support를 한 번에 구현하거나 placeholder plan을 미리 Accepted하지 않는다. S10만 현재 main에
-근거한 상세 plan으로 유지하고, S20~S140은 predecessor actual outcome 뒤 최신 main에서 새 detailed
-ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을 가져야 한다.
+Customer Support를 한 번에 구현하거나 placeholder plan을 미리 Accepted하지 않는다. completed S10의 actual
+outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30~S140은 predecessor actual outcome 뒤
+최신 main에서 새 detailed ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을
+가져야 한다.
 
 ## Current State
 
 - S00 planning audit/repair가 completed path에 있고 document/manual validation evidence를 기록했다.
-- S10 detailed plan은 active이며 deterministic cursor tampering test와 required full-suite regression을 통과해
-  implementation-ready다. Migration scheduling과 lease acquisition은 아직 별도 preflight로 남는다.
-- S20~S140 code/schema/API는 없고 future summary만 존재한다.
+- S10은 V39 Audit category/class/immutable policy snapshot, 기존 financial Audit expiry 불변과 신규 5년,
+  PII access Audit 2년, concurrent retention worker와 persistent 42-permission vocabulary를 구현·검증했다.
+  runtime Support endpoint는 추가하지 않았다.
+- S20 detailed plan은 active지만 exact Case transition/requester/category/reopen policy가 draft라
+  implementation-ready가 아니다. Support module/schema/API와 S20 migration lease는 아직 없다.
+- S30~S140 code/schema/API는 없고 future summary만 존재한다.
 - ADR-083 crypto/KMS와 ADR-090 frontend boundary는 Proposed다.
 - 55개 endpoint는 DRAFT inventory이고 canonical contract가 아니다.
 
@@ -79,16 +83,21 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 
 ## Milestones
 
-### Current detailed Stage
+### Completed Stage
 
 - **S10 — Retention/Audit/permission foundation:** 기존 financial Audit 5년 보존, immutable retention policy
-  version과 exact Support permission grant vocabulary. Runtime Support endpoint는 non-goal.
+  version과 exact Support permission grant vocabulary를 V39로 구현·검증했다. Runtime Support endpoint는 없다.
+
+### Current detailed Stage
+
+- **S20 — SupportCase foundation:** lightweight Case lifecycle, append-only assignment/state history, bounded
+  interaction/note와 identifier-only subject link. exact Case policy를 Accepted한 뒤 readiness를 재계산하고,
+  migration lease와 V-next는 실행 시점에 별도로 선택한다.
 
 ### Future Stage summaries and authoring gates
 
 | Stage | Future outcome | Direct inputs required before detailed plan authoring | Known gate |
 |---|---|---|---|
-| S20 | SupportCase, assignment/history, subject link | completed S10 permission/Audit outcome | current Support module absent |
 | S30 | owner profile + protected exact masked search | completed S20 Case boundary and Accepted ADR-083 | customer/contact/crypto model gap |
 | S40 | purpose-bound verification, grant and reveal | completed S20 Case boundary and S10 Audit/permission | challenge Provider contract not chosen |
 | S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and S40 verification/grant | endpoint-specific cursor contract required |
@@ -129,14 +138,18 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 ## Progress
 
 - [x] S20~S140 placeholder plans removed
-- [x] S10 retained as the sole detailed Support implementation plan
+- [x] S10 implemented, fully validated and moved to completed
 - [x] S00 repair completed and S10 readiness recalculated
-- [ ] no implementation Stage started
+- [x] direct successor S20 detailed plan authored from S10 actual outcome; draft Case policy 때문에 readiness false
+- [ ] S20 execution preflight/lease and implementation not started
 
 ## Surprises & Discoveries
 
 The original 13 successor files repeated the same architecture, failure, validation and outcome shell despite different
 owner models. File presence therefore overstated execution readiness.
+
+S10's actual outcome confirmed that policy rows and permission vocabulary can precede Support runtime safely only when
+documents mark them dormant. S20 therefore consumes the foundation without treating grants as released capabilities.
 
 ## Decision Log
 
@@ -144,12 +157,15 @@ owner models. File presence therefore overstated execution readiness.
 |---|---|---|---|---|
 | 2026-08-10 | Plan boundary | author future plans after predecessor outcome | avoid stale implementation guesses | this plan |
 | 2026-08-10 | Scheduling | S10 and Analytics have no direct dependency edge | lease order is a separate product priority | ADR-072/091 |
+| 2026-08-11 | Stage handoff | complete S10 and author only direct successor S20 with readiness false | V39 outcome is available, but exact Case policy remains draft | completed S10, active S20 |
 
 ## Outcomes & Retrospective
 
-No Support implementation is complete. This plan remains active until the program or its approved subset is delivered
-and release evidence exists.
+S10 foundation is complete; no runtime Support capability is complete. This plan remains active while S20 and later
+approved stages are delivered and capability-specific release evidence is accumulated.
 
 ## Revision Notes
 
 - 2026-08-10: consolidated S10~S140 graph and removed placeholder implementation files.
+- 2026-08-11: recorded completed S10 outcome and created the S20 direct successor with readiness false, without acquiring
+  its migration lease or reserving a Flyway number.

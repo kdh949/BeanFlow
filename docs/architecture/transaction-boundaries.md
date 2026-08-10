@@ -637,6 +637,10 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 ## Audit
 
 - BR-30 대상 변경과 AuditRecord는 가능한 경우 같은 로컬 DB 트랜잭션에 기록한다.
+- Audit append는 `Propagation.MANDATORY`다. command의 필수 `AuditCategory`마다 current policy head를 잠그고
+  exact immutable version을 읽어 category, class, policy version과 expiry를 같은 caller transaction에
+  snapshot한다. head/version 부재, category/class/duration 불일치 또는 Audit flush 실패는 privileged
+  business write와 함께 rollback한다. 고정 5년/2년 fallback은 없다.
 - 주문 생성·예약·확정·만료·해제는 변경된 Aggregate target마다 record를 append하고
   correlationId/source reference로 같은 transaction을 묶는다.
 - deadline 만료는 worker·조회·결제 trigger와 무관하게 SYSTEM actor와
@@ -644,9 +648,12 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - 외부 호출 결과는 별도 트랜잭션에서 owner state와 AuditRecord를 함께 확정한다.
 - 비동기 owner Context 변경은 원본 event/correlation reference를 감사 기록에 남긴다.
 - 감사 실패를 로그만 남기고 원본 수동 변경을 성공 처리하지 않는다.
-- AuditRecord retention worker는 서울 달력 5주년이 지난 record만
-  `(retentionExpiresAt, id)` 순서의 제한된 chunk로 삭제한다. 일반 비즈니스
-  transaction과 분리하고 중단·재실행 시 due 이전 record를 삭제하지 않는다.
+- financial/order/settlement/security/policy Audit는 `occurredAt`의 서울 현지 시각 5주년,
+  PII access Audit는 2주년을 expiry로 저장한다. 기존 row의 expiry는 V39에서 재계산하지 않는다.
+- AuditRecord retention worker는 `retentionExpiresAt <= now`인 record만 `(retentionExpiresAt, id)` 순서로
+  `FOR UPDATE SKIP LOCKED` claim/delete한다. worker별 bounded transaction은 서로 disjoint하고, 실패를
+  0건 성공으로 바꾸지 않으며 due 이전 row를 삭제하지 않는다. 상세는
+  [Audit retention runbook](../operations/audit-retention-runbook.md)을 따른다.
 
 ## Bulk operations
 

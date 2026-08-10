@@ -1652,5 +1652,8 @@
 ## Support implementation gates
 
 - ADR-083의 key provider/rotation 결정이 Accepted되기 전 S30은 ready가 아니다.
-- S10과 다른 migration-writing plan의 실행 순서는 별도 scheduling decision이다. 실행 시 ADR-072의 실제 lease evidence가 필요하다.
+- S10은 V39에서 Audit category/class/version snapshot, financial 5년과 PII access 2년 policy, persistent
+  Support permission vocabulary를 구현했다. Case/content/delivery/LegalHold deletion runtime은 구현하지 않았다.
+- 이후 migration-writing plan은 실행 시 ADR-072의 실제 lease evidence를 새로 획득해야 한다. S10 완료는
+  successor의 migration lease를 예약하지 않는다.
 - R3, exceptional compensation, Delivery와 retention automation은 threat model, owner model, OpenAPI와 failure tests가 확정되기 전 노출하지 않는다.

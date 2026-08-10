@@ -8,7 +8,8 @@ grant, revoke 또는 regrant한다. default grant, 직접 SQL DML, application J
 
 ## Preconditions
 
-- Flyway `V13`이 성공적으로 적용되어 있어야 한다.
+- Flyway `V39`가 성공적으로 적용되어 있어야 한다. V39는 기존 9개와 Support/Operations/Privacy 33개를
+  합친 42개 closed permission vocabulary를 DB 제약에 등록한다.
 - deployment job의 단기 OIDC token과 trusted public JWKS를 서로 다른 read-only regular file로
   mount한다. symlink, 빈 파일, writable file은 거부된다.
 - issuer, audience, allowed subject와 signed deployment-run claim 이름을 배포 설정에서 고정한다.
@@ -24,7 +25,7 @@ grant, revoke 또는 regrant한다. default grant, 직접 SQL DML, application J
 ```text
 BEANFLOW_OPERATOR_BOOTSTRAP_ACTION=GRANT|REVOKE|REGRANT
 BEANFLOW_OPERATOR_BOOTSTRAP_ACTOR_ID=<operator UUID>
-BEANFLOW_OPERATOR_BOOTSTRAP_PERMISSION=EXPIRED_BENEFIT_POLICY_READ|EXPIRED_BENEFIT_POLICY_WRITE|POINT_ACCOUNT_READ|POINT_ADJUSTMENT|POINT_ACCRUAL_POLICY_READ|POINT_ACCRUAL_POLICY_WRITE
+BEANFLOW_OPERATOR_BOOTSTRAP_PERMISSION=<closed OperatorPermission enum value>
 BEANFLOW_OPERATOR_BOOTSTRAP_REASON=<approved change reason>
 BEANFLOW_OPERATOR_BOOTSTRAP_EVIDENCE_REFERENCE=<immutable evidence reference>
 BEANFLOW_OPERATOR_BOOTSTRAP_CORRELATION_ID=<deployment correlation ID>
@@ -44,6 +45,10 @@ token은 command argument나 일반 environment variable로 전달하지 않는�
 evidence body를 shell trace, job annotation 또는 log collector에 복제하지 않는다. command는 입력
 reason을 보존하지 않고 Audit에 고정된 lifecycle reason만 기록하며, evidence reference와 verified
 release-principal whitelist projection만 Audit에 연결한다.
+
+Support-prefixed permission은 owning Support use case나 endpoint를 자동 활성화하지 않는다. 현재 존재하지
+않는 capability를 role/default grant로 보완하지 않으며, approved deployment record가 지시한 exact permission만
+변경한다.
 
 ## Terminal results
 

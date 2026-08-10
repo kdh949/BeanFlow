@@ -3,6 +3,12 @@
 > **Status:** `DRAFT IMPLEMENTATION MODEL`; only invariants explicitly anchored to Accepted ADR-081/082/084-089 are
 > Accepted. Aggregate names, fields and constraints are finalized by the owning Stage.
 
+## Implemented S10 foundation
+
+Operations는 Audit category/class/immutable policy version과 persistent `OperatorPermissionGrant` vocabulary를
+소유한다. financial Audit 5년과 PII access Audit 2년은 검증됐지만 SupportCase와 reveal use case는 아직 없다.
+따라서 dormant Support permission은 아래 Aggregate나 endpoint가 구현됐다는 의미가 아니다.
+
 ## SupportCase
 
 Protects active/closed lifecycle, assignment, subject links and state history. Closed cases reject ordinary work; privileged action requires current assignment.

@@ -1,16 +1,17 @@
 # S10 Audit retention classification과 Support permission foundation을 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s00-documentation-contracts.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-11`
 
-이 ExecPlan은 `.agent/PLANS.md`를 따른다. PaymentMethod cursor tampering test를 padding bit에도 결정적으로
-서명을 바꾸는 helper로 안정화한 뒤, targeted 10회 재실행과 full-suite 2회가 모두 통과해
-`Implementation-Ready=true`다. Migration scheduling과 lease acquisition은 readiness와 별개인 실행 시점
-preflight이며, 이 plan의 migration lease나 번호는 아직 획득·예약하지 않았다.
+이 ExecPlan은 `.agent/PLANS.md`를 따른다. 2026-08-11T03:28:12+09:00에 최신 local/origin `main` `ad07ff3`에서
+`feature/s10-retention-audit-permission` branch를 만들고, open PR 0개와 다른 active BeanFlow migration task
+부재를 확인한 뒤 repository-wide migration-writer lease를 획득했다. 최신 Flyway는 V38이며 S10은 V39를
+사용했다. 구현과 fresh PostgreSQL migration, category boundary, permission/worker concurrency, full suite와
+문서 검증을 완료해 lease를 release한다. 후속 S20에는 lease나 Flyway 번호가 승계되지 않는다.
 
 ## Purpose / Big Picture
 
@@ -24,9 +25,9 @@ grant/revoke/regrant 경계에 추가한다.
 같은 transaction에서 snapshot한다. S10은 SupportCase, reveal, action, API 또는 retention deletion automation을
 구현하지 않는다.
 
-## Current State
+## Initial State
 
-### Current code and schema
+### Initial code and schema
 
 - `operations/api/OperatorPermissionOperations.kt`에는 9개 permission enum과
   `OperatorPermissionAuthorization.requireActive()`가 있다.
@@ -167,8 +168,7 @@ No PII reveal runtime model exists, so table ownership and cross-table query/del
 
 ## Data and Migration
 
-After scheduling S10, create exactly one V-next migration chosen from latest main under an acquired ADR-072 lease. The
-migration performs this order:
+획득한 ADR-072 lease 아래 V39 하나를 추가했고, migration은 다음 순서로 구현됐다.
 
 1. Preflight existing `operations_audit_record.action` distinct values against the explicit classification table in the
    migration. Abort if any value is unmapped.
@@ -243,7 +243,7 @@ No integration event is added. Later Stages must not treat a dormant permission 
 
 - `AuditRetentionPolicyMigrationTest`: fresh PostgreSQL migration, explicit action coverage, unmapped-action abort fixture,
   existing expiry unchanged, NOT NULL/FK/check/immutable trigger/index and current permission check.
-- `AuditRetentionPolicyIntegrationTest`: category-specific `-1ns/at/+1ns`, financial 5y versus PII 2y, missing head/version
+- `AuditRetentionPolicyIntegrationTest`: PostgreSQL timestamp precision에 맞춘 category별 `-1µs/at/+1µs`, financial 5y versus PII 2y, missing head/version
   fail-closed, multi-category append atomicity and worker failure/retry.
 - `AuditPermissionBoundaryConcurrencyTest`: two retention workers claim disjoint chunks; append versus due scan; permission
   authorization versus revoke/regrant; policy-head activation lock contract (test-only transaction until activation exists).
@@ -280,6 +280,43 @@ the repository's actual `*ModularityTests` class, not nonexistent generic archit
   223 Markdown files and 35 ExecPlans validated.
 - `git diff --check` — exit 0.
 
+### S10 implementation evidence (2026-08-11)
+
+- contract-first `AuditRecordContractTest`는 최초 `AuditCategory` class 부재로 exit 1이었고 API 추가 뒤 exit 0.
+- 초기 `AuditRecordTest`는 V39 column 부재로 exit 1, 첫 boundary run은 PostgreSQL/JDBC timestamp의 nanosecond
+  반올림 때문에 exit 1이었다. boundary를 database precision인 1 microsecond로 고정한 뒤 targeted suite가
+  exit 0이었다.
+- offline permission CLI targeted run은 retention policy bootstrap context 부재로 exit 5였다. standalone
+  Entity/Repository scan과 policy service import를 추가한 뒤 exit 0이었다.
+- fresh migration fixture는 `JdbcTemplate`의 `Instant` parameter inference 실패로 exit 1이었다. 명시적
+  `Timestamp` binding으로 수정한 뒤 exit 0이었다.
+- `./gradlew test --tests '*AuditRecordTest' --tests '*AuditRetentionPolicy*' --tests
+  '*OperatorPermissionIntegrationTest' --tests '*AuditPermissionBoundaryConcurrencyTest'` — exit 0,
+  `BUILD SUCCESSFUL in 32s`.
+- `./gradlew spotlessCheck test` — exit 0, `BUILD SUCCESSFUL in 7m 20s`. standalone bootstrap context shutdown에서
+  기존 JPA event-publication cleanup warning 하나가 있었으나 test/build failure는 없었다.
+- `./gradlew test --tests '*ModularityTests' --rerun-tasks` — exit 0, `BUILD SUCCESSFUL in 11s`.
+- 마지막 non-null assertion 정리 뒤 sandbox run은 Gradle wrapper lock 접근 거부로 exit 1이었다. 동일한
+  `./gradlew spotlessCheck test --tests '*AuditRecordTest' --tests '*AuditRetentionPolicy*' --tests
+  '*OperatorPermissionIntegrationTest' --tests '*AuditPermissionBoundaryConcurrencyTest' --tests
+  '*ModularityTests' --rerun-tasks`를 승인된 Gradle cache 접근으로 재실행해 exit 0,
+  `BUILD SUCCESSFUL in 44s`를 확인했다.
+- 여섯 Audit category별 독립 `-1µs/at` boundary fixture를 추가한 뒤
+  `./gradlew spotlessApply test --tests '*AuditRecordTest' --tests '*AuditRetentionPolicy*' --tests
+  '*OperatorPermissionIntegrationTest' --tests '*AuditPermissionBoundaryConcurrencyTest' --tests
+  '*ModularityTests' --rerun-tasks` — exit 0, `BUILD SUCCESSFUL in 42s`.
+- 최종 `./gradlew spotlessCheck test --rerun-tasks` — exit 0, `BUILD SUCCESSFUL in 8m 24s`. standalone
+  bootstrap context 종료 시 `DefaultJpaEventPublication` unknown-entity cleanup WARN 1건과 한 test context의
+  unfinished publication INFO가 있었지만 test/build failure는 없었다.
+- completion move 직후 첫 `./scripts/verify-docs.sh`는 `Completed-At` timestamp 형식 때문에 exit 1이었다.
+  canonical ISO date `2026-08-11`로 수정한 뒤 재실행해 exit 0: target/runtime 34 paths/37 operations,
+  91 schemas, 33 business policies, 91 ADRs, 225 Markdown files와 36 ExecPlans를 검증했다.
+- 최종 `git diff --check` — exit 0, output 없음.
+- 최종 `./gradlew spotlessCheck` — exit 0, `BUILD SUCCESSFUL in 454ms`.
+- 최종 `rg -l 'AppendAuditRecordCommand\\(' src/main/kotlin | sort | wc -l` — exit 0, 25 files
+  (contract definition 1 + classified production callers 24). Migration status는 untracked V39 하나뿐이며
+  inventory tail은 V35~V39다.
+
 ## Observability
 
 Extend current Audit retention metrics only with closed `retention_class`/outcome labels after cardinality review. Record
@@ -300,8 +337,13 @@ stable class/outcome/count only and do not dump failed commands or policy eviden
 - [x] Current Audit/permission code, schema, migrations and tests inventoried
 - [x] Data model alternatives, backfill safety, exact permissions and transaction boundaries specified
 - [x] S00 dependency completed; deterministic cursor tampering validation and full regression passed, readiness true
-- [ ] Scheduling decision and migration lease acquisition
-- [ ] Implementation not started
+- [x] Scheduling decision and migration lease acquisition — 2026-08-11T03:28:12+09:00, branch
+  `feature/s10-retention-audit-permission`, base `ad07ff3`, latest Flyway V38, selected V39
+- [x] Required Audit category/class/version API and every production caller classification implemented
+- [x] V39 immutable policy/head, legacy expiry-preserving backfill, DB constraints and 42 permissions implemented
+- [x] fail-closed append, concurrent worker claim and permission grant/revoke boundaries implemented
+- [x] required PostgreSQL, full suite, Modulith, formatting and documentation validation completed
+- [x] S20 direct successor plan and orchestration/readiness metadata updated; S10 migration lease released
 
 ## Surprises & Discoveries
 
@@ -310,6 +352,12 @@ stable class/outcome/count only and do not dump failed commands or policy eviden
 - Existing `OperatorPermissionAuthorization` already has the correct caller-local pessimistic lock needed for immediate
   revocation semantics.
 - Current retention worker does not claim due rows with `SKIP LOCKED`; S10 must make concurrent worker behavior explicit.
+- one shared `PaymentResultTransaction` action family contained both payment facts and reservation confirm/release facts;
+  action/category mapping therefore keeps payment facts financial and classifies reservation facts as order/fulfillment.
+- PostgreSQL `timestamptz` and JDBC preserve microseconds rather than arbitrary nanoseconds in these tests; the exact
+  retention boundary fixture uses one microsecond on each side.
+- standalone permission bootstrap now depends on retention policy persistence because its Audit append must resolve an
+  immutable policy version. Its minimal application context must scan/import that dependency explicitly.
 
 ## Decision Log
 
@@ -321,16 +369,30 @@ stable class/outcome/count only and do not dump failed commands or policy eviden
 | 2026-08-10 | Implementation plan | offline verified bootstrap remains the only grant mutation path | no premature Support admin endpoint | ADR-069, this plan |
 | 2026-08-10 | Scheduling | Analytics is not a direct dependency | no schema/output consumption | ADR-072, rejected ADR-091 |
 | 2026-08-11 | Validation gate | deterministic signature tampering helper replaces final Base64URL character mutation | padding-only final-character changes can decode to identical HMAC bytes | PaymentMethodControllerIntegrationTest |
+| 2026-08-11 | Migration lease | S10 acquired the repository-wide writer lease and selected V39 | local/origin main `ad07ff3`; open PR 0; current S10 is the only active BeanFlow task; other worktrees/tasks have no acquisition record | ADR-072, this plan |
+| 2026-08-11 | Migration safety | persistent immutable action/category mapping with abort-on-unmapped preflight | a default category would hide new callers and could weaken evidence retention | V39, this plan |
+| 2026-08-11 | Classification | payment results remain financial; reservation confirmations/releases are order/fulfillment | one transaction emits facts with different business purposes | `PaymentResultTransaction`, V39 |
+| 2026-08-11 | Boundary fixture | use ±1 microsecond around PostgreSQL due time | database/JDBC precision rounds nanosecond-only differences | integration tests |
+| 2026-08-11 | Completion | release S10 lease and activate only the S20 detailed plan | V39/full validation complete; successor must acquire its own lease | completed S10, active S20 |
 
 ## Outcomes & Retrospective
 
-Not implemented. Current code still applies one five-year Audit policy and has nine permissions. No migration, enum,
-runtime endpoint or test class named above has been created. `Implementation-Ready=true` means the next Goal has a
-self-contained plan and the baseline validation passed; it is not permission to execute. Do not mark complete without
-actual lease/migration evidence, fresh PostgreSQL migration tests and all validation results.
+V39 preserves every legacy Audit expiry, snapshots required category/class/immutable policy version for new records and
+keeps financial/order/settlement/security/policy Audit at five Seoul calendar years while PII access Audit uses two.
+Audit/policy failure rolls back the privileged caller, and concurrent retention workers claim disjoint due rows with
+`SKIP LOCKED`. Operations now recognizes 42 persistent permissions (existing 9 plus S10 33) with the existing verified
+offline grant/revoke/regrant and row-lock authorization semantics.
+
+No SupportCase, search, PII reveal, action, Delivery, LegalHold, multi-component deletion or Support runtime OpenAPI was
+added. Initial non-Audit owner policy versions are seeded foundations only. Full validation passed, the S10 migration
+lease is released, and the direct S20 successor plan is active but not implementation-ready until exact Case policy is
+Accepted; it has no lease or reserved migration number.
 
 ## Revision Notes
 
 - 2026-08-10: replaced placeholder shell with current-code-based executable S10 plan and removed fake Analytics dependency.
 - 2026-08-11: stabilized the PaymentMethod signed-cursor tampering test and recorded successful targeted/full regression;
   no migration lease, number reservation or implementation work was performed.
+- 2026-08-11: acquired the S10 migration-writer lease from current main and selected V39 after execution-time inventory.
+- 2026-08-11: implemented V39 Audit retention classification and 42-permission foundation, completed PostgreSQL/full/
+  structure/document validation, released the lease and authored the S20 direct successor from actual outcomes.
