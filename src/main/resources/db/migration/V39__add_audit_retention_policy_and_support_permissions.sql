@@ -1,3 +1,6 @@
+-- This migration must fail rather than wait indefinitely for a conflicting audit-table lock.
+SET LOCAL lock_timeout = '5s';
+
 CREATE TABLE operations_audit_action_category (
     action varchar(100) PRIMARY KEY,
     audit_category varchar(48) NOT NULL,
@@ -120,7 +123,7 @@ CREATE TABLE operations_retention_policy_version (
     category varchar(48) NOT NULL,
     retention_class varchar(48) NOT NULL,
     duration_basis varchar(48) NOT NULL,
-    duration_value integer NOT NULL CHECK (duration_value BETWEEN 1 AND 3650),
+    duration_value integer NOT NULL,
     effective_at timestamptz NOT NULL,
     actor_reference varchar(500) NOT NULL CHECK (
         actor_reference = btrim(actor_reference)
@@ -141,7 +144,10 @@ CREATE TABLE operations_retention_policy_version (
             'FINANCIAL_TRANSACTION', 'ORDER_AND_FULFILLMENT', 'SETTLEMENT_AND_DISPUTE',
             'SECURITY_AND_PERMISSION', 'OPERATIONS_POLICY'
         ) AND retention_class = 'FINANCIAL_AUDIT'
-            AND duration_basis = 'SEOUL_CALENDAR_YEARS')
+            AND (
+                (duration_basis = 'SEOUL_CALENDAR_YEARS' AND duration_value = 5)
+                OR (duration_basis = 'PRESERVE_STORED_EXPIRY' AND duration_value = 0)
+            ))
         OR (category = 'PII_ACCESS' AND retention_class = 'PII_ACCESS_AUDIT'
             AND duration_basis = 'SEOUL_CALENDAR_YEARS')
         OR (category = 'SUPPORT_CASE' AND retention_class = 'SUPPORT_CASE'
@@ -181,9 +187,24 @@ INSERT INTO operations_retention_policy_version (
     (9, 'CURRENT_LOCATION', 'CURRENT_LOCATION', 'EXACT_HOURS_FROM_EVENT', 24,
         TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_BOOTSTRAP', 'SP-12;ADR-089'),
     (10, 'PROVIDER_RAW_WEBHOOK', 'PROVIDER_RAW_WEBHOOK', 'EXACT_DAYS_FROM_RECEIPT', 7,
-        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_BOOTSTRAP', 'SP-12;ADR-089');
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_BOOTSTRAP', 'SP-12;ADR-089'),
+    (11, 'FINANCIAL_TRANSACTION', 'FINANCIAL_AUDIT', 'PRESERVE_STORED_EXPIRY', 0,
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_LEGACY_CLASSIFICATION',
+        'V39_LEGACY_EXPIRY_PRESERVED;BR-30;SP-13;ADR-089'),
+    (12, 'ORDER_AND_FULFILLMENT', 'FINANCIAL_AUDIT', 'PRESERVE_STORED_EXPIRY', 0,
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_LEGACY_CLASSIFICATION',
+        'V39_LEGACY_EXPIRY_PRESERVED;BR-30;SP-13;ADR-089'),
+    (13, 'SETTLEMENT_AND_DISPUTE', 'FINANCIAL_AUDIT', 'PRESERVE_STORED_EXPIRY', 0,
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_LEGACY_CLASSIFICATION',
+        'V39_LEGACY_EXPIRY_PRESERVED;BR-30;SP-13;ADR-089'),
+    (14, 'SECURITY_AND_PERMISSION', 'FINANCIAL_AUDIT', 'PRESERVE_STORED_EXPIRY', 0,
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_LEGACY_CLASSIFICATION',
+        'V39_LEGACY_EXPIRY_PRESERVED;BR-30;SP-13;ADR-089'),
+    (15, 'OPERATIONS_POLICY', 'FINANCIAL_AUDIT', 'PRESERVE_STORED_EXPIRY', 0,
+        TIMESTAMPTZ '2026-08-11 00:00:00+09', 'SYSTEM:S10_LEGACY_CLASSIFICATION',
+        'V39_LEGACY_EXPIRY_PRESERVED;BR-30;SP-13;ADR-089');
 
-SELECT setval('operations_retention_policy_version_seq', 10, true);
+SELECT setval('operations_retention_policy_version_seq', 15, true);
 
 CREATE TABLE operations_retention_policy_head (
     category varchar(48) PRIMARY KEY,
@@ -196,7 +217,8 @@ CREATE TABLE operations_retention_policy_head (
 
 INSERT INTO operations_retention_policy_head (category, policy_version_id, version)
 SELECT category, policy_version_id, 0
-  FROM operations_retention_policy_version;
+  FROM operations_retention_policy_version
+ WHERE duration_basis <> 'PRESERVE_STORED_EXPIRY';
 
 CREATE FUNCTION reject_retention_policy_version_mutation()
 RETURNS trigger
@@ -238,18 +260,18 @@ SELECT count(*) AS row_count,
 ALTER TABLE operations_audit_record
     ADD COLUMN audit_category varchar(48),
     ADD COLUMN retention_class varchar(48),
-    ADD COLUMN retention_policy_version_id bigint;
+    ADD COLUMN retention_policy_version_id bigint,
+    ADD COLUMN retention_provenance varchar(48);
 
 UPDATE operations_audit_record record
    SET audit_category = mapping.audit_category,
        retention_class = version.retention_class,
-       retention_policy_version_id = head.policy_version_id
+       retention_policy_version_id = version.policy_version_id,
+       retention_provenance = 'LEGACY_MIGRATION_CLASSIFICATION'
   FROM operations_audit_action_category mapping
-  JOIN operations_retention_policy_head head
-    ON head.category = mapping.audit_category
   JOIN operations_retention_policy_version version
-    ON version.policy_version_id = head.policy_version_id
-   AND version.category = head.category
+    ON version.category = mapping.audit_category
+   AND version.duration_basis = 'PRESERVE_STORED_EXPIRY'
  WHERE record.action = mapping.action;
 
 DO $$
@@ -271,6 +293,7 @@ BEGIN
          WHERE audit_category IS NULL
             OR retention_class IS NULL
             OR retention_policy_version_id IS NULL
+            OR retention_provenance IS NULL
     ) OR before_evidence.row_count <> after_count
        OR before_evidence.minimum_expiry IS DISTINCT FROM after_minimum
        OR before_evidence.maximum_expiry IS DISTINCT FROM after_maximum
@@ -280,26 +303,112 @@ BEGIN
 END
 $$;
 
+-- Expand/backfill phase: keep the columns nullable until a separately deployed contract migration.
+-- This trigger classifies an all-null insert from a V38 binary using the current policy head;
+-- partial inputs, unknown actions, missing heads, and invalid provenance fail closed.
+CREATE FUNCTION populate_audit_retention_compatibility()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    mapped_category varchar(48);
+    selected_policy_version_id bigint;
+    selected_retention_class varchar(48);
+    selected_duration_basis varchar(48);
+BEGIN
+    IF NEW.audit_category IS NULL
+       AND NEW.retention_class IS NULL
+       AND NEW.retention_policy_version_id IS NULL
+       AND NEW.retention_provenance IS NULL THEN
+        SELECT mapping.audit_category,
+               head.policy_version_id,
+               policy.retention_class,
+               policy.duration_basis
+          INTO mapped_category,
+               selected_policy_version_id,
+               selected_retention_class,
+               selected_duration_basis
+          FROM operations_audit_action_category mapping
+          JOIN operations_retention_policy_head head
+            ON head.category = mapping.audit_category
+          JOIN operations_retention_policy_version policy
+            ON policy.policy_version_id = head.policy_version_id
+           AND policy.category = head.category
+         WHERE mapping.action = NEW.action;
+
+        IF NOT FOUND OR selected_duration_basis = 'PRESERVE_STORED_EXPIRY' THEN
+            RAISE EXCEPTION USING
+                ERRCODE = '23514',
+                MESSAGE = 'audit retention compatibility classification is unavailable';
+        END IF;
+
+        NEW.audit_category := mapped_category;
+        NEW.retention_class := selected_retention_class;
+        NEW.retention_policy_version_id := selected_policy_version_id;
+        NEW.retention_provenance := 'DATABASE_COMPATIBILITY_SNAPSHOT';
+    ELSIF NEW.audit_category IS NULL
+       OR NEW.retention_class IS NULL
+       OR NEW.retention_policy_version_id IS NULL
+       OR NEW.retention_provenance IS NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'audit retention fields must be supplied together';
+    END IF;
+
+    SELECT duration_basis
+      INTO selected_duration_basis
+      FROM operations_retention_policy_version
+     WHERE policy_version_id = NEW.retention_policy_version_id
+       AND category = NEW.audit_category
+       AND retention_class = NEW.retention_class;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'audit retention policy version does not match its category and class';
+    END IF;
+
+    IF (NEW.retention_provenance = 'LEGACY_MIGRATION_CLASSIFICATION'
+        AND selected_duration_basis <> 'PRESERVE_STORED_EXPIRY')
+       OR (NEW.retention_provenance IN ('APPEND_SNAPSHOT', 'DATABASE_COMPATIBILITY_SNAPSHOT')
+        AND selected_duration_basis = 'PRESERVE_STORED_EXPIRY')
+       OR NEW.retention_provenance NOT IN (
+           'APPEND_SNAPSHOT',
+           'LEGACY_MIGRATION_CLASSIFICATION',
+           'DATABASE_COMPATIBILITY_SNAPSHOT'
+       ) THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'audit retention provenance does not match the policy version';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER audit_retention_compatibility
+    BEFORE INSERT ON operations_audit_record
+    FOR EACH ROW EXECUTE FUNCTION populate_audit_retention_compatibility();
+
 ALTER TABLE operations_audit_record
-    ALTER COLUMN audit_category SET NOT NULL,
-    ALTER COLUMN retention_class SET NOT NULL,
-    ALTER COLUMN retention_policy_version_id SET NOT NULL,
     ADD CONSTRAINT fk_audit_action_category
         FOREIGN KEY (action, audit_category)
-        REFERENCES operations_audit_action_category(action, audit_category),
+        REFERENCES operations_audit_action_category(action, audit_category) NOT VALID,
     ADD CONSTRAINT fk_audit_retention_policy_version
         FOREIGN KEY (retention_policy_version_id, audit_category, retention_class)
-        REFERENCES operations_retention_policy_version(policy_version_id, category, retention_class),
+        REFERENCES operations_retention_policy_version(policy_version_id, category, retention_class) NOT VALID,
     ADD CONSTRAINT chk_audit_retention_class CHECK (
         (audit_category = 'PII_ACCESS' AND retention_class = 'PII_ACCESS_AUDIT')
         OR (audit_category IN (
             'FINANCIAL_TRANSACTION', 'ORDER_AND_FULFILLMENT', 'SETTLEMENT_AND_DISPUTE',
             'SECURITY_AND_PERMISSION', 'OPERATIONS_POLICY'
         ) AND retention_class = 'FINANCIAL_AUDIT')
-    );
-
-CREATE INDEX idx_audit_retention_class_expiry
-    ON operations_audit_record (retention_class, retention_expires_at, id);
+    ) NOT VALID,
+    ADD CONSTRAINT chk_audit_retention_provenance CHECK (retention_provenance IN (
+        'APPEND_SNAPSHOT',
+        'LEGACY_MIGRATION_CLASSIFICATION',
+        'DATABASE_COMPATIBILITY_SNAPSHOT'
+    )) NOT VALID;
 
 ALTER TABLE operations_operator_permission_grant
     DROP CONSTRAINT chk_operator_permission_vocabulary,

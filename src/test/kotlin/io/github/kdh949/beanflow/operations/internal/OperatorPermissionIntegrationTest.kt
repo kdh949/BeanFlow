@@ -398,7 +398,42 @@ internal class OperatorPermissionIntegrationTest
             )
 
         private companion object {
-            val SUPPORT_PERMISSIONS = OperatorPermission.entries.drop(9)
+            val SUPPORT_PERMISSIONS =
+                listOf(
+                    OperatorPermission.SUPPORT_CASE_READ,
+                    OperatorPermission.SUPPORT_CASE_WRITE,
+                    OperatorPermission.SUPPORT_CASE_ASSIGN,
+                    OperatorPermission.SUPPORT_SUBJECT_SEARCH,
+                    OperatorPermission.SUPPORT_VERIFICATION_MANAGE,
+                    OperatorPermission.SUPPORT_PII_REVEAL_REQUEST,
+                    OperatorPermission.SUPPORT_PII_REVEAL_APPROVE,
+                    OperatorPermission.SUPPORT_PII_REVEAL_BASIC,
+                    OperatorPermission.SUPPORT_PII_REVEAL_SENSITIVE,
+                    OperatorPermission.SUPPORT_BREAK_GLASS_REQUEST,
+                    OperatorPermission.SUPPORT_ACTION_REQUEST,
+                    OperatorPermission.SUPPORT_ACTION_APPROVE,
+                    OperatorPermission.SUPPORT_ACTION_EXECUTE,
+                    OperatorPermission.SUPPORT_ORDER_READ,
+                    OperatorPermission.SUPPORT_ORDER_CANCEL,
+                    OperatorPermission.SUPPORT_PICKUP_RESCHEDULE,
+                    OperatorPermission.SUPPORT_RESOLUTION_REQUEST,
+                    OperatorPermission.SUPPORT_RESOLUTION_APPROVE,
+                    OperatorPermission.SUPPORT_RESOLUTION_EXECUTE,
+                    OperatorPermission.SUPPORT_COMPENSATION_REQUEST,
+                    OperatorPermission.SUPPORT_COMPENSATION_APPROVE,
+                    OperatorPermission.SUPPORT_COMPENSATION_EXECUTE,
+                    OperatorPermission.SUPPORT_PROFILE_R1_CHANGE,
+                    OperatorPermission.SUPPORT_PROFILE_R2_CHANGE,
+                    OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
+                    OperatorPermission.SUPPORT_PROFILE_R3_APPROVE,
+                    OperatorPermission.SUPPORT_DELIVERY_READ,
+                    OperatorPermission.SUPPORT_DELIVERY_INCIDENT_WRITE,
+                    OperatorPermission.SUPPORT_DELIVERY_CHANGE,
+                    OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION,
+                    OperatorPermission.OPERATIONS_LEGAL_HOLD_MANAGE,
+                    OperatorPermission.OPERATIONS_RETENTION_MANAGE,
+                    OperatorPermission.PRIVACY_AUDIT_READ,
+                )
         }
 
         private fun operatorJwt(

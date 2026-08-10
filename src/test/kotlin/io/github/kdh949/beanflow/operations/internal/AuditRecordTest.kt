@@ -54,6 +54,39 @@ internal class AuditRecordTest
         }
 
         @Test
+        fun `raw PII in an allowlisted summary value is rejected instead of persisted`() {
+            listOf(
+                "alice@example.com",
+                "010-1234-5678",
+                "서울특별시 강남구 테헤란로 123",
+                "4242 4242 4242 4242",
+            ).forEach { rawPii ->
+                assertThatThrownBy {
+                    transactionTemplate.executeWithoutResult {
+                        operations.appendAll(listOf(command(after = mapOf("note" to rawPii))))
+                    }
+                }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+                }
+            }
+
+            assertThat(count()).isZero()
+        }
+
+        @Test
+        fun `raw PII in an audit reason is rejected instead of persisted`() {
+            assertThatThrownBy {
+                transactionTemplate.executeWithoutResult {
+                    operations.appendAll(listOf(command(reason = "customer email alice@example.com")))
+                }
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+            }
+
+            assertThat(count()).isZero()
+        }
+
+        @Test
         fun `duplicate audit key is rejected instead of overwriting append only history`() {
             val command = command()
             transactionTemplate.executeWithoutResult { operations.appendAll(listOf(command)) }
@@ -100,6 +133,7 @@ internal class AuditRecordTest
         private fun command(
             occurredAt: Instant = Instant.parse("2026-07-28T00:00:00Z"),
             after: Map<String, String> = mapOf("state" to "RESERVED"),
+            reason: String = "CUSTOMER_ORDER_CREATION",
         ) = AppendAuditRecordCommand(
             actorId = UUID.randomUUID().toString(),
             actorType = AuditActorType.CUSTOMER,
@@ -108,7 +142,7 @@ internal class AuditRecordTest
             targetType = "STOCK_RESERVATION",
             targetId = UUID.randomUUID(),
             occurredAt = occurredAt,
-            reason = "CUSTOMER_ORDER_CREATION",
+            reason = reason,
             beforeSummary = emptyMap(),
             afterSummary = after,
             correlationId = UUID.randomUUID().toString(),

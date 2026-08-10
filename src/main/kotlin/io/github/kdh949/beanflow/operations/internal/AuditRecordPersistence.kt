@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
+import io.github.kdh949.beanflow.operations.api.AuditRetentionProvenance
 import io.github.kdh949.beanflow.operations.api.RetentionClass
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -53,6 +54,9 @@ internal class AuditRecordEntity(
     val retentionClass: RetentionClass,
     @Column(name = "retention_policy_version_id", nullable = false)
     val retentionPolicyVersionId: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "retention_provenance", nullable = false)
+    val retentionProvenance: AuditRetentionProvenance,
 )
 
 internal interface AuditRecordJpaRepository : JpaRepository<AuditRecordEntity, UUID> {

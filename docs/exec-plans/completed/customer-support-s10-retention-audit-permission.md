@@ -70,7 +70,11 @@ unclassified caller remains.
 
 - **AuditCategory:** why an Audit fact exists; closed code vocabulary owned by Operations.
 - **RetentionClass:** accepted purpose/period family independent of a row's business action.
-- **RetentionPolicyVersion:** immutable mapping from category to class and exact duration rule selected at append time.
+- **RetentionPolicyVersion:** immutable mapping from category to class and exact duration rule selected at append time;
+  `PRESERVE_STORED_EXPIRY` is a legacy-classification rule and is never an append snapshot.
+- **Retention provenance:** `APPEND_SNAPSHOT` records a new application append; `LEGACY_MIGRATION_CLASSIFICATION`
+  records V39 classification without claiming historical policy selection; `DATABASE_COMPATIBILITY_SNAPSHOT` records a
+  temporary V38 binary insert classified by the V39 DB bridge.
 - **Policy head:** category-scoped pointer to one immutable policy version. S10 seeds heads but exposes no runtime mutation.
 - **Legacy expiry preservation:** migration adds classification without recalculating an existing row's stored expiry.
 
@@ -103,7 +107,8 @@ unclassified caller remains.
    no existing row is guessed to be PII-only.
 4. `AppendAuditRecordCommand.category` is required. Unknown action/category, missing policy head/version or policy shape
    rolls back the caller transaction; it never falls back to five years, two years or current wall-clock defaults.
-5. The selected policy version ID, category, class and computed expiry are immutable Audit evidence.
+5. The selected policy version ID, category, class, provenance and computed expiry are immutable Audit evidence.
+   Only `APPEND_SNAPSHOT` is evidence of the append-time policy decision; legacy expiry is never recomputed.
 6. Permission role/claim alone grants nothing. `requireActive()` locks the persistent row in the caller's transaction.
 7. Permission revoke/regrant and action authorization serialize on the same grant row. A revoke committed first denies;
    an authorization transaction committed first may finish only inside that already-authorized local transaction.
@@ -175,15 +180,20 @@ No PII reveal runtime model exists, so table ownership and cross-table query/del
 2. Create `operations_retention_policy_version` with immutable version ID, category, class, duration basis/value,
    effective time, actor/evidence and constraints. Add an update/delete rejection trigger.
 3. Create `operations_retention_policy_head(category PK, policy_version_id, version)` with FK including category.
-4. Seed accepted initial classes/versions: financial five Seoul calendar years, Support Case three years, PII access two
-   years, delivery contact 90 days, current location 24 hours and raw Provider webhook seven days. Only financial and PII
+4. Seed accepted current classes/versions: financial five Seoul calendar years, Support Case three years, PII access two
+   years, delivery contact 90 days, current location 24 hours and raw Provider webhook seven days. Seed separate financial
+   `PRESERVE_STORED_EXPIRY` versions only for V39 legacy classification; they are not policy heads. Only financial and PII
    Audit classes are eligible for `operations_audit_record` in S10; later owner Stage plans consume other classes.
-5. Add nullable `audit_category`, `retention_class`, `retention_policy_version_id` columns to Audit rows.
-6. Backfill every existing row through the explicit action classification to a five-year version while preserving the
-   existing `retention_expires_at` byte-for-byte. Verify row counts, no nulls, FK shape and unchanged min/max/checksum
-   evidence before setting columns NOT NULL.
-7. Add FK/check constraints and `(retention_class, retention_expires_at, id)` worker index. Keep existing append-only unique
-   and query indexes.
+5. Add nullable `audit_category`, `retention_class`, `retention_policy_version_id`, `retention_provenance` columns to Audit
+   rows. A `BEFORE INSERT` DB bridge fills all four only for a V38-style all-null insert with a known action/current head;
+   partial, unknown or invalid inputs fail closed.
+6. Backfill every existing row through the explicit action classification to the legacy `PRESERVE_STORED_EXPIRY` version,
+   preserving existing `retention_expires_at` byte-for-byte and marking `LEGACY_MIGRATION_CLASSIFICATION`. Verify row
+   counts, no nulls and unchanged min/max/checksum evidence.
+7. Add new-row-enforced FK/check constraints as `NOT VALID`; defer physical `NOT NULL`, constraint validation and DB bridge
+   population removal to a separately leased contract migration after V38 fleet drain and representative lock measurement.
+   Retain V4 `(retention_expires_at, id)`, whose column order matches the worker query, without claiming planner selection;
+   do not add a class-leading index that cannot serve its purge order.
 8. Alter permission column length if required, replace the closed vocabulary check with current nine plus the exact S10
    values below, and prove no existing grant becomes invalid.
 9. Do not modify, renumber or checksum-repair V1~V38.
@@ -235,14 +245,15 @@ No integration event is added. Later Stages must not treat a dormant permission 
 ### Existing tests to extend
 
 - `AuditRecordTest`: financial five-year leap/calendar regression; policy snapshot; missing/invalid policy rollback;
-  sensitive summary and append-only behavior.
+  sensitive key plus raw email/phone/address summary value and raw-PII reason rejection; append-only behavior.
 - `OperatorPermissionIntegrationTest`: every new enum accepted by DB/bootstrap, undeclared value rejected, grant/revoke/
   regrant, role/claim-only denial and Audit rollback.
 
 ### New test classes
 
 - `AuditRetentionPolicyMigrationTest`: fresh PostgreSQL migration, explicit action coverage, unmapped-action abort fixture,
-  existing expiry unchanged, NOT NULL/FK/check/immutable trigger/index and current permission check.
+  legacy preserve-expiry provenance, V38-style compatibility insert, existing expiry unchanged, FK/check/immutable trigger
+  and current permission check.
 - `AuditRetentionPolicyIntegrationTest`: PostgreSQL timestamp precision에 맞춘 category별 `-1µs/at/+1µs`, financial 5y versus PII 2y, missing head/version
   fail-closed, multi-category append atomicity and worker failure/retry.
 - `AuditPermissionBoundaryConcurrencyTest`: two retention workers claim disjoint chunks; append versus due scan; permission
@@ -317,6 +328,32 @@ the repository's actual `*ModularityTests` class, not nonexistent generic archit
   (contract definition 1 + classified production callers 24). Migration status는 untracked V39 하나뿐이며
   inventory tail은 V35~V39다.
 
+### PR #51 review remediation validation (2026-08-11)
+
+- `./gradlew test --tests io.github.kdh949.beanflow.operations.internal.AuditRecordTest --tests
+  io.github.kdh949.beanflow.operations.internal.AuditRetentionPolicyMigrationTest` — initial exit 1 as intended:
+  raw PII summary/reason, legacy provenance and V38 compatibility regression tests failed against the reviewed code.
+- After implementation, the same command — exit 0, `BUILD SUCCESSFUL in 23s`.
+- The first full-suite rerun exposed three `PointAdjustmentIntegrationTest` regressions: the initial card pattern
+  falsely classified a monetary `Long`/numeric UUID fragment. It was replaced with whole-value digit normalization plus
+  Luhn validation; raw card value `4242 4242 4242 4242` remains a failing Audit input.
+- `./gradlew spotlessApply test --tests io.github.kdh949.beanflow.operations.internal.AuditRecordTest --tests
+  io.github.kdh949.beanflow.loyalty.internal.PointAdjustmentIntegrationTest` — exit 0,
+  `BUILD SUCCESSFUL in 18s`.
+- `./gradlew test --tests '*AuditRecordTest' --tests '*AuditRetentionPolicy*' --tests
+  '*OperatorPermissionIntegrationTest' --tests '*AuditPermissionBoundaryConcurrencyTest' --tests
+  io.github.kdh949.beanflow.loyalty.internal.PointAdjustmentIntegrationTest` — exit 0; eight XML results contained no
+  `failure` or `error` node.
+- `./gradlew spotlessCheck test --rerun-tasks` — completed after full Testcontainers suite; all 140 XML results contained
+  no `failure` or `error` node. Follow-up `./gradlew spotlessCheck test` — exit 0,
+  `BUILD SUCCESSFUL in 770ms` (all 9 actionable tasks up-to-date).
+- `./gradlew test --tests '*ModularityTests'` — exit 0, `BUILD SUCCESSFUL in 3s`.
+- `./scripts/verify-docs.sh` — exit 0: target/runtime 34 paths/37 operations, 91 schemas, 33 business policies, 91 ADRs,
+  225 Markdown files and 36 ExecPlans validated.
+- `git diff --check` — exit 0, output 없음. Representative production-like `EXPLAIN (ANALYZE, BUFFERS)` and V39
+  duration/lock-wait measurement are **Not run**; they remain a mandatory evidence gate for the separate contract
+  migration and are not claimed here.
+
 ## Observability
 
 Extend current Audit retention metrics only with closed `retention_class`/outcome labels after cardinality review. Record
@@ -340,7 +377,8 @@ stable class/outcome/count only and do not dump failed commands or policy eviden
 - [x] Scheduling decision and migration lease acquisition — 2026-08-11T03:28:12+09:00, branch
   `feature/s10-retention-audit-permission`, base `ad07ff3`, latest Flyway V38, selected V39
 - [x] Required Audit category/class/version API and every production caller classification implemented
-- [x] V39 immutable policy/head, legacy expiry-preserving backfill, DB constraints and 42 permissions implemented
+- [x] V39 immutable policy/head, provenance-distinguished legacy expiry-preserving backfill, fail-closed compatibility
+  bridge and 42 permissions implemented
 - [x] fail-closed append, concurrent worker claim and permission grant/revoke boundaries implemented
 - [x] required PostgreSQL, full suite, Modulith, formatting and documentation validation completed
 - [x] S20 direct successor plan and orchestration/readiness metadata updated; S10 migration lease released
@@ -374,14 +412,19 @@ stable class/outcome/count only and do not dump failed commands or policy eviden
 | 2026-08-11 | Classification | payment results remain financial; reservation confirmations/releases are order/fulfillment | one transaction emits facts with different business purposes | `PaymentResultTransaction`, V39 |
 | 2026-08-11 | Boundary fixture | use ±1 microsecond around PostgreSQL due time | database/JDBC precision rounds nanosecond-only differences | integration tests |
 | 2026-08-11 | Completion | release S10 lease and activate only the S20 detailed plan | V39/full validation complete; successor must acquire its own lease | completed S10, active S20 |
+| 2026-08-11 | Review remediation | preserve-expiry version/provenance, DB compatibility bridge and raw-PII value/reason rejection | historical policy evidence and rolling V38 coexistence must not weaken retention or privacy invariants | PR #51 review remediation, V39, this plan |
 
 ## Outcomes & Retrospective
 
-V39 preserves every legacy Audit expiry, snapshots required category/class/immutable policy version for new records and
-keeps financial/order/settlement/security/policy Audit at five Seoul calendar years while PII access Audit uses two.
-Audit/policy failure rolls back the privileged caller, and concurrent retention workers claim disjoint due rows with
-`SKIP LOCKED`. Operations now recognizes 42 persistent permissions (existing 9 plus S10 33) with the existing verified
-offline grant/revoke/regrant and row-lock authorization semantics.
+V39 preserves every legacy Audit expiry with a dedicated `PRESERVE_STORED_EXPIRY` policy and
+`LEGACY_MIGRATION_CLASSIFICATION`, so a policy created by V39 is not represented as a historical append decision. New
+records snapshot required category/class/immutable policy version/provenance and keep financial/order/settlement/security/
+policy Audit at five Seoul calendar years while PII access Audit uses two. Summary values and free-text reasons that match
+raw email/phone/address/payment-card patterns fail before persistence. The DB compatibility bridge supports only all-null
+V38-style inserts during rollout; contract hardening is intentionally deferred to a separately leased migration after
+fleet drain and measured lock behavior. Audit/policy failure rolls back the privileged caller, and concurrent retention
+workers claim disjoint due rows with `SKIP LOCKED`. Operations now recognizes 42 persistent permissions (existing 9 plus
+S10 33) with the existing verified offline grant/revoke/regrant and row-lock authorization semantics.
 
 No SupportCase, search, PII reveal, action, Delivery, LegalHold, multi-component deletion or Support runtime OpenAPI was
 added. Initial non-Audit owner policy versions are seeded foundations only. Full validation passed, the S10 migration
@@ -396,3 +439,9 @@ Accepted; it has no lease or reserved migration number.
 - 2026-08-11: acquired the S10 migration-writer lease from current main and selected V39 after execution-time inventory.
 - 2026-08-11: implemented V39 Audit retention classification and 42-permission foundation, completed PostgreSQL/full/
   structure/document validation, released the lease and authored the S20 direct successor from actual outcomes.
+- 2026-08-11: PR #51 review remediation revalidated the V39 writer lease at `2026-08-11T05:34:24+0900`: PR #51 on
+  `feature/s10-retention-audit-permission` was the only open PR; the four other local worktrees were separate feature or
+  detached branches with no S10 lease record. No direct successor readiness changed: S20 remains
+  `Implementation-Ready: false` and does not inherit V39's future contract migration. The remediation adds raw-PII
+  value/reason fail-closed tests, legacy provenance, a V38 compatibility bridge, and explicit permission/concurrency
+  test intent; its final validation evidence is recorded below before merge.

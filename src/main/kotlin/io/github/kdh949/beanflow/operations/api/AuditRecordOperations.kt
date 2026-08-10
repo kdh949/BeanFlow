@@ -48,6 +48,14 @@ enum class RetentionDurationBasis {
     EXACT_DAYS_FROM_TERMINAL,
     EXACT_HOURS_FROM_EVENT,
     EXACT_DAYS_FROM_RECEIPT,
+    PRESERVE_STORED_EXPIRY,
+}
+
+/** Records whether the retention policy is an append-time snapshot or migration/compatibility classification. */
+enum class AuditRetentionProvenance {
+    APPEND_SNAPSHOT,
+    LEGACY_MIGRATION_CLASSIFICATION,
+    DATABASE_COMPATIBILITY_SNAPSHOT,
 }
 
 data class RetentionPolicyVersionSnapshot(

@@ -33,9 +33,13 @@ Boundary clock, 5y/2y regression, LegalHold race/review/expiry, component partia
 ## Implementation Evidence
 
 S10의 Flyway V39는 Operations-owned immutable policy version/head, Audit action/category mapping과 Audit
-category/class/version snapshot을 추가했다. 기존 Audit expiry 불변, financial 5년, PII access 2년,
-category별 due 경계, policy 결함 시 caller transaction rollback, concurrent worker의 `SKIP LOCKED` claim과
-persistent permission grant/revoke 직렬화를 PostgreSQL Testcontainers로 검증했다.
+category/class/version/provenance를 추가했다. 기존 Audit expiry는 불변이며, legacy row는 과거 append snapshot을
+가장하지 않도록 `PRESERVE_STORED_EXPIRY` version과 `LEGACY_MIGRATION_CLASSIFICATION`으로 기록한다. 신규
+financial 5년과 PII access 2년 snapshot, raw PII value/reason fail-closed validation, category별 due 경계, policy
+결함 시 caller transaction rollback, concurrent worker의 `SKIP LOCKED` claim과 persistent permission grant/revoke
+직렬화를 PostgreSQL Testcontainers로 검증했다. V39은 old binary의 all-null Audit insert를 fail-closed DB
+compatibility trigger로만 일시 지원하는 expand/backfill migration이며, physical `NOT NULL`/constraint validation과
+trigger removal은 fleet drain 및 measurement가 기록된 후속 contract migration에서 수행한다.
 
 이 증거는 Audit와 permission foundation에만 해당한다. SupportCase, PII reveal, LegalHold,
 owner별 retention port, component deletion ledger와 backup replay는 구현되지 않았으며 기존

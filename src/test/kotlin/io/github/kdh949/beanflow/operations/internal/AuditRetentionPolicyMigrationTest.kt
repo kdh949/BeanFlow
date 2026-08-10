@@ -38,21 +38,32 @@ internal class AuditRetentionPolicyMigrationTest {
                 String::class.java,
             ),
         ).isEqualTo("39")
-        assertThat(count(jdbc, "operations_retention_policy_version")).isEqualTo(10)
+        assertThat(count(jdbc, "operations_retention_policy_version")).isEqualTo(15)
         assertThat(count(jdbc, "operations_retention_policy_head")).isEqualTo(10)
         assertThat(
             jdbc.queryForList(
                 "SELECT column_name FROM information_schema.columns " +
-                    "WHERE table_name = 'operations_audit_record' AND is_nullable = 'NO'",
+                    "WHERE table_name = 'operations_audit_record' AND is_nullable = 'YES'",
                 String::class.java,
             ),
-        ).contains("audit_category", "retention_class", "retention_policy_version_id")
+        ).contains("audit_category", "retention_class", "retention_policy_version_id", "retention_provenance")
+        assertThat(
+            jdbc.queryForList(
+                "SELECT conname FROM pg_constraint WHERE conrelid = 'operations_audit_record'::regclass",
+                String::class.java,
+            ),
+        ).contains(
+            "fk_audit_action_category",
+            "fk_audit_retention_policy_version",
+            "chk_audit_retention_class",
+            "chk_audit_retention_provenance",
+        )
         assertThat(
             jdbc.queryForObject(
-                "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_audit_retention_class_expiry'",
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_audit_retention'",
                 String::class.java,
             ),
-        ).contains("retention_class", "retention_expires_at", "id")
+        ).contains("retention_expires_at", "id")
 
         OperatorPermission.entries.forEachIndexed { index, permission ->
             jdbc.update(
@@ -85,7 +96,7 @@ internal class AuditRetentionPolicyMigrationTest {
     }
 
     @Test
-    fun `V39 classifies known legacy rows without changing their exact expiry`() {
+    fun `V39 classifies known legacy rows with preserve expiry provenance without changing their exact expiry`() {
         val dataSource = database("backfill")
         flyway(dataSource).target("38").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
@@ -97,14 +108,43 @@ internal class AuditRetentionPolicyMigrationTest {
         val row =
             jdbc.queryForMap(
                 """
-                SELECT audit_category, retention_class, retention_policy_version_id, retention_expires_at
-                  FROM operations_audit_record
+                SELECT audit.audit_category, audit.retention_class, audit.retention_policy_version_id,
+                       audit.retention_provenance, audit.retention_expires_at,
+                       policy.duration_basis, policy.duration_value
+                  FROM operations_audit_record audit
+                  JOIN operations_retention_policy_version policy
+                    ON policy.policy_version_id = audit.retention_policy_version_id
                 """.trimIndent(),
             )
         assertThat(row["audit_category"]).isEqualTo("ORDER_AND_FULFILLMENT")
         assertThat(row["retention_class"]).isEqualTo("FINANCIAL_AUDIT")
-        assertThat(row["retention_policy_version_id"]).isEqualTo(2L)
+        assertThat(row["retention_policy_version_id"]).isEqualTo(12L)
+        assertThat(row["retention_provenance"]).isEqualTo("LEGACY_MIGRATION_CLASSIFICATION")
+        assertThat(row["duration_basis"]).isEqualTo("PRESERVE_STORED_EXPIRY")
+        assertThat(row["duration_value"]).isEqualTo(0)
         assertThat((row["retention_expires_at"] as Timestamp).toInstant()).isEqualTo(originalExpiry)
+    }
+
+    @Test
+    fun `V39 allows an old binary audit insert through the database compatibility bridge`() {
+        val jdbc = migrated("compatibility")
+
+        insertAudit(jdbc, "STOCK_RESERVED", Instant.parse("2031-01-01T00:00:00Z"))
+
+        val row =
+            jdbc.queryForMap(
+                """
+                SELECT audit.audit_category, audit.retention_class, audit.retention_provenance,
+                       policy.duration_basis
+                  FROM operations_audit_record audit
+                  JOIN operations_retention_policy_version policy
+                    ON policy.policy_version_id = audit.retention_policy_version_id
+                """.trimIndent(),
+            )
+        assertThat(row["audit_category"]).isEqualTo("ORDER_AND_FULFILLMENT")
+        assertThat(row["retention_class"]).isEqualTo("FINANCIAL_AUDIT")
+        assertThat(row["retention_provenance"]).isEqualTo("DATABASE_COMPATIBILITY_SNAPSHOT")
+        assertThat(row["duration_basis"]).isEqualTo("SEOUL_CALENDAR_YEARS")
     }
 
     @Test
@@ -154,9 +194,10 @@ internal class AuditRetentionPolicyMigrationTest {
         INSERT INTO operations_audit_record (
             id, actor_id, actor_type, audit_category, action, target_type, target_id, occurred_at, reason,
             before_summary, after_summary, correlation_id, source_reference, retention_expires_at,
-            retention_class, retention_policy_version_id
+            retention_class, retention_policy_version_id, retention_provenance
         ) VALUES (?, 'SYSTEM', 'SYSTEM', 'FINANCIAL_TRANSACTION', ?, 'MIGRATION_FIXTURE', ?, now(),
-            'MIGRATION_FIXTURE', '{}', '{}', ?, ?, now() + interval '5 years', 'FINANCIAL_AUDIT', 1)
+            'MIGRATION_FIXTURE', '{}', '{}', ?, ?, now() + interval '5 years', 'FINANCIAL_AUDIT', 1,
+            'APPEND_SNAPSHOT')
         """.trimIndent(),
         UUID.randomUUID(),
         action,

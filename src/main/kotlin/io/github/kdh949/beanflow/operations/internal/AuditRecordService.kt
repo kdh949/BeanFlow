@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
+import io.github.kdh949.beanflow.operations.api.AuditRetentionProvenance
 import io.github.kdh949.beanflow.operations.api.RetentionClass
 import io.github.kdh949.beanflow.operations.api.RetentionDurationBasis
 import io.github.kdh949.beanflow.operations.api.RetentionPolicyCategory
@@ -70,6 +71,7 @@ internal class AuditRecordService(
                     retentionExpiresAt = retentionExpiry(command.occurredAt, policy),
                     retentionClass = policy.retentionClass,
                     retentionPolicyVersionId = policy.policyVersionId,
+                    retentionProvenance = AuditRetentionProvenance.APPEND_SNAPSHOT,
                 )
             }
         repository.saveAllAndFlush(records)
@@ -95,6 +97,25 @@ internal class AuditRecordService(
         if (keys.any { key -> SENSITIVE_KEY_PARTS.any { key.contains(it, ignoreCase = true) } }) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Audit summary contains a sensitive field")
         }
+        val values = command.beforeSummary.values + command.afterSummary.values + command.reason
+        if (values.any(::containsRawPii)) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Audit payload contains raw PII")
+        }
+    }
+
+    private fun containsRawPii(value: String): Boolean =
+        RAW_PII_PATTERNS.any { it.containsMatchIn(value) } || containsPaymentCardNumber(value)
+
+    private fun containsPaymentCardNumber(value: String): Boolean {
+        if (value.any { !it.isDigit() && it != ' ' && it != '-' }) return false
+        val digits = value.filter(Char::isDigit)
+        if (digits.length !in 13..19) return false
+        return digits
+            .reversed()
+            .mapIndexed { index, digit ->
+                val numeric = digit.digitToInt()
+                if (index % 2 == 0) numeric else (numeric * 2).let { if (it > 9) it - 9 else it }
+            }.sum() % 10 == 0
     }
 
     private fun validateAuditPolicy(
@@ -172,6 +193,18 @@ internal class AuditRecordService(
                 "recipientName",
                 "birth",
                 "pii",
+            )
+        val RAW_PII_PATTERNS =
+            listOf(
+                Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"""),
+                Regex("""(?<!\d)(?:\+?82[-\s]?)?0?1[0-9][-\s]?\d{3,4}[-\s]?\d{4}(?!\d)"""),
+                Regex(
+                    """(?:서울(?:특별시)?|부산(?:광역시)?|대구(?:광역시)?|인천(?:광역시)?|광주(?:광역시)?|대전(?:광역시)?|울산(?:광역시)?|세종(?:특별자치시)?|경기도|강원(?:특별자치도)?|충청[남북]도|전라[남북]도|경상[남북]도|제주(?:특별자치도)?)[^\n]{0,80}?(?:[가-힣A-Za-z]+(?:로|길)\s*\d+|\d+(?:번지|호)?)""",
+                ),
+                Regex(
+                    """\b\d{1,6}\s+[A-Za-z][A-Za-z .'-]{1,50}\s+(?:street|st\.?|road|rd\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|boulevard|blvd\.?)\b""",
+                    RegexOption.IGNORE_CASE,
+                ),
             )
         const val PURGE_DUE_SQL =
             """

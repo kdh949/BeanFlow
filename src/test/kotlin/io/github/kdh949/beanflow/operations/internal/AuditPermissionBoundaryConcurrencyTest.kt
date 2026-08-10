@@ -83,6 +83,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
         fun `policy head read lock is the linearization point for future activation`() {
             val policyLocked = CountDownLatch(1)
             val releasePolicy = CountDownLatch(1)
+            val updaterAttempted = CountDownLatch(1)
             val executor = Executors.newFixedThreadPool(2)
             try {
                 val reader =
@@ -98,6 +99,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
                 val updater =
                     executor.submit<Int> {
                         transactionTemplate.execute { status ->
+                            updaterAttempted.countDown()
                             val updated =
                                 jdbcTemplate.update(
                                     "UPDATE operations_retention_policy_head SET version = version + 1 " +
@@ -107,6 +109,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
                             updated
                         }
                     }
+                assertThat(updaterAttempted.await(5, TimeUnit.SECONDS)).isTrue()
                 assertThatThrownBy { updater.get(250, TimeUnit.MILLISECONDS) }
                     .isInstanceOf(TimeoutException::class.java)
 
@@ -134,6 +137,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
                 .isEqualTo(OperatorPermissionBootstrapResult.APPLIED)
             val authorized = CountDownLatch(1)
             val release = CountDownLatch(1)
+            val revokerAttempted = CountDownLatch(1)
             val executor = Executors.newFixedThreadPool(2)
             try {
                 val reader =
@@ -147,8 +151,10 @@ internal class AuditPermissionBoundaryConcurrencyTest
                 assertThat(authorized.await(5, TimeUnit.SECONDS)).isTrue()
                 val revoker =
                     executor.submit<OperatorPermissionBootstrapResult> {
+                        revokerAttempted.countDown()
                         apply(actorId, permission, OperatorPermissionBootstrapAction.REVOKE, principal)
                     }
+                assertThat(revokerAttempted.await(5, TimeUnit.SECONDS)).isTrue()
                 assertThatThrownBy { revoker.get(250, TimeUnit.MILLISECONDS) }
                     .isInstanceOf(TimeoutException::class.java)
 

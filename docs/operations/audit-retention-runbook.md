@@ -13,8 +13,14 @@
   없으므로 직접 SQL로 head나 version을 변경하지 않는다.
 - `operations_audit_action_category`는 기존 action과 category의 immutable closed mapping이다. 새 Audit action은
   forward migration으로 mapping을 추가한 뒤 배포한다.
-- `operations_audit_record`의 `audit_category`, `retention_class`, `retention_policy_version_id`와
-  `retention_expires_at`은 append 시점의 증거다. 기존 row를 current policy에 맞춰 재계산하지 않는다.
+- `operations_audit_record`의 `audit_category`, `retention_class`, `retention_policy_version_id`,
+  `retention_provenance`와 `retention_expires_at`은 retention evidence다. `APPEND_SNAPSHOT`만 append 시점의
+  policy snapshot이다. `LEGACY_MIGRATION_CLASSIFICATION`은 V39이 기존 expiry를 재계산하지 않고 부여한
+  `PRESERVE_STORED_EXPIRY` 분류이고, 과거 append 결정을 주장하지 않는다. 기존 row를 current policy에 맞춰
+  재계산하지 않는다.
+- `DATABASE_COMPATIBILITY_SNAPSHOT`은 V39 배포 중 V38 binary가 모든 새 retention field를 생략했을 때만 DB
+  trigger가 current head로 채운 compatibility provenance다. 누락 head/action 또는 partial field는 성공으로
+  대체하지 않고 insert를 실패시킨다.
 
 ## Read-only checks
 
@@ -39,6 +45,36 @@ WHERE retention_expires_at <= now()
 GROUP BY audit_category, retention_class
 ORDER BY audit_category, retention_class;
 ```
+
+legacy 및 rollout compatibility 사용 여부는 PII 없이 다음처럼 확인한다.
+
+```sql
+SELECT retention_provenance, count(*) AS record_count, max(occurred_at) AS newest_occurred_at
+FROM operations_audit_record
+GROUP BY retention_provenance
+ORDER BY retention_provenance;
+```
+
+## V39 deployment and later contract
+
+V39은 `expand/backfill` migration이다. nullable retention columns, immutable policy/action mapping, legacy
+classification과 `BEFORE INSERT` compatibility trigger를 한 transaction으로 추가한다. migration은 conflicting
+audit-table lock을 5초 이상 기다리지 않도록 `lock_timeout`을 설정한다. timeout이나 preflight/backfill evidence
+실패는 전체 migration을 rollback하며, default/current policy를 직접 써서 재시도하지 않는다.
+
+V38 binary가 rollout 중 Audit을 insert해도 trigger가 known action과 current non-legacy head를 사용해 네 field를
+함께 채운다. partial input, unknown action, missing head/version 또는 legacy policy의 snapshot 사용은 DB에서
+실패한다. 따라서 physical `NOT NULL`, FK/CHECK validation과 compatibility population 제거는 **별도 contract
+migration**으로만 수행한다. 그 migration은 모든 instance가 V39+임을 확인하고, `DATABASE_COMPATIBILITY_SNAPSHOT`
+의 가장 최근 `occurred_at`이 fleet drain observation window보다 오래된 뒤 별도 migration-writer lease를 획득해
+계획한다.
+
+V39은 새 `(retention_class, retention_expires_at, id)` index를 추가하지 않는다. V4의
+`idx_audit_retention (retention_expires_at, id)` column order는 purge predicate/order와 일치하지만, planner 선택은
+주장하지 않는다. representative production-like data의 `EXPLAIN (ANALYZE, BUFFERS)`와 migration
+duration/lock-wait 측정은 아직 수행하지 않았다. contract scheduling
+전에는 해당 측정 결과를 이 runbook/후속 ExecPlan에 기록해야 하며, 측정 전에는 performance/no-lock claim을 하지
+않는다.
 
 ## Worker behavior
 
