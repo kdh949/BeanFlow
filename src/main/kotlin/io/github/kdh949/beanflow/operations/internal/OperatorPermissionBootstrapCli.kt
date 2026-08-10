@@ -21,10 +21,25 @@ import kotlin.system.exitProcess
 @Configuration(proxyBeanMethods = false)
 @Profile("operator-permission-bootstrap")
 @EnableAutoConfiguration
-@EntityScan(basePackageClasses = [AuditRecordEntity::class, OperatorPermissionGrantEntity::class])
-@EnableJpaRepositories(basePackageClasses = [AuditRecordJpaRepository::class, OperatorPermissionGrantJpaRepository::class])
+@EntityScan(
+    basePackageClasses = [
+        AuditRecordEntity::class,
+        OperatorPermissionGrantEntity::class,
+        RetentionPolicyHeadEntity::class,
+        RetentionPolicyVersionEntity::class,
+    ],
+)
+@EnableJpaRepositories(
+    basePackageClasses = [
+        AuditRecordJpaRepository::class,
+        OperatorPermissionGrantJpaRepository::class,
+        RetentionPolicyHeadJpaRepository::class,
+        RetentionPolicyVersionJpaRepository::class,
+    ],
+)
 @Import(
     AuditRecordService::class,
+    RetentionPolicyService::class,
     DatabaseAdvisoryLock::class,
     OperatorSecurityMetrics::class,
     OperatorPermissionGrantTransaction::class,

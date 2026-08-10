@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
@@ -104,6 +105,7 @@ internal class OperatorPermissionGrantTransaction(
                 AppendAuditRecordCommand(
                     actorId = principal.reference,
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.SECURITY_AND_PERMISSION,
                     action = auditAction(command.action),
                     targetType = "OPERATOR_PERMISSION_GRANT",
                     targetId = targetId(command.actorId, command.permission),
