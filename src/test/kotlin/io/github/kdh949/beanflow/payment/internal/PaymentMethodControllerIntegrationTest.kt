@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.tamperSignedCursorSignature
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.hasSize
 import org.hamcrest.Matchers.not
@@ -207,7 +208,7 @@ internal class PaymentMethodControllerIntegrationTest(
         mockMvc
             .perform(
                 get("/api/v1/payment-methods")
-                    .param("cursor", cursor.dropLast(1) + if (cursor.last() == 'A') "B" else "A")
+                    .param("cursor", tamperSignedCursorSignature(cursor))
                     .with(customerJwt(customerId)),
             ).andExpect(status().isBadRequest)
         mockMvc
