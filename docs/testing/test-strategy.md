@@ -40,6 +40,29 @@
 - PointAccount support read → `POINT_ACCOUNT_READ` row lock/active grant, normalized access reason,
   projection과 exactly-one target Audit이 같은 transaction에 commit; audit/projection failure에는 body 없음
 
+## Toss one-time Payment Window release suite
+
+- Migration/DB: nullable legacy `payment_method_id` 경계, one-time attempt의 positive KRW,
+  provider order/paymentKey/idempotency uniqueness, 상태별 required/null CHECK와 prepare immutable trigger
+- Prepare/API: owner Order, exact prepare replay, changed-key conflict, server canonical amount/order/customer/name,
+  public client key endpoint와 target/runtime OpenAPI/HandlerMapping parity
+- Callback: 정상 승인, owner/provider order/amount/paymentKey mix-up, 위변조, exact replay, 동시 double click,
+  새로고침·뒤로가기·다중 탭에서 Provider confirm 1회
+- Failure/recovery: 명시 거절 422, timeout·연결 오류·malformed/ACK loss는 202 `UNKNOWN`, 같은 paymentKey
+  query로 `APPROVED|FAILED|MANUAL_REVIEW` 수렴, late approval에서 Order 비복구
+- Adapter: Toss Basic secret-colon credential, stable idempotency header, confirm/query/cancel path·payload,
+  error allowlist, timeout과 민감 header/body redaction, `toss-sandbox & !prod` startup guard
+- Refund: one-time paymentKey로 부분·전액 remaining cancel, 같은 refund key replay, 복수 refund의 서로 다른
+  Provider reference, allocation·Point·Settlement 기존 불변식 회귀
+- Frontend: Runtime OpenAPI generated client, `/app`·`/store`·`/ops`, loading/empty/error/unknown,
+  checkout submit lock, callback polling/replay와 주문 추적, typecheck/unit/production/Sites build
+- Browser/local demo: 실제 Spring HTTP로 주문 준비→callback→추적, 부분/전액 환불과 UNKNOWN lookup 복구,
+  제공 디자인과 구현을 같은 comparison image로 확인하고 `design-qa.md`를 통과
+- Secrets/fallback: production dependency audit, tracked secret scan, product bundle의 fixture/fake success/secret 부재,
+  production profile에서 scripted/sandbox adapter 자동 선택 금지
+- Real sandbox: test client/secret key가 있을 때만 실제 auth/confirm/query/cancel을 실행한다. 키가 없으면
+  구현·local scripted 증거로 대체하지 않고 `Not run — missing credentials`로 기록한다.
+
 ## Customer cancellation release suite
 
 고객 취소 구현은 다음 묶음을 release-blocking suite로 실행한다.

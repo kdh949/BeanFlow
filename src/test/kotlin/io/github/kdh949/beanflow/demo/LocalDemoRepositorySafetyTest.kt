@@ -157,9 +157,15 @@ internal class LocalDemoRepositorySafetyTest {
     private companion object {
         const val MAX_SCANNED_BYTES = 2L * 1024 * 1024
 
-        // This is the repository's only intentionally tracked binary. Any other NUL-bearing
-        // tracked path is a source/configuration mistake rather than a reason to skip the scan.
-        val ALLOWED_BINARY_FILES = setOf("gradle/wrapper/gradle-wrapper.jar")
+        // Every intentionally tracked binary is explicit. Any other NUL-bearing tracked path is a
+        // source/configuration mistake rather than a reason to skip the secret scan.
+        val ALLOWED_BINARY_FILES =
+            setOf(
+                "frontend/public/brand/logo-full.png",
+                "frontend/public/brand/logo-mark.png",
+                "frontend/public/brand/logo-wordmark.png",
+                "gradle/wrapper/gradle-wrapper.jar",
+            )
 
         val CALL_PATTERN =
             Regex("""^\s*call\s+"[^"]*"\s+\d{3}\s+(GET|POST|PUT|PATCH|DELETE)\s+"([^"]+)"""", RegexOption.MULTILINE)

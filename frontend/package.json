@@ -1,0 +1,38 @@
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "npm run generate:api",
+    "dev": "vite",
+    "generate:api": "openapi-typescript ../openapi/beanflow-v1-runtime.yaml -o src/api/schema.d.ts",
+    "typecheck": "npm run generate:api && tsc --noEmit",
+    "test": "vitest run",
+    "build": "npm run generate:api && tsc --noEmit && vite build && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs"
+  },
+  "dependencies": {
+    "@tosspayments/tosspayments-sdk": "^2.7.1",
+    "lucide-react": "^1.31.0",
+    "openapi-fetch": "^0.17.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-router": "^7.18.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "5.0.4",
+    "jsdom": "^29.1.1",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -89,7 +89,7 @@ policy = (root / 'docs/product/business-policy-decisions.md').read_text(encoding
 api_conventions = (root / 'docs/api/api-conventions.md').read_text(encoding='utf-8')
 normalized_api_conventions = re.sub(r'\s+', ' ', api_conventions)
 ids = re.findall(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE)
-expected = [f'BR-{i:02d}' for i in range(1, 33)]
+expected = [f'BR-{i:02d}' for i in range(1, 34)]
 
 if set(ids) != set(expected) or any(count != 1 for count in Counter(ids).values()):
     print('Business policy IDs are missing, duplicated, or out of range.', file=sys.stderr)
@@ -658,7 +658,11 @@ for _, name, status in index_entries:
         )
         sys.exit(1)
 
-markdown_files = sorted(root.rglob('*.md'))
+markdown_files = sorted(
+    path
+    for path in root.rglob('*.md')
+    if 'node_modules' not in path.relative_to(root).parts
+)
 link_pattern = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
 broken_links = []
 for path in markdown_files:
@@ -826,11 +830,14 @@ else:
         '/orders',
         '/orders/{orderId}',
         '/orders/{orderId}/cancellations',
-        '/orders/{orderId}/payment-confirmations',
+        '/orders/{orderId}/payment-attempts',
+        '/payment-config',
         '/payment-methods',
         '/payment-methods/{paymentMethodId}',
         '/payment-methods/{paymentMethodId}/default',
         '/payments/{paymentId}/refunds',
+        '/payments/{paymentId}',
+        '/payments/{paymentId}/confirmations',
         '/store-orders/{orderId}/status',
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
@@ -881,7 +888,8 @@ else:
     mutation_operations = [
         ('/orders', 'post'),
         ('/orders/{orderId}/cancellations', 'post'),
-        ('/orders/{orderId}/payment-confirmations', 'post'),
+        ('/orders/{orderId}/payment-attempts', 'post'),
+        ('/payments/{paymentId}/confirmations', 'post'),
         ('/payment-methods', 'post'),
         ('/payment-methods/{paymentMethodId}', 'delete'),
         ('/payment-methods/{paymentMethodId}/default', 'put'),

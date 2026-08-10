@@ -1,11 +1,14 @@
 # 결제 실패와 reconciliation을 토스페이먼츠 sandbox 실호출로 검증한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/payment-method-token-management.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-10`
+
+> 이 plan은 구현 완료가 아니라 제품 결정 변경으로 종료됐다. ADR-080과
+> `docs/exec-plans/completed/toss-v2-one-time-payment-window.md`가 billing 경로를 대체했다.
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.

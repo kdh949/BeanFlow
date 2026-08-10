@@ -274,6 +274,7 @@ internal class RejectionRefundService(
             RefundClaimMode.LOOKUP -> {
                 paymentGateway.lookupRefund(
                     request,
+                    claim.amountKrw,
                     claim.providerIdempotencyKey,
                 )
             }

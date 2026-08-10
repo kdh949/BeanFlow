@@ -128,47 +128,14 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
-  /orders/{orderId}/payment-confirmations:
-    post:
-      tags: [Payment]
-      operationId: confirmOrderPayment
-      summary: Request or confirm payment for an order
-      parameters:
-        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
-        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmationRequest"
-      responses:
-        "200":
-          description: External payment approval or late-approval recovery is confirmed
-          content:
-            application/json:
-              schema:
-                $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmation"
-        "202":
-          description: Payment result or late-approval recovery is unresolved
-          content:
-            application/json:
-              schema:
-                $ref: "./beanflow-v1.yaml#/components/schemas/PaymentConfirmation"
-        "400":
-          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
-        "401":
-          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
-        "404":
-          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
-        "409":
-          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
-        "422":
-          $ref: "./beanflow-v1.yaml#/components/responses/UnprocessableEntity"
-        "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /payment-config:
+    $ref: "./beanflow-v1.yaml#/paths/~1payment-config"
+  /orders/{orderId}/payment-attempts:
+    $ref: "./beanflow-v1.yaml#/paths/~1orders~1{orderId}~1payment-attempts"
+  /payments/{paymentId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1payments~1{paymentId}"
+  /payments/{paymentId}/confirmations:
+    $ref: "./beanflow-v1.yaml#/paths/~1payments~1{paymentId}~1confirmations"
   /payment-methods:
     $ref: "./beanflow-v1.yaml#/paths/~1payment-methods"
   /payment-methods/{paymentMethodId}:

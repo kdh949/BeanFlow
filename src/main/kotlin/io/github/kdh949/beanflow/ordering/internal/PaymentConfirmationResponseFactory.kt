@@ -20,7 +20,7 @@ internal class PaymentConfirmationResponseFactory(
             when (view.approvalState) {
                 "APPROVED" -> 200
                 "FAILED" -> 422
-                "UNKNOWN", "RECONCILING", "MANUAL_REVIEW" -> 202
+                "READY", "APPROVING", "UNKNOWN", "RECONCILING", "MANUAL_REVIEW" -> 202
                 else -> 409
             }
         if (status == 422) {

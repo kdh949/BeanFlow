@@ -175,24 +175,30 @@ commit before Provider 2xx
 ## Payment approval
 
 ```text
-Tx 1: Order/PaymentMethod 검증 + Payment APPROVING + IdempotencyRecord
-      + immutable PaymentProviderRequestSnapshot 저장
+Tx A: Order lock + amount/currency 검증 + Payment READY + prepare idempotency
+      + immutable OneTimePaymentAttempt 저장
 commit
-External PG approval
-Tx 2 approved: Order lock + 네 예약 확정 + Order PAID + Payment APPROVED + Audit
-Tx 2 declined: Order lock + 네 예약 해제 + Order CANCELLED + Payment FAILED + Audit
-Tx 2 unknown: Payment UNKNOWN + reconciliation schedule
+Browser: Toss V2 Standard CARD 인증
+Tx B: Payment lock + owner/providerOrder/amount/paymentKey binding + callback claim
+commit
+External Toss confirm
+Tx C approved: Order lock + 네 예약 확정 + Order PAID + Payment/Attempt APPROVED + Audit
+Tx C declined: Order lock + 네 예약 해제 + Order CANCELLED + Payment/Attempt FAILED + Audit
+Tx C unknown: Payment/Attempt UNKNOWN + query reconciliation schedule
 ```
 
 - DB connection을 Provider latency 동안 점유하지 않는다.
-- Tx1과 deactivation Tx D1은 같은 PaymentMethod row lock으로 직렬화한다. Tx1이 먼저 commit하면
-  approve/lookup/late recovery는 current PaymentMethod를 다시 읽지 않고 snapshot만 사용한다. D1이
-  먼저 commit하면 Payment와 snapshot을 만들지 않는다.
+- one-time 경로는 PaymentMethod row와 Port를 호출하지 않는다. 저장형 token lifecycle과 checkout
+  승인 소유권을 섞지 않는다.
+- Tx A의 provider order/customer key/order name/amount/currency/success·fail URL과 Provider
+  idempotency key는 이후 모든 confirm/query/refund가 재사용하는 immutable snapshot이다.
+- Tx B는 callback hash와 paymentKey를 한 번만 claim한다. exact replay는 저장 결과를 반환하고
+  다른 callback payload는 Provider 호출 전에 거부한다.
 - timeout은 `UNKNOWN`일 수 있다.
-- PG 성공 후 Tx 2 실패는 reconciliation으로 복구한다.
-- Tx1에서 최초 reconciliation due 시각을 함께 저장해 PG 성공 후 Tx2 전체 실패도
+- PG 성공 후 Tx C 실패는 reconciliation으로 복구한다.
+- Tx A에서 최초 reconciliation due 시각을 함께 저장해 PG 성공 후 Tx C 전체 실패도
   stuck `APPROVING` 조회로 복구한다.
-- Tx2 잠금 순서는 Order → Pickup → 정렬된 Stock → Coupon → Point →
+- Tx C 잠금 순서는 Order → Pickup → 정렬된 Stock → Coupon → Point →
   Payment/Idempotency/Audit다.
 - 명시 거절은 422와 terminal idempotency result를 저장한다. timeout, 연결 오류,
   응답 유실과 해석 불가 응답은 거절로 바꾸지 않는다.
@@ -200,6 +206,8 @@ Tx 2 unknown: Payment UNKNOWN + reconciliation schedule
   확정하지만, 주문별 source reference와 IdempotencyRecord를 동일하게 보호한다.
 - Payment approved amount는 immutable `OrderSettlementInputSnapshot.feeBaseKrw`와 같아야 한다.
   mismatch는 Order completion/event success로 전이하지 않고 reconciliation/manual-review로 남긴다.
+- Toss Authorization은 secret key 뒤 `:`를 붙인 Basic credential을 사용하고 secret, paymentKey와
+  authorization header를 로그·metric·API 응답에 남기지 않는다.
 
 ### Lease expiry while payment is unknown
 

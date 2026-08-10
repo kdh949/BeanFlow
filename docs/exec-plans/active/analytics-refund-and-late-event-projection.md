@@ -10,6 +10,10 @@
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
 
+> **Migration lane released (2026-08-10):** completed `toss-v2-one-time-payment-window` plan이 V38을
+> clean build와 migration test로 검증해 writer lease를 해제했다. 이 plan은 최신 V38 다음 migration
+> 번호를 다시 확인한 뒤 schema 작업을 시작할 수 있다.
+
 ## Purpose / Big Picture
 
 Analytics는 거래 Aggregate를 소유하지 않는 read-only projection Context다.

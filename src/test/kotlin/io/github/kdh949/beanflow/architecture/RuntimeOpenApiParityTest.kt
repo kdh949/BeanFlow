@@ -15,8 +15,8 @@ import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.CustomerCancellationService
 import io.github.kdh949.beanflow.ordering.internal.GetOrderService
+import io.github.kdh949.beanflow.ordering.internal.OneTimeCheckoutService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
-import io.github.kdh949.beanflow.ordering.internal.PaymentConfirmationService
 import io.github.kdh949.beanflow.ordering.internal.StoreOrderTransitionService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodApplicationService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodQueryService
@@ -51,7 +51,7 @@ internal class RuntimeOpenApiParityTest(
     private lateinit var getOrderService: GetOrderService
 
     @MockitoBean
-    private lateinit var paymentConfirmationService: PaymentConfirmationService
+    private lateinit var oneTimeCheckoutService: OneTimeCheckoutService
 
     @MockitoBean
     private lateinit var paymentMethodApplicationService: PaymentMethodApplicationService

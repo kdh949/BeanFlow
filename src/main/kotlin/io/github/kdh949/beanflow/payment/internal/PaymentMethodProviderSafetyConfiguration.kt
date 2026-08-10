@@ -26,7 +26,7 @@ internal class PaymentMethodProviderSafetyConfiguration {
             if ("prod" in profiles && profiles.any { it in setOf("local", "test", "toss-sandbox") }) {
                 error("Payment method lifecycle provider profiles overlap with prod")
             }
-            if ("toss-sandbox" in profiles && profiles.any { it in setOf("local", "test") }) {
+            if ("toss-sandbox" in profiles && scriptedSelected) {
                 error("Scripted and toss-sandbox payment method lifecycle profiles overlap")
             }
             if (registrationProviders.size != 1 || deactivationProviders.size != 1) {

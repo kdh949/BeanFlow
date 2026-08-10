@@ -51,7 +51,7 @@ inspect_demo_container_state() {
   else
     status=$?
   fi
-  if [ "$status" -eq 1 ] && [ "$output" = "Error: No such object: ${DEMO_CONTAINER}" ]; then
+  if [ "$status" -eq 1 ] && printf '%s\n' "$output" | grep -Fqi "no such object: ${DEMO_CONTAINER}"; then
     DEMO_CONTAINER_STATE="absent"
     return 0
   fi
@@ -60,6 +60,7 @@ inspect_demo_container_state() {
 }
 
 cd "$DEMO_ROOT"
+stop_owned_process "$DEMO_FRONTEND_PID_FILE" "frontend"
 stop_owned_process "$DEMO_APP_PID_FILE" "application"
 stop_owned_process "$DEMO_IDENTITY_PID_FILE" "identity server"
 

@@ -277,11 +277,101 @@ internal enum class ReconciliationKind {
 }
 
 internal enum class ReconciliationStatus {
+    WAITING,
     SCHEDULED,
     PROCESSING,
     RETRY_SCHEDULED,
     SUCCEEDED,
     MANUAL_REVIEW,
+}
+
+internal enum class OneTimePaymentAttemptState {
+    READY,
+    CONFIRMING,
+    APPROVED,
+    FAILED,
+    UNKNOWN,
+    RECONCILING,
+    MANUAL_REVIEW,
+}
+
+@Entity
+@Table(name = "payment_one_time_attempt")
+internal class OneTimePaymentAttemptEntity(
+    @Id
+    @Column(name = "payment_id")
+    val paymentId: UUID,
+    @Column(name = "provider_order_id", nullable = false)
+    val providerOrderId: String,
+    @Column(name = "customer_key", nullable = false)
+    val customerKey: String,
+    @Column(name = "order_name", nullable = false)
+    val orderName: String,
+    @Column(name = "amount_krw", nullable = false)
+    val amountKrw: Long,
+    @Column(nullable = false)
+    val currency: String,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var state: OneTimePaymentAttemptState,
+    @Column(name = "payment_key")
+    var paymentKey: String? = null,
+    @Column(name = "callback_payload_hash", length = 64)
+    var callbackPayloadHash: String? = null,
+    @Column(name = "provider_idempotency_key", nullable = false)
+    val providerIdempotencyKey: String,
+    @Column(name = "claim_token")
+    var claimToken: UUID? = null,
+    @Column(name = "claimed_at")
+    var claimedAt: Instant? = null,
+    @Column(name = "success_url", nullable = false)
+    val successUrl: String,
+    @Column(name = "fail_url", nullable = false)
+    val failUrl: String,
+    @Column(name = "expires_at", nullable = false)
+    val expiresAt: Instant,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant,
+    @Version
+    var version: Long = 0,
+) {
+    fun claim(
+        paymentKey: String,
+        callbackPayloadHash: String,
+        claimToken: UUID,
+        now: Instant,
+    ) {
+        check(state == OneTimePaymentAttemptState.READY)
+        this.paymentKey = paymentKey
+        this.callbackPayloadHash = callbackPayloadHash
+        this.claimToken = claimToken
+        claimedAt = now
+        state = OneTimePaymentAttemptState.CONFIRMING
+        updatedAt = now
+    }
+
+    fun synchronize(
+        approvalState: PaymentApprovalState,
+        now: Instant,
+    ) {
+        state =
+            when (approvalState) {
+                PaymentApprovalState.APPROVED -> OneTimePaymentAttemptState.APPROVED
+                PaymentApprovalState.FAILED -> OneTimePaymentAttemptState.FAILED
+                PaymentApprovalState.UNKNOWN -> OneTimePaymentAttemptState.UNKNOWN
+                PaymentApprovalState.RECONCILING -> OneTimePaymentAttemptState.RECONCILING
+                PaymentApprovalState.MANUAL_REVIEW -> OneTimePaymentAttemptState.MANUAL_REVIEW
+                PaymentApprovalState.APPROVING -> OneTimePaymentAttemptState.CONFIRMING
+                PaymentApprovalState.READY -> OneTimePaymentAttemptState.READY
+            }
+        if (state != OneTimePaymentAttemptState.CONFIRMING) {
+            claimToken = null
+            claimedAt = null
+        }
+        updatedAt = now
+    }
 }
 
 @Entity
@@ -505,6 +595,16 @@ internal interface PaymentReconciliationJpaRepository : JpaRepository<PaymentRec
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<UUID>
+}
+
+internal interface OneTimePaymentAttemptJpaRepository : JpaRepository<OneTimePaymentAttemptEntity, UUID> {
+    fun findByProviderOrderId(providerOrderId: String): OneTimePaymentAttemptEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select attempt from OneTimePaymentAttemptEntity attempt where attempt.paymentId = :paymentId")
+    fun findLockedByPaymentId(
+        @Param("paymentId") paymentId: UUID,
+    ): OneTimePaymentAttemptEntity?
 }
 
 internal interface RefundJpaRepository : JpaRepository<RefundEntity, UUID> {

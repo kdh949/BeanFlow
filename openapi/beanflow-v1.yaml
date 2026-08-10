@@ -294,35 +294,117 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
-  /orders/{orderId}/payment-confirmations:
+  /payment-config:
+    get:
+      tags: [Payment]
+      operationId: getPaymentClientConfiguration
+      summary: Get the authenticated browser's Toss V2 Standard payment-window configuration
+      responses:
+        "200":
+          description: Public client configuration for the active payment Provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentClientConfiguration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /orders/{orderId}/payment-attempts:
     post:
       tags: [Payment]
-      operationId: confirmOrderPayment
-      summary: Request or confirm payment for an order
+      operationId: prepareOneTimeOrderPayment
+      summary: Prepare a server-owned one-time Toss payment-window attempt
       description: |
-        The same Idempotency-Key and payload never create a second Provider
-        approval. If the Provider result is unknown, the response is 202 and
-        reconciliation continues. If the five-minute order lease expires first,
-        a later approval never revives the order and triggers void or refund
-        recovery.
+        CUSTOMER only. The server derives orderId, amount, orderName, currency,
+        customerKey and callback URLs from the owned Order snapshot. No
+        PaymentMethod or browser-supplied price is accepted. Same-key replay
+        returns the same immutable attempt.
       parameters:
         - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: New or idempotently replayed one-time payment attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OneTimePaymentAttempt"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /payments/{paymentId}:
+    get:
+      tags: [Payment]
+      operationId: getOneTimePayment
+      summary: Get the owner-visible one-time payment and recovery state
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+      responses:
+        "200":
+          description: Approved payment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmation"
+        "202":
+          description: Provider outcome remains unknown or under reconciliation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /payments/{paymentId}/confirmations:
+    post:
+      tags: [Payment]
+      operationId: confirmOneTimePayment
+      summary: Validate a Toss success callback and confirm the prepared payment server-to-server
+      description: |
+        CUSTOMER only. paymentKey, orderId and amount must exactly match the
+        server-owned attempt. The first valid callback claims the attempt before
+        the Provider call. Exact replays return current state without a second
+        confirmation; altered replays return PAYMENT_CALLBACK_MISMATCH. A 202
+        response is unresolved and must be recovered by status lookup.
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PaymentConfirmationRequest"
+              $ref: "#/components/schemas/OneTimePaymentConfirmationRequest"
       responses:
         "200":
-          description: External payment approval or late-approval recovery is confirmed
+          description: Provider approval and Order transition committed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaymentConfirmation"
         "202":
-          description: Payment result or late-approval recovery is unresolved
+          description: Provider outcome remains unknown and recovery is durable
           content:
             application/json:
               schema:
@@ -2546,13 +2628,87 @@ components:
           $ref: "#/components/schemas/DateTime"
         correlationId:
           type: string
-    PaymentConfirmationRequest:
+    PaymentClientConfiguration:
       type: object
       additionalProperties: false
-      required: [paymentMethodId]
+      required: [provider, sdkVersion, clientKey]
       properties:
-        paymentMethodId:
+        provider:
+          type: string
+          const: TOSS_PAYMENTS
+        sdkVersion:
+          type: string
+          const: V2_STANDARD
+        clientKey:
+          type: string
+          minLength: 1
+    OneTimePaymentAmount:
+      type: object
+      additionalProperties: false
+      required: [value, currency]
+      properties:
+        value:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          $ref: "#/components/schemas/Currency"
+    OneTimePaymentAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        [paymentId, orderId, state, providerOrderId, customerKey, orderName, amount, method, successUrl, failUrl, expiresAt, updatedAt, correlationId]
+      properties:
+        paymentId:
           $ref: "#/components/schemas/Identifier"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+        providerOrderId:
+          type: string
+          minLength: 6
+          maxLength: 64
+        customerKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+        orderName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        amount:
+          $ref: "#/components/schemas/OneTimePaymentAmount"
+        method:
+          type: string
+          const: CARD
+        successUrl:
+          type: string
+          format: uri
+        failUrl:
+          type: string
+          format: uri
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+          minLength: 1
+    OneTimePaymentConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [paymentKey, orderId, amount]
+      properties:
+        paymentKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        orderId:
+          type: string
+          minLength: 6
+          maxLength: 64
+        amount:
+          $ref: "#/components/schemas/MoneyKrw"
     RegisterPaymentMethodRequest:
       type: object
       additionalProperties: false
@@ -2702,7 +2858,7 @@ components:
               const: 0
     PaymentApprovalState:
       type: string
-      enum: [APPROVED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+      enum: [READY, APPROVING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
     PaymentApprovalRecoverySummary:
       type: object
       additionalProperties: false

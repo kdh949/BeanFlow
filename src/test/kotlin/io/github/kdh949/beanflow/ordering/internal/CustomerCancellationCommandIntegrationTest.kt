@@ -696,17 +696,38 @@ internal class CustomerCancellationCommandIntegrationTest
             customerId: UUID,
             amountKrw: Long,
         ) {
-            val paymentMethodId = insertPaymentMethod(customerId)
-            paymentGateway.enqueueApproval(
+            mockMvc
+                .perform(
+                    post("/api/v1/orders/{orderId}/payment-attempts", orderId)
+                        .with(customerJwt(customerId))
+                        .header("Idempotency-Key", "prepare-$orderId"),
+                ).andExpect(status().isOk)
+            val paymentId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT id FROM payment_payment WHERE order_id = ?",
+                        UUID::class.java,
+                        orderId,
+                    ),
+                )
+            val providerOrderId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT provider_order_id FROM payment_one_time_attempt WHERE payment_id = ?",
+                        String::class.java,
+                        paymentId,
+                    ),
+                )
+            paymentGateway.enqueueOneTimeConfirmation(
                 ProviderPaymentResult.Approved("provider:$orderId", amountKrw, "KRW"),
             )
             mockMvc
                 .perform(
-                    post("/api/v1/orders/{orderId}/payment-confirmations", orderId)
+                    post("/api/v1/payments/{paymentId}/confirmations", paymentId)
                         .with(customerJwt(customerId))
-                        .header("Idempotency-Key", "payment-$orderId")
+                        .header("Idempotency-Key", "confirm-$orderId")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"paymentMethodId":"$paymentMethodId"}"""),
+                        .content("""{"paymentKey":"test:$orderId","orderId":"$providerOrderId","amount":$amountKrw}"""),
                 ).andExpect(status().isOk)
         }
 
@@ -744,25 +765,6 @@ internal class CustomerCancellationCommandIntegrationTest
                         .subject(actorId.toString())
                         .claim("roles", listOf("STORE_STAFF"))
                 }.authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF"))
-
-        private fun insertPaymentMethod(customerId: UUID): UUID {
-            val id = UUID.randomUUID()
-            val now = Timestamp.from(Instant.now())
-            jdbcTemplate.update(
-                """
-                INSERT INTO payment_method (
-                    id, customer_id, provider, token_reference, display_alias, card_brand,
-                    last_four, status, created_at, updated_at, version
-                ) VALUES (?, ?, 'SCRIPTED', ?, 'Cancellation test', 'TEST', '4242', 'ACTIVE', ?, ?, 0)
-                """.trimIndent(),
-                id,
-                customerId,
-                "token:$id",
-                now,
-                now,
-            )
-            return id
-        }
 
         private fun insertMembership(
             actorId: UUID,

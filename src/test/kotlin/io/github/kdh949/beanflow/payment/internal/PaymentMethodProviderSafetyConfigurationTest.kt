@@ -1,9 +1,11 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.payment.api.DeactivatePaymentMethodProviderCommand
 import io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProvider
 import io.github.kdh949.beanflow.payment.api.PaymentMethodDeactivationProviderResult
 import io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProvider
 import io.github.kdh949.beanflow.payment.api.PaymentMethodRegistrationProviderResult
+import io.github.kdh949.beanflow.payment.api.RegisterPaymentMethodProviderCommand
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -32,6 +34,28 @@ internal class PaymentMethodProviderSafetyConfigurationTest {
     }
 
     @Test
+    fun `local toss sandbox runtime selects an explicit unavailable payment method lifecycle provider`() {
+        ApplicationContextRunner()
+            .withUserConfiguration(
+                PaymentMethodProviderSafetyConfiguration::class.java,
+                TossSandboxUnavailablePaymentMethodLifecycleConfiguration::class.java,
+            ).withPropertyValues("spring.profiles.active=toss-sandbox-runtime,local,toss-sandbox")
+            .run { context ->
+                assertThat(context).hasNotFailed()
+                assertThat(context).hasSingleBean(PaymentMethodRegistrationProvider::class.java)
+                assertThat(context).hasSingleBean(PaymentMethodDeactivationProvider::class.java)
+
+                val provider = context.getBean(TossSandboxUnavailablePaymentMethodLifecycleAdapter::class.java)
+                assertThat(
+                    provider.register(RegisterPaymentMethodProviderCommand("unused", "unused")),
+                ).isEqualTo(PaymentMethodRegistrationProviderResult.Misconfigured)
+                assertThat(
+                    provider.deactivate(DeactivatePaymentMethodProviderCommand("unused", "unused")),
+                ).isEqualTo(PaymentMethodDeactivationProviderResult.Misconfigured)
+            }
+    }
+
+    @Test
     fun `scripted provider fails startup in production`() {
         ApplicationContextRunner()
             .withUserConfiguration(
@@ -41,6 +65,17 @@ internal class PaymentMethodProviderSafetyConfigurationTest {
             .run { context ->
                 assertThat(context.startupFailure)
                     .hasMessage("Scripted payment method lifecycle provider cannot run in the prod profile")
+            }
+    }
+
+    @Test
+    fun `toss sandbox profile overlapping production fails startup`() {
+        ApplicationContextRunner()
+            .withUserConfiguration(PaymentMethodProviderSafetyConfiguration::class.java)
+            .withPropertyValues("spring.profiles.active=prod,toss-sandbox")
+            .run { context ->
+                assertThat(context.startupFailure)
+                    .hasMessage("Payment method lifecycle provider profiles overlap with prod")
             }
     }
 

@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 #
 # Brings up the local-demo environment:
-#   PostGIS -> ephemeral JWKS endpoint -> explicit policy bootstrap -> application (local,local-demo)
+#   PostGIS -> ephemeral JWKS endpoint -> explicit policy bootstrap -> application -> React frontend
 #
 # Every wait is bounded. Nothing falls back to a default policy or an unauthenticated mode.
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-require_cmd docker curl python3 lsof ps
+require_cmd docker curl python3 lsof npm ps
 
 cd "$DEMO_ROOT"
 mkdir -p "$DEMO_RUNTIME_DIR"
 chmod 700 "$DEMO_RUNTIME_DIR"
 
-log "1/5 starting PostgreSQL 17 / PostGIS 3.5"
+log "1/6 starting PostgreSQL 17 / PostGIS 3.5"
 compose up -d
 wait_until 180 "PostgreSQL to accept connections" postgres_ready
 ok "database ready on port ${DEMO_DB_PORT} (database ${DEMO_DB_NAME})"
 
-log "2/5 starting the ephemeral identity server"
+log "2/6 starting the ephemeral identity server"
 if owned_process_record_is_live "$DEMO_IDENTITY_PID_FILE" "identity server"; then
   ok "identity server already running in its owned process group"
 else
@@ -33,7 +33,7 @@ fi
 load_identity_env
 export_app_env
 
-log "3/5 bootstrapping the required GLOBAL ordinary point accrual policy"
+log "3/6 bootstrapping the required GLOBAL ordinary point accrual policy"
 # The demo never invents this policy implicitly. It is created by the same audited CLI production
 # would use, verified through the same OIDC workload identity path.
 # Arguments go through the CLI's environment-variable contract rather than --args: Gradle splits
@@ -71,7 +71,7 @@ else
   fail "Policy bootstrap failed. The demo does not start without the required policy."
 fi
 
-log "4/5 starting the application with profiles local,local-demo"
+log "4/6 starting the application with profiles local,local-demo"
 if owned_process_record_is_live "$DEMO_APP_PID_FILE" "application"; then
   ok "application already running in its owned process group"
 else
@@ -82,11 +82,23 @@ fi
 wait_until 300 "the application health endpoint" app_healthy
 ok "application healthy on http://127.0.0.1:${DEMO_APP_PORT}"
 
-log "5/5 environment ready"
+log "5/6 starting the React frontend"
+if owned_process_record_is_live "$DEMO_FRONTEND_PID_FILE" "frontend"; then
+  ok "frontend already running in its owned process group"
+else
+  [ ! -f "$DEMO_FRONTEND_PID_FILE" ] || warn "discarding unverified frontend process record without signalling it"
+  rm -f "$DEMO_FRONTEND_PID_FILE"
+  start_owned_frontend "$DEMO_FRONTEND_PID_FILE" "frontend" "$DEMO_FRONTEND_LOG"
+fi
+wait_until 120 "the React frontend" frontend_healthy
+ok "frontend ready on ${DEMO_FRONTEND_BASE_URL}"
+
+log "6/6 environment ready"
 cat <<EOF
 
   database    ${DEMO_DB_URL}
   application ${DEMO_APP_BASE_URL}
+  frontend    ${DEMO_FRONTEND_BASE_URL}/app
   jwk set     ${BEANFLOW_DEMO_JWKS_URI}
   runtime dir ${DEMO_RUNTIME_DIR}  (untracked; holds the run-time key material)
 

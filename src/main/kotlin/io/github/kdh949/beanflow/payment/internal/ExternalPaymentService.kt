@@ -29,6 +29,7 @@ internal class ExternalPaymentService(
     private val providerRequestSnapshots: PaymentProviderRequestSnapshotStore,
     private val idempotencyRepository: PaymentIdempotencyJpaRepository,
     private val reconciliationRepository: PaymentReconciliationJpaRepository,
+    private val oneTimeAttempts: OneTimePaymentAttemptJpaRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val identifierSource: IdentifierSource,
     private val providerRequestLoader: PaymentProviderRequestLoader,
@@ -159,6 +160,7 @@ internal class ExternalPaymentService(
             payment.apply(command.result.toDomain(), command.now)
         }
         entity.apply(payment)
+        oneTimeAttempts.findLockedByPaymentId(command.paymentId)?.synchronize(payment.approvalState, command.now)
 
         val idempotency = idempotencyRepository.findByIdempotencyPaymentId(command.paymentId)
         val work =
@@ -347,6 +349,8 @@ internal class ExternalPaymentService(
 
                     work.status == ReconciliationStatus.SCHEDULED -> "REQUESTED"
 
+                    work.status == ReconciliationStatus.WAITING -> "NOT_REQUIRED"
+
                     work.status == ReconciliationStatus.RETRY_SCHEDULED -> "RECONCILING"
 
                     else -> work.status.name
@@ -377,6 +381,7 @@ internal class ExternalPaymentService(
 internal class PaymentProviderRequestLoader(
     private val paymentRepository: PaymentJpaRepository,
     private val snapshots: PaymentProviderRequestSnapshotStore,
+    private val oneTimeAttempts: OneTimePaymentAttemptJpaRepository,
 ) {
     @Transactional(readOnly = true)
     fun load(paymentId: UUID): GatewayApprovalRequest {
@@ -403,6 +408,22 @@ internal class PaymentProviderRequestLoader(
         val payment =
             paymentRepository.findById(paymentId).orElse(null)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
+        val oneTime = oneTimeAttempts.findById(paymentId).orElse(null)
+        if (oneTime != null) {
+            val paymentKey =
+                oneTime.paymentKey
+                    ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "One-time payment key is missing")
+            return GatewayLookupRequest(
+                paymentId = payment.id,
+                provider = "TOSS_PAYMENTS",
+                tokenReference = null,
+                providerCustomerReference = null,
+                providerTransactionReference = payment.providerTransactionReference ?: paymentKey,
+                providerOrderId = oneTime.providerOrderId,
+                amountKrw = payment.requestedAmountKrw,
+                currency = payment.currency,
+            )
+        }
         val snapshot = snapshot(payment)
         return GatewayLookupRequest(
             paymentId = payment.id,
@@ -410,6 +431,7 @@ internal class PaymentProviderRequestLoader(
             tokenReference = snapshot.tokenReference,
             providerCustomerReference = snapshot.providerCustomerReference,
             providerTransactionReference = payment.providerTransactionReference,
+            providerOrderId = null,
             amountKrw = payment.requestedAmountKrw,
             currency = payment.currency,
         )

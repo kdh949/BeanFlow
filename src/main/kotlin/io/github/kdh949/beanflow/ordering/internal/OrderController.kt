@@ -65,7 +65,7 @@ internal class OrderController(
     private val createOrderUseCase: CreateOrderUseCase,
     private val reorderOrderUseCase: ReorderOrderUseCase,
     private val getOrderService: GetOrderService,
-    private val paymentConfirmationService: PaymentConfirmationService,
+    private val oneTimeCheckoutService: OneTimeCheckoutService,
     private val customerCancellationService: CustomerCancellationService,
 ) {
     @PostMapping
@@ -156,26 +156,13 @@ internal class OrderController(
             .body(result.body)
     }
 
-    @PostMapping("/{orderId}/payment-confirmations")
+    @PostMapping("/{orderId}/payment-attempts")
     @PreAuthorize("hasRole('CUSTOMER')")
-    fun confirmPayment(
+    fun preparePayment(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-        @Valid @RequestBody request: PaymentConfirmationRequest,
-    ): ResponseEntity<String> {
-        val result =
-            paymentConfirmationService.confirm(
-                customerId = customerId(jwt),
-                orderId = orderId,
-                paymentMethodId = requireNotNull(request.paymentMethodId),
-                idempotencyKey = idempotencyKey,
-            )
-        return ResponseEntity
-            .status(result.status)
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(result.body)
-    }
+    ) = oneTimeCheckoutService.prepare(customerId(jwt), orderId, idempotencyKey)
 
     private fun customerId(jwt: Jwt): UUID =
         try {

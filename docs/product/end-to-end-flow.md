@@ -41,19 +41,28 @@ Invariants:
 
 ## 3. Payment approval
 
-1. `Payment(READY)`와 Idempotency Record를 로컬 DB 트랜잭션에서 저장한다.
-2. 커밋 후 DB 트랜잭션 밖에서 PG Adapter를 호출한다.
-3. 승인 성공을 새 트랜잭션에서 기록한다.
-4. `PaymentApproved` 사실을 발행한다.
-5. 주문, 슬롯, 재고, 쿠폰과 포인트 예약을 확정한다.
+1. 서버가 Order를 잠그고 금액·통화·provider order/customer key·order name·callback URL을
+   immutable snapshot으로 가진 `Payment(READY)`와 `OneTimePaymentAttempt`를 저장한다.
+2. React checkout은 `GET /payment-config`의 public client key와 준비 응답만 사용해 Toss V2
+   Standard `CARD` Payment Window를 연다. PaymentMethod는 조회하거나 인증 소스로 쓰지 않는다.
+3. 성공 callback은 paymentKey, provider order와 amount를 서버에 전달한다. 서버는 고객 소유권과
+   exact snapshot binding을 검증하고 stable Provider idempotency key로 승인 claim을 커밋한다.
+4. 커밋 후 DB 트랜잭션 밖에서 Toss confirm API를 호출한다.
+5. 승인 성공을 새 트랜잭션에서 기록하고 `PaymentApproved` 사실과 주문·슬롯·재고·쿠폰·포인트
+   예약을 함께 확정한다.
+6. 고객은 `GET /payments/{paymentId}`로 승인·불명·복구 상태를 다시 조회하고 주문 추적으로 이동한다.
 
 Failure behavior:
 
 - 동일 키·동일 payload는 기존 결과를 반환한다.
 - 동일 키·다른 payload는 `409 Conflict`다.
+- callback 새로고침·뒤로가기·다중 탭의 exact replay는 기존 Payment를 반환하며 Provider confirm을
+  다시 보내지 않는다. amount/order/paymentKey가 달라진 replay는 `409 Conflict`다.
 - PG timeout 또는 응답 유실은 `UNKNOWN`이며 성공·실패로 단정하지 않는다.
+- `UNKNOWN` 뒤에는 같은 paymentKey의 query만 수행하고 새 confirm 요청을 만들지 않는다.
 - PG 성공 후 DB 기록 실패는 reconciliation 대상이다.
 - 필수 PG 설정 누락 시 fake provider로 자동 전환하지 않는다.
+- production source와 bundle에는 fake 결제 성공이나 Toss secret key를 포함하지 않는다.
 - 5분 lease가 먼저 만료되면 Order와 모든 예약을 만료·해제한다.
 - worker가 아직 처리하지 않았더라도 만료 Order 조회·결제 명령은 응답 전에 같은
   expiry transaction을 실행한다. 성공한 조회는 `EXPIRED`, 실패한 조회는 503이며

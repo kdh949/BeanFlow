@@ -4,9 +4,11 @@ import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 @Configuration(proxyBeanMethods = false)
-@Profile("local & !prod")
+@Profile("local & !toss-sandbox & !prod")
 internal class LocalPaymentGatewayConfiguration {
     @Bean
     fun localScriptedPaymentGateway(): PaymentGateway =
@@ -30,8 +32,27 @@ internal class LocalPaymentGatewayConfiguration {
                     }
                 }
 
+            override fun confirmOneTime(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult =
+                when {
+                    request.paymentKey.endsWith(":approved") -> {
+                        ProviderPaymentResult.Approved(
+                            request.paymentKey,
+                            request.amountKrw,
+                            request.currency,
+                        )
+                    }
+
+                    request.paymentKey.endsWith(":declined") -> {
+                        ProviderPaymentResult.Declined("SCRIPTED_DECLINED")
+                    }
+
+                    else -> {
+                        ProviderPaymentResult.Unknown("SCRIPTED_UNKNOWN")
+                    }
+                }
+
             override fun lookup(request: GatewayLookupRequest): ProviderPaymentResult =
-                if (request.tokenReference.endsWith(":eventually-approved")) {
+                if ((request.tokenReference ?: request.providerTransactionReference)?.endsWith(":eventually-approved") == true) {
                     ProviderPaymentResult.Approved(
                         request.providerTransactionReference ?: "sandbox-${request.paymentId}",
                         request.amountKrw,
@@ -56,11 +77,16 @@ internal class LocalPaymentGatewayConfiguration {
                 request: GatewayLookupRequest,
                 amountKrw: Long,
                 providerIdempotencyKey: String,
-            ): GatewayRefundResult = GatewayRefundResult.Succeeded("sandbox-refund-${request.paymentId}")
+            ): GatewayRefundResult = GatewayRefundResult.Succeeded(localRefundReference(providerIdempotencyKey))
 
             override fun lookupRefund(
                 request: GatewayLookupRequest,
+                amountKrw: Long,
                 providerIdempotencyKey: String,
-            ): GatewayRefundResult = GatewayRefundResult.Succeeded("sandbox-refund-${request.paymentId}")
+            ): GatewayRefundResult = GatewayRefundResult.Succeeded(localRefundReference(providerIdempotencyKey))
         }
+
+    private fun localRefundReference(providerIdempotencyKey: String): String =
+        "sandbox-refund-" +
+            UUID.nameUUIDFromBytes(providerIdempotencyKey.toByteArray(StandardCharsets.UTF_8))
 }
