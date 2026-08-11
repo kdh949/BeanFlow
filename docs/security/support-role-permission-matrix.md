@@ -1,10 +1,10 @@
 # Support Role and Permission Matrix
 
 > **Status:** `PARTIALLY IMPLEMENTED`; S20 Case는 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`,
-> `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH` persistent grant를 사용한다. Role bundle과
-> 나머지 Support capability는 DRAFT다.
+> `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH`, S40 verification/reveal/break-glass는 아래
+> 전용 persistent grant를 사용한다. Role bundle과 이후 Support capability는 DRAFT다.
 
-Roles are coarse bundles; S20 Case command와 S30 exact search는 active Operations-owned persistent grant를 요구한다.
+Roles are coarse bundles; S20–S40 use case는 active Operations-owned persistent grant를 요구한다.
 S30은 추가로 structured reason과 persistent actor rate budget을 요구하고 Vault 호출 뒤 grant를 재확인한다. Later
 action은 verification과 latest ActionPolicy까지 추가로 요구한다. JWT role alone is never a fallback.
 
@@ -33,8 +33,10 @@ S10이 구현한 33개 새 permission은 다음과 같다.
   `SUPPORT_PROFILE_R3_REQUEST`, `SUPPORT_PROFILE_R3_APPROVE`
 - Delivery/Operations/Privacy: `SUPPORT_DELIVERY_READ`, `SUPPORT_DELIVERY_INCIDENT_WRITE`,
   `SUPPORT_DELIVERY_CHANGE`, `OPERATIONS_SUPPORT_INVESTIGATION`, `OPERATIONS_LEGAL_HOLD_MANAGE`,
-  `OPERATIONS_RETENTION_MANAGE`, `PRIVACY_AUDIT_READ`
+  `OPERATIONS_RETENTION_MANAGE`, `PRIVACY_AUDIT_READ`, `PRIVACY_BREAK_GLASS_REVIEW`
 
-기존 9개를 포함한 전체 42개 값은 같은 Operations-owned persistent grant/revoke 경계에 있다. 새 값은
-`PLATFORM_OPERATOR`에 자동 부여되지 않는다. S20 Case 3개와 S30 `SUPPORT_SUBJECT_SEARCH`만 owning use case에서
-활성이고 나머지는 owning use case가 구현되기 전까지 dormant하다.
+기존 값과 V42의 `PRIVACY_BREAK_GLASS_REVIEW`는 같은 Operations-owned persistent grant/revoke 경계에 있다.
+어떤 값도 `PLATFORM_OPERATOR`에 자동 부여되지 않는다. S40은 `SUPPORT_VERIFICATION_MANAGE`,
+`SUPPORT_PII_REVEAL_REQUEST`, `SUPPORT_PII_REVEAL_APPROVE`, `SUPPORT_PII_REVEAL_BASIC`,
+`SUPPORT_PII_REVEAL_SENSITIVE`, `SUPPORT_BREAK_GLASS_REQUEST`, `PRIVACY_BREAK_GLASS_REVIEW`를 활성화한다.
+그 밖의 future permission은 owning use case 전까지 dormant다.

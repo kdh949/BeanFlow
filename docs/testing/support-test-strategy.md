@@ -1,20 +1,20 @@
 # Customer Support Planned Test Strategy
 
 > **Status:** `PARTIALLY IMPLEMENTED`
-> S20 has named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
+> S20–S40 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
 > later Support stages remain planned; no Support performance or k6 result is claimed.
 
 ## Coverage by layer
 
 | Layer | Current / planned coverage |
 |---|---|
-| Domain | S20 Case transition matrix, terminal rejection, `OTHER` guard and content policy including embedded PAN/CVC/CVV corpus; later aggregates planned |
-| Application | S20 persistent grant/current assignment/idempotency/Audit fail-closed, non-assignee transition 403, invalid input 400 and state/version 409 separation; owner port/unknown semantics planned |
-| PostgreSQL Testcontainers | S20 migration CHECK/UNIQUE/append-only/active-link constraints, `(actor, operation, key)` idempotency scope, 90-day cleanup boundary/retry and advisory-lock winner; later locks/worker claims planned |
-| API contract | S20 endpoint status/error/no-store/cursor/idempotency/security, optional JSON field omission and target/runtime parity; later masking/reveal planned |
-| Modulith/ArchUnit | S20 Controller→Repository and Support→owner-internal boundary; later module rules planned |
-| Security | IDOR, role/grant/Case/verification matrix, PII leakage, approval separation and browser controls |
-| Provider/resilience | timeout, ACK loss, duplicate/out-of-order, restart and same-reference reconciliation |
+| Domain | S20 Case matrix/content guard; S40 BASIC/ENHANCED channel rules, expiry/lockout, field/risk budget, actor-separated break-glass; later aggregates planned |
+| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 provider UNKNOWN, Audit-before-reveal, Case-terminal revoke, owner failure and notification retry |
+| PostgreSQL Testcontainers | S20–S40 CHECK/UNIQUE/append-only constraints, advisory/row-lock winners, reveal budget, lockout and durable notification claim |
+| API contract | S20–S40 status/error/no-store/idempotency schemas, raw/proof exclusion and target/runtime Spring MVC parity |
+| Modulith/ArchUnit | Controller→Repository and Support→owner-internal boundary; S40 uses Identity/Merchant/Delivery/Notification public APIs only |
+| Security | IDOR, persistent permission/Case/verification/field matrix, proof/raw diagnostic redaction, Audit failure, actor-separated approval/review |
+| Provider/resilience | S40 challenge and security notification timeout/UNKNOWN, duplicate verification winner and transaction-outside-provider checks; later PG/Delivery paths planned |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
 | UI/load | selected frontend boundary, reveal expiry/navigation clearing and reproducible search/timeline/action load |
 
@@ -37,7 +37,7 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch
 - retention worker claim contention and LegalHold create versus delete
 
-S20 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
+S20–S40 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
 deterministic Clock/IdentifierSource where their behavior requires it.
 
 ## Retention and restore scenarios to instantiate
@@ -56,7 +56,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 
 ## Evidence rules
 
-- S20 coverage is limited to its named test classes; it does not verify future Support stages.
+- S20–S40 coverage is limited to their named test classes; it does not verify future Support stages.
 - Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.
 - Legal review is required before production and is not inferred from passing tests.

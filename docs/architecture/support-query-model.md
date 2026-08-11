@@ -1,9 +1,9 @@
 # Support Query Model
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list is implemented. Search, timeline and owner-composed views remain
-> proposed implementation models.
-> **Canonical API status:** S20 has one endpoint-specific Case-list filter/sort/cursor schema; later query schemas are
-> not accepted or present in OpenAPI.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list and S30 protected exact search are implemented. Timeline and
+> cross-context owner-composed views remain proposed implementation models.
+> **Canonical API status:** S20 Case-list and S30 exact-search schemas are accepted/runtime-backed; S50 timeline/action
+> query schemas are not yet accepted or present in OpenAPI.
 
 ## S20 Case list
 

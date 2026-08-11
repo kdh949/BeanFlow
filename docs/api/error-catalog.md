@@ -42,6 +42,10 @@
 | DISPUTE_ALREADY_ACTIVE | 409 | No | 같은 SettlementItem에 `FILED` 또는 `UNDER_REVIEW` 이의제기가 이미 존재 |
 | DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
 | SUPPORT_SEARCH_RATE_LIMITED | 429 + Retry-After | Yes, after the current window | actor별 영속 5분/30회 exact-search budget 소진. 요청은 Vault/owner query 전에 중단되고 응답·Audit에 검색값을 넣지 않음 |
+| VERIFICATION_REQUIRED | 403 | Yes, after matching verification | Case·Subject·Purpose·actor에 묶인 충분한 BASIC/ENHANCED verification이 없음 |
+| VERIFICATION_LOCKED | 429 + Retry-After | Yes, after lock expiry | invalid proof 5회로 같은 Case+Subject binding이 30분 잠김 |
+| DATA_ACCESS_GRANT_REQUIRED | 403 | Yes, after new matching grant | active matching Grant가 없거나 만료·철회·소진됨 |
+| DATA_ACCESS_SCOPE_MISMATCH | 403 | No; request an allowed field | 요청 field가 Grant 또는 subject owner allowlist 밖임 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
@@ -107,8 +111,6 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 | SUPPORT_SUBJECT_NOT_LINKED | 403 | after link | Case와 target Subject 관계 없음 |
 | INSUFFICIENT_VERIFICATION | 403 | after step-up | purpose/action에 필요한 level 미달 |
 | VERIFICATION_EXPIRED | 409 | new session | 만료된 session |
-| VERIFICATION_LOCKED | 409 | after lock policy | attempt limit/replay lock |
-| DATA_ACCESS_GRANT_REQUIRED | 403 | after grant | raw field grant 없음 |
 | DATA_ACCESS_GRANT_EXPIRED | 403 | new grant | 만료/철회/소진 grant |
 | FIELD_SCOPE_NOT_ALLOWED | 403 | no | grant보다 넓은 필드 또는 R4 |
 | AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |

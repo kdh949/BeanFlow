@@ -347,8 +347,9 @@ Ordering retention worker가 table별 독립 chunk로 정리한다.
 ## Reprocessing case
 
 SupportCase, VerificationSession, DataAccessGrant, ActionRequest, Approval and Resolution target states are
-defined in [Support State Machines](support-state-machines.md). The S20 SupportCase portion is a current persisted/API
-contract; Verification, Grant, ActionRequest, Approval and Resolution remain planning contracts. Canonical Delivery
+defined in [Support State Machines](support-state-machines.md). S20 SupportCase and S40 VerificationSession,
+VerificationChallenge, DataAccessGrant and BreakGlassRequest are current persisted/API contracts; ActionRequest,
+Approval and Resolution remain planning contracts. Canonical Delivery
 lifecycle and independent ProviderSyncStatus are defined in [Delivery State Machine](delivery-state-machine.md).
 
 ```text

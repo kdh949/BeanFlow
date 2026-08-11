@@ -1,13 +1,13 @@
 # Support Aggregate Responsibilities and Invariants
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase/Interaction/Note/SubjectLink rules are persisted and tested.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase and S40 Verification/DataAccessGrant/BreakGlass rules are persisted and tested.
 > Future Aggregate names and constraints remain Stage-owned planning inputs unless anchored by an Accepted ADR/policy.
 
 ## Implemented S10 foundation
 
 Operations는 Audit category/class/immutable policy version과 persistent `OperatorPermissionGrant` vocabulary를
-소유한다. financial Audit 5년과 PII access Audit 2년은 검증됐지만 SupportCase와 reveal use case는 아직 없다.
-따라서 dormant Support permission은 아래 Aggregate나 endpoint가 구현됐다는 의미가 아니다.
+소유한다. S40 reveal은 Operations public API로 `PII_ACCESS` Audit를 먼저 commit하며 Support는 Operations
+table을 직접 쓰지 않는다. 아직 owning use case가 없는 permission은 계속 dormant다.
 
 ## SupportCase
 
@@ -24,7 +24,21 @@ bounded chunk with `SKIP LOCKED`, and propagates failures for a later scheduled 
 
 ## VerificationSession and DataAccessGrant
 
-Session binds Case+Subject+Purpose+action scope and never upgrades itself from BASIC to ENHANCED. Grant binds operator+case+subject+field+reason+expiry/reveal budget. Audit must commit before reveal; expiry, revocation, case closure and scope mismatch fail closed. These Aggregates do not exist in S20: S40 must implement Case-terminal revocation and terminal activation/reveal denial.
+`VerificationSession`은 actor+Case+active SubjectLink+Subject+Purpose+`PERSONAL_DATA_REVEAL` action scope와
+requested level에 고정된다. 15분 Session과 5분 Challenge는 경계 시각부터 만료되고 invalid proof 5회는 같은
+Case+Subject에 30분 lockout을 만든다. BASIC은 등록 채널 하나, ENHANCED는 서로 다른 두 채널의 성공을 요구한다.
+Provider reference/outcome만 저장하며 OTP, raw link와 proof는 저장하지 않는다.
+
+`DataAccessGrant`는 requester+Case+SubjectLink+Subject+Purpose+closed field set+structured reason+expiry+reveal
+budget에 고정된다. BASIC field는 10분/3회, SENSITIVE field는 ENHANCED verification과 distinct approver 뒤
+5분/1회다. reveal은 exact subset만 허용하고 Audit와 attempt reservation이 commit된 뒤 owner public API에서만
+decrypt한다. downstream 실패도 이미 예약된 budget을 되돌리지 않는다. raw 성공 body는 idempotency row에
+저장하지 않아 같은 key replay는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`다.
+
+`BreakGlassRequest`는 normal level/Grant와 별개이며 one emergency field, distinct pre-approver, 2분/1회,
+distinct mandatory post-review와 durable PII-free notification intent를 보호한다. Case가 `RESOLVED` 또는
+`CLOSED`로 전이하면 active Session/Challenge/Grant와 pre-reveal break-glass를 같은 Support transaction에서
+revoke한다. reveal 뒤 `REVIEW_PENDING`은 감사 의무 보존을 위해 자동 해제하지 않는다.
 
 ## SupportActionRequest and ApprovalStep
 
