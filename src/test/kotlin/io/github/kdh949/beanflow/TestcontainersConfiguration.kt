@@ -17,6 +17,7 @@ import io.github.kdh949.beanflow.payment.internal.PaymentGateway
 import io.github.kdh949.beanflow.payment.internal.ScriptedPaymentMethodLifecycleAdapter
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import org.springframework.boot.ApplicationRunner
+import org.springframework.boot.flyway.autoconfigure.FlywayConnectionDetails
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
@@ -48,6 +49,18 @@ class TestcontainersConfiguration {
     @Bean
     internal fun testJdbcConnectionDetails(database: IsolatedTestDatabase): JdbcConnectionDetails =
         object : JdbcConnectionDetails {
+            override fun getUsername(): String = POSTGRES.username
+
+            override fun getPassword(): String = POSTGRES.password
+
+            override fun getJdbcUrl(): String = database.jdbcUrl
+
+            override fun getDriverClassName(): String = POSTGRES.driverClassName
+        }
+
+    @Bean
+    internal fun testFlywayConnectionDetails(database: IsolatedTestDatabase): FlywayConnectionDetails =
+        object : FlywayConnectionDetails {
             override fun getUsername(): String = POSTGRES.username
 
             override fun getPassword(): String = POSTGRES.password
