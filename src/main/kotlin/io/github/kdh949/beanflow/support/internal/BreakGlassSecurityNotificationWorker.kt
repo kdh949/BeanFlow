@@ -72,9 +72,9 @@ internal class BreakGlassSecurityNotificationTransactions(
                 WITH due AS (
                     SELECT id
                       FROM support_security_notification_intent
-                     WHERE state IN ('PENDING', 'RETRY_SCHEDULED')
-                       AND next_attempt_at <= ?
-                     ORDER BY next_attempt_at, id
+                     WHERE (state IN ('PENDING', 'RETRY_SCHEDULED') AND next_attempt_at <= ?)
+                        OR (state = 'PROCESSING' AND updated_at <= ?)
+                     ORDER BY CASE WHEN state = 'PROCESSING' THEN updated_at ELSE next_attempt_at END, id
                      FOR UPDATE SKIP LOCKED
                      LIMIT 1
                 )
@@ -93,6 +93,7 @@ internal class BreakGlassSecurityNotificationTransactions(
                     )
                 },
                 Timestamp.from(now),
+                Timestamp.from(now.minus(PROCESSING_CLAIM_TIMEOUT)),
                 Timestamp.from(now),
             ).singleOrNull()
     }
@@ -138,6 +139,7 @@ internal class BreakGlassSecurityNotificationTransactions(
     private companion object {
         const val MAX_ATTEMPTS = 8
         val RETRY_BASE: Duration = Duration.ofSeconds(30)
+        val PROCESSING_CLAIM_TIMEOUT: Duration = Duration.ofMinutes(5)
     }
 }
 

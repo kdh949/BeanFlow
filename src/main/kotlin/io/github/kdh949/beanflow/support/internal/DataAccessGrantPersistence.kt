@@ -62,8 +62,8 @@ internal class DataAccessGrantEntity(
     var expiresAt: Instant?,
     @Column(name = "approver_id")
     var approverId: UUID?,
-    @Column(name = "approved_at")
-    var approvedAt: Instant?,
+    @Column(name = "decided_at")
+    var decidedAt: Instant?,
     @Column(name = "revoked_at")
     var revokedAt: Instant?,
     @Column(nullable = false)
@@ -181,6 +181,9 @@ internal interface DataAccessGrantJpaRepository : JpaRepository<DataAccessGrantE
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select grant from DataAccessGrantEntity grant where grant.id = :id")
     fun findLockedById(@Param("id") id: UUID): DataAccessGrantEntity?
+
+    @Query("select grant.supportCaseId from DataAccessGrantEntity grant where grant.id = :id")
+    fun findCaseIdById(@Param("id") id: UUID): UUID?
 }
 
 internal interface DataAccessGrantFieldJpaRepository : JpaRepository<DataAccessGrantFieldEntity, DataAccessGrantFieldId> {

@@ -186,6 +186,37 @@ internal class BreakGlassIntegrationTest
             ).isEqualTo("UNKNOWN")
         }
 
+        @Test
+        fun `stale processing security notification is reclaimed after worker interruption`() {
+            val requestId = request(seedBinding())
+            jdbcTemplate.update(
+                """
+                UPDATE support_security_notification_intent
+                   SET state = 'PROCESSING', attempt_count = 1, updated_at = now() - INTERVAL '6 minutes'
+                 WHERE break_glass_request_id = ? AND event_type = 'REQUESTED'
+                """.trimIndent(),
+                requestId,
+            )
+
+            worker.dispatchDue()
+
+            assertThat(notificationProvider.calls.get()).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT state FROM support_security_notification_intent WHERE break_glass_request_id = ? AND event_type = 'REQUESTED'",
+                    String::class.java,
+                    requestId,
+                ),
+            ).isEqualTo("SENT")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT attempt_count FROM support_security_notification_intent WHERE break_glass_request_id = ? AND event_type = 'REQUESTED'",
+                    Int::class.java,
+                    requestId,
+                ),
+            ).isEqualTo(2)
+        }
+
         private fun request(binding: Binding): UUID {
             val result =
                 mockMvc

@@ -115,6 +115,9 @@ internal interface BreakGlassRequestJpaRepository : JpaRepository<BreakGlassRequ
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select request from BreakGlassRequestEntity request where request.id = :id")
     fun findLockedById(@Param("id") id: UUID): BreakGlassRequestEntity?
+
+    @Query("select request.supportCaseId from BreakGlassRequestEntity request where request.id = :id")
+    fun findCaseIdById(@Param("id") id: UUID): UUID?
 }
 
 internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDecisionEntity, UUID>

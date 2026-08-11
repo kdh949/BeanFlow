@@ -21,15 +21,16 @@ ALTER TABLE operations_operator_permission_grant
 
 CREATE TABLE support_verification_lockout (
     support_case_id uuid NOT NULL REFERENCES support_case(id),
-    subject_link_id uuid NOT NULL REFERENCES support_case_subject_link(id),
+    subject_type varchar(16) NOT NULL CHECK (subject_type IN ('CUSTOMER', 'STORE', 'DELIVERY')),
+    subject_id uuid NOT NULL,
     locked_until timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
-    PRIMARY KEY (support_case_id, subject_link_id),
+    PRIMARY KEY (support_case_id, subject_type, subject_id),
     CONSTRAINT chk_support_verification_lockout_time CHECK (locked_until >= updated_at)
 );
 
 CREATE INDEX idx_support_verification_lockout_expiry
-    ON support_verification_lockout (locked_until, support_case_id, subject_link_id);
+    ON support_verification_lockout (locked_until, support_case_id, subject_type, subject_id);
 
 ALTER TABLE support_case_subject_link
     ADD CONSTRAINT uq_support_case_subject_link_binding
@@ -63,7 +64,8 @@ CREATE TABLE support_verification_session (
     CONSTRAINT chk_support_verification_session_state CHECK (
         (state = 'VERIFIED' AND verified_at IS NOT NULL AND revoked_at IS NULL)
         OR (state = 'REVOKED' AND revoked_at IS NOT NULL)
-        OR (state NOT IN ('VERIFIED', 'REVOKED') AND verified_at IS NULL AND revoked_at IS NULL)
+        OR (state = 'EXPIRED' AND revoked_at IS NULL)
+        OR (state IN ('PENDING', 'LOCKED') AND verified_at IS NULL AND revoked_at IS NULL)
     ),
     CONSTRAINT chk_support_verification_session_lock CHECK (
         state <> 'LOCKED' OR invalid_attempts = 5
@@ -143,7 +145,7 @@ CREATE TABLE support_data_access_grant (
     requested_at timestamptz NOT NULL,
     expires_at timestamptz,
     approver_id uuid,
-    approved_at timestamptz,
+    decided_at timestamptz,
     revoked_at timestamptz,
     version bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
     CONSTRAINT fk_support_data_access_grant_link_binding
@@ -153,11 +155,11 @@ CREATE TABLE support_data_access_grant (
         FOREIGN KEY (verification_session_id, support_case_id, subject_link_id, subject_type, subject_id, purpose)
         REFERENCES support_verification_session(id, support_case_id, subject_link_id, subject_type, subject_id, purpose),
     CONSTRAINT chk_support_data_access_grant_approval CHECK (
-        (risk = 'BASIC' AND approver_id IS NULL AND approved_at IS NULL)
+        (risk = 'BASIC' AND approver_id IS NULL AND decided_at IS NULL)
         OR (risk = 'SENSITIVE' AND (
-            (state IN ('REQUESTED', 'APPROVAL_PENDING', 'REVOKED') AND approver_id IS NULL AND approved_at IS NULL)
+            (state IN ('REQUESTED', 'APPROVAL_PENDING', 'REVOKED') AND approver_id IS NULL AND decided_at IS NULL)
             OR (state IN ('ACTIVE', 'CONSUMED', 'EXPIRED', 'DENIED', 'REVOKED') AND approver_id IS NOT NULL
-                AND approver_id <> requester_id AND approved_at IS NOT NULL)
+                AND approver_id <> requester_id AND decided_at IS NOT NULL)
         ))
     ),
     CONSTRAINT chk_support_data_access_grant_activation CHECK (
@@ -258,8 +260,8 @@ CREATE TABLE support_break_glass_decision (
     reason_code varchar(32) NOT NULL,
     request_version bigint NOT NULL CHECK (request_version >= 0),
     decided_at timestamptz NOT NULL,
-    CONSTRAINT uq_support_break_glass_decision_type UNIQUE (request_id, decision_type)
-    ,CONSTRAINT chk_support_break_glass_decision_shape CHECK (
+    CONSTRAINT uq_support_break_glass_decision_type UNIQUE (request_id, decision_type),
+    CONSTRAINT chk_support_break_glass_decision_shape CHECK (
         (decision_type = 'PRE_APPROVAL' AND decision IN ('APPROVED', 'DENIED'))
         OR (decision_type = 'POST_REVIEW' AND decision IN ('CONFIRMED', 'ESCALATED'))
     )

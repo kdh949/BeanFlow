@@ -4291,7 +4291,7 @@ components:
       enum: [IN_APP, REGISTERED_PHONE, REGISTERED_EMAIL]
     VerificationChallengeState:
       type: string
-      enum: [ISSUE_PENDING, DELIVERED, ISSUE_UNKNOWN, VERIFYING, VERIFIED, INVALID, VERIFY_UNKNOWN, EXPIRED, REVOKED]
+      enum: [PENDING_ISSUE, ISSUED, ISSUE_UNKNOWN, VERIFYING, VERIFIED, INVALID, VERIFICATION_UNKNOWN, EXPIRED, REVOKED]
     CreateVerificationSessionRequest:
       type: object
       additionalProperties: false

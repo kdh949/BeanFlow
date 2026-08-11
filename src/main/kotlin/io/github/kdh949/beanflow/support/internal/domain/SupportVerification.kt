@@ -269,7 +269,7 @@ internal class VerificationChallenge private constructor(
             "Opaque provider reference is invalid"
         }
         providerReference = normalized
-        state = ChallengeState.ISSUED
+        state = if (occurredAt.isBefore(expiresAt)) ChallengeState.ISSUED else ChallengeState.EXPIRED
         return state
     }
 
@@ -280,7 +280,7 @@ internal class VerificationChallenge private constructor(
     }
 
     fun claimVerification(now: Instant): ChallengeState {
-        expireAtBoundary(now)
+        refresh(now)
         check(state == ChallengeState.ISSUED) { "Verification challenge is not verifiable" }
         state = ChallengeState.VERIFYING
         return state
@@ -302,11 +302,14 @@ internal class VerificationChallenge private constructor(
     }
 
     fun revoke() {
-        if (state == ChallengeState.PENDING_ISSUE || state == ChallengeState.ISSUED) state = ChallengeState.REVOKED
+        if (state == ChallengeState.PENDING_ISSUE || state == ChallengeState.ISSUED || state == ChallengeState.VERIFYING) {
+            state = ChallengeState.REVOKED
+        }
     }
 
-    private fun expireAtBoundary(now: Instant) {
+    fun refresh(now: Instant): ChallengeState {
         if (state == ChallengeState.ISSUED && !now.isBefore(expiresAt)) state = ChallengeState.EXPIRED
+        return state
     }
 
     private fun validateState() {
@@ -318,7 +321,7 @@ internal class VerificationChallenge private constructor(
     internal companion object {
         val CHALLENGE_TTL: Duration = Duration.ofMinutes(5)
         private val TERMINAL_PROVIDER_STATES =
-            setOf(ChallengeState.VERIFIED, ChallengeState.INVALID, ChallengeState.VERIFICATION_UNKNOWN)
+            setOf(ChallengeState.VERIFIED, ChallengeState.INVALID, ChallengeState.VERIFICATION_UNKNOWN, ChallengeState.EXPIRED)
 
         fun request(
             id: UUID,

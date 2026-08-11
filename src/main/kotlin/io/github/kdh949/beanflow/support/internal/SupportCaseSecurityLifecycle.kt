@@ -32,7 +32,7 @@ internal class JdbcSupportCaseSecurityLifecycle(
              WHERE challenge.session_id IN (
                        SELECT session.id FROM support_verification_session session WHERE session.support_case_id = ?
                    )
-               AND challenge.state IN ('PENDING_ISSUE', 'ISSUED')
+               AND challenge.state IN ('PENDING_ISSUE', 'ISSUED', 'VERIFYING')
             """.trimIndent(),
             timestamp,
             caseId,

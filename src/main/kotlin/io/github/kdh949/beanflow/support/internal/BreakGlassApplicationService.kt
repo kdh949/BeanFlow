@@ -112,6 +112,8 @@ internal data class BreakGlassRevealWork(
     val idempotencyId: UUID,
     val requestId: UUID,
     val caseId: UUID,
+    val subjectLinkId: UUID,
+    val actorId: UUID,
     val subjectType: VerificationSubjectType,
     val subjectId: UUID,
     val field: SupportPersonalDataField,
@@ -133,31 +135,38 @@ internal class BreakGlassApplicationService(
     fun reveal(command: RevealBreakGlassCommand): BreakGlassRevealResource {
         val work = transactions.reserveReveal(command)
         val ownerField = work.field.toOwnerField()
-        val response =
-            try {
+        try {
+            val response =
                 when (work.subjectType) {
                     VerificationSubjectType.CUSTOMER -> customers.reveal(RevealPersonalDataCommand(work.subjectId, setOf(ownerField)))
                     VerificationSubjectType.STORE -> stores.reveal(RevealPersonalDataCommand(work.subjectId, setOf(ownerField)))
                     VerificationSubjectType.DELIVERY -> couriers.reveal(RevealPersonalDataCommand(work.subjectId, setOf(ownerField)))
                 }
-            } catch (failure: RuntimeException) {
-                transactions.failReveal(work.attemptId, "OWNER_REVEAL_FAILED")
-                if (failure is DomainFailure) throw failure
-                throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Break-glass owner reveal is unavailable").also {
-                    it.initCause(failure)
-                }
+            validateOwnerResponse(work, response)
+            val value =
+                response.values[ownerField]
+                    ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Break-glass owner response is incomplete")
+            val completedAt = transactions.completeReveal(work)
+            return BreakGlassRevealResource(
+                work.attemptId,
+                work.requestId,
+                work.caseId,
+                work.subjectId,
+                work.field,
+                value,
+                completedAt,
+            )
+        } catch (failure: RuntimeException) {
+            try {
+                transactions.failReveal(work.attemptId, failure.failureClass())
+            } catch (recordingFailure: RuntimeException) {
+                failure.addSuppressed(recordingFailure)
             }
-        validateOwnerResponse(work, response)
-        val completedAt = transactions.completeReveal(work)
-        return BreakGlassRevealResource(
-            work.attemptId,
-            work.requestId,
-            work.caseId,
-            work.subjectId,
-            work.field,
-            requireNotNull(response.values[ownerField]),
-            completedAt,
-        )
+            if (failure is DomainFailure) throw failure
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Break-glass owner reveal is unavailable").also {
+                it.initCause(failure)
+            }
+        }
     }
 
     private fun validateOwnerResponse(
@@ -165,10 +174,12 @@ internal class BreakGlassApplicationService(
         response: RevealedPersonalData,
     ) {
         if (response.subjectId != work.subjectId || response.values.keys != setOf(work.field.toOwnerField())) {
-            transactions.failReveal(work.attemptId, "OWNER_RESPONSE_MISMATCH")
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Break-glass owner response is invalid")
         }
     }
+
+    private fun RuntimeException.failureClass(): String =
+        if (this is DomainFailure && code != FailureCode.DEPENDENCY_UNAVAILABLE) "REVEAL_COMPLETION_REJECTED" else "OWNER_REVEAL_FAILED"
 }
 
 @Service
@@ -229,8 +240,9 @@ internal class BreakGlassTransactions(
         boundary {
             validateKey(command.idempotencyKey)
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
-            val initial = requests.findLockedById(command.requestId) ?: notFound()
-            commandLock.lock(initial.supportCaseId, command.actorId, DECIDE_BREAK_GLASS, command.idempotencyKey)
+            val caseId = requests.findCaseIdById(command.requestId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, DECIDE_BREAK_GLASS, command.idempotencyKey)
+            activeCase(caseId)
             replayOrExecute(
                 command.actorId,
                 DECIDE_BREAK_GLASS,
@@ -239,7 +251,7 @@ internal class BreakGlassTransactions(
                 200,
             ) {
                 val entity = requests.findLockedById(command.requestId) ?: notFound()
-                activeCase(entity.supportCaseId)
+                if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
                 if (entity.version != command.expectedVersion) conflict("Break-glass request version is stale")
                 val aggregate = entity.toAggregate()
                 val now = clock.instant()
@@ -272,8 +284,9 @@ internal class BreakGlassTransactions(
         boundary {
             validateKey(command.idempotencyKey)
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_BREAK_GLASS_REQUEST)
-            val initial = requests.findLockedById(command.requestId) ?: notFound()
-            commandLock.lock(initial.supportCaseId, command.actorId, REVEAL_BREAK_GLASS, command.idempotencyKey)
+            val caseId = requests.findCaseIdById(command.requestId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, REVEAL_BREAK_GLASS, command.idempotencyKey)
+            val supportCase = activeAssignedCase(caseId, command.actorId)
             val payloadHash = hash("${command.requestId}|${command.field}")
             idempotency.findByActorIdAndOperationAndIdempotencyKey(command.actorId, REVEAL_BREAK_GLASS, command.idempotencyKey)?.let {
                 requirePayload(it, payloadHash)
@@ -283,7 +296,12 @@ internal class BreakGlassTransactions(
                 )
             }
             val entity = requests.findLockedById(command.requestId) ?: notFound()
-            val supportCase = activeAssignedCase(entity.supportCaseId, command.actorId)
+            if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
+            if (entity.requesterId != command.actorId) throw DomainFailure(FailureCode.ACCESS_DENIED, "Break-glass request belongs to another operator")
+            val link = activeLink(caseId, entity.subjectLinkId)
+            if (link.subjectType.toBreakGlassSubjectType() != entity.subjectType || link.subjectId != entity.subjectId) {
+                conflict("Break-glass subject binding is stale")
+            }
             val aggregate = entity.toAggregate()
             val now = clock.instant()
             aggregate.reserveReveal(
@@ -345,6 +363,8 @@ internal class BreakGlassTransactions(
                 idempotencyEntity.id,
                 entity.id,
                 supportCase.id,
+                entity.subjectLinkId,
+                command.actorId,
                 entity.subjectType,
                 entity.subjectId,
                 command.field,
@@ -354,7 +374,14 @@ internal class BreakGlassTransactions(
     @Transactional
     fun completeReveal(work: BreakGlassRevealWork): Instant =
         boundary {
+            activeAssignedCase(work.caseId, work.actorId)
+            val link = activeLink(work.caseId, work.subjectLinkId)
+            if (link.subjectType.toBreakGlassSubjectType() != work.subjectType || link.subjectId != work.subjectId) {
+                conflict("Break-glass subject binding is stale")
+            }
+            permissions.requireActive(work.actorId, OperatorPermission.SUPPORT_BREAK_GLASS_REQUEST)
             val attempt = revealAttempts.findLockedById(work.attemptId) ?: notFound()
+            if (attempt.actorId != work.actorId || attempt.supportCaseId != work.caseId) conflict("RevealAttempt binding is stale")
             val now = clock.instant()
             attempt.revealed(now)
             revealAttempts.saveAndFlush(attempt)
@@ -383,8 +410,9 @@ internal class BreakGlassTransactions(
             val normalizedReason = command.reasonCode.trim()
             if (normalizedReason.length !in 1..32 || !normalizedReason.matches(Regex("^[A-Z][A-Z0-9_]*$"))) invalid()
             permissions.requireActive(command.actorId, OperatorPermission.PRIVACY_BREAK_GLASS_REVIEW)
-            val initial = requests.findLockedById(command.requestId) ?: notFound()
-            commandLock.lock(initial.supportCaseId, command.actorId, REVIEW_BREAK_GLASS, command.idempotencyKey)
+            val caseId = requests.findCaseIdById(command.requestId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, REVIEW_BREAK_GLASS, command.idempotencyKey)
+            cases.findLockedById(caseId) ?: notFound()
             replayOrExecute(
                 command.actorId,
                 REVIEW_BREAK_GLASS,
@@ -393,6 +421,7 @@ internal class BreakGlassTransactions(
                 200,
             ) {
                 val entity = requests.findLockedById(command.requestId) ?: notFound()
+                if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
                 if (entity.version != command.expectedVersion) conflict("Break-glass request version is stale")
                 val aggregate = entity.toAggregate()
                 val now = clock.instant()

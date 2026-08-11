@@ -112,7 +112,8 @@ internal class VerificationAttemptEntity(
 
 internal data class VerificationLockoutId(
     var supportCaseId: UUID = UUID(0, 0),
-    var subjectLinkId: UUID = UUID(0, 0),
+    var subjectType: VerificationSubjectType = VerificationSubjectType.CUSTOMER,
+    var subjectId: UUID = UUID(0, 0),
 ) : Serializable
 
 @Entity
@@ -123,8 +124,12 @@ internal class VerificationLockoutEntity(
     @Column(name = "support_case_id", nullable = false)
     val supportCaseId: UUID,
     @Id
-    @Column(name = "subject_link_id", nullable = false)
-    val subjectLinkId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subject_type", nullable = false, length = 16)
+    val subjectType: VerificationSubjectType,
+    @Id
+    @Column(name = "subject_id", nullable = false)
+    val subjectId: UUID,
     @Column(name = "locked_until", nullable = false)
     var lockedUntil: Instant,
     @Column(name = "updated_at", nullable = false)
@@ -180,6 +185,9 @@ internal interface VerificationSessionJpaRepository : JpaRepository<Verification
     @Query("select session from VerificationSessionEntity session where session.id = :id")
     fun findCurrentById(@Param("id") id: UUID): VerificationSessionEntity?
 
+    @Query("select session.supportCaseId from VerificationSessionEntity session where session.id = :id")
+    fun findCaseIdById(@Param("id") id: UUID): UUID?
+
     @Query(
         "select session from VerificationSessionEntity session where session.supportCaseId = :caseId " +
             "and session.state in :states",
@@ -195,7 +203,17 @@ internal interface VerificationChallengeJpaRepository : JpaRepository<Verificati
     @Query("select challenge from VerificationChallengeEntity challenge where challenge.id = :id")
     fun findLockedById(@Param("id") id: UUID): VerificationChallengeEntity?
 
+    @Query("select challenge.sessionId from VerificationChallengeEntity challenge where challenge.id = :id")
+    fun findSessionIdById(@Param("id") id: UUID): UUID?
+
     fun findBySessionIdOrderByRequestedAtAscIdAsc(sessionId: UUID): List<VerificationChallengeEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select challenge from VerificationChallengeEntity challenge where challenge.sessionId = :sessionId " +
+            "order by challenge.requestedAt, challenge.id",
+    )
+    fun findLockedBySessionIdOrderByRequestedAtAscIdAsc(@Param("sessionId") sessionId: UUID): List<VerificationChallengeEntity>
 
     @Query(
         "select distinct challenge.channel from VerificationChallengeEntity challenge " +
@@ -207,17 +225,20 @@ internal interface VerificationChallengeJpaRepository : JpaRepository<Verificati
     ): Set<VerificationChannel>
 }
 
-internal interface VerificationAttemptJpaRepository : JpaRepository<VerificationAttemptEntity, UUID>
+internal interface VerificationAttemptJpaRepository : JpaRepository<VerificationAttemptEntity, UUID> {
+    fun existsByChallengeId(challengeId: UUID): Boolean
+}
 
 internal interface VerificationLockoutJpaRepository : JpaRepository<VerificationLockoutEntity, VerificationLockoutId> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select lockout from VerificationLockoutEntity lockout " +
-            "where lockout.supportCaseId = :caseId and lockout.subjectLinkId = :linkId",
+            "where lockout.supportCaseId = :caseId and lockout.subjectType = :subjectType and lockout.subjectId = :subjectId",
     )
     fun findLocked(
         @Param("caseId") caseId: UUID,
-        @Param("linkId") linkId: UUID,
+        @Param("subjectType") subjectType: VerificationSubjectType,
+        @Param("subjectId") subjectId: UUID,
     ): VerificationLockoutEntity?
 }
 
@@ -226,5 +247,15 @@ internal interface SupportSecurityIdempotencyJpaRepository : JpaRepository<Suppo
         actorId: UUID,
         operation: String,
         idempotencyKey: String,
+    ): SupportSecurityIdempotencyEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        "select command from SupportSecurityIdempotencyEntity command " +
+            "where command.resourceId = :resourceId and command.operation = :operation and command.state = 'PROCESSING'",
+    )
+    fun findLockedProcessingByResourceIdAndOperation(
+        @Param("resourceId") resourceId: UUID,
+        @Param("operation") operation: String,
     ): SupportSecurityIdempotencyEntity?
 }

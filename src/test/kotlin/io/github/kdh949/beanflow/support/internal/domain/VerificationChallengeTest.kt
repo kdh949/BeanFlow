@@ -26,6 +26,20 @@ class VerificationChallengeTest {
     }
 
     @Test
+    fun `provider issue completion at the expiry instant is retained as expired`() {
+        val challenge =
+            VerificationChallenge.request(
+                id = UUID.fromString("42000000-0000-0000-0000-000000000003"),
+                sessionId = UUID.fromString("42000000-0000-0000-0000-000000000002"),
+                channel = VerificationChannel.REGISTERED_EMAIL,
+                requestedAt = issuedAt,
+            )
+
+        assertThat(challenge.completeIssue("opaque-provider-reference", issuedAt.plusSeconds(5 * 60)))
+            .isEqualTo(ChallengeState.EXPIRED)
+    }
+
+    @Test
     fun `terminal provider outcome cannot be replayed`() {
         val challenge = issuedChallenge()
         challenge.claimVerification(issuedAt.plusSeconds(1))

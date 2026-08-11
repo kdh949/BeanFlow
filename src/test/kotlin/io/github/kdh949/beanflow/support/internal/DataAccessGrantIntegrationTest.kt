@@ -32,6 +32,10 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 @Import(TestcontainersConfiguration::class)
@@ -164,6 +168,63 @@ internal class DataAccessGrantIntegrationTest
                     Long::class.java,
                 ),
             ).isZero()
+        }
+
+        @Test
+        fun `permission revocation during owner decrypt prevents raw response release`() {
+            val binding = seedVerifiedBinding(requesterId, "BASIC")
+            val grantId = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-request-race-0001", "ACTIVE")
+            val decryptStarted = CountDownLatch(1)
+            val decryptRelease = CountDownLatch(1)
+            Mockito.doAnswer {
+                check(!TransactionSynchronizationManager.isActualTransactionActive())
+                decryptCalls.incrementAndGet()
+                decryptStarted.countDown()
+                check(decryptRelease.await(5, TimeUnit.SECONDS))
+                "Synthetic Customer".toByteArray(StandardCharsets.UTF_8)
+            }.`when`(crypto).decrypt(
+                EncryptedPersonalData("vault:v7:display", 7, 1),
+                PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, binding.subjectId, PersonalDataField.DISPLAY_NAME),
+            )
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val response =
+                    executor.submit(
+                        Callable {
+                        mockMvc
+                            .perform(
+                                post("/api/v1/support/data-access-grants/$grantId/reveals")
+                                    .with(operatorJwt(requesterId))
+                                    .header("Idempotency-Key", "grant-reveal-race-0001")
+                                    .json("""{"fields":["CUSTOMER_DISPLAY_NAME"]}"""),
+                            ).andReturn()
+                        },
+                    )
+                check(decryptStarted.await(5, TimeUnit.SECONDS))
+                jdbcTemplate.update(
+                    """
+                    UPDATE operations_operator_permission_grant
+                       SET state = 'REVOKED', revoked_at = now(), version = version + 1
+                     WHERE actor_id = ? AND permission = 'SUPPORT_PII_REVEAL_BASIC'
+                    """.trimIndent(),
+                    requesterId,
+                )
+                decryptRelease.countDown()
+                val result = response.get(10, TimeUnit.SECONDS).response
+
+                assertThat(result.status).isEqualTo(403)
+                assertThat(result.contentAsString).doesNotContain("Synthetic Customer")
+                assertThat(
+                    jdbcTemplate.queryForObject(
+                        "SELECT state FROM support_reveal_attempt WHERE grant_id = ?",
+                        String::class.java,
+                        grantId,
+                    ),
+                ).isEqualTo("FAILED")
+            } finally {
+                decryptRelease.countDown()
+                executor.shutdownNow()
+            }
         }
 
         @Test
@@ -356,7 +417,7 @@ internal class DataAccessGrantIntegrationTest
                     Timestamp.from(current.plusSeconds(index.toLong() + 1)),
                 )
             }
-            return Binding(caseId, sessionId)
+            return Binding(caseId, sessionId, linkId, subjectId)
         }
 
         private fun stubDecrypt(subjectId: UUID) {
@@ -433,5 +494,7 @@ internal class DataAccessGrantIntegrationTest
         private data class Binding(
             val caseId: UUID,
             val sessionId: UUID,
+            val linkId: UUID,
+            val subjectId: UUID,
         )
     }

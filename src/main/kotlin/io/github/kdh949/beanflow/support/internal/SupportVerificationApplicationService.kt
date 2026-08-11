@@ -183,6 +183,7 @@ internal sealed interface ChallengeIssueStart {
         val actorId: UUID,
         val challengeId: UUID,
         val sessionId: UUID,
+        val caseId: UUID,
         val subjectType: VerificationSubjectType,
         val subjectId: UUID,
         val channel: VerificationChannel,
@@ -200,6 +201,7 @@ internal sealed interface ChallengeVerifyStart {
         val actorId: UUID,
         val challengeId: UUID,
         val sessionId: UUID,
+        val caseId: UUID,
         val opaqueProviderReference: String,
         val idempotencyId: UUID,
         val correlationId: String,
@@ -247,7 +249,7 @@ internal class SupportVerificationTransactions(
                 val supportCase = activeAssignedCase(command.caseId, command.actorId)
                 val link = activeLink(supportCase.id, command.subjectLinkId)
                 val subjectType = link.subjectType.toVerificationSubjectType()
-                lockouts.findLocked(supportCase.id, link.id)?.let { lockout ->
+                lockouts.findLocked(supportCase.id, subjectType, link.subjectId)?.let { lockout ->
                     if (now.isBefore(lockout.lockedUntil)) {
                         val retry = ceil(Duration.between(now, lockout.lockedUntil).toMillis() / 1000.0).toLong().coerceAtLeast(1)
                         throw DomainFailure(FailureCode.VERIFICATION_LOCKED, "Verification binding is locked", retry)
@@ -281,13 +283,24 @@ internal class SupportVerificationTransactions(
     ): VerificationSessionResource =
         boundary {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_VERIFICATION_MANAGE)
+            val caseId = sessions.findCaseIdById(sessionId) ?: notFound()
+            activeAssignedCase(caseId, actorId)
             val entity = sessions.findLockedById(sessionId) ?: notFound()
-            activeAssignedCase(entity.supportCaseId, actorId)
+            requireSessionOwner(entity, actorId)
             val aggregate = entity.toAggregate(verifiedChannels(entity.id))
-            aggregate.refresh(clock.instant())
-            entity.apply(aggregate, clock.instant())
+            val now = clock.instant()
+            aggregate.refresh(now)
+            entity.apply(aggregate, now)
             sessions.saveAndFlush(entity)
-            entity.toResource(challenges.findBySessionIdOrderByRequestedAtAscIdAsc(entity.id))
+            val challengeEntities = challenges.findLockedBySessionIdOrderByRequestedAtAscIdAsc(entity.id)
+            challengeEntities.forEach { challenge ->
+                val challengeAggregate = challenge.toAggregate()
+                val previousState = challengeAggregate.state
+                challengeAggregate.refresh(now)
+                if (challengeAggregate.state != previousState) challenge.apply(challengeAggregate, now)
+            }
+            challenges.saveAllAndFlush(challengeEntities)
+            entity.toResource(challengeEntities)
         }
 
     @Transactional
@@ -295,9 +308,12 @@ internal class SupportVerificationTransactions(
         boundary {
             validateIdempotency(command.idempotencyKey)
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_VERIFICATION_MANAGE)
+            val caseId = sessions.findCaseIdById(command.sessionId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, ISSUE_CHALLENGE, command.idempotencyKey)
+            activeAssignedCase(caseId, command.actorId)
             val session = sessions.findLockedById(command.sessionId) ?: notFound()
-            commandLock.lock(session.supportCaseId, command.actorId, ISSUE_CHALLENGE, command.idempotencyKey)
-            activeAssignedCase(session.supportCaseId, command.actorId)
+            requireSessionOwner(session, command.actorId)
+            activeLink(caseId, session.subjectLinkId)
             existingCommand(command.actorId, ISSUE_CHALLENGE, command.idempotencyKey)?.let { existing ->
                 requirePayload(existing, hash("${command.sessionId}|${command.channel}"))
                 return@boundary ChallengeIssueStart.Replay(readCompleted(existing, VerificationChallengeResource::class.java))
@@ -325,6 +341,7 @@ internal class SupportVerificationTransactions(
                 command.actorId,
                 entity.id,
                 session.id,
+                session.supportCaseId,
                 session.subjectType,
                 session.subjectId,
                 command.channel,
@@ -339,7 +356,19 @@ internal class SupportVerificationTransactions(
         result: VerificationChallengeIssueResult,
     ): VerificationChallengeResource =
         boundary {
+            cases.findLockedById(start.caseId) ?: notFound()
+            val session = sessions.findLockedById(start.sessionId) ?: notFound()
+            requireSessionOwner(session, start.actorId)
             val challengeEntity = challenges.findLockedById(start.challengeId) ?: notFound()
+            if (challengeEntity.sessionId != session.id) conflict("Verification challenge binding is stale")
+            completedResponse(start.idempotencyId, VerificationChallengeResource::class.java)?.let { return@boundary it }
+            if (challengeEntity.state == ChallengeState.REVOKED) {
+                val response = challengeEntity.toResource()
+                val now = clock.instant()
+                completedCommand(start.idempotencyId, response, 201, now)
+                audits.appendAll(listOf(challengeEntity.audit("SUPPORT_VERIFICATION_CHALLENGE_ISSUED", start.actorId, start.correlationId, now)))
+                return@boundary response
+            }
             check(challengeEntity.state == ChallengeState.PENDING_ISSUE) { "Challenge issue is already terminal" }
             val now = clock.instant()
             val aggregate = challengeEntity.toAggregate()
@@ -369,10 +398,15 @@ internal class SupportVerificationTransactions(
         boundary {
             validateIdempotency(command.idempotencyKey)
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_VERIFICATION_MANAGE)
+            val sessionId = challenges.findSessionIdById(command.challengeId) ?: notFound()
+            val caseId = sessions.findCaseIdById(sessionId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, VERIFY_CHALLENGE, command.idempotencyKey)
+            activeAssignedCase(caseId, command.actorId)
+            val session = sessions.findLockedById(sessionId) ?: notFound()
+            requireSessionOwner(session, command.actorId)
+            activeLink(caseId, session.subjectLinkId)
             val challenge = challenges.findLockedById(command.challengeId) ?: notFound()
-            val session = sessions.findLockedById(challenge.sessionId) ?: notFound()
-            commandLock.lock(session.supportCaseId, command.actorId, VERIFY_CHALLENGE, command.idempotencyKey)
-            activeAssignedCase(session.supportCaseId, command.actorId)
+            if (challenge.sessionId != session.id) conflict("Verification challenge binding is stale")
             existingCommand(command.actorId, VERIFY_CHALLENGE, command.idempotencyKey)?.let { existing ->
                 requirePayload(existing, hash(command.challengeId.toString()))
                 return@boundary ChallengeVerifyStart.Replay(readCompleted(existing, VerificationResultResource::class.java))
@@ -401,6 +435,7 @@ internal class SupportVerificationTransactions(
                 command.actorId,
                 challenge.id,
                 session.id,
+                session.supportCaseId,
                 requireNotNull(challenge.opaqueProviderReference),
                 idempotencyEntity.id,
                 command.correlationId,
@@ -413,8 +448,37 @@ internal class SupportVerificationTransactions(
         providerResult: VerificationChallengeVerifyResult,
     ): VerificationResultResource =
         boundary {
-            val challenge = challenges.findLockedById(start.challengeId) ?: notFound()
+            cases.findLockedById(start.caseId) ?: notFound()
             val session = sessions.findLockedById(start.sessionId) ?: notFound()
+            requireSessionOwner(session, start.actorId)
+            val challenge = challenges.findLockedById(start.challengeId) ?: notFound()
+            if (challenge.sessionId != session.id) conflict("Verification challenge binding is stale")
+            completedResponse(start.idempotencyId, VerificationResultResource::class.java)?.let { return@boundary it }
+            if (challenge.state == ChallengeState.REVOKED) {
+                val now = clock.instant()
+                val response =
+                    VerificationResultResource(
+                        challenge.toResource(),
+                        session.state,
+                        VerificationLevel.UNVERIFIED,
+                        session.invalidAttempts,
+                        null,
+                    )
+                completedCommand(start.idempotencyId, response, 200, now)
+                audits.appendAll(
+                    listOf(
+                        session.audit(
+                            "SUPPORT_VERIFICATION_ATTEMPT_RECORDED",
+                            start.actorId,
+                            start.correlationId,
+                            now,
+                            mapOf("outcome" to "DISCARDED_AFTER_REVOCATION", "sessionState" to session.state.name),
+                            "support-verification-attempt-discarded:${challenge.id}",
+                        ),
+                    ),
+                )
+                return@boundary response
+            }
             check(challenge.state == ChallengeState.VERIFYING) { "Verification challenge is not awaiting an outcome" }
             val previousChannels = verifiedChannels(session.id)
             val sessionAggregate = session.toAggregate(previousChannels)
@@ -453,9 +517,11 @@ internal class SupportVerificationTransactions(
                 ),
             )
             if (lockedUntil != null) {
-                val existing = lockouts.findLocked(session.supportCaseId, session.subjectLinkId)
+                val existing = lockouts.findLocked(session.supportCaseId, session.subjectType, session.subjectId)
                 if (existing == null) {
-                    lockouts.saveAndFlush(VerificationLockoutEntity(session.supportCaseId, session.subjectLinkId, lockedUntil, now))
+                    lockouts.saveAndFlush(
+                        VerificationLockoutEntity(session.supportCaseId, session.subjectType, session.subjectId, lockedUntil, now),
+                    )
                 } else {
                     existing.lockedUntil = maxOf(existing.lockedUntil, lockedUntil)
                     existing.updatedAt = now
@@ -491,8 +557,11 @@ internal class SupportVerificationTransactions(
         boundary {
             validateIdempotency(command.idempotencyKey)
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_VERIFICATION_MANAGE)
+            val caseId = sessions.findCaseIdById(command.sessionId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, REVOKE_SESSION, command.idempotencyKey)
+            activeAssignedCase(caseId, command.actorId)
             val session = sessions.findLockedById(command.sessionId) ?: notFound()
-            commandLock.lock(session.supportCaseId, command.actorId, REVOKE_SESSION, command.idempotencyKey)
+            requireSessionOwner(session, command.actorId)
             replayOrExecute(
                 command.actorId,
                 REVOKE_SESSION,
@@ -501,7 +570,6 @@ internal class SupportVerificationTransactions(
                 VerificationSessionResource::class.java,
                 200,
             ) {
-                activeAssignedCase(session.supportCaseId, command.actorId)
                 val now = clock.instant()
                 val aggregate = session.toAggregate(verifiedChannels(session.id))
                 aggregate.revoke()
@@ -535,6 +603,15 @@ internal class SupportVerificationTransactions(
         val link = subjectLinks.findByIdAndSupportCaseId(linkId, caseId) ?: notFound()
         if (link.unlinkedAt != null) conflict("SupportCase subject link is inactive")
         return link
+    }
+
+    private fun requireSessionOwner(
+        session: VerificationSessionEntity,
+        actorId: UUID,
+    ) {
+        if (session.actorId != actorId) {
+            throw DomainFailure(FailureCode.ACCESS_DENIED, "VerificationSession belongs to another operator")
+        }
     }
 
     private fun verifiedChannels(sessionId: UUID): Set<VerificationChannel> =
@@ -578,6 +655,15 @@ internal class SupportVerificationTransactions(
         val command = idempotency.findById(id).orElseThrow { IllegalStateException("Idempotency command is missing") }
         command.complete(status, objectMapper.writeValueAsString(response), now)
         idempotency.saveAndFlush(command)
+    }
+
+    private fun <T> completedResponse(
+        id: UUID,
+        type: Class<T>,
+    ): T? {
+        val command = idempotency.findById(id).orElseThrow { IllegalStateException("Idempotency command is missing") }
+        if (command.state != "COMPLETED" || command.responseBody == null) return null
+        return objectMapper.readValue(command.responseBody, type)
     }
 
     private fun <T : Any> replayOrExecute(

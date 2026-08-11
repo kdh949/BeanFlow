@@ -112,9 +112,12 @@ internal data class GrantRevealWork(
     val idempotencyId: UUID,
     val grantId: UUID,
     val caseId: UUID,
+    val subjectLinkId: UUID,
+    val actorId: UUID,
     val subjectType: io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType,
     val subjectId: UUID,
     val fields: Set<SupportPersonalDataField>,
+    val risk: DataAccessRisk,
 )
 
 @Service
@@ -131,8 +134,8 @@ internal class DataAccessGrantApplicationService(
     fun reveal(command: RevealGrantedPersonalDataCommand): RevealedPersonalDataResource {
         val work = transactions.reserveReveal(command)
         val ownerFields = work.fields.mapTo(linkedSetOf(), SupportPersonalDataField::toOwnerField)
-        val revealed =
-            try {
+        try {
+            val revealed =
                 when (work.subjectType) {
                     io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.CUSTOMER ->
                         customers.reveal(RevealPersonalDataCommand(work.subjectId, ownerFields))
@@ -143,21 +146,25 @@ internal class DataAccessGrantApplicationService(
                     io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.DELIVERY ->
                         couriers.reveal(RevealPersonalDataCommand(work.subjectId, ownerFields))
                 }
-            } catch (failure: RuntimeException) {
-                transactions.failReveal(work.attemptId, "OWNER_REVEAL_FAILED")
-                if (failure is DomainFailure) throw failure
-                throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner reveal is unavailable").also {
-                    it.initCause(failure)
+            validateOwnerResponse(work, revealed)
+            val values =
+                work.fields.associateWith { field ->
+                    revealed.values[field.toOwnerField()]
+                        ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner response is incomplete")
                 }
+            val completedAt = transactions.completeReveal(work)
+            return RevealedPersonalDataResource(work.attemptId, work.grantId, work.caseId, work.subjectId, values, completedAt)
+        } catch (failure: RuntimeException) {
+            try {
+                transactions.failReveal(work.attemptId, failure.failureClass())
+            } catch (recordingFailure: RuntimeException) {
+                failure.addSuppressed(recordingFailure)
             }
-        validateOwnerResponse(work, revealed)
-        val completedAt = transactions.completeReveal(work)
-        val values =
-            work.fields.associateWith { field ->
-                revealed.values[field.toOwnerField()]
-                    ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner response is incomplete")
+            if (failure is DomainFailure) throw failure
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner reveal is unavailable").also {
+                it.initCause(failure)
             }
-        return RevealedPersonalDataResource(work.attemptId, work.grantId, work.caseId, work.subjectId, values, completedAt)
+        }
     }
 
     private fun validateOwnerResponse(
@@ -165,10 +172,12 @@ internal class DataAccessGrantApplicationService(
         response: RevealedPersonalData,
     ) {
         if (response.subjectId != work.subjectId || response.values.keys != work.fields.mapTo(linkedSetOf(), SupportPersonalDataField::toOwnerField)) {
-            transactions.failReveal(work.attemptId, "OWNER_RESPONSE_MISMATCH")
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner response is invalid")
         }
     }
+
+    private fun RuntimeException.failureClass(): String =
+        if (this is DomainFailure && code != FailureCode.DEPENDENCY_UNAVAILABLE) "REVEAL_COMPLETION_REJECTED" else "OWNER_REVEAL_FAILED"
 }
 
 @Service
@@ -252,8 +261,9 @@ internal class DataAccessGrantTransactions(
             validateKey(command.idempotencyKey)
             if (command.reasonCode == DataAccessReasonCode.CONTACT_CONFIRMATION) invalid()
             permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
-            val initial = grants.findLockedById(command.grantId) ?: notFound()
-            commandLock.lock(initial.supportCaseId, command.actorId, DECIDE_GRANT, command.idempotencyKey)
+            val caseId = grants.findCaseIdById(command.grantId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, DECIDE_GRANT, command.idempotencyKey)
+            activeCase(caseId)
             replayOrExecute(
                 command.actorId,
                 DECIDE_GRANT,
@@ -263,7 +273,7 @@ internal class DataAccessGrantTransactions(
                 200,
             ) {
                 val entity = grants.findLockedById(command.grantId) ?: notFound()
-                activeCase(entity.supportCaseId)
+                if (entity.supportCaseId != caseId) conflict("DataAccessGrant binding is stale")
                 if (entity.version != command.expectedVersion) conflict("DataAccessGrant version is stale")
                 val fields = fields(entity.id)
                 val aggregate = entity.toAggregate(fields)
@@ -294,8 +304,10 @@ internal class DataAccessGrantTransactions(
     fun reserveReveal(command: RevealGrantedPersonalDataCommand): GrantRevealWork =
         boundary {
             validateKey(command.idempotencyKey)
-            val initial = grants.findLockedById(command.grantId) ?: notFound()
-            commandLock.lock(initial.supportCaseId, command.actorId, REVEAL_GRANT, command.idempotencyKey)
+            permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_PII_REVEAL_REQUEST)
+            val caseId = grants.findCaseIdById(command.grantId) ?: notFound()
+            commandLock.lock(caseId, command.actorId, REVEAL_GRANT, command.idempotencyKey)
+            val supportCase = activeAssignedCase(caseId, command.actorId)
             val payloadHash = hash("${command.grantId}|${command.fields.sortedBy { it.name }}")
             idempotency.findByActorIdAndOperationAndIdempotencyKey(command.actorId, REVEAL_GRANT, command.idempotencyKey)?.let {
                 requirePayload(it, payloadHash)
@@ -305,8 +317,12 @@ internal class DataAccessGrantTransactions(
                 )
             }
             val entity = grants.findLockedById(command.grantId) ?: notFound()
-            val supportCase = activeAssignedCase(entity.supportCaseId, command.actorId)
+            if (entity.supportCaseId != caseId) conflict("DataAccessGrant binding is stale")
             if (entity.requesterId != command.actorId) throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant belongs to another operator")
+            val link = activeLink(supportCase.id, entity.subjectLinkId)
+            if (link.subjectType.toVerificationSubjectType() != entity.subjectType || link.subjectId != entity.subjectId) {
+                conflict("DataAccessGrant subject binding is stale")
+            }
             permissions.requireActive(
                 command.actorId,
                 if (entity.risk == DataAccessRisk.BASIC) {
@@ -375,16 +391,34 @@ internal class DataAccessGrantTransactions(
                 idempotencyEntity.id,
                 entity.id,
                 supportCase.id,
+                entity.subjectLinkId,
+                command.actorId,
                 entity.subjectType,
                 entity.subjectId,
                 command.fields,
+                entity.risk,
             )
         }
 
     @Transactional
     fun completeReveal(work: GrantRevealWork): Instant =
         boundary {
+            activeAssignedCase(work.caseId, work.actorId)
+            val link = activeLink(work.caseId, work.subjectLinkId)
+            if (link.subjectType.toVerificationSubjectType() != work.subjectType || link.subjectId != work.subjectId) {
+                conflict("DataAccessGrant subject binding is stale")
+            }
+            permissions.requireActive(work.actorId, OperatorPermission.SUPPORT_PII_REVEAL_REQUEST)
+            permissions.requireActive(
+                work.actorId,
+                if (work.risk == DataAccessRisk.BASIC) {
+                    OperatorPermission.SUPPORT_PII_REVEAL_BASIC
+                } else {
+                    OperatorPermission.SUPPORT_PII_REVEAL_SENSITIVE
+                },
+            )
             val attempt = revealAttempts.findLockedById(work.attemptId) ?: notFound()
+            if (attempt.actorId != work.actorId || attempt.supportCaseId != work.caseId) conflict("RevealAttempt binding is stale")
             val now = clock.instant()
             attempt.revealed(now)
             revealAttempts.saveAndFlush(attempt)
@@ -435,6 +469,14 @@ internal class DataAccessGrantTransactions(
         if (link.unlinkedAt != null) conflict("SupportCase subject link is inactive")
         return link
     }
+
+    private fun SupportSubjectType.toVerificationSubjectType(): io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType =
+        when (this) {
+            SupportSubjectType.CUSTOMER -> io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.CUSTOMER
+            SupportSubjectType.STORE -> io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.STORE
+            SupportSubjectType.DELIVERY -> io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.DELIVERY
+            SupportSubjectType.ORDER -> invalid()
+        }
 
     private fun processing(
         actorId: UUID,
@@ -616,7 +658,7 @@ private fun DataAccessGrantEntity.apply(
     reservedReveals = aggregate.reservedReveals
     expiresAt = aggregate.expiresAt
     approverId = aggregate.approverId
-    if (aggregate.approverId != null && approvedAt == null) approvedAt = now
+    if (aggregate.approverId != null && decidedAt == null) decidedAt = now
     if (state == DataAccessGrantState.REVOKED && revokedAt == null) revokedAt = now
     if (previousState != state || previousReserved != reservedReveals) version += 1
 }
