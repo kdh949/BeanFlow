@@ -97,7 +97,7 @@ internal class VerificationSession private constructor(
         requiredLevel: VerificationLevel,
         now: Instant,
     ): Boolean {
-        expireAtBoundary(now)
+        refresh(now)
         if (state != VerificationState.VERIFIED) return false
         return when (requiredLevel) {
             VerificationLevel.UNVERIFIED -> true
@@ -119,6 +119,11 @@ internal class VerificationSession private constructor(
 
     fun revoke() {
         if (state == VerificationState.PENDING || state == VerificationState.VERIFIED) state = VerificationState.REVOKED
+    }
+
+    fun refresh(now: Instant): VerificationState {
+        expireAtBoundary(now)
+        return state
     }
 
     private fun requirePendingAt(now: Instant) {
