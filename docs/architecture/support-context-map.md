@@ -1,6 +1,7 @@
 # Support Context Map
 
-> **Status:** Accepted ownership boundary from ADR-081/088 with DRAFT DTO, port and aggregate naming.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 owns the Case records shown below. Owner DTO/command integration and the
+> remaining aggregate names stay DRAFT under ADR-081/088.
 
 ```text
 Identity/Merchant/Delivery ── masked subject/profile DTOs ──┐
@@ -13,6 +14,10 @@ Support ── investigation request ID ─────────────�
 Operations ── decision ID; no payload mutation ──────────────────────> Support
 ```
 
-Support owns Case, Interaction, SubjectLink, Verification orchestration, DataAccessGrant, ActionRequest, approval UX, CompensationRequest and ResolutionCase. Operations owns persistent operator grants, cross-functional investigation, reconciliation and LegalHold operations. Identity owns customer authentication/contact and StoreMembership. Merchant owns store public/legal/payout profiles. Delivery owns canonical fulfillment/provider state.
+Support currently owns `SupportCase`, assignment/state history, bounded interaction/note records and `SubjectLink`.
+Verification orchestration, DataAccessGrant, ActionRequest, approval UX, CompensationRequest and ResolutionCase remain
+future aggregates. Operations owns persistent operator grants, cross-functional investigation, reconciliation and
+LegalHold operations. Identity owns customer authentication/contact and StoreMembership. Merchant owns store
+public/legal/payout profiles. Delivery owns canonical fulfillment/provider state.
 
 Support never calls another Context's Repository or updates its table. Cross-context writes use public Application APIs and identifiers. Integrated reads use DTO projections/query services; write aggregates do not gain navigation relationships for console convenience.

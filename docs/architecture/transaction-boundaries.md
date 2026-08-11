@@ -661,13 +661,14 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - 중단·재실행 시 같은 원천을 중복 처리하지 않는다.
 - Bulk SQL 이후 영속성 컨텍스트를 clear하거나 별도 트랜잭션·Repository를 사용한다.
 
-## Support planning boundaries
+## Support boundaries
 
-- Support는 owner Context Repository/table을 쓰지 않고 typed public Application API를 호출한다.
+- S20 Support는 Operations public permission/retention/Audit API만 사용하고, owner Context Repository/table을 쓰거나
+  호출하지 않는다. subject link는 typed owner ID reference만 저장한다.
 - raw PII reveal과 high-risk change는 필요한 authorization fact와 target Audit이 commit된 뒤에만 응답/성공한다.
 - verification, Delivery, notification, object storage Provider 호출은 long DB transaction 밖이며 durable intent/result로 감싼다.
 - pickup reschedule은 owner Fulfillment transaction에서 new-slot-first swap을 수행한다.
 - timeout/ACK loss는 UNKNOWN/RECONCILING이고 retry가 같은 외부 부수효과를 만들지 않아야 한다.
 - retention deletion은 component별 상태와 ledger를 원자적으로 전이하되 외부 object/index 삭제는 부분 실패를 명시한다.
 
-세부 계획은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.
+S20 command/query 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.

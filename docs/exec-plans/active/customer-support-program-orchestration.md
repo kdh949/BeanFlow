@@ -23,11 +23,14 @@ outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30~
 - S10은 V39 Audit category/class/immutable policy snapshot, 기존 financial Audit expiry 불변과 신규 5년,
   PII access Audit 2년, concurrent retention worker와 persistent 42-permission vocabulary를 구현·검증했다.
   runtime Support endpoint는 추가하지 않았다.
-- S20 detailed plan은 active지만 exact Case transition/requester/category/reopen policy가 draft라
-  implementation-ready가 아니다. Support module/schema/API와 S20 migration lease는 아직 없다.
+- S20 detailed plan은 completed path에 있으며 exact Case transition/requester/category/no-reopen policy를
+  Aggregate/DB/API로 구현했다. Support module, V40 schema, target/runtime Case API, full Testcontainers/runtime-parity
+  regression과 documentation validation evidence가 있다. PR #52 remediation validation도 완료돼 V40 writer lease는
+  release됐다.
 - S30~S140 code/schema/API는 없고 future summary만 존재한다.
 - ADR-083 crypto/KMS와 ADR-090 frontend boundary는 Proposed다.
-- 55개 endpoint는 DRAFT inventory이고 canonical contract가 아니다.
+- 55개 endpoint 중 S20의 9개 Case operation은 canonical target/runtime contract에 구현됐고, 나머지는 DRAFT
+  inventory다.
 
 ## Definitions
 
@@ -88,18 +91,19 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 - **S10 — Retention/Audit/permission foundation:** 기존 financial Audit 5년 보존, immutable retention policy
   version과 exact Support permission grant vocabulary를 V39로 구현·검증했다. Runtime Support endpoint는 없다.
 
-### Current detailed Stage
+### Completed detailed Stages
 
 - **S20 — SupportCase foundation:** lightweight Case lifecycle, append-only assignment/state history, bounded
-  interaction/note와 identifier-only subject link. exact Case policy를 Accepted한 뒤 readiness를 재계산하고,
-  migration lease와 V-next는 실행 시점에 별도로 선택한다.
+  interaction/note와 identifier-only subject link. PR #52 remediation으로 payment-card filter, object authorization,
+  canonical/scoped idempotency, 90-day retention cleanup, JSON omission과 index evidence까지 검증 완료했다.
+  terminal-Case DataAccessGrant 안전성은 S40 scope다.
 
 ### Future Stage summaries and authoring gates
 
 | Stage | Future outcome | Direct inputs required before detailed plan authoring | Known gate |
 |---|---|---|---|
 | S30 | owner profile + protected exact masked search | completed S20 Case boundary and Accepted ADR-083 | customer/contact/crypto model gap |
-| S40 | purpose-bound verification, grant and reveal | completed S20 Case boundary and S10 Audit/permission | challenge Provider contract not chosen |
+| S40 | purpose-bound verification, grant and reveal | completed S20 Case boundary and S10 Audit/permission | challenge Provider contract and atomic terminal-Case Grant revocation/activation-denial design not chosen |
 | S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and S40 verification/grant | endpoint-specific cursor contract required |
 | S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | actor separation DB model required |
 | S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | owner typed commands and state-race contract required |
@@ -140,8 +144,11 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 - [x] S20~S140 placeholder plans removed
 - [x] S10 implemented, fully validated and moved to completed
 - [x] S00 repair completed and S10 readiness recalculated
-- [x] direct successor S20 detailed plan authored from S10 actual outcome; draft Case policy 때문에 readiness false
-- [ ] S20 execution preflight/lease and implementation not started
+- [x] direct successor S20 detailed plan authored from S10 actual outcome; initial Case policy accepted and readiness true
+- [x] S20 execution preflight/sole migration-writer lease, V40 implementation and focused evidence completed
+- [x] S20 initial full validation, completion move, migration-writer lease release and successor readiness handoff
+- [x] S20 PR #52 remediation validation, completion move, migration-writer lease release and successor readiness handoff
+- [ ] S30 detailed plan authoring — blocked until ADR-083 is Accepted and customer/contact/crypto owner model exists
 
 ## Surprises & Discoveries
 
@@ -157,15 +164,22 @@ documents mark them dormant. S20 therefore consumes the foundation without treat
 |---|---|---|---|---|
 | 2026-08-10 | Plan boundary | author future plans after predecessor outcome | avoid stale implementation guesses | this plan |
 | 2026-08-10 | Scheduling | S10 and Analytics have no direct dependency edge | lease order is a separate product priority | ADR-072/091 |
-| 2026-08-11 | Stage handoff | complete S10 and author only direct successor S20 with readiness false | V39 outcome is available, but exact Case policy remains draft | completed S10, active S20 |
+| 2026-08-11 | Stage handoff | complete S10 and author direct successor S20 | V39 outcome plus initial Case policy enable the Case foundation | completed S10, active S20 |
+| 2026-08-11 | S20 scope | keep DataAccessGrant outside S20 and assign terminal-Case Grant revocation/activation denial to S40 | no Grant Aggregate exists in S20; future grant safety must be fail-closed | SupportCase Policy, SP-16 |
+| 2026-08-11 | Stage handoff | initial S20 completion retained S30 as not-ready | V40/full validation completed, but ADR-083 and the owner model remain unavailable | completed S20, ADR-083 Proposed |
+| 2026-08-11 | Review remediation | reopen S20 before merge and reacquire the V40 writer lease | valid PR #52 defects change the unmerged migration and require full validation before the completion handoff is restored | active S20 |
+| 2026-08-11 | Review remediation completion | complete S20 again and release the V40 writer lease | all eight review findings and full single-process regression passed; S30 remains independently blocked by ADR-083/model gate | completed S20, ADR-083 Proposed |
 
 ## Outcomes & Retrospective
 
-S10 foundation is complete; no runtime Support capability is complete. This plan remains active while S20 and later
-approved stages are delivered and capability-specific release evidence is accumulated.
+S10 foundation and the S20 runtime Case capability are complete and validated. This plan remains active while later
+approved stages are delivered and capability-specific release evidence is accumulated. S30 is not ready to author; its
+ADR-083 and owner-model gate prevents a speculative successor plan.
 
 ## Revision Notes
 
 - 2026-08-10: consolidated S10~S140 graph and removed placeholder implementation files.
 - 2026-08-11: recorded completed S10 outcome and created the S20 direct successor with readiness false, without acquiring
   its migration lease or reserving a Flyway number.
+- 2026-08-11: completed S20 V40/Case API validation and moved its plan to completed; the migration-writer lease is
+  released. S30 remains un-authored because ADR-083 and the customer/contact/crypto owner model are not Accepted.

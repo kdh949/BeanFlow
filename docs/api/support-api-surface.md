@@ -1,8 +1,9 @@
-# Customer Support Draft API Surface
+# Customer Support API Surface
 
-> **Contract status:** `DRAFT`
-> **Runtime status:** no operation in this inventory is implemented or present in canonical target/runtime OpenAPI.
-> **Semantic completeness:** `0 / 55` endpoint contracts. The type names and required fields below are implementation inputs, not schemas.
+> **Contract status:** `PARTIALLY IMPLEMENTED` — S20 owns the first nine Case operations.
+> **Runtime status:** S20 operations are present in canonical target/runtime OpenAPI and guarded by runtime parity tests.
+> **Semantic completeness:** `9 / 55` endpoint contracts. Remaining type names and required fields are implementation inputs,
+> not schemas.
 
 This inventory preserves the approved product surface without pretending that one generic request or response can
 represent unrelated commands. An owning Stage adds an operation to `openapi/beanflow-v1.yaml` only after its owner
@@ -12,7 +13,9 @@ model, endpoint-specific DTO, authorization, error and failure semantics are imp
 All Support operator operations require authenticated bearer identity, the named Operations-owned persistent
 permission, Case/object relationship checks and owner-state revalidation. `Bearer + Support policy` below is shorthand
 for that full chain, not JWT-role-only authorization. Sensitive successful responses must be `Cache-Control: no-store`.
-State-changing operations require `Idempotency-Key` unless the owning Stage records a narrower exception. Exact PII
+State-changing operations require `Idempotency-Key` unless the owning Stage records a narrower exception. S20 scopes a
+terminal replay by `(actorId, operation, Idempotency-Key)` and compares a typed length-prefixed canonical payload;
+same scope/different payload is `409`, while a different actor or operation may reuse the same key text. Exact PII
 search input is body-only and must not enter URIs, logs, metrics, cursors or Audit summaries.
 
 The Delivery Provider webhook is the sole unauthenticated-by-bearer surface: it must explicitly set `security: []` in
@@ -21,15 +24,15 @@ authentication, and 2xx is allowed only after durable inbox commit.
 
 | Operation | Owner Stage | Required typed request contract | Required typed response contract | Authentication | Status |
 |---|---|---|---|---|---|
-| `POST /support/cases` | S20 | `CreateSupportCaseRequest`: requester type/reference, inquiry category, optional external reference, structured reason | `SupportCaseResource`: Case ID, state, priority, assignee summary, subject links, version, opened time | Bearer + `SUPPORT_CASE_WRITE` | DRAFT |
-| `GET /support/cases` | S20 | `ListSupportCasesQuery`: queue/state/assignee filters, endpoint-specific sort, limit, typed cursor | `SupportCasePage`: typed Case summaries and `nextCursor` | Bearer + `SUPPORT_CASE_READ`; queue scope | DRAFT |
-| `GET /support/cases/{caseId}` | S20 | `GetSupportCaseQuery`: Case ID | `SupportCaseResource` | Bearer + `SUPPORT_CASE_READ`; Case visibility | DRAFT |
-| `POST /support/cases/{caseId}/assignments` | S20 | `AssignSupportCaseRequest`: Case ID, target operator ID, expected Case version, reason | `SupportCaseAssignmentResource`: assignment ID, assignee, state, Case version, assigned time | Bearer + `SUPPORT_CASE_ASSIGN`; queue scope | DRAFT |
-| `POST /support/cases/{caseId}/status-transitions` | S20 | `TransitionSupportCaseRequest`: Case ID, target state, expected version, reason | `SupportCaseTransitionResource`: previous/current state, Case version, occurred time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | DRAFT |
-| `POST /support/cases/{caseId}/interactions` | S20 | `AppendSupportInteractionRequest`: Case ID, channel, direction, occurred time, redacted summary, retention class | `SupportInteractionResource`: interaction ID, type, masked summary, occurred/recorded times | Bearer + `SUPPORT_CASE_WRITE`; current assignment | DRAFT |
-| `POST /support/cases/{caseId}/notes` | S20 | `AppendSupportNoteRequest`: Case ID, secret-filtered note, reason, retention class | `SupportNoteResource`: note ID, redacted summary, author type, created time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | DRAFT |
-| `POST /support/cases/{caseId}/subject-links` | S20 | `LinkSupportSubjectRequest`: Case ID, subject type, opaque subject ID, relationship, reason | `SupportSubjectLinkResource`: link ID, masked subject summary, relationship, linked time | Bearer + `SUPPORT_CASE_WRITE`; subject visibility | DRAFT |
-| `DELETE /support/cases/{caseId}/subject-links/{linkId}` | S20 | `UnlinkSupportSubjectRequest`: Case ID, link ID, expected Case version, reason | `SupportSubjectUnlinkResource`: link ID, unlinked time, Case version | Bearer + `SUPPORT_CASE_WRITE`; current assignment | DRAFT |
+| `POST /support/cases` | S20 | `CreateSupportCaseRequest`: requester type/reference, inquiry category, priority, optional external reference, structured reason | `SupportCaseResource`: Case ID, state, priority, assignee, active subject links, version, opened time | Bearer + `SUPPORT_CASE_WRITE` | IMPLEMENTED |
+| `GET /support/cases` | S20 | `ListSupportCasesQuery`: state/assignee filters, openedAt/Case ID descending sort, limit, typed cursor | `SupportCasePage`: typed Case summaries and `nextCursor` | Bearer + `SUPPORT_CASE_READ` | IMPLEMENTED |
+| `GET /support/cases/{caseId}` | S20 | `GetSupportCaseQuery`: Case ID | `SupportCaseResource` | Bearer + `SUPPORT_CASE_READ` | IMPLEMENTED |
+| `POST /support/cases/{caseId}/assignments` | S20 | `AssignSupportCaseRequest`: Case ID, active target operator ID, expected Case version, reason | `SupportCaseAssignmentResource`: assignment ID, assignee, state, Case version, assigned time | Bearer + `SUPPORT_CASE_ASSIGN` | IMPLEMENTED |
+| `POST /support/cases/{caseId}/status-transitions` | S20 | `TransitionSupportCaseRequest`: Case ID, target state, expected version, reason | `SupportCaseTransitionResource`: previous/current state, Case version, occurred time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
+| `POST /support/cases/{caseId}/interactions` | S20 | `AppendSupportInteractionRequest`: Case ID, channel, direction, occurred time, redacted summary | `SupportInteractionResource`: interaction ID, type, non-content summary, occurred/recorded times | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
+| `POST /support/cases/{caseId}/notes` | S20 | `AppendSupportNoteRequest`: Case ID, secret-filtered note, reason | `SupportNoteResource`: note ID, non-content summary, created time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
+| `POST /support/cases/{caseId}/subject-links` | S20 | `LinkSupportSubjectRequest`: Case ID, subject type, opaque subject ID, relationship, reason | `SupportSubjectLinkResource`: link ID, typed subject ID reference, relationship, linked time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
+| `DELETE /support/cases/{caseId}/subject-links/{linkId}` | S20 | `UnlinkSupportSubjectRequest`: Case ID, link ID, expected Case version, reason | `SupportSubjectUnlinkResource`: link ID, unlinked time, Case version | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
 | `POST /support/searches` | S30 | `SearchSupportSubjectsRequest`: `criterion.type`, `criterion.value`, subject types, reason code | `SupportSubjectSearchResult`: masked typed candidates, ambiguity/count metadata; no raw criterion | Bearer + `SUPPORT_SUBJECT_SEARCH`; rate/anomaly controls | DRAFT |
 | `POST /support/cases/{caseId}/verification-sessions` | S40 | `CreateVerificationSessionRequest`: Case ID, subject link ID, purpose, action scope, requested level | `VerificationSessionResource`: session ID, level/state, purpose, allowed challenge types, expiry | Bearer + `SUPPORT_VERIFICATION_MANAGE`; assignment/subject | DRAFT |
 | `GET /support/verification-sessions/{sessionId}` | S40 | `GetVerificationSessionQuery`: session ID | `VerificationSessionResource`: current state/level, attempts remaining, expiry, pending/unknown result | Bearer + `SUPPORT_VERIFICATION_MANAGE`; same Case/subject | DRAFT |

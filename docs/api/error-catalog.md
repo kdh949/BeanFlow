@@ -101,8 +101,8 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 
 | Code | HTTP/representation | Retry | Meaning |
 |---|---:|---|---|
-| SUPPORT_CASE_NOT_ACTIVE | 409 | after reopen | resolved/closed Case에서 일반 작업 시도 |
-| SUPPORT_CASE_NOT_ASSIGNED | 403 | after assignment | privileged action의 current assignee 불일치 |
+| SUPPORT_CASE_NOT_ACTIVE | 409 | future specialized mapping | resolved/closed Case에서 일반 작업 시도; S20은 `ORDER_STATE_CONFLICT`를 사용 |
+| SUPPORT_CASE_NOT_ASSIGNED | 403 | future specialized mapping | privileged action의 current assignee 불일치; S20은 `ACCESS_DENIED`를 사용 |
 | SUPPORT_SUBJECT_NOT_LINKED | 403 | after link | Case와 target Subject 관계 없음 |
 | INSUFFICIENT_VERIFICATION | 403 | after step-up | purpose/action에 필요한 level 미달 |
 | VERIFICATION_EXPIRED | 409 | new session | 만료된 session |

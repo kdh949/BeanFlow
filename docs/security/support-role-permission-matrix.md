@@ -1,9 +1,11 @@
 # Support Role and Permission Matrix
 
-> **Status:** `IMPLEMENTED PERMISSION FOUNDATION / DRAFT ROLE BUNDLES`; S10은 exact permission enum과 persistent
-> grant DB vocabulary를 구현했지만 이 표의 role bundle이나 Support capability release를 승인하지 않는다.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20은 Case endpoint에서 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`,
+> `SUPPORT_CASE_ASSIGN` persistent grant를 사용한다. 이 표의 role bundle과 나머지 Support capability는 DRAFT다.
 
-Roles are coarse bundles; an active Operations-owned persistent grant, Case/object relationship, verification and latest ActionPolicy are all required. JWT role alone is never a fallback.
+Roles are coarse bundles; S20 Case command는 active Operations-owned persistent grant와 endpoint별 Case
+assignment/version 조건을 요구한다. later action은 verification과 latest ActionPolicy까지 추가로 요구한다. JWT role
+alone is never a fallback.
 
 | Capability | Agent | Supervisor | Specialist | Manager | Operations | Privacy Auditor |
 |---|---:|---:|---:|---:|---:|---:|
@@ -33,4 +35,5 @@ S10이 구현한 33개 새 permission은 다음과 같다.
   `OPERATIONS_RETENTION_MANAGE`, `PRIVACY_AUDIT_READ`
 
 기존 9개를 포함한 전체 42개 값은 같은 Operations-owned persistent grant/revoke 경계에 있다. 새 값은
-`PLATFORM_OPERATOR`에 자동 부여되지 않고, owning use case가 구현되기 전에는 dormant하다.
+`PLATFORM_OPERATOR`에 자동 부여되지 않는다. S20 Case 3개 permission만 owning use case에서 활성이고 나머지는
+owning use case가 구현되기 전까지 dormant하다.

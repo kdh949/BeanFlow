@@ -23,6 +23,7 @@ tags:
   - name: Loyalty
   - name: Settlement
   - name: Dispute
+  - name: Support
 paths:
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
@@ -533,6 +534,22 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements~1{settlementBatchId}~1items"
   /settlement-items/{itemId}/disputes:
     $ref: "./beanflow-v1.yaml#/paths/~1settlement-items~1{itemId}~1disputes"
+  /support/cases:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases"
+  /support/cases/{caseId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}"
+  /support/cases/{caseId}/assignments:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1assignments"
+  /support/cases/{caseId}/status-transitions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1status-transitions"
+  /support/cases/{caseId}/interactions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1interactions"
+  /support/cases/{caseId}/notes:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1notes"
+  /support/cases/{caseId}/subject-links:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links"
+  /support/cases/{caseId}/subject-links/{linkId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links~1{linkId}"
 components:
   securitySchemes:
     bearerAuth:

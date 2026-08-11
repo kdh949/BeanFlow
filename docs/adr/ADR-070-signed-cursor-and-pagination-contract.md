@@ -106,6 +106,7 @@ beanflow:
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
 | `GET /payment-methods` | `(isDefault DESC, createdAt DESC, paymentMethodId DESC)` | authenticated customer ID와 endpoint |
+| `GET /support/cases` | `(openedAt DESC, caseId DESC)` | endpoint, optional state와 optional assignee ID |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
@@ -117,6 +118,11 @@ base64 parsing을 만들지 않는다.
 customer ID의 canonical UUID로 계산한다. 매 요청 customer 인가를 다시 수행하며 다른 customer의
 cursor는 400이다. default 또는 lifecycle 상태가 page 요청 사이 바뀌면 snapshot consistency를
 보장하지 않으므로 client는 최신 first page를 다시 읽는다.
+
+2026-08-11 S20 amendment: SupportCase list typed cursor는 `openedAt` UTC ISO-8601 Instant와 Case ID
+lowercase canonical UUID를 string array로 인코딩한다. endpoint identifier는 `support-cases`, filter hash는
+endpoint와 optional state/assignee ID의 canonical value로 계산하고, expiry는 15분이다. interaction/note는
+Case Aggregate collection에 올리지 않으며 cursor response에도 포함하지 않는다.
 
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고

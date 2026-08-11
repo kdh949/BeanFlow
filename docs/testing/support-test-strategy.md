@@ -1,18 +1,18 @@
 # Customer Support Planned Test Strategy
 
-> **Status:** `IMPLEMENTATION_PLANNED`
-> No Support/Delivery/LegalHold test class, k6 script, fixture or measured result exists. An owning Stage converts only its
-> relevant section into named tests and records exact commands/results in its detailed ExecPlan.
+> **Status:** `PARTIALLY IMPLEMENTED`
+> S20 has named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
+> later Support stages remain planned; no Support performance or k6 result is claimed.
 
 ## Coverage by layer
 
-| Layer | Planned coverage |
+| Layer | Current / planned coverage |
 |---|---|
-| Domain | Case/verification/grant/action/approval/resolution/compensation/delivery/retention state invariants |
-| Application | public owner Port order, transaction/Audit fail-closed, unknown/retry/partial semantics |
-| PostgreSQL Testcontainers | FK/unique/check/index/locks, actor separation, rolling buckets, Inbox and worker claims |
-| API contract | endpoint-specific status/error/masking/no-store/cursor/idempotency/security; target/runtime separation |
-| Modulith/ArchUnit | Support cannot use owner internal Repository/entity; Controller cannot use Repository |
+| Domain | S20 Case transition matrix, terminal rejection, `OTHER` guard and content policy including embedded PAN/CVC/CVV corpus; later aggregates planned |
+| Application | S20 persistent grant/current assignment/idempotency/Audit fail-closed, non-assignee transition 403, invalid input 400 and state/version 409 separation; owner port/unknown semantics planned |
+| PostgreSQL Testcontainers | S20 migration CHECK/UNIQUE/append-only/active-link constraints, `(actor, operation, key)` idempotency scope, 90-day cleanup boundary/retry and advisory-lock winner; later locks/worker claims planned |
+| API contract | S20 endpoint status/error/no-store/cursor/idempotency/security, optional JSON field omission and target/runtime parity; later masking/reveal planned |
+| Modulith/ArchUnit | S20 Controller→Repository and Support→owner-internal boundary; later module rules planned |
 | Security | IDOR, role/grant/Case/verification matrix, PII leakage, approval separation and browser controls |
 | Provider/resilience | timeout, ACK loss, duplicate/out-of-order, restart and same-reference reconciliation |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
@@ -30,13 +30,15 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 
 - challenge replay, attempt lockout and grant expiry/revocation versus reveal
 - permission revoke versus authorized transaction; approval step/reviewer duplication and revoke versus execute
-- same key/same payload replay, same key/changed payload conflict
+- same key/same payload replay, same key/changed payload conflict, cross-actor/cross-operation key reuse and free-text
+  field-boundary collision conflict
 - last pickup slot atomic swap; ACCEPTED cancellation versus PREPARING; two agents cancel one Order
 - rolling compensation bucket and duplicate terminal incident benefit
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch
 - retention worker claim contention and LegalHold create versus delete
 
-Tests use deterministic Clock/IdentifierSource and PostgreSQL locks/constraints, not only mocks.
+S20 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
+deterministic Clock/IdentifierSource where their behavior requires it.
 
 ## Retention and restore scenarios to instantiate
 
@@ -54,7 +56,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 
 ## Evidence rules
 
-- Planned coverage is neither `IMPLEMENTED` nor `VERIFIED`.
-- Each Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
+- S20 coverage is limited to its named test classes; it does not verify future Support stages.
+- Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.
 - Legal review is required before production and is not inferred from passing tests.
