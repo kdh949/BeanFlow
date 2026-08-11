@@ -1,9 +1,9 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S50 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S60 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
-## Implemented S10–S50 boundaries
+## Implemented S10–S60 boundaries
 
 - privileged use case가 Audit를 쓰면 caller-local transaction에서 current retention policy head를 잠그고
   immutable policy version/category/class/expiry를 snapshot한다. policy/Audit 실패는 caller를 rollback한다.
@@ -49,13 +49,26 @@
   state/version snapshot을 읽는다. TxA2는 Case/assignment/link, generic/capability persistent grants와 exact
   VerificationSession을 다시 잠근다. immutable typed evaluator는 그 snapshot만으로 advisory decision을 만들며
   어떤 owner write도 수행하지 않는다. UI response는 2분 expiry/current owner version을 포함하고 실행 권한이 아니다.
+- S60 request create/revision은 Support local transaction에서 Case/request row와 persistent permissions/verification을
+  잠그고 immutable revision, state, 90일 command idempotency response와 PII-free Audit를 함께 commit한다. 승인 시
+  current Ordering version, requester capability, exact verification/policy/expiry를 다시 확인한다. 실패·권한 회수·stale
+  target은 승인 성공으로 바꾸지 않고 `EXPIRED`/`STALE` lineage를 durable하게 남긴다. S60은 owner command를 실행하지
+  않으며 `READY_FOR_EXECUTION`까지만 전이한다.
+- S60 Operations investigation decision은 Operations-owned row를 잠근 뒤 required public Support callback을 같은 local
+  transaction에서 호출한다. callback은 exact request/revision과 최신 policy/permission/verification/target binding을
+  재확인하고 Support approval step을 저장한다. 두 owner 상태, idempotency와 Audit 중 하나라도 실패하면 전체가
+  rollback되며 Operations 단독 성공은 없다. timeout·비동기 Provider 호출은 이 경계에 존재하지 않는다.
+- S60 explicit reassignment는 request와 Case를 정해진 순서로 잠그고 exact revision/request/Case version, target의
+  Case-write/action-execute/capability grant와 reviewer separation을 확인한다. SupportCase assignment, request executor,
+  양쪽 append-only history, 두 Audit와 idempotency response가 한 transaction에서 commit한다. ready executor 권한이
+  회수되면 조회가 `REASSIGNMENT_REQUIRED`를 materialize하며 자동 대체하지 않는다.
 
 ## Local atomic candidates
 
 - SupportCase state + append-only history (S20 implemented)
 - verification outcome + append-only attempt/lock update (S40 implemented)
 - grant activation/reveal authorization + pre-reveal Audit (S40 implemented)
-- ActionRequest revision + policy snapshot; ApprovalStep + request state
+- ActionRequest revision + policy snapshot; ApprovalStep + request state (S60 implemented)
 - owner-local pickup slot swap
 - owner-local point/coupon issuance + compensation execution result
 - provider webhook Inbox insert

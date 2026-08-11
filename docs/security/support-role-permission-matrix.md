@@ -2,9 +2,10 @@
 
 > **Status:** `PARTIALLY IMPLEMENTED`; S20 Case는 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`,
 > `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH`, S40 verification/reveal/break-glass와 S50
-> timeline/action evaluation은 아래 전용 persistent grant를 사용한다. Role bundle과 이후 Support capability는 DRAFT다.
+> timeline/action evaluation, S60 request/approval/investigation/reassignment는 아래 전용 persistent grant를 사용한다.
+> Role bundle과 이후 Support capability는 DRAFT다.
 
-Roles are coarse bundles; S20–S50 use case는 active Operations-owned persistent grant를 요구한다.
+Roles are coarse bundles; S20–S60 use case는 active Operations-owned persistent grant를 요구한다.
 S30은 추가로 structured reason과 persistent actor rate budget을 요구하고 Vault 호출 뒤 grant를 재확인한다. S50
 action evaluation은 action-bound verification과 latest ActionPolicy까지 추가로 요구한다. JWT role alone is never a
 fallback.
@@ -43,4 +44,12 @@ S10이 구현한 33개 새 permission은 다음과 같다.
 S50 timeline은 `SUPPORT_CASE_READ`와 `SUPPORT_ORDER_READ`, action evaluation은 `SUPPORT_ACTION_REQUEST`를 활성화한다.
 Timeline query와 action evaluation은 owner read 전후에 persistent grant, Case relation과 assignment를 재확인한다.
 `PERSONAL_DATA_REVEAL` verification은 원문 열람에만, `SUPPORT_ACTION` verification은 action evaluation에만 사용할 수
-있으며 서로 대체하지 않는다. 그 밖의 future permission은 owning use case 전까지 dormant다.
+있으며 서로 대체하지 않는다.
+
+S60 create/revision은 `SUPPORT_ACTION_REQUEST`와 action별 `SUPPORT_ORDER_CANCEL`,
+`SUPPORT_PICKUP_RESCHEDULE`, `SUPPORT_RESOLUTION_REQUEST` 중 하나를 함께 요구한다. manager decision은
+`SUPPORT_ACTION_APPROVE`, Operations decision은 platform role과 `OPERATIONS_SUPPORT_INVESTIGATION`을 요구한다.
+requester/Support reviewer/Operations reviewer는 모두 달라야 하고 reviewer는 executor가 될 수 없다. 명시적
+reassignment actor는 `SUPPORT_CASE_ASSIGN`, 새 executor는 `SUPPORT_CASE_WRITE`, `SUPPORT_ACTION_EXECUTE`와 action별
+grant를 모두 가져야 한다. 권한 회수는 자동 fallback 상담원을 선택하지 않고 request를 `REASSIGNMENT_REQUIRED`로
+남긴다. 그 밖의 future permission은 owning use case 전까지 dormant다.

@@ -42,7 +42,17 @@ revoke한다. reveal 뒤 `REVIEW_PENDING`은 감사 의무 보존을 위해 자�
 
 ## SupportActionRequest and ApprovalStep
 
-Revision snapshots canonical payload hash, target/policy/verification/aggregate versions and expiry. Any material change makes prior approvals stale. Requester, Support approver and Operations approver are distinct; reviewer cannot occupy two steps or execute. Exact key/revision uniqueness and actor separation require DB constraints plus service checks.
+S60 implements this boundary. A revision snapshots action/target, action and evidence SHA-256 digests,
+VerificationSession, immutable policy version, target version, amount, bounded reason, creator and exact expiry. Any material
+change creates the next revision and leaves prior steps immutable/stale. Request state is closed over manager/Operations wait,
+ready, reassignment required, revision required, denied, expired, stale and manual review.
+
+Requester, Support approver and Operations approver are distinct; one reviewer cannot occupy two steps and no approver may
+execute. Approval is one-time and exact-revision-bound. The Operations investigation is a separate Operations Aggregate and
+can return only through its required Support owner callback. Executor permission loss materializes
+`REASSIGNMENT_REQUIRED`; explicit reassignment atomically updates the SupportCase assignment and request executor after exact
+request/Case versions and target eligibility are checked. DB uniqueness/check constraints plus pessimistic/advisory locks protect
+revision lineage, one terminal step, investigation replay and command idempotency. S60 never executes Ordering or another owner.
 
 ## CompensationRequest and ResolutionCase
 

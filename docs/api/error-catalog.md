@@ -46,6 +46,12 @@
 | VERIFICATION_LOCKED | 429 + Retry-After | Yes, after lock expiry | invalid proof 5회로 같은 Case+Subject binding이 30분 잠김 |
 | DATA_ACCESS_GRANT_REQUIRED | 403 | Yes, after new matching grant | active matching Grant가 없거나 만료·철회·소진됨 |
 | DATA_ACCESS_SCOPE_MISMATCH | 403 | No; request an allowed field | 요청 field가 Grant 또는 subject owner allowlist 밖임 |
+| SUPPORT_ACTION_POLICY_DENIED | 409 | Yes, after state/policy/input changes | current typed ActionPolicy가 request/revision 생성을 거부함; owner command는 실행되지 않음 |
+| SUPPORT_ACTION_REQUEST_STATE_CONFLICT | 409 | Yes, after reviewing current state | request가 해당 revision/approval/reassignment 전이를 허용하지 않음 |
+| SUPPORT_ACTION_REQUEST_STALE | 409 | Yes, after reading current versions and creating a new revision when needed | request revision, target/policy/verification/permission 또는 Case/request version binding이 현재 값과 다름 |
+| SUPPORT_ACTION_REQUEST_EXPIRED | 409 | Yes, with a new verified revision | exact verification-bound approval expiry에 도달함 (`now >= expiresAt`) |
+| SUPPORT_APPROVER_MUST_DIFFER | 409 | Yes, with a distinct eligible actor | requester, executor, Support reviewer, Operations reviewer의 분리 또는 reviewer-as-executor 규칙 위반 |
+| SUPPORT_INVESTIGATION_STATE_CONFLICT | 409 | Yes, after reading the current investigation | Operations investigation이 이미 terminal이거나 요청한 decision 전이를 허용하지 않음 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
@@ -114,13 +120,7 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 | DATA_ACCESS_GRANT_EXPIRED | 403 | new grant | 만료/철회/소진 grant |
 | FIELD_SCOPE_NOT_ALLOWED | 403 | no | grant보다 넓은 필드 또는 R4 |
 | AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |
-| SUPPORT_ACTION_DENIED | 403/422 | after state/policy change | server policy denial |
 | SUPPORT_ACTION_APPROVAL_REQUIRED | 409 representation | after approval | 실행 전 approval 필요 |
-| SELF_APPROVAL_NOT_ALLOWED | 403 | different reviewer | requester가 review 시도 |
-| SEPARATION_OF_DUTIES_VIOLATION | 403 | distinct actor | reviewer step/executor 충돌 |
-| APPROVAL_EXPIRED | 409 | new revision/review | 승인 expiry |
-| APPROVAL_STALE | 409 | re-evaluate | payload/policy/verification/target version 변경 |
-| REQUEST_REVISION_MISMATCH | 409 | latest revision | 실행 revision 불일치 |
 | PICKUP_SLOT_UNAVAILABLE | 409 | choose slot | new slot capacity 불가; old slot 유지 |
 | POST_ACCEPTANCE_RESOLUTION_REQUIRED | 409 | create resolution | direct change가 허용되지 않는 lifecycle |
 | COMPENSATION_LIMIT_EXCEEDED | 422 | investigation/policy | rolling/band 한도 |

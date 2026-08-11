@@ -1,18 +1,18 @@
 # Customer Support Planned Test Strategy
 
 > **Status:** `PARTIALLY IMPLEMENTED`
-> S20–S50 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
+> S20–S60 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
 > later Support stages remain planned; no Support production performance or k6 result is claimed.
 
 ## Coverage by layer
 
 | Layer | Current / planned coverage |
 |---|---|
-| Domain | S20 Case matrix/content guard; S40 verification/grant rules; S50 typed state/action/default-deny/version/expiry matrix; later aggregates planned |
-| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 reveal/resilience; S50 fixed-count owner composition, cursor/filter and permission/relationship/verification/stale evaluation |
-| PostgreSQL Testcontainers | S20–S50 constraints/races; V43 closed action scope and 20k-row identical-fixture EXPLAIN baseline/re-measure for refund/notification timeline indexes |
-| API contract | S20–S50 status/error/no-store/idempotency/closed schemas, sensitive-value exclusion and target/runtime Spring MVC parity |
-| Modulith/ArchUnit | Controller→Repository and Support→owner-internal production boundary; S50 composes owner public APIs only |
+| Domain | S20 Case matrix/content guard; S40 verification/grant rules; S50 typed default-deny policy; S60 request route/revision/approval/expiry/reassignment state machine |
+| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 reveal/resilience; S50 bounded composition/evaluation; S60 exact binding, separation, permission revoke, Operations return and atomic reassignment |
+| PostgreSQL Testcontainers | S20–S60 constraints/races; V44 revision/step/actor/idempotency/investigation constraints; concurrent Support/Operations approval and Audit-failure rollback |
+| API contract | S20–S60 status/error/no-store/idempotency/closed schemas, sensitive-value exclusion and target/runtime Spring MVC parity |
+| Modulith/ArchUnit | Controller→Repository and Support→owner-internal production boundary; S50/S60 use owner public APIs only |
 | Security | IDOR, persistent permission/Case/verification/field/action matrix, proof/raw diagnostic redaction, scope separation, Audit failure and post-owner permission recheck |
 | Provider/resilience | S40 challenge and security notification timeout/UNKNOWN, duplicate verification winner and transaction-outside-provider checks; later PG/Delivery paths planned |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
@@ -29,7 +29,7 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 ## Concurrency and idempotency scenarios to instantiate
 
 - challenge replay, attempt lockout including subject relink, stale Provider work recovery and grant expiry/revocation versus reveal
-- permission revoke versus authorized transaction; approval step/reviewer duplication and revoke versus execute
+- permission revoke versus authorized transaction; approval step/reviewer duplication, concurrent decision, callback failure and revoke versus explicit reassignment
 - same key/same payload replay, same key/changed payload conflict, cross-actor/cross-operation key reuse and free-text
   field-boundary collision conflict
 - last pickup slot atomic swap; ACCEPTED cancellation versus PREPARING; two agents cancel one Order
@@ -37,7 +37,7 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch
 - retention worker claim contention and LegalHold create versus delete
 
-S20–S50 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
+S20–S60 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
 deterministic Clock/IdentifierSource where their behavior requires it.
 
 ## Retention and restore scenarios to instantiate
@@ -59,7 +59,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 - S50 completion ran `spotlessCheck test` with 784 tests, 0 failures, 0 errors and 1 skipped, followed by a successful
   build. JVM-wide PostGIS server reuse is paired with one database per Spring context and a separate Flyway connection,
   so context data isolation and the 1-connection application-pool boundary remain tested.
-- S20–S50 coverage is limited to their named test classes; it does not verify future Support stages.
+- S20–S60 coverage is limited to their named test classes; it does not verify future Support stages.
 - Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.
 - Legal review is required before production and is not inferred from passing tests.
