@@ -309,7 +309,7 @@ internal class FastReorderMigrationTest {
     }
 
     private fun migrateCurrent() {
-        flyway().migrate()
+        flyway(target = "36").migrate()
     }
 
     private fun flyway(

@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.dispute.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.ordering.internal.EventPublicationRecoveryWorker
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.settlement.internal.SettlementBatchLifecycleService
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -460,23 +461,31 @@ internal class SettlementDisputeIntegrationTest
 
         private fun insertCompletedOrder(storeId: UUID): UUID =
             UUID.randomUUID().also { orderId ->
+                val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
                 jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
                 try {
                     jdbcTemplate.update(
                         """
                         INSERT INTO ordering_order (
-                            id, customer_id, store_id, pickup_slot_id, state,
+                            id, customer_id, store_id, pickup_slot_id,
+                            public_reference, pickup_business_date, pickup_sequence,
+                            store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                            state,
                             subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                             currency, reservation_expires_at, paid_at, acceptance_warning_at,
                             acceptance_deadline_at, accepted_at, preparing_at, ready_at, completed_at,
                             created_at, updated_at, version
-                        ) VALUES (?, ?, ?, ?, 'COMPLETED', 1000, 0, 0, 1000,
+                        ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                                  'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                                  'COMPLETED', 1000, 0, 0, 1000,
                                   'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 7)
                         """.trimIndent(),
                         orderId,
                         UUID.randomUUID(),
                         storeId,
                         UUID.randomUUID(),
+                        publicReference,
+                        OrderCreationDatabaseFixture.pickupSequence(orderId),
                         Timestamp.from(COMPLETED_AT.minusSeconds(180)),
                         Timestamp.from(COMPLETED_AT.minusSeconds(120)),
                         Timestamp.from(COMPLETED_AT.minusSeconds(60)),

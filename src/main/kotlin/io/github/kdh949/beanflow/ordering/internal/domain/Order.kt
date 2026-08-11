@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 enum class OrderState {
@@ -36,11 +37,35 @@ data class OrderLineSnapshot(
     val cashPayableKrw: Long,
 )
 
+data class OrderDisplayIdentitySnapshot(
+    val publicReference: String,
+    val pickupBusinessDate: LocalDate,
+    val pickupSequence: Long,
+    val storeName: String,
+    val pickupWindowStart: Instant,
+    val pickupWindowEnd: Instant,
+) {
+    init {
+        require(PUBLIC_REFERENCE_FORMAT.matches(publicReference)) { "Public order reference format is invalid" }
+        require(pickupSequence > 0) { "Pickup sequence must be positive" }
+        require(storeName == storeName.trim() && storeName.length in 1..200) { "Store display name is invalid" }
+        require(pickupWindowEnd.isAfter(pickupWindowStart)) { "Pickup window is invalid" }
+    }
+
+    val pickupNumber: String
+        get() = "A-$pickupSequence"
+
+    private companion object {
+        val PUBLIC_REFERENCE_FORMAT = Regex("^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$")
+    }
+}
+
 class Order private constructor(
     val id: UUID,
     val customerId: UUID,
     val storeId: UUID,
     val pickupSlotId: UUID,
+    val displayIdentity: OrderDisplayIdentitySnapshot,
     val state: OrderState,
     val lines: List<OrderLineSnapshot>,
     val subtotalKrw: Long,
@@ -62,6 +87,7 @@ class Order private constructor(
             customerId: UUID,
             storeId: UUID,
             pickupSlotId: UUID,
+            displayIdentity: OrderDisplayIdentitySnapshot,
             lineIds: List<UUID>,
             quotes: List<MenuLineQuote>,
             pricing: OrderPricing,
@@ -83,6 +109,7 @@ class Order private constructor(
                 customerId = customerId,
                 storeId = storeId,
                 pickupSlotId = pickupSlotId,
+                displayIdentity = displayIdentity,
                 state = OrderState.PENDING_PAYMENT,
                 lines = snapshots,
                 subtotalKrw = pricing.subtotal.value,
@@ -102,6 +129,7 @@ class Order private constructor(
             customerId: UUID,
             storeId: UUID,
             pickupSlotId: UUID,
+            displayIdentity: OrderDisplayIdentitySnapshot,
             lineIds: List<UUID>,
             quotes: List<MenuLineQuote>,
             pricing: OrderPricing,
@@ -119,6 +147,7 @@ class Order private constructor(
                 customerId = customerId,
                 storeId = storeId,
                 pickupSlotId = pickupSlotId,
+                displayIdentity = displayIdentity,
                 state = OrderState.PAID,
                 lines = snapshots,
                 subtotalKrw = pricing.subtotal.value,

@@ -210,6 +210,7 @@ internal class CreateOrderService(
 
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
+            FailureCode.ORDER_REFERENCE_EXHAUSTED,
             -> 503
 
             else -> 409

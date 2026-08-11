@@ -230,7 +230,7 @@ lease를 그대로 Plan 70이나 100으로 넘기지 않는다. 최종 seven-PR 
 | # | Plan | 산출 | 상태 |
 |---|---|---|---|
 | M0 | [productization-00](../completed/productization-00-design-capability-contract.md) | 화면별 capability 계약, 충돌 해소, ADR 승인 | 완료 |
-| M1 | [productization-10](productization-10-public-order-reference.md) | 공개 주문번호, 픽업번호, 표시 스냅샷, backfill | 대기 |
+| M1 | [productization-10](../completed/productization-10-public-order-reference.md) | 공개 주문번호, 픽업번호, 표시 스냅샷, backfill | 완료 |
 | M2 | [productization-20](productization-20-authentication-foundation.md) | 4 FilterChain, Session, CSRF, `CurrentActor`, `/me`, credential 관리 permission | 대기 |
 | M3 | [productization-30](productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 대기 |
 | M4 | [productization-40](productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 대기 |
@@ -329,6 +329,11 @@ git diff --cached --check
   V43이다. open PR은 완료된 Support writer #54와 migration을 추가하지 않은 Plan 00 #55뿐이고 Plan 10+
   또는 Analytics 구현 branch/PR은 없다. `STACK_A_MIGRATION_WRITER_LEASE`를 Plan 10→60에 획득했으며
   Plan 60 Draft PR과 최종 topology/전체 검증 뒤 해제한다.
+- 2026-08-12 Plan 10: exact predecessor `3c02752c114a271cec2458a1f9fcc00873d0ae1f`에서 V43 expand와
+  V44 contract migration, 공개 주문번호·픽업 순번·표시 snapshot, bounded backfill, 공개번호 기반 고객
+  조회·취소와 매장 조회·전이를 구현했다. Ordering 224 tests, 전체 782 tests(1 skipped), Spotless와
+  문서/OpenAPI 검증이 모두 통과했다. Plan 10 completion commit과 Draft PR topology 검증 뒤 Plan 20을
+  시작한다.
 
 ## Surprises & Discoveries
 
@@ -351,6 +356,9 @@ git diff --cached --check
   `SUPPORT_INTEGRATION_PENDING`으로 관측한다.
 - `analytics-refund-and-late-event-projection`은 metadata상 ready migration candidate지만 구현 branch와
   open PR이 없어 active writer는 아니다. Stack A lease가 해제될 때까지 실행 대상에서 제외한다.
+- V44가 주문 표시 필드를 `NOT NULL`로 닫자 Ordering 밖의 결제·정산·분쟁 테스트 fixture도 영향을
+  받았다. 첫 전체 build의 78 failures를 숨기지 않고 유효한 registry·snapshot fixture로 교정한 뒤 동일
+  전체 build 782 tests가 통과했다.
 
 ## Decision Log
 
@@ -375,10 +383,13 @@ git diff --cached --check
 | 2026-08-12 | Plan 00~60은 exact predecessor 기반의 정확히 일곱 Draft PR로 실행한다. Plan 00 base는 main, 이후 base는 직전 branch이며 combined release PR을 만들지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-12 | Support 두 commit이 Plan 00의 ancestor이면 `origin/main` 통합 전 상태를 `SUPPORT_INTEGRATION_PENDING`으로 기록하고 Stack A를 중단하거나 restack하지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-12 | Checkpoint 1 exact tree의 마지막 migration은 V42이며 Stack A가 Plan 10부터 Plan 60 최종 검증까지 단일 writer lease를 보유한다 | 이 ExecPlan `Progress` |
+| 2026-08-12 | Plan 10은 V43 expand + bounded backfill + V44 contract로 배포 경계를 나누고 공개번호 route만 UUID를 숨긴다 | [Plan 10](../completed/productization-10-public-order-reference.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다. 각 plan 완료 시 실제 결과와 측정값으로 갱신한다.
+- M1 Plan 10이 완료되어 주문 생성·조회 계약은 공개 주문번호, 매장·영업일 픽업번호와 불변 표시
+  snapshot을 제공한다. Stack A migration-writer lease는 유지하며 다음 직렬 후보는 Plan 20이다.
+- 프로그램 전체 결과는 아직 완료되지 않았다. M2~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
 
 ## Revision Notes
 

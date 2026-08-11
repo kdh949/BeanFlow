@@ -310,6 +310,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CustomerOrderDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1842,6 +1843,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreOrderBoardItem" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -3155,10 +3157,10 @@ components:
       in: path
       name: orderReference
       required: true
-      description: Human-readable public order reference; it is not an authorization token.
+      description: Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token.
       schema:
         type: string
-        pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+        pattern: '^[Bb][Ff]-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}$'
     MerchantAccountId:
       in: path
       name: merchantAccountId
@@ -4546,6 +4548,12 @@ components:
       required:
         - orderId
         - storeId
+        - publicReference
+        - pickupNumber
+        - pickupBusinessDate
+        - storeName
+        - pickupWindowStart
+        - pickupWindowEnd
         - state
         - lines
         - subtotalKrw
@@ -4560,6 +4568,23 @@ components:
           $ref: "#/components/schemas/Identifier"
         storeId:
           $ref: "#/components/schemas/Identifier"
+        publicReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+        pickupNumber:
+          type: string
+          pattern: '^A-[1-9][0-9]*$'
+        pickupBusinessDate:
+          type: string
+          format: date
+        storeName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        pickupWindowStart:
+          $ref: "#/components/schemas/DateTime"
+        pickupWindowEnd:
+          $ref: "#/components/schemas/DateTime"
         state:
           $ref: "#/components/schemas/OrderState"
         reservationExpiresAt:

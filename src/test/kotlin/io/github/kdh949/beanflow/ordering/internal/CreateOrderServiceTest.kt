@@ -37,6 +37,13 @@ internal class CreateOrderServiceTest
             assertThat(response.status).isEqualTo(201)
             assertThat(response.body).contains("\"state\":\"PENDING_PAYMENT\"")
             assertThat(response.body).contains("\"reservationExpiresAt\"")
+            assertThat(
+                response.body,
+            ).containsPattern(
+                "\\\"publicReference\\\":\\\"BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}\\\"",
+            )
+            assertThat(response.body).contains("\"pickupNumber\":\"A-1\"")
+            assertThat(response.body).contains("\"storeName\":\"BeanFlow Test Store\"")
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isEqualTo(1)
@@ -47,6 +54,34 @@ internal class CreateOrderServiceTest
                 )
             assertThat(optionSnapshot["option_selection_snapshot_state"]).isEqualTo("SNAPSHOTTED")
             assertThat(optionSnapshot["normalized_option_ids_json"]).isEqualTo("[]")
+            val displayIdentity =
+                jdbcTemplate.queryForMap(
+                    """
+                    SELECT public_reference, pickup_business_date, pickup_sequence,
+                           store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot
+                      FROM ordering_order
+                    """.trimIndent(),
+                )
+            assertThat(displayIdentity["public_reference"].toString()).matches(
+                "^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$",
+            )
+            assertThat(displayIdentity["pickup_business_date"].toString()).isEqualTo("2030-01-01")
+            assertThat(displayIdentity["pickup_sequence"]).isEqualTo(1L)
+            assertThat(displayIdentity["store_name_snapshot"]).isEqualTo("BeanFlow Test Store")
+        }
+
+        @Test
+        fun `missing verified store display profile rolls back the entire order transaction`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, includeDisplayProfile = false)
+
+            val response = createOrderUseCase.create("missing-profile-01", fixture.command())
+
+            assertThat(response.status).isEqualTo(503)
+            assertThat(response.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")
+            assertNoOrderOrReservation()
+            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_pickup_counter")).isZero()
+            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_public_reference_registry")).isZero()
         }
 
         @Test

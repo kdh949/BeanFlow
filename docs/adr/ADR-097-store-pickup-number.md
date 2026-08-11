@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Public order reference](../exec-plans/active/productization-10-public-order-reference.md)
+- **Implementation owner:** [Public order reference](../exec-plans/completed/productization-10-public-order-reference.md)
 
 ## Context
 
@@ -142,6 +142,16 @@ DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동�
 - 단일 매장의 동시 주문에서 카운터 잠금 대기가 실제로 병목이 될 때
 - 매장별 접두사 또는 채널별 번호 체계가 필요할 때
 - 24시간 영업 매장이 생겨 영업일 경계 정의를 바꿔야 할 때
+
+## Implementation Outcome (2026-08-12)
+
+- `ordering_pickup_counter` UPSERT와 주문 insert는 같은 transaction에서 실행되며 rollback 시 함께
+  되돌아간다. 커밋된 할당은 종료 상태와 무관하게 반납하지 않는다.
+- V43는 기존 매장·영업일별 주문 수를 선점하고, bounded backfill은 `(created_at, id)` rank를 기록한 뒤
+  V44가 실제 최대값으로 카운터를 재동기화한다.
+- `Asia/Seoul` 자정 경계, 매장/일자 독립성, 동시 20건 유일성, rollback과 커밋 후 비재사용을
+  PostgreSQL Testcontainers로 검증했다.
+- 순번 UPSERT와 행 잠금 대기를 `beanflow.order.pickup_sequence.allocation.duration` p95 timer로 계측한다.
 
 ## Related Decisions
 

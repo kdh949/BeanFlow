@@ -87,6 +87,10 @@ Application Service 양쪽에서 수행한다. 한 곳만 두면 새 endpoint �
 - 고객 경로는 주문번호와 함께 Session actor의 소유권을 검증한다. 소유자가 아니면 `403`,
   존재하지 않으면 `404`다.
 - 매장 경로는 주문번호와 함께 `StoreMembership`과 주문의 `storeId` 일치를 검증한다.
+- 공개번호 고객 취소와 매장 전이도 같은 predicate로 내부 UUID를 해석한 뒤 기존 Aggregate 명령을
+  실행한다. 신규 응답과 멱등 replay 변환 결과에는 내부 `orderId`를 포함하지 않는다.
+- 형식 검증은 대문자 canonicalization 뒤 수행한다. 존재 확인은 403/404 구분에만 사용하며 공개번호
+  단독 조회 결과를 반환하지 않는다.
 - 픽업번호는 매장·영업일 안에서만 유일하므로 조회 키로 사용하지 않는다.
 
 ## Enforcement layers

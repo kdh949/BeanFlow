@@ -82,6 +82,10 @@ internal class PickupReservationEntity(
     var state: PickupReservationState,
     @Column(name = "expires_at", nullable = false)
     val expiresAt: Instant,
+    @Column(name = "slot_starts_at_snapshot", nullable = false)
+    val slotStartsAtSnapshot: Instant,
+    @Column(name = "slot_ends_at_snapshot", nullable = false)
+    val slotEndsAtSnapshot: Instant,
     @Column(name = "source_reference", nullable = false)
     val sourceReference: String,
     @Column(name = "created_at", nullable = false)

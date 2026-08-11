@@ -20,6 +20,8 @@ data class ReservePickupCommand(
 data class PickupReservationGrant(
     val reservationId: UUID,
     val expiresAt: Instant,
+    val startsAt: Instant,
+    val endsAt: Instant,
 )
 
 data class ReleasePickupAfterTerminationCommand(

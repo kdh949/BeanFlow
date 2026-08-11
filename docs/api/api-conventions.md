@@ -142,6 +142,31 @@ reason과 evidence를
 - 동일 key/payload replay는 최초 201 또는 확정 실패 status/body를 그대로 반환하며
   `replayed` 표시를 추가하지 않는다.
 
+## Human-facing order identifiers
+
+Order UUIDs remain internal aggregate/FK/event identifiers. Human-facing customer and merchant routes use the
+canonical public reference `BF-XXXX-XXXX`, whose alphabet is
+`23456789ABCDEFGHJKMNPQRSTUVWXYZ`. Input is uppercased before strict format validation; whitespace and ambiguous
+characters are rejected rather than guessed.
+
+- Customer read/cancel: `GET /api/v1/me/orders/{orderReference}` and
+  `POST /api/v1/me/orders/{orderReference}/cancellations`.
+- Store read/transition: `GET /api/v1/stores/{storeId}/orders/{orderReference}` and
+  `POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions`.
+- A public reference is not authorization. Customer lookup includes `customerId`; store lookup includes `storeId`
+  and requires current active membership. An existing reference outside that scope returns 403 and a missing
+  reference returns 404.
+- New public-reference responses omit internal `orderId`. Existing UUID routes remain during compatibility migration
+  and keep their existing UUID response fields.
+- `pickupNumber` is `A-` plus the unpadded positive per-store/per-Seoul-business-date sequence. It is display-only and
+  never a lookup key.
+- Store name and pickup window fields are immutable order snapshots. Reads do not replace them with current Merchant
+  or Fulfillment values.
+
+The Plan 10 runtime customer/store detail representations intentionally retain the existing rich Order fields minus
+`orderId`. Plans 50 and 60 replace those transitional shapes with the dedicated customer read model and store board
+contracts; Plan 10 does not implement those later projections.
+
 ## Customer order cancellation
 
 `POST /api/v1/orders/{orderId}/cancellations`의 성공 표현은 취소 시점 Order 상태에

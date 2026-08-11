@@ -133,6 +133,7 @@ internal class ApiExceptionHandler(
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
             FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,
+            FailureCode.ORDER_REFERENCE_EXHAUSTED,
             -> HttpStatus.SERVICE_UNAVAILABLE
 
             else -> HttpStatus.CONFLICT

@@ -12,6 +12,7 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
 import io.github.kdh949.beanflow.payment.api.PrepareCustomerCancellationPaymentCommand
 import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
@@ -373,22 +374,30 @@ internal class RejectionRefundRepositoryTest
                 "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
                 storeId,
             )
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state,
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, 'PAID', 7000, 0, 0, 7000, 'KRW', NULL,
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                              'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                              'PAID', 7000, 0, 0, 7000, 'KRW', NULL,
                               ?, ?, ?, ?, ?, 1)
                     """.trimIndent(),
                     orderId,
                     customerId,
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(orderId),
                     Timestamp.from(NOW),
                     Timestamp.from(NOW.plusSeconds(120)),
                     Timestamp.from(NOW.plusSeconds(180)),

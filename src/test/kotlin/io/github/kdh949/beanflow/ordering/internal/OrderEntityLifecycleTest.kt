@@ -9,6 +9,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 class OrderEntityLifecycleTest {
@@ -157,6 +158,12 @@ class OrderEntityLifecycleTest {
             customerId = UUID.randomUUID(),
             storeId = UUID.randomUUID(),
             pickupSlotId = UUID.randomUUID(),
+            publicReference = "BF-2345-6789",
+            pickupBusinessDate = LocalDate.parse("2026-07-31"),
+            pickupSequence = 1,
+            storeNameSnapshot = "Test Store",
+            pickupWindowStartSnapshot = paidAt.plusSeconds(600),
+            pickupWindowEndSnapshot = paidAt.plusSeconds(1_200),
             state = OrderState.PENDING_PAYMENT,
             subtotalKrw = 1_000,
             couponDiscountKrw = 0,

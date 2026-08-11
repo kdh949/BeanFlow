@@ -4,12 +4,14 @@ import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
+import io.github.kdh949.beanflow.ordering.internal.domain.OrderDisplayIdentitySnapshot
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderPricingCalculator
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.ordering.internal.domain.PricingLine
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 internal class FastReorderPolicyTest {
@@ -106,6 +108,15 @@ internal class FastReorderPolicyTest {
             customerId = UUID.randomUUID(),
             storeId = UUID.randomUUID(),
             pickupSlotId = UUID.randomUUID(),
+            displayIdentity =
+                OrderDisplayIdentitySnapshot(
+                    publicReference = "BF-2345-6789",
+                    pickupBusinessDate = LocalDate.parse("2026-08-09"),
+                    pickupSequence = 1,
+                    storeName = "Test Store",
+                    pickupWindowStart = now.plusSeconds(600),
+                    pickupWindowEnd = now.plusSeconds(1_200),
+                ),
             lineIds = listOf(UUID.randomUUID()),
             quotes = listOf(quote),
             pricing = pricing,

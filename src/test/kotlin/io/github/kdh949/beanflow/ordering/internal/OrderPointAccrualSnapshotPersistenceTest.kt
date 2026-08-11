@@ -16,6 +16,7 @@ import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -60,17 +61,24 @@ internal class OrderPointAccrualSnapshotPersistenceTest
             val storeId = UUID.randomUUID()
             val now = Instant.parse("2026-08-01T06:00:00Z")
             transactions.executeWithoutResult {
+                OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId, now)
                 orderRepository.save(
                     OrderEntity(
-                        orderId,
-                        UUID.randomUUID(),
-                        storeId,
-                        UUID.randomUUID(),
-                        OrderState.PENDING_PAYMENT,
-                        200,
-                        0,
-                        0,
-                        200,
+                        id = orderId,
+                        customerId = UUID.randomUUID(),
+                        storeId = storeId,
+                        pickupSlotId = UUID.randomUUID(),
+                        publicReference = OrderCreationDatabaseFixture.registeredReference(orderId),
+                        pickupBusinessDate = LocalDate.parse("2026-08-01"),
+                        pickupSequence = 1,
+                        storeNameSnapshot = "Test Store",
+                        pickupWindowStartSnapshot = now.plusSeconds(600),
+                        pickupWindowEndSnapshot = now.plusSeconds(1_200),
+                        state = OrderState.PENDING_PAYMENT,
+                        subtotalKrw = 200,
+                        couponDiscountKrw = 0,
+                        pointsAppliedKrw = 0,
+                        payableKrw = 200,
                         reservationExpiresAt = now.plusSeconds(300),
                         createdAt = now,
                         updatedAt = now,

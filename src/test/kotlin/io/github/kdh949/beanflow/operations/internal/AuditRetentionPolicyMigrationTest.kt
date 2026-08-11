@@ -37,7 +37,7 @@ internal class AuditRetentionPolicyMigrationTest {
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1",
                 String::class.java,
             ),
-        ).isEqualTo("42")
+        ).isEqualTo("44")
         assertThat(count(jdbc, "operations_retention_policy_version")).isEqualTo(15)
         assertThat(count(jdbc, "operations_retention_policy_head")).isEqualTo(10)
         assertThat(

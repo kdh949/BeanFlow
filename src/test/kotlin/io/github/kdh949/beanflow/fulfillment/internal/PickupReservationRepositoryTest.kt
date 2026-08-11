@@ -112,6 +112,12 @@ internal class PickupReservationRepositoryTest
                 val first = operations.reserve(command)
                 val replay = operations.reserve(command)
                 assertThat(replay).isEqualTo(first)
+                assertThat(first.startsAt).isEqualTo(
+                    slotRepository.findById(slotId).orElseThrow().startsAt,
+                )
+                assertThat(first.endsAt).isEqualTo(
+                    slotRepository.findById(slotId).orElseThrow().endsAt,
+                )
             }
 
             transactions.executeWithoutResult {

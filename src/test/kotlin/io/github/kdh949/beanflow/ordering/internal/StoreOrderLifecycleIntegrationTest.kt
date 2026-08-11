@@ -31,6 +31,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
@@ -99,6 +100,56 @@ internal class StoreOrderLifecycleIntegrationTest
             )
             paymentGateway.reset()
             notificationProvider.reset()
+        }
+
+        @Test
+        fun `public reference store routes authorize the store and omit the internal order id`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "public-store-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/{storeId}/orders/{orderReference}", fixture.storeId, reference.lowercase())
+                        .with(storeJwt(actorId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.order.orderId").doesNotExist())
+                .andExpect(jsonPath("$.order.publicReference").value(reference))
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/{storeId}/orders/{orderReference}", UUID.randomUUID(), reference)
+                        .with(storeJwt(actorId)),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        fixture.storeId,
+                        reference.lowercase(),
+                    ).with(storeJwt(actorId))
+                        .header("Idempotency-Key", "public-store-accept")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"targetState":"ACCEPTED","reason":null}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.order.orderId").doesNotExist())
+                .andExpect(jsonPath("$.order.publicReference").value(reference))
+                .andExpect(jsonPath("$.order.state").value("ACCEPTED"))
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        UUID.randomUUID(),
+                        reference,
+                    ).with(storeJwt(actorId))
+                        .header("Idempotency-Key", "wrong-store-transition")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"targetState":"PREPARING","reason":null}"""),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
         }
 
         @Test

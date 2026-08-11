@@ -22,6 +22,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 @Entity
@@ -35,6 +36,18 @@ internal class OrderEntity(
     val storeId: UUID,
     @Column(name = "pickup_slot_id", nullable = false)
     val pickupSlotId: UUID,
+    @Column(name = "public_reference", nullable = false, length = 12)
+    val publicReference: String,
+    @Column(name = "pickup_business_date", nullable = false)
+    val pickupBusinessDate: LocalDate,
+    @Column(name = "pickup_sequence", nullable = false)
+    val pickupSequence: Long,
+    @Column(name = "store_name_snapshot", nullable = false, length = 200)
+    val storeNameSnapshot: String,
+    @Column(name = "pickup_window_start_snapshot", nullable = false)
+    val pickupWindowStartSnapshot: Instant,
+    @Column(name = "pickup_window_end_snapshot", nullable = false)
+    val pickupWindowEndSnapshot: Instant,
     state: OrderState,
     @Column(name = "subtotal_krw", nullable = false)
     val subtotalKrw: Long,
@@ -405,6 +418,20 @@ internal class StoreCommandIdempotencyEntity(
 )
 
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
+    fun findByPublicReference(publicReference: String): OrderEntity?
+
+    fun findByPublicReferenceAndCustomerId(
+        publicReference: String,
+        customerId: UUID,
+    ): OrderEntity?
+
+    fun findByPublicReferenceAndStoreId(
+        publicReference: String,
+        storeId: UUID,
+    ): OrderEntity?
+
+    fun existsByPublicReference(publicReference: String): Boolean
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select beanOrder from OrderEntity beanOrder where beanOrder.id = :id")
     fun findLockedById(

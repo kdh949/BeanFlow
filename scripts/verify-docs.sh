@@ -886,8 +886,9 @@ else:
         sys.exit(1)
 
     public_order_reference_pattern = '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+    public_order_reference_input_pattern = '^[Bb][Ff]-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}$'
     order_reference_parameter = spec['components']['parameters']['OrderReference']['schema']
-    if order_reference_parameter.get('pattern') != public_order_reference_pattern:
+    if order_reference_parameter.get('pattern') != public_order_reference_input_pattern:
         print('Public order reference path pattern does not match ADR-096.', file=sys.stderr)
         sys.exit(1)
     for schema_name in (

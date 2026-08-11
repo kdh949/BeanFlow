@@ -86,6 +86,12 @@ internal class GetOrderService(
         return OrderResponse(
             orderId = order.id,
             storeId = order.storeId,
+            publicReference = order.publicReference,
+            pickupNumber = "A-${order.pickupSequence}",
+            pickupBusinessDate = order.pickupBusinessDate,
+            storeName = order.storeNameSnapshot,
+            pickupWindowStart = order.pickupWindowStartSnapshot,
+            pickupWindowEnd = order.pickupWindowEndSnapshot,
             state = order.state.name,
             reservationExpiresAt = order.reservationExpiresAt,
             paymentRecovery = paymentRecovery,

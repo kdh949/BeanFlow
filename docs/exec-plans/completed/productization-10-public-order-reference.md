@@ -1,11 +1,11 @@
 # 공개 주문번호와 매장 픽업번호로 UUID를 내부에 숨긴다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-00-design-capability-contract.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -130,7 +130,7 @@ ALTER TABLE ordering_order
     ADD COLUMN public_reference varchar(12),
     ADD COLUMN pickup_business_date date,
     ADD COLUMN pickup_sequence bigint,
-    ADD COLUMN store_name_snapshot varchar(255),
+    ADD COLUMN store_name_snapshot varchar(200),
     ADD COLUMN pickup_window_start_snapshot timestamptz,
     ADD COLUMN pickup_window_end_snapshot timestamptz;
 
@@ -276,7 +276,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다. `productization-00` 완료 후 `Implementation-Ready`를 `true`로 전환한다.
+- 2026-08-12: Checkpoint 1에서 exact predecessor
+  `3c02752c114a271cec2458a1f9fcc00873d0ae1f`와 최신 migration V42를 확인하고
+  `feature/productization-10-order-reference`를 그 commit에서 분기했다. Stack A migration-writer lease 아래
+  V43/V44를 할당했다.
+- 2026-08-12: 공개번호 CSPRNG 생성·registry 충돌 예약(최초 포함 5회), Seoul 영업일별 원자 pickup counter,
+  주문 표시 snapshot과 `ORDER_REFERENCE_EXHAUSTED` 503 실패 계약을 구현했다.
+- 2026-08-12: Merchant 표시명 port와 Fulfillment 예약 grant 시각 snapshot을 주문 생성 transaction에
+  연결하고, 기존 UUID route를 유지한 채 고객 조회·취소와 매장 조회·전이의 공개번호 route를 추가했다.
+  신규 응답은 내부 `orderId`를 제거했다.
+- 2026-08-12: V43 expand, 재시작 가능한 bounded backfill CLI/runbook, V44 contract migration을 구현했다.
+  V44는 6개 필드 `NOT NULL`·유일성·registry FK·형식·불변 trigger와 Fulfillment grant window 제약을
+  적용한다.
+- 2026-08-12: target/runtime OpenAPI, API 규칙, 인가 매트릭스, ADR-096~098과 회귀 fixture를 실제 동작에
+  맞게 갱신했다.
+- 2026-08-12: 필수 검증을 완료했다. Ordering 224 tests는 0 failure/0 skipped, 전체 build는 782 tests 중
+  0 failure/1 skipped로 통과했다. Spotless와 문서/OpenAPI 검증도 통과했다.
 
 ## Surprises & Discoveries
 
@@ -284,6 +299,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   rollback된다. 이전 문서의 "rollback 결번" 설명을 제거했다.
 - 매장 표시명은 `merchant_store`가 아니라 `merchant_store_discovery_profile.name`이 소유한다.
 - JPA insert의 unique 예외 뒤 같은 transaction 재시도는 안전하지 않아 별도 registry 예약으로 바꿨다.
+- Fulfillment의 idempotent 예약 replay가 현재 slot row를 다시 읽으면 이후 slot 변경이 과거 주문 표시를
+  바꾼다. V43에서 예약 자체에 시작·종료 snapshot을 추가하고 최초 grant와 replay가 같은 값을 반환하게
+  했다.
+- PostgreSQL의 non-null 개수 함수 이름은 `num_nonnull`이 아니라 `num_nonnulls`였다. backfill migration
+  테스트가 첫 구현의 오타를 검출했다.
+- 공개번호 충돌 상한 실패가 공통 오류 매핑에서 처음에는 409로 변환됐다. 실제 HTTP 통합 테스트가 이를
+  검출했고 `ORDER_REFERENCE_EXHAUSTED`를 명시적으로 503에 고정했다.
+- V44 `NOT NULL` 적용 뒤 기존 테스트의 여러 모듈이 `ordering_order`를 구형 column 집합으로 직접
+  삽입했다. 첫 전체 build는 782 tests 중 78 failures였고, 유효한 registry 예약과 표시 snapshot을 만드는
+  공통 fixture로 모두 교정했다. 한 Loyalty 테스트의 일시적 `INVALID_REQUEST`도 함께 관측됐지만 집중
+  재실행과 최종 전체 build에서 코드 변경 없이 재발하지 않았다.
+- 첫 fixture 교정 뒤 Kotlin 증분 cache가 `EOFException`으로 손상됐다. `./gradlew --stop`과 저장소
+  `build/` clean 뒤 전체 test source를 재컴파일해 정상화했다.
+- 완료 diff 검토에서 target OpenAPI path parameter가 구현의 case-insensitive 입력보다 좁고 두 GET
+  경로에 400 응답이 빠진 것을 발견했다. 입력용 대소문자 정규식과 canonical 출력 정규식을 분리하고
+  문서 검증기·계약 테스트를 함께 고정했다. 첫 문서 재검증은 이 불일치로 실패했고 교정 후 통과했다.
 
 ## Decision Log
 
@@ -295,11 +326,30 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | rollback은 counter를 소비하지 않고 커밋 후 종료 번호만 재사용하지 않는다 | [ADR-097](../../adr/ADR-097-store-pickup-number.md) |
 | 2026-08-12 | 공개번호는 registry `ON CONFLICT DO NOTHING`으로 최대 5회 예약 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
 | 2026-08-12 | 매장명은 discovery profile, 픽업 시각은 lock 아래 grant에서 snapshot | [ADR-098](../../adr/ADR-098-order-display-snapshots.md) |
+| 2026-08-12 | V43 expand에서 dual-write와 bounded CLI backfill을 수행하고, V44 contract에서 완전성·불변성을 강제 | [backfill runbook](../../operations/order-reference-backfill-runbook.md) |
+| 2026-08-12 | 예약 replay의 시각도 최초 grant 값으로 고정하기 위해 Fulfillment reservation에 slot window snapshot을 저장 | [ADR-098](../../adr/ADR-098-order-display-snapshots.md) |
+| 2026-08-12 | 신규 공개번호 route만 내부 UUID를 제거하고 기존 UUID route는 후속 화면 전환까지 유지 | [API conventions](../../api/api-conventions.md) |
+| 2026-08-12 | OpenAPI 입력은 대소문자를 허용하고 응답·저장값은 대문자 canonical 형식만 허용 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+- 주문 생성은 한 transaction에서 검증된 매장명, lock 아래 픽업 시간, Seoul 영업일 순번과 전역 공개번호를
+  할당한다. rollback은 counter와 registry를 함께 되돌리고, 커밋된 종료 주문의 번호는 재사용하지 않는다.
+- 고객·점주는 대소문자 입력을 canonicalize한 공개번호로 조회·명령할 수 있다. 소유권 또는 store scope가
+  다르면 403, 존재하지 않으면 404이며 신규 응답에는 내부 `orderId`가 없다.
+- 과거 주문은 V43에서 중단·재개 가능한 배치로 채우고 V44가 누락, 중복, registry 미등록, 잘못된
+  snapshot과 이후 변경을 거부한다. 누락 profile·slot은 placeholder로 대체하지 않는다.
+- 실행 검증 결과:
+  - `./gradlew test --tests 'io.github.kdh949.beanflow.ordering.*'`: 성공, 최종 전체 리포트 기준 Ordering
+    224 tests, 0 failures, 0 skipped.
+  - `./gradlew spotlessCheck`: 성공.
+  - `./gradlew build --stacktrace`: 성공(13m 53s), 782 tests, 0 failures, 1 skipped.
+  - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`: 성공. target 98 paths/104 operations,
+    runtime 59 paths/63 operations, 213 schemas, 46 policies, 111 ADRs, 264 Markdown files, 50 ExecPlans.
+- 측정 가능한 production traffic이 없어 latency 개선이나 실사용 충돌률은 주장하지 않는다. metric과
+  runbook만 제공하며 실제 배포 시 관측해야 한다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-12: 구현, 회귀 fixture 교정, 필수 검증과 완료 결과를 기록.

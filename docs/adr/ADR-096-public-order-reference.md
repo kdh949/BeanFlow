@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Public order reference](../exec-plans/active/productization-10-public-order-reference.md)
+- **Implementation owner:** [Public order reference](../exec-plans/completed/productization-10-public-order-reference.md)
 
 ## Context
 
@@ -129,6 +129,16 @@ ALTER TABLE ordering_order ADD CONSTRAINT ck_ordering_order_public_reference
 - 충돌 재생성이 실제로 유의미한 빈도로 발생할 때(문자 수 확대 검토)
 - 주문번호를 오프라인 인쇄물·바코드에 사용해야 할 때
 - 다국가 확장으로 접두사 체계가 필요할 때
+
+## Implementation Outcome (2026-08-12)
+
+- V43가 nullable 컬럼, 영구 registry, 카운터를 열고 V44가 backfill preflight 뒤 Unique/FK/NOT NULL과
+  불변 trigger를 닫는다.
+- `OrderReferenceBackfillService`는 `(created_at, id)` keyset과 bounded transaction으로 재시작 가능하게
+  구현됐고, 별도 Gradle CLI와 운영 runbook을 제공한다.
+- 고객·매장 lookup은 canonical reference와 ownership/store predicate를 한 query에 포함하고, 별도 존재
+  query로 403/404를 구분한다. 신규 응답은 내부 `orderId`를 제외한다.
+- 충돌·상한 초과, backfill 처리/실패/시간, lookup 403/404 metric을 실제 코드에 연결했다.
 
 ## Related Decisions
 
