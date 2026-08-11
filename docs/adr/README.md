@@ -93,3 +93,4 @@
 | [ADR-089](ADR-089-purpose-based-retention-legal-hold-and-deletion.md) | Accepted | 목적별 retention, expiring LegalHold와 deletion replay |
 | [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Proposed | Support Console frontend/trust boundary와 non-persistent sensitive state |
 | [ADR-091](ADR-091-support-migration-queue-metadata.md) | Rejected | queue priority를 direct ExecPlan dependency로 표현하는 metadata 제안 |
+| [ADR-106](ADR-106-support-verification-and-data-access-grant.md) | Accepted | opaque challenge verification과 audit-gated DataAccessGrant reveal |

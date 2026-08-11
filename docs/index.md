@@ -95,6 +95,7 @@
 - [Completed Support S20 Case Foundation](exec-plans/completed/customer-support-s20-case-foundation.md)
 - [Support S30 Protected Profile Search](exec-plans/completed/customer-support-s30-protected-profile-search.md)
 - [Support Program Orchestration](exec-plans/active/customer-support-program-orchestration.md)
+- [Completed Support S40 Verification and DataAccessGrant](exec-plans/completed/customer-support-s40-verification-data-access-grant.md)
 - [PaymentMethod Token Management](exec-plans/completed/payment-method-token-management.md)
 - [Toss V2 One-Time Payment Window](exec-plans/completed/toss-v2-one-time-payment-window.md)
 - [Superseded Toss Billing Sandbox Plan](exec-plans/completed/toss-payments-sandbox-gateway-adapter-superseded.md)

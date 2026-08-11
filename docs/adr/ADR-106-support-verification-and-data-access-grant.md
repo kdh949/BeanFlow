@@ -25,6 +25,9 @@ test source에서만 허용하며 production adapter/configuration 부재는 sta
 Session은 15분, challenge는 5분 유효하다. 한 Session에서 invalid proof 5회면 `LOCKED`가 되고 같은
 Case+Subject는 30분 동안 새 Session을 만들 수 없다. BASIC은 등록 채널 한 종류, ENHANCED는 서로 다른 등록 채널
 두 종류의 성공을 요구한다. 같은 challenge는 terminal provider outcome 뒤 다시 검증할 수 없다.
+Lockout key는 subject-link ID가 아니라 Case+Subject type+Subject ID라서 unlink/relink로 우회할 수 없다. Process가
+Provider 호출 중 종료되어 `PENDING_ISSUE`/`VERIFYING`이 남으면 challenge expiry 뒤 recovery worker가 Case-first
+lock으로 `ISSUE_UNKNOWN`/`VERIFICATION_UNKNOWN`과 terminal idempotency receipt를 원자 기록한다.
 
 ### DataAccessGrant와 reveal
 
@@ -39,7 +42,8 @@ Reveal은 다음 순서다.
 1. 짧은 Support transaction이 Case와 Grant를 잠그고 budget을 예약한 `RevealAttempt`와 PII-free
    `SUPPORT_PII_ACCESS_RECORDED` Audit를 함께 commit한다.
 2. owner public Application API가 owner-local ciphertext를 읽고 Vault decrypt를 DB transaction 밖에서 수행한다.
-3. 별도 Support transaction이 attempt를 `REVEALED` 또는 `FAILED`로 commit한다.
+3. 별도 Support transaction이 current Case assignment/state, active subject link와 persistent permission을 다시
+   확인하고 attempt를 `REVEALED` 또는 `FAILED`로 commit한다.
 4. `REVEALED` commit 뒤에만 Controller가 raw DTO를 반환한다.
 
 Audit, first commit, owner decrypt 또는 result commit이 실패하면 raw response가 없다. Audited attempt는 결과와
@@ -53,6 +57,8 @@ Requester와 다른 `SUPPORT_PII_REVEAL_APPROVE` actor의 사전 승인이 필�
 `PRIVACY_BREAK_GLASS_REVIEW` actor의 사후 검토가 필수다. Request/approval/reveal은 PII-free security notification
 intent를 durable하게 만들며 delivery failure는 retry/manual-review 상태로 남긴다. Raw break-glass reveal도 위
 Audit-before-reveal commit gate와 owner object authorization을 사용한다.
+Notification claim이 `PROCESSING`에서 worker 중단을 만나면 5분 claim timeout 뒤 재회수하며 attempt limit을
+계속 적용한다.
 
 SupportCase가 `RESOLVED` 또는 `CLOSED`로 전이하는 transaction은 같은 Case의 active VerificationSession,
 DataAccessGrant와 pre-reveal BreakGlassRequest를 revoke한다. 이미 reveal되어 mandatory review를 기다리는
@@ -82,10 +88,12 @@ delivery provisioning은 release 전 필수이며 local/test adapter가 fallback
 ## Verification
 
 - OTP/proof replay, five-failure lock과 30-minute recreation boundary
+- subject unlink/relink lockout bypass와 replacement-assignee session reuse denial
 - session/challenge/grant/break-glass `-1ns / at / +1ns`
 - other Case/Subject/Purpose/action reuse와 BASIC-for-ENHANCED denial
 - concurrent verify/reveal single winner와 budget exhaustion
 - Audit/commit/Vault failure의 no raw response
+- owner decrypt 중 Case/subject/permission 변경의 no raw response와 stale Provider/notification work recovery
 - field allowlist, distinct approval, Case closure revoke and activation denial
 - break-glass request/pre-review/reveal/post-review/security-notification
 - API `Cache-Control: no-store`와 PII-free logs/Audit/snapshots

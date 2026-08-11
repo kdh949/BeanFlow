@@ -27,17 +27,20 @@
   다시 확인하고 owner public APIs의 masked projections만 bounded 조회한 뒤 PII-free `PII_ACCESS` Audit와 함께
   commit한다. Audit/owner DB failure는 Tx2를 rollback하고 503을 반환한다. genuine no-match만 audited empty 200이다.
 - S40 challenge issue/verify는 Tx1 intent/claim, Identity Provider call, Tx2 result로 나뉜다. Provider timeout,
-  malformed result와 ACK loss는 `UNKNOWN`이며 local/test provider가 production fallback이 되지 않는다.
+  malformed result와 ACK loss는 `UNKNOWN`이며 local/test provider가 production fallback이 되지 않는다. Process
+  중단으로 Tx2가 실행되지 않은 expired `PENDING_ISSUE`/`VERIFYING`은 recovery worker가 Case→Session→Challenge
+  순서로 잠그고 explicit unknown outcome, attempt, idempotency receipt와 Audit를 같은 transaction에 기록한다.
 - normal/break-glass reveal은 TxR1에서 current Case assignment/state, active SubjectLink, persistent permission,
   verification 또는 emergency binding, exact field scope, expiry/budget을 다시 검사한다. `RevealAttempt` reservation과
   PII-free Audit가 함께 commit된 뒤 owner public API가 owner ciphertext를 짧게 읽고 Vault decrypt를 transaction
   밖에서 수행한다. TxR2가 `REVEALED`/`FAILED`를 commit하고 성공 commit 뒤에만 Controller가 raw DTO를 반환한다.
-  TxR1 이후 owner/TxR2 실패는 raw response가 없고 budget은 소비된다.
+  TxR2는 owner 호출 뒤 Case assignment/state, active SubjectLink와 persistent permission을 다시 잠금·검사한다.
+  TxR1 이후 owner/TxR2 실패나 두 transaction 사이의 revoke/reassignment는 raw response가 없고 budget은 소비된다.
 - Case `RESOLVED`/`CLOSED` transition은 같은 Support transaction에서 active Session/Challenge/Grant와 아직
   reveal되지 않은 break-glass를 revoke한다. Provider/security notification 호출은 이 transaction에 포함하지 않는다.
 - break-glass request/approval/reveal은 각각 durable PII-free security notification intent를 commit한다. Worker는
   `SKIP LOCKED`로 claim하고 Provider를 transaction 밖에서 호출하며 `RETRY_SCHEDULED`, `MANUAL_REVIEW`, `SENT`를
-  명시한다. Provider가 없으면 fake/no-op 성공으로 바꾸지 않는다.
+  명시한다. 중단된 `PROCESSING` claim은 5분 뒤 재회수한다. Provider가 없으면 fake/no-op 성공으로 바꾸지 않는다.
 
 ## Local atomic candidates
 

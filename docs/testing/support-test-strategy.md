@@ -9,11 +9,11 @@
 | Layer | Current / planned coverage |
 |---|---|
 | Domain | S20 Case matrix/content guard; S40 BASIC/ENHANCED channel rules, expiry/lockout, field/risk budget, actor-separated break-glass; later aggregates planned |
-| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 provider UNKNOWN, Audit-before-reveal, Case-terminal revoke, owner failure and notification retry |
-| PostgreSQL Testcontainers | S20–S40 CHECK/UNIQUE/append-only constraints, advisory/row-lock winners, reveal budget, lockout and durable notification claim |
+| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 provider UNKNOWN/stale recovery, Audit-before-reveal, Case-terminal revoke, owner failure and notification retry/reclaim |
+| PostgreSQL Testcontainers | S20–S40 CHECK/UNIQUE/append-only constraints, Case-first row-lock winners, reveal budget, Case+Subject lockout and durable notification claim/reclaim |
 | API contract | S20–S40 status/error/no-store/idempotency schemas, raw/proof exclusion and target/runtime Spring MVC parity |
 | Modulith/ArchUnit | Controller→Repository and Support→owner-internal boundary; S40 uses Identity/Merchant/Delivery/Notification public APIs only |
-| Security | IDOR, persistent permission/Case/verification/field matrix, proof/raw diagnostic redaction, Audit failure, actor-separated approval/review |
+| Security | IDOR, persistent permission/Case/verification/field matrix, proof/raw diagnostic redaction, Audit failure, actor-separated approval/review, post-decrypt permission recheck |
 | Provider/resilience | S40 challenge and security notification timeout/UNKNOWN, duplicate verification winner and transaction-outside-provider checks; later PG/Delivery paths planned |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
 | UI/load | selected frontend boundary, reveal expiry/navigation clearing and reproducible search/timeline/action load |
@@ -28,7 +28,7 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 
 ## Concurrency and idempotency scenarios to instantiate
 
-- challenge replay, attempt lockout and grant expiry/revocation versus reveal
+- challenge replay, attempt lockout including subject relink, stale Provider work recovery and grant expiry/revocation versus reveal
 - permission revoke versus authorized transaction; approval step/reviewer duplication and revoke versus execute
 - same key/same payload replay, same key/changed payload conflict, cross-actor/cross-operation key reuse and free-text
   field-boundary collision conflict
