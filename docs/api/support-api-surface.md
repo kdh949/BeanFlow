@@ -15,8 +15,9 @@ permission, Case/object relationship checks and owner-state revalidation. `Beare
 for that full chain, not JWT-role-only authorization. Sensitive successful responses must be `Cache-Control: no-store`.
 State-changing operations require `Idempotency-Key` unless the owning Stage records a narrower exception. S20 scopes a
 terminal replay by `(actorId, operation, Idempotency-Key)` and compares a typed length-prefixed canonical payload;
-same scope/different payload is `409`, while a different actor or operation may reuse the same key text. Exact PII
-search input is body-only and must not enter URIs, logs, metrics, cursors or Audit summaries.
+same scope/different payload is `409`, while a different actor or operation may reuse the same key text. The supported
+exact PII search contract is body-only and rejects query parameters. Upstream access logs must omit/redact query strings;
+BeanFlow does not put the input in application logs, metrics, cursors or Audit summaries.
 
 The Delivery Provider webhook is the sole unauthenticated-by-bearer surface: it must explicitly set `security: []` in
 OpenAPI and define provider-specific raw-byte signature/timestamp/replay headers. Parsing must happen only after raw-body

@@ -15,7 +15,7 @@ receives nor sends `X-Vault-Token`; no token or key material belongs in BeanFlow
 Provision two distinct Transit keys at the configured mount:
 
 - encryption key: `aes256-gcm96`, derived/convergent/exportable/deletion disabled;
-- blind-index key: `hmac`, exportable/deletion disabled, HMAC SHA-256 use only.
+- blind-index key: `hmac`, derived/exportable/deletion disabled, HMAC SHA-256 use only.
 
 The Vault policy granted to the Proxy identity permits only the required `encrypt`, `decrypt`, `rewrap`, `hmac` and key
 metadata paths for these two keys. It must not grant key export, deletion or arbitrary Transit key access.
@@ -38,6 +38,11 @@ configured active HMAC version. Missing settings, a non-loopback URI, reused key
 permission denial or malformed metadata must stop startup. Do not bypass this check by changing profile, installing a
 local HMAC, or preloading cached results.
 
+For a normal `derived=false` Transit key, Vault may omit `convergent_encryption`; absence is accepted as false, while a
+present true or non-boolean value fails startup. BeanFlow reads at most 32 KiB of every Provider response and cancels
+oversized Content-Length or chunked bodies. A malformed 2xx body is reported only as a fixed dependency error; do not
+attach the parser exception or raw body to startup/runtime exception chains.
+
 ## Runtime incident handling
 
 Vault timeout, connection failure, permission denial, absent version or malformed response yields generic
@@ -46,9 +51,23 @@ search result. Do not interpret 503 as no match, and do not query encrypted colu
 response bodies, request bodies, key URI segments, ciphertext, digest and raw/normalized search input must not be put in
 incident tickets, logs, metrics or Audit payloads.
 
-Ingress and reverse-proxy access logs must record the route path without a query string. BeanFlow rejects every query
-parameter on `POST /support/searches`, pins Spring MVC/Security request logging to INFO and fails startup if those
-sensitive categories are effectively DEBUG-enabled. Do not override this guard during an incident.
+The application cannot remove a client-supplied query from infrastructure that sees the URI before Controller
+rejection. Ingress, load-balancer, reverse-proxy and container access logs for `POST /api/v1/support/searches` must
+therefore record the route path only or redact the complete query string. BeanFlow rejects every query parameter, pins
+Spring MVC/Security request logging to INFO and fails startup if those sensitive categories are effectively
+DEBUG-enabled. Production enablement is blocked until the upstream path-only/redaction control is verified. Do not
+override this guard during an incident.
+
+## Search rate-window retention
+
+The database clock defines each five-minute quota. Do not replace it with application-node time. Fixed-window policy can
+admit the adjacent-window burst documented in SP-17; represent it as that known limitation, not as a sliding-window
+guarantee.
+
+`support_subject_search_rate_window` rows expire after 24 hours. The scheduled worker runs every five minutes by default
+and deletes at most 100 rows in `(window_started_at, actor_id)` order with `SKIP LOCKED`. Monitor the PII-free deleted,
+remaining-backlog, oldest-retained-age and failure metrics. A failed cleanup run is retried independently and must not be
+used to change a search response. The two-year `PII_ACCESS` Audit, not this transient table, is the access-history record.
 
 During an outage:
 
@@ -88,4 +107,4 @@ The representative query-plan test compares the same 20,000-row fixture with and
 index-choice evidence, not a production latency or throughput claim.
 
 Related records: ADR-083, `docs/product/support-protected-search-policy.md`,
-`docs/security/support-pii-controls.md`, and the S30 completed ExecPlan.
+`docs/security/support-pii-controls.md`, and the active S30 ExecPlan.

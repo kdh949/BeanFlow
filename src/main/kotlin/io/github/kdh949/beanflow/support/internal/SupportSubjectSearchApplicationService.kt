@@ -23,9 +23,7 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
-import java.sql.Timestamp
 import java.time.Clock
-import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -162,12 +160,11 @@ internal class SupportSubjectSearchApplicationService(
 internal class SupportSubjectSearchPreflight(
     private val permissions: OperatorPermissionAuthorization,
     private val rateWindows: SupportSubjectSearchRateWindowRepository,
-    private val clock: Clock,
 ) {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun authorizeAndConsume(actorId: UUID) {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_SUBJECT_SEARCH)
-        rateWindows.consume(actorId, clock.instant())
+        rateWindows.consume(actorId)
     }
 }
 
@@ -175,47 +172,72 @@ internal class SupportSubjectSearchPreflight(
 internal class SupportSubjectSearchRateWindowRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
-    fun consume(
-        actorId: UUID,
-        now: Instant,
-    ) {
-        val window = Instant.ofEpochSecond(now.epochSecond - Math.floorMod(now.epochSecond, WINDOW_SECONDS))
-        val counts =
+    fun consume(actorId: UUID) {
+        val decision =
             try {
-                jdbcTemplate.queryForList(
+                jdbcTemplate.queryForObject(
                     """
-                    INSERT INTO support_subject_search_rate_window (
-                        actor_id, window_started_at, attempt_count, updated_at
-                    ) VALUES (?, ?, 1, ?)
-                    ON CONFLICT (actor_id, window_started_at) DO UPDATE
-                       SET attempt_count = support_subject_search_rate_window.attempt_count + 1,
-                           updated_at = EXCLUDED.updated_at
-                     WHERE support_subject_search_rate_window.attempt_count < 30
-                    RETURNING attempt_count
+                    WITH rate_clock AS MATERIALIZED (
+                        SELECT clock_timestamp() AS db_now
+                    ), rate_context AS MATERIALIZED (
+                        SELECT db_now,
+                               date_bin(
+                                   INTERVAL '5 minutes',
+                                   db_now,
+                                   TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                               ) AS window_started_at
+                          FROM rate_clock
+                    ), consumed AS (
+                        INSERT INTO support_subject_search_rate_window (
+                            actor_id, window_started_at, attempt_count, updated_at
+                        )
+                        SELECT ?, window_started_at, 1, db_now
+                          FROM rate_context
+                        ON CONFLICT (actor_id, window_started_at) DO UPDATE
+                           SET attempt_count = support_subject_search_rate_window.attempt_count + 1,
+                               updated_at = EXCLUDED.updated_at
+                         WHERE support_subject_search_rate_window.attempt_count < 30
+                        RETURNING attempt_count
+                    )
+                    SELECT EXISTS(SELECT 1 FROM consumed) AS allowed,
+                           GREATEST(
+                               1,
+                               LEAST(
+                                   300,
+                                   CEIL(
+                                       EXTRACT(EPOCH FROM (
+                                           window_started_at + INTERVAL '5 minutes' - db_now
+                                       ))
+                                   )::integer
+                               )
+                           ) AS retry_after_seconds
+                      FROM rate_context
                     """.trimIndent(),
-                    Int::class.java,
+                    { resultSet, _ ->
+                        RateWindowDecision(
+                            allowed = resultSet.getBoolean("allowed"),
+                            retryAfterSeconds = resultSet.getLong("retry_after_seconds"),
+                        )
+                    },
                     actorId,
-                    Timestamp.from(window),
-                    Timestamp.from(now),
                 )
             } catch (failure: DataAccessException) {
                 throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support search rate guard is unavailable")
-                    .also { it.initCause(failure) }
             }
-        if (counts.isEmpty()) {
-            val remainingMillis = Duration.between(now, window.plusSeconds(WINDOW_SECONDS)).toMillis().coerceAtLeast(1)
-            val retryAfter = ((remainingMillis + 999) / 1000).coerceIn(1, WINDOW_SECONDS)
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support search rate guard is unavailable")
+        if (!decision.allowed) {
             throw DomainFailure(
                 FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
                 "Support search rate limit was exceeded",
-                retryAfter,
+                decision.retryAfterSeconds,
             )
         }
     }
 
-    private companion object {
-        const val WINDOW_SECONDS = 300L
-    }
+    private data class RateWindowDecision(
+        val allowed: Boolean,
+        val retryAfterSeconds: Long,
+    )
 }
 
 @Service

@@ -30,7 +30,7 @@ in-memory/local/mock/no-op crypto나 자동 fallback을 등록하지 않는다. 
 구현은 두 개의 서로 다른 Transit keyring을 사용한다.
 
 - `personal-data-encryption`: `aes256-gcm96`, non-derived, non-convergent, non-exportable, deletion disabled
-- `personal-data-exact-index`: `hmac`, non-exportable, deletion disabled, HMAC-SHA-256 전용
+- `personal-data-exact-index`: `hmac`, non-derived, non-exportable, deletion disabled, HMAC-SHA-256 전용
 
 실제 key 이름은 필수 configuration으로 주입하며 위 논리 이름을 문서와 검사에 사용한다. 두 설정이 같은
 Vault key를 가리키면 startup을 실패시킨다. 애플리케이션, DB와 로그에는 plaintext key, Vault token, DEK 또는
@@ -88,6 +88,12 @@ convergent, exportable, deletion 허용, latest/minimum version과 configured ac
 permission denial, sealed/uninitialized/disconnected Vault, key 부재, malformed response 또는 정책 불일치는 startup
 실패다.
 
+Vault의 non-derived key metadata는 `convergent_encryption` 필드를 생략할 수 있다. 따라서 startup 검증은
+`derived=false`를 먼저 요구하고 `convergent_encryption`은 없거나 `false`인 경우만 허용한다. 다른 type의 값은
+malformed response다. 모든 Provider 응답은 수신 중 32 KiB byte limit을 적용하며, Content-Length와 chunked
+응답 모두 초과 즉시 취소한다. malformed 2xx parser 예외와 response body는 외부 exception cause에 연결하지
+않고 고정된 sanitized dependency failure로 변환한다.
+
 Runtime Vault timeout/5xx/permission/key-version/response 오류는 `DEPENDENCY_UNAVAILABLE`과 HTTP 503으로
 매핑한다. raw criterion, ciphertext, digest, key name/version 조합 또는 Vault 응답 body는 error/log/metric/Audit에
 넣지 않는다. local HMAC, plaintext scan, cached/stale result 또는 empty 200 fallback은 없다. 현재 deployment는
@@ -129,6 +135,8 @@ Vault Proxy는 workload 인증과 token renewal을 애플리케이션 코드 밖
 - encrypt/decrypt AAD binding, ciphertext/key-version metadata 일치와 rewrap metadata
 - Support response, log, metric, exception, Audit와 snapshot의 raw PII/digest/ciphertext 부재
 - production missing/malformed config, 동일 key 이름, 잘못된 key type/policy, unreachable/sealed Vault startup 실패
+- 실제 non-derived key metadata의 생략된 `convergent_encryption`, malformed 2xx sanitized cause chain,
+  Content-Length/chunked 32 KiB response limit
 - runtime Vault failure 503, Audit failure no response, no empty/local/cache fallback
 - PostgreSQL Testcontainers index constraint와 comparable `EXPLAIN (ANALYZE, BUFFERS)` fixture
 

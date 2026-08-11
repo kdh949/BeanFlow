@@ -10,14 +10,19 @@ import io.github.kdh949.beanflow.shared.api.PersonalDataCryptoPort
 import io.github.kdh949.beanflow.shared.api.PersonalDataEncryptionContext
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
+import java.util.concurrent.Flow
 
 internal class VaultTransitPersonalDataAdapter(
     private val properties: VaultTransitPersonalDataProperties,
@@ -131,12 +136,14 @@ internal class VaultTransitPersonalDataAdapter(
         val latest = data.requiredInt("latest_version")
         val minimumEncryption = data.requiredInt("min_encryption_version")
         val minimumDecryption = data.requiredInt("min_decryption_version")
+        val derived = data.requiredBoolean("derived")
+        val convergentEncryption = data.optionalBoolean("convergent_encryption") ?: false
         val metadataValid =
             data.requiredText("type") == expectedType &&
-                !data.requiredBoolean("derived") &&
+                !derived &&
                 !data.requiredBoolean("exportable") &&
                 !data.requiredBoolean("deletion_allowed") &&
-                !data.requiredBoolean("convergent_encryption") &&
+                !convergentEncryption &&
                 latest > 0 &&
                 minimumEncryption in 0..latest &&
                 minimumDecryption in 0..latest &&
@@ -175,22 +182,23 @@ internal class VaultTransitPersonalDataAdapter(
         }
         val response =
             try {
-                httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                httpClient.send(requestBuilder.build(), BoundedVaultTransitBodyHandler(MAX_RESPONSE_BYTES))
             } catch (exception: InterruptedException) {
                 Thread.currentThread().interrupt()
-                unavailable(exception)
-            } catch (exception: IOException) {
-                unavailable(exception)
+                unavailable(VaultTransitRequestFailure())
+            } catch (_: IOException) {
+                unavailable(VaultTransitRequestFailure())
             } catch (exception: RuntimeException) {
                 if (exception is DomainFailure) throw exception
-                unavailable(exception)
+                unavailable(VaultTransitRequestFailure())
             }
-        if (response.statusCode() !in 200..299 || response.body().length > MAX_RESPONSE_CHARS) unavailable()
+        if (response.statusCode() !in 200..299) unavailable()
+        val responseBody = response.body().toString(StandardCharsets.UTF_8)
         return try {
-            objectMapper.readTree(response.body()).path("data").takeUnless { it.isMissingNode || it.isNull } ?: unavailable()
+            objectMapper.readTree(responseBody).path("data").takeUnless { it.isMissingNode || it.isNull } ?: unavailable()
         } catch (exception: RuntimeException) {
             if (exception is DomainFailure) throw exception
-            unavailable(exception)
+            unavailable(InvalidVaultTransitResponse())
         }
     }
 
@@ -241,6 +249,13 @@ internal class VaultTransitPersonalDataAdapter(
     private fun JsonNode.requiredBoolean(field: String): Boolean =
         path(field).takeUnless { it.isMissingNode || !it.isBoolean }?.asBoolean() ?: unavailable()
 
+    private fun JsonNode.optionalBoolean(field: String): Boolean? {
+        val value = path(field)
+        if (value.isMissingNode) return null
+        if (!value.isBoolean) unavailable()
+        return value.asBoolean()
+    }
+
     private fun configured(): ValidatedVaultTransitConfiguration =
         try {
             properties.validated()
@@ -256,8 +271,84 @@ internal class VaultTransitPersonalDataAdapter(
 
     private companion object {
         const val MAX_PLAINTEXT_BYTES = 4096
-        const val MAX_RESPONSE_CHARS = 32768
+        const val MAX_RESPONSE_BYTES = 32768
         val CIPHERTEXT_PATTERN = Regex("^vault:v([1-9][0-9]*):[^\\s]{1,16000}$")
         val HMAC_PATTERN = Regex("^vault:v([1-9][0-9]*):([A-Za-z0-9+/=]{40,64})$")
+    }
+}
+
+private class VaultTransitRequestFailure : RuntimeException("Vault Transit request failed")
+
+private class InvalidVaultTransitResponse : RuntimeException("Vault Transit response was invalid")
+
+private class VaultTransitResponseTooLarge : RuntimeException("Vault Transit response exceeded the byte limit")
+
+private class BoundedVaultTransitBodyHandler(
+    private val maxBytes: Int,
+) : HttpResponse.BodyHandler<ByteArray> {
+    init {
+        require(maxBytes > 0)
+    }
+
+    override fun apply(responseInfo: HttpResponse.ResponseInfo): HttpResponse.BodySubscriber<ByteArray> =
+        BoundedVaultTransitBodySubscriber(
+            maxBytes = maxBytes,
+            rejectOnSubscribe = responseInfo.headers().firstValueAsLong("Content-Length").orElse(-1L) > maxBytes,
+        )
+}
+
+private class BoundedVaultTransitBodySubscriber(
+    private val maxBytes: Int,
+    private val rejectOnSubscribe: Boolean,
+) : HttpResponse.BodySubscriber<ByteArray> {
+    private val body = ByteArrayOutputStream(minOf(maxBytes, INITIAL_CAPACITY))
+    private val completion = CompletableFuture<ByteArray>()
+    private var subscription: Flow.Subscription? = null
+    private var receivedBytes = 0
+
+    override fun getBody(): CompletionStage<ByteArray> = completion
+
+    override fun onSubscribe(subscription: Flow.Subscription) {
+        if (this.subscription != null) {
+            subscription.cancel()
+            return
+        }
+        this.subscription = subscription
+        if (rejectOnSubscribe) {
+            subscription.cancel()
+            completion.completeExceptionally(VaultTransitResponseTooLarge())
+        } else {
+            subscription.request(1)
+        }
+    }
+
+    override fun onNext(item: List<ByteBuffer>) {
+        if (completion.isDone) return
+        val incomingBytes = item.sumOf { it.remaining().toLong() }
+        if (receivedBytes.toLong() + incomingBytes > maxBytes) {
+            subscription?.cancel()
+            completion.completeExceptionally(VaultTransitResponseTooLarge())
+            return
+        }
+        item.forEach { source ->
+            val buffer = source.asReadOnlyBuffer()
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            body.write(bytes)
+            receivedBytes += bytes.size
+        }
+        subscription?.request(1)
+    }
+
+    override fun onError(throwable: Throwable) {
+        completion.completeExceptionally(VaultTransitRequestFailure())
+    }
+
+    override fun onComplete() {
+        completion.complete(body.toByteArray())
+    }
+
+    private companion object {
+        const val INITIAL_CAPACITY = 8192
     }
 }

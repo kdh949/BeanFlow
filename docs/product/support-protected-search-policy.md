@@ -60,10 +60,18 @@ verification state.
 ## Authorization, rate control and Audit
 
 Every request requires the persistent `SUPPORT_SUBJECT_SEARCH` permission. Each actor may start at most 30 accepted
-search attempts per fixed five-minute UTC window. The counter is persistent, PII-free and consumed before the Vault
-call; retries are new read attempts because this endpoint does not mutate owner state. Exceeding the limit returns 429
-with `Retry-After`. The initial value is a security operating assumption and must be revisited with measured legitimate
-operator traffic before production.
+search attempts per fixed five-minute window. PostgreSQL derives the window start, current time and `Retry-After` from
+one database clock in the same atomic upsert, so application-node clock skew cannot split a quota. The counter is
+persistent, PII-free and consumed before the Vault call; retries are new read attempts because this endpoint does not
+mutate owner state. Exceeding the limit returns 429 with `Retry-After`.
+
+Fixed-window semantics can permit up to two window quotas around a real boundary; this boundary burst is an explicit
+initial-policy limitation, not a sliding-window claim. The 30/5-minute value must be revisited with measured legitimate
+operator and abuse traffic before production. Enforcement rows are transient state retained for 24 hours; the two-year
+`PII_ACCESS` Audit is the canonical access record. A scheduled worker deletes at most 100 expired rows per short
+transaction by default, uses `(window_started_at, actor_id)` order with `SKIP LOCKED`, and can be safely rerun. Deleted
+count, remaining backlog, oldest-retained age and failures are PII-free metrics. Cleanup failure never converts a search
+failure or success and is retried independently.
 
 After Vault HMAC generation and before a response is returned, the final local transaction revalidates the persistent
 permission, queries owner public APIs and commits a `PII_ACCESS` search Audit. Audit contains only a generated search ID,
@@ -71,8 +79,11 @@ actor ID, criterion type, selected subject types, reason code, bounded result co
 never contains raw/normalized criteria, masked values, profile labels, subject IDs, ciphertext, blind indexes, key names
 or Vault response data. Audit failure returns 503 and no search response.
 
-Raw criteria are POST-body only and never enter URI, access log, application log, trace, metric label, cursor, Audit,
-exception message, snapshot or Support persistence. Sensitive success responses use `Cache-Control: no-store`.
+The supported contract accepts raw criteria only in the POST JSON body and rejects every query parameter. A client can
+still place a value in the URI before BeanFlow rejects it, so production ingress and container access logs for this
+route must record path only or redact the query string. BeanFlow never places the criterion in its application log,
+trace, metric label, cursor, Audit, exception message, snapshot or Support persistence. Sensitive success responses use
+`Cache-Control: no-store`.
 
 ## Failure semantics
 

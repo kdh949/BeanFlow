@@ -1363,9 +1363,12 @@ paths:
       operationId: searchSupportSubjects
       summary: Exact-search protected Support profiles
       description: |
-        Accepts one phone or email criterion only in the JSON body. The raw and normalized
-        criterion never enters the URI, response, Audit payload, log, metric, cursor, or Support
-        storage. Owner Contexts perform versioned blind-index lookup and return masked projections.
+        The supported contract accepts one phone or email criterion only in the JSON body and
+        rejects every query parameter. A client-supplied query may reach upstream infrastructure
+        before rejection, so ingress and container access logs for this route must omit or redact
+        query strings. BeanFlow does not put the raw or normalized criterion in its response, Audit
+        payload, application log, metric, cursor, or Support storage. Owner Contexts perform
+        versioned blind-index lookup and return masked projections.
         Results are ordered by CUSTOMER, STORE, RIDER then subject ID, limited to 20, and expose a
         match count capped at 21. A genuine no-match returns an audited empty 200 only after every
         required dependency succeeds.

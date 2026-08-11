@@ -3,7 +3,9 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.BlindIndex
 import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.ExactSearchCriterionType
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.KeyedBlindIndexPort
 import io.github.kdh949.beanflow.shared.api.NormalizedExactSearchValue
 import org.assertj.core.api.Assertions.assertThat
@@ -29,7 +31,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -56,6 +60,9 @@ internal class SupportSubjectSearchIntegrationTest
         private val jdbcTemplate: JdbcTemplate,
         private val blindIndexes: RecordingBlindIndexPort,
         private val preflight: SupportSubjectSearchPreflight,
+        private val searchTransaction: SupportSubjectSearchTransaction,
+        private val identifiers: IdentifierSource,
+        private val rateWindowRetention: SupportSubjectSearchRateWindowRetention,
     ) {
         private val actorId = UUID.fromString("40000000-0000-0000-0000-000000000001")
         private val customerId = UUID.fromString("10000000-0000-0000-0000-000000000001")
@@ -215,6 +222,101 @@ internal class SupportSubjectSearchIntegrationTest
             ).isEqualTo(30)
             assertThat(blindIndexes.invocations.get()).isZero()
             assertThat(count("operations_audit_record")).isZero()
+        }
+
+        @Test
+        fun `two service instances with skewed clocks cannot split one database rate window`() {
+            grant()
+            val instanceClocks =
+                listOf(
+                    Clock.fixed(Instant.parse("2026-08-11T00:04:59Z"), ZoneOffset.UTC),
+                    Clock.fixed(Instant.parse("2026-08-11T00:05:01Z"), ZoneOffset.UTC),
+                )
+            val services =
+                instanceClocks.map { instanceClock ->
+                    SupportSubjectSearchApplicationService(
+                        preflight,
+                        blindIndexes,
+                        searchTransaction,
+                        identifiers,
+                        instanceClock,
+                    )
+                }
+            val start = CountDownLatch(1)
+            val pool = Executors.newFixedThreadPool(8)
+            try {
+                val outcomes =
+                    (1..31).map { attempt ->
+                        pool.submit<FailureCode?> {
+                            start.await()
+                            try {
+                                services[attempt % services.size].search(
+                                    SearchSupportSubjectsCommand(
+                                        actorId = actorId,
+                                        criterionType = ExactSearchCriterionType.EMAIL,
+                                        rawCriterion = "clock-skew@example.com",
+                                        subjectTypes = listOf(SupportSearchSubjectType.CUSTOMER),
+                                        reasonCode = SupportSearchReasonCode.CASE_INTAKE,
+                                        correlationId = "clock-skew-$attempt",
+                                    ),
+                                )
+                                null
+                            } catch (failure: DomainFailure) {
+                                failure.code
+                            }
+                        }
+                    }
+                start.countDown()
+
+                assertThat(outcomes.map { it.get() })
+                    .containsExactlyInAnyOrderElementsOf(
+                        List(30) { null } + FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
+                    )
+            } finally {
+                pool.shutdownNow()
+            }
+
+            assertThat(count("support_subject_search_rate_window")).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT attempt_count FROM support_subject_search_rate_window WHERE actor_id = ?",
+                    Int::class.java,
+                    actorId,
+                ),
+            ).isEqualTo(30)
+            assertThat(blindIndexes.invocations.get()).isEqualTo(30)
+            assertThat(count("operations_audit_record")).isEqualTo(30)
+        }
+
+        @Test
+        fun `rate window retention cleanup is bounded concurrent and safely rerunnable`() {
+            seedRateWindowsForRetention()
+            val start = CountDownLatch(1)
+            val pool = Executors.newFixedThreadPool(2)
+            val firstPass =
+                try {
+                    val outcomes =
+                        (1..2).map {
+                            pool.submit<Int> {
+                                start.await()
+                                rateWindowRetention.purgeExpired(100).deletedCount
+                            }
+                        }
+                    start.countDown()
+                    outcomes.sumOf { it.get() }
+                } finally {
+                    pool.shutdownNow()
+                }
+
+            assertThat(firstPass).isEqualTo(200)
+            val finalBatch = rateWindowRetention.purgeExpired(100)
+            assertThat(finalBatch.deletedCount).isEqualTo(50)
+            assertThat(finalBatch.remainingBacklog).isZero()
+            assertThat(finalBatch.oldestRetainedWindowStartedAt).isNotNull()
+            assertThat(finalBatch.oldestRetainedWindowStartedAt)
+                .isAfter(finalBatch.observedAt.minusSeconds(24 * 60 * 60L))
+            assertThat(rateWindowRetention.purgeExpired(100).deletedCount).isZero()
+            assertThat(count("support_subject_search_rate_window")).isOne()
         }
 
         @Test
@@ -378,6 +480,38 @@ internal class SupportSubjectSearchIntegrationTest
                 """.trimIndent(),
                 actorId,
                 "support-search-test-grant:$actorId",
+            )
+        }
+
+        private fun seedRateWindowsForRetention() {
+            jdbcTemplate.execute(
+                """
+                INSERT INTO support_subject_search_rate_window (
+                    actor_id, window_started_at, attempt_count, updated_at
+                )
+                SELECT md5('support-rate-retention-' || item)::uuid,
+                       date_bin(
+                           INTERVAL '5 minutes',
+                           clock_timestamp() - INTERVAL '25 hours',
+                           TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                       ),
+                       1,
+                       date_bin(
+                           INTERVAL '5 minutes',
+                           clock_timestamp() - INTERVAL '25 hours',
+                           TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                       ) + INTERVAL '1 minute'
+                  FROM generate_series(1, 250) AS item
+                UNION ALL
+                SELECT '50000000-0000-0000-0000-000000000001'::uuid,
+                       date_bin(
+                           INTERVAL '5 minutes',
+                           clock_timestamp(),
+                           TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                       ),
+                       1,
+                       clock_timestamp()
+                """.trimIndent(),
             )
         }
 

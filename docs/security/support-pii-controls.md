@@ -3,13 +3,15 @@
 > **Status:** Masking, grant scope and Audit-before-reveal are Accepted in ADR-082. Vault Transit search crypto/index
 > mechanics are Accepted in ADR-083.
 
-Default responses are masked. Exact PII search criteria is POST-body only. Raw value never enters URL, log, metric,
-trace, cursor, Audit, exception or Support long-term storage. Owner Contexts store Vault Transit AEAD ciphertext and a
-separate versioned HMAC-SHA-256 blind index. Search computes configured versions outside a DB transaction, queries only
-owner public APIs and returns owner-produced masked DTOs. Vault failure is 503; no plaintext scan, local key, stale cache,
-empty-result or no-op fallback is permitted.
+Default responses are masked. The supported exact-search contract accepts PII criteria only in the POST body and rejects
+query parameters. Because upstream infrastructure can observe a client-created query before rejection, production
+ingress/container access logs must omit or redact query strings for the route. BeanFlow never places the raw value in an
+application log, metric, trace, cursor, Audit, exception or Support long-term storage. Owner Contexts store Vault Transit
+AEAD ciphertext and a separate versioned HMAC-SHA-256 blind index. Search computes configured versions outside a DB
+transaction, queries only owner public APIs and returns owner-produced masked DTOs. Vault failure is 503; no plaintext
+scan, local key, stale cache, empty-result or no-op fallback is permitted.
 
-`POST /support/searches` rejects every query parameter before rate/Vault access. Request DTO `toString()` values are
+`POST /api/v1/support/searches` rejects every query parameter before rate/Vault access. Request DTO `toString()` values are
 redacted, Spring MVC/Security request logging is pinned to INFO, and startup rejects effective DEBUG for the categories
 that render body values or complete query URIs. JDBC bound-parameter TRACE/ALL remains startup-forbidden.
 

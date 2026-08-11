@@ -56,6 +56,52 @@ internal class VaultTransitStartupValidationTest {
     }
 
     @Test
+    fun `production rejects derived convergent key metadata`() {
+        startServer { exchange ->
+            val isEncryption = exchange.requestURI.path.endsWith("/keys/customer-profile")
+            respond(
+                exchange,
+                200,
+                keyMetadata(
+                    if (isEncryption) "aes256-gcm96" else "hmac",
+                    if (isEncryption) 8 else 4,
+                    derived = true,
+                    convergentEncryption = true,
+                ),
+            )
+        }
+
+        contextRunner().withPropertyValues(*validProperties(baseUri()).toTypedArray()).run { context ->
+            assertThat(context.startupFailure).isNotNull
+            assertThat(context.startupFailure).hasMessageContaining("Vault Transit personal-data startup validation failed")
+        }
+    }
+
+    @Test
+    fun `malformed successful metadata cannot expose provider data through startup cause chain`() {
+        startServer { exchange ->
+            respond(
+                exchange,
+                200,
+                """{"data":{"type":private@example.com-vault:v9:secret-010-1234-5678}}""",
+            )
+        }
+
+        contextRunner().withPropertyValues(*validProperties(baseUri()).toTypedArray()).run { context ->
+            assertThat(context.startupFailure).isNotNull
+            assertThat(causeChain(context.startupFailure!!))
+                .doesNotContain(
+                    "private@example.com",
+                    "vault:v9",
+                    "010-1234-5678",
+                    "customer-profile",
+                    "JsonParseException",
+                    "tools.jackson",
+                )
+        }
+    }
+
+    @Test
     fun `wrong key type and malformed provider response fail without exposing provider body`() {
         startServer { exchange ->
             if (exchange.requestURI.path.endsWith("/keys/customer-profile")) {
@@ -98,11 +144,13 @@ internal class VaultTransitStartupValidationTest {
     private fun keyMetadata(
         type: String,
         latestVersion: Int,
+        derived: Boolean = false,
+        convergentEncryption: Boolean? = null,
     ): String =
         """
         {"data":{
-          "type":"$type","derived":false,"exportable":false,"deletion_allowed":false,
-          "convergent_encryption":false,"latest_version":$latestVersion,
+          "type":"$type","derived":$derived,"exportable":false,"deletion_allowed":false,
+          ${convergentEncryption?.let { "\"convergent_encryption\":$it," }.orEmpty()}"latest_version":$latestVersion,
           "min_decryption_version":1,"min_encryption_version":0
         }}
         """.trimIndent()
@@ -127,4 +175,8 @@ internal class VaultTransitStartupValidationTest {
         exchange.sendResponseHeaders(status, bytes.size.toLong())
         exchange.responseBody.use { it.write(bytes) }
     }
+
+    private fun causeChain(failure: Throwable): String =
+        generateSequence(failure) { it.cause }
+            .joinToString(" | ") { "${it.javaClass.name}:${it.message}" }
 }

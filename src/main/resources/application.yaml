@@ -54,6 +54,10 @@ beanflow:
     chunk-size: 100
     fixed-delay-ms: 3600000
     initial-delay-ms: 300000
+  support-search-rate-retention:
+    chunk-size: 100
+    fixed-delay-ms: 300000
+    initial-delay-ms: 300000
   ordering-idempotency-retention:
     chunk-size: 100
     fixed-delay-ms: 3600000

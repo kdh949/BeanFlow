@@ -10,7 +10,9 @@
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. completed S20의 Support Context/Application Service/Audit/permission
 boundary, Accepted ADR-083의 Vault Transit provider 계약과 Accepted initial SP-17을 direct implementation input으로
 사용한다. 이 plan의 migration-writer lease는 `feature/s30-protected-profile-search`가 2026-08-11 획득해 V41을
-선택했고, focused/full/document validation과 completion handoff를 마친 뒤 같은 날 release했다.
+선택했고 최초 validation 뒤 release했다. PR #53 review가 V41 rate-window lifecycle과 production Vault contract의
+미완료를 발견해 2026-08-11 같은 branch가 remediation 동안 lease를 다시 획득했다. focused/full/document
+validation을 완료하고 같은 날 lease를 release했다. Remote review reply/resolution은 PR 자체의 evidence로 남긴다.
 
 ## Purpose / Big Picture
 
@@ -24,13 +26,16 @@ Support는 raw criterion, 원문 프로필, ciphertext 또는 blind index를 장
 
 ## Current State
 
-- Branch `feature/s30-protected-profile-search`의 HEAD, `main`, `origin/main`은 모두
-  `037c3cb8cdd9261b47aa3851a443070803294714`이다.
+- Branch `feature/s30-protected-profile-search`의 HEAD와 `origin/feature/s30-protected-profile-search`는
+  `619e9e8731f66b7cb8b9384158076326de7707e7`이고 `main`/`origin/main`은
+  `037c3cb8cdd9261b47aa3851a443070803294714`이다. PR #53만 현재 열린 PR이다.
 - 마지막 Flyway migration은 V40 `support_case` foundation이다. Identity에는 store membership만 있고 customer
   profile/table이 없다. Merchant `merchant_store`에는 주문 가능 상태만 있으며 검색용 public name/location은
   별도 `merchant_store_discovery_profile`이 소유한다. Delivery module/schema는 없다.
 - V41이 Identity customer, Merchant store, Delivery external-courier의 owner-local encrypted profile와 blind-index
   table, 그리고 PII-free Support rate window를 추가했다. S30은 새 기본 permission grant를 만들지 않는다.
+- PR #53 remediation은 실제 non-derived Vault metadata, 32 KiB streaming response bound, sanitized malformed-2xx
+  cause, PostgreSQL-clock atomic limiter와 24시간/100행 bounded retention worker를 구현·검증했다.
 - S20 Controller→Application Service→internal persistence와 Operations public API pattern은 구현돼 있다.
 - ADR-083은 2026-08-11 Vault Transit + loopback Vault Proxy, 별도 AEAD/HMAC keyring, versioned rotation과
   fail-closed startup/runtime 정책으로 Accepted됐다. SP-17은 최소 profile, normalization, masking, result/rate
@@ -75,7 +80,9 @@ Support는 raw criterion, 원문 프로필, ciphertext 또는 blind index를 장
 
 1. Identity/Merchant/Delivery만 자신의 raw profile ciphertext를 보관한다. Support는 typed ID와 masked DTO만 받는다.
 2. 원문 AEAD keyring과 exact-index HMAC keyring은 서로 다르며 DB에서도 ciphertext와 digest를 분리한다.
-3. 검색값은 POST body 전용이고 URI/log/trace/metric/cursor/Audit/exception/snapshot/Support table에 남지 않는다.
+3. 지원 계약은 검색값을 POST body로만 받고 query parameter를 거부한다. ingress/container가 거부 전 URI를
+   관찰할 수 있으므로 production route는 query string을 access log에 기록하지 않아야 하며, 애플리케이션
+   log/trace/metric/cursor/Audit/exception/snapshot/Support table에는 검색값을 남기지 않는다.
 4. 성공 응답은 zero-result를 포함해 항상 masked이고 `Cache-Control: no-store`다.
 5. CUSTOMER/STORE/RIDER typed IDs만 조합하며 JPA Entity/Repository를 Context 밖에 노출하지 않는다.
 6. phone/email normalization v1과 criterion type/version domain separation이 exact equality를 결정한다.
@@ -170,8 +177,10 @@ added.
 - **Selection:** repository migration inventory ends at
   `V40__create_support_case_foundation.sql`; this sole writer selects
   `V41__create_protected_support_profiles_and_search_guard.sql`.
-- **Lease lifetime:** focused/full validation과 atomic completion/readiness handoff까지 보유한 뒤 2026-08-11
-  release했다. V1–V40 수정, number reservation, checksum repair와 migration renumbering은 없었다.
+- **Lease lifetime:** 최초 focused/full validation과 atomic completion/readiness handoff 뒤 2026-08-11 release했다.
+  PR #53 remediation에서 V41 lifecycle 검토가 다시 필요해 같은 날 sole open PR branch가 lease를 재획득했고,
+  remediation focused/full/PostgreSQL/document validation과 atomic completion handoff 뒤 같은 날 다시 release했다.
+  V1–V40 수정, number reservation, checksum repair와 migration renumbering은 없다.
 
 ## API and Event Contracts
 
@@ -263,6 +272,40 @@ The successful full suite emitted the existing OpenJDK class-sharing warning, Gr
 shutdown-time unfinished `PaymentRefundedV1` publication report from a failure-path fixture. It did not fail the task.
 Docker/Testcontainers failures were not replaced with H2 or hidden.
 
+### PR #53 remediation evidence (2026-08-11)
+
+- First sandboxed Vault focused invocation — exit 1 before Gradle execution because the sandbox denied the Gradle
+  wrapper lock under the user cache. The same command was rerun with the approved Gradle test permission.
+- Vault RED command covering `VaultTransitPersonalDataAdapterTest` and `VaultTransitStartupValidationTest` — exit 1,
+  13 tests/1 failure: the actual non-derived metadata fixture without `convergent_encryption` failed startup as the
+  review predicted. After implementation the same command — exit 0, `BUILD SUCCESSFUL in 2s`.
+- Initial skew harness invocation — exit 1 because a manually constructed preflight bypassed Spring's required
+  transaction; no product assertion was inferred. The corrected repository-level RED invocation — exit 1 with the
+  expected quota-split assertion after 31 requests used two application timestamps. The final three-test PostgreSQL
+  rate command — exit 0, `BUILD SUCCESSFUL in 16s`; concurrent/skewed requests share one DB-clock row capped at 30.
+- Retention worker RED invocation — exit 1 at test compilation because the retention service/result/worker did not yet
+  exist. The first post-implementation invocation exposed only a Kotlin AssertJ test syntax error and exited 1. After
+  correcting the test, the worker metric/failure-log, concurrent bounded cleanup/reexecution and cleanup-index plan
+  command — exit 0, `BUILD SUCCESSFUL in 21s`.
+- `./gradlew spotlessApply` — exit 0, `BUILD SUCCESSFUL in 1s`. The 15-class S30 focused command covering Vault,
+  startup, normalization/masking, migration/query/query-plan, Support integration/retention/API/PII and architecture —
+  exit 0, `BUILD SUCCESSFUL in 47s`.
+- `./gradlew spotlessCheck` — exit 0, `BUILD SUCCESSFUL in 1s`. `./scripts/verify-docs.sh` — exit 0; target/runtime
+  OpenAPI 43 paths/47 operations and 122 schemas, 33 policies, 91 ADRs, 228 Markdown files and 37 ExecPlans validated.
+  `git diff --check` and main-source sensitive logging scans — exit 0.
+- First final `./gradlew test` — exit 1 after 9m 31s; 722 tests, 1 failure and 1 skipped. The only failure was the
+  unrelated existing `SettlementRefundAdjustmentIntegrationTest` random-fixture Audit PII heuristic. Its isolated
+  seven-test class rerun — exit 0, `BUILD SUCCESSFUL in 17s`.
+- Second final `./gradlew test` — exit 0, `BUILD SUCCESSFUL in 10m 38s`; JUnit XML reports 155 suites/722 tests,
+  0 failures, 0 errors and 1 skipped. Full XML canary scan for raw/normalized phone/email and Vault ciphertext markers —
+  exit 0 with no matches.
+- `./gradlew build` — exit 0, `BUILD SUCCESSFUL in 2s` (4 executed, 7 up-to-date). No H2, fake Vault fallback or
+  suppressed failure replaced the required PostgreSQL/Vault contract validation. A live Vault container was not run;
+  the startup fixture matches the official non-derived Transit key response shape and this limitation is explicit.
+- After the completion move, the full Support integration/retention worker plus `spotlessCheck` command — exit 0,
+  `BUILD SUCCESSFUL in 18s`. Final `./scripts/verify-docs.sh`, `git diff --check`, XML canary scan and stale active-link
+  scan — exit 0; document counts remain 43/47 operations, 122 schemas, 33 policies, 91 ADRs, 228 Markdown and 37 plans.
+
 ## Observability
 
 Metrics use only operation, owner type, generic outcome and key-version coverage; no key name/version pair, subject ID,
@@ -291,6 +334,13 @@ status class, never URI key segment or response body. Rate/anomaly reporting is 
 - [x] RED Support search/Audit/API/security tests and implementation
 - [x] focused and full validation
 - [x] completion move and atomic successor/readiness handoff; V41 migration-writer lease released
+- [x] PR #53 review 6건의 provider 계약, 정보 노출, resource bound, DB clock, retention, URI 보장 타당성 확인
+- [x] plan을 ACTIVE로 복귀하고 V41 remediation migration-writer lease 재획득
+- [x] RED: 실제 non-derived Vault metadata, malformed 200 cause-chain, Content-Length/chunked oversized response
+- [x] RED: 서로 다른 application clock 인스턴스의 단일 DB quota와 bounded retention cleanup 재실행
+- [x] Vault adapter, atomic DB-clock limiter, retention worker/PII-free metrics 구현
+- [x] SP-17/OpenAPI/runbook/traceability 보완
+- [x] focused/full/docs/PII/query-plan validation, diff review와 atomic completion handoff
 
 ## Surprises & Discoveries
 
@@ -321,6 +371,10 @@ status class, never URI key segment or response body. Rate/anomaly reporting is 
 | 2026-08-11 | Execution | acquire sole migration lease and select V41 | current active task/worktree/base inventory satisfies ADR-072 | this plan |
 | 2026-08-11 | Test infrastructure | bound the Spring test context cache at 8 | prevents simultaneous PostgreSQL container accumulation without replacing Testcontainers or sharing test data | completion evidence above |
 | 2026-08-11 | Completion | V41 owner profiles, Vault Transit exact search and masked Support API validated; V41 lease released | focused, full, PII, PostgreSQL plan, build and documentation gates passed | completion evidence above |
+| 2026-08-11 | Review remediation | reopen S30 and reacquire the V41 writer lease on the sole open PR branch | review found production Vault response mismatch and an unbounded V41 rate-window lifecycle, so prior completion/readiness is suspended | PR #53 threads and this plan |
+| 2026-08-11 | Security/operations | retain fixed-window enforcement rows for 24 hours and delete at most 100 per scheduled transaction by default | Audit is the canonical access record; the limiter needs only short replay/diagnostic state and bounded retryable cleanup | SP-17 and this plan |
+| 2026-08-11 | Rate semantics | derive window and retry time from one PostgreSQL clock; retain fixed-window boundary burst as an explicit initial-policy limitation | prevents application clock skew from splitting a window while avoiding an unapproved sliding-window redesign | SP-17 and this plan |
+| 2026-08-11 | Remediation completion | release the V41 lease and restore S30 completion/successor input | 15-class focused, 155-suite full, PII, PostgreSQL plan, build and documentation gates passed | remediation evidence below |
 
 ## Outcomes & Retrospective
 
@@ -330,10 +384,13 @@ and rate preflight, computes versioned HMACs outside DB transactions through loo
 queries owner public APIs and returns only bounded masked DTOs after Audit commit. Vault/owner/Audit failures are 503,
 rate overflow is 429, and missing/invalid production Vault metadata fails startup without fallback.
 
-All focused and full validation gates pass. The PostgreSQL fixture proves only intended B-tree index selection; no
-production latency/throughput claim is made. Actual Vault cluster/Proxy provisioning, HA/replication and production
-deployment remain operational work outside S30. S40 remains unauthored and not ready because its challenge Provider and
-terminal-Case grant design gate is independent of S30; S50 and S100 now have their S30 input but retain their other gates.
+PR #53 remediation now accepts actual non-derived Vault metadata without weakening the derived/convergent policy,
+streams at most 32 KiB, sanitizes parser causes, shares one PostgreSQL-clock quota across skewed application clocks and
+deletes 24-hour rate state in concurrent/retryable 100-row chunks with PII-free observability. The supported API contract
+is body-only while upstream query-redaction remains an explicit production enablement control. The PostgreSQL fixtures
+prove intended B-tree index selection only; no production latency/throughput claim is made. Actual Vault cluster/Proxy
+provisioning, HA/replication and production deployment remain operational work outside S30. S50/S100 regain the completed
+S30 input but remain not ready on their independent gates.
 
 ## Revision Notes
 
@@ -341,3 +398,7 @@ terminal-Case grant design gate is independent of S30; S50 and S100 now have the
   V41 lease evidence, exact transaction/failure/security/test plan and implementation readiness.
 - 2026-08-11: implemented V41, Vault Transit ports/adapter, owner-local masked query APIs and Support exact search; passed
   focused/full/PII/OpenAPI/PostgreSQL/build validation, released the V41 lease and moved the plan to completed.
+- 2026-08-11: PR #53 review findings reopened the plan; reacquired the V41 migration-writer lease, suspended completion
+  and successor readiness, and added bounded retention/provider-contract/distributed-rate remediation gates.
+- 2026-08-11: implemented and fully validated all six review remediations, released the V41 lease, restored successor
+  input and moved the plan back to completed; PR push/thread resolution follows the recorded validation.

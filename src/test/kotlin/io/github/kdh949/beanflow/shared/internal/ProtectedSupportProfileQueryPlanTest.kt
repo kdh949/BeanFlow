@@ -91,6 +91,49 @@ internal class ProtectedSupportProfileQueryPlanTest {
         assertThat(withIndex).contains(INDEX_NAME).doesNotContain("Seq Scan on identity_customer_support_profile_exact_index")
     }
 
+    @Test
+    fun `bounded rate window retention candidates use the cleanup index`() {
+        jdbcTemplate.execute(
+            """
+            INSERT INTO support_subject_search_rate_window (
+                actor_id, window_started_at, attempt_count, updated_at
+            )
+            SELECT md5('rate-window-plan-' || item)::uuid,
+                   date_bin(
+                       INTERVAL '5 minutes',
+                       clock_timestamp() - INTERVAL '25 hours',
+                       TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                   ),
+                   1,
+                   date_bin(
+                       INTERVAL '5 minutes',
+                       clock_timestamp() - INTERVAL '25 hours',
+                       TIMESTAMPTZ '1970-01-01 00:00:00Z'
+                   ) + INTERVAL '1 minute'
+              FROM generate_series(1, $FIXTURE_COUNT) AS item
+            """.trimIndent(),
+        )
+        jdbcTemplate.execute("ANALYZE support_subject_search_rate_window")
+
+        val plan =
+            jdbcTemplate
+                .queryForList(
+                    """
+                    EXPLAIN (ANALYZE, BUFFERS)
+                    SELECT actor_id, window_started_at
+                      FROM support_subject_search_rate_window
+                     WHERE window_started_at < clock_timestamp() - INTERVAL '24 hours'
+                     ORDER BY window_started_at, actor_id
+                     FOR UPDATE SKIP LOCKED
+                     LIMIT 100
+                    """.trimIndent(),
+                    String::class.java,
+                ).joinToString("\n")
+
+        println("SUPPORT_RATE_RETENTION_EXPLAIN_FIXTURE rows=$FIXTURE_COUNT limit=100\n$plan")
+        assertThat(plan).contains("idx_support_subject_search_rate_window_cleanup")
+    }
+
     private fun explain(digest: ByteArray): String =
         jdbcTemplate
             .queryForList(

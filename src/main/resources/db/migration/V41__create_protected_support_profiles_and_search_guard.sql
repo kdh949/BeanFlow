@@ -243,3 +243,6 @@ CREATE TABLE support_subject_search_rate_window (
 
 CREATE INDEX idx_support_subject_search_rate_window_cleanup
     ON support_subject_search_rate_window (window_started_at, actor_id);
+
+COMMENT ON TABLE support_subject_search_rate_window IS
+    'Transient fixed-window enforcement state; application retention deletes rows older than 24 hours in bounded chunks';

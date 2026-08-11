@@ -130,6 +130,60 @@ internal class VaultTransitPersonalDataAdapterTest {
         }
     }
 
+    @Test
+    fun `malformed successful response never exposes provider data through the cause chain`() {
+        responses +=
+            StubResponse(
+                200,
+                """{"data":{"hmac":private@example.com-vault:v9:secret-010-1234-5678}}""",
+            )
+
+        assertThatThrownBy {
+            adapter.generate(
+                PersonalDataNormalizer.normalize(ExactSearchCriterionType.EMAIL, "private@example.com"),
+                setOf(3),
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+            assertThat(failure.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+            assertThat(causeChain(failure))
+                .doesNotContain(
+                    "private@example.com",
+                    "vault:v9",
+                    "010-1234-5678",
+                    "support-exact-index",
+                    "JsonParseException",
+                    "tools.jackson",
+                )
+        }
+    }
+
+    @Test
+    fun `oversized Content-Length response is rejected with a sanitized dependency failure`() {
+        responses += StubResponse(200, "x".repeat(64 * 1024))
+
+        assertSanitizedOversizedFailure()
+    }
+
+    @Test
+    fun `oversized chunked response is rejected with a sanitized dependency failure`() {
+        responses += StubResponse(200, "x".repeat(64 * 1024), chunked = true)
+
+        assertSanitizedOversizedFailure()
+    }
+
+    private fun assertSanitizedOversizedFailure() {
+        assertThatThrownBy {
+            adapter.generate(
+                PersonalDataNormalizer.normalize(ExactSearchCriterionType.EMAIL, "private@example.com"),
+                setOf(3),
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+            assertThat(failure.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+            assertThat(causeChain(failure))
+                .doesNotContain("private@example.com", "support-exact-index", "x".repeat(256))
+        }
+    }
+
     private fun properties(): VaultTransitPersonalDataProperties =
         VaultTransitPersonalDataProperties(
             proxyBaseUri = URI("http://127.0.0.1:${server.address.port}"),
@@ -166,13 +220,14 @@ internal class VaultTransitPersonalDataAdapterTest {
             )
         val bytes = response.body.toByteArray(StandardCharsets.UTF_8)
         exchange.responseHeaders.add("Content-Type", "application/json")
-        exchange.sendResponseHeaders(response.status, bytes.size.toLong())
+        exchange.sendResponseHeaders(response.status, if (response.chunked) 0 else bytes.size.toLong())
         exchange.responseBody.use { it.write(bytes) }
     }
 
     private data class StubResponse(
         val status: Int,
         val body: String,
+        val chunked: Boolean = false,
     )
 
     private data class CapturedRequest(
@@ -181,4 +236,8 @@ internal class VaultTransitPersonalDataAdapterTest {
         val tokenHeader: String?,
         val authorizationHeader: String?,
     )
+
+    private fun causeChain(failure: Throwable): String =
+        generateSequence(failure) { it.cause }
+            .joinToString(" | ") { "${it.javaClass.name}:${it.message}" }
 }

@@ -30,11 +30,12 @@ distribution이나 query projection이 달라지면 동일 조건으로 재측�
 
 `SupportSearchQueryService`, `SupportSubjectSummary`, `SupportOrderTimeline`, `SupportDeliveryView` and `SupportActionAvailabilityView` compose owner DTOs without adding JPA relationships to write models.
 
-Exact phone/email search accepts raw values only in a POST body and returns masked results. Raw criteria never appears
-in URI, access log, metric, cursor, Audit or exception. ADR-083 fixes Vault Transit AEAD ciphertext and a separate
-versioned HMAC-SHA-256 blind index. S30 selects the minimal owner profile tables and masked DTOs; Support stores neither
-raw criteria nor long-lived owner profile copies. The product scope is exact bounded search; Elasticsearch requires
-measured need and a new Accepted decision.
+Exact phone/email search accepts raw values only in a POST body, rejects query parameters and returns masked results.
+Because upstream infrastructure can see a client-created query before rejection, deployment access logs must record
+path only or redact query strings. BeanFlow does not place raw criteria in its application metric, cursor, Audit or
+exception. ADR-083 fixes Vault Transit AEAD ciphertext and a separate versioned HMAC-SHA-256 blind index. S30 selects
+the minimal owner profile tables and masked DTOs; Support stores neither raw criteria nor long-lived owner profile
+copies. The product scope is exact bounded search; Elasticsearch requires measured need and a new Accepted decision.
 
 Each timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
 from the implemented owner DTOs before adopting ADR-070. The S20 Case-list tuple is not a shared Support tuple. Items
