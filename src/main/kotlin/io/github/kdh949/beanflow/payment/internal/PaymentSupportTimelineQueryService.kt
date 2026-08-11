@@ -16,12 +16,21 @@ internal class PaymentSupportTimelineQueryService(
     private val jdbcTemplate: JdbcTemplate,
 ) : PaymentSupportTimelineOperations {
     override fun findTimelineFacts(query: SupportOwnerTimelineQuery): List<SupportOwnerTimelineFact> {
+        val supportedTypes =
+            query.types.intersect(setOf(SupportTimelineType.PAYMENT_STATE, SupportTimelineType.REFUND_STATE))
+        if (query.types.isNotEmpty() && supportedTypes.isEmpty()) return emptyList()
         val ids = query.orderIds.sortedBy(UUID::toString)
         val placeholders = ids.joinToString(",") { "?" }
         val arguments = mutableListOf<Any>()
         arguments.addAll(ids)
         arguments.addAll(ids)
-        val boundary = boundaryClause(query, arguments)
+        val conditions = mutableListOf<String>()
+        if (supportedTypes.isNotEmpty()) {
+            conditions += "fact_type IN (${supportedTypes.joinToString(",") { "?" }})"
+            arguments.addAll(supportedTypes.sortedBy { it.name }.map { it.name })
+        }
+        boundaryCondition(query, arguments)?.let(conditions::add)
+        val where = if (conditions.isEmpty()) "" else "WHERE ${conditions.joinToString(" AND ")}"
         arguments += query.limit
         return jdbcTemplate.query(
             """
@@ -37,7 +46,7 @@ internal class PaymentSupportTimelineQueryService(
                       FROM payment_refund
                      WHERE order_id IN ($placeholders)
                    ) facts
-             $boundary
+             $where
              ORDER BY occurred_at DESC, item_id DESC
              LIMIT ?
             """.trimIndent(),
@@ -55,28 +64,28 @@ internal class PaymentSupportTimelineQueryService(
         )
     }
 
-    private fun boundaryClause(
+    private fun boundaryCondition(
         query: SupportOwnerTimelineQuery,
         arguments: MutableList<Any>,
-    ): String {
-        val after = query.after ?: return ""
+    ): String? {
+        val after = query.after ?: return null
         val time = Timestamp.from(after.occurredAt)
         return when {
             SupportTimelineSource.PAYMENT.rank > after.source.rank -> {
                 arguments += time
-                "WHERE occurred_at <= ?"
+                "occurred_at <= ?"
             }
 
             SupportTimelineSource.PAYMENT.rank < after.source.rank -> {
                 arguments += time
-                "WHERE occurred_at < ?"
+                "occurred_at < ?"
             }
 
             else -> {
                 arguments += time
                 arguments += time
                 arguments += after.itemId
-                "WHERE (occurred_at < ? OR (occurred_at = ? AND item_id < ?))"
+                "(occurred_at < ? OR (occurred_at = ? AND item_id < ?))"
             }
         }
     }

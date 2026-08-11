@@ -108,6 +108,7 @@ data class SupportOwnerTimelineQuery(
     val orderIds: Set<UUID>,
     val after: SupportTimelineBoundary?,
     val limit: Int,
+    val types: Set<SupportTimelineType> = emptySet(),
 ) {
     init {
         require(orderIds.isNotEmpty() && orderIds.size <= MAX_ORDER_IDS) { "Timeline query requires one to 100 Order IDs" }
@@ -131,4 +132,5 @@ val SUPPORT_TIMELINE_COMPARATOR: Comparator<SupportOwnerTimelineFact> =
         }
     }
 
-fun SupportOwnerTimelineQuery.accepts(fact: SupportOwnerTimelineFact): Boolean = after?.isBefore(fact) ?: true
+fun SupportOwnerTimelineQuery.accepts(fact: SupportOwnerTimelineFact): Boolean =
+    (types.isEmpty() || fact.type in types) && (after?.isBefore(fact) ?: true)
