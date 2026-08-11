@@ -209,7 +209,7 @@ internal class SupportActionEvaluationApplicationService(
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
 }
 
-private fun SupportActionType.capabilityPermission(): OperatorPermission =
+internal fun SupportActionType.capabilityPermission(): OperatorPermission =
     when (this) {
         SupportActionType.ORDER_CANCELLATION -> OperatorPermission.SUPPORT_ORDER_CANCEL
         SupportActionType.PICKUP_RESCHEDULE -> OperatorPermission.SUPPORT_PICKUP_RESCHEDULE
