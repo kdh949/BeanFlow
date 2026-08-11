@@ -56,6 +56,9 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 
 ## Evidence rules
 
+- S50 completion ran `spotlessCheck test` with 784 tests, 0 failures, 0 errors and 1 skipped, followed by a successful
+  build. JVM-wide PostGIS server reuse is paired with one database per Spring context and a separate Flyway connection,
+  so context data isolation and the 1-connection application-pool boundary remain tested.
 - S20–S50 coverage is limited to their named test classes; it does not verify future Support stages.
 - Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.

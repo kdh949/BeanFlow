@@ -38,6 +38,12 @@ class TestcontainersConfiguration {
      * PostgreSQL 17 with PostGIS 3.5. Spatial migrations and the nearby query must never pass on a
      * plain PostgreSQL image or on an application distance fallback, so the shared container pins
      * the extension-bearing image and declares compatibility with the PostgreSQL substitute name.
+     * One server follows Testcontainers' singleton lifecycle while every Spring context receives an
+     * isolated database and dedicated JDBC/Flyway connection details.
+     *
+     * Sources:
+     * https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
+     * https://docs.spring.io/spring-boot/reference/testing/testcontainers.html#testing.testcontainers.lifecycle
      */
     @Bean
     internal fun isolatedTestDatabase(): IsolatedTestDatabase =
