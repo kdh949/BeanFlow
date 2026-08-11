@@ -111,18 +111,17 @@ class SupportActionPolicyTest {
     private fun eligibleInput(
         action: SupportActionType = SupportActionType.ORDER_CANCELLATION,
         state: SupportActionOrderState = SupportActionOrderState.PAID,
-    ) =
-        SupportActionPolicyInput(
-            action = action,
-            targetState = state,
-            expectedTargetVersion = 5,
-            currentTargetVersion = 5,
-            caseEligible = true,
-            relationshipMatches = true,
-            hasGenericPermission = true,
-            hasCapabilityPermission = true,
-            verificationScope = VerificationActionScope.SUPPORT_ACTION,
-            verificationPurpose = VerificationPurpose.CASE_RESOLUTION,
-            verificationLevel = VerificationLevel.BASIC,
-        )
+    ) = SupportActionPolicyInput(
+        action = action,
+        targetState = state,
+        expectedTargetVersion = 5,
+        currentTargetVersion = 5,
+        caseEligible = true,
+        relationshipMatches = true,
+        hasGenericPermission = true,
+        hasCapabilityPermission = true,
+        verificationScope = VerificationActionScope.SUPPORT_ACTION,
+        verificationPurpose = VerificationPurpose.CASE_RESOLUTION,
+        verificationLevel = VerificationLevel.BASIC,
+    )
 }

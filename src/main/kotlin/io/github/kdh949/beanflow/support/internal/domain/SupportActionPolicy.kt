@@ -137,23 +137,34 @@ internal class SupportActionPolicy {
         when (action) {
             SupportActionType.ORDER_CANCELLATION,
             SupportActionType.PICKUP_RESCHEDULE,
-            ->
+            -> {
                 when (state) {
                     SupportActionOrderState.PENDING_PAYMENT,
                     SupportActionOrderState.PAID,
-                    -> PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.BASIC)
-                    SupportActionOrderState.ACCEPTED ->
+                    -> {
+                        PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.BASIC)
+                    }
+
+                    SupportActionOrderState.ACCEPTED -> {
                         PolicyRule(SupportActionDecision.APPROVAL_REQUIRED, VerificationLevel.ENHANCED)
-                    else -> null
+                    }
+
+                    else -> {
+                        null
+                    }
                 }
-            SupportActionType.POST_ACCEPTANCE_RESOLUTION ->
+            }
+
+            SupportActionType.POST_ACCEPTANCE_RESOLUTION -> {
                 when (state) {
                     SupportActionOrderState.PREPARING,
                     SupportActionOrderState.READY,
                     SupportActionOrderState.COMPLETED,
                     -> PolicyRule(SupportActionDecision.APPROVAL_REQUIRED, VerificationLevel.ENHANCED)
+
                     else -> null
                 }
+            }
         }
 
     private data class PolicyRule(
