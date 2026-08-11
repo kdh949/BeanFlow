@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyO
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
+import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -27,6 +28,7 @@ import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.support.internal.BreakGlassApplicationService
 import io.github.kdh949.beanflow.support.internal.DataAccessGrantApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportActionEvaluationApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportActionRequestApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportCaseApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportSubjectSearchApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportTimelineApplicationService
@@ -122,6 +124,12 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var supportActionEvaluationApplicationService: SupportActionEvaluationApplicationService
+
+    @MockitoBean
+    private lateinit var supportActionRequestApplicationService: SupportActionRequestApplicationService
+
+    @MockitoBean
+    private lateinit var operationsSupportInvestigationService: OperationsSupportInvestigationService
 
     @MockitoBean
     private lateinit var supportSubjectSearchApplicationService: SupportSubjectSearchApplicationService

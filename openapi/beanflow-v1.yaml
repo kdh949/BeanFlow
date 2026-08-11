@@ -1759,6 +1759,193 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/action-requests:
+    post:
+      tags: [Support]
+      operationId: createSupportActionRequest
+      summary: Create an immutable revision-bound Support action request
+      description: |
+        Persists only SHA-256 action/evidence digests and an exact binding to the
+        Case, target version, verification session, policy version and expiry.
+        This endpoint creates approval work only and never executes an owner command.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportActionRequest"
+      responses:
+        "201":
+          description: Action request created or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}:
+    get:
+      tags: [Support]
+      operationId: getSupportActionRequest
+      summary: Read one visible Support action request and materialize due terminal state
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+      responses:
+        "200":
+          description: Current request revision, approval lineage and execution readiness
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/revisions:
+    post:
+      tags: [Support]
+      operationId: reviseSupportActionRequest
+      summary: Replace a returned request with a new immutable revision
+      description: Existing approval steps remain immutable and become stale lineage.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviseSupportActionRequest"
+      responses:
+        "200":
+          description: New revision created or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/support-manager-decisions:
+    post:
+      tags: [Support]
+      operationId: decideSupportManagerApproval
+      summary: Decide the Support-manager step for one exact revision
+      description: |
+        The reviewer must differ from the requester and executor. Permission,
+        verification, policy, target version and exact expiry are rechecked under lock.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideSupportManagerApprovalRequest"
+      responses:
+        "200":
+          description: Decision committed or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/reassignments:
+    post:
+      tags: [Support]
+      operationId: reassignSupportActionRequest
+      summary: Atomically reassign a ready request and its SupportCase
+      description: |
+        Requires exact request revision/version and Case version. The target must
+        hold active Case-write, action-execute and capability-specific permissions
+        and must not be an approver for this revision.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReassignSupportActionRequest"
+      responses:
+        "200":
+          description: Case and request reassigned atomically, or the first response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/investigations/{investigationId}/decisions:
+    post:
+      tags: [Operations]
+      operationId: decideOperationsSupportInvestigation
+      summary: Decide an Operations investigation for one Support request revision
+      description: |
+        Requires a distinct Operations reviewer. The Operations row and required
+        Support callback commit in one transaction; callback or Audit failure rolls
+        back both owners and does not claim a decision.
+      parameters:
+        - $ref: "#/components/parameters/OperationsInvestigationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideOperationsSupportInvestigationRequest"
+      responses:
+        "200":
+          description: Investigation decision and Support callback committed, or exact replay
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsSupportInvestigationDecisionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases/{caseId}/verification-sessions:
     post:
       tags: [Support]
@@ -2205,6 +2392,18 @@ components:
     SupportCaseId:
       in: path
       name: caseId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportActionRequestId:
+      in: path
+      name: requestId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    OperationsInvestigationId:
+      in: path
+      name: investigationId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -4614,6 +4813,258 @@ components:
         expiresAt:
           type: string
           format: date-time
+    SupportActionApprovalRoute:
+      type: string
+      enum: [NONE, SUPPORT_MANAGER, OPERATIONS, SUPPORT_MANAGER_THEN_OPERATIONS]
+    SupportActionRequestState:
+      type: string
+      enum:
+        - AWAITING_SUPPORT_MANAGER
+        - AWAITING_OPERATIONS
+        - READY_FOR_EXECUTION
+        - REASSIGNMENT_REQUIRED
+        - REVISION_REQUIRED
+        - DENIED
+        - EXPIRED
+        - STALE
+        - MANUAL_REVIEW
+    SupportApprovalStepType:
+      type: string
+      enum: [SUPPORT_MANAGER, OPERATIONS]
+    SupportApprovalStepState:
+      type: string
+      enum: [PENDING, APPROVED, DENIED, RETURNED, EXPIRED, STALE, ESCALATED]
+    SupportApprovalDecision:
+      type: string
+      enum: [APPROVE, DENY, RETURN_FOR_REVISION]
+    OperationsSupportInvestigationDecision:
+      type: string
+      enum: [APPROVE, DENY, RETURN_FOR_REVISION, ESCALATE]
+    OperationsSupportInvestigationState:
+      type: string
+      enum: [OPEN, APPROVED, DENIED, RETURNED, ESCALATED, EXPIRED, STALE]
+    CreateSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, expectedTargetVersion, verificationSessionId, actionPayloadDigest, reason, evidenceDigest]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    ReviseSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevisionNumber, expectedRequestVersion, expectedTargetVersion, verificationSessionId, actionPayloadDigest, reason, evidenceDigest]
+      properties:
+        expectedRevisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    DecideSupportManagerApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedRequestVersion, decision, reason]
+      properties:
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decision:
+          $ref: "#/components/schemas/SupportApprovalDecision"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ReassignSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedRequestVersion, expectedCaseVersion, assigneeId, reason]
+      properties:
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedCaseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    DecideOperationsSupportInvestigationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, decision, reason, evidenceDigest]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decision:
+          $ref: "#/components/schemas/OperationsSupportInvestigationDecision"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    SupportApprovalStepResource:
+      type: object
+      additionalProperties: false
+      required: [stepType, state, decidedByActorId, decidedAt]
+      properties:
+        stepType:
+          $ref: "#/components/schemas/SupportApprovalStepType"
+        state:
+          $ref: "#/components/schemas/SupportApprovalStepState"
+        decidedByActorId:
+          type: [string, "null"]
+          format: uuid
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+    SupportActionRequestResource:
+      type: object
+      additionalProperties: false
+      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps]
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        targetId:
+          $ref: "#/components/schemas/Identifier"
+        requesterActorId:
+          $ref: "#/components/schemas/Identifier"
+        executorActorId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        policyVersion:
+          type: string
+          minLength: 1
+          maxLength: 160
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        amountKrw:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        expiresAt:
+          type: string
+          format: date-time
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        approvalSteps:
+          type: array
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/SupportApprovalStepResource"
+    OperationsSupportInvestigationDecisionResource:
+      type: object
+      additionalProperties: false
+      required: [investigationId, requestId, revisionId, revisionNumber, state, supportRequestState, supportRequestVersion, decidedByActorId, decidedAt, version]
+      properties:
+        investigationId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/OperationsSupportInvestigationState"
+        supportRequestState:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        supportRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decidedByActorId:
+          type: [string, "null"]
+          format: uuid
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 0
     VerificationLevel:
       type: string
       enum: [UNVERIFIED, BASIC, ENHANCED]

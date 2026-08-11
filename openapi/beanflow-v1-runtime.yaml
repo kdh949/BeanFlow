@@ -558,6 +558,18 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1timeline"
   /support/cases/{caseId}/action-evaluations:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1action-evaluations"
+  /support/cases/{caseId}/action-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1action-requests"
+  /support/action-requests/{requestId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}"
+  /support/action-requests/{requestId}/revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1revisions"
+  /support/action-requests/{requestId}/support-manager-decisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1support-manager-decisions"
+  /support/action-requests/{requestId}/reassignments:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1reassignments"
+  /operations/investigations/{investigationId}/decisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations~1{investigationId}~1decisions"
   /support/cases/{caseId}/verification-sessions:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1verification-sessions"
   /support/verification-sessions/{sessionId}:
