@@ -113,8 +113,10 @@ execution source다.
 ### Unattended execution and completion move
 
 - 자동 실행기는 `ACTIVE + IMPLEMENTATION + Implementation-Ready=true`만 candidate로 선택한다.
-  candidate branch는 항상 최신 `main`에서 만들며 active plan head 또는 여러 sibling을 통합한
-  base를 추측하지 않는다.
+  candidate branch는 기본적으로 최신 `main`에서 만들며 active plan head 또는 여러 sibling을 통합한
+  base를 추측하지 않는다. 단, Accepted ADR이 exact plan 순서, immutable stack root, predecessor branch,
+  completion 의미, migration-writer lease와 final release gate를 모두 고정한 bounded Draft stack은
+  verified predecessor head에서 child를 시작할 수 있다.
 - `Writes-Migration=true` candidate는 repository-wide migration-writer lease가 있을 때만 시작한다.
   lease holder는 branch 생성 뒤 최신 main의 마지막 Flyway 번호를 읽어 새 번호를 고르고, PR merge가
   끝나기 전 다른 migration writer를 시작하지 않는다. 번호 reservation manifest나 checksum repair로
@@ -125,6 +127,12 @@ execution source다.
   completion commit은 parent Draft branch에서 자신의 `active → completed` 이동과 Plan 50의
   dependency path/ready 갱신을 함께 기록하고, Plan 50은 그 head에서만 시작한다. final child PR이
   main에 merge될 때까지 unrelated schema writer를 시작하지 않는다.
+- 제품화 Stack A는 [ADR-111](../docs/adr/ADR-111-productization-stack-a-draft-release.md)에 한해
+  Plan 00→10→20→30→40→50→60을 직렬 Draft stack으로 실행한다. 각 child는 직전 plan의 verified
+  completion head만 parent로 사용한다. Plan 10부터 Stack A release 종료까지 하나의 migration-writer
+  lease를 유지하며, `origin/main` 또는 recorded stack root가 바뀌거나 restack이 필요하면 자동 실행을
+  중단한다. stack 내부 `COMPLETED`는 exact predecessor 위에서 required validation을 통과했다는 뜻이며
+  merge 또는 deployment 완료를 뜻하지 않는다.
 - plan completion commit은 `(1) active → completed 이동과 status/date 변경`, `(2) 모든 direct
   successor의 dependency path 갱신`, `(3) 이제 모든 direct dependency가 completed인 successor의
   `Implementation-Ready=true` 갱신`, `(4) dependency graph/document validation`을 함께 수행한다.
