@@ -17,8 +17,9 @@ outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30 
 ADR-083/SP-17에서 작성·검증했다. PR #53 review remediation도 완료돼 S30 successor input이 복구됐다.
 S40은 SP-18/ADR-106의 strict verification/Grant/break-glass model을 V42와 12개 runtime operation으로 구현하고
 full validation 뒤 lease를 해제했다.
-S50은 S40 verified stacked head에서 ADR-070 cursor gate를 닫고 detailed ExecPlan/V43 lease를 시작했다.
-S60~S140은 predecessor actual outcome 뒤 새 detailed ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을
+S50은 S40 verified stacked head에서 Case/Order timeline, typed ActionPolicy와 V43을 구현·검증하고 lease를 해제했다.
+S60은 completed S50 action evaluation을 입력으로 detailed plan을 작성할 수 있다. S70~S140은 predecessor actual outcome 뒤
+새 detailed ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을
 가져야 한다.
 
 ## Current State
@@ -38,10 +39,11 @@ S60~S140은 predecessor actual outcome 뒤 새 detailed ExecPlan을 작성한다
 - ADR-083 Vault Transit crypto/index는 Accepted이고 ADR-090 frontend boundary는 Proposed다.
 - S40 completed plan은 purpose-bound verification, field/time/count-bound Grant, Audit-gated owner reveal와 distinct
   break-glass lifecycle을 기록한다. V42 migration-writer lease는 full validation 뒤 release됐다.
-- S50 active plan은 Case/Order timeline의 endpoint-specific cursor와 initial typed ActionPolicy matrix를 확정하고,
-  S40 branch에서 V43 writer lease를 이어 구현 중이다.
-- 55개 endpoint 중 S20의 9개 Case operation, S30의 1개 protected search operation과 S40의 12개 operation,
-  총 22개가 canonical target/runtime contract에 구현됐고 나머지는 DRAFT inventory다.
+- S50 completed plan은 여덟 owner public query를 fixed-count로 조합하는 Case/Order timeline, action-bound verification과
+  persistent authorization을 포함한 immutable typed ActionPolicy, V43 index/scope와 no-store runtime contract를 기록한다.
+  784-test full regression과 build/docs validation 뒤 V43 writer lease는 release됐다.
+- 55개 endpoint 중 S20의 9개 Case operation, S30의 1개 protected search operation, S40의 12개 operation과 S50의
+  3개 timeline/evaluation operation, 총 25개가 canonical target/runtime contract에 구현됐고 나머지는 DRAFT inventory다.
 
 ## Definitions
 
@@ -117,13 +119,17 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
   five-attempt/30m lockout, bounded normal Grant, two-phase Audit-before-reveal와 separate break-glass path를
   확정했다. V42와 12개 endpoint, stale Provider/notification recovery, post-decrypt authorization recheck까지
   구현·검증했으며 `docs/exec-plans/completed/customer-support-s40-verification-data-access-grant.md`에 evidence가 있다.
+- **S50 — integrated timeline and ActionPolicy:** 여덟 owner public query의 masked closed fact를 global signed cursor로
+  합성하고, Case relation/persistent permission/action-bound verification/current Order state-version을 immutable typed
+  policy로 평가한다. V43과 3개 runtime operation, identical-fixture EXPLAIN 및 784-test full regression evidence는
+  `docs/exec-plans/completed/customer-support-s50-integrated-timeline-action-policy.md`에 있다.
 
 ### Future Stage summaries and authoring gates
 
 | Stage | Future outcome | Direct inputs required before detailed plan authoring | Known gate |
 |---|---|---|---|
-| S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | ACTIVE — ADR-070 endpoint cursor fixed; V43 lease acquired |
-| S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | actor separation DB model required |
+| S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | COMPLETED — V43/runtime/full validation; lease released |
+| S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | READY TO AUTHOR — exact revision/actor-separation schema and transaction plan required |
 | S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | owner typed commands and state-race contract required |
 | S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | responsibility/step persistence required |
 | S90 | versioned goodwill compensation | completed S60 approval/investigation foundation | policy/bucket/cost-owner schema required |
@@ -178,6 +184,9 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
   endpoint-specific signed cursor contract is decided; no S50 plan was authored in S40
 - [x] S50 plan authoring — ADR-070 timeline cursor와 ADR-084 initial action matrix를 확정하고 S40 stacked head에서
   active S50 plan/V43 lease를 시작
+- [x] S50 V43/owner timeline/ActionPolicy/runtime implementation, 784-test full validation and V43 lease release
+- [x] S50 direct successor readiness recalculation — completed action evaluation makes S60 ready for detailed plan
+  authoring; S70/S90/S100 remain gated by completed S60 output
 
 ## Surprises & Discoveries
 
@@ -192,6 +201,9 @@ provider/response/rate-state 경계도 fail-closed·bounded하게 운영할 수 
 terminal-Case grant design은 SP-18/ADR-106과 V42 runtime으로 해소했다. S40 review는 Case-first lock, subject relink
 lockout, assignee binding, post-decrypt authorization recheck와 stale work recovery가 필수임을 확인했다. S50 cursor
 contract는 S50 시작 시 endpoint ID, global tuple과 canonical filter로 해결했다.
+S50 full regression은 per-context PostGIS container churn과 application Hikari를 재사용한 Flyway가 suite stability와
+1-connection boundary를 훼손할 수 있음을 드러냈다. JVM당 server 하나와 context별 database/Flyway connection details로
+state isolation을 유지하며 startup failure를 제거했다.
 
 ## Decision Log
 
@@ -211,13 +223,14 @@ contract는 S50 시작 시 endpoint ID, global tuple과 canonical filter로 해�
 | 2026-08-11 | S40 authoring/lease | accept strict challenge/Grant/break-glass policy, author S40 and acquire sole V42 lease | user decision plus S10/S20/S30 actual outcomes remove the independent S40 gate | SP-18, ADR-106, active S40 |
 | 2026-08-12 | S40 completion | complete V42 and 12 runtime operations, release lease and pass S40 output to S50 | focused security/PostgreSQL/API plus 760-test full build passed; S50 cursor gate remains independent | completed S40 |
 | 2026-08-12 | S50 authoring/lease | fix two timeline cursor contracts, type the initial action matrix and acquire V43 lane | completed S30/S40 outcomes and the endpoint amendment remove the S50 gate | ADR-070/084, active S50 |
+| 2026-08-12 | S50 completion | complete V43, two timelines and typed advisory evaluation; release lease and pass output to S60 | focused PostgreSQL/security/API plus 784-test full build and docs gates passed | completed S50 |
 
 ## Outcomes & Retrospective
 
-S10 foundation, S20 runtime Case, S30 protected exact search/remediation and S40 verification/DataAccessGrant are
-complete. S40 full build passed 760 tests and its V42 lease was released. S50 has both completed predecessor inputs,
-its endpoint-specific cursor/action contract is now fixed, and the active detailed plan owns V43 on the stacked S40 head.
-S100 has the completed S30 owner models but still lacks S60 and the
+S10 foundation, S20 runtime Case, S30 protected exact search/remediation, S40 verification/DataAccessGrant and S50
+timeline/ActionPolicy are complete. S50 full regression passed 784 tests, target/runtime expose 25 Support operations and
+its V43 lease was released. S60 is ready for detailed plan authoring from the actual S50 outcome. S100 has the completed
+S30 owner models but still lacks S60 and the
 customer/legal/payout/rider models recorded in its gate.
 
 ## Revision Notes
@@ -239,3 +252,5 @@ customer/legal/payout/rider models recorded in its gate.
   S50 readiness without authoring or implementing S50.
 - 2026-08-12: fixed ADR-070/084 S50 contracts, authored the active detailed plan and acquired the V43 writer lane on the
   S40 stacked head.
+- 2026-08-12: completed S50 V43/timeline/ActionPolicy/runtime and full validation, moved the plan to completed, released
+  the migration lane and marked only direct successor S60 ready to author.

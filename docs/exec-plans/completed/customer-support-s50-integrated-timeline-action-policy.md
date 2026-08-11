@@ -1,11 +1,11 @@
 # S50 통합 거래 timeline과 typed ActionPolicy를 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s30-protected-profile-search.md`, `docs/exec-plans/completed/customer-support-s40-verification-data-access-grant.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -20,14 +20,16 @@ state/version을 근거로 action 가능성을 설명한다. Support는 owner ta
 
 - branch는 S40 verified head `ae9fa0b9c97a75134131106a1818f04315611860`에서 분기한
   `feature/support-integrated-timeline-action-policy`다. 최종 PR base는 parent S40 branch다.
-- Flyway inventory는 V1~V42이며 마지막은 `V42__create_support_verification_and_data_access_grant.sql`이다.
+- Flyway inventory는 V1~V43이며 마지막은 `V43__add_support_timeline_and_action_scope.sql`이다.
 - S20은 Case/history/interaction/note/identifier-only SubjectLink와 signed Case list를, S30은 masked owner exact search를,
   S40은 Case+Subject+Purpose+action-bound verification과 field-scoped reveal을 제공한다.
-- target/runtime OpenAPI에는 22개 Support operation이 있고 timeline/action-evaluation 3개는 draft inventory뿐이다.
-- payment refund와 notification delivery는 Order timeline key가 있으나 supporting order/time index가 없다.
+- target/runtime OpenAPI에는 S20~S50의 25개 Support operation이 있고 timeline/action-evaluation 3개도 runtime parity
+  검증 대상이다.
+- payment refund와 notification delivery에는 V43 Order timeline index가 있고 20k-row identical fixture에서 index
+  execution plan을 검증했다.
 - migration-writer lease는 2026-08-12에 이 branch가 S40 head/V42 inventory, open PR #54만 존재함, 다른 worktree와
   active plan에 explicit current acquisition evidence가 없음을 확인하고 획득했다. S50은 V43을 사용한다.
-- shared working tree의 productization 문서 변경은 사용자 소유이며 S50 commit에 포함하지 않는다.
+- V43 migration-writer lease는 focused/full/build/document validation 뒤 release됐다.
 
 ## Definitions
 
@@ -94,7 +96,7 @@ version은 immutable typed Kotlin identifier이며 generic DB rule table을 만�
 - `POST /api/v1/support/cases/{caseId}/action-evaluations`
 
 Timeline cursor는 ADR-070의 endpoint ID/filter hash/15분 TTL/default 20/max 100을 사용한다. Response는 source/type,
-public state, masked summary, correlation/causation reference, occurredAt, itemId만 포함한다. Action evaluation request는
+public state, masked summary, occurredAt, itemId와 필요한 opaque Case/Order reference만 포함한다. Action evaluation request는
 typed action, Order target/version과 action-bound verification session ID만 받으며 role/verification level/history/
 decision은 받지 않는다.
 
@@ -145,18 +147,24 @@ living plan을 actual implementation/evidence에 맞게 갱신한다.
 - [x] mandatory documents, current branch/schema/owner model inspected
 - [x] endpoint cursor contract and initial action matrix accepted from existing policy constraints
 - [x] V43 migration-writer lease preflight and acquisition evidence recorded
-- [ ] policy/domain RED-GREEN slice
-- [ ] owner query API and V43 PostgreSQL slice
-- [ ] timeline composition/cursor/API slice
-- [ ] action evaluation integration/API slice
-- [ ] focused/full/document validation
-- [ ] completion move, S60 readiness handoff and lease release
+- [x] policy/domain RED-GREEN slice
+- [x] owner query API and V43 PostgreSQL slice
+- [x] timeline composition/cursor/API slice
+- [x] action evaluation integration/API slice
+- [x] focused/full/document validation
+- [x] completion move, S60 readiness handoff and lease release
 
 ## Surprises & Discoveries
 
 Existing owner tables already have direct Order lookup indexes except refund and notification history. S40 stores an explicit
 action-scope column but the only allowed/runtime value is reveal, so S50 must add a distinct action scope before using
 verification in ActionPolicy. Reusing reveal verification would violate the exact binding invariant.
+
+Production-only ArchUnit 검증은 test fixture까지 import해 false positive를 냈으므로 `DoNotIncludeTests`를 명시해 원래
+production boundary를 보존했다. Full regression은 V43 latest-version expectation, 누락된 store-acceptance worker 격리와
+context별 PostGIS container churn을 드러냈다. Testcontainers 공식 singleton lifecycle로 JVM당 server 하나를 유지하되
+각 Spring context에 별도 database를 만들고, Flyway는 application Hikari와 분리해 데이터 격리와 1-connection 경계
+테스트를 모두 보존했다.
 
 ## Decision Log
 
@@ -166,11 +174,28 @@ verification in ActionPolicy. Reusing reveal verification would violate the exac
 | 2026-08-12 | Accepted | three initial typed Order actions and immutable `support-action-policy/2026-08-12/v1` | enable S70/S80 inputs without generic engine | ADR-084 |
 | 2026-08-12 | Security | add `SUPPORT_ACTION` verification scope | reveal proof cannot authorize state mutation | ADR-084, V43 |
 | 2026-08-12 | Migration lease | S50 owns V43 after S40 V42 head | stacked parent inventory and no competing holder | this plan |
+| 2026-08-12 | Test infrastructure | one JVM PostGIS server, one database per Spring context and separate Flyway details | remove repeated container network churn without sharing data or weakening pool-boundary tests | Testcontainers official singleton lifecycle, Spring Boot 4.1 connection details |
+| 2026-08-12 | Completion | release V43 and make S60 ready to author | focused/full/build/document gates passed against the stacked S40 head | this plan, orchestration |
 
 ## Outcomes & Retrospective
 
-진행 중이다. 구현·검증 evidence 없이 완료나 성능 향상을 주장하지 않는다.
+Case/Order timeline 두 GET과 typed advisory action-evaluation POST를 target/runtime OpenAPI에 추가했다. Support는 여덟
+owner public query API를 source당 한 번 호출해 global tuple로 merge하고, persistent permission/Case relation/action-bound
+verification/Ordering state-version을 두 단계 authorization으로 평가한다. V43은 `SUPPORT_ACTION` scope와 refund/
+notification timeline index를 추가했다.
+
+Focused S50 policy/authorization/owner query/cursor/EXPLAIN/OpenAPI/ArchUnit/Modulith 검증은 51초에 통과했다. 최종
+`./gradlew spotlessCheck test`는 784 tests, 0 failures, 0 errors, 1 skipped로 10분 20초에 통과했고 `./gradlew build`도
+성공했다. 문서 검증은 target/runtime 58 paths, 62 operations, 165 schemas와 33 business policies, 92 ADRs,
+231 Markdown files, 39 ExecPlans를 검증했다. `git diff --check`도 통과했다.
+
+20k-row identical fixture의 refund baseline은 sequential scan/19,999 rows removed/604 buffers/4.301ms였고 V43 index
+scan은 3 buffers/1.336ms였다. notification baseline은 sequential scan/19,999 rows removed/840 buffers/4.010ms였고
+index scan은 3 buffers/1.687ms였다. 이는 해당 fixture의 execution-plan evidence이며 일반 성능 향상 주장이 아니다.
+V43 lease를 release했고 S60은 completed S50 action evaluation을 입력으로 detailed plan authoring이 가능하다.
 
 ## Revision Notes
 
 - 2026-08-12: authored from S40 verified head, fixed the cursor/action-scope contract, acquired the V43 lane and began S50.
+- 2026-08-12: completed V43/timeline/ActionPolicy/runtime contract, passed focused/full/build/document validation, released
+  the migration lane and handed S60 readiness to the orchestration plan.
