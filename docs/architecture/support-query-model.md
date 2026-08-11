@@ -26,7 +26,21 @@ assignee-only가 assignee index scan(2.060ms, 14 buffers), state+assignee가 ass
 state+assignee composite index는 유지한다. 이 fixture 결과는 production SLO나 일반 성능 수치가 아니며, data
 distribution이나 query projection이 달라지면 동일 조건으로 재측정한다.
 
-## Future support query model
+## S50 integrated timeline contract
+
+S50 composes Case and Order timelines from owner public query DTOs. Ordering, Payment, Loyalty, Promotion, Fulfillment,
+Settlement, Notification and Operations each execute at most one bounded query for the supplied Order ID set; Support
+does not loop owner calls per Case link. Local Case history, interaction, note metadata and subject-link lifecycle remain
+Support-owned projections. The global tuple is `(occurredAt DESC, sourceRank ASC, itemId DESC)` and the signed endpoint/
+filter contract is recorded in ADR-070.
+
+The response uses closed source/type/state vocabulary and a server-created masked summary. It never returns note content,
+interaction free text, payment/provider reference, notification payload, Audit before/after summary, recipient identity or
+raw profile data. A required owner query failure is a non-success response, not an empty partial timeline. V43 adds the two
+missing Order-history indexes and the owning Stage records an identical-fixture EXPLAIN baseline/re-measure before claiming
+an index effect.
+
+## Later support query model
 
 `SupportSearchQueryService`, `SupportSubjectSummary`, `SupportOrderTimeline`, `SupportDeliveryView` and `SupportActionAvailabilityView` compose owner DTOs without adding JPA relationships to write models.
 
@@ -37,7 +51,7 @@ exception. ADR-083 fixes Vault Transit AEAD ciphertext and a separate versioned 
 the minimal owner profile tables and masked DTOs; Support stores neither raw criteria nor long-lived owner profile
 copies. The product scope is exact bounded search; Elasticsearch requires measured need and a new Accepted decision.
 
-Each timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
+Each later timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
 from the implemented owner DTOs before adopting ADR-070. The S20 Case-list tuple is not a shared Support tuple. Items
 expose only the source, public state, masked summary and correlation/causation reference that their typed contract
 allows. Dependency failure is non-success, never an empty 200. A materialized projection is allowed only when lag,
