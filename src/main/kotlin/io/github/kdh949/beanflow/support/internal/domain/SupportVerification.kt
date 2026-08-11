@@ -70,6 +70,9 @@ internal class VerificationSession private constructor(
 
     init {
         require(requestedLevel != VerificationLevel.UNVERIFIED) { "A verification session must request BASIC or ENHANCED" }
+        require(actionScope != VerificationActionScope.SUPPORT_ACTION || purpose == VerificationPurpose.CASE_RESOLUTION) {
+            "Support action verification must use the case-resolution purpose"
+        }
         require(expiresAt == startedAt.plus(SESSION_TTL)) { "Verification session lifetime must be fifteen minutes" }
         require(invalidAttempts in 0..MAX_INVALID_ATTEMPTS) { "Verification invalid-attempt count is invalid" }
         validateState()

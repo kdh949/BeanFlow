@@ -175,6 +175,29 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
+        fun `action scoped verification cannot authorize a personal data grant`() {
+            val binding = seedVerifiedBinding(requesterId, "BASIC")
+            jdbcTemplate.update(
+                "UPDATE support_verification_session SET action_scope = 'SUPPORT_ACTION' WHERE id = ?",
+                binding.sessionId,
+            )
+
+            mockMvc
+                .perform(
+                    post("/api/v1/support/cases/${binding.caseId}/data-access-grants")
+                        .with(operatorJwt(requesterId))
+                        .header("Idempotency-Key", "grant-action-scope-denied")
+                        .json(
+                            """
+                            {"verificationSessionId":"${binding.sessionId}","purpose":"CASE_RESOLUTION",
+                             "fields":["CUSTOMER_DISPLAY_NAME"],"reasonCode":"CASE_HANDLING"}
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("VERIFICATION_REQUIRED"))
+        }
+
+        @Test
         fun `permission revocation during owner decrypt prevents raw response release`() {
             val binding = seedVerifiedBinding(requesterId, "BASIC")
             val grantId = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-request-race-0001", "ACTIVE")
