@@ -34,6 +34,7 @@ internal enum class VerificationPurpose {
 
 internal enum class VerificationActionScope {
     PERSONAL_DATA_REVEAL,
+    SUPPORT_ACTION,
 }
 
 internal enum class VerificationChannel {
