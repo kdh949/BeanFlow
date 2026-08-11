@@ -4,11 +4,11 @@ import io.github.kdh949.beanflow.identity.api.CustomerSupportProfileRevealOperat
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OwnerPersonalDataDecryptOperations
 import io.github.kdh949.beanflow.shared.api.PersonalDataField
 import io.github.kdh949.beanflow.shared.api.PersonalDataOwnerContext
 import io.github.kdh949.beanflow.shared.api.RevealPersonalDataCommand
 import io.github.kdh949.beanflow.shared.api.RevealedPersonalData
-import io.github.kdh949.beanflow.shared.internal.OwnerPersonalDataDecryptor
 import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
@@ -19,7 +19,7 @@ import java.util.UUID
 @Service
 internal class CustomerSupportProfileRevealService(
     private val repository: CustomerSupportProfileRevealRepository,
-    private val decryptor: OwnerPersonalDataDecryptor,
+    private val decryptor: OwnerPersonalDataDecryptOperations,
 ) : CustomerSupportProfileRevealOperations {
     override fun reveal(command: RevealPersonalDataCommand): RevealedPersonalData {
         require(command.fields.isNotEmpty() && command.fields.all { it in ALLOWED_FIELDS }) { "Customer reveal field is invalid" }

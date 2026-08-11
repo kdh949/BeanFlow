@@ -7,6 +7,14 @@ data class RevealPersonalDataCommand(
     val fields: Set<PersonalDataField>,
 )
 
+interface OwnerPersonalDataDecryptOperations {
+    fun decrypt(
+        ownerContext: PersonalDataOwnerContext,
+        subjectId: UUID,
+        encrypted: Map<PersonalDataField, EncryptedPersonalData>,
+    ): RevealedPersonalData
+}
+
 class RevealedPersonalData(
     val subjectId: UUID,
     values: Map<PersonalDataField, String>,

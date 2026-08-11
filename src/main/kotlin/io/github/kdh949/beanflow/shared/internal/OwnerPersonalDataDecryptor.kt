@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.shared.internal
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OwnerPersonalDataDecryptOperations
 import io.github.kdh949.beanflow.shared.api.PersonalDataCryptoPort
 import io.github.kdh949.beanflow.shared.api.PersonalDataEncryptionContext
 import io.github.kdh949.beanflow.shared.api.PersonalDataField
@@ -18,8 +19,8 @@ import java.util.UUID
 @Component
 internal class OwnerPersonalDataDecryptor(
     private val crypto: PersonalDataCryptoPort,
-) {
-    fun decrypt(
+) : OwnerPersonalDataDecryptOperations {
+    override fun decrypt(
         ownerContext: PersonalDataOwnerContext,
         subjectId: UUID,
         encrypted: Map<PersonalDataField, EncryptedPersonalData>,
