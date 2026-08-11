@@ -3,7 +3,7 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-11
+  x-beanflow-contract-date: 2026-08-12
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
@@ -18,22 +18,540 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Identity
   - name: Discovery
   - name: Ordering
   - name: Payment
   - name: Payment Methods
   - name: Store Orders
+  - name: Merchant
   - name: Operations
   - name: Loyalty
   - name: Settlement
   - name: Dispute
   - name: Support
 paths:
+  /auth/customer/csrf:
+    get:
+      tags: [Identity]
+      operationId: issueCustomerCsrfToken
+      summary: Issue the customer-chain CSRF cookie
+      x-beanflow-contract-status: TARGET
+      security: []
+      responses:
+        "204":
+          description: BEANFLOW_CUSTOMER_XSRF cookie issued; the response has no body
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/customer/registrations:
+    post:
+      tags: [Identity]
+      operationId: registerCustomerAccount
+      summary: Register a customer account and its zero-balance point account
+      x-beanflow-contract-status: TARGET
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerRegistrationRequest" }
+      responses:
+        "201":
+          description: CustomerAccount and PointAccount committed atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerRegistrationResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/customer/sessions:
+    post:
+      tags: [Identity]
+      operationId: createCustomerSession
+      summary: Authenticate a customer and rotate the browser session
+      x-beanflow-contract-status: TARGET
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Customer session created
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerActor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/AuthenticationRateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/customer/sessions/current:
+    delete:
+      tags: [Identity]
+      operationId: deleteCurrentCustomerSession
+      summary: Delete the current customer session
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "204": { description: Current customer session deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/merchant/csrf:
+    get:
+      tags: [Identity]
+      operationId: issueMerchantCsrfToken
+      summary: Issue the merchant-chain CSRF cookie
+      x-beanflow-contract-status: TARGET
+      security: []
+      responses:
+        "204":
+          description: BEANFLOW_MERCHANT_XSRF cookie issued; the response has no body
+          headers:
+            Set-Cookie: { schema: { type: string } }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/merchant/sessions:
+    post:
+      tags: [Identity]
+      operationId: createMerchantSession
+      summary: Authenticate a merchant and rotate the browser session
+      x-beanflow-contract-status: TARGET
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Merchant session created; INITIAL_PASSWORD is still gated
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantActor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/AuthenticationRateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/merchant/password-changes:
+    post:
+      tags: [Identity]
+      operationId: changeMerchantPassword
+      summary: Replace the merchant password and rotate the session
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantPasswordChangeRequest" }
+      responses:
+        "204":
+          description: Password changed, credential version increased, and new session issued
+          headers:
+            Set-Cookie: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/merchant/sessions/current:
+    delete:
+      tags: [Identity]
+      operationId: deleteCurrentMerchantSession
+      summary: Delete the current merchant session
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      responses:
+        "204": { description: Current merchant session deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /auth/operations/config:
+    get:
+      tags: [Identity]
+      operationId: getOperationsOidcConfiguration
+      summary: Get public Keycloak Authorization Code and PKCE configuration
+      x-beanflow-contract-status: TARGET
+      security: []
+      responses:
+        "200":
+          description: Validated public OIDC client configuration without secrets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationsOidcConfiguration" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentCustomer
+      summary: Get the current customer actor
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: Current customer actor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerActor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /merchant/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentMerchant
+      summary: Get the current merchant actor, including INITIAL_PASSWORD state
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      responses:
+        "200":
+          description: Current merchant actor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantActor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /merchant/me/stores:
+    get:
+      tags: [Merchant]
+      operationId: listCurrentMerchantStores
+      summary: List stores with current active membership
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      responses:
+        "200":
+          description: Complete current membership list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantStoreList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentOperator
+      summary: Get the current Keycloak-backed operator actor
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current operator actor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorActor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders:
+    get:
+      tags: [Ordering]
+      operationId: listCurrentCustomerOrders
+      summary: List orders owned by the current customer
+      description: Defaults to the latest 30 Asia/Seoul calendar days; historical ranges have no product cap.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [ACTIVE] }
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Stable page ordered by createdAt and internal tie-breaker descending
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerOrderPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}:
+    get:
+      tags: [Ordering]
+      operationId: getCurrentCustomerOrder
+      summary: Get an owned order by public order reference
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+      responses:
+        "200":
+          description: Customer-facing order without internal order UUID
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/cancellations:
+    post:
+      tags: [Ordering]
+      operationId: cancelCurrentCustomerOrder
+      summary: Cancel an owned order by public order reference
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancellationRequest" }
+      responses:
+        "200":
+          description: PENDING_PAYMENT cancellation committed synchronously
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerCancellationResult" }
+        "202":
+          description: PAID cancellation committed; refund and compensation remain independent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerCancellationResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/reorders:
+    post:
+      tags: [Ordering]
+      operationId: reorderCurrentCustomerOrder
+      summary: Create a current-condition order from an owned terminal order
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderOrderRequest" }
+      responses:
+        "201":
+          description: New order and price comparison committed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReorderOrderResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ReorderConflict" }
+        "503": { $ref: "#/components/responses/OrderCreationDependencyUnavailable" }
+  /me/points:
+    get:
+      tags: [Loyalty]
+      operationId: getCurrentCustomerPoints
+      summary: Get current customer point balance and expirations
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: Actor-scoped point balance without PointAccount ID
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerPointSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/point-transactions:
+    get:
+      tags: [Loyalty]
+      operationId: listCurrentCustomerPointTransactions
+      summary: List current customer point ledger transactions
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Actor-scoped signed point ledger page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PointTransactionPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/search:
+    get:
+      tags: [Discovery]
+      operationId: searchStores
+      summary: Search stores by name or representative menu text
+      description: |
+        The query is trimmed and internal whitespace is collapsed before validation
+        and cursor binding. Latitude and longitude must be supplied together or both
+        omitted; radiusMeters without both coordinates returns 400. Coordinates are
+        request-only and never persisted or written to logs. pickupAvailable is a
+        point-in-time projection and does not reserve a slot.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 50 }
+        - in: query
+          name: latitude
+          required: false
+          schema: { type: number, format: double, minimum: -90, maximum: 90 }
+        - in: query
+          name: longitude
+          required: false
+          schema: { type: number, format: double, minimum: -180, maximum: 180 }
+        - in: query
+          name: radiusMeters
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 10000 }
+        - in: query
+          name: pickupAvailable
+          required: false
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/DiscoveryLimit"
+      responses:
+        "200":
+          description: Signed-cursor page bound to the normalized query and optional location filters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreSearchPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/favorite-stores:
+    get:
+      tags: [Discovery]
+      operationId: listCurrentCustomerFavoriteStores
+      summary: List the current customer's favorite stores
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: Complete favorite-store list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerStoreList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/favorite-stores/{storeId}:
+    put:
+      tags: [Discovery]
+      operationId: addCurrentCustomerFavoriteStore
+      summary: Add a store to current customer favorites idempotently
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "204": { description: Store is a favorite }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    delete:
+      tags: [Discovery]
+      operationId: deleteCurrentCustomerFavoriteStore
+      summary: Remove a store from current customer favorites idempotently
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "204": { description: Store is not a favorite }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/recent-stores:
+    get:
+      tags: [Discovery]
+      operationId: listCurrentCustomerRecentStores
+      summary: List distinct stores from the customer's recent eligible orders
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CompactLimit"
+      responses:
+        "200":
+          description: Recent stores ordered by latest qualifying order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerStoreList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/store-recommendations:
+    get:
+      tags: [Discovery]
+      operationId: listCurrentCustomerStoreRecommendations
+      summary: Recommend stores from favorite, recent, and nearby baseline signals
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: query
+          name: latitude
+          required: false
+          schema: { type: number, format: double, minimum: -90, maximum: 90 }
+        - in: query
+          name: longitude
+          required: false
+          schema: { type: number, format: double, minimum: -180, maximum: 180 }
+        - in: query
+          name: radiusMeters
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 10000 }
+        - $ref: "#/components/parameters/CompactLimit"
+      responses:
+        "200":
+          description: Deterministic baseline recommendations without personalization claims
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreRecommendationList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/nearby:
     get:
       tags: [Discovery]
       operationId: searchNearbyStores
       summary: Search nearby pickup-capable stores
+      security: [{ customerSession: [] }]
       description: |
         Precise customer coordinates are used only for this request and are not
         persisted or written to application logs or traces. radiusMeters is 1..10000.
@@ -43,8 +561,12 @@ paths:
         - $ref: "#/components/parameters/Latitude"
         - $ref: "#/components/parameters/Longitude"
         - $ref: "#/components/parameters/RadiusMeters"
+        - in: query
+          name: pickupAvailable
+          required: false
+          schema: { type: boolean }
         - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/DiscoveryLimit"
       responses:
         "200":
           description: Nearby stores ordered by distance and store ID
@@ -63,6 +585,7 @@ paths:
       tags: [Discovery]
       operationId: listStoreMenus
       summary: List currently visible menus for a store
+      security: [{ customerSession: [] }]
       description: |
         Returns the current owner catalogue, including unavailable menus and options. A 200 response
         is a complete list, not a page or a partial result. More than 1,000 menus or 5,000 options
@@ -87,6 +610,7 @@ paths:
       tags: [Discovery]
       operationId: listStorePickupSlots
       summary: List available pickup slots
+      security: [{ customerSession: [] }]
       description: |
         Returns only slots with startsAt > server time and startsAt less than seven days ahead.
         An existing store that is not currently accepting pickup orders returns a 200 empty list;
@@ -112,8 +636,10 @@ paths:
       tags: [Ordering]
       operationId: createOrder
       summary: Create an order and reserve required resources
+      security: [{ customerSession: [] }]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
@@ -146,6 +672,7 @@ paths:
       tags: [Ordering]
       operationId: reorderOrder
       summary: Create a new order from a terminal source order
+      security: [{ customerSession: [] }]
       description: |
         The owning customer may use a COMPLETED, CANCELLED, REJECTED or EXPIRED
         source order. The server copies only menu IDs, normalized option IDs and
@@ -166,6 +693,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SourceOrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
@@ -198,6 +726,7 @@ paths:
       tags: [Ordering]
       operationId: getOrder
       summary: Get an order and materialize a due reservation expiry
+      security: [{ customerSession: [] }]
       description: |
         If a PENDING_PAYMENT order has reached reservationExpiresAt, the server
         atomically expires the order and releases all reserved resources before
@@ -225,6 +754,7 @@ paths:
       tags: [Ordering]
       operationId: cancelOrder
       summary: Cancel an order in a customer-allowed state
+      security: [{ customerSession: [] }]
       description: |
         PENDING_PAYMENT and PAID orders not yet ACCEPTED may be cancelled by the
         owning customer. Order cancellation and payment refund recovery are
@@ -258,6 +788,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
@@ -299,7 +830,8 @@ paths:
     get:
       tags: [Payment]
       operationId: getPaymentClientConfiguration
-      summary: Get the authenticated browser's Toss V2 Standard payment-window configuration
+      summary: Get public Toss V2 Standard payment-window configuration
+      security: []
       responses:
         "200":
           description: Public client configuration for the active payment Provider
@@ -307,10 +839,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaymentClientConfiguration"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /orders/{orderId}/payment-attempts:
@@ -318,6 +846,7 @@ paths:
       tags: [Payment]
       operationId: prepareOneTimeOrderPayment
       summary: Prepare a server-owned one-time Toss payment-window attempt
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. The server derives orderId, amount, orderName, currency,
         customerKey and callback URLs from the owned Order snapshot. No
@@ -326,6 +855,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       responses:
         "200":
           description: New or idempotently replayed one-time payment attempt
@@ -350,6 +880,7 @@ paths:
       tags: [Payment]
       operationId: getOneTimePayment
       summary: Get the owner-visible one-time payment and recovery state
+      security: [{ customerSession: [] }]
       parameters:
         - $ref: "#/components/parameters/PaymentId"
       responses:
@@ -382,6 +913,7 @@ paths:
       tags: [Payment]
       operationId: confirmOneTimePayment
       summary: Validate a Toss success callback and confirm the prepared payment server-to-server
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. paymentKey, orderId and amount must exactly match the
         server-owned attempt. The first valid callback claims the attempt before
@@ -391,6 +923,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PaymentId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
@@ -429,6 +962,7 @@ paths:
       tags: [Payment Methods]
       operationId: listPaymentMethods
       summary: List the authenticated customer's usable payment methods
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. Returns the caller's ACTIVE and deactivation-pending
         methods; terminal DEACTIVATED tombstones are excluded. Internal token,
@@ -459,6 +993,7 @@ paths:
       tags: [Payment Methods]
       operationId: registerPaymentMethod
       summary: Register a provider-window-authorized payment method
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. The request accepts a one-time authKey returned by the
         Provider payment window and a customer display alias. It never accepts
@@ -474,6 +1009,7 @@ paths:
         An unknown Provider result is never retried with the one-time authKey.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
@@ -518,6 +1054,7 @@ paths:
       tags: [Payment Methods]
       operationId: deactivatePaymentMethod
       summary: Deactivate an owned payment method and detach its Provider token
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. Tx D1 first marks the owned method unavailable for new
         payments, clears its default flag and stores durable work. The Provider
@@ -534,6 +1071,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PaymentMethodId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       responses:
         "202":
           description: Provider detachment is unresolved; the method already rejects new payments
@@ -560,6 +1098,7 @@ paths:
       tags: [Payment Methods]
       operationId: setDefaultPaymentMethod
       summary: Set an owned active payment method as the display default
+      security: [{ customerSession: [] }]
       description: |
         CUSTOMER only. This command has no request body. It atomically clears the
         previous default and marks this ACTIVE method as default under a
@@ -572,6 +1111,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PaymentMethodId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
       responses:
         "200":
           description: Default preference committed
@@ -1254,11 +1794,184 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/orders:
+    get:
+      tags: [Store Orders]
+      operationId: listStoreOrderBoard
+      summary: List all actionable store orders, including future paid orders awaiting acceptance
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string, minLength: 1 }
+        - in: query
+          name: lane
+          required: false
+          schema:
+            type: string
+            enum: [PENDING_ACCEPTANCE, ACCEPTED, PREPARING, READY]
+      responses:
+        "200":
+          description: Complete board snapshot with ETag
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderBoard" }
+        "304": { description: Board has not changed for the supplied If-None-Match value }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/orders/{orderReference}:
+    get:
+      tags: [Store Orders]
+      operationId: getStoreOrderByReference
+      summary: Get a store order by public order reference
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+      responses:
+        "200":
+          description: Store-facing order without customer-only cancellation or refund data
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderBoardItem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/orders/{orderReference}/transitions:
+    post:
+      tags: [Store Orders]
+      operationId: transitionStoreOrderByReference
+      summary: Apply one server-allowed store order action
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreOrderActionRequest" }
+      responses:
+        "200":
+          description: Transition committed or exact idempotent result returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderBoardItem" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/orders/{orderReference}/refund-previews:
+    post:
+      tags: [Payment]
+      operationId: previewStoreOrderRefund
+      summary: Preview a server-calculated line and quantity refund without side effects
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundPreviewRequest" }
+      responses:
+        "200":
+          description: Current preview; no Refund, Audit, Provider, or Loyalty write was made
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundPreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/orders/{orderReference}/refunds:
+    post:
+      tags: [Payment]
+      operationId: refundStoreOrderByReference
+      summary: Execute a refund from an exact fresh preview
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundRequest" }
+      responses:
+        "200":
+          description: Refund reached a definitive successful state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "202":
+          description: Provider outcome is still processing, unknown, or reconciling
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/disputes:
+    get:
+      tags: [Dispute]
+      operationId: listStoreDisputes
+      summary: List disputes filed for an owner-operated store
+      x-beanflow-contract-status: TARGET
+      security: [{ merchantSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - in: query
+          name: state
+          required: false
+          schema:
+            type: string
+            enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED]
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Signed-cursor dispute summary page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantDisputePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/settlements:
     get:
       tags: [Settlement]
       operationId: listStoreSettlements
       summary: List settlement batches for an owned store
+      security: [{ merchantSession: [] }]
       description: |
         Returns only CALCULATED and CONFIRMED batch summaries. OPEN batches are
         internal ingestion state and are not represented with fabricated zero
@@ -1290,6 +2003,7 @@ paths:
       tags: [Settlement]
       operationId: listStoreSettlementItems
       summary: List settlement items in an owned store batch
+      security: [{ merchantSession: [] }]
       description: |
         Returns the item identifiers and immutable amount snapshots needed to
         inspect a settlement batch and file an item dispute. Items are ordered by
@@ -1322,6 +2036,7 @@ paths:
       tags: [Dispute]
       operationId: createSettlementDispute
       summary: File a dispute for a confirmed settlement item
+      security: [{ merchantSession: [] }]
       description: |
         Requires the STORE_OWNER role and an active OWNER membership for the
         item's store. Filing is allowed during [D+1 00:00, D+15 00:00) in
@@ -1332,6 +2047,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SettlementItemId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
       requestBody:
         required: true
         content:
@@ -2039,13 +2755,387 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/failure-queues/summary:
+    get:
+      tags: [Operations]
+      operationId: getOperationsFailureQueueSummary
+      summary: Summarize all typed failure queues without partial success
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Complete type and attention-state summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FailureQueueSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/failure-queues/{queueType}:
+    get:
+      tags: [Operations]
+      operationId: listOperationsFailureQueue
+      summary: List one source-owned typed failure queue
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/QueueType"
+        - in: query
+          name: attentionState
+          required: false
+          schema: { $ref: "#/components/schemas/FailureAttentionState" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Deduplicated signed-cursor page; source failure never becomes a partial 200
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FailureQueuePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/failure-queues/{queueType}/{workReference}:
+    get:
+      tags: [Operations]
+      operationId: getOperationsFailureWork
+      summary: Get sanitized failure work detail from its owning source
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/QueueType"
+        - $ref: "#/components/parameters/WorkReference"
+      responses:
+        "200":
+          description: Sanitized typed failure work and actually allowed actions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FailureWorkDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/failure-search:
+    get:
+      tags: [Operations]
+      operationId: searchOperationsFailuresByCorrelation
+      summary: Search typed failure sources by exact correlation ID
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: correlationId
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 160 }
+      responses:
+        "200":
+          description: Complete per-type bounded results with explicit truncation flags
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FailureSearchResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/settlement-batches:
+    get:
+      tags: [Operations, Settlement]
+      operationId: listOperationsSettlementBatches
+      summary: List global settlement batches for reconciliation
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: storeId
+          required: false
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - in: query
+          name: state
+          required: false
+          schema: { type: string, enum: [OPEN, CALCULATED, CONFIRMED] }
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Default 30-day and maximum 90-day inclusive Seoul settlement-date window
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationsSettlementBatchPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/settlement-batches/{settlementBatchId}:
+    get:
+      tags: [Operations, Settlement]
+      operationId: getOperationsSettlementBatch
+      summary: Get a global settlement batch
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SettlementBatchId"
+      responses:
+        "200":
+          description: Stored settlement batch values without inferred completion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationsSettlementBatch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/settlement-batches/{settlementBatchId}/items:
+    get:
+      tags: [Operations, Settlement]
+      operationId: listOperationsSettlementItems
+      summary: List global settlement items for a batch
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SettlementBatchId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Batch-scoped stable item page ordered by completion and ID descending
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettlementItemPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/settlement-batches/{settlementBatchId}/reconciliation:
+    get:
+      tags: [Operations, Settlement]
+      operationId: getOperationsSettlementReconciliation
+      summary: Reconcile stored batch totals and source-owned components without mutation
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SettlementBatchId"
+      responses:
+        "200":
+          description: CONSISTENT, MISMATCH, or INCOMPLETE tie-out; INCOMPLETE values are not replaced by zero
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettlementReconciliation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/audit-records:
+    get:
+      tags: [Operations]
+      operationId: listOperationsAuditRecords
+      summary: List sanitized audit records with an audited access reason
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AccessReason"
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: category
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - in: query
+          name: action
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - in: query
+          name: correlationId
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 160 }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Sanitized records; access Audit and read commit together
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditRecordPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/audit-records/{auditRecordId}:
+    get:
+      tags: [Operations]
+      operationId: getOperationsAuditRecord
+      summary: Get a sanitized audit record with an audited access reason
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AuditRecordId"
+        - $ref: "#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Sanitized audit record; not a PII reveal endpoint
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditRecord" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/merchant-accounts:
+    get:
+      tags: [Operations, Identity]
+      operationId: getMerchantAccountByLoginId
+      summary: Get one merchant account by exact canonical login ID
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: loginId
+          required: true
+          schema: { $ref: "#/components/schemas/LoginId" }
+        - $ref: "#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Merchant credential administration view; never contains a password
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantAccountView" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    post:
+      tags: [Operations, Identity]
+      operationId: createMerchantAccount
+      summary: Create a merchant account and first active store membership atomically
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMerchantAccountRequest" }
+      responses:
+        "201":
+          description: Secret-bearing first response; the temporary password is never persisted for replay
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantAccountCreationResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/merchant-accounts/{merchantAccountId}/temporary-password-resets:
+    post:
+      tags: [Operations, Identity]
+      operationId: resetMerchantTemporaryPassword
+      summary: Replace a merchant credential with a one-time-display temporary password
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MerchantAccountId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: Secret-bearing first response; same-key replay returns 409 and never reproduces the password
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantTemporaryPasswordResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/merchant-accounts/{merchantAccountId}/lock-releases:
+    post:
+      tags: [Operations, Identity]
+      operationId: releaseMerchantAccountLock
+      summary: Release a merchant login lock and matching login-ID attempt block
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MerchantAccountId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "204":
+          description: "Account and matching attempt lock released atomically, or exact replay returned"
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    customerSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_CUSTOMER_SESSION
+      description: Customer browser session cookie; never readable by JavaScript.
+    merchantSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_MERCHANT_SESSION
+      description: Merchant browser session cookie; never readable by JavaScript.
   parameters:
+    CustomerCsrfToken:
+      in: header
+      name: X-BEANFLOW-CSRF
+      required: true
+      description: Token copied from the BEANFLOW_CUSTOMER_XSRF cookie.
+      schema:
+        type: string
+        minLength: 1
+    MerchantCsrfToken:
+      in: header
+      name: X-BEANFLOW-CSRF
+      required: true
+      description: Token copied from the BEANFLOW_MERCHANT_XSRF cookie.
+      schema:
+        type: string
+        minLength: 1
     IdempotencyKey:
       in: header
       name: Idempotency-Key
@@ -2058,6 +3148,41 @@ components:
     StoreId:
       in: path
       name: storeId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    OrderReference:
+      in: path
+      name: orderReference
+      required: true
+      description: Human-readable public order reference; it is not an authorization token.
+      schema:
+        type: string
+        pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+    MerchantAccountId:
+      in: path
+      name: merchantAccountId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    QueueType:
+      in: path
+      name: queueType
+      required: true
+      schema:
+        type: string
+        enum: [PAYMENT, NOTIFICATION, SETTLEMENT]
+    WorkReference:
+      in: path
+      name: workReference
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 160
+    AuditRecordId:
+      in: path
+      name: auditRecordId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -2191,6 +3316,24 @@ components:
         minimum: 1
         maximum: 100
         default: 20
+    DiscoveryLimit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    CompactLimit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 20
+        default: 10
     AccessReason:
       in: header
       name: X-Access-Reason
@@ -2212,6 +3355,25 @@ components:
       schema:
         type: string
   responses:
+    AuthenticationFailed:
+      description: Credentials are invalid, the account is absent, locked, or expired; these cases are not distinguished.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    AuthenticationRateLimited:
+      description: The persistent per-IP authentication attempt budget is exhausted.
+      headers:
+        Retry-After:
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 900
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     BadRequest:
       description: Request syntax or field validation failed
       content:
@@ -2225,7 +3387,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Forbidden:
-      description: Role, ownership, or store membership check failed
+      description: Role, ownership, store membership, actor-chain, or CSRF validation failed
       content:
         application/json:
           schema:
@@ -2342,6 +3504,680 @@ components:
         type: string
         const: no-store
   schemas:
+    LoginId:
+      type: string
+      minLength: 5
+      maxLength: 32
+      pattern: '^[a-z0-9][a-z0-9._-]{3,30}[a-z0-9]$'
+      description: Canonical lowercase login ID in an actor-specific namespace.
+    Password:
+      type: string
+      minLength: 15
+      maxLength: 128
+      description: 15..128 Unicode code points and at most 512 UTF-8 bytes; never trimmed or normalized.
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [loginId, password]
+      properties:
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        password: { $ref: "#/components/schemas/Password" }
+    CustomerRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [loginId, password, displayName]
+      properties:
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        password: { $ref: "#/components/schemas/Password" }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+    CustomerRegistrationResult:
+      type: object
+      additionalProperties: false
+      required: [loginId]
+      properties:
+        loginId: { $ref: "#/components/schemas/LoginId" }
+    CustomerActor:
+      type: object
+      additionalProperties: false
+      required: [actorType, customerId, displayName]
+      properties:
+        actorType: { const: CUSTOMER }
+        customerId: { $ref: "#/components/schemas/Identifier" }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+    MerchantActor:
+      type: object
+      additionalProperties: false
+      required: [actorType, merchantId, displayName, accountState]
+      properties:
+        actorType: { const: MERCHANT }
+        merchantId: { $ref: "#/components/schemas/Identifier" }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        accountState: { type: string, enum: [INITIAL_PASSWORD, ACTIVE] }
+    OperatorActor:
+      type: object
+      additionalProperties: false
+      required: [actorType, operatorId, roles]
+      properties:
+        actorType: { const: OPERATOR }
+        operatorId: { $ref: "#/components/schemas/Identifier" }
+        roles:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 100 }
+    MerchantPasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { $ref: "#/components/schemas/Password" }
+        newPassword: { $ref: "#/components/schemas/Password" }
+    MerchantStoreList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MerchantStore" }
+    MerchantStore:
+      type: object
+      additionalProperties: false
+      required: [storeId, storeName, membershipRole]
+      properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        storeName: { type: string, minLength: 1, maxLength: 200 }
+        membershipRole: { type: string, enum: [OWNER, STAFF] }
+    OperationsOidcConfiguration:
+      type: object
+      additionalProperties: false
+      required: [issuerUri, authorizationServerUrl, realm, clientId, redirectUri, postLogoutRedirectUri, scopes]
+      properties:
+        issuerUri: { type: string, format: uri }
+        authorizationServerUrl: { type: string, format: uri }
+        realm: { type: string, minLength: 1 }
+        clientId: { type: string, minLength: 1 }
+        redirectUri: { type: string, format: uri }
+        postLogoutRedirectUri: { type: string, format: uri }
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
+    CustomerOrderAllowedAction:
+      type: string
+      enum: [CANCEL, REORDER, VIEW_REFUND]
+    CustomerOrderSummary:
+      type: object
+      additionalProperties: false
+      required: [orderReference, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, itemSummary, allowedActions]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        pickupNumber: { type: string, minLength: 1, maxLength: 32 }
+        storeName: { type: string, minLength: 1, maxLength: 200 }
+        status: { $ref: "#/components/schemas/OrderState" }
+        orderedAt: { $ref: "#/components/schemas/DateTime" }
+        pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
+        pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
+        totalAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        itemSummary: { type: string, minLength: 1, maxLength: 300 }
+        allowedActions:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/CustomerOrderAllowedAction" }
+    CustomerOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerOrderSummary" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    CustomerOrderLine:
+      type: object
+      additionalProperties: false
+      required: [lineSequence, menuName, optionNames, quantity, lineTotalKrw]
+      properties:
+        lineSequence: { type: integer, minimum: 0 }
+        menuName: { type: string, minLength: 1, maxLength: 200 }
+        optionNames:
+          type: array
+          items: { type: string, minLength: 1, maxLength: 200 }
+        quantity: { type: integer, minimum: 1 }
+        lineTotalKrw: { $ref: "#/components/schemas/MoneyKrw" }
+    CustomerOrderDetail:
+      type: object
+      additionalProperties: false
+      required: [orderReference, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, lines, allowedActions]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        pickupNumber: { type: string, minLength: 1, maxLength: 32 }
+        storeName: { type: string, minLength: 1, maxLength: 200 }
+        status: { $ref: "#/components/schemas/OrderState" }
+        orderedAt: { $ref: "#/components/schemas/DateTime" }
+        pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
+        pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
+        totalAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CustomerOrderLine" }
+        allowedActions:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/CustomerOrderAllowedAction" }
+        cancellationPreview:
+          allOf:
+            - $ref: "#/components/schemas/CustomerCancellationPreview"
+          description: |
+            Present only while CANCEL is allowed. This server-calculated projection
+            is an estimate, not a refund commitment. The cancellation command
+            revalidates the order and returns the committed outcome independently.
+        paymentRecovery: { $ref: "#/components/schemas/CancellationRefundRecoverySummary" }
+    CustomerCancellationPreview:
+      type: object
+      additionalProperties: false
+      required: [estimate, calculatedAt, orderVersion, cashRefundAmountKrw, restoredPoints, couponRestoration, pendingAccrual]
+      properties:
+        estimate:
+          const: true
+          description: Distinguishes this projection from a committed refund outcome
+        calculatedAt: { $ref: "#/components/schemas/DateTime" }
+        orderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Order version used for this estimate; display-only for the customer client
+        cashRefundAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        restoredPoints:
+          type: integer
+          format: int64
+          minimum: 0
+        couponRestoration:
+          type: string
+          enum: [NOT_APPLICABLE, WILL_RESTORE, WILL_NOT_RESTORE]
+        pendingAccrual:
+          type: string
+          enum: [NOT_APPLICABLE, WILL_NOT_ACCRUE, WILL_BE_REVERSED]
+    CustomerCancellationResult:
+      type: object
+      additionalProperties: false
+      required: [orderReference, orderState, reasonCode, paymentRecovery, cancelledAt, correlationId]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        orderState: { const: CANCELLED }
+        reasonCode: { $ref: "#/components/schemas/CancellationReasonCode" }
+        paymentRecovery: { $ref: "#/components/schemas/CancellationRefundRecoverySummary" }
+        cancelledAt: { $ref: "#/components/schemas/DateTime" }
+        correlationId: { type: string, minLength: 1, maxLength: 160 }
+    CustomerPointSummary:
+      type: object
+      additionalProperties: false
+      required: [availablePointsKrw, recoveryPendingKrw, currency, expiring]
+      properties:
+        availablePointsKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        recoveryPendingKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        expiring:
+          type: array
+          items: { $ref: "#/components/schemas/ExpiringPointAmount" }
+    ExpiringPointAmount:
+      type: object
+      additionalProperties: false
+      required: [expiresAt, amountKrw]
+      properties:
+        expiresAt: { $ref: "#/components/schemas/DateTime" }
+        amountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+    StoreSearchPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, distanceAvailable]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StoreSearchItem" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+        distanceAvailable:
+          type: boolean
+          description: True only when a valid latitude/longitude pair was supplied and distance ordering participated.
+    StoreSearchItem:
+      type: object
+      additionalProperties: false
+      required: [storeId, name, matchReason, pickupAvailable, representativeMenus]
+      properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        matchReason: { type: string, enum: [STORE_NAME, MENU_NAME, BOTH] }
+        distanceMeters: { type: integer, minimum: 0 }
+        pickupAvailable: { type: boolean }
+        representativeMenus:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 1, maxLength: 200 }
+    CustomerStore:
+      type: object
+      additionalProperties: false
+      required: [storeId, name, pickupAvailable]
+      properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        pickupAvailable: { type: boolean }
+        distanceMeters: { type: integer, minimum: 0 }
+    CustomerStoreList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerStore" }
+    StoreRecommendation:
+      type: object
+      additionalProperties: false
+      required: [store, reason]
+      properties:
+        store: { $ref: "#/components/schemas/CustomerStore" }
+        reason: { type: string, enum: [FAVORITE, RECENT, NEARBY] }
+    StoreRecommendationList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StoreRecommendation" }
+    StoreOrderAction:
+      type: string
+      enum: [ACCEPT, REJECT, START_PREPARING, MARK_READY, COMPLETE]
+    StoreOrderBoardItem:
+      type: object
+      additionalProperties: false
+      required: [orderReference, pickupNumber, pickupBusinessDate, lane, status, pickupWindowStart, pickupWindowEnd, itemSummary, acceptancePhase, allowedActions]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        pickupNumber: { type: string, minLength: 1, maxLength: 32 }
+        pickupBusinessDate: { type: string, format: date }
+        lane: { type: string, enum: [PENDING_ACCEPTANCE, ACCEPTED, PREPARING, READY] }
+        status: { $ref: "#/components/schemas/OrderState" }
+        pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
+        pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
+        itemSummary: { type: string, minLength: 1, maxLength: 300 }
+        acceptanceDeadlineAt: { $ref: "#/components/schemas/DateTime" }
+        acceptancePhase: { type: string, enum: [OPEN, WARNING, TIMEOUT_PENDING] }
+        allowedActions:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/StoreOrderAction" }
+    StoreOrderBoard:
+      type: object
+      additionalProperties: false
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/StoreOrderBoardDateGroup" }
+    StoreOrderBoardDateGroup:
+      type: object
+      additionalProperties: false
+      required: [pickupBusinessDate, items]
+      properties:
+        pickupBusinessDate: { type: string, format: date }
+        items:
+          type: array
+          minItems: 1
+          description: Every item has the same pickupBusinessDate as this group.
+          items: { $ref: "#/components/schemas/StoreOrderBoardItem" }
+    StoreOrderActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { $ref: "#/components/schemas/StoreOrderAction" }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+    MerchantRefundSelection:
+      type: object
+      additionalProperties: false
+      required: [lineSequence, quantity]
+      properties:
+        lineSequence: { type: integer, minimum: 0 }
+        quantity: { type: integer, minimum: 1 }
+    MerchantRefundPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/MerchantRefundSelection" }
+    MerchantRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [lines, previewVersion, reason]
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/MerchantRefundSelection" }
+        previewVersion: { type: string, pattern: '^[0-9a-f]{64}$' }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+    MerchantRefundPreviewLine:
+      type: object
+      additionalProperties: false
+      required: [lineSequence, menuName, selectedQuantity, remainingQuantity, grossAttributionKrw, couponAttributionKrw, pointsRestorationKrw, cashRefundKrw]
+      properties:
+        lineSequence: { type: integer, minimum: 0 }
+        menuName: { type: string, minLength: 1, maxLength: 200 }
+        selectedQuantity: { type: integer, minimum: 1 }
+        remainingQuantity: { type: integer, minimum: 0 }
+        grossAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        couponAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsRestorationKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        cashRefundKrw: { $ref: "#/components/schemas/MoneyKrw" }
+    MerchantRefundTotals:
+      type: object
+      additionalProperties: false
+      required: [grossAttributionKrw, couponAttributionKrw, pointsRestorationKrw, cashRefundKrw, currency]
+      properties:
+        grossAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        couponAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsRestorationKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        cashRefundKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+    MerchantRefundPreview:
+      type: object
+      additionalProperties: false
+      required: [orderReference, lines, totals, previewVersion]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MerchantRefundPreviewLine" }
+        totals: { $ref: "#/components/schemas/MerchantRefundTotals" }
+        previewVersion: { type: string, pattern: '^[0-9a-f]{64}$' }
+    MerchantRefundResult:
+      type: object
+      additionalProperties: false
+      required: [orderReference, state, cashRefundRequestedKrw, pointsRestorationRequestedKrw, pointsRestorationState, currency, createdAt, updatedAt, correlationId]
+      properties:
+        orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        state: { type: string, enum: [REQUESTED, PROCESSING, RETRY_SCHEDULED, SUCCEEDED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW] }
+        cashRefundRequestedKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsRestorationRequestedKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsRestorationState: { type: string, enum: [NOT_REQUIRED, REQUESTED, PROCESSING, SUCCEEDED, MANUAL_REVIEW] }
+        cashRefundedKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsRestoredKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        updatedAt: { $ref: "#/components/schemas/DateTime" }
+        correlationId: { type: string, minLength: 1, maxLength: 160 }
+    MerchantDisputeSummary:
+      type: object
+      additionalProperties: false
+      required: [disputeId, settlementItemId, state, expectedAdjustmentKrw, heldAmountKrw, filedAt]
+      properties:
+        disputeId: { $ref: "#/components/schemas/Identifier" }
+        settlementItemId: { $ref: "#/components/schemas/Identifier" }
+        state: { type: string, enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED] }
+        expectedAdjustmentKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        heldAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        filedAt: { $ref: "#/components/schemas/DateTime" }
+        decidedAt: { $ref: "#/components/schemas/DateTime" }
+    MerchantDisputePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MerchantDisputeSummary" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    FailureAttentionState:
+      type: string
+      enum: [RETRY_SCHEDULED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+    FailureQueueSummaryBucket:
+      type: object
+      additionalProperties: false
+      required: [queueType, attentionState, count]
+      properties:
+        queueType: { type: string, enum: [PAYMENT, NOTIFICATION, SETTLEMENT] }
+        attentionState: { $ref: "#/components/schemas/FailureAttentionState" }
+        count: { type: integer, format: int64, minimum: 0 }
+        oldestOccurredAt: { $ref: "#/components/schemas/DateTime" }
+    FailureQueueSummary:
+      type: object
+      additionalProperties: false
+      required: [buckets, generatedAt]
+      properties:
+        buckets:
+          type: array
+          items: { $ref: "#/components/schemas/FailureQueueSummaryBucket" }
+        generatedAt: { $ref: "#/components/schemas/DateTime" }
+    FailureWorkItem:
+      type: object
+      additionalProperties: false
+      required: [queueType, workReference, sourceState, attentionState, attemptCountAvailable, occurredAt, updatedAt, correlationId, sanitizedSummary, allowedActions]
+      properties:
+        queueType: { type: string, enum: [PAYMENT, NOTIFICATION, SETTLEMENT] }
+        workReference: { type: string, minLength: 1, maxLength: 160 }
+        sourceState: { type: string, minLength: 1, maxLength: 100 }
+        attentionState: { $ref: "#/components/schemas/FailureAttentionState" }
+        attemptCount:
+          type: integer
+          minimum: 0
+          description: Present only when attemptCountAvailable is true; absence is not projected as zero.
+        attemptCountAvailable: { type: boolean }
+        occurredAt: { $ref: "#/components/schemas/DateTime" }
+        updatedAt: { $ref: "#/components/schemas/DateTime" }
+        correlationId: { type: string, minLength: 1, maxLength: 160 }
+        sanitizedSummary: { type: string, minLength: 1, maxLength: 500 }
+        allowedActions:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 100 }
+    FailureQueuePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FailureWorkItem" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    FailureWorkDetail:
+      type: object
+      additionalProperties: false
+      required: [work, sanitizedDetails]
+      properties:
+        work: { $ref: "#/components/schemas/FailureWorkItem" }
+        sanitizedDetails:
+          type: array
+          items: { $ref: "#/components/schemas/ErrorDetail" }
+    FailureSearchTypeResult:
+      type: object
+      additionalProperties: false
+      required: [queueType, items, truncated]
+      properties:
+        queueType: { type: string, enum: [PAYMENT, NOTIFICATION, SETTLEMENT] }
+        items:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/FailureWorkItem" }
+        truncated: { type: boolean }
+    FailureSearchResult:
+      type: object
+      additionalProperties: false
+      required: [correlationId, results]
+      properties:
+        correlationId: { type: string, minLength: 1, maxLength: 160 }
+        results:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { $ref: "#/components/schemas/FailureSearchTypeResult" }
+    OperationsSettlementBatch:
+      type: object
+      additionalProperties: false
+      required: [settlementBatchId, storeId, settlementDate, state, currency]
+      properties:
+        settlementBatchId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        settlementDate: { type: string, format: date }
+        state: { type: string, enum: [OPEN, CALCULATED, CONFIRMED] }
+        grossPaidKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        feeKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        benefitCostKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        adjustmentKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        netSettlementKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        confirmedAt: { $ref: "#/components/schemas/DateTime" }
+    OperationsSettlementBatchPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OperationsSettlementBatch" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    SettlementReconciliation:
+      type: object
+      additionalProperties: false
+      required: [settlementBatchId, state, storedTotals, itemTotals, effectiveAdjustmentKrw, carryForwardInKrw, carryForwardOutKrw, activeDisputeHoldKrw, currency]
+      properties:
+        settlementBatchId: { $ref: "#/components/schemas/Identifier" }
+        state: { type: string, enum: [CONSISTENT, MISMATCH, INCOMPLETE] }
+        storedTotals: { $ref: "#/components/schemas/SettlementTieOutTotals" }
+        itemTotals: { $ref: "#/components/schemas/SettlementTieOutTotals" }
+        effectiveAdjustmentKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        carryForwardInKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        carryForwardOutKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+        activeDisputeHoldKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        incompleteSources:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 100 }
+    SettlementTieOutTotals:
+      type: object
+      additionalProperties: false
+      properties:
+        grossPaidKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        feeKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        benefitCostKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        netSettlementKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
+    AuditRecord:
+      type: object
+      additionalProperties: false
+      required: [auditRecordId, actorType, maskedActorReference, action, category, targetType, targetReference, occurredAt, reasonCode, sanitizedBeforeSummary, sanitizedAfterSummary, correlationId]
+      properties:
+        auditRecordId: { $ref: "#/components/schemas/Identifier" }
+        actorType: { type: string, minLength: 1, maxLength: 100 }
+        maskedActorReference: { type: string, minLength: 1, maxLength: 200 }
+        action: { type: string, minLength: 1, maxLength: 100 }
+        category: { type: string, minLength: 1, maxLength: 100 }
+        targetType: { type: string, minLength: 1, maxLength: 100 }
+        targetReference: { type: string, minLength: 1, maxLength: 160 }
+        occurredAt: { $ref: "#/components/schemas/DateTime" }
+        reasonCode: { type: string, minLength: 1, maxLength: 100 }
+        sanitizedBeforeSummary: { type: string, maxLength: 500 }
+        sanitizedAfterSummary: { type: string, maxLength: 500 }
+        correlationId: { type: string, minLength: 1, maxLength: 160 }
+    AuditRecordPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuditRecord" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+    CreateMerchantAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [loginId, displayName, storeId, membershipRole, reason]
+      properties:
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        membershipRole: { type: string, enum: [OWNER, STAFF] }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[^\u0000-\u001F\u007F]*$'
+    MerchantMembershipView:
+      type: object
+      additionalProperties: false
+      required: [storeId, role]
+      properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        role: { type: string, enum: [OWNER, STAFF] }
+    MerchantAccountView:
+      type: object
+      additionalProperties: false
+      required: [merchantAccountId, loginId, displayName, accountState, memberships]
+      properties:
+        merchantAccountId: { $ref: "#/components/schemas/Identifier" }
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        accountState: { type: string, enum: [INITIAL_PASSWORD, ACTIVE, EXPIRED] }
+        lockedUntil: { $ref: "#/components/schemas/DateTime" }
+        temporaryPasswordExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        memberships:
+          type: array
+          items: { $ref: "#/components/schemas/MerchantMembershipView" }
+    MerchantTemporaryPasswordResult:
+      type: object
+      additionalProperties: false
+      required: [merchantAccountId, accountState, temporaryPassword, temporaryPasswordExpiresAt]
+      properties:
+        merchantAccountId: { $ref: "#/components/schemas/Identifier" }
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        accountState: { const: INITIAL_PASSWORD }
+        membership: { $ref: "#/components/schemas/MerchantMembershipView" }
+        temporaryPassword:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{32}$'
+          description: One-time-display value present only in the first successful response.
+        temporaryPasswordExpiresAt: { $ref: "#/components/schemas/DateTime" }
+    MerchantAccountCreationResult:
+      type: object
+      additionalProperties: false
+      required: [merchantAccountId, loginId, accountState, membership, temporaryPassword, temporaryPasswordExpiresAt]
+      properties:
+        merchantAccountId: { $ref: "#/components/schemas/Identifier" }
+        loginId: { $ref: "#/components/schemas/LoginId" }
+        accountState: { const: INITIAL_PASSWORD }
+        membership: { $ref: "#/components/schemas/MerchantMembershipView" }
+        temporaryPassword:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{32}$'
+          description: One-time-display value present only in the first successful response.
+        temporaryPasswordExpiresAt: { $ref: "#/components/schemas/DateTime" }
     Identifier:
       type: string
       minLength: 1

@@ -21,9 +21,9 @@
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
 | 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
-| 가까운 매장 검색 | Yes | Yes | Yes | Yes | Yes |
-| 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
-| 매장 픽업 슬롯 조회 | Yes | Yes | Yes | Yes | Yes |
+| 가까운 매장 검색 (`/stores/nearby`) | Customer Session | No | No | No | No |
+| 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
+| 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Active explicit `POINT_ACCOUNT_READ` grant + reason | No |
@@ -57,9 +57,11 @@
 - 요청은 정확히 하나의 Chain에 속한다. 경로가 겹치거나 미배정이면 기동을 실패시킨다.
 - Chain을 명시하지 않은 새 endpoint는 구조 검증을 실패시킨다. Customer Chain을 암묵적
   기본값으로 사용하지 않는다.
-- Cookie는 `HttpOnly`, `Secure`, `SameSite=Lax`이며 고객·점주 Cookie 이름을 분리한다.
+- Cookie는 `HttpOnly`, `Secure`, `SameSite=Lax`이며 고객은 `BEANFLOW_CUSTOMER_SESSION`, 점주는
+  `BEANFLOW_MERCHANT_SESSION`으로 이름을 분리한다([MD-2026-013](../decisions/minor-decisions.md)).
 - CSRF token은 고객 `BEANFLOW_CUSTOMER_XSRF`, 점주 `BEANFLOW_MERCHANT_XSRF` Cookie로 분리하고
   `X-BEANFLOW-CSRF` header에 복사한다. actor별 token 발급 endpoint와 다른 Chain의 token은 수용하지 않는다.
+  token 발급 GET은 body 없는 204이며 해당 actor의 XSRF Cookie만 발급한다.
 - 현재 actor 조회와 logout도 Chain별 경로로 분리한다. 하나의 `/me`에서 여러 Cookie와 JWT를
   동시에 해석하지 않는다.
 - 로그인 시 Session ID를 회전한다. 비밀번호 변경·로그아웃 시 해당 계정 Session을 폐기한다.

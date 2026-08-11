@@ -45,6 +45,7 @@ UUID 입력 조회를 상태별 실행 주문 보드로 바꾼다. 점주는 매
 - `GET /stores/{storeId}/orders` 상태별 활성 주문 목록
 - `GET /stores/{storeId}/orders/{orderReference}` 상세
 - `POST /stores/{storeId}/orders/{orderReference}/transitions` 상태 전이
+- `GET /merchant/me/stores`를 사용하는 단일/다점포 매장 선택·전환 UI
 - `allowedActions` 계산
 - `ETag` / `If-None-Match` 조건부 응답
 - `(store_id, state, pickup_window_start_snapshot, id)` 인덱스와 실행계획 검증
@@ -148,18 +149,21 @@ POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions
 ```
 
 ```text
-StoreOrderBoardItem
-  orderReference
-  pickupNumber
-  pickupBusinessDate
-  lane                    PENDING_ACCEPTANCE | ACCEPTED | PREPARING | READY
-  status
-  pickupWindowStart
-  pickupWindowEnd
-  itemSummary
-  acceptanceDeadlineAt
-  acceptancePhase         OPEN | WARNING | TIMEOUT_PENDING
-  allowedActions          [ "ACCEPT", "REJECT", "START_PREPARING", "MARK_READY", "COMPLETE" ]
+StoreOrderBoard
+  groups[]
+    pickupBusinessDate
+    items[]
+      orderReference
+      pickupNumber
+      pickupBusinessDate   group date와 동일
+      lane                 PENDING_ACCEPTANCE | ACCEPTED | PREPARING | READY
+      status
+      pickupWindowStart
+      pickupWindowEnd
+      itemSummary
+      acceptanceDeadlineAt
+      acceptancePhase      OPEN | WARNING | TIMEOUT_PENDING
+      allowedActions       [ "ACCEPT", "REJECT", "START_PREPARING", "MARK_READY", "COMPLETE" ]
 
 POST .../transitions
   request  { action, reason? }
@@ -181,11 +185,16 @@ POST .../transitions
 6. 동시 전이 충돌 테스트와 409 계약 확정.
 7. `EXPLAIN ANALYZE` 전후 비교와 Polling 부하 측정.
 8. 프론트엔드 점주 콘솔 전환(UUID 입력 제거, Polling 생명주기).
-9. runtime OpenAPI, 계약 테스트, runbook 갱신.
+9. 단일 매장은 바로 보드를 열고 다점포 계정은 접근 가능한 매장만 전환하는 상태 검증.
+10. runtime OpenAPI, 계약 테스트, runbook 갱신.
 
 ## Required Tests
 
 - 다른 매장의 주문이 보드에 나타나지 않는지 검증한다.
+- 단일 매장 membership은 별도 선택 없이 해당 보드를 열고, 다점포 membership은 매장 전환 뒤 선택한
+  `storeId`로만 보드·전이 요청을 보내는지 프론트엔드 상태 테스트로 검증한다.
+- `REVOKED` membership 매장은 전환 목록에서 제거되고 현재 선택 매장이 revoke되면 빈 목록이나 이전
+  보드를 계속 표시하지 않고 403 상태로 전환하는지 검증한다.
 - membership 없는 점주와 `REVOKED` membership이 403인지 검증한다.
 - 다른 매장의 `orderReference` 조회·전이가 403인지 검증한다.
 - 두 요청이 동시에 같은 주문을 전이시킬 때 하나만 성공하고 다른 하나가 409인지
@@ -193,6 +202,7 @@ POST .../transitions
 - 허용되지 않는 전이가 409/422로 구분되는지 검증한다.
 - 활성 주문 50건 기준으로 보드 조회 SQL 수가 고정인지 검증한다.
 - 오늘 이후 픽업 `PAID`가 `PENDING_ACCEPTANCE` lane에 즉시 나타나고 deadline 순인지 검증한다.
+- 목록이 `pickupBusinessDate`별 `groups[]`로 반환되고 각 item의 날짜가 group key와 일치하는지 검증한다.
 - `PENDING_PAYMENT`와 종료 상태가 보드에서 제외되고, 나머지 lane이 픽업 시작 순인지 검증한다.
 - `EXPLAIN ANALYZE`로 인덱스 사용을 확인하고 추가 전후를 같은 조건에서 비교한다.
 - 변경이 없을 때 Projection 조회 후 `304`와 빈 response body가 반환되는지 검증한다.

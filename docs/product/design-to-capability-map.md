@@ -4,8 +4,7 @@
 > Capability를 요구하는지, 그중 무엇이 이미 구현됐고 무엇이 없는지, 어떤 우선순위로 만들지를
 > 화면 단위로 확정한다.
 > **적용 범위:** BeanFlow 제품화(Productization) 프로그램 P0~P1
-> **결정 상태:** `Proposed`. [productization-00 ExecPlan](../exec-plans/active/productization-00-design-capability-contract.md)의
-> 완료 시점에 `Accepted`로 전환한다.
+> **결정 상태:** `Accepted` (2026-08-12).
 
 ## 원천과 판독 규칙
 
@@ -20,6 +19,20 @@
 
 원본에는 점주 계정을 실제 발급할 화면이 없다. [BR-46](business-policy-decisions.md)에 따라 P0 운영
 콘솔에 `신규 점주 계정 발급` 화면 1개를 추가하므로 구현 인벤토리는 총 49화면이다.
+
+### 첨부 ZIP 대조 증거
+
+화면 계약 검증 자료로 첨부된 `BeanFlow_디자인.zip`(SHA-256
+`a546e3f4253f35f9c0c405d0c8f1b57e3d94e98f5a7eeb32c5ce72dc3b1f612e`)을 대조했다. 압축파일에는
+`BeanFlow 고객 앱.dc.html`, `BeanFlow 점주 콘솔.dc.html`, `BeanFlow 운영자 콘솔.dc.html` 원문과
+렌더링 screenshot이 들어 있다. 세 HTML의 `data-screen-label`을 직접 계수한 결과 고객 22개,
+점주 13개, 운영자 13개로 정확히 48개이며 위 인벤토리와 일치한다.
+
+원문과 screenshot은 정적 화면의 문구·상태를 판독하는 증거로 사용했다. 특히 고객 `5a/5b`의
+전화번호 OTP, 고객 `2b`의 자동 환불·지갑 환급, 고객 `4d`의 취소 전 환급 분해, 점주 `4d`의
+PIN·3단 권한, 점주 `4e`의 발주 실행, 운영자 `4a`의 자동 PG 전환, 운영자 `4b/4c`의 KYC·실지급을
+직접 확인했다. 이 동작들은 그대로 구현하지 않고 [Design and Contract Conflicts](design-contract-conflicts.md)의
+C-1~C-18 판정과 화면 수정 지시를 적용한다.
 
 판독 규칙은 다음과 같다.
 
@@ -76,7 +89,7 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 | `2d 부분 환불 상세` | 고객 | 환불 내역·포인트 복원 확인 | Ordering, Payment | `GET /me/orders/{orderReference}` (신규) | P1 | 환불 원장·복원 있음. 고객 조회 투영 없음. |
 | `4b 쿠폰·프로모션` | 고객 | 보유 쿠폰·한정 발급 | Promotion | `GET /me/coupons`, `POST /campaigns/{campaignId}/coupon-issuances` (신규) | P1 | Campaign·예약 있음. 발급 한도 컬럼과 고객 발급 endpoint가 모두 없다(ADR-107). |
 | `4c 주문 내역` | 고객 | 과거 주문 목록 | Ordering | `GET /me/orders?from=&to=&cursor=` (신규) | P0 | 없음. Cursor 계약은 ADR-070 재사용. 기본 30일, 과거 상한 없음. |
-| `4d 주문 취소` | 고객 | 수락 전 전체 취소 | Ordering | `POST /me/orders/{orderReference}/cancellations` (신규 경로, 기존 유스케이스) | P0 | 있음(ADR-029~032). 경로만 주문번호 기반으로 바꾼다. |
+| `4d 주문 취소` | 고객 | 수락 전 전체 취소 | Ordering | `GET /me/orders/{orderReference}`의 `cancellationPreview`, `POST /me/orders/{orderReference}/cancellations` (신규 경로, 기존 유스케이스) | P0 | 있음(ADR-029~032). 서버가 예상 환급을 계산하고 명령 시 재검증하며, 경로는 주문번호 기반으로 바꾼다. |
 | `4e 알림` | 고객 | 알림함·수신 설정 | Notification | `GET /me/notifications`, `PATCH /me/notifications/{id}`, `GET/PUT /me/notification-preferences` (신규) | P1 | 발송·재시도 있음. 알림함 없음. 현재 6개 템플릿은 모두 거래성이다(ADR-104). |
 | `4f 마이` | 고객 | 계정 허브·로그아웃 | Identity | `GET /me`, `DELETE /auth/customer/sessions/current` (신규) | P0 | 없음. |
 | `3a 포인트` | 고객 | 잔액·만료·원장 | Loyalty | `GET /me/points`, `GET /me/point-transactions` (신규 facade) | P0 | Account 조회는 있음. `accountId`를 Session actor로 해석하고 가입과 0원 계정을 원자 생성한다(ADR-109). |
@@ -210,7 +223,7 @@ P0 24화면 가운데 메뉴·슬롯, 결제, 취소, 재주문, 부분 환불, 
 | 고객 | `3a 포인트` | Plan 30/ADR-109 + Loyalty | Plan 80 |
 | 고객 | `3c 재주문 재검증` | 기존 ADR-077 | Plan 80 |
 | 점주 | `1b POS 주문보드` | Plans 10, 40, 60 | Plan 60 |
-| 점주 | `4a 매장 비교`의 전환 | Plan 40 | Plan 40 |
+| 점주 | `4a 매장 비교`의 전환 | Plan 40 | Plan 60 |
 | 점주 | `4c 품목 부분 환불` | Plan 90/ADR-108 | Plan 90 |
 | 점주 | `2a 정산 내역` | 기존 Settlement | Plan 90 |
 | 점주 | `2b 이의제기 상세`의 P0 범위 | 기존 Dispute + Plan 90 query | Plan 90 |

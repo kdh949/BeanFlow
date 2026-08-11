@@ -225,7 +225,7 @@ lease를 그대로 Plan 70이나 100으로 넘기지 않는다. Stack A release�
 
 | # | Plan | 산출 | 상태 |
 |---|---|---|---|
-| M0 | [productization-00](productization-00-design-capability-contract.md) | 화면별 capability 계약, 충돌 해소, ADR 승인 | 진행 예정 |
+| M0 | [productization-00](../completed/productization-00-design-capability-contract.md) | 화면별 capability 계약, 충돌 해소, ADR 승인 | 완료 |
 | M1 | [productization-10](productization-10-public-order-reference.md) | 공개 주문번호, 픽업번호, 표시 스냅샷, backfill | 대기 |
 | M2 | [productization-20](productization-20-authentication-foundation.md) | 4 FilterChain, Session, CSRF, `CurrentActor`, `/me`, credential 관리 permission | 대기 |
 | M3 | [productization-30](productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 대기 |
@@ -298,7 +298,12 @@ git diff --cached --check
 - 2026-08-12: 운영 웹 점주 계정 발급·최초 membership·임시 비밀번호 1회 표시를 BR-46으로 확정하고
   P0 범위를 24화면으로 확장.
 - 2026-08-12: Plan 00~60을 직렬 Draft PR로 검증하고 final combined release PR 하나로 전달하는
-  Stack A 실행 정책을 ADR-111로 확정. 아직 stack root SHA를 기록하거나 Goal을 시작하지 않음.
+  Stack A 실행 정책을 ADR-111로 확정.
+- 2026-08-12: Stack A root를 push된 `feature/productization-plans`의
+  `3b67425e1761f883dded3ef04b715789f495e8d7`로, 당시 `origin/main`을
+  `d8db63089a1d61a13069ab352819bc9479e4faa2`로 기록. Plan 00은 exact root에서 분기한
+  `feature/productization-00-contract`에서 required validation과 atomic completion을 마쳤다.
+  executor의 다음 후보는 고정 순서상 Plan 10이며 Plan 10 구현은 아직 시작하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -313,6 +318,9 @@ git diff --cached --check
   발급을 요청하는 경로가 존재하지 않는다. C-15와 ADR-107로 기록했다.
 - 알림 템플릿 6종이 모두 거래성이고 전부 `orderId`를 가진다. 마케팅 알림은 존재하지 않는다.
   그래서 분류 규칙을 데이터로 판정할 수 있다. C-17로 기록했다.
+- Stack A preflight 시 local root commit은 clean했지만 remote `feature/productization-plans` branch가
+  없었다. 동일 remote branch·Plan 00 branch·PR 충돌이 없음을 확인한 뒤 root commit만 먼저 push해
+  ADR-111의 immutable predecessor를 만들었다.
 
 ## Decision Log
 
