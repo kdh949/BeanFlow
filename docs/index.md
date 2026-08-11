@@ -75,7 +75,7 @@
 ## Execution Plans
 
 - [Product Usability Program](exec-plans/active/product-usability-program-orchestration.md)
-- [Productization 00 Design and Capability Contract](exec-plans/active/productization-00-design-capability-contract.md)
+- [Productization 00 Design and Capability Contract](exec-plans/completed/productization-00-design-capability-contract.md)
 - [Productization 10 Public Order Reference](exec-plans/active/productization-10-public-order-reference.md)
 - [Productization 20 Authentication Foundation](exec-plans/active/productization-20-authentication-foundation.md)
 - [Productization 30 Customer Account and Login](exec-plans/active/productization-30-customer-account-and-login.md)

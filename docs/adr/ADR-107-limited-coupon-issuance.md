@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-12
-- **Implementation owner:** [Design and capability contract](../exec-plans/active/productization-00-design-capability-contract.md)
+- **Implementation owner:** [Design and capability contract](../exec-plans/completed/productization-00-design-capability-contract.md)
 
 ## Context
 
