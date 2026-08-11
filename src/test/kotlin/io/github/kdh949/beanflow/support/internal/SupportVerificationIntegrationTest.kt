@@ -160,7 +160,11 @@ internal class SupportVerificationIntegrationTest
                 .andExpect(header().exists("Retry-After"))
                 .andExpect(jsonPath("$.code").value("VERIFICATION_LOCKED"))
             assertThat(
-                jdbcTemplate.queryForObject("SELECT invalid_attempts FROM support_verification_session WHERE id = ?", Int::class.java, sessionId),
+                jdbcTemplate.queryForObject(
+                    "SELECT invalid_attempts FROM support_verification_session WHERE id = ?",
+                    Int::class.java,
+                    sessionId,
+                ),
             ).isEqualTo(5)
 
             val replacementLinkId = UUID.randomUUID()
@@ -204,7 +208,11 @@ internal class SupportVerificationIntegrationTest
             val binding = insertBinding(actorId)
             val sessionId = createSession(binding, "BASIC", "verification-owner-create")
             grant(replacementActor, "SUPPORT_VERIFICATION_MANAGE")
-            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?", replacementActor, binding.caseId)
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                replacementActor,
+                binding.caseId,
+            )
 
             mockMvc
                 .perform(get("/api/v1/support/verification-sessions/$sessionId").with(operatorJwt(replacementActor)))
@@ -337,7 +345,13 @@ internal class SupportVerificationIntegrationTest
                     ).andExpect(status().isCreated)
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andReturn()
-            return UUID.fromString(JsonMapper.builder().build().readTree(result.response.contentAsString)["sessionId"].asText())
+            return UUID.fromString(
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(result.response.contentAsString)["sessionId"]
+                    .asText(),
+            )
         }
 
         private fun issue(
@@ -355,7 +369,13 @@ internal class SupportVerificationIntegrationTest
                     ).andExpect(status().isCreated)
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andReturn()
-            return UUID.fromString(JsonMapper.builder().build().readTree(result.response.contentAsString)["challengeId"].asText())
+            return UUID.fromString(
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(result.response.contentAsString)["challengeId"]
+                    .asText(),
+            )
         }
 
         private fun insertBinding(assigneeId: UUID): Binding {
@@ -474,7 +494,13 @@ internal class ScriptedVerificationProvider : VerificationChallengeOperations {
         verifyRelease.await(5, TimeUnit.SECONDS)
         val chars = command.proof.copyChars()
         return try {
-            if (String(chars) == "VALID_TEST_PROOF") VerificationChallengeVerifyResult.VERIFIED else VerificationChallengeVerifyResult.INVALID
+            if (String(chars) ==
+                "VALID_TEST_PROOF"
+            ) {
+                VerificationChallengeVerifyResult.VERIFIED
+            } else {
+                VerificationChallengeVerifyResult.INVALID
+            }
         } finally {
             Arrays.fill(chars, '\u0000')
         }

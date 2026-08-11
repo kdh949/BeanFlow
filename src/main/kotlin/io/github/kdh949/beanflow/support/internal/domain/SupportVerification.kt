@@ -140,8 +140,11 @@ internal class VerificationSession private constructor(
     private fun validateState() {
         when (state) {
             VerificationState.PENDING -> require(successfulChannels.size < requiredChannelCount())
+
             VerificationState.VERIFIED -> require(successfulChannels.size >= requiredChannelCount())
+
             VerificationState.LOCKED -> require(invalidAttempts == MAX_INVALID_ATTEMPTS)
+
             VerificationState.EXPIRED,
             VerificationState.REVOKED,
             -> Unit
@@ -347,7 +350,6 @@ internal class VerificationChallenge private constructor(
             expiresAt: Instant,
             state: ChallengeState,
             providerReference: String?,
-        ): VerificationChallenge =
-            VerificationChallenge(id, sessionId, channel, requestedAt, expiresAt, state, providerReference)
+        ): VerificationChallenge = VerificationChallenge(id, sessionId, channel, requestedAt, expiresAt, state, providerReference)
     }
 }

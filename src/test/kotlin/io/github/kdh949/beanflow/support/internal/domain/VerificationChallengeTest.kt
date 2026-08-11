@@ -62,12 +62,13 @@ class VerificationChallengeTest {
     }
 
     private fun issuedChallenge(): VerificationChallenge =
-        VerificationChallenge.request(
-            id = UUID.fromString("42000000-0000-0000-0000-000000000001"),
-            sessionId = UUID.fromString("42000000-0000-0000-0000-000000000002"),
-            channel = VerificationChannel.REGISTERED_PHONE,
-            requestedAt = issuedAt,
-        ).also {
-            it.completeIssue("opaque-provider-reference", issuedAt)
-        }
+        VerificationChallenge
+            .request(
+                id = UUID.fromString("42000000-0000-0000-0000-000000000001"),
+                sessionId = UUID.fromString("42000000-0000-0000-0000-000000000002"),
+                channel = VerificationChannel.REGISTERED_PHONE,
+                requestedAt = issuedAt,
+            ).also {
+                it.completeIssue("opaque-provider-reference", issuedAt)
+            }
 }

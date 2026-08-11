@@ -24,7 +24,11 @@ internal class StoreSupportProfileRevealService(
     override fun reveal(command: RevealPersonalDataCommand): RevealedPersonalData {
         require(command.fields.isNotEmpty() && command.fields.all { it in ALLOWED_FIELDS }) { "Store reveal field is invalid" }
         val encrypted = repository.load(command.subjectId, command.fields)
-        if (encrypted.keys != command.fields) throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store support profile field was not found")
+        if (encrypted.keys !=
+            command.fields
+        ) {
+            throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store support profile field was not found")
+        }
         return decryptor.decrypt(PersonalDataOwnerContext.MERCHANT, command.subjectId, encrypted)
     }
 
@@ -63,7 +67,14 @@ internal class StoreSupportProfileRevealRepository(
                                         else -> error("Unsupported store field")
                                     }
                                 rs.getString("${prefix}_ciphertext")?.let { ciphertext ->
-                                    put(field, EncryptedPersonalData(ciphertext, rs.getInt("${prefix}_key_version"), rs.getInt("${prefix}_aad_version")))
+                                    put(
+                                        field,
+                                        EncryptedPersonalData(
+                                            ciphertext,
+                                            rs.getInt("${prefix}_key_version"),
+                                            rs.getInt("${prefix}_aad_version"),
+                                        ),
+                                    )
                                 }
                             }
                         }

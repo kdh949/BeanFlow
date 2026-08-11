@@ -107,6 +107,7 @@ internal class BreakGlassSecurityNotificationTransactions(
         val state =
             when (result) {
                 BreakGlassSecurityNotificationResult.SENT -> "SENT"
+
                 BreakGlassSecurityNotificationResult.RETRYABLE_FAILURE,
                 BreakGlassSecurityNotificationResult.UNKNOWN,
                 -> if (work.attemptCount >= MAX_ATTEMPTS) "MANUAL_REVIEW" else "RETRY_SCHEDULED"

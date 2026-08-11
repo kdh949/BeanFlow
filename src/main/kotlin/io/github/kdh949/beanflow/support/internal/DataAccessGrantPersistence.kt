@@ -180,10 +180,14 @@ internal class RevealAttemptFieldEntity(
 internal interface DataAccessGrantJpaRepository : JpaRepository<DataAccessGrantEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select grant from DataAccessGrantEntity grant where grant.id = :id")
-    fun findLockedById(@Param("id") id: UUID): DataAccessGrantEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): DataAccessGrantEntity?
 
     @Query("select grant.supportCaseId from DataAccessGrantEntity grant where grant.id = :id")
-    fun findCaseIdById(@Param("id") id: UUID): UUID?
+    fun findCaseIdById(
+        @Param("id") id: UUID,
+    ): UUID?
 }
 
 internal interface DataAccessGrantFieldJpaRepository : JpaRepository<DataAccessGrantFieldEntity, DataAccessGrantFieldId> {
@@ -195,7 +199,9 @@ internal interface DataAccessGrantDecisionJpaRepository : JpaRepository<DataAcce
 internal interface RevealAttemptJpaRepository : JpaRepository<RevealAttemptEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select attempt from RevealAttemptEntity attempt where attempt.id = :id")
-    fun findLockedById(@Param("id") id: UUID): RevealAttemptEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): RevealAttemptEntity?
 }
 
 internal interface RevealAttemptFieldJpaRepository : JpaRepository<RevealAttemptFieldEntity, RevealAttemptFieldId> {

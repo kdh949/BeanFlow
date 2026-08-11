@@ -123,7 +123,10 @@ internal class SupportVerificationApplicationService(
     fun issue(command: IssueVerificationChallengeRequestCommand): VerificationChallengeResource {
         val provider = provider()
         return when (val start = transactions.beginIssue(command)) {
-            is ChallengeIssueStart.Replay -> start.response
+            is ChallengeIssueStart.Replay -> {
+                start.response
+            }
+
             is ChallengeIssueStart.Work -> {
                 val result =
                     try {
@@ -147,7 +150,10 @@ internal class SupportVerificationApplicationService(
         val provider = provider()
         command.proof.use { proof ->
             return when (val start = transactions.beginVerify(command)) {
-                is ChallengeVerifyStart.Replay -> start.response
+                is ChallengeVerifyStart.Replay -> {
+                    start.response
+                }
+
                 is ChallengeVerifyStart.Work -> {
                     val result =
                         try {
@@ -366,7 +372,9 @@ internal class SupportVerificationTransactions(
                 val response = challengeEntity.toResource()
                 val now = clock.instant()
                 completedCommand(start.idempotencyId, response, 201, now)
-                audits.appendAll(listOf(challengeEntity.audit("SUPPORT_VERIFICATION_CHALLENGE_ISSUED", start.actorId, start.correlationId, now)))
+                audits.appendAll(
+                    listOf(challengeEntity.audit("SUPPORT_VERIFICATION_CHALLENGE_ISSUED", start.actorId, start.correlationId, now)),
+                )
                 return@boundary response
             }
             check(challengeEntity.state == ChallengeState.PENDING_ISSUE) { "Challenge issue is already terminal" }
@@ -723,9 +731,15 @@ internal class SupportVerificationTransactions(
     private fun SupportSubjectType.toVerificationSubjectType(): VerificationSubjectType =
         when (this) {
             SupportSubjectType.CUSTOMER -> VerificationSubjectType.CUSTOMER
+
             SupportSubjectType.STORE -> VerificationSubjectType.STORE
+
             SupportSubjectType.DELIVERY -> VerificationSubjectType.DELIVERY
-            SupportSubjectType.ORDER -> throw DomainFailure(FailureCode.INVALID_REQUEST, "Order links cannot own personal-data verification")
+
+            SupportSubjectType.ORDER -> throw DomainFailure(
+                FailureCode.INVALID_REQUEST,
+                "Order links cannot own personal-data verification",
+            )
         }
 
     private fun <T> boundary(block: () -> T): T = persistenceBoundary(block)

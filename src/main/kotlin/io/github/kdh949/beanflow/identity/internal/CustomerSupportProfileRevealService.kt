@@ -24,7 +24,11 @@ internal class CustomerSupportProfileRevealService(
     override fun reveal(command: RevealPersonalDataCommand): RevealedPersonalData {
         require(command.fields.isNotEmpty() && command.fields.all { it in ALLOWED_FIELDS }) { "Customer reveal field is invalid" }
         val encrypted = repository.load(command.subjectId, command.fields)
-        if (encrypted.keys != command.fields) throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Customer support profile field was not found")
+        if (encrypted.keys !=
+            command.fields
+        ) {
+            throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Customer support profile field was not found")
+        }
         return decryptor.decrypt(PersonalDataOwnerContext.IDENTITY, command.subjectId, encrypted)
     }
 

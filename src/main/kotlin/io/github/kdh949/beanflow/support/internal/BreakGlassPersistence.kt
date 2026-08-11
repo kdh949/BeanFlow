@@ -114,10 +114,14 @@ internal class SecurityNotificationIntentEntity(
 internal interface BreakGlassRequestJpaRepository : JpaRepository<BreakGlassRequestEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select request from BreakGlassRequestEntity request where request.id = :id")
-    fun findLockedById(@Param("id") id: UUID): BreakGlassRequestEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): BreakGlassRequestEntity?
 
     @Query("select request.supportCaseId from BreakGlassRequestEntity request where request.id = :id")
-    fun findCaseIdById(@Param("id") id: UUID): UUID?
+    fun findCaseIdById(
+        @Param("id") id: UUID,
+    ): UUID?
 }
 
 internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDecisionEntity, UUID>
@@ -125,5 +129,7 @@ internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDec
 internal interface SecurityNotificationIntentJpaRepository : JpaRepository<SecurityNotificationIntentEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select intent from SecurityNotificationIntentEntity intent where intent.id = :id")
-    fun findLockedById(@Param("id") id: UUID): SecurityNotificationIntentEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): SecurityNotificationIntentEntity?
 }

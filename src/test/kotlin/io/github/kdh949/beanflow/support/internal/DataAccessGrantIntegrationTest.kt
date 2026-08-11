@@ -157,7 +157,11 @@ internal class DataAccessGrantIntegrationTest
 
             assertThat(decryptCalls.get()).isZero()
             assertThat(
-                jdbcTemplate.queryForObject("SELECT reserved_reveals FROM support_data_access_grant WHERE id = ?", Int::class.java, grantId),
+                jdbcTemplate.queryForObject(
+                    "SELECT reserved_reveals FROM support_data_access_grant WHERE id = ?",
+                    Int::class.java,
+                    grantId,
+                ),
             ).isZero()
             assertThat(
                 jdbcTemplate.queryForObject("SELECT count(*) FROM support_reveal_attempt WHERE grant_id = ?", Long::class.java, grantId),
@@ -176,28 +180,30 @@ internal class DataAccessGrantIntegrationTest
             val grantId = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-request-race-0001", "ACTIVE")
             val decryptStarted = CountDownLatch(1)
             val decryptRelease = CountDownLatch(1)
-            Mockito.doAnswer {
-                check(!TransactionSynchronizationManager.isActualTransactionActive())
-                decryptCalls.incrementAndGet()
-                decryptStarted.countDown()
-                check(decryptRelease.await(5, TimeUnit.SECONDS))
-                "Synthetic Customer".toByteArray(StandardCharsets.UTF_8)
-            }.`when`(crypto).decrypt(
-                EncryptedPersonalData("vault:v7:display", 7, 1),
-                PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, binding.subjectId, PersonalDataField.DISPLAY_NAME),
-            )
+            Mockito
+                .doAnswer {
+                    check(!TransactionSynchronizationManager.isActualTransactionActive())
+                    decryptCalls.incrementAndGet()
+                    decryptStarted.countDown()
+                    check(decryptRelease.await(5, TimeUnit.SECONDS))
+                    "Synthetic Customer".toByteArray(StandardCharsets.UTF_8)
+                }.`when`(crypto)
+                .decrypt(
+                    EncryptedPersonalData("vault:v7:display", 7, 1),
+                    PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, binding.subjectId, PersonalDataField.DISPLAY_NAME),
+                )
             val executor = Executors.newSingleThreadExecutor()
             try {
                 val response =
                     executor.submit(
                         Callable {
-                        mockMvc
-                            .perform(
-                                post("/api/v1/support/data-access-grants/$grantId/reveals")
-                                    .with(operatorJwt(requesterId))
-                                    .header("Idempotency-Key", "grant-reveal-race-0001")
-                                    .json("""{"fields":["CUSTOMER_DISPLAY_NAME"]}"""),
-                            ).andReturn()
+                            mockMvc
+                                .perform(
+                                    post("/api/v1/support/data-access-grants/$grantId/reveals")
+                                        .with(operatorJwt(requesterId))
+                                        .header("Idempotency-Key", "grant-reveal-race-0001")
+                                        .json("""{"fields":["CUSTOMER_DISPLAY_NAME"]}"""),
+                                ).andReturn()
                         },
                     )
                 check(decryptStarted.await(5, TimeUnit.SECONDS))
@@ -285,7 +291,11 @@ internal class DataAccessGrantIntegrationTest
 
             assertThat(transition.currentState.name).isEqualTo("RESOLVED")
             assertThat(
-                jdbcTemplate.queryForObject("SELECT state FROM support_verification_session WHERE id = ?", String::class.java, binding.sessionId),
+                jdbcTemplate.queryForObject(
+                    "SELECT state FROM support_verification_session WHERE id = ?",
+                    String::class.java,
+                    binding.sessionId,
+                ),
             ).isEqualTo("REVOKED")
             assertThat(
                 jdbcTemplate.queryForObject("SELECT state FROM support_data_access_grant WHERE id = ?", String::class.java, grantId),
@@ -314,7 +324,13 @@ internal class DataAccessGrantIntegrationTest
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.state").value(expectedState))
                     .andReturn()
-            return UUID.fromString(JsonMapper.builder().build().readTree(result.response.contentAsString)["grantId"].asText())
+            return UUID.fromString(
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(result.response.contentAsString)["grantId"]
+                    .asText(),
+            )
         }
 
         private fun seedVerifiedBinding(
@@ -426,14 +442,16 @@ internal class DataAccessGrantIntegrationTest
                 field: PersonalDataField,
                 value: String,
             ) {
-                Mockito.doAnswer {
-                    check(!TransactionSynchronizationManager.isActualTransactionActive())
-                    decryptCalls.incrementAndGet()
-                    value.toByteArray(StandardCharsets.UTF_8)
-                }.`when`(crypto).decrypt(
-                    encrypted,
-                    PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, subjectId, field),
-                )
+                Mockito
+                    .doAnswer {
+                        check(!TransactionSynchronizationManager.isActualTransactionActive())
+                        decryptCalls.incrementAndGet()
+                        value.toByteArray(StandardCharsets.UTF_8)
+                    }.`when`(crypto)
+                    .decrypt(
+                        encrypted,
+                        PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, subjectId, field),
+                    )
             }
             stub(EncryptedPersonalData("vault:v7:display", 7, 1), PersonalDataField.DISPLAY_NAME, "Synthetic Customer")
             stub(EncryptedPersonalData("vault:v7:email", 7, 1), PersonalDataField.PRIMARY_EMAIL, "synthetic@example.invalid")

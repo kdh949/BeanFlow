@@ -80,7 +80,9 @@ internal class SupportVerificationRecoveryTransactions(
                     idempotency.findLockedProcessingByResourceIdAndOperation(challenge.id, operation)
                 }
 
-                else -> error("Unreachable verification recovery state")
+                else -> {
+                    error("Unreachable verification recovery state")
+                }
             } ?: error("Recoverable verification challenge is missing its processing command")
 
         challenge.state =

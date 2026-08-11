@@ -54,7 +54,8 @@ internal class SupportVerificationPiiLeakTest {
     @Test
     fun `S40 persistence has no secret proof or raw reveal columns`() {
         val migration =
-            Path.of("src/main/resources/db/migration/V42__create_support_verification_and_data_access_grant.sql")
+            Path
+                .of("src/main/resources/db/migration/V42__create_support_verification_and_data_access_grant.sql")
                 .readText()
                 .lowercase()
                 .lineSequence()

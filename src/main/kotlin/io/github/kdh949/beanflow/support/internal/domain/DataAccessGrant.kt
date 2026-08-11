@@ -132,7 +132,9 @@ internal class DataAccessGrant private constructor(
     }
 
     fun revoke() {
-        if (state == DataAccessGrantState.REQUESTED || state == DataAccessGrantState.APPROVAL_PENDING || state == DataAccessGrantState.ACTIVE) {
+        if (state == DataAccessGrantState.REQUESTED || state == DataAccessGrantState.APPROVAL_PENDING ||
+            state == DataAccessGrantState.ACTIVE
+        ) {
             state = DataAccessGrantState.REVOKED
         }
     }

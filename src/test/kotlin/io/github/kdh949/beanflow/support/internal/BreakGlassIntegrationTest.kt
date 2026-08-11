@@ -234,7 +234,13 @@ internal class BreakGlassIntegrationTest
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.state").value("APPROVAL_PENDING"))
                     .andReturn()
-            return UUID.fromString(JsonMapper.builder().build().readTree(result.response.contentAsString)["requestId"].asText())
+            return UUID.fromString(
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(result.response.contentAsString)["requestId"]
+                    .asText(),
+            )
         }
 
         private fun seedBinding(): Binding {
@@ -280,13 +286,15 @@ internal class BreakGlassIntegrationTest
                 Timestamp.from(now),
                 Timestamp.from(now),
             )
-            Mockito.doAnswer {
-                check(!TransactionSynchronizationManager.isActualTransactionActive())
-                "emergency@example.invalid".toByteArray(StandardCharsets.UTF_8)
-            }.`when`(crypto).decrypt(
-                EncryptedPersonalData("vault:v7:email", 7, 1),
-                PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, subjectId, PersonalDataField.PRIMARY_EMAIL),
-            )
+            Mockito
+                .doAnswer {
+                    check(!TransactionSynchronizationManager.isActualTransactionActive())
+                    "emergency@example.invalid".toByteArray(StandardCharsets.UTF_8)
+                }.`when`(crypto)
+                .decrypt(
+                    EncryptedPersonalData("vault:v7:email", 7, 1),
+                    PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY, subjectId, PersonalDataField.PRIMARY_EMAIL),
+                )
             return Binding(caseId, linkId)
         }
 

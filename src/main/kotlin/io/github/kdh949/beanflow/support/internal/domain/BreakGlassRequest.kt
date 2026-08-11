@@ -133,12 +133,25 @@ internal class BreakGlassRequest private constructor(
 
             BreakGlassState.ACTIVE,
             BreakGlassState.EXPIRED,
-            -> require(expiresAt != null && approverId != null && revealedAt == null && reviewerId == null)
+            -> {
+                require(expiresAt != null && approverId != null && revealedAt == null && reviewerId == null)
+            }
 
-            BreakGlassState.REVIEW_PENDING -> require(expiresAt != null && approverId != null && revealedAt != null && reviewerId == null)
-            BreakGlassState.REVIEWED -> require(expiresAt != null && approverId != null && revealedAt != null && reviewerId != null)
-            BreakGlassState.DENIED -> require(approverId != null && expiresAt == null && revealedAt == null && reviewerId == null)
-            BreakGlassState.REVOKED -> Unit
+            BreakGlassState.REVIEW_PENDING -> {
+                require(expiresAt != null && approverId != null && revealedAt != null && reviewerId == null)
+            }
+
+            BreakGlassState.REVIEWED -> {
+                require(expiresAt != null && approverId != null && revealedAt != null && reviewerId != null)
+            }
+
+            BreakGlassState.DENIED -> {
+                require(approverId != null && expiresAt == null && revealedAt == null && reviewerId == null)
+            }
+
+            BreakGlassState.REVOKED -> {
+                Unit
+            }
         }
     }
 

@@ -38,10 +38,20 @@ class BreakGlassRequestTest {
             request.reserveReveal(UUID.randomUUID(), binding(), SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE, requestedAt.plusSeconds(2))
         }.isInstanceOf(IllegalArgumentException::class.java)
         assertThatThrownBy {
-            request.reserveReveal(requesterId, binding(caseId = UUID.randomUUID()), SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE, requestedAt.plusSeconds(2))
+            request.reserveReveal(
+                requesterId,
+                binding(caseId = UUID.randomUUID()),
+                SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE,
+                requestedAt.plusSeconds(2),
+            )
         }.isInstanceOf(IllegalArgumentException::class.java)
         assertThatThrownBy {
-            request.reserveReveal(requesterId, binding(subjectId = UUID.randomUUID()), SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE, requestedAt.plusSeconds(2))
+            request.reserveReveal(
+                requesterId,
+                binding(subjectId = UUID.randomUUID()),
+                SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE,
+                requestedAt.plusSeconds(2),
+            )
         }.isInstanceOf(IllegalArgumentException::class.java)
         assertThatThrownBy {
             request.reserveReveal(

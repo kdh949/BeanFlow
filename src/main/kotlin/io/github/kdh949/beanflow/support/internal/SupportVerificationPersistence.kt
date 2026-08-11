@@ -180,13 +180,19 @@ internal class SupportSecurityIdempotencyEntity(
 internal interface VerificationSessionJpaRepository : JpaRepository<VerificationSessionEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select session from VerificationSessionEntity session where session.id = :id")
-    fun findLockedById(@Param("id") id: UUID): VerificationSessionEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): VerificationSessionEntity?
 
     @Query("select session from VerificationSessionEntity session where session.id = :id")
-    fun findCurrentById(@Param("id") id: UUID): VerificationSessionEntity?
+    fun findCurrentById(
+        @Param("id") id: UUID,
+    ): VerificationSessionEntity?
 
     @Query("select session.supportCaseId from VerificationSessionEntity session where session.id = :id")
-    fun findCaseIdById(@Param("id") id: UUID): UUID?
+    fun findCaseIdById(
+        @Param("id") id: UUID,
+    ): UUID?
 
     @Query(
         "select session from VerificationSessionEntity session where session.supportCaseId = :caseId " +
@@ -201,10 +207,14 @@ internal interface VerificationSessionJpaRepository : JpaRepository<Verification
 internal interface VerificationChallengeJpaRepository : JpaRepository<VerificationChallengeEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select challenge from VerificationChallengeEntity challenge where challenge.id = :id")
-    fun findLockedById(@Param("id") id: UUID): VerificationChallengeEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): VerificationChallengeEntity?
 
     @Query("select challenge.sessionId from VerificationChallengeEntity challenge where challenge.id = :id")
-    fun findSessionIdById(@Param("id") id: UUID): UUID?
+    fun findSessionIdById(
+        @Param("id") id: UUID,
+    ): UUID?
 
     fun findBySessionIdOrderByRequestedAtAscIdAsc(sessionId: UUID): List<VerificationChallengeEntity>
 
@@ -213,7 +223,9 @@ internal interface VerificationChallengeJpaRepository : JpaRepository<Verificati
         "select challenge from VerificationChallengeEntity challenge where challenge.sessionId = :sessionId " +
             "order by challenge.requestedAt, challenge.id",
     )
-    fun findLockedBySessionIdOrderByRequestedAtAscIdAsc(@Param("sessionId") sessionId: UUID): List<VerificationChallengeEntity>
+    fun findLockedBySessionIdOrderByRequestedAtAscIdAsc(
+        @Param("sessionId") sessionId: UUID,
+    ): List<VerificationChallengeEntity>
 
     @Query(
         "select distinct challenge.channel from VerificationChallengeEntity challenge " +

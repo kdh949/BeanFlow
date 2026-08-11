@@ -137,14 +137,17 @@ internal class DataAccessGrantApplicationService(
         try {
             val revealed =
                 when (work.subjectType) {
-                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.CUSTOMER ->
+                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.CUSTOMER -> {
                         customers.reveal(RevealPersonalDataCommand(work.subjectId, ownerFields))
+                    }
 
-                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.STORE ->
+                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.STORE -> {
                         stores.reveal(RevealPersonalDataCommand(work.subjectId, ownerFields))
+                    }
 
-                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.DELIVERY ->
+                    io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType.DELIVERY -> {
                         couriers.reveal(RevealPersonalDataCommand(work.subjectId, ownerFields))
+                    }
                 }
             validateOwnerResponse(work, revealed)
             val values =
@@ -171,7 +174,9 @@ internal class DataAccessGrantApplicationService(
         work: GrantRevealWork,
         response: RevealedPersonalData,
     ) {
-        if (response.subjectId != work.subjectId || response.values.keys != work.fields.mapTo(linkedSetOf(), SupportPersonalDataField::toOwnerField)) {
+        if (response.subjectId != work.subjectId ||
+            response.values.keys != work.fields.mapTo(linkedSetOf(), SupportPersonalDataField::toOwnerField)
+        ) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Personal-data owner response is invalid")
         }
     }
@@ -209,7 +214,11 @@ internal class DataAccessGrantTransactions(
                 command.actorId,
                 REQUEST_GRANT,
                 command.idempotencyKey,
-                hash("${command.caseId}|${command.verificationSessionId}|${command.purpose}|${command.fields.sortedBy { it.name }}|${command.reasonCode}"),
+                hash(
+                    "${command.caseId}|${command.verificationSessionId}|${command.purpose}|${command.fields.sortedBy {
+                        it.name
+                    }}|${command.reasonCode}",
+                ),
                 DataAccessGrantResource::class.java,
                 201,
             ) {
@@ -223,7 +232,15 @@ internal class DataAccessGrantTransactions(
                 }
                 val sessionAggregate = session.toVerificationAggregate(verifiedChannels(session.id))
                 val now = clock.instant()
-                val required = if (command.fields.any { it.risk == DataAccessRisk.SENSITIVE }) VerificationLevel.ENHANCED else VerificationLevel.BASIC
+                val required =
+                    if (command.fields.any {
+                            it.risk == DataAccessRisk.SENSITIVE
+                        }
+                    ) {
+                        VerificationLevel.ENHANCED
+                    } else {
+                        VerificationLevel.BASIC
+                    }
                 if (!sessionAggregate.satisfies(required, now)) verificationRequired()
                 val aggregate =
                     DataAccessGrant.request(
@@ -250,7 +267,9 @@ internal class DataAccessGrantTransactions(
                 val entity = aggregate.toEntity(session.id)
                 grants.saveAndFlush(entity)
                 grantFields.saveAllAndFlush(aggregate.fields.map { DataAccessGrantFieldEntity(entity.id, it) })
-                audits.appendAll(listOf(entity.securityAudit("SUPPORT_DATA_ACCESS_GRANT_REQUESTED", command.actorId, command.correlationId, now)))
+                audits.appendAll(
+                    listOf(entity.securityAudit("SUPPORT_DATA_ACCESS_GRANT_REQUESTED", command.actorId, command.correlationId, now)),
+                )
                 entity.toResource(aggregate.fields)
             }
         }
@@ -295,7 +314,9 @@ internal class DataAccessGrantTransactions(
                         now,
                     ),
                 )
-                audits.appendAll(listOf(entity.securityAudit("SUPPORT_DATA_ACCESS_GRANT_DECIDED", command.actorId, command.correlationId, now)))
+                audits.appendAll(
+                    listOf(entity.securityAudit("SUPPORT_DATA_ACCESS_GRANT_DECIDED", command.actorId, command.correlationId, now)),
+                )
                 entity.toResource(fields)
             }
         }
@@ -318,7 +339,11 @@ internal class DataAccessGrantTransactions(
             }
             val entity = grants.findLockedById(command.grantId) ?: notFound()
             if (entity.supportCaseId != caseId) conflict("DataAccessGrant binding is stale")
-            if (entity.requesterId != command.actorId) throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant belongs to another operator")
+            if (entity.requesterId !=
+                command.actorId
+            ) {
+                throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant belongs to another operator")
+            }
             val link = activeLink(supportCase.id, entity.subjectLinkId)
             if (link.subjectType.toVerificationSubjectType() != entity.subjectType || link.subjectId != entity.subjectId) {
                 conflict("DataAccessGrant subject binding is stale")
@@ -569,7 +594,8 @@ internal class DataAccessGrantTransactions(
             }
         }
 
-    private fun verificationRequired(): Nothing = throw DomainFailure(FailureCode.VERIFICATION_REQUIRED, "Matching verification is required")
+    private fun verificationRequired(): Nothing =
+        throw DomainFailure(FailureCode.VERIFICATION_REQUIRED, "Matching verification is required")
 
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "DataAccessGrant resource was not found")
 
@@ -708,11 +734,18 @@ internal fun SupportPersonalDataField.toOwnerField(): PersonalDataField =
         -> PersonalDataField.DISPLAY_NAME
 
         SupportPersonalDataField.CUSTOMER_PRIMARY_PHONE -> PersonalDataField.PRIMARY_PHONE
+
         SupportPersonalDataField.CUSTOMER_PRIMARY_EMAIL -> PersonalDataField.PRIMARY_EMAIL
+
         SupportPersonalDataField.STORE_LEGAL_DISPLAY_NAME -> PersonalDataField.LEGAL_DISPLAY_NAME
+
         SupportPersonalDataField.STORE_SUPPORT_PHONE -> PersonalDataField.SUPPORT_PHONE
+
         SupportPersonalDataField.STORE_SUPPORT_EMAIL -> PersonalDataField.SUPPORT_EMAIL
+
         SupportPersonalDataField.COURIER_PROVIDER_REFERENCE -> PersonalDataField.PROVIDER_COURIER_REFERENCE
+
         SupportPersonalDataField.COURIER_RELAY_PHONE -> PersonalDataField.RELAY_PHONE
+
         SupportPersonalDataField.COURIER_RELAY_EMAIL -> PersonalDataField.RELAY_EMAIL
     }

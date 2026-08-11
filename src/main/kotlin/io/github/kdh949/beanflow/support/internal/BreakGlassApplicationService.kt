@@ -230,7 +230,9 @@ internal class BreakGlassTransactions(
                 val entity = aggregate.toEntity()
                 requests.saveAndFlush(entity)
                 notification(entity.id, "REQUESTED", entity.requestedAt)
-                audits.appendAll(listOf(entity.audit("SUPPORT_BREAK_GLASS_REQUESTED", command.actorId, command.correlationId, entity.requestedAt)))
+                audits.appendAll(
+                    listOf(entity.audit("SUPPORT_BREAK_GLASS_REQUESTED", command.actorId, command.correlationId, entity.requestedAt)),
+                )
                 entity.toResource()
             }
         }
@@ -297,7 +299,11 @@ internal class BreakGlassTransactions(
             }
             val entity = requests.findLockedById(command.requestId) ?: notFound()
             if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
-            if (entity.requesterId != command.actorId) throw DomainFailure(FailureCode.ACCESS_DENIED, "Break-glass request belongs to another operator")
+            if (entity.requesterId !=
+                command.actorId
+            ) {
+                throw DomainFailure(FailureCode.ACCESS_DENIED, "Break-glass request belongs to another operator")
+            }
             val link = activeLink(caseId, entity.subjectLinkId)
             if (link.subjectType.toBreakGlassSubjectType() != entity.subjectType || link.subjectId != entity.subjectId) {
                 conflict("Break-glass subject binding is stale")
@@ -505,8 +511,18 @@ internal class BreakGlassTransactions(
         now: Instant,
     ): SupportSecurityIdempotencyEntity =
         SupportSecurityIdempotencyEntity(
-            identifiers.next(), actorId, operation, key, payloadHash, resourceId, "PROCESSING",
-            null, null, now, null, now.plus(IDEMPOTENCY_RETENTION),
+            identifiers.next(),
+            actorId,
+            operation,
+            key,
+            payloadHash,
+            resourceId,
+            "PROCESSING",
+            null,
+            null,
+            now,
+            null,
+            now.plus(IDEMPOTENCY_RETENTION),
         )
 
     private fun completeCommand(
