@@ -665,10 +665,15 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 
 - S20 Support는 Operations public permission/retention/Audit API만 사용하고, owner Context Repository/table을 쓰거나
   호출하지 않는다. subject link는 typed owner ID reference만 저장한다.
+- S30 exact search는 짧은 Tx1에서 persistent permission과 actor/5-minute rate row를 잠그고 시도 횟수를 commit한
+  뒤, transaction 밖에서 모든 configured Vault HMAC version을 계산한다. Tx2는 permission을 다시 확인하고
+  Identity/Merchant/Delivery public query API의 masked DTO만 모아 PII-free Audit와 함께 commit한다. Vault, owner query
+  또는 Audit 실패는 503이며 부분/빈 결과 fallback이 없다. Support에는 criterion, digest, ciphertext 또는 masked
+  candidate를 저장하지 않는다.
 - raw PII reveal과 high-risk change는 필요한 authorization fact와 target Audit이 commit된 뒤에만 응답/성공한다.
 - verification, Delivery, notification, object storage Provider 호출은 long DB transaction 밖이며 durable intent/result로 감싼다.
 - pickup reschedule은 owner Fulfillment transaction에서 new-slot-first swap을 수행한다.
 - timeout/ACK loss는 UNKNOWN/RECONCILING이고 retry가 같은 외부 부수효과를 만들지 않아야 한다.
 - retention deletion은 component별 상태와 ledger를 원자적으로 전이하되 외부 object/index 삭제는 부분 실패를 명시한다.
 
-S20 command/query 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.
+S20/S30 command/query 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.

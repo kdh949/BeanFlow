@@ -1649,10 +1649,13 @@
 | SP-14 | Accepted scope / Proposed boundary | Support Console은 최종 scope다. 별도 app, 기존 app 통합, server-rendered boundary는 credential/CORS/CSRF/trust/deployment 결정 전 Proposed다. | ADR-090 |
 | SP-15 | Accepted | 자체 rider/call-center/rules-engine/premature Elasticsearch와 bulk export는 비목표 | [non-goals](non-goals.md) |
 | SP-16 | Accepted initial policy | S20 Case 상태는 `OPEN`, `IN_PROGRESS`, `WAITING`, `RESOLVED`, `CLOSED`이고 Aggregate 전이 matrix는 SupportCase Policy에 고정한다. S20은 reopen endpoint를 노출하지 않으며 `OTHER`는 구조화된 상세 사유를 요구한다. S20에는 `DataAccessGrant`가 없고, S40 Grant 도입 시 terminal Case의 active Grant 철회와 terminal Case에서의 Grant 활성화·reveal 차단을 같은 Case 경계에서 구현한다. | [case](support-case-policy.md) |
+| SP-17 | Accepted initial policy | S30은 Identity 고객, Merchant 매장, Delivery 외부 courier 최소 프로필을 owner-local Vault Transit 암호문·별도 versioned HMAC blind index로 보관하고 Support에는 masked DTO만 반환한다. 지원 계약은 exact phone/email을 POST body로만 받고 query parameter를 거부한다. 결과 최대 20, PostgreSQL clock 기준 actor당 fixed 5분 30회, rate row 24시간 보존과 기본 100행 bounded cleanup, 구조화 사유와 PII-free Audit을 요구한다. fixed-window 경계 burst는 initial-policy limitation이다. | [protected search](support-protected-search-policy.md), ADR-083 |
 
 ## Support implementation gates
 
-- ADR-083의 key provider/rotation 결정이 Accepted되기 전 S30은 ready가 아니다.
+- ADR-083의 Vault Transit provider/auth/key separation/rotation/fail-closed 결정과 SP-17의 최소 owner profile,
+  normalization/masking/rate/Audit initial policy가 2026-08-11 Accepted되어 S30 detailed plan authoring gate를
+  충족했다. 실제 runtime release는 S30 구현·검증과 production Vault provisioning evidence 전에는 허용하지 않는다.
 - S10은 V39에서 Audit category/class/version snapshot, financial 5년과 PII access 2년 policy, persistent
   Support permission vocabulary를 구현했다. Case/content/delivery/LegalHold deletion runtime은 구현하지 않았다.
 - 이후 migration-writing plan은 실행 시 ADR-072의 실제 lease evidence를 새로 획득해야 한다. S10 완료는

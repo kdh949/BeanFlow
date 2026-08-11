@@ -3,7 +3,7 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-09
+  x-beanflow-contract-date: 2026-08-11
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
@@ -1357,6 +1357,42 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /support/searches:
+    post:
+      tags: [Support]
+      operationId: searchSupportSubjects
+      summary: Exact-search protected Support profiles
+      description: |
+        The supported contract accepts one phone or email criterion only in the JSON body and
+        rejects every query parameter. A client-supplied query may reach upstream infrastructure
+        before rejection, so ingress and container access logs for this route must omit or redact
+        query strings. BeanFlow does not put the raw or normalized criterion in its response, Audit
+        payload, application log, metric, cursor, or Support storage. Owner Contexts perform
+        versioned blind-index lookup and return masked projections.
+        Results are ordered by CUSTOMER, STORE, RIDER then subject ID, limited to 20, and expose a
+        match count capped at 21. A genuine no-match returns an audited empty 200 only after every
+        required dependency succeeds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchSupportSubjectsRequest"
+      responses:
+        "200":
+          description: Masked exact-match candidates and bounded ambiguity metadata
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportSubjectSearchResult"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/SupportSearchRateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases:
     post:
       tags: [Support]
@@ -1855,6 +1891,20 @@ components:
             $ref: "#/components/schemas/Error"
     DependencyUnavailable:
       description: A required dependency is unavailable; no fallback result was used
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    SupportSearchRateLimited:
+      description: The persistent per-operator Support exact-search budget is exhausted
+      headers:
+        Retry-After:
+          required: true
+          description: Whole seconds until the next five-minute UTC rate window.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
       content:
         application/json:
           schema:
@@ -3728,6 +3778,87 @@ components:
           $ref: "#/components/schemas/Currency"
         filedAt:
           $ref: "#/components/schemas/DateTime"
+    ExactSearchCriterionType:
+      type: string
+      enum: [PHONE, EMAIL]
+    SupportSearchSubjectType:
+      type: string
+      enum: [CUSTOMER, STORE, RIDER]
+    SupportSearchReasonCode:
+      type: string
+      enum: [CASE_INTAKE, ACTIVE_CASE_LOOKUP, DELIVERY_INCIDENT, PRIVACY_REQUEST]
+    SupportSearchCriterion:
+      type: object
+      additionalProperties: false
+      required: [type, value]
+      properties:
+        type:
+          $ref: "#/components/schemas/ExactSearchCriterionType"
+        value:
+          type: string
+          minLength: 1
+          maxLength: 320
+          description: Raw phone or email used transiently for this body-only exact search.
+    SearchSupportSubjectsRequest:
+      type: object
+      additionalProperties: false
+      required: [criterion, subjectTypes, reasonCode]
+      properties:
+        criterion:
+          $ref: "#/components/schemas/SupportSearchCriterion"
+        subjectTypes:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportSearchSubjectType"
+        reasonCode:
+          $ref: "#/components/schemas/SupportSearchReasonCode"
+    SupportSubjectSearchCandidate:
+      type: object
+      additionalProperties: false
+      required: [subjectType, subjectId, maskedDisplayName, matchedCriterionType, maskedMatchedValue]
+      properties:
+        subjectType:
+          $ref: "#/components/schemas/SupportSearchSubjectType"
+        subjectId:
+          type: string
+          format: uuid
+        maskedDisplayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^.*\*.*$'
+        matchedCriterionType:
+          $ref: "#/components/schemas/ExactSearchCriterionType"
+        maskedMatchedValue:
+          type: string
+          minLength: 3
+          maxLength: 320
+          pattern: '^.*\*.*$'
+    SupportSubjectSearchResult:
+      type: object
+      additionalProperties: false
+      required: [searchId, items, matchedCount, ambiguous, hasMore]
+      properties:
+        searchId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SupportSubjectSearchCandidate"
+        matchedCount:
+          type: integer
+          minimum: 0
+          maximum: 21
+          description: Bounded count; 21 means at least 21 matches.
+        ambiguous:
+          type: boolean
+        hasMore:
+          type: boolean
     SupportCaseState:
       type: string
       enum: [OPEN, IN_PROGRESS, WAITING, RESOLVED, CLOSED]

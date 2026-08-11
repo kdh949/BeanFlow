@@ -48,6 +48,7 @@
 - [Support PII Controls](security/support-pii-controls.md)
 - [Support Threat Model](security/support-threat-model.md)
 - [Support Console Browser Controls](security/support-console-browser-controls.md)
+- [Personal Data Vault Transit Runbook](operations/personal-data-vault-transit-runbook.md)
 
 ## Quality
 
@@ -92,6 +93,7 @@
 - [Completed Support S00 Audit and Repair](exec-plans/completed/customer-support-s00-documentation-contracts.md)
 - [Completed Support S10 Retention/Audit/Permission](exec-plans/completed/customer-support-s10-retention-audit-permission.md)
 - [Completed Support S20 Case Foundation](exec-plans/completed/customer-support-s20-case-foundation.md)
+- [Support S30 Protected Profile Search](exec-plans/completed/customer-support-s30-protected-profile-search.md)
 - [Support Program Orchestration](exec-plans/active/customer-support-program-orchestration.md)
 - [PaymentMethod Token Management](exec-plans/completed/payment-method-token-management.md)
 - [Toss V2 One-Time Payment Window](exec-plans/completed/toss-v2-one-time-payment-window.md)

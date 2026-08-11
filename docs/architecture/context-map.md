@@ -62,7 +62,7 @@ Support <── investigation reference and decision ──> Operations
 | Settlement | Dispute | Settlement / Dispute | confirmed Item·Batch view와 Adjustment command | Dispute가 held/workflow를 소유하고 판정 후 조정은 별도 Settlement transaction의 명시적 명령 |
 | Transaction Contexts | Operations | 원본 Context | failure/audit fact와 reconciliation case | eventual, 원본 상태 보존 |
 | Transaction contexts | Analytics | 원본 Context | idempotent event | eventual, 재집계 가능 |
-| Owner Contexts | Support | Owner Context | masked DTO/query projection과 typed command result | 조회는 요청 시, 변경은 owner local transaction |
+| Owner Contexts | Support | Owner Context | versioned blind-index query와 masked DTO projection; typed command result | S30 exact 조회는 요청 시 owner public API로만 수행, 변경은 owner local transaction |
 | Support | Operations | Support / Operations | immutable request/investigation references | eventual handoff; approval은 exact revision에 귀속 |
 
 Operations로 향하는 두 경로를 구분한다. 사후 관측인 failure/reconciliation case는

@@ -41,6 +41,7 @@
 | DISPUTE_WINDOW_CLOSED | 409 | No | 이의제기 기간 종료 |
 | DISPUTE_ALREADY_ACTIVE | 409 | No | 같은 SettlementItem에 `FILED` 또는 `UNDER_REVIEW` 이의제기가 이미 존재 |
 | DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
+| SUPPORT_SEARCH_RATE_LIMITED | 429 + Retry-After | Yes, after the current window | actor별 영속 5분/30회 exact-search budget 소진. 요청은 Vault/owner query 전에 중단되고 응답·Audit에 검색값을 넣지 않음 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 

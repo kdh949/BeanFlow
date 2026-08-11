@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-09
+  x-beanflow-contract-date: 2026-08-11
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -534,6 +534,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements~1{settlementBatchId}~1items"
   /settlement-items/{itemId}/disputes:
     $ref: "./beanflow-v1.yaml#/paths/~1settlement-items~1{itemId}~1disputes"
+  /support/searches:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1searches"
   /support/cases:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases"
   /support/cases/{caseId}:
