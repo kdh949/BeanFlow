@@ -1,19 +1,20 @@
 # S20 SupportCase, Interaction과 SubjectLink foundation을 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s10-retention-audit-permission.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-11`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. S10의 실제 V39 Audit/retention/permission 결과를 direct input으로
-사용한다. S20의 migration-writer lease는 획득하지 않았고 Flyway 번호도 선택하지 않았다. 실행자는 latest
-main과 concurrent migration work를 다시 확인한 뒤 ADR-072 lease를 별도로 획득해야 한다.
+사용한다. S20의 migration-writer lease는 `feature/support-case-foundation`이 획득했고 V40을 선택했다.
+V40의 fresh PostgreSQL migration과 전체 검증을 완료했으므로 이 lease는 release됐고, 후속 plan은 이를
+승계하거나 번호를 예약하지 않는다.
 
-`Implementation-Ready=false`인 이유는 `docs/product/support-case-policy.md`가 exact state transition,
-requester/category vocabulary와 reopen policy를 아직 draft implementation policy로 두기 때문이다. 이 제품
-동작을 Accepted policy로 기록하기 전에는 migration/API 구현을 시작하지 않는다.
+`Implementation-Ready=true`인 이유는 direct dependency인 S10의 actual outcome과 S20 initial Case policy가 모두
+확정됐기 때문이다. `docs/product/support-case-policy.md`가 exact state transition, requester/category vocabulary,
+S20 no-reopen scope와 S40 DataAccessGrant terminal-Case 의무를 Accepted initial policy로 기록한다.
 
 ## Purpose / Big Picture
 
@@ -27,15 +28,16 @@ collection이 아닌 append-only query model로 조회한다. S10의 dormant per
 
 ## Current State
 
-- Support module, table, Controller와 canonical Support OpenAPI operation은 없다.
+- Support module, V40 tables, Controller와 canonical target/runtime SupportCase operations가 구현·검증됐다.
 - ADR-081은 독립 Support Context, owner public API와 ID reference boundary를 Accepted했다.
-- `docs/product/support-case-policy.md`의 exact state/requester/category/reopen vocabulary는 S20에서 계약과
-  PostgreSQL constraint로 검증해야 하는 draft implementation policy다.
+- `docs/product/support-case-policy.md`는 exact state/requester/category vocabulary와 S20 no-reopen scope를
+  Accepted initial policy로 확정했고, S20은 이를 계약과 PostgreSQL constraint로 검증한다.
 - V39는 `SUPPORT_CASE` close-based 3년 policy version과 `SUPPORT_CASE_READ/WRITE/ASSIGN` persistent permission을
   등록했지만 Case row, expiry 계산이나 deletion은 만들지 않았다.
 - Operations Audit append는 category/class/immutable policy version을 caller transaction에서 snapshot하고
   실패 시 caller write를 rollback한다.
-- latest migration inventory는 V39다. S20은 실행 전 V-next를 다시 선택해야 한다.
+- execution preflight에서 latest `main`/`origin/main` `26880ecce2a865e84696fa62c909ffa50fb5bd17`의 last migration이
+  V39임을 확인했고, S20 lease holder가 V40을 선택해 fresh PostgreSQL에서 적용했다. V1–V39는 수정하지 않았다.
 
 ## Scope
 
@@ -48,7 +50,7 @@ collection이 아닌 append-only query model로 조회한다. S10의 dormant per
 - identifier-only customer/store/order/delivery subject links with relationship and unlink history
 - create/list/get/assign/state-transition/interaction/note/link/unlink endpoint-specific DTO와 canonical target/runtime
   OpenAPI parity
-- persistent `SUPPORT_CASE_READ/WRITE/ASSIGN` authorization, queue/assignment/Case visibility and object relation checks
+- persistent `SUPPORT_CASE_READ/WRITE/ASSIGN` authorization, current-assignment/version checks and typed ID-link checks
 - Support lifecycle Audit using S10 category/policy snapshot and PII-free summaries
 - PostgreSQL constraints, idempotency, concurrency, migration and API contract tests
 
@@ -62,11 +64,11 @@ collection이 아닌 append-only query model로 조회한다. S10의 dormant per
 
 ## Readiness Gate
 
-S20 implementation 전 Business Policy에서 다음 하나의 결정을 확정한다: initial Case state transition matrix,
-requester/category closed vocabulary와 reopen 허용 여부/권한/Audit contract. 권고안은 현재 draft의
-`OPEN | IN_PROGRESS | WAITING | RESOLVED | CLOSED`와 requester/category vocabulary를 initial policy로
-승격하되 S20에서는 reopen endpoint를 노출하지 않는 것이다. 이 결정은 SupportCase 상태/API/DB CHECK와
-history fixture 전체에 영향을 주며 `docs/product/support-case-policy.md`와 필요 시 ADR-081 amendment에 기록한다.
+The initial Case state transition matrix, requester/category closed vocabulary and S20 no-reopen scope are Accepted in
+`docs/product/support-case-policy.md`. The policy fixes the `OPEN | IN_PROGRESS | WAITING | RESOLVED | CLOSED` vocabulary,
+Aggregate transition table, `OTHER` structured-detail requirement and terminal `CLOSED` behavior. It applies to Case
+state/API/DB CHECK and history fixtures. Reopen stays out of scope until its authorization/Audit contract is separately
+accepted; ADR-081 needs no amendment because the Context boundary remains unchanged.
 
 ## Business Rules and Invariants
 
@@ -82,10 +84,12 @@ history fixture 전체에 영향을 주며 `docs/product/support-case-policy.md`
    DTO projections and a stable endpoint-specific tuple.
 7. every command assumes duplicate delivery. same key/same canonical payload returns the stored terminal response;
    same key/different payload is a conflict, and no duplicate history/Audit row is written.
-8. persistent permission is necessary but not sufficient: Case visibility, current assignment where required, expected
-   Case version and subject relation are revalidated in the same transaction.
+8. persistent permission is necessary but not sufficient: current assignment where required and expected Case version are
+   revalidated in the same transaction. S20 typed ID links deliberately do not imply owner existence or subject relation.
 9. Audit failure rolls back privileged Case mutation. JWT role, cache, in-memory grant or no-op Audit is never a fallback.
 10. SupportCase 3-year retention policy is snapshot/reference input only in S20; deletion automation remains S120 scope.
+11. S20 does not create or revoke DataAccessGrant. S40 must make a terminal Case revoke active Grants and reject Grant
+    activation/reveal for a terminal Case in its own detailed plan; no S20 transition may claim that non-existent work ran.
 
 ## Architecture and Transaction Boundaries
 
@@ -98,24 +102,25 @@ one local database transaction. Any permission, policy, Audit or persistence fai
 idempotency response.
 
 Create uses an idempotency key/advisory transaction lock before inserting Case and initial state history. Assignment,
-transition, note/interaction and subject-link commands use Case-scoped serialization plus expected version. Do not hold
+transition and unlink use expected Case version; all Case commands use Case-scoped serialization. Do not hold
 the transaction across an external Provider or owner Context network call.
 
 ### Query transaction
 
-List/detail/history queries are read-only Support projections, except privileged reads that require an accepted access
-Audit contract. Object visibility predicates belong in the query/application boundary so another queue or Case does not
-leak existence or data. Dependency failure is 503, not an empty page or 404.
+List/detail are bounded Support projections. They run in a local transaction, rather than a database read-only
+transaction, because Operations persistent grant authorization locks its row. Object visibility predicates belong in
+the query/application boundary so another queue or Case does not leak existence or data. Dependency failure is 503,
+not an empty page or 404.
 
 ### Cross-context boundary
 
-S20 stores owner IDs and validates only through typed public owner Application APIs where validation is necessary.
-Support never imports owner Repository/Entity or updates owner tables. A dependency timeout remains unavailable/unknown;
-it is not converted to a valid subject link.
+S20 stores typed owner IDs only; it neither validates an owner object nor calls an owner Context for a subject link.
+Support never imports owner Repository/Entity or updates owner tables. A future owner validation dependency timeout
+remains unavailable/unknown; it is not converted to a valid subject link.
 
 ## Data and Migration
 
-After acquiring an execution-time lease, add one V-next forward migration that:
+The acquired execution-time lease added `V40__create_support_case_foundation.sql`, which:
 
 1. creates SupportCase with closed state/requester/category/priority vocabulary, version and retention policy reference;
 2. creates append-only assignment/state history with sequence/uniqueness and actor/reference constraints;
@@ -128,6 +133,17 @@ After acquiring an execution-time lease, add one V-next forward migration that:
 The implementation must define whether Case content expiry is materialized at close or derived by a later S120 owner
 port. It may reference the seeded immutable `SUPPORT_CASE` policy version, but must not delete content in S20.
 
+### Migration-writer lease evidence
+
+- **Acquired:** 2026-08-11 by `feature/support-case-foundation` from latest
+  `main`/`origin/main` `26880ecce2a865e84696fa62c909ffa50fb5bd17`.
+- **Inventory:** the repository worktree inventory has no executing Support or Analytics migration branch. The other
+  ready migration plan is metadata only; its `Migration lane released` note records a prior release, not a current lease.
+- **Selection:** current last Flyway migration is V39, so this sole lease holder selects `V40__create_support_case_foundation.sql`.
+- **Release:** V40 fresh migration, constraint and full-suite validation을 마친 이 completion handoff에서 lease를
+  release한다. 후속 schema-writing plan은 새 execution-time inventory와 fresh lease를 다시 획득해야 한다. Existing
+  V1–V39 migrations remain unchanged; no reservation manifest, checksum repair or migration renumbering is allowed.
+
 ## API and Event Contracts
 
 S20 owns the first nine rows in `docs/api/support-api-surface.md`: create/list/get Case, assignment, state transition,
@@ -135,9 +151,9 @@ interaction, note, subject link and unlink. Each operation gets a distinct reque
 `additionalProperties: false`, operation security and target/runtime parity only after Controller implementation.
 
 List/history cursors bind endpoint scope, filters, sort tuple and direction using the existing signed cursor convention.
-The exact tuple is recorded in ADR-070 only after the actual projection is selected. Generic Support command/resource
-schemas are forbidden. No event is required merely for local history; introduce an event only for a named consumer and
-record duplicate-delivery behavior.
+The actual Case-list tuple `(openedAt DESC, caseId DESC)`, optional state/assignee filter scope and 15-minute expiry are
+recorded in the ADR-070 S20 amendment. Generic Support command/resource schemas are forbidden. No event is required
+merely for local history; introduce an event only for a named consumer and record duplicate-delivery behavior.
 
 ## Failure Semantics
 
@@ -163,7 +179,8 @@ record duplicate-delivery behavior.
 - Application Service permission/object/assignment matrix, idempotent replay/conflict and Audit rollback
 - PostgreSQL fresh migration, CHECK/FK/UNIQUE, append-only history and no default grants
 - concurrent assignment/transition/idempotency winner tests with deterministic terminal outcomes
-- bounded cursor order/page/tampering/filter-scope tests and statement-count evidence for large history fixtures
+- bounded cursor order/page/tampering/filter-scope tests and an architecture check that Case has no interaction/note
+  collection; no performance measurement is claimed
 - secret/PII negative corpus proving no persistence, log, metric, Audit or snapshot leakage
 - Controller/OpenAPI request/response/error/security and target/runtime parity tests
 - Spring Modulith/ArchUnit tests proving Controller→Service and Support→owner public API boundaries
@@ -171,21 +188,31 @@ record duplicate-delivery behavior.
 
 ## Validation Commands
 
-- focused Support domain/application/PostgreSQL/API test selectors chosen from implemented class names
-- `./gradlew test --tests '*ModularityTests' --rerun-tasks`
-- `./gradlew spotlessCheck test`
-- `./scripts/verify-docs.sh`
-- `git diff --check`
-- migration inventory and checksum review proving V1..V39 unchanged and exactly one V-next added
+### Completion evidence (2026-08-11)
 
-Record every command, exit status and relevant count/duration in this plan. Do not claim performance without a comparable
-baseline and identical measurement conditions.
+- `./gradlew test --tests SupportCaseTest --tests SupportContentPolicyTest --tests SupportCaseMigrationTest --tests SupportCaseIntegrationTest --tests SupportCaseOpenApiContractTest --tests SupportArchitectureTest --tests ModularityTests --tests RuntimeOpenApiParityTest`
+  — exit 0, `BUILD SUCCESSFUL in 26s`.
+- First `./gradlew test` — exit 1: `AuditRetentionPolicyMigrationTest` expected the final Flyway version to be V39 at
+  line 40, while V40 was correctly present. The historical inventory expectation was updated from 39 to 40; no migration
+  was changed or removed.
+- Re-run `./gradlew test` — exit 0, `BUILD SUCCESSFUL in 8m 30s`; JUnit XML reports 144 suites, 672 tests, 0 failures,
+  0 errors and 1 skipped.
+- `./gradlew spotlessApply` — exit 0; `./gradlew spotlessCheck` — exit 0, `BUILD SUCCESSFUL in 774ms`.
+- `./scripts/verify-docs.sh` — exit 0; target/runtime OpenAPI 42 paths/46 operations and 115 schemas, plus 33 business
+  policies, 91 ADRs, 225 Markdown files and 36 ExecPlans validated.
+- `git diff --check` — exit 0.
+- After the `active/` → `completed/` move: `./scripts/verify-docs.sh` — exit 0 with the same 42/46/115 and
+  33/91/225/36 inventory; `./gradlew spotlessCheck` — exit 0, `BUILD SUCCESSFUL in 1s`; `./gradlew build` — exit 0,
+  `BUILD SUCCESSFUL in 1s` (2 executed, 9 up-to-date).
+
+The full suite exercises the actual `ModularityTests`; the focused command includes the S20 ArchUnit boundary test. No
+comparable performance baseline was run, so this plan makes no performance claim.
 
 ## Observability and Privacy
 
-Use closed state/category/outcome labels for Case create/transition/assignment/error and bounded query latency/count.
-Actor, requester, subject, Case, external reference, note, interaction content, reason and cursor are forbidden labels.
-Logs record stable outcome/error class and opaque correlation only where policy permits; rejected secrets are never echoed.
+S20 emits no Support-specific metric or log payload. Its Audit summary is limited to action/state/version; actor,
+requester, subject, Case, external reference, note, interaction content, reason and cursor are not included in the Audit
+payload. Future telemetry must use only closed outcome labels and preserve this exclusion.
 
 ## Documentation Updates
 
@@ -200,10 +227,11 @@ Logs record stable outcome/error class and opaque correlation only where policy 
 - [x] S10 direct input completed with V39 Audit/retention/permission evidence
 - [x] S20 plan authored from current repository and Accepted ADR-081 boundary
 - [x] Writes-Migration and execution-time lease requirement recorded
-- [ ] exact Case state/requester/category/reopen policy accepted and readiness recalculated
-- [ ] execution preflight/lease and V-next selection
-- [ ] domain/API tests and implementation
-- [ ] migration, full validation, documentation and completion handoff
+- [x] execution preflight: latest main/origin main, worktree inventory and sole migration-writer lease verified; V40 selected
+- [x] exact Case state/requester/category/no-reopen policy accepted and readiness recalculated
+- [x] SupportCase domain, persistence, Application Service, Controller and target/runtime OpenAPI implementation
+- [x] V40 migration and focused PostgreSQL/domain/integration/runtime-parity tests
+- [x] full validation, documentation consistency review and completion handoff; migration-writer lease released
 
 ## Surprises & Discoveries
 
@@ -218,15 +246,31 @@ Logs record stable outcome/error class and opaque correlation only where policy 
 |---|---|---|---|---|
 | 2026-08-11 | Plan boundary | independent Support Context with identifier-only owner links | preserve ADR-081 ownership and Aggregate boundaries | ADR-081, this plan |
 | 2026-08-11 | Readiness | S20 is active but not implementation-ready | S10 direct input exists, but exact Case transition/vocabulary/reopen policy remains draft | SupportCase Policy, this plan |
+| 2026-08-11 | Product policy | initial state matrix and closed vocabulary accepted; S20 exposes no reopen endpoint | persist/API contract needs a fixed policy; reopen requires future authorization and Audit decision | SupportCase Policy, SP-16 |
+| 2026-08-11 | Migration lease | `feature/support-case-foundation` is the sole S20 migration writer; V40 selected from latest main/origin main V39 inventory | ADR-072 requires one execution-time holder and branch-local next number selection | lease evidence above, ADR-072 |
 | 2026-08-11 | Scope | exact search, verification/reveal and action execution stay out of S20 | those features require later owner/security models | program orchestration |
+| 2026-08-11 | Product policy | S20 has no DataAccessGrant; S40 must revoke active Grants on terminal Case and block terminal Case grant activation/reveal | preserve terminal Case safety without inventing an out-of-scope Aggregate or a no-op revocation | SupportCase Policy, SP-16 |
+| 2026-08-11 | Completion | V40 Case foundation, API contract and full regression completed; migration-writer lease released | V1–V39 remain unchanged and all required S20 validation has evidence | validation evidence above |
 
 ## Outcomes & Retrospective
 
-Not implemented. This plan describes the now-eligible direct successor after S10, but the exact Case policy gate keeps
-readiness false. No Support code/table/endpoint, migration number, lease, performance result or capability release is
-claimed.
+V40 establishes the independent SupportCase boundary: Aggregate-protected state transitions, current assignment and
+append-only assignment/state histories; separate bounded interaction/note rows; typed opaque subject links; endpoint-
+specific target/runtime OpenAPI; and persistent permission plus object/version checks. Closed Cases reject ordinary
+mutations, content policy rejects secret/high-risk PII before persistence, and Audit failure rolls back the mutation.
+
+All required S20 domain, object authorization, PostgreSQL constraint, cursor, Modulith/ArchUnit and API contract checks
+passed. The migration-writer lease is released. S30 is not authored or ready: it still requires an Accepted ADR-083 and a
+customer/contact/crypto owner model. S40 remains a future plan and must implement the explicitly recorded terminal-Case
+DataAccessGrant revocation and activation/reveal denial. No performance result is claimed.
 
 ## Revision Notes
 
-- 2026-08-11: authored from completed S10 actual outcome and current Support policy/ADR/API inventory; readiness remains
-  false until exact Case transition/vocabulary/reopen policy is Accepted.
+- 2026-08-11: user accepted the initial Case state matrix, closed requester/category vocabulary and S20 no-reopen scope;
+  readiness is true. Execution still requires ADR-072 migration-writer lease and V-next selection.
+- 2026-08-11: `feature/support-case-foundation` acquired the sole migration-writer lease after latest-main/worktree preflight
+  and selected V40. The active Analytics plan is not an executing holder.
+- 2026-08-11: user confirmed that DataAccessGrant remains outside S20; policy now assigns terminal-Case Grant revocation and
+  terminal activation/reveal denial to the future S40 Grant implementation.
+- 2026-08-11: completed V40 fresh PostgreSQL/full-suite/format/document validation, corrected the historical V39 latest-
+  migration test expectation to V40, released the migration-writer lease, and moved this plan to completed path.

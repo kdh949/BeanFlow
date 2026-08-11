@@ -105,10 +105,11 @@
 애플리케이션 사전 조회만으로 보호하지 않는다. owner summary row lock/version,
 source-reference Unique Constraint와 같은 트랜잭션 최종 방어를 함께 사용한다.
 
-## Support planning additions
+## Support additions
 
-- SupportCase는 active/closed, assignment와 append-only history를 보호한다.
-- VerificationSession은 Case+Subject+Purpose에, DataAccessGrant는 operator+Case+Subject+field+reason+expiry에 묶인다.
+- S20 SupportCase는 Aggregate transition matrix, current assignee, terminal `CLOSED`, version과 append-only
+  assignment/state history를 보호한다. interaction/note는 Case collection이 아닌 별도 bounded record다.
+- VerificationSession은 Case+Subject+Purpose에, future DataAccessGrant는 operator+Case+Subject+field+reason+expiry에 묶인다.
 - ActionRequest revision과 ApprovalStep은 exact payload/policy/verification/aggregate version을 snapshot하며 actor separation을 DB와 service 양쪽에서 지킨다.
 - CompensationRequest는 immutable policy와 cost responsibility, one-benefit execution, duplicate/rolling-limit key를 보호한다.
 - PostAcceptanceResolutionCase는 trigger Order fact를 변경하지 않고 partial/unknown resolution을 별도 상태로 유지한다.

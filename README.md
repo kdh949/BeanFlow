@@ -47,6 +47,7 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
 - 인근 매장 검색과 매장 메뉴·픽업 슬롯 조회
 - PointAccount summary·transaction 조회
+- SupportCase 접수·담당·상태 전이, 제한형 메모·접촉 기록과 ID-only 대상 연결
 - React/TypeScript 고객·매장·운영 콘솔과 Runtime OpenAPI 생성 client
 - 로컬 데모 환경과 고객→결제→매장→포인트→부분/전액 환불 smoke flow
 
@@ -173,7 +174,7 @@ Controller mapping과 이 계약의 operation 집합을 양방향으로 비교�
 
 ### 계약 inventory
 
-현재 target과 runtime의 public operation inventory는 일치하며 34 paths/37 operations다.
+현재 target과 runtime의 public operation inventory는 일치하며 42 paths/46 operations다.
 이는 operation 개수이며 처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 장애 주입,
 실제 배포 smoke test와 SLA는 `Not measured`다.
 

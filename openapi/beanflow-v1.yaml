@@ -27,6 +27,7 @@ tags:
   - name: Loyalty
   - name: Settlement
   - name: Dispute
+  - name: Support
 paths:
   /stores/nearby:
     get:
@@ -1356,6 +1357,275 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /support/cases:
+    post:
+      tags: [Support]
+      operationId: createSupportCase
+      summary: Create an assigned SupportCase
+      description: |
+        Creates an OPEN Case assigned to the authenticated operator. The Case, initial assignment/state
+        histories, retention snapshot, Audit record, and stored idempotent response commit atomically.
+        Free text is rejected when it contains secrets or high-risk PII. No owner Context record is updated.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportCaseRequest"
+      responses:
+        "201":
+          description: Case created, or the original response replayed for the same command
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCase"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    get:
+      tags: [Support]
+      operationId: listSupportCases
+      summary: List SupportCases using a filter-bound cursor
+      description: |
+        Ordered by openedAt descending then Case ID descending. The signed cursor is bound to state and
+        assigneeId, expires after 15 minutes, and never loads interactions or notes as an entity collection.
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/SupportCaseState"
+        - name: assigneeId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Identifier"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Case summary page
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCasePage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}:
+    get:
+      tags: [Support]
+      operationId: getSupportCase
+      summary: Get a SupportCase and active identifier links
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+      responses:
+        "200":
+          description: Current Case representation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCase"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/assignments:
+    post:
+      tags: [Support]
+      operationId: assignSupportCase
+      summary: Append a SupportCase assignment
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignSupportCaseRequest"
+      responses:
+        "200":
+          description: Assignment appended, or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCaseAssignment"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/status-transitions:
+    post:
+      tags: [Support]
+      operationId: transitionSupportCase
+      summary: Transition an assigned active SupportCase
+      description: Only OPEN→IN_PROGRESS, IN_PROGRESS→WAITING|RESOLVED, WAITING→IN_PROGRESS, and RESOLVED→CLOSED are valid. CLOSED is terminal.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitionSupportCaseRequest"
+      responses:
+        "200":
+          description: State transition appended, or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCaseTransition"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/interactions:
+    post:
+      tags: [Support]
+      operationId: appendSupportInteraction
+      summary: Append a redacted Support interaction
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppendSupportInteractionRequest"
+      responses:
+        "200":
+          description: Interaction appended, or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportInteraction"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/notes:
+    post:
+      tags: [Support]
+      operationId: appendSupportNote
+      summary: Append a secret-filtered Support note
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppendSupportNoteRequest"
+      responses:
+        "200":
+          description: Note appended without returning its content
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportNote"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/subject-links:
+    post:
+      tags: [Support]
+      operationId: linkSupportSubject
+      summary: Link an opaque typed identifier to an active SupportCase
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkSupportSubjectRequest"
+      responses:
+        "200":
+          description: Subject link appended, or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportSubjectLink"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/subject-links/{linkId}:
+    delete:
+      tags: [Support]
+      operationId: unlinkSupportSubject
+      summary: Close an active Support subject link
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/SupportSubjectLinkId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlinkSupportSubjectRequest"
+      responses:
+        "200":
+          description: Link closed, or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportSubjectUnlink"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
 components:
   securitySchemes:
     bearerAuth:
@@ -1418,6 +1688,18 @@ components:
     SettlementBatchId:
       in: path
       name: settlementBatchId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportCaseId:
+      in: path
+      name: caseId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportSubjectLinkId:
+      in: path
+      name: linkId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -1587,6 +1869,13 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+  headers:
+    NoStore:
+      required: true
+      description: Sensitive support representation must not be stored by shared or browser caches.
+      schema:
+        type: string
+        const: no-store
   schemas:
     Identifier:
       type: string
@@ -3439,3 +3728,311 @@ components:
           $ref: "#/components/schemas/Currency"
         filedAt:
           $ref: "#/components/schemas/DateTime"
+    SupportCaseState:
+      type: string
+      enum: [OPEN, IN_PROGRESS, WAITING, RESOLVED, CLOSED]
+    SupportRequesterType:
+      type: string
+      enum: [CUSTOMER, STORE_OWNER, STORE_MEMBER, RIDER, THIRD_PARTY, INTERNAL_OPERATOR, SYSTEM, UNKNOWN]
+    SupportInquiryCategory:
+      type: string
+      enum: [ORDER_STATUS, PICKUP_RESCHEDULE, ORDER_CANCELLATION, PAYMENT_OR_REFUND, COUPON_OR_POINT, COMPENSATION, CUSTOMER_PROFILE, STORE_PROFILE, DELIVERY_STATUS, DELIVERY_INCIDENT, SETTLEMENT, DISPUTE, ACCOUNT_RECOVERY, PRIVACY, SAFETY, OTHER]
+    SupportCasePriority:
+      type: string
+      enum: [LOW, NORMAL, HIGH, URGENT]
+    SupportInteractionChannel:
+      type: string
+      enum: [PHONE, CHAT, EMAIL, IN_PERSON, SYSTEM]
+    SupportInteractionDirection:
+      type: string
+      enum: [INBOUND, OUTBOUND, INTERNAL]
+    SupportSubjectType:
+      type: string
+      enum: [CUSTOMER, STORE, ORDER, DELIVERY]
+    SupportSubjectRelationship:
+      type: string
+      enum: [REQUESTER, AFFECTED_CUSTOMER, AFFECTED_STORE, RELATED_ORDER, RELATED_DELIVERY, OTHER]
+    CreateSupportCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [requesterType, requesterReference, category, priority, reason]
+      properties:
+        requesterType:
+          $ref: "#/components/schemas/SupportRequesterType"
+        requesterReference:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Opaque requester reference; it is not expanded or validated against an owner table in S20.
+        category:
+          $ref: "#/components/schemas/SupportInquiryCategory"
+        priority:
+          $ref: "#/components/schemas/SupportCasePriority"
+        externalReference:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Structured operational reason; secrets and high-risk PII are rejected.
+      allOf:
+        - if:
+            properties:
+              category:
+                const: OTHER
+            required: [category]
+          then:
+            properties:
+              reason:
+                minLength: 3
+    AssignSupportCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [assigneeId, expectedVersion, reason]
+      properties:
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    TransitionSupportCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [targetState, expectedVersion, reason]
+      properties:
+        targetState:
+          $ref: "#/components/schemas/SupportCaseState"
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    AppendSupportInteractionRequest:
+      type: object
+      additionalProperties: false
+      required: [channel, direction, occurredAt, redactedSummary]
+      properties:
+        channel:
+          $ref: "#/components/schemas/SupportInteractionChannel"
+        direction:
+          $ref: "#/components/schemas/SupportInteractionDirection"
+        occurredAt:
+          $ref: "#/components/schemas/DateTime"
+        redactedSummary:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Must already exclude secrets and high-risk PII.
+    AppendSupportNoteRequest:
+      type: object
+      additionalProperties: false
+      required: [content, reason]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Secret- and high-risk-PII-filtered internal note. The successful response never returns content.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    LinkSupportSubjectRequest:
+      type: object
+      additionalProperties: false
+      required: [subjectType, subjectId, relationship, reason]
+      properties:
+        subjectType:
+          $ref: "#/components/schemas/SupportSubjectType"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        relationship:
+          $ref: "#/components/schemas/SupportSubjectRelationship"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    UnlinkSupportSubjectRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    SupportCase:
+      type: object
+      additionalProperties: false
+      required: [caseId, state, priority, assigneeId, version, openedAt, subjectLinks]
+      properties:
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          $ref: "#/components/schemas/SupportCaseState"
+        priority:
+          $ref: "#/components/schemas/SupportCasePriority"
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        openedAt:
+          $ref: "#/components/schemas/DateTime"
+        closedAt:
+          $ref: "#/components/schemas/DateTime"
+        subjectLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportSubjectLink"
+    SupportCaseSummary:
+      type: object
+      additionalProperties: false
+      required: [caseId, state, priority, assigneeId, version, openedAt]
+      properties:
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          $ref: "#/components/schemas/SupportCaseState"
+        priority:
+          $ref: "#/components/schemas/SupportCasePriority"
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        openedAt:
+          $ref: "#/components/schemas/DateTime"
+    SupportCasePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportCaseSummary"
+        nextCursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+    SupportCaseAssignment:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, assigneeId, state, caseVersion, assignedAt]
+      properties:
+        assignmentId:
+          $ref: "#/components/schemas/Identifier"
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          $ref: "#/components/schemas/SupportCaseState"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        assignedAt:
+          $ref: "#/components/schemas/DateTime"
+    SupportCaseTransition:
+      type: object
+      additionalProperties: false
+      required: [transitionId, previousState, currentState, caseVersion, occurredAt]
+      properties:
+        transitionId:
+          $ref: "#/components/schemas/Identifier"
+        previousState:
+          $ref: "#/components/schemas/SupportCaseState"
+        currentState:
+          $ref: "#/components/schemas/SupportCaseState"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        occurredAt:
+          $ref: "#/components/schemas/DateTime"
+    SupportInteraction:
+      type: object
+      additionalProperties: false
+      required: [interactionId, channel, direction, summary, occurredAt, recordedAt, caseVersion]
+      properties:
+        interactionId:
+          $ref: "#/components/schemas/Identifier"
+        channel:
+          $ref: "#/components/schemas/SupportInteractionChannel"
+        direction:
+          $ref: "#/components/schemas/SupportInteractionDirection"
+        summary:
+          type: string
+          const: INTERACTION_RECORDED
+        occurredAt:
+          $ref: "#/components/schemas/DateTime"
+        recordedAt:
+          $ref: "#/components/schemas/DateTime"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportNote:
+      type: object
+      additionalProperties: false
+      required: [noteId, summary, createdAt, caseVersion]
+      properties:
+        noteId:
+          $ref: "#/components/schemas/Identifier"
+        summary:
+          type: string
+          const: NOTE_RECORDED
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportSubjectLink:
+      type: object
+      additionalProperties: false
+      required: [linkId, subjectType, subjectId, relationship, linkedAt]
+      properties:
+        linkId:
+          $ref: "#/components/schemas/Identifier"
+        subjectType:
+          $ref: "#/components/schemas/SupportSubjectType"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        relationship:
+          $ref: "#/components/schemas/SupportSubjectRelationship"
+        linkedAt:
+          $ref: "#/components/schemas/DateTime"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportSubjectUnlink:
+      type: object
+      additionalProperties: false
+      required: [linkId, unlinkedAt, caseVersion]
+      properties:
+        linkId:
+          $ref: "#/components/schemas/Identifier"
+        unlinkedAt:
+          $ref: "#/components/schemas/DateTime"
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0

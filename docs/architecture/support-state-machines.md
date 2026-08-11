@@ -1,15 +1,24 @@
 # Support State Machines
 
-> **Status:** `DRAFT`; diagrams are Stage inputs, not Accepted persisted/API enum contracts.
+> **Status:** `PARTIALLY IMPLEMENTED`; the S20 Case state contract below is Accepted and persisted/API-backed.
+> Verification and Grant diagrams remain future-stage inputs.
 
 ## Case
 
 ```text
-OPEN -> IN_PROGRESS -> WAITING -> IN_PROGRESS -> RESOLVED -> CLOSED
-                                  RESOLVED -> IN_PROGRESS (audited reopen)
+OPEN        -> IN_PROGRESS
+IN_PROGRESS -> WAITING | RESOLVED
+WAITING     -> IN_PROGRESS
+RESOLVED    -> CLOSED
 ```
 
+`CLOSED` is terminal in S20; no reopen transition or endpoint exists.
+
 ## Verification and grant
+
+These are S40 contracts, not S20 persistence or endpoints. When Grant becomes implemented, a Case entering
+`RESOLVED` or `CLOSED` must revoke its active Grants in the same Case boundary, and Grant activation/reveal for a
+terminal Case must fail closed.
 
 ```text
 CHALLENGE_PENDING -> VERIFIED | FAILED -> LOCKED

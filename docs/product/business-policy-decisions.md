@@ -1648,6 +1648,7 @@
 | SP-13 | Accepted | financial Audit 5y는 PII Audit 2y로 대체하지 않음; active PII와 legal-minimum record 분리 | [retention](support-retention-policy.md), ADR-089 |
 | SP-14 | Accepted scope / Proposed boundary | Support Console은 최종 scope다. 별도 app, 기존 app 통합, server-rendered boundary는 credential/CORS/CSRF/trust/deployment 결정 전 Proposed다. | ADR-090 |
 | SP-15 | Accepted | 자체 rider/call-center/rules-engine/premature Elasticsearch와 bulk export는 비목표 | [non-goals](non-goals.md) |
+| SP-16 | Accepted initial policy | S20 Case 상태는 `OPEN`, `IN_PROGRESS`, `WAITING`, `RESOLVED`, `CLOSED`이고 Aggregate 전이 matrix는 SupportCase Policy에 고정한다. S20은 reopen endpoint를 노출하지 않으며 `OTHER`는 구조화된 상세 사유를 요구한다. S20에는 `DataAccessGrant`가 없고, S40 Grant 도입 시 terminal Case의 active Grant 철회와 terminal Case에서의 Grant 활성화·reveal 차단을 같은 Case 경계에서 구현한다. | [case](support-case-policy.md) |
 
 ## Support implementation gates
 

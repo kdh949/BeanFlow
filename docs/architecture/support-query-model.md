@@ -1,7 +1,17 @@
 # Support Query Model
 
-> **Status:** `PROPOSED IMPLEMENTATION MODEL`
-> **Canonical API status:** endpoint-specific filter/sort/cursor schemas are not accepted or present in OpenAPI.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list is implemented. Search, timeline and owner-composed views remain
+> proposed implementation models.
+> **Canonical API status:** S20 has one endpoint-specific Case-list filter/sort/cursor schema; later query schemas are
+> not accepted or present in OpenAPI.
+
+## S20 Case list
+
+`GET /support/cases` uses a JDBC summary projection ordered by `(openedAt DESC, caseId DESC)`. Its signed 15-minute
+cursor binds optional state and optional assignee ID; interactions and notes are neither selected nor JPA collections.
+The endpoint does not compose owner data or validate owner IDs in S20.
+
+## Future support query model
 
 `SupportSearchQueryService`, `SupportSubjectSummary`, `SupportOrderTimeline`, `SupportDeliveryView` and `SupportActionAvailabilityView` compose owner DTOs without adding JPA relationships to write models.
 
@@ -11,7 +21,7 @@ remain blocked by Proposed ADR-083 and the owner model selected in S30. The prod
 Elasticsearch requires measured need and a new Accepted decision.
 
 Each timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
-from the implemented owner DTOs before adopting ADR-070. No shared Support tuple is accepted in S00. Items expose only
-the source, public state, masked summary and correlation/causation reference that their typed contract allows. Dependency
-failure is non-success, never an empty 200. A materialized projection is allowed only when lag, freshness and rebuild
-failure semantics are explicit.
+from the implemented owner DTOs before adopting ADR-070. The S20 Case-list tuple is not a shared Support tuple. Items
+expose only the source, public state, masked summary and correlation/causation reference that their typed contract
+allows. Dependency failure is non-success, never an empty 200. A materialized projection is allowed only when lag,
+freshness and rebuild failure semantics are explicit.

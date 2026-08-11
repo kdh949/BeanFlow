@@ -9,11 +9,16 @@
   immutable policy version/category/class/expiry를 snapshot한다. policy/Audit 실패는 caller를 rollback한다.
 - operator authorization은 caller-local transaction에서 persistent actor/permission row를 잠근다. revoke와
   authorization은 같은 row에서 직렬화되며 role/JWT claim은 grant 조회 실패의 fallback이 아니다.
-- SupportCase, assignment, reveal와 owner command transaction은 아직 구현되지 않았다.
+- S20 Case create/assignment/transition/interaction/note/link/unlink은 Support local transaction으로 구현됐다.
+  Operations persistent permission과 retention policy head를 잠그고, SupportCase advisory/row lock, immutable history,
+  idempotency response와 PII-free lifecycle Audit를 함께 commit한다. 권한·정책·Audit·DB 실패는 모두 rollback한다.
+  read permission도 persistent grant row를 잠그므로 S20 list/detail은 read-only transaction을 사용하지 않는다.
+- Verification/DataAccessGrant/reveal와 owner command transaction은 아직 구현되지 않았다. S40은 terminal Case Grant
+  revocation과 terminal activation/reveal denial을 같은 Case boundary에 포함해야 한다.
 
 ## Local atomic candidates
 
-- SupportCase state + append-only history
+- SupportCase state + append-only history (S20 implemented)
 - verification outcome + attempt/lock update
 - grant activation/reveal authorization + pre-reveal Audit when co-located
 - ActionRequest revision + policy snapshot; ApprovalStep + request state

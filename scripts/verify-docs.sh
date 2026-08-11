@@ -1304,6 +1304,7 @@ else:
         'GET /operations/policies/ordinary-point-accrual/global/versions',
         'GET /operations/policies/ordinary-point-accrual/stores',
         'GET /operations/policies/ordinary-point-accrual/stores/{storeId}/versions',
+        'GET /support/cases',
     }
     cursor_operations = set()
     for path, path_item in spec['paths'].items():

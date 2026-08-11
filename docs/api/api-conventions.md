@@ -25,16 +25,17 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 
 ### Support draft surface
 
-The 55 planned Support/Delivery/LegalHold operations are kept in
-[`support-api-surface.md`](support-api-surface.md) as `DRAFT`, not in either canonical OpenAPI file. An owning Stage
-adds endpoint-specific request, response/page, error and security schemas to target OpenAPI only when its model is
-implementable. Runtime OpenAPI still requires a matching Controller, contract, authorization and failure tests.
+The 55 Support/Delivery/LegalHold operations are kept in
+[`support-api-surface.md`](support-api-surface.md). S20's nine Case operations are implemented in both canonical
+OpenAPI files; every other row remains `DRAFT`. An owning Stage adds endpoint-specific request, response/page, error and
+security schemas to target OpenAPI only when its model is implementable. Runtime OpenAPI still requires a matching
+Controller, contract, authorization and failure tests.
 
 Exact phone/email input uses a POST body. Sensitive successful responses carry
 `Cache-Control: no-store`; errors must not echo or retain raw PII. State-changing commands require
 `Idempotency-Key`, same-key/changed-payload is 409, and execution re-evaluates current policy/version.
-An endpoint may reuse ADR-070 only after its Stage records the exact typed filters and stable sort tuple. No Support
-cursor contract is accepted by S00.
+An endpoint may reuse ADR-070 only after its Stage records the exact typed filters and stable sort tuple. S20 records
+the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted.
 
 - `200 OK`: 조회 또는 동기 처리 결과
 - `201 Created`: 새 리소스 생성
@@ -319,8 +320,8 @@ reason과 evidence를
 
 - 목록은 안정적인 cursor를 우선 검토한다.
 - common cursor는 ADR-070의 `v1.<key-id>.<payload>.<signature>` HMAC-SHA-256 format을
-  사용한다. endpoint, canonical filter hash, stable sort tuple과 24시간 expiry를 signature에
-  bind한다.
+  사용한다. endpoint, canonical filter hash, stable sort tuple과 endpoint별 최대 24시간 expiry를 signature에
+  bind한다. S20 Case list expiry는 15분이다.
 - v1 payload는 whitespace-free UTF-8 JSON이며 property 순서는 `endpoint`, `filterHash`, `sort`,
   `issuedAt`, `expiresAt`로 고정한다. 추가 property와 `null`은 허용하지 않고, `sort`는 순서를 보존하는
   string array, 두 시각은 JSON integer epoch second, UUID sort value는 lowercase canonical UUID다.
@@ -349,6 +350,8 @@ reason과 evidence를
 - 일반 포인트 적립 정책의 GLOBAL/STORE history와 STORE head 목록도 같은 signed cursor를 사용한다.
   version history는 `policyVersionId DESC`, STORE head는 `(policyVersionId DESC, storeId DESC)`이며
   cursor는 endpoint, GLOBAL/STORE scope와 optional state filter에 bind된다.
+- S20 Case list는 `(openedAt DESC, caseId DESC)`이며 cursor를 endpoint, optional state와 optional assignee ID에
+  bind한다. response에는 interaction/note collection을 포함하지 않는다.
 
 ## Ordinary point accrual policy operations
 

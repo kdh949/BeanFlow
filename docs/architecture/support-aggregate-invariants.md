@@ -1,7 +1,7 @@
 # Support Aggregate Responsibilities and Invariants
 
-> **Status:** `DRAFT IMPLEMENTATION MODEL`; only invariants explicitly anchored to Accepted ADR-081/082/084-089 are
-> Accepted. Aggregate names, fields and constraints are finalized by the owning Stage.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase/Interaction/Note/SubjectLink rules are persisted and tested.
+> Future Aggregate names and constraints remain Stage-owned planning inputs unless anchored by an Accepted ADR/policy.
 
 ## Implemented S10 foundation
 
@@ -11,11 +11,13 @@ Operations는 Audit category/class/immutable policy version과 persistent `Opera
 
 ## SupportCase
 
-Protects active/closed lifecycle, assignment, subject links and state history. Closed cases reject ordinary work; privileged action requires current assignment.
+Protects the S20 active/closed lifecycle, assignment, subject links and state history. `CLOSED` rejects every ordinary
+Case mutation; Case transitions use the Accepted no-reopen matrix. Assignment and state histories append in the same
+transaction as Case version changes. Interactions, notes and links remain separate rows, never a Case collection.
 
 ## VerificationSession and DataAccessGrant
 
-Session binds Case+Subject+Purpose+action scope and never upgrades itself from BASIC to ENHANCED. Grant binds operator+case+subject+field+reason+expiry/reveal budget. Audit must commit before reveal; expiry, revocation, case closure and scope mismatch fail closed.
+Session binds Case+Subject+Purpose+action scope and never upgrades itself from BASIC to ENHANCED. Grant binds operator+case+subject+field+reason+expiry/reveal budget. Audit must commit before reveal; expiry, revocation, case closure and scope mismatch fail closed. These Aggregates do not exist in S20: S40 must implement Case-terminal revocation and terminal activation/reveal denial.
 
 ## SupportActionRequest and ApprovalStep
 
