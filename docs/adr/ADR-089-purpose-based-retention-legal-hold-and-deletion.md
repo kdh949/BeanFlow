@@ -11,6 +11,11 @@
 
 AuditCategory+RetentionClass+immutable PolicyVersion으로 financial transaction 5y, Support content 3y, PII access 2y, delivery contact 90d, current location 24h, raw webhook 7d 등 Initial policy를 분리한다. 법적 최소 record는 active PII와 분리한다. LegalHold는 scoped, distinct approval, next-review와 expiry가 필수다. Deletion은 DB/Crypto/Object/Index/Projection component states와 redacted ledger를 보존하며 backup restore 전에 deletion decisions를 재적용한다.
 
+고객 NotificationInboxItem은 거래 증거가 아닌 convenience Projection으로 분류하고
+[BR-37](../product/business-policy-decisions.md)에 따라 분류와 무관하게 생성 후 90일 보존한다. 읽음,
+preference와 Delivery 상태는 기한을 연장하지 않는다. Notification owner의 bounded worker가 삭제하며
+Order·Refund·Audit 또는 NotificationDelivery 보존에는 영향을 주지 않는다.
+
 ## Alternatives Considered
 
 - 모든 Audit 5y: PII 최소화 부족.
@@ -29,6 +34,9 @@ AuditCategory+RetentionClass+immutable PolicyVersion으로 financial transaction
 ## Verification
 
 Boundary clock, 5y/2y regression, LegalHold race/review/expiry, component partial failure, restore replay와 PII-free ledger tests.
+
+NotificationInboxItem은 90일 경계, 읽음·preference·Delivery retry 뒤 기한 불변, owner-local bounded
+삭제와 Ordering 데이터 비삭제를 검증한다.
 
 ## Implementation Evidence
 

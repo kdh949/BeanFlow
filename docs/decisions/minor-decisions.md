@@ -14,6 +14,8 @@
 | MD-2026-010 | 2026-08-07 | Discovery pickup slot 조회 범위 | **Superseded (2026-08-08) — [ADR-076](../adr/ADR-076-store-catalog-read-contract.md)과 BR-05 Slot Reservation Window Amendment로 대체됨.** 원 결정: `GET /stores/{storeId}/pickup-slots`는 주입된 Clock 기준 `ends_at > now`인 슬롯만 `(starts_at, id)` 순서로 반환하고 `PickupReservationService.reserve`의 슬롯 시간 미검증 동작은 바꾸지 않는다 | 원 근거: 계약이 "available pickup slots"이고 종료된 슬롯은 픽업할 수 없으나, 쓰기 경로 변경은 별도 제품 결정이 필요하므로 read와 write 창이 다르다는 사실을 문서에 남긴다. 이후 조회 창은 공개 계약을 바꾸고 쓰기 경로의 시간 검증과 함께 결정해야 하므로 Minor Decision 분류가 맞지 않다고 판단해 승격했다 | `PickupSlotQueryOperations.kt`, `PickupSlotQueryRepository.kt`, nearby runbook | 대체 완료. 이후 변경은 ADR-076에서 다룬다 |
 | MD-2026-011 | 2026-08-07 | Discovery 메뉴 목록 availability 투영 | `GET /stores/{storeId}/menus`는 store의 메뉴와 옵션을 모두 반환하고 `available`에 현재 owner state를 그대로 투영한다 | `Menu.available`과 `MenuOption.available`이 required 필드이므로 판매 가능한 항목만 거르면 계약이 무의미해진다. `merchant_menu`에는 별도 visibility 컬럼이 없어 없는 모델을 추정하지 않는다 | `StoreMenuQueryOperations.kt`, `StoreMenuQueryRepository.kt` | 별도 visibility/노출 정책과 컬럼이 도입될 때 |
 
+| MD-2026-012 | 2026-08-12 | 점주 매출 분석 지표 소유권 | 점주 콘솔 `3a 매출 분석`은 새 지표를 정의하지 않고 BR-31의 두 지표(환불 발생일 기준 환불액, 원 주문 완료일 기준 보정 수익)만 소비한다. 객단가·환불률·인기 메뉴는 그 두 지표와 주문 스냅샷에서 파생하고, 지표 정의는 Analytics Context가 단독 소유한다. 따라서 점주 매출 분석은 [Analytics ExecPlan](../exec-plans/active/analytics-refund-and-late-event-projection.md) 완료 이후의 P1이다 | 같은 이름의 지표가 두 Context에서 다른 숫자를 내면 점주가 보는 예상 정산액과 실제 정산 명세가 어긋난다. BR-31과 ADR-023이 이미 귀속일 규칙을 확정했으므로 Merchant가 다시 정의할 이유가 없다 | `docs/product/design-to-capability-map.md`, 향후 Merchant analytics query | 점주 화면이 Analytics의 두 지표로 표현할 수 없는 요구를 갖게 될 때 |
+
 ## ID format
 
 `MD-YYYY-NNN`

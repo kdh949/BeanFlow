@@ -15,11 +15,16 @@ JWT의 `STORE_OWNER` 또는 `STORE_STAFF` 역할만 검사하면 같은 역할�
 - membership은 actor ID, store ID, `OWNER | STAFF` 역할과
   `ACTIVE | REVOKED` 상태를 가진다.
 - `(actor_id, store_id)`는 Unique Constraint로 한 관계만 허용한다.
-- Controller는 `STORE_OWNER | STORE_STAFF` 역할을 검사하고, Ordering Application
-  Service는 Order의 store ID로 `StoreAccessOperations.requireOrderManagementAccess`
-  를 호출한다.
-- role과 membership role이 모순되면 권한을 거부한다. `STORE_OWNER`는 `OWNER`,
-  `STORE_STAFF`는 `STAFF` membership이 필요하다.
+- **2026-08-12 Session amendment:** 고객·점주 Session 전환 뒤 Merchant Chain은 인증 결과를
+  `MerchantActor`로 만들고 Controller는 점주 역할이나 store ID를 요청·Session에서 받지 않는다.
+  Ordering Application Service는 Order의 store ID와 해당 operation이 허용하는 membership 역할 집합으로
+  `StoreAccessOperations`를 호출한다. 주문 운영·부분 환불은 `OWNER | STAFF`, 정산·이의제기는
+  `OWNER`만 허용한다.
+- P0 점주 Session에는 role·membership을 캐시하지 않는다. 요청 시점의 `ACTIVE StoreMembership.role`이
+  객체 관계와 세부 역할의 단일 authoritative source다. 따라서 revoke와 role 변경이 다음 요청에 즉시
+  반영된다. `MerchantActor` 유형은 coarse merchant gate일 뿐 특정 store 권한이 아니다.
+- 기존 JWT의 `STORE_OWNER | STORE_STAFF` claim과 membership role 일치 검사는 productization-20 전환
+  전 runtime에만 적용한다. 전환 후 Merchant JWT 경로를 병행하거나 Session에 claim을 복제하지 않는다.
 - membership이 없거나 `REVOKED`이거나 다른 매장 관계면 `403`이다.
 - 권한 확인은 상태 변경 전에 수행하고 성공 actor type을 AuditRecord에 기록한다.
 
@@ -48,7 +53,7 @@ JWT의 `STORE_OWNER` 또는 `STORE_STAFF` 역할만 검사하면 같은 역할�
 
 ## Verification
 
-- 역할 없음, membership 없음, 타 매장, `REVOKED`, role 불일치 `403`
+- 잘못된 actor 유형, membership 없음, 타 매장, `REVOKED`, operation에 허용되지 않은 role `403`
 - 해당 매장의 일치하는 `ACTIVE` membership 성공
 - 동일 actor/store 동시 등록 Unique Constraint
 
