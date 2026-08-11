@@ -10,6 +10,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointTransactionViewType
 import io.github.kdh949.beanflow.loyalty.api.ReadPointAccountCommand
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
@@ -144,6 +145,7 @@ internal class SupportPointAccountReadTransaction(
                 AppendAuditRecordCommand(
                     actorId = command.actor.actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = "POINT_ACCOUNT_READ",
                     targetType = "POINT_ACCOUNT",
                     targetId = command.accountId,
@@ -167,6 +169,7 @@ internal class SupportPointAccountReadTransaction(
                 AppendAuditRecordCommand(
                     actorId = command.actor.actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = "POINT_ACCOUNT_READ",
                     targetType = "POINT_ACCOUNT",
                     targetId = command.accountId,

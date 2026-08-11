@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualExpiryRule
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
@@ -104,6 +105,7 @@ internal class OrdinaryPointAccrualPolicyBootstrapTransaction(
                 AppendAuditRecordCommand(
                     actorId = principal.reference,
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.OPERATIONS_POLICY,
                     action = "POINT_ACCRUAL_POLICY_BOOTSTRAPPED",
                     targetType = "POINT_ACCRUAL_POLICY_GLOBAL",
                     targetId = OrdinaryPointAccrualPolicySnapshot.GLOBAL_SCOPE_REFERENCE,

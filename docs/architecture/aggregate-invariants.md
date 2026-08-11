@@ -33,8 +33,9 @@
 | RepairProposal | 금융 setup 복구의 2인 승인 | case당 active 하나, proposer≠decider, 30분 만료, terminal 재개 금지 | case/order/payment IDs |
 | AcceptanceTimeoutWork | 관측된 PAID deadline winner의 내구 실행 | order+deadline source unique, claim lease, nonterminal 자동 정리 금지 | `orderId` |
 | OrderCompensationCase | 주문 종료 후 owner 보상 추적 | order당 하나, trigger 필수, 여섯 step과 두 benefit policy snapshot | `orderId`, event/source IDs |
-| AuditRecord | 중요 변경의 target별 감사 | 5년 보존 중 append-only, action/target/source 중복 금지, 필수 주체·사유·correlation, 민감정보 금지 | target IDs |
+| AuditRecord | 중요 변경의 target별 감사 | category/class/immutable policy version snapshot, financial 5년·PII access 2년, append-only, action/target/source 중복 금지, 필수 주체·사유·correlation, PII 원문 금지 | target IDs |
 | OperatorPermissionGrant | privileged operator permission source | actor/permission unique, ACTIVE/REVOKED lifecycle, role/JWT fallback 금지 | `actorId` |
+| RetentionPolicyVersion/Head | 목적별 보존 규칙과 current pointer | version 수정·삭제 금지, category/class/duration 일치, Audit append가 head lock과 exact version을 snapshot | actor/evidence IDs |
 | BenefitRestorationPolicyVersion | 종료 원인·혜택별 만료 복원 규칙 이력 | version ID 전역 유일, row 수정·삭제 금지, trigger/type/mode 유효 | actor ID |
 | CompensationCouponTermsSnapshot | 종료 Campaign과 독립적인 보상 쿠폰 조건·비용 부담 | 원 issuance snapshot 복사, share 합 10000, 발급 후 불변 | CouponIssuance ID |
 | OrderCompensationBenefitPolicySnapshot | Case가 확정한 혜택별 정책 참조 | Case당 COUPON·POINTS 각 하나, immutable version FK | `caseId`, `policyVersionId` |
@@ -94,8 +95,9 @@
 | `RepairProposalRepository` | RepairProposal | case당 active proposal 하나, actor 분리, guarded terminal transition | partial unique + row lock |
 | `AcceptanceTimeoutWorkRepository` | AcceptanceTimeoutWork | order/deadline source unique, claim lease와 terminal retention guard | unique + skip-locked claim |
 | `OrderCompensationCaseRepository` | OrderCompensationCase | order unique, trigger/step CHECK, case+step unique | unique + guarded step transition |
-| `AuditRecordRepository` | AuditRecord | action/target/source unique, occurred-at/correlation/retention-expiry index | append-only permissions + retention worker role |
+| `AuditRecordRepository` | AuditRecord | action/category mapping, immutable policy version FK, action/target/source unique, class/expiry/id index | append-only permissions + retention worker role |
 | `OperatorPermissionGrantRepository` | OperatorPermissionGrant | actor/permission unique, active/revoked state and audit source | same transaction grant lock + guarded revoke |
+| `RetentionPolicyVersionRepository` | RetentionPolicyVersion/Head | immutable version, category head PK, category/class/version composite FK | append head read lock + future audited activation lock |
 | `BenefitRestorationPolicyRepository` | BenefitRestorationPolicyVersion/Head | global version PK, trigger+benefit head PK, append-only version | COUPON→POINTS head row lock + CAS |
 | `OrderCompensationBenefitPolicySnapshotRepository` | OrderCompensationBenefitPolicySnapshot | case+benefit unique, policy version FK, Case당 두 row | Case 생성 transaction |
 

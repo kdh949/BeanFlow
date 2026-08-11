@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryOutcome
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryResult
@@ -162,6 +163,7 @@ internal class ReservationExpiryService(
     ) = AppendAuditRecordCommand(
         actorId = "SYSTEM",
         actorType = AuditActorType.SYSTEM,
+        category = AuditCategory.ORDER_AND_FULFILLMENT,
         action = action,
         targetType = targetType,
         targetId = targetId,

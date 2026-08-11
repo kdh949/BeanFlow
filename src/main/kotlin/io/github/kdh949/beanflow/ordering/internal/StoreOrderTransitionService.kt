@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.identity.api.StoreActor
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
@@ -294,6 +295,7 @@ internal class StoreOrderTransitionService(
                             StoreActorRole.OWNER -> AuditActorType.STORE_OWNER
                             StoreActorRole.STAFF -> AuditActorType.STORE_STAFF
                         },
+                    category = AuditCategory.ORDER_AND_FULFILLMENT,
                     action = "STORE_ORDER_${request.targetState.name}",
                     targetType = "ORDER",
                     targetId = order.id,

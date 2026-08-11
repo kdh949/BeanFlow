@@ -3,7 +3,7 @@
 > **Status:** Accepted retention/LegalHold/deletion principles from ADR-089 with `PROPOSED` S10/S120 schema and worker
 > mechanics. No table, worker or restore procedure below is implemented by S00.
 
-`RetentionPolicyVersion` maps category and purpose to immutable RetentionClass. `retentionExpiresAt` is evidence, not the only policy source. Existing records are not silently reclassified when policy changes.
+`RetentionPolicyVersion` maps category and purpose to immutable RetentionClass. `retentionExpiresAt` is evidence, not the only policy source. `retentionProvenance` distinguishes an append-time snapshot from migration or rollout classification; existing records are not silently reclassified when policy changes.
 
 ```text
 candidate keyset chunk -> LegalHold check -> owner precondition

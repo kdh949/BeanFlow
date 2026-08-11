@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundProvider
 import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundRestoration
@@ -163,6 +164,7 @@ internal class PartialRefundPaymentService(
                 AppendAuditRecordCommand(
                     actorId = command.actorId.toString(),
                     actorType = command.auditActorType.toOperationsType(),
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = "PARTIAL_REFUND_REQUESTED",
                     targetType = "PAYMENT_REFUND",
                     targetId = refundId,
@@ -772,6 +774,7 @@ internal class PartialRefundSuccessLedger(
                 AppendAuditRecordCommand(
                     actorId = "SYSTEM",
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = "PARTIAL_REFUND_CASH_SUCCEEDED",
                     targetType = "PAYMENT_REFUND",
                     targetId = refund.id,

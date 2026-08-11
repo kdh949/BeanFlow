@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyHead
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
@@ -63,6 +64,7 @@ internal class ExpiredBenefitRestorationPolicyService(
                         AppendAuditRecordCommand(
                             actorId = command.actorId.toString(),
                             actorType = AuditActorType.PLATFORM_OPERATOR,
+                            category = AuditCategory.OPERATIONS_POLICY,
                             action = "EXPIRED_BENEFIT_POLICY_READ",
                             targetType = "EXPIRED_BENEFIT_POLICY_HEAD_SET",
                             targetId = POLICY_HEAD_SET_TARGET_ID,
@@ -123,6 +125,7 @@ internal class ExpiredBenefitRestorationPolicyService(
                         AppendAuditRecordCommand(
                             actorId = command.actorId.toString(),
                             actorType = AuditActorType.PLATFORM_OPERATOR,
+                            category = AuditCategory.OPERATIONS_POLICY,
                             action = "EXPIRED_BENEFIT_POLICY_CHANGED",
                             targetType = "EXPIRED_BENEFIT_POLICY_HEAD",
                             targetId = policyTargetId(command.trigger, command.benefitType),

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import org.springframework.stereotype.Component
@@ -78,6 +79,7 @@ internal class PaymentMethodAuditWriter(
                 AppendAuditRecordCommand(
                     actorId = actorId,
                     actorType = actorType,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = action,
                     targetType = targetType,
                     targetId = targetId,

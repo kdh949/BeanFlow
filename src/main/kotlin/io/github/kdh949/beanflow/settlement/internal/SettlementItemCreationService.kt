@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2Contract
 import io.github.kdh949.beanflow.eventing.api.SettlementItemCreatedV1
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.operations.api.SettlementLateItemReprocessingCaseOperations
@@ -122,6 +123,7 @@ internal class SettlementItemCreationService(
                 AppendAuditRecordCommand(
                     actorId = SYSTEM_ACTOR,
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.SETTLEMENT_AND_DISPUTE,
                     action = "SETTLEMENT_ITEM_CREATED",
                     targetType = "SETTLEMENT_ITEM",
                     targetId = item.id,

@@ -48,6 +48,11 @@
 `PLATFORM_OPERATOR` role과 active grant를 같은 local transaction에서 확인한다. revoked/missing
 grant는 403, grant/Audit persistence failure는 503이다.
 
+S10은 기존 9개와 Support/Operations/Privacy 33개를 합친 42개 closed permission 값을 enum과 DB 제약에
+등록했다. 새 값은 persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만, role bundle이나
+default grant로 배포되지 않는다. SupportCase, 검색, PII reveal, action, Delivery, LegalHold endpoint가 없는
+동안 이 값들은 dormant foundation이며 capability release를 뜻하지 않는다.
+
 주문 보상 case step 상세 GET은 active `ORDER_COMPENSATION_READ` grant와
 `X-Access-Reason` header를 요구하고 target Case access Audit와 조회를 한 local
 transaction에 묶는다. 다른 policy·point permission이나 `PLATFORM_OPERATOR` role만으로

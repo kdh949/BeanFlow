@@ -172,6 +172,29 @@ internal class OperatorPermissionIntegrationTest
         }
 
         @Test
+        fun `every support permission is persisted authorized and revoked through the existing grant boundary`() {
+            SUPPORT_PERMISSIONS.forEachIndexed { index, permission ->
+                assertThat(apply(OperatorPermissionBootstrapAction.GRANT, permission, index))
+                    .describedAs("grant %s", permission)
+                    .isEqualTo(OperatorPermissionBootstrapResult.APPLIED)
+                transactionTemplate.executeWithoutResult {
+                    authorization.requireActive(actorId, permission)
+                }
+                assertThat(apply(OperatorPermissionBootstrapAction.REVOKE, permission, index))
+                    .describedAs("revoke %s", permission)
+                    .isEqualTo(OperatorPermissionBootstrapResult.APPLIED)
+            }
+
+            assertThat(count("operations_operator_permission_grant")).isEqualTo(SUPPORT_PERMISSIONS.size.toLong())
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_operator_permission_grant WHERE state = 'REVOKED'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(SUPPORT_PERMISSIONS.size.toLong())
+        }
+
+        @Test
         fun `grant transaction rolls back when audit persistence fails`() {
             installAuditFailureTrigger()
 
@@ -329,7 +352,9 @@ internal class OperatorPermissionIntegrationTest
                         ),
                 )
 
-            assertThat(exitCode).isZero()
+            assertThat(exitCode)
+                .describedAs("bootstrap stderr: %s", error.toString(StandardCharsets.UTF_8))
+                .isZero()
             assertThat(error.toString(StandardCharsets.UTF_8)).isEmpty()
             assertThat(output.toString(StandardCharsets.UTF_8))
                 .contains("result=APPLIED")
@@ -354,19 +379,62 @@ internal class OperatorPermissionIntegrationTest
                 .doesNotContain("bootstrap test", Files.readString(valid.tokenFile))
         }
 
-        private fun apply(action: OperatorPermissionBootstrapAction): OperatorPermissionBootstrapResult =
+        private fun apply(
+            action: OperatorPermissionBootstrapAction,
+            permission: OperatorPermission = OperatorPermission.EXPIRED_BENEFIT_POLICY_READ,
+            timeOffset: Int = 0,
+        ): OperatorPermissionBootstrapResult =
             lifecycle.apply(
                 OperatorPermissionBootstrapCommand(
                     action = action,
                     actorId = actorId,
-                    permission = OperatorPermission.EXPIRED_BENEFIT_POLICY_READ,
+                    permission = permission,
                     reason = "Lifecycle test",
                     evidenceReference = "evidence://run-1",
                     correlationId = UUID.randomUUID().toString(),
-                    now = now.plusSeconds(action.ordinal.toLong()),
+                    now = now.plusSeconds(timeOffset * 10L + action.ordinal),
                 ),
                 principal,
             )
+
+        private companion object {
+            val SUPPORT_PERMISSIONS =
+                listOf(
+                    OperatorPermission.SUPPORT_CASE_READ,
+                    OperatorPermission.SUPPORT_CASE_WRITE,
+                    OperatorPermission.SUPPORT_CASE_ASSIGN,
+                    OperatorPermission.SUPPORT_SUBJECT_SEARCH,
+                    OperatorPermission.SUPPORT_VERIFICATION_MANAGE,
+                    OperatorPermission.SUPPORT_PII_REVEAL_REQUEST,
+                    OperatorPermission.SUPPORT_PII_REVEAL_APPROVE,
+                    OperatorPermission.SUPPORT_PII_REVEAL_BASIC,
+                    OperatorPermission.SUPPORT_PII_REVEAL_SENSITIVE,
+                    OperatorPermission.SUPPORT_BREAK_GLASS_REQUEST,
+                    OperatorPermission.SUPPORT_ACTION_REQUEST,
+                    OperatorPermission.SUPPORT_ACTION_APPROVE,
+                    OperatorPermission.SUPPORT_ACTION_EXECUTE,
+                    OperatorPermission.SUPPORT_ORDER_READ,
+                    OperatorPermission.SUPPORT_ORDER_CANCEL,
+                    OperatorPermission.SUPPORT_PICKUP_RESCHEDULE,
+                    OperatorPermission.SUPPORT_RESOLUTION_REQUEST,
+                    OperatorPermission.SUPPORT_RESOLUTION_APPROVE,
+                    OperatorPermission.SUPPORT_RESOLUTION_EXECUTE,
+                    OperatorPermission.SUPPORT_COMPENSATION_REQUEST,
+                    OperatorPermission.SUPPORT_COMPENSATION_APPROVE,
+                    OperatorPermission.SUPPORT_COMPENSATION_EXECUTE,
+                    OperatorPermission.SUPPORT_PROFILE_R1_CHANGE,
+                    OperatorPermission.SUPPORT_PROFILE_R2_CHANGE,
+                    OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
+                    OperatorPermission.SUPPORT_PROFILE_R3_APPROVE,
+                    OperatorPermission.SUPPORT_DELIVERY_READ,
+                    OperatorPermission.SUPPORT_DELIVERY_INCIDENT_WRITE,
+                    OperatorPermission.SUPPORT_DELIVERY_CHANGE,
+                    OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION,
+                    OperatorPermission.OPERATIONS_LEGAL_HOLD_MANAGE,
+                    OperatorPermission.OPERATIONS_RETENTION_MANAGE,
+                    OperatorPermission.PRIVACY_AUDIT_READ,
+                )
+        }
 
         private fun operatorJwt(
             actor: UUID,

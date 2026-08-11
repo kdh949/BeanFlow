@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.CustomerCancellationMissingRefundRepairOperations
 import io.github.kdh949.beanflow.operations.api.CustomerCancellationMissingRefundRepairSnapshot
@@ -362,6 +363,7 @@ internal class PaymentSetupRepairService(
                 AppendAuditRecordCommand(
                     actorId = SYSTEM_ACTOR,
                     actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = EXPIRED_ACTION,
                     targetType = TARGET_PROPOSAL,
                     targetId = proposal.id,
@@ -549,6 +551,7 @@ internal class PaymentSetupRepairService(
                 AppendAuditRecordCommand(
                     actorId = actorId.toString(),
                     actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
                     action = action,
                     targetType = targetType,
                     targetId = targetId,

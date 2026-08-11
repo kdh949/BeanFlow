@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
@@ -355,6 +356,7 @@ internal class PaymentResultTransaction(
             mutableListOf(
                 audit(
                     customerId,
+                    AuditCategory.FINANCIAL_TRANSACTION,
                     action,
                     "PAYMENT",
                     paymentId,
@@ -366,6 +368,7 @@ internal class PaymentResultTransaction(
                 ),
                 audit(
                     customerId,
+                    AuditCategory.FINANCIAL_TRANSACTION,
                     if (action == "PAYMENT_APPROVED") "ORDER_PAID" else "ORDER_CANCELLED",
                     "ORDER",
                     orderId,
@@ -381,6 +384,7 @@ internal class PaymentResultTransaction(
                 commands +=
                     audit(
                         customerId,
+                        AuditCategory.ORDER_AND_FULFILLMENT,
                         "${owner}_$terminal",
                         "${owner}_RESERVATION",
                         targetId,
@@ -397,6 +401,7 @@ internal class PaymentResultTransaction(
 
     private fun audit(
         customerId: UUID,
+        category: AuditCategory,
         action: String,
         targetType: String,
         targetId: UUID,
@@ -408,6 +413,7 @@ internal class PaymentResultTransaction(
     ) = AppendAuditRecordCommand(
         actorId = customerId.toString(),
         actorType = AuditActorType.CUSTOMER,
+        category = category,
         action = action,
         targetType = targetType,
         targetId = targetId,
