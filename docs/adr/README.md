@@ -93,4 +93,22 @@
 | [ADR-089](ADR-089-purpose-based-retention-legal-hold-and-deletion.md) | Accepted | 목적별 retention, expiring LegalHold와 deletion replay |
 | [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Proposed | Support Console frontend/trust boundary와 non-persistent sensitive state |
 | [ADR-091](ADR-091-support-migration-queue-metadata.md) | Rejected | queue priority를 direct ExecPlan dependency로 표현하는 metadata 제안 |
+| [ADR-092](ADR-092-hybrid-authentication.md) | Accepted | 고객·점주 Session과 운영자 Keycloak의 Hybrid 인증 |
+| [ADR-093](ADR-093-merchant-credential-lifecycle.md) | Accepted | 점주 계정 자격증명 lifecycle과 최초 비밀번호 강제 변경 |
+| [ADR-094](ADR-094-browser-session-security.md) | Accepted | 브라우저 Session 보안과 저장소 |
+| [ADR-095](ADR-095-unified-current-actor.md) | Accepted | 인증 구현을 Application 계층에서 분리하는 CurrentActor |
+| [ADR-096](ADR-096-public-order-reference.md) | Accepted | 내부 UUID와 분리한 공개 주문번호 |
+| [ADR-097](ADR-097-store-pickup-number.md) | Accepted | 매장·영업일 단위 픽업번호와 동시 발급 |
+| [ADR-098](ADR-098-order-display-snapshots.md) | Accepted | 주문 표시용 매장명·픽업 시간 스냅샷 |
+| [ADR-099](ADR-099-customer-order-read-model.md) | Accepted | 고객 주문 목록의 Aggregate와 Read Model 분리 |
+| [ADR-100](ADR-100-store-order-board-read-model.md) | Accepted | 점주 주문보드의 상태·픽업 시간 중심 Query |
+| [ADR-101](ADR-101-payment-method-checkout-scope.md) | Accepted | 일회성 결제창과 저장 결제수단의 범위 분리 |
+| [ADR-102](ADR-102-polling-before-sse.md) | Accepted | 주문보드 갱신을 조건부 Polling으로 시작 |
+| [ADR-103](ADR-103-store-search-strategy.md) | Accepted | 매장 검색 전략과 추천 Baseline |
+| [ADR-104](ADR-104-notification-inbox.md) | Accepted | 고객 알림함과 거래·마케팅 수신 설정 |
+| [ADR-105](ADR-105-sandbox-settlement-payout.md) | Accepted | 실제 정산 지급을 Non-goal로 두고 sandbox 범위 명시 |
 | [ADR-106](ADR-106-support-verification-and-data-access-grant.md) | Accepted | opaque challenge verification과 audit-gated DataAccessGrant reveal |
+| [ADR-107](ADR-107-limited-coupon-issuance.md) | Accepted | 한정 쿠폰의 원자적 발급과 잔여 수량 표현 |
+| [ADR-108](ADR-108-merchant-partial-refund-preview.md) | Accepted | 점주 부분 환불 preview와 공개 품목 식별 계약 |
+| [ADR-109](ADR-109-customer-point-account-provisioning.md) | Accepted | 고객 가입과 PointAccount 원자 provisioning |
+| [ADR-110](ADR-110-federated-operations-failure-queues.md) | Accepted | 소유 Context 기반 운영 실패 큐 연합 조회 |

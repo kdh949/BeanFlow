@@ -89,7 +89,7 @@ policy = (root / 'docs/product/business-policy-decisions.md').read_text(encoding
 api_conventions = (root / 'docs/api/api-conventions.md').read_text(encoding='utf-8')
 normalized_api_conventions = re.sub(r'\s+', ' ', api_conventions)
 ids = re.findall(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE)
-expected = [f'BR-{i:02d}' for i in range(1, 34)]
+expected = [f'BR-{i:02d}' for i in range(1, 47)]
 
 if set(ids) != set(expected) or any(count != 1 for count in Counter(ids).values()):
     print('Business policy IDs are missing, duplicated, or out of range.', file=sys.stderr)

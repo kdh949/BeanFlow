@@ -22,15 +22,21 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 모든 영업시간, 픽업 슬롯, 캠페인 기간, 포인트 만료, 정산 기준일과 배치 스케줄은 `Asia/Seoul`을 기준으로 계산한다. API와 DB의 시각 값은 timezone을 포함한 `Instant` 또는 offset이 명시된 형식으로 저장·전달하고, 사용자 표시 시 `Asia/Seoul`로 변환한다.
+- **Pickup Business Date Amendment (2026-08-12):** 매장 일일 픽업 순번의
+  `pickupBusinessDate`는 주문의 픽업 슬롯 `startsAt` Instant를 `Asia/Seoul` 날짜로 변환한 값이다.
+  주문 생성 시 이 날짜를 snapshot하고 이후 슬롯·영업시간 변경으로 다시 계산하지 않는다. 매장별
+  마감 시각이나 주문 생성일을 대신 사용하지 않는다. 슬롯 시작 시각이 없거나 해석할 수 없으면 주문
+  생성 또는 migration을 실패시키며 현재 날짜·주문 생성일로 대체하지 않는다.
 - **Rationale:** MVP 대상 매장이 국내에 한정되어 있어 매장별 timezone을 지원할 실익보다 구현·테스트 복잡도가 크다.
 - **Affected Contexts:** Merchant, Fulfillment, Promotion, Loyalty, Settlement, Analytics
 - **Affected Aggregates:** Store, PickupSlot, Campaign, PointLot, SettlementBatch
 - **Required Tests:**
   - 자정 경계의 영업시간과 정산일 테스트
+  - 자정 전후 픽업 슬롯의 `pickupBusinessDate`와 주문 생성일 불일치 테스트
   - 캠페인 시작·종료 경계 테스트
   - 포인트 만료 시각 경계 테스트
   - 고정 `Clock`을 사용한 시간 의존 테스트
-- **ADR Required:** No
+- **ADR Required:** Yes for pickup numbering — [ADR-097](../adr/ADR-097-store-pickup-number.md)
 - **Revisit Conditions:** 해외 매장 지원 또는 매장별 timezone 요구가 확정될 때
 
 ## BR-02 금액 단위와 반올림
@@ -66,6 +72,13 @@
 - **Amendment (2026-07-28):** 결제 결과 불명 상태에서 자원이 무기한 점유되는 것을 막고 뒤늦은 승인 주문이 이미 해제된 자원을 다시 확정하지 않도록 만료 우선과 명시적 환불 복구를 확정했다.
 - **Point Reservation Amendment (2026-07-28):** 주문 생성 시점에 유효한 PointLot에서 예약한 allocation은 주문 lease가 끝날 때까지 확정 가능성을 보장한다. lease 도중 원 PointLot 만료 시각이 지나도 예약분은 결제 승인에 사용할 수 있다. 예약을 해제할 때 이미 만료된 allocation은 가용 포인트로 복원하지 않고 만료 원장으로 처리한다.
 - **Materialization Amendment (2026-07-28):** `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회·결제 명령은 worker를 기다리지 않고 먼저 Order 만료와 네 자원 해제를 같은 transaction으로 시도한다. 성공하면 `EXPIRED`를 반환하거나 만료 오류로 결제를 거부한다. 해제 실패 시 stale `PENDING_PAYMENT`나 부분 성공을 반환하지 않고 503으로 실패하며 worker 또는 다음 요청이 재시도한다.
+- **Customer List Materialization Amendment (2026-08-12):** 고객 주문 목록도 조회에 해당한다.
+  목록은 customer scope와 signed cursor로 먼저 고정한 **한 페이지의 candidate ID window** 안에서
+  만료 시각이 지난 `PENDING_PAYMENT`를 찾고, 해당 Order와 네 예약 자원을 하나의 쓰기
+  transaction에서 모두 만료·해제한 뒤 같은 candidate window를 Projection으로 다시 읽는다. 하나라도
+  해제하지 못하면 전체 materialization transaction을 rollback하고 stale 목록 대신 `503`을 반환한다.
+  활성 상태 필터에서 만료 Order가 제외되면 페이지가 page size보다 짧거나 비어도 scan boundary 기반
+  `nextCursor`를 반환할 수 있다. 페이지를 채우려고 다음 window까지 암묵적으로 쓰지 않는다.
 - **Payment Decline Amendment (2026-07-29):** Provider가 승인을 명시적으로
   거절하면 Payment를 `FAILED`, Order를 `CANCELLED`로 전환하고 네 예약을 같은
   transaction에서 해제한다. 같은 Order에서 다른 결제수단으로 다시 승인하지 않고
@@ -115,6 +128,8 @@
   - 만료 작업 재실행 시 중복 해제 방지
   - worker 전후 조회가 같은 `EXPIRED` representation을 반환
   - 조회 중 만료 해제 실패 시 503과 전체 rollback
+  - 고객 목록 candidate window의 만료 Order가 반환 전에 모두 `EXPIRED`로 물질화되는지 검증
+  - 활성 목록에서 만료 Order가 빠져 빈 페이지가 되어도 scan boundary cursor가 다음 주문을 건너뛰지 않는지 검증
   - 결제와 만료 작업의 동시 실행 테스트
   - Provider 응답 또는 `UNKNOWN` lookup이 슬롯 시작 경계를 넘을 때 주문 비복구·예약 비확정과 reconciliation
 - **ADR Required:** Yes — 예약 lease와 자원 확정 시점
@@ -186,6 +201,13 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 재고·슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
+- **Store Board Visibility Amendment (2026-08-12):** 수락 제한시간은 픽업 영업일과 무관하므로 점주
+  실행 주문보드는 오늘 주문만으로 제한하지 않는다. 해당 매장의 모든 `PAID`, `ACCEPTED`,
+  `PREPARING`, `READY`를 픽업 영업일별로 반환한다. `PENDING_PAYMENT`와 종료 상태는 포함하지 않는다.
+  API lane `PENDING_ACCEPTANCE`는 Domain의 `PAID`를 표시하는 이름일 뿐 새 Order 상태가 아니다.
+  `PENDING_ACCEPTANCE` lane은 `(acceptanceDeadlineAt, id)` 오름차순, 나머지 lane은
+  `(pickupWindowStartSnapshot, id)` 오름차순이다. 날짜 탐색 UI가 있어도 처리할 `PAID` 주문을
+  숨기지 않는다.
 - **Expired Benefit Restoration Amendment (2026-07-30):** 매장 거절 시 원 쿠폰 또는
   PointLot이 아직 유효하면 원 혜택으로 복원한다. 이미 만료됐으면 기본적으로 같은
   가치와 원 발급 reference를 보존한 새 CouponIssuance 또는 PointLot을 거절 시각부터
@@ -207,6 +229,8 @@
 - **Required Tests:**
   - 3분 이전 수락·거절
   - 2분 경고와 3분 자동 거절
+  - 오늘 이후 픽업 `PAID` 주문도 보드에 즉시 노출되고 수락 deadline 순으로 정렬
+  - `PENDING_PAYMENT`와 종료 상태가 보드에 노출되지 않는지 검증
   - 자동 거절 작업 재실행 멱등성
   - 수락과 timeout 작업의 동시 실행
   - 자동 환불 실패 시 reconciliation
@@ -1565,6 +1589,447 @@
 - **Revisit Conditions:** 결제수단 UI 제품, Payment Widget/BrandPay, verified webhook 또는
   다중 Provider routing 요구가 확정될 때
 
+## BR-34 고객·점주 로그인 식별자와 계정 존재 응답
+
+- **Status:** Accepted for MVP
+- **Decision:** P0 고객과 점주 로그인 식별자는 이메일·전화번호가 아닌 **사용자명 ID**다. 고객은
+  가입할 때 정하고 점주는 운영자가 발급한다. 두 actor는 서로 분리된 namespace를 사용하므로 같은
+  canonical 문자열이 고객 계정과 점주 계정에 각각 존재할 수 있다. 두 actor 모두 canonical 값은
+  ASCII 소문자 5~32자이며 첫·끝 문자는 영문 소문자 또는 숫자, 중간에는 영문 소문자·숫자·점(`.`)·
+  밑줄(`_`)·하이픈(`-`)만 허용한다. 입력은 앞뒤 공백을 제거하고 ASCII 대문자를 소문자로 바꾼 뒤
+  검증·저장한다. Unicode 호환 정규화나 비슷한 글자 추론은 하지 않는다.
+- **Registration Response:** 이미 사용 중인 사용자명이면 `409 LOGIN_ID_UNAVAILABLE`을 반환한다.
+  사용자명 점유 여부는 외부 이메일·전화번호의 보유 사실을 드러내지 않으므로, 가입 성공과 중복을
+  같은 응답으로 숨겨 사용자가 생성 실패를 알 수 없게 만들지 않는다. 별도 availability endpoint는
+  P0에 두지 않는다.
+- **Login Response:** 존재하지 않는 사용자명, 잘못된 비밀번호와 잠금 상태는 모두 동일한
+  `401 AUTHENTICATION_FAILED` 응답을 사용한다. 응답 시간 차이를 줄이기 위해 계정이 없어도 같은
+  password hash 검증 비용을 사용한다.
+- **Recovery Scope:** P0 CustomerAccount와 MerchantAccount에는 검증되지 않은 이메일·전화번호를
+  로그인 키나 복구 수단으로 저장하지 않는다. 비밀번호 재설정은 검증된 전달 채널과 복구 정책을
+  도입하는 후속 범위다.
+- **Rationale:** 외부 Provider 없이 P0를 구현하면서 타인의 이메일 선점과 검증되지 않은 연락처 기반
+  계정 복구를 피하고, 동시에 가입 실패를 사용자가 바로 수정할 수 있게 한다.
+- **Affected Contexts:** Identity, Customer Web, Merchant Console, Operations, Support
+- **Affected Aggregates:** CustomerAccount, MerchantAccount
+- **Required Tests:**
+  - 대소문자만 다른 사용자명의 중복과 동시 가입에서 한 건만 성공
+  - 점주 계정 발급에서 고객과 같은 canonical 규칙을 적용하고 actor별 namespace를 분리
+  - 허용 문자·길이·경계 문자와 공백 정규화 계약
+  - 없는 사용자명·잘못된 비밀번호·잠금 상태의 동일 응답과 유사한 hash 검증 비용
+  - 검증되지 않은 이메일·전화번호가 CustomerAccount와 Session에 저장되지 않는지 검증
+- **ADR Required:** Yes — [ADR-092](../adr/ADR-092-hybrid-authentication.md)
+- **Revisit Conditions:** 검증된 이메일·휴대전화 로그인, 비밀번호 재설정 또는 계정 복구 요구가
+  확정될 때
+
+## BR-35 고객·점주 비밀번호와 로그인 제한
+
+- **Status:** Accepted initial policy
+- **Password Input:** 고객·점주 비밀번호는 15~128 Unicode code point, UTF-8 최대 512 byte다.
+  공백과 Unicode를 허용하고 대소문자·숫자·특수문자 조합 규칙을 요구하지 않는다. 앞뒤 공백 제거,
+  Unicode 정규화 또는 조용한 자르기를 하지 않고 사용자가 입력한 byte sequence를 그대로 검증한다.
+  사용자명과 동일한 비밀번호 및 versioned local common-password blocklist의 exact match는 거부한다.
+- **Password Storage:** Argon2id PHC 문자열로만 저장한다. 초기 파라미터는 memory 19 MiB,
+  iterations 2, parallelism 1이며 각 hash는 고유 salt를 사용한다. 구현 환경에서 같은 조건으로 검증
+  지연을 측정하고 1초 이상이면 파라미터를 조용히 낮추지 않고 문서·정책을 재검토한다. 지원되지 않는
+  알고리즘이나 잘못된 파라미터는 기동 실패다. 평문·복호화 가능한 값·별도 salt 컬럼은 저장하지 않는다.
+- **Account Limit:** actor 종류별 사용자명에서 15분 관찰 창 안에 5번째 인증 실패가 발생하면 해당
+  계정의 `lockedUntil`을 15분 뒤로 설정한다. 잠금 transaction에서 `credentialVersion`을 증가시켜
+  기존 Session을 무효화한다. CustomerAccount는 잠금 동안 `LOCKED` 상태를 사용하고, 잠금 시각이 지난
+  다음 정상 로그인에서 `ACTIVE`로 복귀한다. MerchantAccount는 `INITIAL_PASSWORD` / `ACTIVE` /
+  `EXPIRED` lifecycle을 바꾸지 않고 `lockedUntil`을 시간 제한 overlay로 적용한다. 따라서 만료 뒤
+  정상 로그인은 잠기기 전 lifecycle을 그대로 사용한다. 어느 경우에도 이전 Session의 version은
+  되살리지 않는다. 성공 로그인은 그 계정의 실패 창만 초기화한다. 운영자 조기 해제는
+  `lockedUntil`만 지우며 AuditRecord를 함께 커밋한다.
+- **IP Limit:** actor 종류별 source IP에서 15분 안에 실패 30건이면 그 IP의 해당 로그인 endpoint를
+  15분 차단하고 `429 AUTHENTICATION_RATE_LIMITED`와 `Retry-After`를 반환한다. 성공 로그인 하나로 IP
+  실패 창을 초기화하지 않는다. 신뢰 proxy 목록 밖의 forwarding header는 IP 판정에 사용하지 않는다.
+- **Merchant Temporary Password:** 점주 임시 비밀번호는 발급 시각부터 24시간 유효하다. 운영자는
+  만료 전후 재발급할 수 있으며 재발급 transaction은 새 Hash·만료 시각·`credentialVersion`과
+  `AuditRecord`를 함께 커밋한다.
+- **Attempt Data:** 사용자명과 IP 원문은 attempt table에 저장하지 않는다. actor 종류, scope 종류와
+  별도 설정한 keyed HMAC-SHA-256만 저장한다. HMAC key가 없거나 유효하지 않으면 기동 실패다. attempt
+  row는 마지막 갱신 24시간 뒤 `(updated_at, id)` 순서의 bounded worker가 삭제한다. 정리 실패는 인증을
+  우회하지 않으며 retry·metric·log로 남긴다.
+- **Rationale:** MFA와 비밀번호 재설정이 없는 P0에서 짧은 비밀번호와 무제한 추측을 허용하지 않되,
+  영구 잠금으로 공격자가 계정을 계속 사용할 수 없게 만드는 DoS를 피한다.
+- **Affected Contexts:** Identity, Customer Web, Merchant Console, Operations
+- **Affected Aggregates:** CustomerAccount, MerchantAccount, LoginAttempt
+- **Required Tests:**
+  - 15분 창의 4회/5회 경계, 15분 잠금 전·경계·후와 동시 실패
+  - 계정 잠금 뒤 기존 Session의 `credentialVersion` 불일치 401
+  - `INITIAL_PASSWORD`와 `ACTIVE` 점주가 잠금 만료 뒤 각각 원래 lifecycle로 로그인
+  - IP 29회/30회 경계, actor 종류 분리, 신뢰하지 않는 forwarding header 거부
+  - 성공 로그인 후 계정 창 초기화와 IP 창 비초기화
+  - 임시 비밀번호 발급 후 24시간 -1ns/at/+1ns와 재발급 감사 원자성
+  - Unicode·공백·15/128 code point·512 byte 경계와 비밀번호 비정규화
+  - attempt 원문 비저장, HMAC key 누락 기동 실패와 24시간 보존 worker 재실행
+- **ADR Required:** Yes — [ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md),
+  [ADR-094](../adr/ADR-094-browser-session-security.md)
+- **Revisit Conditions:** MFA 또는 복구 채널 도입, credential-stuffing 관측치, hash 지연·메모리 측정,
+  로그인 지원 문의가 초기 정책 조정을 요구할 때
+
+## BR-36 고객·점주 브라우저 Session 수명과 동시 한도
+
+- **Status:** Accepted initial policy
+- **Customer Session:** 마지막 접근 후 7일 idle timeout, 인증 시각 후 30일 absolute timeout, 계정당
+  최대 5개 Session이다.
+- **Merchant Session:** 마지막 접근 후 30분 idle timeout, 인증 시각 후 12시간 absolute timeout,
+  계정당 최대 3개 Session이다. `INITIAL_PASSWORD` Session도 같은 수명을 쓰지만 BR-35와 ADR-093의
+  password change gate를 적용한다.
+- **Boundary:** `now >= idleDeadline` 또는 `now >= absoluteDeadline`이면 만료다. 요청 중 last access를
+  갱신해도 absolute deadline은 이동하지 않는다. 만료 Session은 401이며 새 Session이나 익명 actor로
+  자동 교체하지 않는다.
+- **Concurrent Login:** 한도에서 새 로그인이 성공하면 `(authenticatedAt, sessionId)` 오름차순으로
+  가장 오래된 Session부터 필요한 수만큼 폐기한다. 같은 계정 로그인은 account row lock으로
+  직렬화하고, 기존 Session 폐기와 새 Session 저장은 같은 PostgreSQL transaction에 참여시킨다.
+  어느 하나라도 실패하면 transaction을 rollback하고 새 로그인을 503으로 실패시킨다. 상한을 조용히
+  초과하거나 in-memory registry로 대체하지 않는다.
+- **Credential Change:** BR-35의 `credentialVersion` 증가가 수명·동시 한도보다 우선한다. version이
+  다른 Session은 행이 남아 있어도 즉시 401이며 동시 Session 수 계산에서도 활성으로 보지 않는다.
+- **Rationale:** 고객은 일상 주문에서 반복 로그인을 줄이고, 금전·매장 운영 기능을 가진 점주는 근무
+  단위로 더 짧게 제한한다.
+- **Affected Contexts:** Identity, Customer Web, Merchant Console
+- **Affected Aggregates:** CustomerAccount, MerchantAccount, BrowserSession
+- **Required Tests:**
+  - 고객 7일/30일, 점주 30분/12시간의 -1ns/at/+1ns 경계
+  - idle 갱신 후에도 absolute deadline이 이동하지 않는지 검증
+  - 고객 6번째·점주 4번째 로그인에서 가장 오래된 Session만 401
+  - 같은 계정 동시 로그인에서 상한 초과가 없는 PostgreSQL 동시성 테스트
+  - 기존 Session 삭제·새 Session 저장 각각의 장애가 전체 rollback과 503을 만드는지 검증
+- **ADR Required:** Yes — [ADR-094](../adr/ADR-094-browser-session-security.md)
+- **Revisit Conditions:** 실제 재로그인률, 활성 Session 수, 탈취 사고, Session DB 지연과 사용자 지원
+  데이터를 측정한 뒤 조정
+
+## BR-37 고객 알림함 보존
+
+- **Status:** Accepted initial policy
+- **Decision:** `TRANSACTIONAL`과 `MARKETING` NotificationInboxItem을 모두 생성 시각부터 90일
+  보존한다. 저장할 때 `retentionExpiresAt = createdAt + 90일`을 고정하며 읽음 처리, 수신 설정 변경,
+  외부 Delivery 재시도는 기한을 연장하지 않는다.
+- **Deletion:** Notification-owned worker가 기본 1시간마다 최대 100개 due row를
+  `(retention_expires_at, id)` keyset 순서로 짧은 transaction에서 삭제한다. `now >=
+  retentionExpiresAt`이 due 경계다. 실패는 retry·backlog metric·구조화 log로 남기고 빈 목록이나
+  삭제 성공으로 표현하지 않는다.
+- **Scope:** InboxItem은 거래 원장이나 감사 증거가 아니다. 항목 삭제 뒤에도 주문·환불의 보존과 조회
+  정책은 바뀌지 않는다. NotificationDelivery 운영 데이터의 보존 기간도 이 정책으로 추론하지 않는다.
+- **Rationale:** 알림함은 주문 내역을 대체하지 않는 편의 Projection이므로 분류별 기간을 나누지 않고
+  저장 최소화와 단순한 삭제 경계를 택한다.
+- **Affected Contexts:** Notification, Customer Web
+- **Affected Aggregates:** NotificationInboxItem
+- **Required Tests:**
+  - 생성 후 90일 -1ns/at/+1ns 삭제 경계
+  - 읽음·수신 설정·Delivery retry 뒤 retention 기한 불변
+  - 한 번에 100개 bounded keyset 삭제와 worker 재실행
+  - 삭제 실패 후 항목 보존·backlog 관측과 주문/환불 데이터 비삭제
+- **ADR Required:** Yes — [ADR-089](../adr/ADR-089-purpose-based-retention-legal-hold-and-deletion.md),
+  [ADR-104](../adr/ADR-104-notification-inbox.md)
+- **Revisit Conditions:** 알림함 사용률, 저장량, 고객 문의 또는 법률 검토가 다른 기간을 요구할 때
+
+## BR-38 매장 부분 환불 실행 권한
+
+- **Status:** Accepted for P0
+- **Decision:** `ACTIVE`한 `OWNER`와 `STAFF` StoreMembership은 자신이 속한 매장의 주문에 대해
+  품목 부분 환불 preview와 실행을 요청할 수 있다. 역할만으로는 충분하지 않으며, 요청 시점의
+  membership과 Order의 `storeId`가 일치해야 한다. P0에서는 STAFF별 환불 금액 상한이나 점주 사전
+  승인을 두지 않는다.
+- **Command Contract:** 브라우저는 `paymentId`나 `orderLineId` UUID를 제출하지 않는다. 매장 범위
+  `orderReference`와 화면에 반환된 line reference·수량만 보내며 서버가 결제, 기존 성공·불명 환불,
+  금액 배분과 허용 수량을 다시 계산한다. 실행에는 8~128자의 `Idempotency-Key`와 trim 뒤 1~500자의
+  사유가 필수다. preview 결과는 승인 금액이 아니며 실행 transaction이 같은 불변식을 다시 검증한다.
+- **Failure Policy:** membership이 없거나 `REVOKED`이면 `403`, 주문·결제·환불 상태가 preview 이후
+  달라졌으면 `409 REFUND_PREVIEW_STALE`로 실패한다. Provider 결과가 불명확하면 기존 Refund를
+  `UNKNOWN` 또는 reconciliation 상태로 남기며 새 Refund나 Provider 취소를 자동 생성하지 않는다.
+  membership 조회, Refund·원장 저장 또는 Audit 저장 실패는 성공으로 응답하지 않는다.
+- **Audit:** preview 조회 자체는 금전 변경 Audit 대상이 아니지만 환불 실행은 actor, membership role,
+  store, order, refund, 사유, 멱등 요청과 결과를 기존 금전성 Audit 계약에 남긴다. 자유 입력 사유를
+  metric tag로 사용하지 않는다.
+- **Rationale:** 실제 매장에서는 직원도 주문 문제를 즉시 해결해야 하므로 현재 코드의 OWNER·STAFF
+  권한을 유지하되, 내부 UUID 입력과 역할만 확인하는 객체 수준 인가 누락을 제거한다.
+- **Affected Contexts:** Identity, Ordering, Payment, Loyalty, Settlement, Merchant Console, Audit
+- **Affected Aggregates:** StoreMembership, Order, Payment, Refund, PointAccount, SettlementItem
+- **Required Tests:**
+  - 같은 매장의 ACTIVE OWNER·STAFF preview와 실행 성공
+  - 다른 매장, REVOKED membership, operation에 허용되지 않은 role과 `INITIAL_PASSWORD` 계정의 403
+  - 다른 주문의 line reference, 초과 수량, preview 이후 선행 환불의 409
+  - 같은 Idempotency-Key replay와 다른 payload 재사용의 부작용 0회
+  - Provider timeout·응답 유실에서 중복 Provider 환불 0회와 reconciliation 수렴
+  - Audit 저장 실패 시 Refund 실행 미확정과 503
+- **ADR Required:** Yes — [ADR-108](../adr/ADR-108-merchant-partial-refund-preview.md)
+- **Revisit Conditions:** STAFF 오조작·환불률 측정, 역할 세분화, 금액 상한, step-up 인증 또는 2인 승인
+  요구가 생길 때
+
+## BR-39 운영자 P0 조회 권한 분리
+
+- **Status:** Accepted for P0
+- **Decision:** Keycloak의 `PLATFORM_OPERATOR` 역할은 coarse gate로만 사용한다. 실패 작업 목록·상세는
+  `REPROCESSING_CASE_READ`, 정산 대사 목록·상세는 `SETTLEMENT_RECONCILIATION_READ`, 감사 로그
+  목록·상세는 `AUDIT_RECORD_READ`라는 서로 다른 active `OperatorPermissionGrant`를 요구한다. 한
+  permission이나 역할로 다른 조회를 허용하지 않고, 어떤 값도 기본 grant로 seed하지 않는다.
+- **Audit Read:** 감사 로그 조회는 trim 뒤 1~200자이고 control character가 없는
+  `X-Access-Reason`을 필수로 받는다. permission 확인, 조회 Projection과 `AUDIT_RECORD_READ` 접근
+  Audit 저장은 같은 local transaction에서 완료되어야만 응답한다. 접근 Audit에는 자유 입력 filter나
+  원본 before/after payload를 복제하지 않는다. 실패 큐와 정산 대사 조회는 P0에서 매 요청 접근 Audit을
+  추가하지 않지만 권한 거부와 조회 장애 metric·구조화 log를 남긴다.
+- **Command Separation:** 세 permission은 읽기 전용이다. 재처리 실행, 정산 조정, 환불,
+  permission 변경 또는 Audit 원본 수정 권한을 부여하지 않는다. 각 명령은 기존의 전용 permission,
+  사유, 멱등성·승인 정책을 계속 요구한다.
+- **Failure Policy:** role 또는 active grant가 없으면 `403`, grant·Audit·Projection 저장소 조회가
+  실패하면 `503`이다. role, JWT claim, 다른 grant, cache 또는 빈 목록으로 대체하지 않는다.
+- **Rationale:** 운영 화면 하나를 열기 위해 금융·보안 이력 전체를 함께 노출하지 않고, 직무별 최소
+  권한과 즉시 revoke 경계를 유지하기 위함이다.
+- **Affected Contexts:** Operations, Settlement, Payment, Notification, Security
+- **Affected Aggregates:** OperatorPermissionGrant, ReprocessingCase, SettlementBatch, AuditRecord
+- **Required Tests:**
+  - 세 permission의 모든 교차 조합에서 해당 조회만 허용되는지 검증
+  - `PLATFORM_OPERATOR` 역할만 있거나 revoked grant인 경우 403
+  - grant 조회 장애가 빈 page나 role fallback이 아닌 503인지 검증
+  - 감사 조회 reason 누락·공백·201자·control character 거부
+  - 감사 Projection 또는 접근 Audit 저장 실패 시 응답 body 미반환과 전체 rollback
+  - 읽기 permission으로 재처리·정산 조정·permission lifecycle 명령이 실행되지 않는지 검증
+- **ADR Required:** Yes — [ADR-069](../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md)
+- **Revisit Conditions:** 직무 체계 변경, 대량 조회에 따른 접근 Audit 부하, 별도 SIEM·감사 저장소 또는
+  정산 운영자 전용 인증 주체가 도입될 때
+
+## BR-40 홈 최근 주문 매장 선정
+
+- **Status:** Accepted for P0
+- **Decision:** 고객의 최근 주문 매장은 조회 시점의 Order 상태가 `PAID`, `ACCEPTED`, `PREPARING`,
+  `READY`, `COMPLETED`인 주문만 대상으로 한다. `PENDING_PAYMENT`, `EXPIRED`, `CANCELLED` 주문은
+  제외한다. 매장별 `max(order.createdAt)`을 `lastOrderedAt`으로 사용해 한 번만 반환하고,
+  `(lastOrderedAt DESC, storeId ASC)`로 결정적으로 정렬한다.
+- **Recommendation Merge:** 홈 추천은 즐겨찾기, 최근 주문 매장, 좌표가 있을 때 nearby 순으로
+  중복을 제거한다. 좌표가 없으면 즐겨찾기와 최근 주문 매장까지만 반환한다. 앞 단계에 포함된 매장을
+  다음 단계가 다시 추가하지 않으며 첫 번째 근거를 응답의 recommendation reason으로 사용한다.
+- **Boundary:** Ordering은 customer scope로 eligible store ID와 `lastOrderedAt`만 Projection하여
+  Discovery에 제공하고, Discovery가 현재 노출 가능한 매장 정보를 hydrate한다. 존재하지 않거나 현재
+  노출 불가능한 매장은 결과에서 제외하되 주문 스냅샷이나 상태를 수정하지 않는다.
+- **Failure Policy:** 최근 주문 Projection이나 매장 hydrate 실패를 빈 recent 목록 또는 거리순 결과로
+  대체하지 않고 홈 추천 요청을 `503`으로 실패시킨다. 고객 주문 이력을 Discovery table로 복제하지 않는다.
+- **Rationale:** 실제 결제·운영 흐름에 들어간 매장은 편의 추천에 반영하면서 결제 전 포기, 만료,
+  취소·거절 경험을 자동 재추천하지 않기 위함이다.
+- **Affected Contexts:** Ordering, Discovery, Customer Web
+- **Affected Aggregates:** Order; 추천은 Query Projection이며 새 Aggregate가 아니다.
+- **Required Tests:**
+  - 상태별 포함·제외와 상태 변경 후 다음 조회 반영
+  - 같은 매장의 여러 주문이 최신 `createdAt` 한 건으로 합쳐지는지 검증
+  - 동률 `lastOrderedAt`의 `storeId` tie-breaker
+  - 즐겨찾기·최근·nearby 중복 제거와 좌표 없는 순서
+  - Ordering 또는 Discovery 조회 장애의 503과 빈 결과 fallback 부재
+- **ADR Required:** Yes — [ADR-103](../adr/ADR-103-store-search-strategy.md)
+- **Revisit Conditions:** 추천 제외/숨김 기능, 취소 사유별 재노출, 고객 행동 데이터 기반 ranking 또는
+  별도 추천 Read Model이 필요해질 때
+
+## BR-41 운영자 웹 Keycloak 로그인
+
+- **Status:** Accepted for P0
+- **Decision:** 운영자 웹은 Keycloak public client의 Authorization Code Flow와 PKCE `S256`으로
+  로그인한다. 브라우저는 승인된 same-origin callback에서 code, state와 nonce를 검증한 뒤 token을
+  교환하고, access token을 JavaScript 메모리에만 보관하여 기존 Operations Resource Server에 Bearer로
+  전송한다. Implicit Flow, Resource Owner Password, client secret이 있는 SPA와 토큰 직접 입력 UI는
+  허용하지 않는다.
+- **Browser Storage:** access token, ID token과 refresh token을 `localStorage`, `sessionStorage`,
+  IndexedDB 또는 일반 Cookie에 저장하지 않는다. redirect 왕복에 필요한 state, nonce, code verifier와
+  검증된 same-origin return path만 일회성 `sessionStorage`에 둘 수 있으며 callback 성공·실패 뒤 즉시
+  삭제한다. P0는 `offline_access`를 요청하거나 refresh token을 지속 저장하지 않는다.
+- **Runtime Configuration:** Public endpoint는 검증된 issuer, public client ID, callback path와 scope만
+  반환하며 secret이나 관리 endpoint를 반환하지 않는다. issuer/client/callback 설정이 누락·불일치하면
+  애플리케이션 기동 또는 로그인 시작을 명시적으로 실패시킨다. Keycloak callback allowlist는 정확한
+  production origin/path만 허용하고 wildcard origin을 사용하지 않는다.
+- **Expiry and Logout:** access token 만료 또는 401이면 메모리 credential을 지우고 보호 화면을
+  중단한 뒤 Keycloak SSO 재인증으로 보낸다. 이전 API를 익명·stale cache로 계속 사용하지 않는다.
+  로그아웃은 로컬 메모리·일회성 state를 지우고 Keycloak의 검증된 end-session 흐름으로 이동한다.
+- **Rationale:** 운영자 신원과 기존 JWT Resource Server·permission grant 경계를 유지하면서 사람이
+  토큰을 복사하지 않는 표준 브라우저 로그인 흐름을 제공하기 위함이다.
+- **Affected Contexts:** Operations Console, Security, Operations, Support
+- **Affected Aggregates:** 없음. Keycloak 신원과 OperatorPermissionGrant는 기존 소유권을 유지한다.
+- **Required Tests:**
+  - state·nonce 불일치, code 재사용, callback error와 open redirect 거부
+  - PKCE `S256` 사용과 client secret·implicit/password flow 부재
+  - callback 성공·실패 후 일회성 storage 삭제와 token 영구 storage 0건
+  - token issuer·audience·expiry 검증 및 만료 뒤 보호 화면·API 중단
+  - Keycloak logout 뒤 이전 token 재사용 거부와 Token Editor 부재
+  - runtime config 누락·callback mismatch가 fake config나 local token fallback이 아닌 명시적 실패
+- **ADR Required:** Yes — [ADR-092](../adr/ADR-092-hybrid-authentication.md)
+- **Revisit Conditions:** backend-for-frontend, 운영자 Session, native client, refresh token rotation 또는
+  조직 SSO 정책 변경이 요구될 때
+
+## BR-42 고객 가입과 PointAccount 원자 생성
+
+- **Status:** Accepted for P0
+- **Decision:** 고객 가입은 `CustomerAccount`와 available/reserved/recovery-pending이 모두 0인
+  `PointAccount`를 같은 PostgreSQL transaction에서 정확히 한 번 생성한다. Identity Application
+  Service가 가입 경계를 조정하고 Loyalty의 public provisioning port가 새 customer ID를 받아
+  `MANDATORY` transaction에 참여한다. 두 Aggregate는 ID로만 연결하며 JPA 객체 연관관계나 cascade를
+  만들지 않는다.
+- **Failure Policy:** PointAccount 저장, Unique Constraint 또는 Loyalty dependency가 실패하면
+  CustomerAccount 생성도 rollback하고 가입 요청을 503으로 실패시킨다. CustomerAccount만 있고
+  PointAccount가 없는 상태를 잔액 0, in-memory 계정 또는 GET의 lazy-create로 대체하지 않는다. 그런
+  무결성 손상은 `/me/points`를 503으로 실패시키고 운영 진단 대상으로 남긴다.
+- **Existing Data:** P0 CustomerAccount schema는 신규이므로 최초 migration에는 제품 고객 backfill이
+  없다. 이후 account import 또는 별도 migration이 생기면 PointAccount coverage preflight와 같은
+  transaction의 provisioning을 필수로 한다. Support profile을 CustomerAccount로 추론하지 않는다.
+- **Rationale:** 가입 직후 포인트 화면의 0원이 실제 원장 상태가 되게 하고, 첫 조회가 쓰기를 수행하거나
+  첫 적립 전 계정 없음이라는 별도 제품 상태를 만들지 않기 위함이다.
+- **Affected Contexts:** Identity, Loyalty, Customer Web
+- **Affected Aggregates:** CustomerAccount, PointAccount
+- **Required Tests:**
+  - 가입 성공 후 두 Aggregate가 한 건씩 존재하고 PointAccount 세 잔액이 0인지 검증
+  - 같은 사용자명 동시 가입에서 CustomerAccount와 PointAccount가 각각 한 건인지 검증
+  - Loyalty 저장·flush 장애가 CustomerAccount까지 rollback하고 503인지 검증
+  - CustomerAccount만 있는 손상 fixture의 `/me/points`가 0/404/lazy-create가 아닌 503인지 검증
+  - Application/Domain에 cross-Context JPA 연관관계가 없는지 ArchUnit·Modulith 검증
+- **ADR Required:** Yes — [ADR-109](../adr/ADR-109-customer-point-account-provisioning.md)
+- **Revisit Conditions:** 외부 Identity import, 고객 탈퇴·익명화, Loyalty 서비스 분리 또는 가입과 계정
+  provisioning의 비동기화가 필요해질 때
+
+## BR-43 운영 실패 큐의 소유 Context 연합 조회
+
+- **Status:** Accepted for P0
+- **Decision:** P0 운영 실패 큐는 `PAYMENT`, `NOTIFICATION`, `SETTLEMENT` 세 유형으로 분리한다.
+  Payment와 Notification은 자기 table의 상태·실제 시도 횟수·발생/갱신 시각·correlation ID를 public
+  DTO Projection port로 반환한다. Operations는 자신이 이미 소유한 `operations_reprocessing_case`를
+  closed case type으로 조회해 각 유형에 합친다. 정산 P0 실패의 명시적 source는
+  `SETTLEMENT_LATE_ITEM`, `SETTLEMENT_ADJUSTMENT`, `SETTLEMENT_DISPUTE` ReprocessingCase이며 존재하지
+  않는 Settlement failure ledger를 새로 만들지 않는다.
+- **Source Map:** PAYMENT는 Payment attempt/reconciliation과 `PAYMENT_RECONCILIATION`,
+  `PAYMENT_CANCELLATION_SETUP` case, NOTIFICATION은 NotificationDelivery와
+  `NOTIFICATION_DELIVERY` case, SETTLEMENT는 위 세 `SETTLEMENT_*` case다. `EVENT_PUBLICATION`과
+  `ACCEPTANCE_TIMEOUT_WORK`는 P0 세 tab에 억지로 넣지 않고 P1이다. `operations_reprocessing_case`는
+  owner 상태의 mirror가 아니라 수동 복구가 필요한 명시적 case source로만 사용한다.
+- **Pagination:** 각 유형은 독립된 signed cursor와 정렬을 사용한다. 전 유형을 하나의 시간순 page와
+  cursor로 합치지 않는다. summary와 exact correlation ID 검색만 세 port를 호출해 조합하며, 한 port가
+  실패하면 부분 결과·stale cache·0건으로 대체하지 않고 전체 요청을 503으로 실패시킨다.
+- **Normalized Contract:** 각 item은 opaque `workReference`, 원본 `sourceState`, 화면용
+  `attentionState`(`RETRY_SCHEDULED | FAILED | UNKNOWN | RECONCILING | MANUAL_REVIEW`), 실제
+  `attemptCount` 또는 `attemptCountAvailable=false`, occurredAt, updatedAt, correlationId와 서버 계산
+  `allowedActions`를 반환한다. 원본에 시도 횟수가 없으면 0으로 꾸미지 않는다.
+- **Command Boundary:** 연합 조회는 읽기 전용이다. `allowedActions`는 이미 존재하고 현재 권한으로
+  실행 가능한 전용 command를 설명할 뿐, 목록 조회가 새 재처리 권한을 부여하거나 source 상태를
+  직접 수정하지 않는다. 실행은 기존 stable key·reason·permission·reconciliation 정책을 적용한다.
+- **Authorization:** 목록·상세·summary·correlation 검색은 BR-39의 active
+  `REPROCESSING_CASE_READ`를 요구한다. 다른 read grant나 `PLATFORM_OPERATOR` 역할만으로 허용하지 않는다.
+- **Rationale:** 운영 화면 편의를 위해 금융·전달·정산 실패의 source of truth를 복제하지 않고, 각
+  Context의 실제 상태와 장애 의미를 그대로 표시하기 위함이다.
+- **Affected Contexts:** Operations, Payment, Notification, Settlement
+- **Affected Aggregates:** Payment, NotificationDelivery, ReprocessingCase, SettlementBatch;
+  목록은 Query Projection이며 새 Aggregate가 아니다.
+- **Required Tests:**
+  - 유형별 상태 mapping과 실제 attempt count/availability 계약
+  - 각 cursor의 type·filter binding과 page 누락·중복 부재
+  - summary/correlation search에서 한 port 장애가 부분 결과가 아닌 503인지 검증
+  - source map 밖 case가 P0 tab에 섞이지 않고 원본 상태 변경이 다음 조회에 반영되는지 검증
+  - Payment/Notification 상태와 같은 source의 case가 중복 카드가 아니라 하나의 work item으로
+    결정적으로 병합되는지 검증
+  - read permission으로 command가 실행되지 않고 allowedActions가 실제 command 인가와 일치하는지 검증
+  - provider key·원본 payload·PII가 Projection에 노출되지 않는지 검증
+- **ADR Required:** Yes — [ADR-110](../adr/ADR-110-federated-operations-failure-queues.md)
+- **Revisit Conditions:** 전 유형 단일 SLA 정렬이 필요하거나 port fan-out이 측정된 병목이 되고,
+  event-backed Projection의 rebuild·lag·backfill 운영 비용을 감수할 요구가 생길 때
+
+## BR-44 운영자 감사 로그 조회 기간
+
+- **Status:** Accepted for P0
+- **Decision:** 운영자 감사 로그 목록은 `to` 미지정 시 요청 시각, `from` 미지정 시 `to - 30일`을
+  사용한다. 한 요청의 `from` 이상 `to` 이하 기간은 최대 90일이며 `from > to` 또는 90일 초과는
+  400으로 거부한다. 5년 보존 기간 안에서는 과거 조회 시작일에 별도 제품 상한을 두지 않는다.
+- **Pagination:** `(occurredAt DESC, auditRecordId DESC)` keyset cursor를 사용한다. signed cursor에는
+  actor가 지정하거나 서버가 확정한 `from`, `to`, category, action, correlationId와 endpoint를 함께
+  묶는다. 다음 page에서 필터나 기간이 달라지면 400으로 실패시키며 새 조회로 시작해야 한다.
+- **Authorization and Audit:** active `AUDIT_RECORD_READ`, `PLATFORM_OPERATOR`와 유효한
+  `X-Access-Reason`을 모두 요구한다. 조회 Projection과 `AUDIT_RECORD_READ` 접근 Audit append를 같은
+  local transaction에 묶고 Audit 저장 실패 시 body를 반환하지 않는다. 조회 사유 원문은 log, metric
+  tag 또는 응답에 복제하지 않는다.
+- **Data Exposure:** 목록과 상세는 credential, secret, raw Provider payload와 불필요한 PII를 반환하지
+  않는다. before/after summary는 저장된 sanitized 값만 반환하며 UI가 임의 JSON을 실행하거나 HTML로
+  해석하지 않는다.
+- **Rationale:** 기본 운영 화면의 비용을 예측 가능하게 하면서도 사고·분쟁 조사를 위해 5년 보존분을
+  최대 90일 단위로 탐색할 수 있게 한다.
+- **Affected Contexts:** Operations, Operations Console
+- **Affected Aggregate / Read Model:** append-only AuditRecord, AuditRecordQueryProjection
+- **Required Tests:**
+  - 생략한 기간이 요청 시각 기준 30일로 고정되는지 검증
+  - 정확히 90일 허용, 90일 초과와 역전 기간 400 검증
+  - cursor의 기간·필터 변조와 다른 endpoint 재사용 400 검증
+  - 5년 보존 범위의 과거 90일 window 조회와 due purge 경계 회귀 검증
+  - 권한·사유·접근 Audit 원자성과 query/Audit 저장 장애의 503 검증
+  - Projection과 브라우저 렌더링에 secret·raw payload·불필요한 PII가 없는지 검증
+- **ADR Required:** Existing [ADR-022](../adr/ADR-022-audit-record.md) amendment
+- **Revisit Conditions:** 측정된 query p95·DB 부하, 별도 감사 저장소, legal hold, 조사 업무의 더 긴 단일
+  window 요구 또는 export 전용 비동기 workflow가 필요할 때
+
+## BR-45 운영자 정산 대사 조회 기간
+
+- **Status:** Accepted for P0
+- **Decision:** 운영자 정산 대사 목록은 `to` 미지정 시 `Asia/Seoul`의 현재 정산일,
+  `from` 미지정 시 `to - 29일`을 사용해 양 끝을 포함한 30개 정산일을 조회한다. 한 요청의
+  `from..to`는 양 끝을 포함해 최대 90개 정산일이며 역전 또는 90일 초과는 400으로 거부한다.
+  보존된 과거 정산일 조회 자체에는 별도 제품 상한을 두지 않는다.
+- **Pagination:** `(settlementDate DESC, settlementBatchId DESC)` keyset cursor에 서버가 확정한
+  from/to, storeId, state와 endpoint를 서명한다. 다음 page에서 filter를 바꾸면 400으로 실패시키고
+  새 조회를 시작한다.
+- **Incomplete Semantics:** OPEN batch나 필수 source가 아직 terminal이 아니면 대사 결과는
+  `INCOMPLETE`다. 미완료 금액을 0으로 대체하거나 일관된 정산으로 표시하지 않는다.
+- **Rationale:** 일별 batch를 월간 기본 화면과 최대 분기 단위 조사로 다루면서 단일 전역 query의
+  비용과 응답 범위를 제한한다.
+- **Affected Contexts:** Settlement, Operations, Operations Console
+- **Affected Aggregate / Read Model:** SettlementBatch, SettlementItem, SettlementAdjustment,
+  SettlementDispute, SettlementReconciliationProjection
+- **Required Tests:**
+  - 생략한 기간이 서울 정산일 기준 양 끝 포함 30일인지 검증
+  - 정확히 90개 정산일 허용, 91일·역전 기간 400 검증
+  - store/state/date filter와 cursor binding, page 누락·중복 부재
+  - 과거 90일 window와 자정·윤년 경계
+  - OPEN·late source가 0원 `CONSISTENT`가 아닌 `INCOMPLETE`인지 검증
+- **ADR Required:** No — 기존 [ADR-017](../adr/ADR-017-settlement-calculation-and-cost-allocation.md)과
+  [ADR-070](../adr/ADR-070-signed-cursor-and-pagination-contract.md)을 따르는 P0 read 계약
+- **Revisit Conditions:** 실제 조회 p95·DB 부하, 분기 이상 단일 조사, 비동기 export 또는 별도
+  reconciliation 저장 모델이 요구될 때
+
+## BR-46 운영자 웹의 점주 계정 발급과 임시 비밀번호 1회 표시
+
+- **Status:** Accepted for P0
+- **Authorization:** 점주 계정 발급·임시 비밀번호 초기화·잠금 조기 해제·관리 조회는 Keycloak
+  `PLATFORM_OPERATOR`와 active `MERCHANT_CREDENTIAL_MANAGE` grant를 모두 요구한다. 명령은 1~200자의
+  control-character 없는 reason과 `Idempotency-Key`를 요구하며, role이나 다른 grant로 대체하지 않는다.
+- **Create Boundary:** 발급 요청은 canonical login ID, display name, 존재하는 `storeId`와
+  `OWNER | STAFF` initial membership role을 받는다. MerchantAccount, 최초 ACTIVE StoreMembership,
+  같은 LOGIN_ID의 과거 attempt 삭제와 AuditRecord를 한 PostgreSQL transaction에 commit한다. 하나라도
+  실패하면 전부 rollback하며 membership 없는 계정이나 계정 없는 membership을 성공으로 남기지 않는다.
+- **Temporary Password:** 서버 CSPRNG로 24 random byte를 생성하고 padding 없는 Base64URL 32자로
+  인코딩한다. BR-35를 통과한 값만 Argon2id로 hash해 저장한다. 평문은 발급 또는 초기화가 처음 성공한
+  HTTP 응답의 `temporaryPassword` 필드에만 한 번 포함한다. 조회 endpoint, DB, AuditRecord, log,
+  metric, tracing, error payload와 frontend storage에는 남기지 않는다. 응답은 `Cache-Control: no-store`다.
+- **Lost Response:** 발급·초기화 mutation을 브라우저에서 자동 retry하지 않는다. 같은
+  `Idempotency-Key` replay는 부수효과를 다시 만들거나 비밀번호를 재현하지 않고
+  `409 TEMPORARY_PASSWORD_NOT_REPLAYABLE`과 대상 계정 reference만 반환한다. 잠금 조기 해제는 secret이
+  없으므로 같은 payload replay에 204를 재생한다. 다른 payload의 key 재사용은 모두
+  `409 IDEMPOTENCY_KEY_REUSED`다. 운영자는 exact login ID로 생성 여부를 확인하고 새 idempotency key의
+  초기화 명령으로 새 임시 비밀번호를 한 번 발급한다. 초기화 응답을 잃어도 같은 절차로 다시 초기화하며,
+  매 초기화는 이전 Hash를 무효화하고 `credentialVersion`을 증가시키고 AuditRecord를 남긴다.
+- **Idempotency Retention:** terminal command row에는 secret·Hash·response body를 저장하지 않고 90일
+  보존한다. 기본 1시간마다 최대 100개 due row를 `(retentionExpiresAt, id)` 순서로 삭제하며 실패는
+  retry·metric·log로 남기고 명령 검사를 우회하지 않는다.
+- **Frontend Boundary:** Operations UI는 성공 응답의 임시 비밀번호를 현재 화면의 memory state에만
+  보관하고 복사 여부와 무관하게 route 이동·새로고침·닫기에서 제거한다. 다시 보기 기능은 없고,
+  사라진 비밀번호는 초기화로만 대체한다.
+- **Rationale:** 검증된 이메일·SMS Provider가 없는 P0에서도 웹 운영 흐름을 완결하되, 임시 비밀번호를
+  나중에 복호화·조회할 수 있는 장기 secret으로 만들지 않기 위함이다.
+- **Affected Contexts:** Identity, Merchant, Operations, Operations Console
+- **Affected Aggregates:** MerchantAccount, StoreMembership, LoginAttempt, OperatorPermissionGrant,
+  AuditRecord, CommandIdempotency
+- **Required Tests:**
+  - account·membership·attempt 삭제·Audit 원자성과 store/membership role 검증
+  - CSPRNG 24-byte/Base64URL 형식, Hash만 persistence, response 외 평문 비노출
+  - permission·reason·idempotency 누락/폐기와 Audit 장애의 fail-closed
+  - 동일 key 같은/다른 payload replay에서 부수효과 0회와 secret 비재현
+  - 응답 유실 뒤 exact login ID 확인 → 새 key reset으로 수렴하고 이전 비밀번호 실패
+  - frontend storage·URL·log·error report에 temporaryPassword가 없고 route 이탈 뒤 재표시되지 않음
+- **ADR Required:** Existing [ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md) amendment,
+  [ADR-069](../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md) permission amendment
+- **Revisit Conditions:** 검증된 전달 Provider, 이중 승인, 별도 credential administrator 역할 또는
+  Hardware-backed secret delivery가 필요할 때
+
 ---
 
 # 정책 간 의존성과 우선 적용 순서
@@ -1580,6 +2045,20 @@
 9. 위치 검색은 `BR-28`, 결제수단은 `BR-29`를 따른다.
 10. 고객 일회성 결제는 `BR-33`을 따르고 PaymentMethod lifecycle과 분리한다.
 11. 분석 Read Model은 `BR-31`, `BR-32`를 따른다.
+12. 고객·점주 사용자명과 고객 가입·로그인 응답은 `BR-34`를 따른다.
+13. 고객·점주 비밀번호와 로그인 제한은 `BR-35`를 따른다.
+14. 고객·점주 Session 수명과 동시 한도는 `BR-36`을 따른다.
+15. 고객 알림함 보존은 `BR-37`을 따른다.
+16. 매장 부분 환불 권한과 사용자 계약은 `BR-38`을 따르고 금액 계산에는 `BR-12`, `BR-13`,
+    `BR-15`, `BR-18`, `BR-21`을 함께 적용한다.
+17. P0 운영 조회는 `BR-39`의 세 explicit permission을 서로 대체하지 않고 적용한다.
+18. 홈의 최근 주문 매장과 추천 병합은 `BR-40`을 따른다.
+19. 운영자 웹 로그인과 token 저장 경계는 `BR-41`을 따른다.
+20. 고객 가입은 `BR-42`에 따라 0원 PointAccount까지 원자 생성한다.
+21. 운영 실패 큐는 `BR-43`의 유형별 source-owned Projection을 사용한다.
+22. 운영자 감사 로그 조회는 `BR-44`의 30일 기본·90일 요청 상한과 접근 Audit를 적용한다.
+23. 운영자 정산 대사 목록은 `BR-45`의 서울 정산일 기준 30일 기본·90일 요청 상한을 적용한다.
+24. 점주 계정 발급·초기화는 `BR-46`의 최초 membership 원자 생성과 임시 비밀번호 1회 표시를 따른다.
 
 ---
 
