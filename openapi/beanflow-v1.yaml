@@ -1662,6 +1662,383 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/verification-sessions:
+    post:
+      tags: [Support]
+      operationId: createSupportVerificationSession
+      summary: Start purpose-bound step-up verification
+      description: |
+        Starts a 15-minute BASIC or ENHANCED session bound to the assigned active Case,
+        one active subject link, the authenticated operator, a purpose, and the fixed
+        PERSONAL_DATA_REVEAL action scope. No OTP, raw link, answer, or proof is stored.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVerificationSessionRequest"
+      responses:
+        "201":
+          description: Verification session started or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationSessionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/verification-sessions/{sessionId}:
+    get:
+      tags: [Support]
+      operationId: getSupportVerificationSession
+      summary: Get the current purpose-bound verification state
+      parameters:
+        - $ref: "#/components/parameters/VerificationSessionId"
+      responses:
+        "200":
+          description: Current session and opaque challenge metadata
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationSessionResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/verification-sessions/{sessionId}/challenges:
+    post:
+      tags: [Support]
+      operationId: issueSupportVerificationChallenge
+      summary: Issue an opaque registered-channel challenge
+      description: |
+        Persists a challenge intent, calls the configured Identity provider outside the
+        database transaction, then records the definitive or UNKNOWN provider outcome.
+      parameters:
+        - $ref: "#/components/parameters/VerificationSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueVerificationChallengeRequest"
+      responses:
+        "201":
+          description: Opaque challenge metadata; never contains a secret or raw link
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationChallengeResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/verification-challenges/{challengeId}/verifications:
+    post:
+      tags: [Support]
+      operationId: verifySupportVerificationChallenge
+      summary: Verify one opaque challenge proof
+      description: |
+        The proof is transient write-only input. Invalid proofs consume the Case+Subject
+        attempt budget; the fifth invalid proof creates a 30-minute persistent lockout.
+        Concurrent or replayed verification cannot call the provider twice.
+      parameters:
+        - $ref: "#/components/parameters/VerificationChallengeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyVerificationChallengeRequest"
+      responses:
+        "200":
+          description: Verification outcome without proof or provider reference
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResultResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/verification-sessions/{sessionId}/revocations:
+    post:
+      tags: [Support]
+      operationId: revokeSupportVerificationSession
+      summary: Revoke a verification session
+      parameters:
+        - $ref: "#/components/parameters/VerificationSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Revoked session or the original response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationSessionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/data-access-grants:
+    post:
+      tags: [Support]
+      operationId: requestSupportDataAccessGrant
+      summary: Request a field-scoped personal-data grant
+      description: |
+        Binds the Grant to the Case, subject link, subject, requester and verification
+        purpose. BASIC display fields activate for 10 minutes and three reveals;
+        SENSITIVE fields require ENHANCED verification and a distinct approver before
+        a five-minute, one-reveal Grant can activate.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestDataAccessGrantRequest"
+      responses:
+        "201":
+          description: Grant state after verification qualification
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataAccessGrantResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/data-access-grants/{grantId}/approvals:
+    post:
+      tags: [Support]
+      operationId: decideSupportDataAccessGrant
+      summary: Decide a SENSITIVE DataAccessGrant
+      description: The approver must differ from the requester and the exact Grant version must still be current.
+      parameters:
+        - $ref: "#/components/parameters/DataAccessGrantId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideDataAccessGrantRequest"
+      responses:
+        "200":
+          description: Approved active or denied Grant
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataAccessGrantResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/data-access-grants/{grantId}/reveals:
+    post:
+      tags: [Support]
+      operationId: revealSupportPersonalData
+      summary: Reveal exactly the fields allowed by an active Grant
+      description: |
+        Audit record and reveal-attempt reservation commit before owner decryption.
+        The owner Context decrypts outside the Support transaction. Audit or owner failure
+        never returns raw data, and a committed attempt consumes budget even if decryption fails.
+        A successful body is not persisted and same-key replay requires manual review.
+      parameters:
+        - $ref: "#/components/parameters/DataAccessGrantId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevealGrantedPersonalDataRequest"
+      responses:
+        "200":
+          description: Ephemeral field-keyed values; clients must not cache or persist this response
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevealedPersonalDataResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/break-glass-requests:
+    post:
+      tags: [Support]
+      operationId: requestSupportBreakGlass
+      summary: Request emergency access to one personal-data field
+      description: |
+        BREAK_GLASS is separate from normal verification and Grant paths. It is limited
+        to one emergency-purpose field and emits a durable PII-free security notification.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestBreakGlassRequest"
+      responses:
+        "201":
+          description: Pending distinct pre-approval
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BreakGlassResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/break-glass-requests/{requestId}/approvals:
+    post:
+      tags: [Support]
+      operationId: decideSupportBreakGlass
+      summary: Pre-approve or deny one break-glass request
+      description: Approval requires an actor distinct from the requester and activates a two-minute, one-reveal window.
+      parameters:
+        - $ref: "#/components/parameters/BreakGlassRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideBreakGlassRequest"
+      responses:
+        "200":
+          description: Current break-glass request state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BreakGlassResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/break-glass-requests/{requestId}/reveals:
+    post:
+      tags: [Support]
+      operationId: revealSupportBreakGlassData
+      summary: Reveal the exact pre-approved emergency field once
+      description: |
+        Uses the same Audit-before-owner-decryption boundary as normal reveal, emits a
+        durable security notification, consumes the single attempt, and enters mandatory post-review.
+      parameters:
+        - $ref: "#/components/parameters/BreakGlassRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevealBreakGlassRequest"
+      responses:
+        "200":
+          description: One ephemeral pre-approved field value
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BreakGlassRevealResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/break-glass-requests/{requestId}/reviews:
+    post:
+      tags: [Support]
+      operationId: reviewSupportBreakGlass
+      summary: Complete mandatory post-review
+      description: The reviewer must differ from both requester and pre-approver; the exact request version is required.
+      parameters:
+        - $ref: "#/components/parameters/BreakGlassRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewBreakGlassRequest"
+      responses:
+        "200":
+          description: Reviewed or escalated break-glass request
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BreakGlassResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
 components:
   securitySchemes:
     bearerAuth:
@@ -1736,6 +2113,30 @@ components:
     SupportSubjectLinkId:
       in: path
       name: linkId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    VerificationSessionId:
+      in: path
+      name: sessionId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    VerificationChallengeId:
+      in: path
+      name: challengeId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    DataAccessGrantId:
+      in: path
+      name: grantId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    BreakGlassRequestId:
+      in: path
+      name: requestId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -1905,6 +2306,20 @@ components:
             type: integer
             minimum: 1
             maximum: 300
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: A persistent verification lockout is active for this Case and Subject binding
+      headers:
+        Retry-After:
+          required: true
+          description: Whole seconds until the binding lockout expires.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1800
       content:
         application/json:
           schema:
@@ -3859,6 +4274,387 @@ components:
           type: boolean
         hasMore:
           type: boolean
+    VerificationLevel:
+      type: string
+      enum: [UNVERIFIED, BASIC, ENHANCED]
+    VerificationState:
+      type: string
+      enum: [PENDING, VERIFIED, LOCKED, EXPIRED, REVOKED]
+    VerificationSubjectType:
+      type: string
+      enum: [CUSTOMER, STORE, DELIVERY]
+    VerificationPurpose:
+      type: string
+      enum: [CONTACT_CONFIRMATION, CASE_RESOLUTION, SAFETY_RESPONSE, FRAUD_INVESTIGATION, PRIVACY_INCIDENT]
+    VerificationChannel:
+      type: string
+      enum: [IN_APP, REGISTERED_PHONE, REGISTERED_EMAIL]
+    VerificationChallengeState:
+      type: string
+      enum: [ISSUE_PENDING, DELIVERED, ISSUE_UNKNOWN, VERIFYING, VERIFIED, INVALID, VERIFY_UNKNOWN, EXPIRED, REVOKED]
+    CreateVerificationSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [subjectLinkId, requestedLevel, purpose]
+      properties:
+        subjectLinkId:
+          $ref: "#/components/schemas/Identifier"
+        requestedLevel:
+          type: string
+          enum: [BASIC, ENHANCED]
+        purpose:
+          $ref: "#/components/schemas/VerificationPurpose"
+    IssueVerificationChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel:
+          $ref: "#/components/schemas/VerificationChannel"
+    VerifyVerificationChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [proof]
+      properties:
+        proof:
+          type: string
+          minLength: 1
+          maxLength: 512
+          writeOnly: true
+          description: Transient one-time answer or proof; never persisted, logged, audited, or returned.
+    VerificationChallengeResource:
+      type: object
+      additionalProperties: false
+      required: [challengeId, sessionId, channel, state, requestedAt, expiresAt]
+      properties:
+        challengeId:
+          $ref: "#/components/schemas/Identifier"
+        sessionId:
+          $ref: "#/components/schemas/Identifier"
+        channel:
+          $ref: "#/components/schemas/VerificationChannel"
+        state:
+          $ref: "#/components/schemas/VerificationChallengeState"
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    VerificationSessionResource:
+      type: object
+      additionalProperties: false
+      required: [sessionId, caseId, subjectLinkId, subjectType, subjectId, purpose, requestedLevel, achievedLevel, state, invalidAttempts, startedAt, expiresAt, version, challenges]
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        subjectLinkId:
+          $ref: "#/components/schemas/Identifier"
+        subjectType:
+          $ref: "#/components/schemas/VerificationSubjectType"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        purpose:
+          $ref: "#/components/schemas/VerificationPurpose"
+        requestedLevel:
+          $ref: "#/components/schemas/VerificationLevel"
+        achievedLevel:
+          $ref: "#/components/schemas/VerificationLevel"
+        state:
+          $ref: "#/components/schemas/VerificationState"
+        invalidAttempts:
+          type: integer
+          minimum: 0
+          maximum: 5
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        challenges:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationChallengeResource"
+    VerificationResultResource:
+      type: object
+      additionalProperties: false
+      required: [challenge, sessionState, achievedLevel, invalidAttempts, lockedUntil]
+      properties:
+        challenge:
+          $ref: "#/components/schemas/VerificationChallengeResource"
+        sessionState:
+          $ref: "#/components/schemas/VerificationState"
+        achievedLevel:
+          $ref: "#/components/schemas/VerificationLevel"
+        invalidAttempts:
+          type: integer
+          minimum: 0
+          maximum: 5
+        lockedUntil:
+          type: [string, "null"]
+          format: date-time
+    SupportPersonalDataField:
+      type: string
+      enum:
+        - CUSTOMER_DISPLAY_NAME
+        - CUSTOMER_PRIMARY_PHONE
+        - CUSTOMER_PRIMARY_EMAIL
+        - STORE_LEGAL_DISPLAY_NAME
+        - STORE_SUPPORT_PHONE
+        - STORE_SUPPORT_EMAIL
+        - COURIER_DISPLAY_NAME
+        - COURIER_PROVIDER_REFERENCE
+        - COURIER_RELAY_PHONE
+        - COURIER_RELAY_EMAIL
+    DataAccessReasonCode:
+      type: string
+      enum: [CASE_HANDLING, CONTACT_CONFIRMATION, FRAUD_INVESTIGATION, SAFETY_RESPONSE, PRIVACY_INCIDENT]
+    DataAccessRisk:
+      type: string
+      enum: [BASIC, SENSITIVE]
+    DataAccessGrantState:
+      type: string
+      enum: [REQUESTED, APPROVAL_PENDING, ACTIVE, DENIED, CONSUMED, EXPIRED, REVOKED]
+    RequestDataAccessGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [verificationSessionId, purpose, fields, reasonCode]
+      properties:
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        purpose:
+          $ref: "#/components/schemas/VerificationPurpose"
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportPersonalDataField"
+        reasonCode:
+          $ref: "#/components/schemas/DataAccessReasonCode"
+    DecideDataAccessGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedVersion, reasonCode]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, DENY]
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reasonCode:
+          $ref: "#/components/schemas/DataAccessReasonCode"
+    RevealGrantedPersonalDataRequest:
+      type: object
+      additionalProperties: false
+      required: [fields]
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportPersonalDataField"
+    DataAccessGrantResource:
+      type: object
+      additionalProperties: false
+      required: [grantId, caseId, subjectLinkId, subjectType, subjectId, purpose, fields, risk, state, maxReveals, reservedReveals, requestedAt, expiresAt, version]
+      properties:
+        grantId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        subjectLinkId:
+          $ref: "#/components/schemas/Identifier"
+        subjectType:
+          $ref: "#/components/schemas/VerificationSubjectType"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        purpose:
+          $ref: "#/components/schemas/VerificationPurpose"
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportPersonalDataField"
+        risk:
+          $ref: "#/components/schemas/DataAccessRisk"
+        state:
+          $ref: "#/components/schemas/DataAccessGrantState"
+        maxReveals:
+          type: integer
+          minimum: 1
+          maximum: 3
+        reservedReveals:
+          type: integer
+          minimum: 0
+          maximum: 3
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportPersonalDataValues:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 4
+      properties:
+        CUSTOMER_DISPLAY_NAME: { type: string }
+        CUSTOMER_PRIMARY_PHONE: { type: string }
+        CUSTOMER_PRIMARY_EMAIL: { type: string }
+        STORE_LEGAL_DISPLAY_NAME: { type: string }
+        STORE_SUPPORT_PHONE: { type: string }
+        STORE_SUPPORT_EMAIL: { type: string }
+        COURIER_DISPLAY_NAME: { type: string }
+        COURIER_PROVIDER_REFERENCE: { type: string }
+        COURIER_RELAY_PHONE: { type: string }
+        COURIER_RELAY_EMAIL: { type: string }
+    RevealedPersonalDataResource:
+      type: object
+      additionalProperties: false
+      required: [revealAttemptId, grantId, caseId, subjectId, values, revealedAt]
+      properties:
+        revealAttemptId:
+          $ref: "#/components/schemas/Identifier"
+        grantId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        values:
+          $ref: "#/components/schemas/SupportPersonalDataValues"
+        revealedAt:
+          type: string
+          format: date-time
+    BreakGlassReasonCode:
+      type: string
+      enum: [IMMEDIATE_SAFETY, ACTIVE_FRAUD, PRIVACY_INCIDENT]
+    BreakGlassState:
+      type: string
+      enum: [APPROVAL_PENDING, ACTIVE, DENIED, REVIEW_PENDING, REVIEWED, EXPIRED, REVOKED]
+    RequestBreakGlassRequest:
+      type: object
+      additionalProperties: false
+      required: [subjectLinkId, field, purpose, reasonCode]
+      properties:
+        subjectLinkId:
+          $ref: "#/components/schemas/Identifier"
+        field:
+          $ref: "#/components/schemas/SupportPersonalDataField"
+        purpose:
+          type: string
+          enum: [SAFETY_RESPONSE, FRAUD_INVESTIGATION, PRIVACY_INCIDENT]
+        reasonCode:
+          $ref: "#/components/schemas/BreakGlassReasonCode"
+    DecideBreakGlassRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedVersion]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, DENY]
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    RevealBreakGlassRequest:
+      type: object
+      additionalProperties: false
+      required: [field]
+      properties:
+        field:
+          $ref: "#/components/schemas/SupportPersonalDataField"
+    ReviewBreakGlassRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedVersion, reasonCode]
+      properties:
+        decision:
+          type: string
+          enum: [CONFIRMED, ESCALATED]
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reasonCode:
+          type: string
+          minLength: 1
+          maxLength: 32
+    BreakGlassResource:
+      type: object
+      additionalProperties: false
+      required: [requestId, caseId, subjectLinkId, subjectType, subjectId, field, purpose, reasonCode, state, requestedAt, expiresAt, version]
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        subjectLinkId:
+          $ref: "#/components/schemas/Identifier"
+        subjectType:
+          $ref: "#/components/schemas/VerificationSubjectType"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        field:
+          $ref: "#/components/schemas/SupportPersonalDataField"
+        purpose:
+          $ref: "#/components/schemas/VerificationPurpose"
+        reasonCode:
+          $ref: "#/components/schemas/BreakGlassReasonCode"
+        state:
+          $ref: "#/components/schemas/BreakGlassState"
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    BreakGlassRevealResource:
+      type: object
+      additionalProperties: false
+      required: [revealAttemptId, requestId, caseId, subjectId, field, value, revealedAt]
+      properties:
+        revealAttemptId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        field:
+          $ref: "#/components/schemas/SupportPersonalDataField"
+        value:
+          type: string
+          description: Ephemeral raw value for the exact approved field; never persisted by Support.
+        revealedAt:
+          type: string
+          format: date-time
     SupportCaseState:
       type: string
       enum: [OPEN, IN_PROGRESS, WAITING, RESOLVED, CLOSED]

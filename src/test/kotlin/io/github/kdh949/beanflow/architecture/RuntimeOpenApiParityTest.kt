@@ -24,8 +24,11 @@ import io.github.kdh949.beanflow.settlement.internal.SettlementBatchQueryService
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemQueryService
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.support.internal.BreakGlassApplicationService
+import io.github.kdh949.beanflow.support.internal.DataAccessGrantApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportCaseApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportSubjectSearchApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportVerificationApplicationService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Qualifier
@@ -114,6 +117,15 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var supportSubjectSearchApplicationService: SupportSubjectSearchApplicationService
+
+    @MockitoBean
+    private lateinit var supportVerificationApplicationService: SupportVerificationApplicationService
+
+    @MockitoBean
+    private lateinit var dataAccessGrantApplicationService: DataAccessGrantApplicationService
+
+    @MockitoBean
+    private lateinit var breakGlassApplicationService: BreakGlassApplicationService
 
     @MockitoBean
     private lateinit var correlationIdSource: CorrelationIdSource

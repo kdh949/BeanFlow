@@ -552,6 +552,30 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links"
   /support/cases/{caseId}/subject-links/{linkId}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links~1{linkId}"
+  /support/cases/{caseId}/verification-sessions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1verification-sessions"
+  /support/verification-sessions/{sessionId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1verification-sessions~1{sessionId}"
+  /support/verification-sessions/{sessionId}/challenges:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1verification-sessions~1{sessionId}~1challenges"
+  /support/verification-challenges/{challengeId}/verifications:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1verification-challenges~1{challengeId}~1verifications"
+  /support/verification-sessions/{sessionId}/revocations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1verification-sessions~1{sessionId}~1revocations"
+  /support/cases/{caseId}/data-access-grants:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1data-access-grants"
+  /support/data-access-grants/{grantId}/approvals:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1data-access-grants~1{grantId}~1approvals"
+  /support/data-access-grants/{grantId}/reveals:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1data-access-grants~1{grantId}~1reveals"
+  /support/cases/{caseId}/break-glass-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1break-glass-requests"
+  /support/break-glass-requests/{requestId}/approvals:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1approvals"
+  /support/break-glass-requests/{requestId}/reveals:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reveals"
+  /support/break-glass-requests/{requestId}/reviews:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reviews"
 components:
   securitySchemes:
     bearerAuth:
