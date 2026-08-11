@@ -259,6 +259,10 @@ CREATE TABLE support_break_glass_decision (
     request_version bigint NOT NULL CHECK (request_version >= 0),
     decided_at timestamptz NOT NULL,
     CONSTRAINT uq_support_break_glass_decision_type UNIQUE (request_id, decision_type)
+    ,CONSTRAINT chk_support_break_glass_decision_shape CHECK (
+        (decision_type = 'PRE_APPROVAL' AND decision IN ('APPROVED', 'DENIED'))
+        OR (decision_type = 'POST_REVIEW' AND decision IN ('CONFIRMED', 'ESCALATED'))
+    )
 );
 
 CREATE TRIGGER trg_support_break_glass_decision_append_only

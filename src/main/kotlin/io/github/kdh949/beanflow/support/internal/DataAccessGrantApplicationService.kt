@@ -659,7 +659,7 @@ private fun DataAccessGrantEntity.securityAudit(
         sourceReference = "support-data-access-grant:$id:$action:$version",
     )
 
-private fun SupportPersonalDataField.toOwnerField(): PersonalDataField =
+internal fun SupportPersonalDataField.toOwnerField(): PersonalDataField =
     when (this) {
         SupportPersonalDataField.CUSTOMER_DISPLAY_NAME,
         SupportPersonalDataField.COURIER_DISPLAY_NAME,
