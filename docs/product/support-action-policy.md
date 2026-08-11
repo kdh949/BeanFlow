@@ -1,7 +1,7 @@
 # Support ActionPolicy
 
 > **Status:** Core ALLOWED/APPROVAL_REQUIRED/DENIED and exact approval binding are Accepted in ADR-084. S50 initial
-> typed evaluator and advisory API are implemented; S60 request revision/approval/execution remains planned.
+> typed evaluator and advisory API are implemented; S60 request revision/approval/investigation is in progress.
 
 ## Decision
 
@@ -12,6 +12,14 @@
 ## Request and approval binding
 
 SupportActionRequest revision은 action, target, canonical payload hash, verification session, policy version, aggregate version, amount, reason, evidence digest와 expiry에 묶인다. 값이 바뀌면 승인과 decision은 `STALE`이며 새 revision이 필요하다. 모든 변경 명령은 `Idempotency-Key`를 요구하고 같은 key+다른 payload는 409다.
+
+S60 approval persistence는 raw action payload/evidence를 저장하지 않고 lowercase SHA-256 digest만 저장한다. revision
+expiry는 bound action VerificationSession의 exact expiry이며 boundary는 `now >= expiresAt`이다. 현재 S50 Order matrix는
+`NONE` 또는 `SUPPORT_MANAGER` route만 선택한다. `OPERATIONS`와 `SUPPORT_MANAGER_THEN_OPERATIONS`는 future typed
+compensation/profile policy가 server-side로 선택할 때까지 dormant이고 client가 route를 보낼 수 없다.
+
+승인 결과는 `READY_FOR_EXECUTION` lineage이며 실제 owner 변경 성공이 아니다. S70/S80/S90/S100 typed owner command가
+동일 canonical payload digest와 최신 permission/verification/policy/target version을 다시 확인하고 approval을 consume한다.
 
 범용 DB JSON/SpEL/Drools DSL은 도입하지 않고 typed Kotlin policy를 계획한다. Owner Context가 최종 불변식을 재검증하며 승인도 owner 거부를 우회하지 않는다.
 
