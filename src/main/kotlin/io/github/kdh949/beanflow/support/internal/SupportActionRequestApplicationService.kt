@@ -4,8 +4,12 @@ import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationReturnHandler
+import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnResult
+import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnState
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
+import io.github.kdh949.beanflow.operations.api.ReturnOperationsSupportInvestigationCommand
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -27,6 +31,7 @@ import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
 import io.github.kdh949.beanflow.support.internal.domain.VerificationState
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
@@ -36,6 +41,8 @@ import java.time.Duration
 import java.time.Instant
 import java.util.HexFormat
 import java.util.UUID
+import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationDecision as PublicOperationsDecision
+import io.github.kdh949.beanflow.support.internal.domain.OperationsInvestigationDecision as DomainOperationsDecision
 
 internal data class CreateSupportActionRequestCommand(
     val actorId: UUID,
@@ -190,6 +197,7 @@ internal class SupportActionRequestTransactionService(
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
     private val sessions: VerificationSessionJpaRepository,
+    private val ordering: OrderingSupportTimelineOperations,
     private val permissions: OperatorPermissionAuthorization,
     private val commandLock: SupportCaseCommandLock,
     private val canonicalizer: SupportCommandPayloadCanonicalizer,
@@ -198,7 +206,7 @@ internal class SupportActionRequestTransactionService(
     private val correlations: CorrelationIdSource,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
-) {
+) : OperationsSupportInvestigationReturnHandler {
     @Transactional
     fun create(
         command: CreateSupportActionRequestCommand,
@@ -446,6 +454,60 @@ internal class SupportActionRequestTransactionService(
         return resource(entity, revision, currentSteps(entity))
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun returnDecision(command: ReturnOperationsSupportInvestigationCommand): OperationsSupportReturnResult {
+        val entity = requests.findLockedById(command.supportActionRequestId) ?: notFound("SupportActionRequest")
+        if (entity.currentRevisionNumber != command.revisionNumber) stale()
+        val revision = currentRevision(entity)
+        if (revision.id != command.supportActionRevisionId) stale()
+        val aggregate = entity.toAggregate(revision)
+
+        if (command.terminalState == OperationsSupportReturnState.EXPIRED) {
+            val change =
+                try {
+                    aggregate.expire(command.occurredAt)
+                } catch (_: IllegalStateException) {
+                    conflict("Support action request is not awaiting Operations")
+                }
+            persistApprovalChange(entity, aggregate, revision, change, "INVESTIGATION_EXPIRED", command.occurredAt)
+            return OperationsSupportReturnResult(
+                OperationsSupportReturnState.EXPIRED,
+                entity.state.name,
+                entity.version,
+            )
+        }
+
+        val order = ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull() ?: notFound("Order")
+        val invalidity = approvalInvalidity(entity, revision, aggregate, order.version, command.occurredAt)
+        if (invalidity != null) {
+            val (change, code) = invalidity
+            persistApprovalChange(entity, aggregate, revision, change, "OPERATIONS_POLICY_RECHECK", command.occurredAt)
+            val state =
+                if (code == FailureCode.SUPPORT_ACTION_REQUEST_EXPIRED) {
+                    OperationsSupportReturnState.EXPIRED
+                } else {
+                    OperationsSupportReturnState.STALE
+                }
+            return OperationsSupportReturnResult(state, entity.state.name, entity.version)
+        }
+
+        val actorId = command.actorId ?: invalid("Operations reviewer is required")
+        val decision = command.decision ?: invalid("Operations decision is required")
+        val change =
+            try {
+                aggregate.decideOperations(actorId, command.revisionNumber, decision.toDomain(), command.occurredAt)
+            } catch (_: IllegalArgumentException) {
+                throw DomainFailure(
+                    FailureCode.SUPPORT_APPROVER_MUST_DIFFER,
+                    "Operations reviewer must differ from requester, executor and Support approver",
+                )
+            } catch (_: IllegalStateException) {
+                conflict("Support action request is not awaiting Operations")
+            }
+        persistApprovalChange(entity, aggregate, revision, change, "OPERATIONS_DECISION_APPLIED", command.occurredAt)
+        return OperationsSupportReturnResult(OperationsSupportReturnState.APPLIED, entity.state.name, entity.version)
+    }
+
     private fun approvalInvalidity(
         entity: SupportActionRequestEntity,
         revision: SupportActionRevisionEntity,
@@ -507,9 +569,21 @@ internal class SupportActionRequestTransactionService(
         requests.saveAndFlush(entity)
         val action =
             when (change.stepState) {
-                SupportApprovalStepState.EXPIRED -> "SUPPORT_ACTION_APPROVAL_EXPIRED"
-                SupportApprovalStepState.STALE -> "SUPPORT_ACTION_APPROVAL_STALE"
-                else -> "SUPPORT_ACTION_SUPPORT_MANAGER_DECIDED"
+                SupportApprovalStepState.EXPIRED -> {
+                    "SUPPORT_ACTION_APPROVAL_EXPIRED"
+                }
+
+                SupportApprovalStepState.STALE -> {
+                    "SUPPORT_ACTION_APPROVAL_STALE"
+                }
+
+                else -> {
+                    if (change.stepType == SupportApprovalStepType.OPERATIONS) {
+                        "SUPPORT_ACTION_OPERATIONS_DECIDED"
+                    } else {
+                        "SUPPORT_ACTION_SUPPORT_MANAGER_DECIDED"
+                    }
+                }
             }
         appendAudits(
             listOf(
@@ -892,3 +966,11 @@ internal class SupportActionRequestTransactionService(
         val ACTIVE_CASE_STATES = setOf(SupportCaseState.OPEN, SupportCaseState.IN_PROGRESS, SupportCaseState.WAITING)
     }
 }
+
+private fun PublicOperationsDecision.toDomain(): DomainOperationsDecision =
+    when (this) {
+        PublicOperationsDecision.APPROVE -> DomainOperationsDecision.APPROVE
+        PublicOperationsDecision.DENY -> DomainOperationsDecision.DENY
+        PublicOperationsDecision.RETURN_FOR_REVISION -> DomainOperationsDecision.RETURN_FOR_REVISION
+        PublicOperationsDecision.ESCALATE -> DomainOperationsDecision.ESCALATE
+    }
