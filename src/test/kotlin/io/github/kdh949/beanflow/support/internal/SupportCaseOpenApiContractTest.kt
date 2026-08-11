@@ -56,6 +56,8 @@ internal class SupportCaseOpenApiContractTest {
             .contains("OPEN→IN_PROGRESS", "RESOLVED→CLOSED", "CLOSED is terminal")
         assertThat(schema(target, "AppendSupportNoteRequest"))
             .contains("successful response never returns content")
+        assertThat(schema(target, "SupportSubjectLink")).doesNotContain("nullable: true")
+        assertThat(schema(target, "SupportCasePage")).doesNotContain("nullable: true")
     }
 
     private fun pathItem(

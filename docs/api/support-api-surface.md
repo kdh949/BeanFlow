@@ -13,7 +13,9 @@ model, endpoint-specific DTO, authorization, error and failure semantics are imp
 All Support operator operations require authenticated bearer identity, the named Operations-owned persistent
 permission, Case/object relationship checks and owner-state revalidation. `Bearer + Support policy` below is shorthand
 for that full chain, not JWT-role-only authorization. Sensitive successful responses must be `Cache-Control: no-store`.
-State-changing operations require `Idempotency-Key` unless the owning Stage records a narrower exception. Exact PII
+State-changing operations require `Idempotency-Key` unless the owning Stage records a narrower exception. S20 scopes a
+terminal replay by `(actorId, operation, Idempotency-Key)` and compares a typed length-prefixed canonical payload;
+same scope/different payload is `409`, while a different actor or operation may reuse the same key text. Exact PII
 search input is body-only and must not enter URIs, logs, metrics, cursors or Audit summaries.
 
 The Delivery Provider webhook is the sole unauthenticated-by-bearer surface: it must explicitly set `security: []` in

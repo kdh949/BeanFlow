@@ -133,6 +133,7 @@ internal data class SupportCaseSummaryResource(
     val openedAt: Instant,
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 internal data class SupportCasePageResource(
     val items: List<SupportCaseSummaryResource>,
     val nextCursor: String?,
@@ -171,6 +172,7 @@ internal data class SupportNoteResource(
     val caseVersion: Long,
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 internal data class SupportSubjectLinkResource(
     val linkId: UUID,
     val subjectType: SupportSubjectType,
@@ -192,11 +194,13 @@ internal class SupportCaseCommandLock(
 ) {
     fun lock(
         caseId: UUID?,
+        actorId: UUID,
+        operation: String,
         idempotencyKey: String,
     ) {
         buildList {
             caseId?.let { add("support-case:$it") }
-            add("support-case-idempotency:$idempotencyKey")
+            add("support-case-idempotency:$actorId:$operation:$idempotencyKey")
         }.map(::lockKey).sorted().forEach { key ->
             jdbcTemplate.execute(
                 "SELECT pg_advisory_xact_lock(?)",
@@ -230,6 +234,7 @@ internal class SupportCaseApplicationService(
     private val audits: AuditRecordOperations,
     private val identifiers: IdentifierSource,
     private val objectMapper: ObjectMapper,
+    private val commandPayloads: SupportCommandPayloadCanonicalizer,
     private val clock: Clock,
 ) {
     @Transactional
@@ -237,13 +242,23 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(null, normalized.idempotencyKey)
+            commandLock.lock(null, normalized.actorId, CREATE_CASE, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = CREATE_CASE,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$CREATE_CASE|${normalized.actorId}|${normalized.requesterType}|${normalized.requesterReference}|${normalized.category}|${normalized.priority}|${normalized.externalReference.orEmpty()}|${normalized.reason}",
+                    commandPayloadHash(
+                        CREATE_CASE,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("requesterType", "enum", normalized.requesterType),
+                            payloadField("requesterReference", "string", normalized.requesterReference),
+                            payloadField("category", "enum", normalized.category),
+                            payloadField("priority", "enum", normalized.priority),
+                            payloadField("externalReference", "string", normalized.externalReference),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
                     ),
                 responseType = SupportCaseResource::class.java,
             ) {
@@ -298,13 +313,21 @@ internal class SupportCaseApplicationService(
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
             permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, ASSIGN_CASE, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = ASSIGN_CASE,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$ASSIGN_CASE|${normalized.actorId}|${normalized.caseId}|${normalized.assigneeId}|${normalized.expectedVersion}|${normalized.reason}",
+                    commandPayloadHash(
+                        ASSIGN_CASE,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("assigneeId", "uuid", normalized.assigneeId),
+                            payloadField("expectedVersion", "int64", normalized.expectedVersion),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
                     ),
                 responseType = SupportCaseAssignmentResource::class.java,
             ) {
@@ -338,17 +361,25 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, TRANSITION_CASE, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = TRANSITION_CASE,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$TRANSITION_CASE|${normalized.actorId}|${normalized.caseId}|${normalized.targetState}|${normalized.expectedVersion}|${normalized.reason}",
+                    commandPayloadHash(
+                        TRANSITION_CASE,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("targetState", "enum", normalized.targetState),
+                            payloadField("expectedVersion", "int64", normalized.expectedVersion),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
                     ),
                 responseType = SupportCaseTransitionResource::class.java,
             ) {
-                val entity = lockedCase(normalized.caseId)
+                val entity = lockedCaseAssignedTo(normalized.caseId, normalized.actorId)
                 val aggregate = entity.toAggregate()
                 requireVersion(aggregate.version, normalized.expectedVersion)
                 val now = clock.instant()
@@ -378,13 +409,22 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, APPEND_INTERACTION, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = APPEND_INTERACTION,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$APPEND_INTERACTION|${normalized.actorId}|${normalized.caseId}|${normalized.channel}|${normalized.direction}|${normalized.occurredAt}|${normalized.redactedSummary}",
+                    commandPayloadHash(
+                        APPEND_INTERACTION,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("channel", "enum", normalized.channel),
+                            payloadField("direction", "enum", normalized.direction),
+                            payloadField("occurredAt", "instant", normalized.occurredAt),
+                            payloadField("redactedSummary", "string", normalized.redactedSummary),
+                        ),
                     ),
                 responseType = SupportInteractionResource::class.java,
             ) {
@@ -431,11 +471,21 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, APPEND_NOTE, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = APPEND_NOTE,
                 idempotencyKey = normalized.idempotencyKey,
-                payloadHash = hash("$APPEND_NOTE|${normalized.actorId}|${normalized.caseId}|${normalized.content}|${normalized.reason}"),
+                payloadHash =
+                    commandPayloadHash(
+                        APPEND_NOTE,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("content", "string", normalized.content),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
+                    ),
                 responseType = SupportNoteResource::class.java,
             ) {
                 val entity = lockedCaseAssignedTo(normalized.caseId, normalized.actorId)
@@ -468,13 +518,22 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, LINK_SUBJECT, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = LINK_SUBJECT,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$LINK_SUBJECT|${normalized.actorId}|${normalized.caseId}|${normalized.subjectType}|${normalized.subjectId}|${normalized.relationship}|${normalized.reason}",
+                    commandPayloadHash(
+                        LINK_SUBJECT,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("subjectType", "enum", normalized.subjectType),
+                            payloadField("subjectId", "uuid", normalized.subjectId),
+                            payloadField("relationship", "enum", normalized.relationship),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
                     ),
                 responseType = SupportSubjectLinkResource::class.java,
             ) {
@@ -515,13 +574,21 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             val normalized = command.normalized()
             permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
-            commandLock.lock(normalized.caseId, normalized.idempotencyKey)
+            commandLock.lock(normalized.caseId, normalized.actorId, UNLINK_SUBJECT, normalized.idempotencyKey)
             replayOrExecute(
+                actorId = normalized.actorId,
                 operation = UNLINK_SUBJECT,
                 idempotencyKey = normalized.idempotencyKey,
                 payloadHash =
-                    hash(
-                        "$UNLINK_SUBJECT|${normalized.actorId}|${normalized.caseId}|${normalized.linkId}|${normalized.expectedVersion}|${normalized.reason}",
+                    commandPayloadHash(
+                        UNLINK_SUBJECT,
+                        listOf(
+                            payloadField("actorId", "uuid", normalized.actorId),
+                            payloadField("caseId", "uuid", normalized.caseId),
+                            payloadField("linkId", "uuid", normalized.linkId),
+                            payloadField("expectedVersion", "int64", normalized.expectedVersion),
+                            payloadField("reason", "string", normalized.reason),
+                        ),
                     ),
                 responseType = SupportSubjectUnlinkResource::class.java,
             ) {
@@ -611,27 +678,32 @@ internal class SupportCaseApplicationService(
     }
 
     private fun <T : Any> replayOrExecute(
+        actorId: UUID,
         operation: String,
         idempotencyKey: String,
         payloadHash: String,
         responseType: Class<T>,
         execute: () -> T,
     ): T {
-        idempotency.findById(idempotencyKey).orElse(null)?.let { existing ->
-            if (existing.operation != operation || existing.payloadHash != payloadHash) {
+        idempotency.findByActorIdAndOperationAndIdempotencyKey(actorId, operation, idempotencyKey)?.let { existing ->
+            if (existing.payloadHash != payloadHash) {
                 throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency-Key was reused for another SupportCase command")
             }
             return objectMapper.readValue(existing.responseBody, responseType)
         }
         val response = execute()
+        val recordedAt = clock.instant()
         idempotency.saveAndFlush(
             SupportCaseIdempotencyEntity(
+                id = identifiers.next(),
+                actorId = actorId,
                 idempotencyKey = idempotencyKey,
                 operation = operation,
                 payloadHash = payloadHash,
                 responseStatus = if (operation == CREATE_CASE) 201 else 200,
                 responseBody = objectMapper.writeValueAsString(response),
-                createdAt = clock.instant(),
+                createdAt = recordedAt,
+                retentionExpiresAt = recordedAt.plus(IDEMPOTENCY_RETENTION),
             ),
         )
         return response
@@ -811,6 +883,27 @@ internal class SupportCaseApplicationService(
     private fun hash(value: String): String =
         HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
 
+    private fun commandPayloadHash(
+        operation: String,
+        fields: List<SupportCommandPayloadField>,
+    ): String = hash(commandPayloads.canonical(operation, fields))
+
+    private fun payloadField(
+        name: String,
+        type: String,
+        value: Any?,
+    ): SupportCommandPayloadField =
+        SupportCommandPayloadField(
+            name = name,
+            type = type,
+            value =
+                when (value) {
+                    null -> null
+                    is Enum<*> -> value.name
+                    else -> value.toString()
+                },
+        )
+
     private fun <T> persistenceBoundary(block: () -> T): T =
         try {
             block()
@@ -820,8 +913,8 @@ internal class SupportCaseApplicationService(
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "SupportCase persistence is unavailable").also { it.initCause(failure) }
         } catch (failure: IllegalArgumentException) {
             throw DomainFailure(
-                FailureCode.ORDER_STATE_CONFLICT,
-                "SupportCase state does not allow this operation",
+                FailureCode.INVALID_REQUEST,
+                "SupportCase input is invalid",
             ).also { it.initCause(failure) }
         } catch (failure: IllegalStateException) {
             throw DomainFailure(
@@ -850,6 +943,7 @@ internal class SupportCaseApplicationService(
         const val MAX_LIST_LIMIT = 100
         const val LIST_CURSOR_ENDPOINT = "support/cases"
         val CURSOR_TTL: Duration = Duration.ofMinutes(15)
+        val IDEMPOTENCY_RETENTION: Duration = Duration.ofDays(90)
         val SUPPORT_CASE_SORT_ADAPTER =
             object : CursorSortAdapter<SupportCaseSort> {
                 override fun encode(sort: SupportCaseSort): List<String> = listOf(sort.openedAt.toString(), sort.caseId.toString())

@@ -11,8 +11,16 @@
   authorization은 같은 row에서 직렬화되며 role/JWT claim은 grant 조회 실패의 fallback이 아니다.
 - S20 Case create/assignment/transition/interaction/note/link/unlink은 Support local transaction으로 구현됐다.
   Operations persistent permission과 retention policy head를 잠그고, SupportCase advisory/row lock, immutable history,
-  idempotency response와 PII-free lifecycle Audit를 함께 commit한다. 권한·정책·Audit·DB 실패는 모두 rollback한다.
+  idempotency response와 PII-free lifecycle Audit를 함께 commit한다. idempotency advisory lock/replay lookup은
+  `(actorId, operation, Idempotency-Key)` scope로 직렬화하고 terminal response에는 `created_at + 90일` expiry를
+  함께 저장한다. 권한·정책·Audit·DB 실패는 모두 rollback한다.
   read permission도 persistent grant row를 잠그므로 S20 list/detail은 read-only transaction을 사용하지 않는다.
+- current-assignee가 아닌 actor의 transition은 Aggregate까지 내리지 않고 object authorization 단계에서 403으로
+  종료한다. input validation은 400, stale version/허용되지 않은 transition은 409로 분리하며 어느 실패도
+  history, idempotency 또는 Audit를 남기지 않는다.
+- Support-owned retention worker는 별도 짧은 transaction에서 due terminal idempotency row를 최대 100개씩
+  `(retention_expires_at, id)` 순서로 `FOR UPDATE SKIP LOCKED` 삭제한다. 오류를 0건 성공으로 바꾸지 않아 다음
+  scheduled tick이 재시도한다.
 - Verification/DataAccessGrant/reveal와 owner command transaction은 아직 구현되지 않았다. S40은 terminal Case Grant
   revocation과 terminal activation/reveal denial을 같은 Case boundary에 포함해야 한다.
 

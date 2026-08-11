@@ -29,7 +29,10 @@ an explicit product decision covering authorization and Audit before it can add 
    Grant 활성화·reveal을 허용하지 않는다.
 3. privileged action은 활성 담당자가 있어야 하며 다른 상담원에게 실행 권한이 자동 이전되지 않는다.
 4. state와 assignment 변경은 append-only history를 남긴다.
-5. note에는 password, OTP, token, PAN/CVC, 전체 계좌, 불필요한 주소를 저장하지 않는다.
+5. `reason`, note와 interaction summary에는 password, OTP, token, PAN/CVC, 전체 계좌, 불필요한 주소를
+   저장하지 않는다. 본문 속 13~19자리 숫자 후보는 공백·하이픈을 정규화해 Luhn으로 검사하고, `CVC`, `CVV`,
+   `security code`와 3~4자리 보안코드 표현은 거부한다. 거부된 원문은 Case, child row, idempotency response,
+   Audit, log와 test snapshot 어느 곳에도 남기지 않는다.
 6. subject link는 식별자만 보유하며 대상 Context의 소유권을 이전하지 않는다.
 7. interaction과 제한형 EvidenceReference는 retention class를 명시한다.
 

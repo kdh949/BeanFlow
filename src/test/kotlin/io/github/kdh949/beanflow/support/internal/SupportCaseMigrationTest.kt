@@ -98,7 +98,7 @@ internal class SupportCaseMigrationTest {
     }
 
     @Test
-    fun `V40 enforces active subject link and command idempotency uniqueness`() {
+    fun `V40 enforces active subject links and actor operation scoped idempotency retention`() {
         val caseId = insertCase()
         val subjectId = UUID.randomUUID()
 
@@ -129,24 +129,80 @@ internal class SupportCaseMigrationTest {
             )
         }.isInstanceOf(DataIntegrityViolationException::class.java)
 
+        val actorA = UUID.randomUUID()
+        val actorB = UUID.randomUUID()
         jdbcTemplate.update(
             """
             INSERT INTO support_case_command_idempotency (
-                idempotency_key, operation, payload_hash, response_status, response_body, created_at
-            ) VALUES ('support-case-key-001', 'CREATE_CASE', ?, 201, '{}', ?)
+                id, actor_id, operation, idempotency_key, payload_hash, response_status, response_body, created_at, retention_expires_at
+            ) VALUES (?, ?, 'CREATE_CASE', 'support-case-key-001', ?, 201, '{}', ?, ?)
             """.trimIndent(),
+            UUID.randomUUID(),
+            actorA,
             "a".repeat(64),
             Timestamp.from(NOW),
+            Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
         )
         assertThatThrownBy {
             jdbcTemplate.update(
                 """
                 INSERT INTO support_case_command_idempotency (
-                    idempotency_key, operation, payload_hash, response_status, response_body, created_at
-                ) VALUES ('support-case-key-001', 'APPEND_NOTE', ?, 201, '{}', ?)
+                    id, actor_id, operation, idempotency_key, payload_hash, response_status, response_body, created_at, retention_expires_at
+                ) VALUES (?, ?, 'CREATE_CASE', 'support-case-key-001', ?, 201, '{}', ?, ?)
                 """.trimIndent(),
+                UUID.randomUUID(),
+                actorA,
                 "b".repeat(64),
                 Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThat(
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_case_command_idempotency (
+                    id, actor_id, operation, idempotency_key, payload_hash, response_status, response_body, created_at, retention_expires_at
+                ) VALUES (?, ?, 'CREATE_CASE', 'support-case-key-001', ?, 201, '{}', ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                actorB,
+                "c".repeat(64),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
+            ),
+        ).isOne()
+        assertThat(
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_case_command_idempotency (
+                    id, actor_id, operation, idempotency_key, payload_hash, response_status, response_body, created_at, retention_expires_at
+                ) VALUES (?, ?, 'APPEND_NOTE', 'support-case-key-001', ?, 200, '{}', ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                actorA,
+                "d".repeat(64),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
+            ),
+        ).isOne()
+    }
+
+    @Test
+    fun `V40 rejects a closed timestamp after the last aggregate change`() {
+        assertThatThrownBy {
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_case (
+                    id, requester_type, requester_reference, category, priority, reason, state,
+                    current_assignee_id, opened_at, last_changed_at, closed_at, version, retention_policy_version_id
+                ) VALUES (?, 'CUSTOMER', 'customer-reference', 'ORDER_STATUS', 'NORMAL', 'ORDER_STATUS_INQUIRY', 'CLOSED',
+                          ?, ?, ?, ?, 1, 7)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(1)),
             )
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }

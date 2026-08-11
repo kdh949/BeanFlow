@@ -232,10 +232,13 @@ internal class SupportCaseSubjectLinkEntity(
 @Table(name = "support_case_command_idempotency")
 internal class SupportCaseIdempotencyEntity(
     @Id
-    @Column(name = "idempotency_key", length = 128)
-    val idempotencyKey: String,
+    val id: UUID,
+    @Column(name = "actor_id", nullable = false)
+    val actorId: UUID,
     @Column(nullable = false, length = 32)
     val operation: String,
+    @Column(name = "idempotency_key", nullable = false, length = 128)
+    val idempotencyKey: String,
     @Column(name = "payload_hash", nullable = false, length = 64)
     val payloadHash: String,
     @Column(name = "response_status", nullable = false)
@@ -244,6 +247,8 @@ internal class SupportCaseIdempotencyEntity(
     val responseBody: String,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Column(name = "retention_expires_at", nullable = false)
+    val retentionExpiresAt: Instant,
 )
 
 internal interface SupportCaseJpaRepository : JpaRepository<SupportCaseEntity, UUID> {
@@ -304,4 +309,10 @@ internal interface SupportCaseSubjectLinkJpaRepository : JpaRepository<SupportCa
     ): Boolean
 }
 
-internal interface SupportCaseIdempotencyJpaRepository : JpaRepository<SupportCaseIdempotencyEntity, String>
+internal interface SupportCaseIdempotencyJpaRepository : JpaRepository<SupportCaseIdempotencyEntity, UUID> {
+    fun findByActorIdAndOperationAndIdempotencyKey(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+    ): SupportCaseIdempotencyEntity?
+}

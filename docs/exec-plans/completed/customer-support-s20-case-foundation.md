@@ -9,8 +9,8 @@
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. S10의 실제 V39 Audit/retention/permission 결과를 direct input으로
 사용한다. S20의 migration-writer lease는 `feature/support-case-foundation`이 획득했고 V40을 선택했다.
-V40의 fresh PostgreSQL migration과 전체 검증을 완료했으므로 이 lease는 release됐고, 후속 plan은 이를
-승계하거나 번호를 예약하지 않는다.
+PR #52 review remediation은 V40이 아직 main에 병합되지 않은 상태에서 같은 branch가 다시 lease를 획득해
+수정한다. 다른 schema writer는 이 remediation lease가 release될 때까지 시작할 수 없다.
 
 `Implementation-Ready=true`인 이유는 direct dependency인 S10의 actual outcome과 S20 initial Case policy가 모두
 확정됐기 때문이다. `docs/product/support-case-policy.md`가 exact state transition, requester/category vocabulary,
@@ -29,6 +29,8 @@ collection이 아닌 append-only query model로 조회한다. S10의 dormant per
 ## Current State
 
 - Support module, V40 tables, Controller와 canonical target/runtime SupportCase operations가 구현·검증됐다.
+  PR #52 review에서 결제정보 차단, object authorization, idempotency scope/retention, JSON null contract를
+  깨는 결함이 확인돼 remediation validation이 진행 중이다.
 - ADR-081은 독립 Support Context, owner public API와 ID reference boundary를 Accepted했다.
 - `docs/product/support-case-policy.md`는 exact state/requester/category vocabulary와 S20 no-reopen scope를
   Accepted initial policy로 확정했고, S20은 이를 계약과 PostgreSQL constraint로 검증한다.
@@ -38,6 +40,8 @@ collection이 아닌 append-only query model로 조회한다. S10의 dormant per
   실패 시 caller write를 rollback한다.
 - execution preflight에서 latest `main`/`origin/main` `26880ecce2a865e84696fa62c909ffa50fb5bd17`의 last migration이
   V39임을 확인했고, S20 lease holder가 V40을 선택해 fresh PostgreSQL에서 적용했다. V1–V39는 수정하지 않았다.
+  2026-08-11 remediation preflight에서도 latest `main`/`origin/main`은 같은 SHA이고 open migration PR은
+  current S20 PR뿐이므로 V40 writer lease를 재획득했다.
 
 ## Scope
 
@@ -78,17 +82,21 @@ accepted; ADR-081 needs no amendment because the Context boundary remains unchan
 3. assignment and state changes append history in the same transaction as Case version/state update.
 4. subject links store type plus opaque owner ID only. Support does not write another Context's table or create JPA
    relationships to owner entities.
-5. note/interaction rejects password, OTP, token, PAN/CVC, full account and unnecessary address content before persistence.
-   rejected input is not logged or copied into Audit/test snapshots.
+5. reason/note/interaction rejects password, OTP, token, full account and unnecessary address content before persistence.
+   Embedded 13–19-digit PAN candidates are separator-normalized then Luhn-checked; CVC/CVV/security-code expressions
+   are rejected. Rejected input is not logged or copied into Case rows, idempotency response, Audit or test snapshots.
 6. large interaction, note and history sets are not `@OneToMany` collections on SupportCase. Cursor queries use bounded
    DTO projections and a stable endpoint-specific tuple.
-7. every command assumes duplicate delivery. same key/same canonical payload returns the stored terminal response;
-   same key/different payload is a conflict, and no duplicate history/Audit row is written.
-8. persistent permission is necessary but not sufficient: current assignment where required and expected Case version are
+7. every command assumes duplicate delivery. `(actorId, operation, Idempotency-Key)` scopes replay; same scoped key/same
+   typed length-prefixed canonical payload returns the stored terminal response, while a different payload is a conflict.
+   Different actors or operations may reuse the key text. No duplicate history/Audit row is written.
+8. terminal idempotency response expires exactly 90 days after creation. Support cleanup uses bounded
+   `(retention_expires_at, id)` keyset claims; a DB failure is propagated and retried, never counted as empty success.
+9. persistent permission is necessary but not sufficient: current assignment where required and expected Case version are
    revalidated in the same transaction. S20 typed ID links deliberately do not imply owner existence or subject relation.
-9. Audit failure rolls back privileged Case mutation. JWT role, cache, in-memory grant or no-op Audit is never a fallback.
-10. SupportCase 3-year retention policy is snapshot/reference input only in S20; deletion automation remains S120 scope.
-11. S20 does not create or revoke DataAccessGrant. S40 must make a terminal Case revoke active Grants and reject Grant
+10. Audit failure rolls back privileged Case mutation. JWT role, cache, in-memory grant or no-op Audit is never a fallback.
+11. SupportCase 3-year retention policy is snapshot/reference input only in S20; deletion automation remains S120 scope.
+12. S20 does not create or revoke DataAccessGrant. S40 must make a terminal Case revoke active Grants and reject Grant
     activation/reveal for a terminal Case in its own detailed plan; no S20 transition may claim that non-existent work ran.
 
 ## Architecture and Transaction Boundaries
@@ -101,9 +109,11 @@ checks visibility/assignment/version, invokes Aggregate transition, appends hist
 one local database transaction. Any permission, policy, Audit or persistence failure rolls back the command and terminal
 idempotency response.
 
-Create uses an idempotency key/advisory transaction lock before inserting Case and initial state history. Assignment,
-transition and unlink use expected Case version; all Case commands use Case-scoped serialization. Do not hold
-the transaction across an external Provider or owner Context network call.
+Create uses a `(actorId, operation, Idempotency-Key)` advisory transaction lock before inserting Case and initial state
+history. A shared typed, length-prefixed canonicalizer hashes every command field without delimiter ambiguity. Assignment,
+transition and unlink use expected Case version; all Case commands use Case-scoped serialization. Transition checks
+current assignment before the Aggregate, so an object authorization mismatch is 403 rather than state conflict. Do not
+hold the transaction across an external Provider or owner Context network call.
 
 ### Query transaction
 
@@ -126,8 +136,10 @@ The acquired execution-time lease added `V40__create_support_case_foundation.sql
 2. creates append-only assignment/state history with sequence/uniqueness and actor/reference constraints;
 3. creates interaction/note tables separate from the Aggregate row, with bounded lengths and retention class/version;
 4. creates subject link rows with Case/type/opaque ID/relationship uniqueness and unlink lifecycle;
-5. creates command idempotency records with canonical payload hash and terminal response bounds;
-6. adds FK/CHECK/UNIQUE/index constraints for state, expected query order, current assignment and duplicate prevention;
+5. creates command idempotency records with actor/operation/key scope, typed canonical payload hash, exact 90-day expiry
+   and bounded-keyset cleanup index;
+6. adds FK/CHECK/UNIQUE/index constraints for state, closed-time reconstitution order, expected query order, current
+   assignment and duplicate prevention;
 7. grants no Support permission by default and does not modify V1..V39.
 
 The implementation must define whether Case content expiry is materialized at close or derived by a later S120 owner
@@ -140,9 +152,10 @@ port. It may reference the seeded immutable `SUPPORT_CASE` policy version, but m
 - **Inventory:** the repository worktree inventory has no executing Support or Analytics migration branch. The other
   ready migration plan is metadata only; its `Migration lane released` note records a prior release, not a current lease.
 - **Selection:** current last Flyway migration is V39, so this sole lease holder selects `V40__create_support_case_foundation.sql`.
-- **Release:** V40 fresh migration, constraint and full-suite validation을 마친 이 completion handoff에서 lease를
-  release한다. 후속 schema-writing plan은 새 execution-time inventory와 fresh lease를 다시 획득해야 한다. Existing
-  V1–V39 migrations remain unchanged; no reservation manifest, checksum repair or migration renumbering is allowed.
+- **Remediation lease:** PR #52 review remediation 동안 `feature/support-case-foundation`이 sole writer다. V40이
+  main에 병합되기 전이므로 forward V41을 만들지 않고 V40을 수정한다. remediation validation/PR update 뒤 lease를
+  release한다. Existing V1–V39 migrations remain unchanged; no reservation manifest, checksum repair or migration
+  renumbering is allowed.
 
 ## API and Event Contracts
 
@@ -157,11 +170,13 @@ merely for local history; introduce an event only for a named consumer and recor
 
 ## Failure Semantics
 
-- missing/revoked permission or object authorization mismatch: 403 without revealing unrelated Case details;
+- missing/revoked permission or object authorization mismatch (including non-assignee transition): 403 without revealing
+  unrelated Case details;
 - absent visible Case: 404; stale expected version or illegal transition: 409;
 - invalid/secret-bearing input or malformed cursor/idempotency contract: 400;
 - DB, owner validation, policy or Audit failure: 503 and no partial Case/history/idempotency success;
-- duplicate same-payload request: original terminal response; duplicate different payload: 409;
+- duplicate same-payload request within `(actorId, operation, key)`: original terminal response; same scoped key with a
+  different payload: 409; terminal replay response expires after 90 days;
 - concurrent assignment/transition loser: explicit 409, not last-write-wins;
 - no local/in-memory/fake/no-op fallback in production profiles.
 
@@ -176,13 +191,16 @@ merely for local history; introduce an event only for a named consumer and recor
 ## Required Tests
 
 - pure domain state-transition table, closed-case rejection and version invariants
-- Application Service permission/object/assignment matrix, idempotent replay/conflict and Audit rollback
-- PostgreSQL fresh migration, CHECK/FK/UNIQUE, append-only history and no default grants
+- Application Service permission/object/assignment matrix, non-assignee transition 403, idempotent replay/conflict,
+  free-text canonical-boundary collision and Audit rollback
+- PostgreSQL fresh migration, CHECK/FK/UNIQUE, append-only history, actor/operation/key scope, 90-day cleanup
+  boundary/retry and no default grants
 - concurrent assignment/transition/idempotency winner tests with deterministic terminal outcomes
 - bounded cursor order/page/tampering/filter-scope tests and an architecture check that Case has no interaction/note
   collection; no performance measurement is claimed
-- secret/PII negative corpus proving no persistence, log, metric, Audit or snapshot leakage
-- Controller/OpenAPI request/response/error/security and target/runtime parity tests
+- secret/PII negative corpus (embedded/multiple PAN candidates and CVC/CVV/security-code variants) proving no Case,
+  child row, idempotency, log, metric, Audit or snapshot leakage
+- Controller/OpenAPI request/response/error/security, optional-field JSON omission and target/runtime parity tests
 - Spring Modulith/ArchUnit tests proving Controller→Service and Support→owner public API boundaries
 - production-profile startup failure for missing mandatory permission/Audit dependencies; no H2 substitution
 
@@ -205,8 +223,33 @@ merely for local history; introduce an event only for a named consumer and recor
   33/91/225/36 inventory; `./gradlew spotlessCheck` — exit 0, `BUILD SUCCESSFUL in 1s`; `./gradlew build` — exit 0,
   `BUILD SUCCESSFUL in 1s` (2 executed, 9 up-to-date).
 
-The full suite exercises the actual `ModularityTests`; the focused command includes the S20 ArchUnit boundary test. No
-comparable performance baseline was run, so this plan makes no performance claim.
+The full suite exercises the actual `ModularityTests`; the focused command includes the S20 ArchUnit boundary test. The
+remediation fixture measurement documents an index choice only; it makes no production performance claim.
+
+### PR #52 remediation evidence (completed, 2026-08-11)
+
+- Red regression command: `./gradlew test --tests SupportContentPolicyTest --tests SupportCaseMigrationTest --tests
+  SupportCaseIntegrationTest` — exit 1, 14 tests with 7 expected failures before the remediation: embedded PAN/CVC
+  rejection, non-assignee transition 403, invalid `OTHER` reason 400, idempotency scope/canonical collision, and the
+  two V40 constraints.
+- Focused remediation command: `./gradlew test --tests SupportContentPolicyTest --tests SupportCaseMigrationTest --tests
+  SupportCaseIntegrationTest` — exit 0, `BUILD SUCCESSFUL in 24s` after implementation. The suite also corrected a
+  pre-existing cursor-tamper fixture whose final Base64URL character could decode to the original signature; it now
+  modifies the first character deterministically.
+- S20 focused command: `./gradlew test --tests SupportCaseTest --tests SupportContentPolicyTest --tests
+  SupportCaseMigrationTest --tests SupportCaseIntegrationTest --tests SupportCaseOpenApiContractTest --tests
+  SupportArchitectureTest --tests ModularityTests --tests RuntimeOpenApiParityTest` — exit 0,
+  `BUILD SUCCESSFUL in 28s`.
+- Index decision measurement: PostgreSQL Testcontainers executed the exact list projection for all four filter shapes
+  with `EXPLAIN (ANALYZE, BUFFERS)` on 20,000 synthetic rows. The retained/added indexes and raw before/after timings
+  are recorded in `docs/architecture/support-query-model.md`; these fixture values are not a production performance
+  claim.
+- Initial simultaneous `cleanTest test --rerun-tasks` attempts were invalid because each process removed the shared
+  `build/test-results` binary while the other was writing it (`NoSuchFileException`). They were not used as evidence.
+  After both were idle, a single `./gradlew test --rerun-tasks` run passed in `9m 48s`: JUnit XML reports 144 suites,
+  678 tests, 0 failures, 0 errors and 1 skipped.
+- `./gradlew spotlessCheck build` — exit 0, `BUILD SUCCESSFUL in 3s`; its test task reused the passing single-process
+  result above. `./scripts/verify-docs.sh` and `git diff --check` are re-run after this completed-path update.
 
 ## Observability and Privacy
 
@@ -231,7 +274,9 @@ payload. Future telemetry must use only closed outcome labels and preserve this 
 - [x] exact Case state/requester/category/no-reopen policy accepted and readiness recalculated
 - [x] SupportCase domain, persistence, Application Service, Controller and target/runtime OpenAPI implementation
 - [x] V40 migration and focused PostgreSQL/domain/integration/runtime-parity tests
-- [x] full validation, documentation consistency review and completion handoff; migration-writer lease released
+- [x] initial full validation, documentation consistency review and completion handoff
+- [x] PR #52 review remediation: security/authorization/idempotency/JSON corrections, execution-plan measurements and
+  full validation; remediation migration-writer lease release
 
 ## Surprises & Discoveries
 
@@ -251,6 +296,7 @@ payload. Future telemetry must use only closed outcome labels and preserve this 
 | 2026-08-11 | Scope | exact search, verification/reveal and action execution stay out of S20 | those features require later owner/security models | program orchestration |
 | 2026-08-11 | Product policy | S20 has no DataAccessGrant; S40 must revoke active Grants on terminal Case and block terminal Case grant activation/reveal | preserve terminal Case safety without inventing an out-of-scope Aggregate or a no-op revocation | SupportCase Policy, SP-16 |
 | 2026-08-11 | Completion | V40 Case foundation, API contract and full regression completed; migration-writer lease released | V1–V39 remain unchanged and all required S20 validation has evidence | validation evidence above |
+| 2026-08-11 | Review remediation | accept eight valid PR #52 findings and correct V40/code/test/document contracts before merge | amendment retains the original S20 scope while restoring payment-data, object authorization, idempotency, retention and JSON guarantees | remediation evidence above |
 
 ## Outcomes & Retrospective
 
@@ -259,10 +305,14 @@ append-only assignment/state histories; separate bounded interaction/note rows; 
 specific target/runtime OpenAPI; and persistent permission plus object/version checks. Closed Cases reject ordinary
 mutations, content policy rejects secret/high-risk PII before persistence, and Audit failure rolls back the mutation.
 
-All required S20 domain, object authorization, PostgreSQL constraint, cursor, Modulith/ArchUnit and API contract checks
-passed. The migration-writer lease is released. S30 is not authored or ready: it still requires an Accepted ADR-083 and a
-customer/contact/crypto owner model. S40 remains a future plan and must implement the explicitly recorded terminal-Case
-DataAccessGrant revocation and activation/reveal denial. No performance result is claimed.
+The initial S20 validation passed, but PR #52 review found valid Critical/Important defects in payment-card detection,
+object authorization, canonical idempotency, idempotency scope/retention and JSON null omission. The remediation added
+embedded PAN/CVC/CVV rejection before any persistence; assigned transition authorization; typed length-prefixed canonical
+payloads; actor/operation/key idempotency scope with 90-day bounded cleanup; non-null JSON omission; close-time DB
+alignment; and measured list-index selection. Focused and single-process full validation now pass, so this plan is
+completed again and its V40 writer lease is released. S30 is not authored or ready: it still requires an Accepted ADR-083
+and a customer/contact/crypto owner model. S40 remains a future plan and must implement the explicitly recorded
+terminal-Case DataAccessGrant revocation and activation/reveal denial. No production performance result is claimed.
 
 ## Revision Notes
 
@@ -274,3 +324,7 @@ DataAccessGrant revocation and activation/reveal denial. No performance result i
   terminal activation/reveal denial to the future S40 Grant implementation.
 - 2026-08-11: completed V40 fresh PostgreSQL/full-suite/format/document validation, corrected the historical V39 latest-
   migration test expectation to V40, released the migration-writer lease, and moved this plan to completed path.
+- 2026-08-11: reopened this plan for valid PR #52 review remediation. V40 remains unmerged, latest main is
+  `26880ecce2a865e84696fa62c909ffa50fb5bd17`, and this branch is the sole open migration writer; it therefore reacquired
+  the writer lease before modifying V40.
+- 2026-08-11: completed PR #52 remediation validation, restored the completed path, and released the V40 writer lease.

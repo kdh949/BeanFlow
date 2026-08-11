@@ -8,10 +8,10 @@
 
 | Layer | Current / planned coverage |
 |---|---|
-| Domain | S20 Case transition matrix, terminal rejection, `OTHER` guard and content policy; later aggregates planned |
-| Application | S20 persistent grant/current assignment/idempotency/Audit fail-closed; owner port/unknown semantics planned |
-| PostgreSQL Testcontainers | S20 migration CHECK/UNIQUE/append-only/active-link constraints and advisory-lock winner; later locks/worker claims planned |
-| API contract | S20 endpoint status/error/no-store/cursor/idempotency/security plus target/runtime parity; later masking/reveal planned |
+| Domain | S20 Case transition matrix, terminal rejection, `OTHER` guard and content policy including embedded PAN/CVC/CVV corpus; later aggregates planned |
+| Application | S20 persistent grant/current assignment/idempotency/Audit fail-closed, non-assignee transition 403, invalid input 400 and state/version 409 separation; owner port/unknown semantics planned |
+| PostgreSQL Testcontainers | S20 migration CHECK/UNIQUE/append-only/active-link constraints, `(actor, operation, key)` idempotency scope, 90-day cleanup boundary/retry and advisory-lock winner; later locks/worker claims planned |
+| API contract | S20 endpoint status/error/no-store/cursor/idempotency/security, optional JSON field omission and target/runtime parity; later masking/reveal planned |
 | Modulith/ArchUnit | S20 Controller→Repository and Support→owner-internal boundary; later module rules planned |
 | Security | IDOR, role/grant/Case/verification matrix, PII leakage, approval separation and browser controls |
 | Provider/resilience | timeout, ACK loss, duplicate/out-of-order, restart and same-reference reconciliation |
@@ -30,7 +30,8 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 
 - challenge replay, attempt lockout and grant expiry/revocation versus reveal
 - permission revoke versus authorized transaction; approval step/reviewer duplication and revoke versus execute
-- same key/same payload replay, same key/changed payload conflict
+- same key/same payload replay, same key/changed payload conflict, cross-actor/cross-operation key reuse and free-text
+  field-boundary collision conflict
 - last pickup slot atomic swap; ACCEPTED cancellation versus PREPARING; two agents cancel one Order
 - rolling compensation bucket and duplicate terminal incident benefit
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch

@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.json.JsonMapper
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
@@ -38,6 +40,7 @@ import java.util.concurrent.TimeUnit
         "beanflow.payment.reconciliation.initial-delay-ms=3600000",
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
+        "beanflow.support-case-idempotency.retention.initial-delay-ms=3600000",
     ],
 )
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -46,6 +49,7 @@ internal class SupportCaseIntegrationTest
     constructor(
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
+        private val idempotencyCleanup: SupportCaseIdempotencyRetentionCleanup,
     ) {
         private val actorId = UUID.fromString("20000000-0000-0000-0000-000000000020")
         private val otherActorId = UUID.fromString("20000000-0000-0000-0000-000000000021")
@@ -53,6 +57,7 @@ internal class SupportCaseIntegrationTest
         @BeforeEach
         fun resetSupportState() {
             removeAuditFailureTrigger()
+            removeIdempotencyCleanupFailureTrigger()
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
@@ -72,6 +77,7 @@ internal class SupportCaseIntegrationTest
         @AfterEach
         fun removeAuditFailureTriggerAfterTest() {
             removeAuditFailureTrigger()
+            removeIdempotencyCleanupFailureTrigger()
         }
 
         @Test
@@ -102,6 +108,18 @@ internal class SupportCaseIntegrationTest
                         .json("""{"content":"INTERNAL_NOTE_RECORDED","reason":"CASE_REVIEW"}"""),
                 ).andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/status-transitions")
+                        .with(operatorJwt(otherActorId))
+                        .header("Idempotency-Key", "support-other-transition-0001")
+                        .json("""{"targetState":"IN_PROGRESS","expectedVersion":0,"reason":"CASE_STATE_REVIEW"}"""),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+            assertThat(count("SELECT count(*) FROM support_case_state_history WHERE support_case_id = ?", created.caseId)).isOne()
+            assertThat(countAll("support_case_command_idempotency")).isOne()
+            assertThat(count("SELECT count(*) FROM operations_audit_record WHERE target_id = ?", created.caseId)).isOne()
 
             mockMvc
                 .perform(get(BASE).with(operatorJwt(actorId)))
@@ -323,6 +341,183 @@ internal class SupportCaseIntegrationTest
         }
 
         @Test
+        fun `idempotency retention cleanup deletes only due chunks and retries after a failure`() {
+            val now = Instant.parse("2026-11-09T00:00:00Z")
+            insertIdempotency("support-retention-due-first", now.minusSeconds(91L * 24 * 60 * 60))
+            insertIdempotency("support-retention-due-second", now.minusSeconds(90L * 24 * 60 * 60))
+            insertIdempotency("support-retention-future", now.minusSeconds(89L * 24 * 60 * 60))
+
+            assertThat(idempotencyCleanup.deleteExpired(now, 1)).isOne()
+            assertThat(countAll("support_case_command_idempotency")).isEqualTo(2)
+
+            jdbcTemplate.execute(
+                """
+                CREATE FUNCTION reject_support_case_idempotency_cleanup()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS ${'$'}${'$'}
+                BEGIN
+                    RAISE EXCEPTION 'support idempotency cleanup unavailable';
+                END;
+                ${'$'}${'$'};
+                """.trimIndent(),
+            )
+            jdbcTemplate.execute(
+                """
+                CREATE TRIGGER trg_reject_support_case_idempotency_cleanup
+                BEFORE DELETE ON support_case_command_idempotency
+                FOR EACH ROW EXECUTE FUNCTION reject_support_case_idempotency_cleanup()
+                """.trimIndent(),
+            )
+            org.assertj.core.api.Assertions
+                .assertThatThrownBy { idempotencyCleanup.deleteExpired(now, 10) }
+                .isInstanceOf(org.springframework.dao.DataAccessException::class.java)
+            assertThat(countAll("support_case_command_idempotency")).isEqualTo(2)
+            removeIdempotencyCleanupFailureTrigger()
+
+            assertThat(idempotencyCleanup.deleteExpired(now, 10)).isOne()
+            assertThat(countAll("support_case_command_idempotency")).isOne()
+            assertThat(countIdempotencyKey("support-retention-future")).isOne()
+        }
+
+        @Test
+        fun `payment card and security code input is rejected before support persistence or audit`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            mockMvc
+                .perform(
+                    post(BASE)
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-card-create-0001")
+                        .json(createBody(reason = "reviewed card 4111-1111-1111-1111")),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            assertThat(countAll("support_case")).isZero()
+            assertThat(countAll("support_case_command_idempotency")).isZero()
+            assertThat(countAll("operations_audit_record")).isZero()
+
+            val created = createCase("support-card-safe-create-0001")
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/notes")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-card-note-0001")
+                        .json("""{"content":"primary 4242 4242 4242 4242 and backup 4111 1111 1111 1111","reason":"CASE_REVIEW"}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/interactions")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-card-interaction-0001")
+                        .json(
+                            """
+                            {"channel":"CHAT","direction":"INBOUND","occurredAt":"2026-08-11T00:00:00Z","redactedSummary":"customer gave CVV: 123"}
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/status-transitions")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-card-transition-0001")
+                        .json("""{"targetState":"IN_PROGRESS","expectedVersion":0,"reason":"security code 987"}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            assertThat(count("SELECT version FROM support_case WHERE id = ?", created.caseId)).isZero()
+            assertThat(count("SELECT count(*) FROM support_case_note WHERE support_case_id = ?", created.caseId)).isZero()
+            assertThat(count("SELECT count(*) FROM support_case_interaction WHERE support_case_id = ?", created.caseId)).isZero()
+            assertThat(count("SELECT count(*) FROM support_case_state_history WHERE support_case_id = ?", created.caseId)).isOne()
+            assertThat(countAll("support_case_command_idempotency")).isOne()
+            assertThat(count("SELECT count(*) FROM operations_audit_record WHERE target_id = ?", created.caseId)).isOne()
+        }
+
+        @Test
+        fun `idempotency scope is actor operation bound and payload field boundaries cannot replay`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            grant(otherActorId, "SUPPORT_CASE_WRITE")
+            createCase("support-cross-actor-key-0001")
+            mockMvc
+                .perform(
+                    post(BASE)
+                        .with(operatorJwt(otherActorId))
+                        .header("Idempotency-Key", "support-cross-actor-key-0001")
+                        .json(createBody(externalReference = "case-ref-other-actor")),
+                ).andExpect(status().isCreated)
+
+            val created = createCase("support-canonical-create-0001")
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/notes")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-canonical-note-0001")
+                        .json("""{"content":"FIELD|BOUNDARY","reason":"SECOND"}"""),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/notes")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-canonical-note-0001")
+                        .json("""{"content":"FIELD","reason":"BOUNDARY|SECOND"}"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/subject-links")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-canonical-note-0001")
+                        .json(
+                            """{"subjectType":"ORDER","subjectId":"30000000-0000-0000-0000-000000000099","relationship":"RELATED_ORDER","reason":"ORDER_CONTEXT"}""",
+                        ),
+                ).andExpect(status().isOk)
+        }
+
+        @Test
+        fun `invalid OTHER detail returns 400 with no Case idempotency or audit row`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            mockMvc
+                .perform(
+                    post(BASE)
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-other-input-0001")
+                        .json(
+                            """
+                            {"requesterType":"CUSTOMER","requesterReference":"customer-ref-001","category":"OTHER","priority":"NORMAL","reason":"ok"}
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            assertThat(countAll("support_case")).isZero()
+            assertThat(countAll("support_case_command_idempotency")).isZero()
+            assertThat(countAll("operations_audit_record")).isZero()
+        }
+
+        @Test
+        fun `HTTP responses omit optional support fields instead of serializing null`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            grant(actorId, "SUPPORT_CASE_READ")
+            val created = createCase("support-null-contract-create-0001")
+            mockMvc
+                .perform(
+                    post("$BASE/${created.caseId}/subject-links")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "support-null-contract-link-0001")
+                        .json(
+                            """{"subjectType":"ORDER","subjectId":"30000000-0000-0000-0000-000000000088","relationship":"RELATED_ORDER","reason":"ORDER_CONTEXT"}""",
+                        ),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(get("$BASE/${created.caseId}").with(operatorJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.subjectLinks[0].caseVersion").doesNotExist())
+            mockMvc
+                .perform(get(BASE).param("limit", "1").with(operatorJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+        }
+
+        @Test
         fun `support case list uses a filter-bound signed cursor without interaction collections`() {
             grant(actorId, "SUPPORT_CASE_WRITE")
             grant(actorId, "SUPPORT_CASE_READ")
@@ -347,7 +542,7 @@ internal class SupportCaseIntegrationTest
                 .perform(get(BASE).param("state", "CLOSED").param("cursor", cursor).with(operatorJwt(actorId)))
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            val tamperedCursor = cursor.dropLast(1) + if (cursor.last() == 'A') "B" else "A"
+            val tamperedCursor = (if (cursor.first() == 'A') "B" else "A") + cursor.drop(1)
             mockMvc
                 .perform(get(BASE).param("cursor", tamperedCursor).with(operatorJwt(actorId)))
                 .andExpect(status().isBadRequest)
@@ -382,9 +577,12 @@ internal class SupportCaseIntegrationTest
                 .andExpect(jsonPath("$.caseVersion").value(resultingVersion))
         }
 
-        private fun createBody(externalReference: String = "case-ref-001"): String =
+        private fun createBody(
+            externalReference: String = "case-ref-001",
+            reason: String = "ORDER_STATUS_INQUIRY",
+        ): String =
             """
-            {"requesterType":"CUSTOMER","requesterReference":"customer-ref-001","category":"ORDER_STATUS","priority":"NORMAL","externalReference":"$externalReference","reason":"ORDER_STATUS_INQUIRY"}
+            {"requesterType":"CUSTOMER","requesterReference":"customer-ref-001","category":"ORDER_STATUS","priority":"NORMAL","externalReference":"$externalReference","reason":"$reason"}
             """.trimIndent()
 
         private fun grant(
@@ -414,6 +612,32 @@ internal class SupportCaseIntegrationTest
 
         private fun countAll(table: String): Long = jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
 
+        private fun countIdempotencyKey(key: String): Long =
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM support_case_command_idempotency WHERE idempotency_key = ?",
+                Long::class.java,
+                key,
+            )!!
+
+        private fun insertIdempotency(
+            key: String,
+            createdAt: Instant,
+        ) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_case_command_idempotency (
+                    id, actor_id, operation, idempotency_key, payload_hash, response_status, response_body, created_at, retention_expires_at
+                ) VALUES (?, ?, 'CREATE_CASE', ?, ?, 201, '{}', ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                actorId,
+                key,
+                "a".repeat(64),
+                Timestamp.from(createdAt),
+                Timestamp.from(createdAt.plusSeconds(90L * 24 * 60 * 60)),
+            )
+        }
+
         private fun concurrently(
             vararg requests: () -> org.springframework.test.web.servlet.MvcResult,
         ): List<org.springframework.test.web.servlet.MvcResult> {
@@ -442,6 +666,13 @@ internal class SupportCaseIntegrationTest
         private fun removeAuditFailureTrigger() {
             jdbcTemplate.execute("DROP TRIGGER IF EXISTS trg_reject_support_case_test_audit ON operations_audit_record")
             jdbcTemplate.execute("DROP FUNCTION IF EXISTS reject_support_case_test_audit()")
+        }
+
+        private fun removeIdempotencyCleanupFailureTrigger() {
+            jdbcTemplate.execute(
+                "DROP TRIGGER IF EXISTS trg_reject_support_case_idempotency_cleanup ON support_case_command_idempotency",
+            )
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS reject_support_case_idempotency_cleanup()")
         }
 
         private fun json(body: String) = JsonMapper.builder().build().readTree(body)

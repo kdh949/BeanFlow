@@ -40,7 +40,7 @@ CREATE TABLE support_case (
     ),
     CONSTRAINT chk_support_case_time_order CHECK (opened_at <= last_changed_at),
     CONSTRAINT chk_support_case_closed_state CHECK (
-        (state = 'CLOSED' AND closed_at IS NOT NULL AND closed_at >= opened_at)
+        (state = 'CLOSED' AND closed_at IS NOT NULL AND closed_at >= opened_at AND closed_at <= last_changed_at)
         OR (state <> 'CLOSED' AND closed_at IS NULL)
     ),
     CONSTRAINT fk_support_case_retention_policy
@@ -48,8 +48,14 @@ CREATE TABLE support_case (
         REFERENCES operations_retention_policy_version (policy_version_id, category)
 );
 
-CREATE INDEX idx_support_case_list
+CREATE INDEX idx_support_case_list_state_assignee
     ON support_case (state, current_assignee_id, opened_at DESC, id DESC);
+
+CREATE INDEX idx_support_case_list_opened
+    ON support_case (opened_at DESC, id DESC);
+
+CREATE INDEX idx_support_case_list_assignee
+    ON support_case (current_assignee_id, opened_at DESC, id DESC);
 
 CREATE TABLE support_case_assignment_history (
     id uuid PRIMARY KEY,
@@ -194,19 +200,29 @@ CREATE INDEX idx_support_case_subject_link_case
     ON support_case_subject_link (support_case_id, linked_at DESC, id DESC);
 
 CREATE TABLE support_case_command_idempotency (
-    idempotency_key varchar(128) PRIMARY KEY CHECK (
+    id uuid PRIMARY KEY,
+    actor_id uuid NOT NULL,
+    operation varchar(32) NOT NULL CHECK (operation IN (
+        'CREATE_CASE', 'ASSIGN_CASE', 'TRANSITION_CASE', 'APPEND_INTERACTION', 'APPEND_NOTE', 'LINK_SUBJECT', 'UNLINK_SUBJECT'
+    )),
+    idempotency_key varchar(128) NOT NULL CHECK (
         idempotency_key = btrim(idempotency_key)
         AND length(idempotency_key) BETWEEN 8 AND 128
         AND idempotency_key !~ '[[:cntrl:]]'
     ),
-    operation varchar(32) NOT NULL CHECK (operation IN (
-        'CREATE_CASE', 'ASSIGN_CASE', 'TRANSITION_CASE', 'APPEND_INTERACTION', 'APPEND_NOTE', 'LINK_SUBJECT', 'UNLINK_SUBJECT'
-    )),
     payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
     response_status integer NOT NULL CHECK (response_status IN (200, 201)),
     response_body text NOT NULL CHECK (length(response_body) BETWEEN 1 AND 10000),
-    created_at timestamptz NOT NULL
+    created_at timestamptz NOT NULL,
+    retention_expires_at timestamptz NOT NULL,
+    CONSTRAINT uq_support_case_command_idempotency_scope UNIQUE (actor_id, operation, idempotency_key),
+    CONSTRAINT chk_support_case_command_idempotency_retention CHECK (
+        retention_expires_at = created_at + INTERVAL '90 days'
+    )
 );
+
+CREATE INDEX idx_support_case_command_idempotency_retention
+    ON support_case_command_idempotency (retention_expires_at, id);
 
 INSERT INTO operations_audit_action_category (action, audit_category) VALUES
     ('SUPPORT_CASE_CREATED', 'OPERATIONS_POLICY'),

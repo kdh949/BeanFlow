@@ -14,6 +14,13 @@ Operations는 Audit category/class/immutable policy version과 persistent `Opera
 Protects the S20 active/closed lifecycle, assignment, subject links and state history. `CLOSED` rejects every ordinary
 Case mutation; Case transitions use the Accepted no-reopen matrix. Assignment and state histories append in the same
 transaction as Case version changes. Interactions, notes and links remain separate rows, never a Case collection.
+The database additionally rejects a closed timestamp later than `last_changed_at`, so a persisted row always satisfies
+Aggregate reconstitution time ordering.
+
+Every S20 mutating command is replay-scoped by `(actorId, operation, Idempotency-Key)`. Its named, typed,
+length-prefixed payload representation prevents free-text field-boundary collisions; only the 90-day terminal replay
+record is retained. The Support-owned cleanup selects due rows in `(retention_expires_at, id)` keyset order, locks a
+bounded chunk with `SKIP LOCKED`, and propagates failures for a later scheduled retry.
 
 ## VerificationSession and DataAccessGrant
 
