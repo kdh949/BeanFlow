@@ -93,7 +93,7 @@ CREATE TABLE support_verification_challenge (
     version bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
     CONSTRAINT chk_support_verification_challenge_ttl CHECK (expires_at = requested_at + INTERVAL '5 minutes'),
     CONSTRAINT chk_support_verification_challenge_provider_reference CHECK (
-        (state IN ('PENDING_ISSUE', 'ISSUE_UNKNOWN') AND opaque_provider_reference IS NULL)
+        (state IN ('PENDING_ISSUE', 'ISSUE_UNKNOWN', 'REVOKED') AND opaque_provider_reference IS NULL)
         OR (state NOT IN ('PENDING_ISSUE', 'ISSUE_UNKNOWN')
             AND opaque_provider_reference = btrim(opaque_provider_reference)
             AND length(opaque_provider_reference) BETWEEN 1 AND 1000
@@ -155,14 +155,15 @@ CREATE TABLE support_data_access_grant (
     CONSTRAINT chk_support_data_access_grant_approval CHECK (
         (risk = 'BASIC' AND approver_id IS NULL AND approved_at IS NULL)
         OR (risk = 'SENSITIVE' AND (
-            (state IN ('REQUESTED', 'APPROVAL_PENDING') AND approver_id IS NULL AND approved_at IS NULL)
-            OR (state NOT IN ('REQUESTED', 'APPROVAL_PENDING') AND approver_id IS NOT NULL
+            (state IN ('REQUESTED', 'APPROVAL_PENDING', 'REVOKED') AND approver_id IS NULL AND approved_at IS NULL)
+            OR (state IN ('ACTIVE', 'CONSUMED', 'EXPIRED', 'DENIED', 'REVOKED') AND approver_id IS NOT NULL
                 AND approver_id <> requester_id AND approved_at IS NOT NULL)
         ))
     ),
     CONSTRAINT chk_support_data_access_grant_activation CHECK (
-        (state IN ('REQUESTED', 'APPROVAL_PENDING', 'DENIED', 'REVOKED') AND expires_at IS NULL)
+        (state IN ('REQUESTED', 'APPROVAL_PENDING', 'DENIED') AND expires_at IS NULL)
         OR (state IN ('ACTIVE', 'CONSUMED', 'EXPIRED') AND expires_at IS NOT NULL)
+        OR state = 'REVOKED'
     ),
     CONSTRAINT chk_support_data_access_grant_consumed CHECK (
         state <> 'CONSUMED' OR reserved_reveals = max_reveals
@@ -220,14 +221,15 @@ CREATE TABLE support_break_glass_request (
     revealed_at timestamptz,
     reviewer_id uuid,
     reviewed_at timestamptz,
+    revoked_at timestamptz,
     version bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
     CONSTRAINT fk_support_break_glass_link_binding
         FOREIGN KEY (subject_link_id, support_case_id, subject_type, subject_id)
         REFERENCES support_case_subject_link(id, support_case_id, subject_type, subject_id),
     CONSTRAINT chk_support_break_glass_approval CHECK (
-        (state = 'APPROVAL_PENDING' AND approver_id IS NULL AND approved_at IS NULL AND expires_at IS NULL)
+        (state IN ('APPROVAL_PENDING', 'REVOKED') AND approver_id IS NULL AND approved_at IS NULL AND expires_at IS NULL)
         OR (state = 'DENIED' AND approver_id IS NOT NULL AND approver_id <> requester_id AND approved_at IS NULL)
-        OR (state NOT IN ('APPROVAL_PENDING', 'DENIED') AND approver_id IS NOT NULL
+        OR (state IN ('ACTIVE', 'REVIEW_PENDING', 'REVIEWED', 'EXPIRED', 'REVOKED') AND approver_id IS NOT NULL
             AND approver_id <> requester_id AND approved_at IS NOT NULL AND expires_at IS NOT NULL)
     ),
     CONSTRAINT chk_support_break_glass_ttl CHECK (
