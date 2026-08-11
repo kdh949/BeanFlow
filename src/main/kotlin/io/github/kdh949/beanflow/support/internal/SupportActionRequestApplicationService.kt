@@ -486,6 +486,15 @@ internal class SupportActionRequestTransactionService(
         ) {
             stale()
         }
+        if (normalized.assigneeId == entity.supportApproverActorId || normalized.assigneeId == entity.operationsApproverActorId) {
+            throw DomainFailure(
+                FailureCode.SUPPORT_APPROVER_MUST_DIFFER,
+                "An approver cannot execute the approved action",
+            )
+        }
+        if (normalized.assigneeId == entity.executorActorId) {
+            conflict("Support action executor is already assigned")
+        }
         permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_CASE_WRITE)
         permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
         permissions.requireActive(normalized.assigneeId, entity.action.capabilityPermission())
@@ -500,10 +509,7 @@ internal class SupportActionRequestTransactionService(
             try {
                 requestAggregate.reassignExecutor(normalized.assigneeId, now)
             } catch (_: IllegalArgumentException) {
-                throw DomainFailure(
-                    FailureCode.SUPPORT_APPROVER_MUST_DIFFER,
-                    "An approver cannot execute the approved action",
-                )
+                conflict("Support action reassignment binding is invalid")
             } catch (_: IllegalStateException) {
                 conflict("Support action request is not eligible for reassignment")
             }

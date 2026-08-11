@@ -75,6 +75,7 @@ CREATE TABLE support_action_revision (
     created_at timestamptz NOT NULL,
     CONSTRAINT uq_support_action_revision_number UNIQUE (request_id, revision_number),
     CONSTRAINT uq_support_action_revision_identity UNIQUE (request_id, id),
+    CONSTRAINT uq_support_action_revision_lineage UNIQUE (request_id, id, revision_number),
     CONSTRAINT chk_support_action_revision_expiry CHECK (created_at < expires_at)
 );
 
@@ -99,8 +100,8 @@ CREATE TABLE support_action_approval_step (
     decided_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL,
     CONSTRAINT fk_support_action_approval_revision
-        FOREIGN KEY (request_id, revision_id)
-        REFERENCES support_action_revision (request_id, id),
+        FOREIGN KEY (request_id, revision_id, revision_number)
+        REFERENCES support_action_revision (request_id, id, revision_number),
     CONSTRAINT uq_support_action_approval_step UNIQUE (request_id, revision_number, step_type),
     CONSTRAINT chk_support_action_approval_actor CHECK (
         (state IN ('APPROVED', 'DENIED', 'RETURNED', 'ESCALATED') AND decided_by_actor_id IS NOT NULL)
@@ -128,6 +129,9 @@ CREATE TABLE support_action_reassignment (
     case_version bigint NOT NULL CHECK (case_version >= 0),
     request_version bigint NOT NULL CHECK (request_version >= 0),
     occurred_at timestamptz NOT NULL,
+    CONSTRAINT fk_support_action_reassignment_revision
+        FOREIGN KEY (request_id, revision_number)
+        REFERENCES support_action_revision (request_id, revision_number),
     CONSTRAINT chk_support_action_reassignment_actor CHECK (
         previous_executor_actor_id <> current_executor_actor_id
     )
@@ -161,6 +165,10 @@ CREATE TABLE support_action_command_idempotency (
     CONSTRAINT uq_support_action_command_idempotency_scope UNIQUE (actor_id, operation, idempotency_key),
     CONSTRAINT chk_support_action_command_idempotency_retention CHECK (
         retention_expires_at = created_at + INTERVAL '90 days'
+    ),
+    CONSTRAINT chk_support_action_command_idempotency_outcome CHECK (
+        (response_status IN (200, 201) AND failure_code IS NULL)
+        OR (response_status = 409 AND failure_code IS NOT NULL)
     )
 );
 
@@ -247,6 +255,10 @@ CREATE TABLE operations_support_investigation_idempotency (
     ),
     CONSTRAINT chk_operations_support_investigation_idempotency_retention CHECK (
         retention_expires_at = created_at + INTERVAL '90 days'
+    ),
+    CONSTRAINT chk_operations_support_investigation_idempotency_outcome CHECK (
+        (response_status = 200 AND failure_code IS NULL)
+        OR (response_status = 409 AND failure_code IS NOT NULL)
     )
 );
 

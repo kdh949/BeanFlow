@@ -112,6 +112,13 @@ internal class SupportActionRequestMigrationTest {
         assertThatThrownBy {
             insertApprovalStep(UUID.randomUUID(), requestId, revisionId, 1)
         }.isInstanceOf(DataIntegrityViolationException::class.java)
+        insertRevision(binding, requestId, 2)
+        assertThatThrownBy {
+            insertApprovalStep(UUID.randomUUID(), requestId, revisionId, 2)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertReassignment(requestId, 3)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
         assertThatThrownBy {
             jdbcTemplate.update("UPDATE support_action_approval_step SET state = 'DENIED' WHERE id = ?", stepId)
         }.isInstanceOf(DataIntegrityViolationException::class.java)
@@ -131,6 +138,52 @@ internal class SupportActionRequestMigrationTest {
             insertInvestigation(requestId, revisionId, MANAGER)
         }.isInstanceOf(DataIntegrityViolationException::class.java)
         assertThat(jdbcTemplate.update(investigationSql(), UUID.randomUUID(), requestId, revisionId, OPERATIONS)).isOne()
+    }
+
+    @Test
+    fun `V44 rejects contradictory idempotency status and failure code`() {
+        val binding = insertBinding()
+        val requestId = UUID.randomUUID()
+        insertRequest(binding, requestId, MANAGER, null, REQUESTER)
+        val revisionId = insertRevision(binding, requestId, 1)
+
+        assertThatThrownBy {
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_action_command_idempotency (
+                    id, actor_id, operation, idempotency_key, payload_hash, request_id,
+                    response_status, response_body, failure_code, created_at, retention_expires_at
+                ) VALUES (?, ?, 'CREATE_REQUEST', 'invalid-outcome-1',
+                          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ?,
+                          200, '{}', 'SUPPORT_ACTION_REQUEST_STALE', ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                REQUESTER,
+                requestId,
+                Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+
+        val investigationId = UUID.randomUUID()
+        jdbcTemplate.update(investigationSql(), investigationId, requestId, revisionId, OPERATIONS)
+        assertThatThrownBy {
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_support_investigation_idempotency (
+                    id, actor_id, operation, idempotency_key, payload_hash, investigation_id,
+                    response_status, response_body, failure_code, created_at, retention_expires_at
+                ) VALUES (?, ?, 'DECIDE', 'invalid-outcome-2',
+                          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', ?,
+                          200, '{}', 'SUPPORT_ACTION_REQUEST_STALE', ?, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                OPERATIONS,
+                investigationId,
+                Timestamp.from(NOW),
+                Timestamp.from(NOW.plusSeconds(90L * 24 * 60 * 60)),
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
     private fun insertBinding(): Binding {
@@ -270,6 +323,27 @@ internal class SupportActionRequestMigrationTest {
         reviewer: UUID,
     ) {
         jdbcTemplate.update(investigationSql(), UUID.randomUUID(), requestId, revisionId, reviewer)
+    }
+
+    private fun insertReassignment(
+        requestId: UUID,
+        revisionNumber: Int,
+    ) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO support_action_reassignment (
+                id, request_id, revision_number, previous_executor_actor_id, current_executor_actor_id,
+                reassigned_by_actor_id, reason, case_version, request_version, occurred_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'EXECUTOR_REASSIGNED', 1, 1, ?)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            requestId,
+            revisionNumber,
+            REQUESTER,
+            OPERATIONS,
+            MANAGER,
+            Timestamp.from(NOW.plusSeconds(1)),
+        )
     }
 
     private fun investigationSql() =

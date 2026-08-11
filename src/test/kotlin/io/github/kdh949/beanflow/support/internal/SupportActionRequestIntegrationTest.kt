@@ -120,6 +120,7 @@ internal class SupportActionRequestIntegrationTest
 
             reviseRequest(requestId, "revise-action-001")
                 .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.revisionNumber").value(2))
                 .andExpect(jsonPath("$.state").value("AWAITING_SUPPORT_MANAGER"))
                 .andExpect(jsonPath("$.approvalSteps").isEmpty)
@@ -144,6 +145,7 @@ internal class SupportActionRequestIntegrationTest
                 .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
             getRequest(revokedRequest, managerId)
                 .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.state").value("STALE"))
 
             grant(requesterId, "SUPPORT_ORDER_CANCEL")
@@ -295,6 +297,15 @@ internal class SupportActionRequestIntegrationTest
             decideManager(requestId, managerId, "approve-action-reassign-guard").andExpect(status().isOk)
             grant(managerId, "SUPPORT_CASE_ASSIGN")
             grantReplacementPermissions(managerId)
+
+            reassignRequest(
+                requestId,
+                managerId,
+                requesterId,
+                "reassign-same-executor",
+                expectedRequestVersion = 1,
+            ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STATE_CONFLICT"))
 
             reassignRequest(
                 requestId,

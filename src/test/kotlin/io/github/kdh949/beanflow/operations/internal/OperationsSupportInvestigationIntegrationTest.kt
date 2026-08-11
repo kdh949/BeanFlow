@@ -102,6 +102,9 @@ internal class OperationsSupportInvestigationIntegrationTest
             decide(investigationId, operationsId, "investigation-approve-001")
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.state").value("APPROVED"))
+            decide(investigationId, operationsId, "investigation-approve-001", decision = "DENY")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
 
             assertThat(state("support_action_request", binding.requestId)).isEqualTo("READY_FOR_EXECUTION")
             assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("APPROVED")

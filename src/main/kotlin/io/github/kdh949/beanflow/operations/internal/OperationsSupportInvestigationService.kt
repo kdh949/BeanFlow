@@ -325,13 +325,17 @@ internal class OperationsSupportInvestigationService(
     private fun DecideOperationsSupportInvestigationCommand.payloadHash(): String =
         sha256(
             listOf(
-                actorId,
-                investigationId,
-                expectedVersion,
-                decision,
-                reason,
-                evidenceDigest,
-            ).joinToString("\u0000"),
+                "operation" to "DECIDE_OPERATIONS_SUPPORT_INVESTIGATION",
+                "actorId" to actorId.toString(),
+                "investigationId" to investigationId.toString(),
+                "expectedVersion" to expectedVersion.toString(),
+                "decision" to decision.name,
+                "reason" to reason,
+                "evidenceDigest" to evidenceDigest,
+            ).joinToString(separator = "") { (name, value) ->
+                val encoded = "$name=$value"
+                "${encoded.toByteArray(StandardCharsets.UTF_8).size}:$encoded"
+            },
         )
 
     private fun OperationsSupportInvestigationEntity.returnCommand(
