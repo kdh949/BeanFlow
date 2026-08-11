@@ -1,9 +1,13 @@
 logging:
   level:
-    # Spring logs every bound statement parameter at TRACE, which would put raw customer
-    # coordinates in the application log and violate BR-28 / ADR-020. The level is pinned here and
-    # JdbcParameterLoggingSafetyConfiguration rejects an effective TRACE/ALL override at startup.
+    # Spring logs every bound statement parameter at TRACE, which would expose request-only
+    # coordinates and protected-profile blind indexes. The level is pinned here and the startup
+    # guard rejects an effective TRACE/ALL override.
     org.springframework.jdbc.core.StatementCreatorUtils: DEBUG
+    # Spring Security/MVC DEBUG renders complete query URIs and request DTOs. Exact-search values
+    # are body-only, but both categories stay at INFO and the startup guard rejects overrides.
+    org.springframework.security.web.FilterChainProxy: INFO
+    org.springframework.web.servlet: INFO
 spring:
   application:
     name: beanflow

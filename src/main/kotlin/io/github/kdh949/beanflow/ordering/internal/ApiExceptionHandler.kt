@@ -117,6 +117,8 @@ internal class ApiExceptionHandler(
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 
+            FailureCode.SUPPORT_SEARCH_RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS
+
             FailureCode.PAYMENT_DECLINED,
             FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,
             -> HttpStatus.UNPROCESSABLE_ENTITY

@@ -1,8 +1,8 @@
 # Customer Support API Surface
 
-> **Contract status:** `PARTIALLY IMPLEMENTED` — S20 owns the first nine Case operations.
-> **Runtime status:** S20 operations are present in canonical target/runtime OpenAPI and guarded by runtime parity tests.
-> **Semantic completeness:** `9 / 55` endpoint contracts. Remaining type names and required fields are implementation inputs,
+> **Contract status:** `PARTIALLY IMPLEMENTED` — S20 owns nine Case operations and S30 owns exact profile search.
+> **Runtime status:** S20/S30 operations are present in canonical target/runtime OpenAPI and guarded by runtime parity tests.
+> **Semantic completeness:** `10 / 55` endpoint contracts. Remaining type names and required fields are implementation inputs,
 > not schemas.
 
 This inventory preserves the approved product surface without pretending that one generic request or response can
@@ -33,7 +33,7 @@ authentication, and 2xx is allowed only after durable inbox commit.
 | `POST /support/cases/{caseId}/notes` | S20 | `AppendSupportNoteRequest`: Case ID, secret-filtered note, reason | `SupportNoteResource`: note ID, non-content summary, created time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
 | `POST /support/cases/{caseId}/subject-links` | S20 | `LinkSupportSubjectRequest`: Case ID, subject type, opaque subject ID, relationship, reason | `SupportSubjectLinkResource`: link ID, typed subject ID reference, relationship, linked time | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
 | `DELETE /support/cases/{caseId}/subject-links/{linkId}` | S20 | `UnlinkSupportSubjectRequest`: Case ID, link ID, expected Case version, reason | `SupportSubjectUnlinkResource`: link ID, unlinked time, Case version | Bearer + `SUPPORT_CASE_WRITE`; current assignment | IMPLEMENTED |
-| `POST /support/searches` | S30 | `SearchSupportSubjectsRequest`: `criterion.type`, `criterion.value`, subject types, reason code | `SupportSubjectSearchResult`: masked typed candidates, ambiguity/count metadata; no raw criterion | Bearer + `SUPPORT_SUBJECT_SEARCH`; rate/anomaly controls | DRAFT |
+| `POST /support/searches` | S30 | `SearchSupportSubjectsRequest`: `criterion.type`, `criterion.value`, unique subject types, reason code; strict body, no query value | `SupportSubjectSearchResult`: at most 20 masked typed candidates, count capped at 21, ambiguity/truncation metadata; no raw criterion | Bearer + `SUPPORT_SUBJECT_SEARCH`; persistent 30/5-minute rate guard | IMPLEMENTED |
 | `POST /support/cases/{caseId}/verification-sessions` | S40 | `CreateVerificationSessionRequest`: Case ID, subject link ID, purpose, action scope, requested level | `VerificationSessionResource`: session ID, level/state, purpose, allowed challenge types, expiry | Bearer + `SUPPORT_VERIFICATION_MANAGE`; assignment/subject | DRAFT |
 | `GET /support/verification-sessions/{sessionId}` | S40 | `GetVerificationSessionQuery`: session ID | `VerificationSessionResource`: current state/level, attempts remaining, expiry, pending/unknown result | Bearer + `SUPPORT_VERIFICATION_MANAGE`; same Case/subject | DRAFT |
 | `POST /support/verification-sessions/{sessionId}/challenges` | S40 | `CreateVerificationChallengeRequest`: session ID, registered-channel type, idempotent client intent | `VerificationChallengeAccepted`: challenge ID, delivery state, retry/poll time, expiry; no secret | Bearer + `SUPPORT_VERIFICATION_MANAGE` | DRAFT |

@@ -1,0 +1,12 @@
+beanflow:
+  security:
+    personal-data:
+      vault:
+        proxy-base-uri: ${BEANFLOW_VAULT_PROXY_BASE_URI}
+        transit-mount: ${BEANFLOW_VAULT_TRANSIT_MOUNT}
+        encryption-key: ${BEANFLOW_VAULT_PERSONAL_DATA_ENCRYPTION_KEY}
+        blind-index-key: ${BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY}
+        blind-index-write-key-version: ${BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION}
+        blind-index-search-key-versions: ${BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS}
+        connect-timeout: ${BEANFLOW_VAULT_CONNECT_TIMEOUT:PT2S}
+        request-timeout: ${BEANFLOW_VAULT_REQUEST_TIMEOUT:PT3S}

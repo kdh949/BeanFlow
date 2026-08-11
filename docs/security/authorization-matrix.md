@@ -51,8 +51,9 @@ grant는 403, grant/Audit persistence failure는 503이다.
 S10은 기존 9개와 Support/Operations/Privacy 33개를 합친 42개 closed permission 값을 enum과 DB 제약에
 등록했다. 새 값은 persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만, role bundle이나
 default grant로 배포되지 않는다. S20은 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`, `SUPPORT_CASE_ASSIGN`를
-active grant와 Case assignment/version 조건으로 실제 사용한다. 검색, PII reveal, action, Delivery, LegalHold
-값은 owning endpoint가 생기기 전까지 dormant foundation이며 capability release를 뜻하지 않는다.
+active grant와 Case assignment/version 조건으로 사용한다. S30은 `SUPPORT_SUBJECT_SEARCH`를 Tx1/rate guard와
+Vault 호출 뒤 Tx2에서 모두 확인한다. PII reveal, action, Delivery, LegalHold 값은 owning endpoint가 생기기 전까지
+dormant foundation이며 capability release를 뜻하지 않는다.
 
 주문 보상 case step 상세 GET은 active `ORDER_COMPENSATION_READ` grant와
 `X-Access-Reason` header를 요구하고 target Case access Audit와 조회를 한 local

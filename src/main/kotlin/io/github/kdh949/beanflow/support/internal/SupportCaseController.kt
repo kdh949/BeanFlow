@@ -106,7 +106,7 @@ internal interface StrictSupportRequest {
     fun rejectUnknownField(
         @Suppress("UNUSED_PARAMETER") field: String,
         @Suppress("UNUSED_PARAMETER") value: Any?,
-    ): Unit = throw IllegalArgumentException("SupportCase request contains an unexpected field")
+    ): Unit = throw IllegalArgumentException("Support request contains an unexpected field")
 }
 
 @Validated

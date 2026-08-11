@@ -93,6 +93,7 @@ spotless {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	maxHeapSize = "1g"
+	systemProperty("spring.test.context.cache.maxSize", "8")
 }
 
 tasks.test {

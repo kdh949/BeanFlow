@@ -84,7 +84,7 @@
 | [ADR-080](ADR-080-toss-v2-one-time-payment-window.md) | Accepted | Toss V2 일회성 결제창과 Payment 시도 경계 |
 | [ADR-081](ADR-081-support-context-case-and-query-boundary.md) | Accepted | Support Context, Case 중심 privileged action과 query boundary |
 | [ADR-082](ADR-082-masked-purpose-bound-support-access.md) | Accepted | 기본 마스킹, staged verification과 purpose-bound PII access |
-| [ADR-083](ADR-083-personal-data-encryption-and-blind-index.md) | Proposed | 개인데이터 암호화와 keyed blind index |
+| [ADR-083](ADR-083-personal-data-encryption-and-blind-index.md) | Accepted | Vault Transit 개인데이터 암호화와 keyed blind index |
 | [ADR-084](ADR-084-support-action-authorization-and-separation.md) | Accepted | risk-based Support action, exact approval binding과 Operations handoff |
 | [ADR-085](ADR-085-lifecycle-aware-support-order-resolution.md) | Accepted | 주문 생명주기별 Support 변경과 post-acceptance resolution |
 | [ADR-086](ADR-086-versioned-goodwill-compensation.md) | Accepted | versioned risk compensation과 goodwill source 분리 |

@@ -6,11 +6,12 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 /**
- * Refuses an effective TRACE/ALL override of Spring's JDBC parameter logger at startup.
+ * Refuses unsafe Spring JDBC and HTTP request logging overrides at startup.
  *
- * StatementCreatorUtils renders bound values at TRACE, including the request-only nearby-search
- * coordinate. A YAML default alone is not a privacy boundary because deployment configuration can
- * override it before the application starts.
+ * StatementCreatorUtils renders bound values at TRACE, including request-only nearby-search
+ * coordinates and protected-profile blind indexes. Spring MVC and Security render the request body
+ * or complete query URI at DEBUG. YAML defaults alone are not privacy boundaries because deployment
+ * configuration can override them before application startup.
  */
 @Configuration(proxyBeanMethods = false)
 internal class JdbcParameterLoggingSafetyConfiguration {
@@ -18,11 +19,22 @@ internal class JdbcParameterLoggingSafetyConfiguration {
     fun jdbcParameterTraceLoggingGuard(): SmartInitializingSingleton =
         SmartInitializingSingleton {
             check(!LoggerFactory.getLogger(STATEMENT_CREATOR_UTILS_LOGGER).isTraceEnabled) {
-                "JDBC parameter TRACE logging is forbidden because it can expose coordinates"
+                "JDBC parameter TRACE logging is forbidden because it can expose sensitive parameters"
+            }
+            SENSITIVE_HTTP_LOGGERS.forEach { loggerName ->
+                check(!LoggerFactory.getLogger(loggerName).isDebugEnabled) {
+                    "HTTP request DEBUG logging is forbidden because it can expose sensitive request data"
+                }
             }
         }
 
     private companion object {
         const val STATEMENT_CREATOR_UTILS_LOGGER = "org.springframework.jdbc.core.StatementCreatorUtils"
+        val SENSITIVE_HTTP_LOGGERS =
+            setOf(
+                "org.springframework.security.web.FilterChainProxy",
+                "org.springframework.web.servlet.DispatcherServlet",
+                "org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor",
+            )
     }
 }

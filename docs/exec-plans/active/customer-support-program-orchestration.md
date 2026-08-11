@@ -13,7 +13,8 @@ scheduling, plan-authoring gate와 release evidence만 관리한다.
 ## Purpose / Big Picture
 
 Customer Support를 한 번에 구현하거나 placeholder plan을 미리 Accepted하지 않는다. completed S10의 actual
-outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30~S140은 predecessor actual outcome 뒤
+outcome을 기준으로 direct successor S20 detailed plan을 만들었고, completed S30 detailed plan은 S20 outcome과
+Accepted ADR-083/SP-17에서 작성·검증했다. S40~S140은 predecessor actual outcome 뒤
 최신 main에서 새 detailed ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을
 가져야 한다.
 
@@ -27,10 +28,13 @@ outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30~
   Aggregate/DB/API로 구현했다. Support module, V40 schema, target/runtime Case API, full Testcontainers/runtime-parity
   regression과 documentation validation evidence가 있다. PR #52 remediation validation도 완료돼 V40 writer lease는
   release됐다.
-- S30~S140 code/schema/API는 없고 future summary만 존재한다.
-- ADR-083 crypto/KMS와 ADR-090 frontend boundary는 Proposed다.
-- 55개 endpoint 중 S20의 9개 Case operation은 canonical target/runtime contract에 구현됐고, 나머지는 DRAFT
-  inventory다.
+- S30은 V41 owner-local encrypted profile/index, Vault Transit adapter/startup guard, persistent search rate guard,
+  masked `POST /api/v1/support/searches`와 PII-free committed Audit를 구현했다. 154 suites/712 tests full regression,
+  focused security/PostgreSQL/OpenAPI evidence와 documentation validation을 통과해 completed path로 이동했고 V41
+  migration-writer lease는 release됐다.
+- ADR-083 Vault Transit crypto/index는 Accepted이고 ADR-090 frontend boundary는 Proposed다.
+- 55개 endpoint 중 S20의 9개 Case operation과 S30의 1개 protected search operation, 총 10개가 canonical
+  target/runtime contract에 구현됐고 나머지는 DRAFT inventory다.
 
 ## Definitions
 
@@ -51,8 +55,8 @@ path 노출, branch/PR/deployment 생성.
 
 ## Business Rules and Invariants
 
-SP-01~SP-15와 ADR-081/082/084~089의 Accepted decisions를 유지한다. Proposed ADR-083/090을 승인된 것으로
-추정하지 않는다. Owner Context만 자신의 상태와 data를 변경하며 partial/unknown은 terminal success가 아니다.
+SP-01~SP-17와 ADR-081~089의 Accepted decisions를 유지한다. Proposed ADR-090을 승인된 것으로 추정하지 않는다.
+Owner Context만 자신의 상태와 data를 변경하며 partial/unknown은 terminal success가 아니다.
 
 ## Architecture and Transaction Boundaries
 
@@ -97,12 +101,16 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
   interaction/note와 identifier-only subject link. PR #52 remediation으로 payment-card filter, object authorization,
   canonical/scoped idempotency, 90-day retention cleanup, JSON omission과 index evidence까지 검증 완료했다.
   terminal-Case DataAccessGrant 안전성은 S40 scope다.
+- **S30 — protected owner profile search:** Identity customer, Merchant store, Delivery external courier가 각자의
+  encrypted profile와 versioned blind index를 소유한다. Vault Transit/loopback Proxy 외부 호출은 DB transaction
+  밖에서 수행하고 Support는 persistent permission/rate guard와 PII-free Audit 뒤 masked 후보만 반환한다.
+  `docs/exec-plans/completed/customer-support-s30-protected-profile-search.md`가 V41/API/failure/test evidence를
+  기록하며 V41 writer lease는 release됐다.
 
 ### Future Stage summaries and authoring gates
 
 | Stage | Future outcome | Direct inputs required before detailed plan authoring | Known gate |
 |---|---|---|---|
-| S30 | owner profile + protected exact masked search | completed S20 Case boundary and Accepted ADR-083 | customer/contact/crypto model gap |
 | S40 | purpose-bound verification, grant and reveal | completed S20 Case boundary and S10 Audit/permission | challenge Provider contract and atomic terminal-Case Grant revocation/activation-denial design not chosen |
 | S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and S40 verification/grant | endpoint-specific cursor contract required |
 | S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | actor separation DB model required |
@@ -148,7 +156,10 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 - [x] S20 execution preflight/sole migration-writer lease, V40 implementation and focused evidence completed
 - [x] S20 initial full validation, completion move, migration-writer lease release and successor readiness handoff
 - [x] S20 PR #52 remediation validation, completion move, migration-writer lease release and successor readiness handoff
-- [ ] S30 detailed plan authoring — blocked until ADR-083 is Accepted and customer/contact/crypto owner model exists
+- [x] S30 detailed plan authoring — Vault Transit ADR-083와 SP-17 accepted, V41 lease acquired
+- [x] S30 V41/owner APIs/Vault exact search implementation, full validation, completion move and V41 lease release
+- [x] S30 direct successor readiness recalculation — S40 independent gate unchanged; S50/S100 have S30 input but remain
+  not ready on their other recorded gates
 
 ## Surprises & Discoveries
 
@@ -157,6 +168,9 @@ owner models. File presence therefore overstated execution readiness.
 
 S10's actual outcome confirmed that policy rows and permission vocabulary can precede Support runtime safely only when
 documents mark them dormant. S20 therefore consumes the foundation without treating grants as released capabilities.
+
+S30's outcome confirms that masked exact search can compose synchronous owner public APIs without a Support PII copy,
+but it does not resolve S40's challenge-provider/terminal-Case grant design or S50's cursor contract.
 
 ## Decision Log
 
@@ -169,17 +183,24 @@ documents mark them dormant. S20 therefore consumes the foundation without treat
 | 2026-08-11 | Stage handoff | initial S20 completion retained S30 as not-ready | V40/full validation completed, but ADR-083 and the owner model remain unavailable | completed S20, ADR-083 Proposed |
 | 2026-08-11 | Review remediation | reopen S20 before merge and reacquire the V40 writer lease | valid PR #52 defects change the unmerged migration and require full validation before the completion handoff is restored | active S20 |
 | 2026-08-11 | Review remediation completion | complete S20 again and release the V40 writer lease | all eight review findings and full single-process regression passed; S30 remains independently blocked by ADR-083/model gate | completed S20, ADR-083 Proposed |
+| 2026-08-11 | S30 authoring/lease | accept Vault Transit contract, author S30 and acquire the sole V41 writer lease | user provider decision plus S20 actual outcome and SP-17 remove the speculative model gate | ADR-083, SP-17, active S30 |
+| 2026-08-11 | S30 completion | complete V41 owner profile search and release the V41 writer lease | full PostgreSQL/security/OpenAPI regression passed; successor readiness was recalculated from actual outcome | completed S30 |
 
 ## Outcomes & Retrospective
 
-S10 foundation and the S20 runtime Case capability are complete and validated. This plan remains active while later
-approved stages are delivered and capability-specific release evidence is accumulated. S30 is not ready to author; its
-ADR-083 and owner-model gate prevents a speculative successor plan.
+S10 foundation, S20 runtime Case and S30 protected exact search are complete and validated. This plan remains active
+while later approved stages are delivered and capability-specific release evidence is accumulated. S40 is not authored
+or ready because its independent challenge-provider and terminal-Case grant design gate remains open. S50 now has the
+completed S30 masked DTO input but still lacks S40 and its cursor contract; S100 now has S30 owner models but still lacks
+S60 and the customer/legal/payout/rider models recorded in its gate.
 
 ## Revision Notes
 
 - 2026-08-10: consolidated S10~S140 graph and removed placeholder implementation files.
 - 2026-08-11: recorded completed S10 outcome and created the S20 direct successor with readiness false, without acquiring
   its migration lease or reserving a Flyway number.
-- 2026-08-11: completed S20 V40/Case API validation and moved its plan to completed; the migration-writer lease is
-  released. S30 remains un-authored because ADR-083 and the customer/contact/crypto owner model are not Accepted.
+- 2026-08-11: completed S20 V40/Case API validation and moved its plan to completed; the V40 lease was released.
+- 2026-08-11: accepted Vault Transit ADR-083/SP-17, authored active S30 from current main and acquired the sole V41
+  migration-writer lease.
+- 2026-08-11: completed S30 V41/Vault/owner/API validation, released the V41 lease, moved S30 to completed and atomically
+  recalculated S40/S50/S100 readiness without weakening their independent gates.

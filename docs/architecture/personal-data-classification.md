@@ -1,7 +1,7 @@
 # Support Personal-Data Classification
 
-> **Status:** R0-R4 classification is Accepted in ADR-087. Field mapping is DRAFT; crypto/index mechanics are Proposed
-> in ADR-083 and are not an approved implementation contract.
+> **Status:** R0-R4 classification is Accepted in ADR-087. Field mapping is DRAFT; Vault Transit crypto/index mechanics
+> are Accepted in ADR-083.
 > Legal review required before production.
 
 | Class | Examples | Default behavior |
@@ -15,6 +15,7 @@
 Additional field scopes include PHONE_NUMBER, EMAIL, DELIVERY_ADDRESS, CUSTOMER_DELIVERY_CONTACT, RIDER_RELAY_CONTACT, CURRENT_COURIER_LOCATION, PROOF_OF_DELIVERY and DELIVERY_INSTRUCTIONS. Current location is limited to safety/misdelivery/unreachable/emergency.
 
 Owner Context must protect necessary raw PII and expose only grant-controlled reveal operations. Support stores
-identifiers and masked data, not long-lived plaintext copies. If ADR-083's encrypted value/keyed-index approach is
-accepted, key-version and fail-startup behavior become required; until then KMS, index, rotation and outage behavior are
-open implementation decisions.
+identifiers and masked data, not long-lived plaintext copies. ADR-083 requires distinct Vault Transit encryption and
+HMAC keyrings, explicit ciphertext/index key-version metadata, owner-local rotation/backfill and production fail-startup
+when Proxy/key configuration or metadata validation fails. Runtime Vault failure is 503 without plaintext, local,
+cached, stale, no-op or empty-result fallback.
