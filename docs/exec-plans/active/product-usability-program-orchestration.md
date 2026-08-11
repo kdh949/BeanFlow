@@ -313,6 +313,22 @@ git diff --cached --check
   필수 파일이 존재하면 `origin/main` 비조상 관계를 `SUPPORT_INTEGRATION_PENDING`으로 기록하고
   비차단하기로 했다. Plan 00 PR base는 `main`, Plan 10~60은 exact predecessor branch, 최종 산출은
   combined release PR 없는 일곱 open Draft PR로 고정했다.
+- 2026-08-12 Checkpoint 0: `.agent/PLANS.md`, ADR-111과 이 orchestration을 seven-PR 정책으로 교정하고
+  `aeeb3caa6cb4f10353e84c6cffb2a63b2d6a2704`를 push했다. `bash scripts/verify-docs.sh`,
+  `git diff --check`, `git diff --cached --check`가 통과했고 local/remote/PR #55 head가 모두 그 SHA,
+  PR #55는 open Draft, head `feature/productization-00-contract`, base `main`임을 확인했다.
+- 2026-08-12 Checkpoint 1: provisional baseline branch는 `feature/productization-00-contract`, 관측한
+  Plan 00 head는 `aeeb3caa6cb4f10353e84c6cffb2a63b2d6a2704`, observed `origin/main`은
+  `d8db63089a1d61a13069ab352819bc9479e4faa2`다. Support 구현
+  `35d662d0deb5808c0df12b3ae822d9ec128aa28e`와 완료
+  `ae9fa0b9c97a75134131106a1818f04315611860`는 모두 Plan 00의 ancestor(`true`)이고
+  `origin/main`의 ancestor는 둘 다 `false`다. 후자는 `SUPPORT_INTEGRATION_PENDING`이며 비차단이다.
+- 2026-08-12 Checkpoint 1 migration lease: V42 Support migration, Support verification service,
+  `PersonalDataReveal` 계약과 completed S40 ExecPlan이 exact tree에 존재하고 Support 완료 이후 Plan 00의
+  migration diff는 0건이다. migration version 중복 없이 마지막은 V42이며 Plan 10의 다음 사용 번호는
+  V43이다. open PR은 완료된 Support writer #54와 migration을 추가하지 않은 Plan 00 #55뿐이고 Plan 10+
+  또는 Analytics 구현 branch/PR은 없다. `STACK_A_MIGRATION_WRITER_LEASE`를 Plan 10→60에 획득했으며
+  Plan 60 Draft PR과 최종 topology/전체 검증 뒤 해제한다.
 
 ## Surprises & Discoveries
 
@@ -333,6 +349,8 @@ git diff --cached --check
 - Plan 00은 아직 `origin/main`에 merge되지 않은 Support 구현·완료 commit을 포함할 수 있다. 이 상태는
   Stack A의 제품 코드 충돌이 아니라 사용자가 별도로 관리하는 통합 순서이며
   `SUPPORT_INTEGRATION_PENDING`으로 관측한다.
+- `analytics-refund-and-late-event-projection`은 metadata상 ready migration candidate지만 구현 branch와
+  open PR이 없어 active writer는 아니다. Stack A lease가 해제될 때까지 실행 대상에서 제외한다.
 
 ## Decision Log
 
@@ -356,6 +374,7 @@ git diff --cached --check
 | 2026-08-12 | Operations SPA는 Keycloak PKCE S256, 실패 큐는 source-owned typed Projection을 사용한다 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [ADR-110](../../adr/ADR-110-federated-operations-failure-queues.md) |
 | 2026-08-12 | Plan 00~60은 exact predecessor 기반의 정확히 일곱 Draft PR로 실행한다. Plan 00 base는 main, 이후 base는 직전 branch이며 combined release PR을 만들지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-12 | Support 두 commit이 Plan 00의 ancestor이면 `origin/main` 통합 전 상태를 `SUPPORT_INTEGRATION_PENDING`으로 기록하고 Stack A를 중단하거나 restack하지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-12 | Checkpoint 1 exact tree의 마지막 migration은 V42이며 Stack A가 Plan 10부터 Plan 60 최종 검증까지 단일 writer lease를 보유한다 | 이 ExecPlan `Progress` |
 
 ## Outcomes & Retrospective
 
