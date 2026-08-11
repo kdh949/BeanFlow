@@ -112,3 +112,4 @@
 | [ADR-108](ADR-108-merchant-partial-refund-preview.md) | Accepted | 점주 부분 환불 preview와 공개 품목 식별 계약 |
 | [ADR-109](ADR-109-customer-point-account-provisioning.md) | Accepted | 고객 가입과 PointAccount 원자 provisioning |
 | [ADR-110](ADR-110-federated-operations-failure-queues.md) | Accepted | 소유 Context 기반 운영 실패 큐 연합 조회 |
+| [ADR-111](ADR-111-productization-stack-a-draft-release.md) | Accepted | 제품화 Plan 00~60의 검증형 Draft PR 체인과 combined release gate |
