@@ -61,7 +61,7 @@ BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN`
 - 각 plan의 완료 증거 수집과 다음 plan의 `Implementation-Ready` 전환
 - 프로그램 수준 지표와 미결정 항목 추적
 - [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md)에 따른 Stack A(Plan 00~60)의
-  직렬 Draft PR chain, shared migration-writer lease와 combined release gate 관리
+  정확히 일곱 개의 직렬 Draft PR chain, shared migration-writer lease와 final topology gate 관리
 
 ### Non-goals
 
@@ -154,8 +154,10 @@ Customer Web / Merchant Console / Operations UI
 - 기존 JWT 기반 고객·점주 인증 경로와 새 Session 경로를 같은 URI에서 동시에 허용하지 않는다.
   Plan 20에서 두 경로를 Session-only로 먼저 바꾸며, Plan 30/40 전까지 고객·점주 보호 경로가 401인
   중간 가용성 중단을 허용한다. 이를 fake Session, 기본 actor 또는 JWT fallback으로 숨기지 않는다.
-- Stack A 실행 중 recorded root/main/predecessor SHA가 달라지거나 required validation, migration lease,
-  branch/PR base가 불명확하면 다음 plan을 시작하지 않고 Goal을 중단한다.
+- Stack A 실행 중 exact predecessor/head SHA가 달라지거나 required validation, migration lease,
+  branch/PR topology가 불명확하면 다음 plan을 시작하지 않고 Goal을 중단한다. observed `origin/main`
+  변화와 Support commit의 `origin/main` 비조상 관계는 `SUPPORT_INTEGRATION_PENDING`으로 기록하지만
+  중단·restack·force-push 사유로 쓰지 않는다.
 
 ## Stack A Execution Contract
 
@@ -165,13 +167,15 @@ Stack A는 P0 Core 중간 통합점인 Plan 60까지만 다음 고정 순서로 
 00 → 10 → 20 → 30 → 40 → 50 → 60
 ```
 
-Goal 시작 전에 clean하고 push된 `feature/productization-plans`의 commit SHA와 당시 `origin/main` SHA를
-이 문서의 `Progress`에 stack root로 기록한다. 각 plan은 직전 verified completion head에서 branch를
-만들고 바로 이전 branch를 base로 하는 Draft PR을 연다.
+Plan 00의 verified completion head를 provisional baseline으로 기록한다. Support 구현 commit
+`35d662d0deb5808c0df12b3ae822d9ec128aa28e`와 완료 commit
+`ae9fa0b9c97a75134131106a1818f04315611860`이 Plan 00의 ancestor이고 필수 Support 파일/migration이
+존재하면 Stack A를 계속한다. 각 후속 plan은 직전 verified completion head에서 branch를 만들고 바로
+이전 branch를 base로 하는 Draft PR을 연다.
 
 | Plan | Branch | Draft PR base |
 |---|---|---|
-| 00 | `feature/productization-00-contract` | recorded stack root |
+| 00 | `feature/productization-00-contract` | `main` |
 | 10 | `feature/productization-10-order-reference` | Plan 00 branch |
 | 20 | `feature/productization-20-auth-foundation` | Plan 10 branch |
 | 30 | `feature/productization-30-customer-account` | Plan 20 branch |
@@ -180,13 +184,13 @@ Goal 시작 전에 clean하고 push된 `feature/productization-plans`의 commit 
 | 60 | `feature/productization-60-store-order-board` | Plan 50 branch |
 
 Plan completion은 required validation과 atomic active→completed/successor update가 exact predecessor
-위에서 끝났음을 뜻한다. merge나 deploy 완료를 뜻하지 않는다. Plan 10 시작 전 획득한 migration-writer
-lease는 Stack A combined release가 merge되거나 stack이 폐기될 때까지 유지한다.
+위에서 끝났음을 뜻한다. merge, deploy 또는 Support 통합 완료를 뜻하지 않는다. Plan 10 시작 전 획득한
+migration-writer lease는 Plan 60 Draft PR 생성과 최종 topology validation 완료까지 유지한다.
 
-Plan 60 완료 뒤 Plan 60 head에서 `feature/productization-stack-a-release`를 만든다. recorded stack
-root가 현재 `origin/main`의 ancestor이고 current main 대비 full validation이 통과한 경우에만 `main`
-대상 combined Draft PR을 만든다. root/main drift, restack, conflict, 다른 migration writer 또는 검증
-실패가 있으면 자동 보정이나 force-push 없이 중단한다. 상세 규칙은 ADR-111을 따른다.
+Plan 60 완료 뒤 release branch나 combined PR을 만들지 않는다. 최종 상태는 표의 정확히 일곱 open Draft
+PR이며, Plan 00은 `main`, Plan 10~60은 정확히 직전 branch를 base로 한다. base만 틀린 기존 PR은 head를
+바꾸지 않고 정정할 수 있다. `feature/productization-plans` head PR, Plan 70+ branch/PR, merge, close와
+force-push는 하지 않는다. 상세 규칙은 ADR-111을 따른다.
 
 ## Data and Migration
 
@@ -210,8 +214,8 @@ Plan 90의 기존 dispute index가 측정 결과 부족해 schema 변경이 필�
 갱신한다.
 
 Stack A에서는 위 전역 순서 중 10→20→30→40→50→60을 하나의 lease로 직렬 실행한다. Plan 60 이후
-lease를 그대로 Plan 70이나 100으로 넘기지 않는다. Stack A release가 정리된 뒤 후속 stack이 별도
-정책과 최신 main inventory에서 새 lease를 얻는다.
+lease를 그대로 Plan 70이나 100으로 넘기지 않는다. 최종 seven-PR topology와 전체 검증이 끝나 lease를
+해제한 뒤 후속 stack이 별도 정책과 최신 main inventory에서 새 lease를 얻는다.
 
 ## API and Event Contracts
 
@@ -298,12 +302,17 @@ git diff --cached --check
 - 2026-08-12: 운영 웹 점주 계정 발급·최초 membership·임시 비밀번호 1회 표시를 BR-46으로 확정하고
   P0 범위를 24화면으로 확장.
 - 2026-08-12: Plan 00~60을 직렬 Draft PR로 검증하고 final combined release PR 하나로 전달하는
-  Stack A 실행 정책을 ADR-111로 확정.
+  최초 Stack A 실행 정책을 ADR-111로 확정. 같은 날 Support 통합 보류 결정에 따라 combined PR을
+  폐기하고 정확히 일곱 Draft PR topology로 개정.
 - 2026-08-12: Stack A root를 push된 `feature/productization-plans`의
   `3b67425e1761f883dded3ef04b715789f495e8d7`로, 당시 `origin/main`을
   `d8db63089a1d61a13069ab352819bc9479e4faa2`로 기록. Plan 00은 exact root에서 분기한
   `feature/productization-00-contract`에서 required validation과 atomic completion을 마쳤다.
   executor의 다음 후보는 고정 순서상 Plan 10이며 Plan 10 구현은 아직 시작하지 않았다.
+- 2026-08-12: 사용자는 Support PR의 별도 merge를 선택했다. Support 두 commit이 Plan 00에 포함되고
+  필수 파일이 존재하면 `origin/main` 비조상 관계를 `SUPPORT_INTEGRATION_PENDING`으로 기록하고
+  비차단하기로 했다. Plan 00 PR base는 `main`, Plan 10~60은 exact predecessor branch, 최종 산출은
+  combined release PR 없는 일곱 open Draft PR로 고정했다.
 
 ## Surprises & Discoveries
 
@@ -321,6 +330,9 @@ git diff --cached --check
 - Stack A preflight 시 local root commit은 clean했지만 remote `feature/productization-plans` branch가
   없었다. 동일 remote branch·Plan 00 branch·PR 충돌이 없음을 확인한 뒤 root commit만 먼저 push해
   ADR-111의 immutable predecessor를 만들었다.
+- Plan 00은 아직 `origin/main`에 merge되지 않은 Support 구현·완료 commit을 포함할 수 있다. 이 상태는
+  Stack A의 제품 코드 충돌이 아니라 사용자가 별도로 관리하는 통합 순서이며
+  `SUPPORT_INTEGRATION_PENDING`으로 관측한다.
 
 ## Decision Log
 
@@ -342,7 +354,8 @@ git diff --cached --check
 | 2026-08-12 | Plan 20에서 고객·점주 경로를 Session-only로 먼저 전환하고 Plan 30/40까지의 401 중간 단절을 허용한다 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md) |
 | 2026-08-12 | 고객 13화면은 Plan 80, 점주 금융 3화면은 Plan 90, 운영자 5화면은 Plan 100이 최종 상태 검증을 소유한다 | [Capability Map](../../product/design-to-capability-map.md) |
 | 2026-08-12 | Operations SPA는 Keycloak PKCE S256, 실패 큐는 source-owned typed Projection을 사용한다 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [ADR-110](../../adr/ADR-110-federated-operations-failure-queues.md) |
-| 2026-08-12 | Plan 00~60은 exact predecessor 기반 Draft PR chain과 하나의 migration-writer lease로 실행하며 final combined release 전 merge하지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-12 | Plan 00~60은 exact predecessor 기반의 정확히 일곱 Draft PR로 실행한다. Plan 00 base는 main, 이후 base는 직전 branch이며 combined release PR을 만들지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-12 | Support 두 commit이 Plan 00의 ancestor이면 `origin/main` 통합 전 상태를 `SUPPORT_INTEGRATION_PENDING`으로 기록하고 Stack A를 중단하거나 restack하지 않는다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 
 ## Outcomes & Retrospective
 
@@ -351,3 +364,4 @@ git diff --cached --check
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-12: Support deferred integration과 seven-PR Stack A topology를 반영.
