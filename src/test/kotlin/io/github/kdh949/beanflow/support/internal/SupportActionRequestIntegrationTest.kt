@@ -51,6 +51,7 @@ internal class SupportActionRequestIntegrationTest
         private val requesterId = UUID.fromString("62000000-0000-0000-0000-000000000001")
         private val managerId = UUID.fromString("62000000-0000-0000-0000-000000000002")
         private val otherManagerId = UUID.fromString("62000000-0000-0000-0000-000000000003")
+        private val replacementId = UUID.fromString("62000000-0000-0000-0000-000000000004")
         private lateinit var fixture: OrderCreationFixture
         private lateinit var caseId: UUID
         private lateinit var sessionId: UUID
@@ -239,6 +240,123 @@ internal class SupportActionRequestIntegrationTest
             ).isZero()
         }
 
+        @Test
+        fun `revoked executor requires explicit atomic case and action reassignment`() {
+            val requestId = requestId(createRequest("create-action-reassign").andReturn().response.contentAsString)
+            decideManager(requestId, managerId, "approve-action-reassign").andExpect(status().isOk)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
+                requesterId,
+            )
+
+            getRequest(requestId, managerId)
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.state").value("REASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.requestVersion").value(2))
+
+            grant(managerId, "SUPPORT_CASE_ASSIGN")
+            grantReplacementPermissions(replacementId)
+            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
+                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
+                .andExpect(jsonPath("$.requestVersion").value(3))
+            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
+
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
+            ).isEqualTo(replacementId)
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT version FROM support_case WHERE id = ?", Long::class.java, caseId),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_action_reassignment WHERE request_id = ?",
+                    Int::class.java,
+                    requestId,
+                ),
+            ).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_case_assignment_history WHERE support_case_id = ?",
+                    Int::class.java,
+                    caseId,
+                ),
+            ).isEqualTo(2)
+        }
+
+        @Test
+        fun `approver cannot become executor and reassignment audit failure rolls back both aggregates`() {
+            val requestId = requestId(createRequest("create-action-reassign-guard").andReturn().response.contentAsString)
+            decideManager(requestId, managerId, "approve-action-reassign-guard").andExpect(status().isOk)
+            grant(managerId, "SUPPORT_CASE_ASSIGN")
+            grantReplacementPermissions(managerId)
+
+            reassignRequest(
+                requestId,
+                managerId,
+                managerId,
+                "reassign-approver-denied",
+                expectedRequestVersion = 1,
+            ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_APPROVER_MUST_DIFFER"))
+
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
+                requesterId,
+            )
+            getRequest(requestId, managerId).andExpect(status().isOk)
+            grantReplacementPermissions(replacementId)
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_audit_record (
+                    id, actor_id, actor_type, audit_category, action, target_type, target_id, occurred_at, reason,
+                    before_summary, after_summary, correlation_id, source_reference, retention_expires_at,
+                    retention_class, retention_policy_version_id, retention_provenance
+                )
+                SELECT ?, ?, 'PLATFORM_OPERATOR', audit_category, 'SUPPORT_ACTION_REQUEST_REASSIGNED',
+                       target_type, target_id, occurred_at, reason, before_summary, after_summary, correlation_id,
+                       ?, retention_expires_at, retention_class, retention_policy_version_id, retention_provenance
+                  FROM operations_audit_record
+                 WHERE action = 'SUPPORT_ACTION_REQUEST_CREATED' AND target_id = ?
+                """.trimIndent(),
+                UUID.randomUUID(),
+                managerId.toString(),
+                "support-action:$requestId:SUPPORT_ACTION_REQUEST_REASSIGNED:3",
+                requestId,
+            )
+
+            reassignRequest(requestId, managerId, replacementId, "reassign-audit-failure")
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT state FROM support_action_request WHERE id = ?", String::class.java, requestId),
+            ).isEqualTo("REASSIGNMENT_REQUIRED")
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
+            ).isEqualTo(requesterId)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_action_reassignment WHERE request_id = ?",
+                    Int::class.java,
+                    requestId,
+                ),
+            ).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_case_assignment_history WHERE support_case_id = ?",
+                    Int::class.java,
+                    caseId,
+                ),
+            ).isOne()
+        }
+
         private fun createRequest(
             key: String,
             payloadDigest: String = DIGEST_1,
@@ -300,6 +418,25 @@ internal class SupportActionRequestIntegrationTest
                 .with(jwt().jwt { it.subject(actorId.toString()) }),
         )
 
+        private fun reassignRequest(
+            requestId: UUID,
+            actorId: UUID,
+            assigneeId: UUID,
+            key: String,
+            expectedRequestVersion: Long = 2,
+        ) = mockMvc.perform(
+            post("/api/v1/support/action-requests/$requestId/reassignments")
+                .with(jwt().jwt { it.subject(actorId.toString()) })
+                .header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"revisionNumber":1,"expectedRequestVersion":$expectedRequestVersion,"expectedCaseVersion":0,
+                     "assigneeId":"$assigneeId","reason":"Original executor permission was revoked"}
+                    """.trimIndent(),
+                ),
+        )
+
         private fun makeAccepted(id: UUID) {
             jdbcTemplate.update(
                 """
@@ -335,6 +472,19 @@ internal class SupportActionRequestIntegrationTest
                 caseId,
                 requesterId,
                 Timestamp.from(now),
+                Timestamp.from(now),
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_case_assignment_history (
+                    id, support_case_id, sequence, previous_assignee_id, current_assignee_id,
+                    actor_id, case_version, occurred_at
+                ) VALUES (?, ?, 0, NULL, ?, ?, 0, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                caseId,
+                requesterId,
+                requesterId,
                 Timestamp.from(now),
             )
             jdbcTemplate.update(
@@ -387,6 +537,10 @@ internal class SupportActionRequestIntegrationTest
 
         private fun grantManagerPermissions(actorId: UUID) {
             listOf("SUPPORT_CASE_READ", "SUPPORT_ORDER_READ", "SUPPORT_ACTION_APPROVE").forEach { grant(actorId, it) }
+        }
+
+        private fun grantReplacementPermissions(actorId: UUID) {
+            listOf("SUPPORT_CASE_WRITE", "SUPPORT_ACTION_EXECUTE", "SUPPORT_ORDER_CANCEL").forEach { grant(actorId, it) }
         }
 
         private fun grant(

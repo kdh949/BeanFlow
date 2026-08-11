@@ -76,6 +76,19 @@ internal data class DecideSupportManagerApprovalRequest(
     val reason: String?,
 ) : StrictSupportRequest
 
+internal data class ReassignSupportActionRequestRequest(
+    @field:Positive
+    val revisionNumber: Int,
+    @field:PositiveOrZero
+    val expectedRequestVersion: Long,
+    @field:PositiveOrZero
+    val expectedCaseVersion: Long,
+    @field:NotNull
+    val assigneeId: UUID?,
+    @field:NotBlank @field:Size(max = 500)
+    val reason: String?,
+) : StrictSupportRequest
+
 @Validated
 @RestController
 @RequestMapping("/api/v1/support")
@@ -178,6 +191,32 @@ internal class SupportActionRequestController(
             }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(resource)
     }
+
+    @PostMapping("/action-requests/{requestId}/reassignments")
+    @PreAuthorize("isAuthenticated()")
+    fun reassign(
+        @AuthenticationPrincipal jwt: Jwt,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @PathVariable requestId: UUID,
+        @Valid @RequestBody request: ReassignSupportActionRequestRequest,
+    ): ResponseEntity<SupportActionRequestResource> =
+        ResponseEntity
+            .ok()
+            .cacheControl(CacheControl.noStore())
+            .body(
+                service.reassign(
+                    ReassignSupportActionRequestCommand(
+                        jwt.actorId(),
+                        requestId,
+                        request.revisionNumber,
+                        request.expectedRequestVersion,
+                        request.expectedCaseVersion,
+                        request.assigneeId ?: invalid(),
+                        request.reason ?: invalid(),
+                        idempotencyKey,
+                    ),
+                ),
+            )
 
     private fun Jwt.actorId(): UUID =
         try {

@@ -26,6 +26,7 @@ import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalChange
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepState
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepType
+import io.github.kdh949.beanflow.support.internal.domain.SupportCase
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
@@ -78,6 +79,17 @@ internal data class DecideSupportManagerApprovalCommand(
     val revisionNumber: Int,
     val expectedRequestVersion: Long,
     val decision: SupportApprovalDecision,
+    val reason: String,
+    val idempotencyKey: String,
+)
+
+internal data class ReassignSupportActionRequestCommand(
+    val actorId: UUID,
+    val requestId: UUID,
+    val revisionNumber: Int,
+    val expectedRequestVersion: Long,
+    val expectedCaseVersion: Long,
+    val assigneeId: UUID,
     val reason: String,
     val idempotencyKey: String,
 )
@@ -185,6 +197,8 @@ internal class SupportActionRequestApplicationService(
         requestId: UUID,
     ): SupportActionRequestResource = transactions.get(actorId, requestId)
 
+    fun reassign(command: ReassignSupportActionRequestCommand): SupportActionRequestResource = transactions.reassign(command)
+
     private fun notFound(resource: String): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "$resource was not found")
 }
 
@@ -194,7 +208,9 @@ internal class SupportActionRequestTransactionService(
     private val revisions: SupportActionRevisionJpaRepository,
     private val steps: SupportActionApprovalStepJpaRepository,
     private val idempotencies: SupportActionCommandIdempotencyJpaRepository,
+    private val reassignments: SupportActionReassignmentJpaRepository,
     private val cases: SupportCaseJpaRepository,
+    private val caseAssignments: SupportCaseAssignmentHistoryJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
     private val sessions: VerificationSessionJpaRepository,
     private val ordering: OrderingSupportTimelineOperations,
@@ -452,6 +468,99 @@ internal class SupportActionRequestTransactionService(
             )
         }
         return resource(entity, revision, currentSteps(entity))
+    }
+
+    @Transactional
+    fun reassign(command: ReassignSupportActionRequestCommand): SupportActionRequestResource {
+        val normalized = command.normalized()
+        permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
+        val observed = requests.findById(normalized.requestId).orElseThrow { notFound("SupportActionRequest") }
+        commandLock.lock(observed.supportCaseId, normalized.actorId, REASSIGN.name, normalized.idempotencyKey)
+        val payloadHash = normalized.reassignPayloadHash()
+        replay(normalized.actorId, REASSIGN, normalized.idempotencyKey, payloadHash)?.let { return it.resourceOrThrow() }
+
+        val entity = requests.findLockedById(normalized.requestId) ?: notFound("SupportActionRequest")
+        if (entity.supportCaseId != observed.supportCaseId ||
+            entity.currentRevisionNumber != normalized.revisionNumber ||
+            entity.version != normalized.expectedRequestVersion
+        ) {
+            stale()
+        }
+        permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_CASE_WRITE)
+        permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
+        permissions.requireActive(normalized.assigneeId, entity.action.capabilityPermission())
+
+        val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
+        if (supportCase.version != normalized.expectedCaseVersion || supportCase.state !in ACTIVE_CASE_STATES) stale()
+        val revision = currentRevision(entity)
+        val requestAggregate = entity.toAggregate(revision)
+        val caseAggregate = supportCase.toActionAggregate()
+        val now = clock.instant()
+        val requestChange =
+            try {
+                requestAggregate.reassignExecutor(normalized.assigneeId, now)
+            } catch (_: IllegalArgumentException) {
+                throw DomainFailure(
+                    FailureCode.SUPPORT_APPROVER_MUST_DIFFER,
+                    "An approver cannot execute the approved action",
+                )
+            } catch (_: IllegalStateException) {
+                conflict("Support action request is not eligible for reassignment")
+            }
+        val caseChange =
+            try {
+                caseAggregate.assign(normalized.assigneeId, normalized.actorId, now)
+            } catch (_: IllegalStateException) {
+                conflict("Support case is not eligible for reassignment")
+            }
+
+        entity.apply(requestAggregate, now)
+        supportCase.applyActionAggregate(caseAggregate)
+        requests.saveAndFlush(entity)
+        cases.saveAndFlush(supportCase)
+        reassignments.saveAndFlush(
+            SupportActionReassignmentEntity(
+                identifiers.next(),
+                entity.id,
+                revision.revisionNumber,
+                requestChange.previousExecutorActorId,
+                requestChange.currentExecutorActorId,
+                normalized.actorId,
+                normalized.reason,
+                caseChange.caseVersion,
+                requestChange.requestVersion,
+                now,
+            ),
+        )
+        caseAssignments.saveAndFlush(
+            SupportCaseAssignmentHistoryEntity(
+                identifiers.next(),
+                supportCase.id,
+                caseAssignments.nextSequence(supportCase.id),
+                caseChange.previousAssigneeId,
+                caseChange.currentAssigneeId,
+                normalized.actorId,
+                caseChange.caseVersion,
+                now,
+            ),
+        )
+        appendAudits(
+            listOf(
+                caseAssignmentAudit(supportCase, normalized.actorId, now),
+                audit(
+                    entity,
+                    normalized.actorId,
+                    "SUPPORT_ACTION_REQUEST_REASSIGNED",
+                    "EXECUTOR_REASSIGNED",
+                    requestChange.previousState,
+                    requestChange.currentState,
+                    now,
+                ),
+            ),
+        )
+        val response = resource(entity, revision, currentSteps(entity))
+        saveIdempotency(normalized.actorId, REASSIGN, normalized.idempotencyKey, payloadHash, response, 200, null, now)
+        return response
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -759,6 +868,29 @@ internal class SupportActionRequestTransactionService(
         sourceReference = "support-action:${entity.id}:$action:${entity.version}",
     )
 
+    private fun caseAssignmentAudit(
+        entity: SupportCaseEntity,
+        actorId: UUID,
+        now: Instant,
+    ) = AppendAuditRecordCommand(
+        actorId = actorId.toString(),
+        actorType = AuditActorType.PLATFORM_OPERATOR,
+        category = AuditCategory.OPERATIONS_POLICY,
+        action = "SUPPORT_CASE_ASSIGNED",
+        targetType = "SUPPORT_CASE",
+        targetId = entity.id,
+        occurredAt = now,
+        reason = "SUPPORT_ACTION_REASSIGNMENT",
+        afterSummary =
+            mapOf(
+                "event" to "SUPPORT_CASE_ASSIGNED",
+                "state" to entity.state.name,
+                "caseVersion" to entity.version.toString(),
+            ),
+        correlationId = correlations.currentOrCreate(),
+        sourceReference = "support-case:${entity.id}:SUPPORT_CASE_ASSIGNED:${entity.version}",
+    )
+
     private fun stepEntity(
         requestId: UUID,
         revision: SupportActionRevisionEntity,
@@ -858,6 +990,13 @@ internal class SupportActionRequestTransactionService(
             if (it.revisionNumber < 1 || it.expectedRequestVersion < 0) invalid("Approval binding is invalid")
         }
 
+    private fun ReassignSupportActionRequestCommand.normalized() =
+        copy(idempotencyKey = idempotencyKey.normalizedKey(), reason = reason.normalizedReason()).also {
+            if (it.revisionNumber < 1 || it.expectedRequestVersion < 0 || it.expectedCaseVersion < 0) {
+                invalid("Action reassignment binding is invalid")
+            }
+        }
+
     private fun CreateSupportActionRequestCommand.createPayloadHash(): String =
         hash(
             canonicalizer.canonical(
@@ -911,6 +1050,45 @@ internal class SupportActionRequestTransactionService(
             ),
         )
 
+    private fun ReassignSupportActionRequestCommand.reassignPayloadHash(): String =
+        hash(
+            canonicalizer.canonical(
+                REASSIGN.name,
+                listOf(
+                    field("actorId", "uuid", actorId),
+                    field("requestId", "uuid", requestId),
+                    field("revisionNumber", "int32", revisionNumber),
+                    field("expectedRequestVersion", "int64", expectedRequestVersion),
+                    field("expectedCaseVersion", "int64", expectedCaseVersion),
+                    field("assigneeId", "uuid", assigneeId),
+                    field("reason", "string", reason),
+                ),
+            ),
+        )
+
+    private fun SupportCaseEntity.toActionAggregate(): SupportCase =
+        SupportCase.reconstitute(
+            id,
+            requesterType,
+            requesterReference,
+            category,
+            priority,
+            openedAt,
+            currentAssigneeId,
+            state,
+            version,
+            closedAt,
+            lastChangedAt,
+        )
+
+    private fun SupportCaseEntity.applyActionAggregate(aggregate: SupportCase) {
+        currentAssigneeId = aggregate.assigneeId
+        state = aggregate.state
+        version = aggregate.version
+        closedAt = aggregate.closedAt
+        lastChangedAt = aggregate.latestChangeAt
+    }
+
     private fun field(
         name: String,
         type: String,
@@ -961,6 +1139,7 @@ internal class SupportActionRequestTransactionService(
         val CREATE = SupportActionCommandOperation.CREATE_REQUEST
         val REVISE = SupportActionCommandOperation.REVISE_REQUEST
         val MANAGER = SupportActionCommandOperation.MANAGER_DECISION
+        val REASSIGN = SupportActionCommandOperation.REASSIGN_REQUEST
         val IDEMPOTENCY_RETENTION: Duration = Duration.ofDays(90)
         val SHA_256 = Regex("^[0-9a-f]{64}$")
         val ACTIVE_CASE_STATES = setOf(SupportCaseState.OPEN, SupportCaseState.IN_PROGRESS, SupportCaseState.WAITING)
