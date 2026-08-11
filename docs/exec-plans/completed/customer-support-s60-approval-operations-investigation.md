@@ -1,11 +1,11 @@
 # S60 exact revision 승인과 Operations 조사를 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s50-integrated-timeline-action-policy.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`, `Decision Log`,
 `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -20,14 +20,14 @@
 
 - branch는 S50 verified head `f7880cbc7810bbb9147e8aebaec8e041e67a90a8`에서 이어받은
   `feature/support-approval-operations-investigation`이며 최종 PR base는 parent S50 branch다.
-- Flyway inventory는 V1~V43이고 마지막은 `V43__add_support_timeline_and_action_scope.sql`이다.
+- Flyway inventory는 V1~V44이고 마지막은 `V44__create_support_action_approval_and_investigation.sql`이다.
 - S20은 Case/assignment history, S40은 Case+Subject+actor+purpose+scope bound VerificationSession, S50은 current
   Order state/version 기반 typed ActionPolicy를 제공한다. ActionRequest, revision, approval step과 investigation
-  persistence는 아직 없다.
-- target/runtime OpenAPI에는 S20~S50의 25개 Support operation이 있다. S60은 request/read/revise/Support decision/
-  reassignment와 Operations decision을 구현하고 generic execution endpoint는 활성화하지 않는다.
-- S50 V43 writer lease는 완료 검증 뒤 해제됐다. 2026-08-12 현재 open schema PR은 이 Support stack뿐이고 다른
-  worktree/active plan에 현재 acquisition evidence가 없다. 이 branch가 sole V44 migration-writer lease를 획득했다.
+  persistence를 입력으로 S60 request/revision/step/reassignment와 Operations investigation을 구현했다.
+- target/runtime OpenAPI에는 S20~S60의 31개 Support/Operations operation이 있고 전체 계약은 64 path/68 operation이다.
+  generic execution endpoint는 활성화하지 않았다.
+- V44 sole migration-writer lease는 809-test full regression, build와 docs validation 뒤 해제됐다. 다음 Stage는 새
+  preflight와 lease를 수행해야 한다.
 
 ## Definitions
 
@@ -82,7 +82,8 @@ Operations API에 선언된 required callback을 Support 구현이 받아 자기
 Operations→Support static module cycle을 만들지 않는다.
 
 create/revise/Support decision/reassignment은 각각 Case/request/verification row와 permission grant를 잠그는 짧은 Support
-transaction이다. manager approval이 Operations route를 이어야 하면 같은 transaction에서 Operations open port를 호출한다.
+transaction이다. 현재 S50 HTTP route는 `NONE`/`SUPPORT_MANAGER`만 생성한다. S90/S100의 future typed orchestrator가
+Operations route를 선택할 때 public open port를 호출하며 S60은 generic route/open HTTP를 만들지 않는다.
 Operations decision은 investigation lock, permission/separation check, Support callback, investigation/Audit 저장을 한 DB
 transaction으로 commit한다. 외부 Provider 호출은 없다. Audit append 실패는 privileged 상태 변경 전체를 rollback한다.
 
@@ -147,9 +148,9 @@ reason/evidence를 되돌리지 않고 digest, closed state/step, immutable vers
 - `SupportActionRequestTest`: self/dual-role, route/state matrix, new revision stales old step, expiry boundary
 - `SupportActionRequestIntegrationTest`: create/revise, target/policy/verification stale, permission revoke, concurrent approval,
   one-time/idempotency, Audit rollback
-- `OperationsInvestigationIntegrationTest`: no self/same manager reviewer, approve/deny/return/escalate, returned revision,
+- `OperationsSupportInvestigationIntegrationTest`: no self/same manager reviewer, approve/deny/return/escalate, returned revision,
   concurrent decision, permission revoke, callback/Audit rollback
-- `SupportActionReassignmentIntegrationTest`: inactive executor, target eligibility, Case+request atomic reassignment
+- `SupportActionRequestIntegrationTest`: inactive executor, target eligibility, Case+request atomic reassignment 포함
 - `SupportActionRequestMigrationTest`: DB actor/revision/step/idempotency constraints
 - `SupportActionRequestOpenApiContractTest`: strict closed schema, errors, no-store, target/runtime parity
 - `SupportArchitectureTest`, `ModularityTests`, `RuntimeOpenApiParityTest`
@@ -157,8 +158,8 @@ reason/evidence를 되돌리지 않고 digest, closed state/step, immutable vers
 ## Validation Commands
 
 - `./gradlew test --tests '*SupportActionRequestTest'`
-- `./gradlew test --tests '*SupportActionRequestIntegrationTest' --tests '*OperationsInvestigationIntegrationTest'`
-- `./gradlew test --tests '*SupportActionReassignmentIntegrationTest' --tests '*SupportActionRequestMigrationTest'`
+- `./gradlew test --tests '*SupportActionRequestIntegrationTest' --tests '*OperationsSupportInvestigationIntegrationTest'`
+- `./gradlew test --tests '*SupportActionRequestMigrationTest'`
 - `./gradlew test --tests '*SupportActionRequestOpenApiContractTest' --tests '*SupportArchitectureTest' --tests '*ModularityTests' --tests '*RuntimeOpenApiParityTest'`
 - `./gradlew spotlessCheck test`
 - `./gradlew build`
@@ -181,12 +182,12 @@ plan을 actual implementation/evidence에 맞게 갱신한다. actual execution�
 - [x] mandatory documents/current branch/schema/open PR/worktree inspected
 - [x] no Accepted ADR/Business Policy conflict; DRAFT execution ownership mismatch resolved as non-runtime owner scope
 - [x] S60 branch and sole V44 migration-writer lease acquired
-- [ ] ActionRequest/revision/Support approval domain slice
-- [ ] V44 persistence and Support API slice
-- [ ] Operations investigation/callback/reassignment slice
-- [ ] concurrency/security/failure/OpenAPI/architecture slice
-- [ ] focused/full/build/document validation
-- [ ] completion move, lease release and direct successor readiness handoff
+- [x] ActionRequest/revision/Support approval domain slice
+- [x] V44 persistence and Support API slice
+- [x] Operations investigation/callback/reassignment slice
+- [x] concurrency/security/failure/OpenAPI/architecture slice
+- [x] focused/full/build/document validation
+- [x] completion move, lease release and direct successor readiness handoff
 
 ## Surprises & Discoveries
 
@@ -196,6 +197,10 @@ S60은 approved lineage까지만 구현하고 owner execution activation은 후�
 
 Existing S50 evaluation은 durable evaluation token을 저장하지 않는다. 따라서 create/decision은 UI 결과를 신뢰하지 않고
 current Order snapshot, permission, Case relation과 action-bound VerificationSession을 다시 평가해야 한다.
+
+첫 full regression은 V44 추가 뒤 `AuditRetentionPolicyMigrationTest`가 마지막 version을 43으로 고정해 한 건 실패했다.
+follower를 44로 갱신한 단독 test와 전체 809-test 재실행이 통과했다. 구현 리뷰에서는 approval/reassignment의
+revision-number FK와 idempotency status/failure 정합성 제약을 추가해 service가 아닌 DB도 lineage를 보호하게 했다.
 
 ## Decision Log
 
@@ -207,12 +212,19 @@ current Order snapshot, permission, Case relation과 action-bound VerificationSe
 | 2026-08-12 | Module boundary | Operations public open port plus required Support callback in one transaction | owner-only writes without a static module cycle or inconsistent return | ADR-084 amendment, this plan |
 | 2026-08-12 | Stage boundary | S60 stops at `READY_FOR_EXECUTION` | S70/S80/S90/S100 own latest-state validation and actual effects | user Stage scope, API inventory |
 | 2026-08-12 | Migration lease | S60 owns V44 on S50 stacked head | V43 released and no competing current holder evidence | this plan |
+| 2026-08-12 | Completion | release V44 and mark S70 ready to author; S90/S100 receive only their S60 input | 809 tests, build, 64/68 OpenAPI and docs gates passed; later owner-specific gates remain | completed S60, orchestration |
 
 ## Outcomes & Retrospective
 
-Implementation is in progress. Completion will record exact test counts, failure/concurrency evidence, OpenAPI path/schema
-counts and migration lease release. No execution success is claimed by this Stage.
+S60 implements immutable request revisions, one-time manager/Operations decisions, required Operations→Support return,
+explicit permission-loss reassignment and V44 constraints without owner execution. Focused domain/PostgreSQL/API/concurrency/
+Audit-failure tests passed. Final `./gradlew --no-daemon spotlessCheck test` passed 809 tests with 0 failures, 0 errors and
+1 skipped in 8m59s; `./gradlew --no-daemon build` passed; docs validation reported target/runtime 64 paths/68 operations,
+180 schemas, 33 policies, 92 ADRs, 232 Markdown files and 40 ExecPlans. V44 lease is released. No production deployment,
+traffic, SLA or owner action execution is claimed.
 
 ## Revision Notes
 
 - 2026-08-12: authored from verified S50 head, fixed S60 state/module/payload/expiry boundaries and acquired V44 lease.
+- 2026-08-12: completed V44, 6 runtime operations, full review/remediation/validation, moved the plan to completed and
+  released the V44 migration-writer lease.
