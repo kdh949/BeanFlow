@@ -45,6 +45,7 @@ enum class OperatorPermission {
     OPERATIONS_LEGAL_HOLD_MANAGE,
     OPERATIONS_RETENTION_MANAGE,
     PRIVACY_AUDIT_READ,
+    PRIVACY_BREAK_GLASS_REVIEW,
 }
 
 interface OperatorPermissionAuthorization {
