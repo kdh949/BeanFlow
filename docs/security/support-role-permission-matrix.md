@@ -1,12 +1,13 @@
 # Support Role and Permission Matrix
 
 > **Status:** `PARTIALLY IMPLEMENTED`; S20 Case는 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`,
-> `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH`, S40 verification/reveal/break-glass는 아래
-> 전용 persistent grant를 사용한다. Role bundle과 이후 Support capability는 DRAFT다.
+> `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH`, S40 verification/reveal/break-glass와 S50
+> timeline/action evaluation은 아래 전용 persistent grant를 사용한다. Role bundle과 이후 Support capability는 DRAFT다.
 
-Roles are coarse bundles; S20–S40 use case는 active Operations-owned persistent grant를 요구한다.
-S30은 추가로 structured reason과 persistent actor rate budget을 요구하고 Vault 호출 뒤 grant를 재확인한다. Later
-action은 verification과 latest ActionPolicy까지 추가로 요구한다. JWT role alone is never a fallback.
+Roles are coarse bundles; S20–S50 use case는 active Operations-owned persistent grant를 요구한다.
+S30은 추가로 structured reason과 persistent actor rate budget을 요구하고 Vault 호출 뒤 grant를 재확인한다. S50
+action evaluation은 action-bound verification과 latest ActionPolicy까지 추가로 요구한다. JWT role alone is never a
+fallback.
 
 | Capability | Agent | Supervisor | Specialist | Manager | Operations | Privacy Auditor |
 |---|---:|---:|---:|---:|---:|---:|
@@ -39,4 +40,7 @@ S10이 구현한 33개 새 permission은 다음과 같다.
 어떤 값도 `PLATFORM_OPERATOR`에 자동 부여되지 않는다. S40은 `SUPPORT_VERIFICATION_MANAGE`,
 `SUPPORT_PII_REVEAL_REQUEST`, `SUPPORT_PII_REVEAL_APPROVE`, `SUPPORT_PII_REVEAL_BASIC`,
 `SUPPORT_PII_REVEAL_SENSITIVE`, `SUPPORT_BREAK_GLASS_REQUEST`, `PRIVACY_BREAK_GLASS_REVIEW`를 활성화한다.
-그 밖의 future permission은 owning use case 전까지 dormant다.
+S50 timeline은 `SUPPORT_CASE_READ`와 `SUPPORT_ORDER_READ`, action evaluation은 `SUPPORT_ACTION_REQUEST`를 활성화한다.
+Timeline query와 action evaluation은 owner read 전후에 persistent grant, Case relation과 assignment를 재확인한다.
+`PERSONAL_DATA_REVEAL` verification은 원문 열람에만, `SUPPORT_ACTION` verification은 action evaluation에만 사용할 수
+있으며 서로 대체하지 않는다. 그 밖의 future permission은 owning use case 전까지 dormant다.

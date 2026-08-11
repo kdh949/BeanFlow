@@ -1,9 +1,9 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S40 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S50 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
-## Implemented S10–S40 boundaries
+## Implemented S10–S50 boundaries
 
 - privileged use case가 Audit를 쓰면 caller-local transaction에서 current retention policy head를 잠그고
   immutable policy version/category/class/expiry를 snapshot한다. policy/Audit 실패는 caller를 rollback한다.
@@ -41,6 +41,14 @@
 - break-glass request/approval/reveal은 각각 durable PII-free security notification intent를 commit한다. Worker는
   `SKIP LOCKED`로 claim하고 Provider를 transaction 밖에서 호출하며 `RETRY_SCHEDULED`, `MANUAL_REVIEW`, `SENT`를
   명시한다. 중단된 `PROCESSING` claim은 5분 뒤 재회수한다. Provider가 없으면 fake/no-op 성공으로 바꾸지 않는다.
+- S50 timeline은 Tx1에서 persistent read permission, current Case assignment와 active Order links를 잠금·확인한 뒤
+  transaction 밖에서 source당 최대 한 번 owner public query를 호출한다. bounded fact를 global tuple로 merge한 뒤
+  Tx2에서 permission/assignment/link set을 다시 확인하고 같을 때만 no-store DTO를 반환한다. 중간 revoke/relink는
+  403이며 owner 실패는 partial/empty 200이 아니라 503이다.
+- S50 Action evaluation은 TxA1에서 Case/Order read scope를 확인하고 transaction 밖에서 Ordering public
+  state/version snapshot을 읽는다. TxA2는 Case/assignment/link, generic/capability persistent grants와 exact
+  VerificationSession을 다시 잠근다. immutable typed evaluator는 그 snapshot만으로 advisory decision을 만들며
+  어떤 owner write도 수행하지 않는다. UI response는 2분 expiry/current owner version을 포함하고 실행 권한이 아니다.
 
 ## Local atomic candidates
 
@@ -55,6 +63,6 @@
 
 ## Cross-context orchestration
 
-Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs and S40 owner-local reveal APIs expose public contracts only; Support never imports their repositories/entities. If a future owner change and Audit share the same database/local transaction, high-risk change and target Audit commit together; otherwise an Accepted durability ADR is required before implementation.
+Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs, S40 owner-local reveal APIs and S50 bounded timeline/snapshot APIs expose public contracts only; Support never imports their repositories/entities. If a future owner change and Audit share the same database/local transaction, high-risk change and target Audit commit together; otherwise an Accepted durability ADR is required before implementation.
 
 External OTP/email/PG/Delivery/notification/object-storage calls occur outside long DB transactions. Intent/claim is committed before call and result is committed afterward. Timeout or ACK loss produces `UNKNOWN`/`RECONCILING`, never guessed success/failure. Notification failure after confirmed change leaves the change intact and schedules retry/manual review.

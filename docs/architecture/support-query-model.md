@@ -1,9 +1,9 @@
 # Support Query Model
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list and S30 protected exact search are implemented. Timeline and
-> cross-context owner-composed views remain proposed implementation models.
-> **Canonical API status:** S20 Case-list and S30 exact-search schemas are accepted/runtime-backed; S50 timeline/action
-> query schemas are not yet accepted or present in OpenAPI.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list, S30 protected exact search and S50 Case/Order timeline are implemented.
+> Later Delivery and additional cross-context views remain proposed implementation models.
+> **Canonical API status:** S20 Case-list, S30 exact-search and S50 timeline/action-evaluation schemas are
+> accepted/runtime-backed.
 
 ## S20 Case list
 
@@ -39,6 +39,15 @@ interaction free text, payment/provider reference, notification payload, Audit b
 raw profile data. A required owner query failure is a non-success response, not an empty partial timeline. V43 adds the two
 missing Order-history indexes and the owning Stage records an identical-fixture EXPLAIN baseline/re-measure before claiming
 an index effect.
+
+### S50 timeline-index evidence (2026-08-12)
+
+PostgreSQL 17.5 Testcontainers에서 각 table 20,000행, target Order 1행, `LIMIT 20`의 동일 fixture를 사용했다.
+`payment_refund`는 V43 index 제거 시 19,999행을 제거하는 sequential scan(604 shared buffers)이었고 index 재생성
+후 `(order_id, updated_at DESC, id DESC)` index scan(3 shared buffers)을 선택했다. `notification_delivery`도 같은
+조건에서 sequential scan(19,999행 제거, 840 buffers)에서 V43 index scan(3 buffers)으로 전환됐다.
+`SupportTimelineQueryPlanTest`가 두 baseline/re-measure 계획을 모두 출력하고 scan type을 검증한다. 이 결과는
+해당 synthetic fixture의 plan evidence이며 production latency나 일반 성능 향상 주장이 아니다.
 
 ## Later support query model
 

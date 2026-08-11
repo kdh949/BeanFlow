@@ -1,7 +1,7 @@
 # Support ActionPolicy
 
-> **Status:** Core ALLOWED/APPROVAL_REQUIRED/DENIED and exact approval binding are Accepted in ADR-084; class/type names
-> and typed Kotlin policy structure are `DRAFT IMPLEMENTATION DETAILS`.
+> **Status:** Core ALLOWED/APPROVAL_REQUIRED/DENIED and exact approval binding are Accepted in ADR-084. S50 initial
+> typed evaluator and advisory API are implemented; S60 request revision/approval/execution remains planned.
 
 ## Decision
 
@@ -26,3 +26,8 @@ Action verification은 `SUPPORT_ACTION` scope와 `CASE_RESOLUTION` purpose를 �
 `PERSONAL_DATA_REVEAL` scope와 서로 대체할 수 없다. Initial immutable policy identifier는
 `support-action-policy/2026-08-12/v1`, evaluation TTL은 2분이다. 응답은 current target version, closed reason과
 required permission/verification/approval을 포함하지만 실행 권한은 아니다.
+
+구현은 client가 role, permission, verification level, relation, current owner state 또는 decision을 보내지 못하게 한다.
+Support가 Case/current assignment/active Order link를 확인하고 Ordering public snapshot을 읽은 뒤 persistent grant와
+action-bound session을 다시 잠가 평가한다. Owner query/persistence 장애는 `DENIED`로 축소하지 않고 503이며,
+실행 endpoint가 생기는 S60 이후에는 같은 immutable evaluator와 최신 owner version을 다시 사용해야 한다.

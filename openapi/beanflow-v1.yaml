@@ -3,7 +3,7 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-11
+  x-beanflow-contract-date: 2026-08-12
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
@@ -1662,6 +1662,103 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/timeline:
+    get:
+      tags: [Support]
+      operationId: listSupportCaseTimeline
+      summary: List a bounded cross-context timeline for one SupportCase
+      description: |
+        Merges closed, masked Support and owner facts using the stable tuple
+        occurredAt DESC, source rank ASC, itemId DESC. The signed cursor is bound
+        to the Case and canonical source/type filters for 15 minutes. A required
+        owner failure returns 503; it is never converted to a partial or empty page.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/SupportTimelineSources"
+        - $ref: "#/components/parameters/SupportTimelineTypes"
+        - $ref: "#/components/parameters/SupportTimelineCursor"
+        - $ref: "#/components/parameters/SupportTimelineLimit"
+      responses:
+        "200":
+          description: Globally ordered masked transaction facts
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportTimelinePage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/timeline:
+    get:
+      tags: [Support]
+      operationId: listSupportOrderTimeline
+      summary: List owner facts for an Order linked to one SupportCase
+      description: |
+        Requires both Support Case/Order read permissions, current assignment and
+        an active RELATED_ORDER link. SUPPORT is not a valid explicit source for
+        this owner-only endpoint. Authorization is rechecked before response release.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/SupportOrderTimelineCaseId"
+        - $ref: "#/components/parameters/SupportTimelineSources"
+        - $ref: "#/components/parameters/SupportTimelineTypes"
+        - $ref: "#/components/parameters/SupportTimelineCursor"
+        - $ref: "#/components/parameters/SupportTimelineLimit"
+      responses:
+        "200":
+          description: Globally ordered masked owner facts
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportTimelinePage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/action-evaluations:
+    post:
+      tags: [Support]
+      operationId: evaluateSupportAction
+      summary: Evaluate one typed Support action against current server state
+      description: |
+        Returns advisory ALLOWED, APPROVAL_REQUIRED or DENIED with closed reasons,
+        current target version, immutable policy version and two-minute expiry.
+        The server reads role-independent persistent permissions, Case/relationship,
+        action-bound verification and the current Ordering snapshot. Execution must
+        re-evaluate and this response is never an execution capability.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateSupportActionRequest"
+      responses:
+        "200":
+          description: Current advisory decision, including closed denial reasons
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionEvaluationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases/{caseId}/verification-sessions:
     post:
       tags: [Support]
@@ -1669,8 +1766,9 @@ paths:
       summary: Start purpose-bound step-up verification
       description: |
         Starts a 15-minute BASIC or ENHANCED session bound to the assigned active Case,
-        one active subject link, the authenticated operator, a purpose, and the fixed
-        PERSONAL_DATA_REVEAL action scope. No OTP, raw link, answer, or proof is stored.
+        one active subject link, the authenticated operator, a purpose, and a closed
+        action scope. Omitted scope means PERSONAL_DATA_REVEAL; SUPPORT_ACTION is valid
+        only with CASE_RESOLUTION. No OTP, raw link, answer, or proof is stored.
       parameters:
         - $ref: "#/components/parameters/SupportCaseId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -2110,6 +2208,61 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
+    SupportOrderTimelineCaseId:
+      in: query
+      name: caseId
+      required: true
+      description: SupportCase that currently has the target Order linked as RELATED_ORDER.
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportTimelineSources:
+      in: query
+      name: sources
+      required: false
+      description: Closed source filter. Omission selects every source valid for the endpoint.
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        maxItems: 9
+        items:
+          $ref: "#/components/schemas/SupportTimelineSource"
+    SupportTimelineTypes:
+      in: query
+      name: types
+      required: false
+      description: Closed fact-type filter. Omission selects every type valid for the endpoint.
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        maxItems: 15
+        items:
+          $ref: "#/components/schemas/SupportTimelineType"
+    SupportTimelineCursor:
+      in: query
+      name: cursor
+      required: false
+      description: |
+        Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
+        canonical source/type filters. It expires after 15 minutes; malformed,
+        expired or scope-mismatched values return 400 INVALID_REQUEST.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    SupportTimelineLimit:
+      in: query
+      name: limit
+      required: false
+      description: Maximum globally merged facts. Defaults to 20 and may not exceed 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
     SupportSubjectLinkId:
       in: path
       name: linkId
@@ -4274,6 +4427,193 @@ components:
           type: boolean
         hasMore:
           type: boolean
+    SupportTimelineSource:
+      type: string
+      enum: [SUPPORT, ORDERING, PAYMENT, LOYALTY, PROMOTION, FULFILLMENT, SETTLEMENT, NOTIFICATION, OPERATIONS]
+    SupportTimelineType:
+      type: string
+      enum:
+        - CASE_STATE
+        - CASE_ASSIGNMENT
+        - CASE_INTERACTION
+        - CASE_NOTE
+        - SUBJECT_LINK
+        - ORDER_STATE
+        - PAYMENT_STATE
+        - REFUND_STATE
+        - POINT_RESERVATION
+        - COUPON_RESERVATION
+        - PICKUP_RESERVATION
+        - SETTLEMENT_ITEM
+        - SETTLEMENT_ADJUSTMENT
+        - NOTIFICATION_DELIVERY
+        - OPERATION_AUDIT
+    SupportTimelineState:
+      type: string
+      enum:
+        - OPEN
+        - PENDING_CUSTOMER
+        - PENDING_STORE
+        - ESCALATED
+        - RESOLVED
+        - CLOSED
+        - ASSIGNED
+        - INBOUND
+        - OUTBOUND
+        - INTERNAL
+        - RECORDED
+        - LINKED
+        - UNLINKED
+        - PENDING_PAYMENT
+        - PAID
+        - ACCEPTED
+        - PREPARING
+        - READY
+        - COMPLETED
+        - REJECTED
+        - EXPIRED
+        - CANCELLED
+        - APPROVING
+        - APPROVED
+        - FAILED
+        - UNKNOWN
+        - RECONCILING
+        - MANUAL_REVIEW
+        - REQUESTED
+        - PROCESSING
+        - SUCCEEDED
+        - RESERVED
+        - USED
+        - RELEASED
+        - CONFIRMED
+        - ITEM_CREATED
+        - ADJUSTMENT_RECORDED
+        - PENDING
+        - RETRY_SCHEDULED
+    SupportTimelineItem:
+      type: object
+      additionalProperties: false
+      required: [itemId, source, type, state, summary, amountKrw, occurredAt]
+      properties:
+        itemId:
+          $ref: "#/components/schemas/Identifier"
+        source:
+          $ref: "#/components/schemas/SupportTimelineSource"
+        type:
+          $ref: "#/components/schemas/SupportTimelineType"
+        state:
+          $ref: "#/components/schemas/SupportTimelineState"
+        summary:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Server-generated closed type/state label; never owner free text or PII.
+        amountKrw:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        occurredAt:
+          type: string
+          format: date-time
+    SupportTimelinePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/SupportTimelineItem"
+        nextCursor:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 2048
+    SupportActionType:
+      type: string
+      enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION]
+    SupportActionDecision:
+      type: string
+      enum: [ALLOWED, APPROVAL_REQUIRED, DENIED]
+    SupportActionReasonCode:
+      type: string
+      enum:
+        - POLICY_ALLOWED
+        - POLICY_APPROVAL_REQUIRED
+        - UNSUPPORTED_TARGET_STATE
+        - CASE_NOT_ELIGIBLE
+        - TARGET_RELATIONSHIP_MISMATCH
+        - MISSING_PERMISSION
+        - VERIFICATION_SCOPE_MISMATCH
+        - VERIFICATION_PURPOSE_MISMATCH
+        - INSUFFICIENT_VERIFICATION
+        - STALE_TARGET_VERSION
+    SupportActionApprovalRequirement:
+      type: string
+      enum: [SUPPORT_MANAGER]
+    SupportActionPermission:
+      type: string
+      enum: [SUPPORT_ACTION_REQUEST, SUPPORT_ORDER_CANCEL, SUPPORT_PICKUP_RESCHEDULE, SUPPORT_RESOLUTION_REQUEST]
+    EvaluateSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, expectedTargetVersion, verificationSessionId]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+    SupportActionEvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, decision, reasonCodes, requiredPermissions, requiredVerificationLevel, approvalRequirements, policyVersion, targetVersion, evaluatedAt, expiresAt]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        decision:
+          $ref: "#/components/schemas/SupportActionDecision"
+        reasonCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionReasonCode"
+        requiredPermissions:
+          type: array
+          minItems: 2
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionPermission"
+        requiredVerificationLevel:
+          type: string
+          enum: [BASIC, ENHANCED]
+        approvalRequirements:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionApprovalRequirement"
+        policyVersion:
+          type: string
+          const: support-action-policy/2026-08-12/v1
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        evaluatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
     VerificationLevel:
       type: string
       enum: [UNVERIFIED, BASIC, ENHANCED]
@@ -4286,6 +4626,9 @@ components:
     VerificationPurpose:
       type: string
       enum: [CONTACT_CONFIRMATION, CASE_RESOLUTION, SAFETY_RESPONSE, FRAUD_INVESTIGATION, PRIVACY_INCIDENT]
+    VerificationActionScope:
+      type: string
+      enum: [PERSONAL_DATA_REVEAL, SUPPORT_ACTION]
     VerificationChannel:
       type: string
       enum: [IN_APP, REGISTERED_PHONE, REGISTERED_EMAIL]
@@ -4304,6 +4647,10 @@ components:
           enum: [BASIC, ENHANCED]
         purpose:
           $ref: "#/components/schemas/VerificationPurpose"
+        actionScope:
+          allOf:
+            - $ref: "#/components/schemas/VerificationActionScope"
+          default: PERSONAL_DATA_REVEAL
     IssueVerificationChallengeRequest:
       type: object
       additionalProperties: false
@@ -4344,7 +4691,7 @@ components:
     VerificationSessionResource:
       type: object
       additionalProperties: false
-      required: [sessionId, caseId, subjectLinkId, subjectType, subjectId, purpose, requestedLevel, achievedLevel, state, invalidAttempts, startedAt, expiresAt, version, challenges]
+      required: [sessionId, caseId, subjectLinkId, subjectType, subjectId, purpose, actionScope, requestedLevel, achievedLevel, state, invalidAttempts, startedAt, expiresAt, version, challenges]
       properties:
         sessionId:
           $ref: "#/components/schemas/Identifier"
@@ -4358,6 +4705,8 @@ components:
           $ref: "#/components/schemas/Identifier"
         purpose:
           $ref: "#/components/schemas/VerificationPurpose"
+        actionScope:
+          $ref: "#/components/schemas/VerificationActionScope"
         requestedLevel:
           $ref: "#/components/schemas/VerificationLevel"
         achievedLevel:

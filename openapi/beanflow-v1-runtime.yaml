@@ -552,6 +552,12 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links"
   /support/cases/{caseId}/subject-links/{linkId}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1subject-links~1{linkId}"
+  /support/cases/{caseId}/timeline:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1timeline"
+  /support/orders/{orderId}/timeline:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1timeline"
+  /support/cases/{caseId}/action-evaluations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1action-evaluations"
   /support/cases/{caseId}/verification-sessions:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1verification-sessions"
   /support/verification-sessions/{sessionId}:

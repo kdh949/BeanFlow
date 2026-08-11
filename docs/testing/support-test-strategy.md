@@ -1,19 +1,19 @@
 # Customer Support Planned Test Strategy
 
 > **Status:** `PARTIALLY IMPLEMENTED`
-> S20–S40 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
-> later Support stages remain planned; no Support performance or k6 result is claimed.
+> S20–S50 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
+> later Support stages remain planned; no Support production performance or k6 result is claimed.
 
 ## Coverage by layer
 
 | Layer | Current / planned coverage |
 |---|---|
-| Domain | S20 Case matrix/content guard; S40 BASIC/ENHANCED channel rules, expiry/lockout, field/risk budget, actor-separated break-glass; later aggregates planned |
-| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 provider UNKNOWN/stale recovery, Audit-before-reveal, Case-terminal revoke, owner failure and notification retry/reclaim |
-| PostgreSQL Testcontainers | S20–S40 CHECK/UNIQUE/append-only constraints, Case-first row-lock winners, reveal budget, Case+Subject lockout and durable notification claim/reclaim |
-| API contract | S20–S40 status/error/no-store/idempotency schemas, raw/proof exclusion and target/runtime Spring MVC parity |
-| Modulith/ArchUnit | Controller→Repository and Support→owner-internal boundary; S40 uses Identity/Merchant/Delivery/Notification public APIs only |
-| Security | IDOR, persistent permission/Case/verification/field matrix, proof/raw diagnostic redaction, Audit failure, actor-separated approval/review, post-decrypt permission recheck |
+| Domain | S20 Case matrix/content guard; S40 verification/grant rules; S50 typed state/action/default-deny/version/expiry matrix; later aggregates planned |
+| Application | S20 Case authorization/idempotency/Audit; S30 masked search; S40 reveal/resilience; S50 fixed-count owner composition, cursor/filter and permission/relationship/verification/stale evaluation |
+| PostgreSQL Testcontainers | S20–S50 constraints/races; V43 closed action scope and 20k-row identical-fixture EXPLAIN baseline/re-measure for refund/notification timeline indexes |
+| API contract | S20–S50 status/error/no-store/idempotency/closed schemas, sensitive-value exclusion and target/runtime Spring MVC parity |
+| Modulith/ArchUnit | Controller→Repository and Support→owner-internal production boundary; S50 composes owner public APIs only |
+| Security | IDOR, persistent permission/Case/verification/field/action matrix, proof/raw diagnostic redaction, scope separation, Audit failure and post-owner permission recheck |
 | Provider/resilience | S40 challenge and security notification timeout/UNKNOWN, duplicate verification winner and transaction-outside-provider checks; later PG/Delivery paths planned |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
 | UI/load | selected frontend boundary, reveal expiry/navigation clearing and reproducible search/timeline/action load |
@@ -37,7 +37,7 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch
 - retention worker claim contention and LegalHold create versus delete
 
-S20–S40 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
+S20–S50 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
 deterministic Clock/IdentifierSource where their behavior requires it.
 
 ## Retention and restore scenarios to instantiate
@@ -56,7 +56,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 
 ## Evidence rules
 
-- S20–S40 coverage is limited to their named test classes; it does not verify future Support stages.
+- S20–S50 coverage is limited to their named test classes; it does not verify future Support stages.
 - Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.
 - Legal review is required before production and is not inferred from passing tests.
