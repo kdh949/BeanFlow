@@ -20,8 +20,10 @@ import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryOutcome
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
+import io.github.kdh949.beanflow.ordering.api.SupportOrderCancellationCommand
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentProjection
@@ -40,6 +42,7 @@ import io.micrometer.core.instrument.Timer
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
@@ -60,10 +63,35 @@ internal sealed interface CustomerCancellationTransactionOutcome {
     ) : CustomerCancellationTransactionOutcome
 }
 
+internal sealed interface SupportCancellationTransactionOutcome {
+    data class Applied(
+        val response: CustomerCancellationHttpResult,
+        val previousState: String,
+        val previousPickupSlotId: UUID,
+        val orderVersion: Long,
+    ) : SupportCancellationTransactionOutcome
+
+    data class ResolutionRequired(
+        val currentState: String,
+        val pickupSlotId: UUID,
+        val orderVersion: Long,
+    ) : SupportCancellationTransactionOutcome
+}
+
 internal data class CustomerCancellationMetricsContext(
     var fromState: String = "unresolved",
     var phase: String = "unresolved",
     var rollbackTarget: String = "transaction",
+)
+
+internal data class CancellationExecutionContext(
+    val actorId: UUID,
+    val actorType: AuditActorType,
+    val cause: OrderCancellationCause,
+    val orderAuditAction: String,
+    val releaseAuditSuffix: String,
+    val sourceSegment: String,
+    val persistCustomerIdempotency: Boolean,
 )
 
 @Service
@@ -194,12 +222,13 @@ internal class CustomerCancellationTransaction(
             return CustomerCancellationTransactionOutcome.Success(it)
         }
         val correlationId = correlations.currentOrCreate()
+        val context = customerContext(customerId)
 
         return when (order.state) {
             OrderState.PENDING_PAYMENT -> {
                 cancelPending(
                     order,
-                    customerId,
+                    context,
                     idempotencyKey,
                     request.reasonCode,
                     normalizedDetail,
@@ -213,7 +242,7 @@ internal class CustomerCancellationTransaction(
             OrderState.PAID -> {
                 cancelPaid(
                     order,
-                    customerId,
+                    context,
                     idempotencyKey,
                     request.reasonCode,
                     normalizedDetail,
@@ -232,9 +261,79 @@ internal class CustomerCancellationTransaction(
         }
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun executeSupport(command: SupportOrderCancellationCommand): SupportCancellationTransactionOutcome {
+        val normalizedDetail = CanonicalCustomerCancellationPayload.normalizeDetail(command.reasonDetail)
+        val payloadHash = CanonicalCustomerCancellationPayload.hash(command.orderId, command.reasonCode, normalizedDetail, objectMapper)
+        val order = orders.findLockedById(command.orderId) ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
+        if (order.state in POST_ACCEPTANCE_RESOLUTION_STATES) {
+            return SupportCancellationTransactionOutcome.ResolutionRequired(order.state.name, order.pickupSlotId, order.version)
+        }
+        if (order.version != command.expectedOrderVersion) {
+            throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Order version changed before execution")
+        }
+        if (order.state == OrderState.ACCEPTED && command.acceptedStoreAuthorizationId == null) {
+            throw DomainFailure(FailureCode.ACCESS_DENIED, "Accepted order cancellation requires store authorization")
+        }
+        val previousState = order.state.name
+        val previousPickupSlotId = order.pickupSlotId
+        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
+        val metrics = CustomerCancellationMetricsContext(fromState = order.state.name.lowercase())
+        val outcome =
+            when (order.state) {
+                OrderState.PENDING_PAYMENT -> {
+                    cancelPending(
+                        order,
+                        supportContext(command.actorId),
+                        command.supportExecutionId.toString(),
+                        command.reasonCode,
+                        normalizedDetail,
+                        payloadHash,
+                        correlations.currentOrCreate(),
+                        now,
+                        metrics,
+                    )
+                }
+
+                OrderState.PAID, OrderState.ACCEPTED -> {
+                    cancelPaid(
+                        order,
+                        supportContext(command.actorId),
+                        command.supportExecutionId.toString(),
+                        command.reasonCode,
+                        normalizedDetail,
+                        payloadHash,
+                        correlations.currentOrCreate(),
+                        now,
+                        metrics,
+                    )
+                }
+
+                else -> {
+                    throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Order state does not allow support cancellation")
+                }
+            }
+        return when (outcome) {
+            is CustomerCancellationTransactionOutcome.Success -> {
+                SupportCancellationTransactionOutcome.Applied(
+                    outcome.response,
+                    previousState,
+                    previousPickupSlotId,
+                    order.version + 1,
+                )
+            }
+
+            CustomerCancellationTransactionOutcome.ReservationExpired,
+            is CustomerCancellationTransactionOutcome.AcceptanceDeadlineReached,
+            -> {
+                SupportCancellationTransactionOutcome.ResolutionRequired(order.state.name, order.pickupSlotId, order.version)
+            }
+        }
+    }
+
     private fun cancelPending(
         order: OrderEntity,
-        customerId: UUID,
+        context: CancellationExecutionContext,
         idempotencyKey: String,
         reasonCode: CustomerCancellationReasonCode,
         detail: String?,
@@ -276,16 +375,16 @@ internal class CustomerCancellationTransaction(
                 null
             }
         metrics.rollbackTarget = "order"
-        order.cancelByCustomer(now, reasonCode, detail)
+        applyCancellation(order, context, now, reasonCode, detail)
         val terminalVersion = order.version + 1
         metrics.rollbackTarget = "notification_delivery"
         val notification = acceptedNotification(order, terminalVersion, identifiers.next(), correlationId, now)
-        val sourcePrefix = sourcePrefix(order.id, terminalVersion)
+        val sourcePrefix = sourcePrefix(order.id, terminalVersion, context)
         val audits =
             mutableListOf(
                 audit(
-                    customerId,
-                    "ORDER_CUSTOMER_CANCELLED",
+                    context,
+                    context.orderAuditAction,
                     "ORDER",
                     order.id,
                     reasonCode,
@@ -293,24 +392,24 @@ internal class CustomerCancellationTransaction(
                     "$sourcePrefix:order",
                     correlationId,
                     mapOf("state" to "PENDING_PAYMENT"),
-                    mapOf("state" to "CANCELLED", "cause" to "CUSTOMER_REQUEST"),
+                    mapOf("state" to "CANCELLED", "cause" to context.cause.name),
                 ),
             )
         pickup.targetIds.forEach {
-            audits += releaseAudit(customerId, "PICKUP", it, reasonCode, now, sourcePrefix, correlationId)
+            audits += releaseAudit(context, "PICKUP", it, reasonCode, now, sourcePrefix, correlationId)
         }
         stock.targetIds.forEach {
-            audits += releaseAudit(customerId, "STOCK", it, reasonCode, now, sourcePrefix, correlationId)
+            audits += releaseAudit(context, "STOCK", it, reasonCode, now, sourcePrefix, correlationId)
         }
         coupon?.targetIds?.forEach {
-            audits += releaseAudit(customerId, "COUPON", it, reasonCode, now, sourcePrefix, correlationId)
+            audits += releaseAudit(context, "COUPON", it, reasonCode, now, sourcePrefix, correlationId)
         }
         points?.targetIds?.forEach {
-            audits += releaseAudit(customerId, "POINT", it, reasonCode, now, sourcePrefix, correlationId)
+            audits += releaseAudit(context, "POINT", it, reasonCode, now, sourcePrefix, correlationId)
         }
         audits +=
             audit(
-                customerId,
+                context,
                 "ORDER_CANCELLATION_ACCEPTED_DELIVERY_CREATED",
                 "NOTIFICATION_DELIVERY",
                 notification.deliveryId,
@@ -339,7 +438,7 @@ internal class CustomerCancellationTransaction(
                                 now = now,
                             ),
                         ).toCustomerSummary(),
-                customerId = customerId,
+                context = context,
                 idempotencyKey = idempotencyKey,
                 payloadHash = payloadHash,
                 correlationId = correlationId,
@@ -351,7 +450,7 @@ internal class CustomerCancellationTransaction(
 
     private fun cancelPaid(
         order: OrderEntity,
-        customerId: UUID,
+        context: CancellationExecutionContext,
         idempotencyKey: String,
         reasonCode: CustomerCancellationReasonCode,
         detail: String?,
@@ -360,10 +459,10 @@ internal class CustomerCancellationTransaction(
         now: Instant,
         metrics: CustomerCancellationMetricsContext,
     ): CustomerCancellationTransactionOutcome {
-        val deadline =
-            order.acceptanceDeadlineAt
-                ?: dependency("Paid order has no acceptance deadline")
-        if (!now.isBefore(deadline)) {
+        val previousState = order.state.name
+        val deadline = order.acceptanceDeadlineAt
+        if (order.state == OrderState.PAID && deadline == null) dependency("Paid order has no acceptance deadline")
+        if (order.state == OrderState.PAID && !now.isBefore(requireNotNull(deadline))) {
             metrics.phase = "ct"
             metrics.rollbackTarget = "acceptance_timeout_work"
             val outcome =
@@ -393,10 +492,10 @@ internal class CustomerCancellationTransaction(
         val pointsPolicy =
             policyOperations.current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.POINTS)
         metrics.rollbackTarget = "order"
-        order.cancelByCustomer(now, reasonCode, detail)
+        applyCancellation(order, context, now, reasonCode, detail)
         val eventId = identifiers.next()
         val caseId = identifiers.next()
-        val sourcePrefix = sourcePrefix(order.id, terminalVersion)
+        val sourcePrefix = sourcePrefix(order.id, terminalVersion, context)
         metrics.rollbackTarget = "compensation_case"
         val compensation =
             compensationOperations.open(
@@ -424,7 +523,8 @@ internal class CustomerCancellationTransaction(
         auditOperations.appendAll(
             paidAudits(
                 order,
-                customerId,
+                context,
+                previousState,
                 reasonCode,
                 payment,
                 compensation.caseId,
@@ -477,7 +577,7 @@ internal class CustomerCancellationTransaction(
                 order = order,
                 reasonCode = reasonCode,
                 recovery = recovery,
-                customerId = customerId,
+                context = context,
                 idempotencyKey = idempotencyKey,
                 payloadHash = payloadHash,
                 correlationId = correlationId,
@@ -553,7 +653,7 @@ internal class CustomerCancellationTransaction(
         order: OrderEntity,
         reasonCode: CustomerCancellationReasonCode,
         recovery: CancellationRefundRecoverySummary,
-        customerId: UUID,
+        context: CancellationExecutionContext,
         idempotencyKey: String,
         payloadHash: String,
         correlationId: String,
@@ -570,21 +670,23 @@ internal class CustomerCancellationTransaction(
                     correlationId = correlationId,
                 ),
             )
-        idempotencyRecords.save(
-            CancellationCommandIdempotencyEntity(
-                id = identifiers.next(),
-                actorId = customerId,
-                orderId = order.id,
-                operation = OPERATION,
-                idempotencyKey = idempotencyKey,
-                payloadHash = payloadHash,
-                responseStatus = status,
-                responseBody = body,
-                responseVersion = 1,
-                createdAt = now,
-                retentionExpiresAt = now.plus(IDEMPOTENCY_RETENTION),
-            ),
-        )
+        if (context.persistCustomerIdempotency) {
+            idempotencyRecords.save(
+                CancellationCommandIdempotencyEntity(
+                    id = identifiers.next(),
+                    actorId = context.actorId,
+                    orderId = order.id,
+                    operation = OPERATION,
+                    idempotencyKey = idempotencyKey,
+                    payloadHash = payloadHash,
+                    responseStatus = status,
+                    responseBody = body,
+                    responseVersion = 1,
+                    createdAt = now,
+                    retentionExpiresAt = now.plus(IDEMPOTENCY_RETENTION),
+                ),
+            )
+        }
         return CustomerCancellationTransactionOutcome.Success(CustomerCancellationHttpResult(status, body))
     }
 
@@ -605,7 +707,8 @@ internal class CustomerCancellationTransaction(
 
     private fun paidAudits(
         order: OrderEntity,
-        customerId: UUID,
+        context: CancellationExecutionContext,
+        previousState: String,
         reasonCode: CustomerCancellationReasonCode,
         payment: CustomerCancellationPaymentSnapshot,
         caseId: UUID,
@@ -620,19 +723,19 @@ internal class CustomerCancellationTransaction(
         val audits =
             mutableListOf(
                 audit(
-                    customerId,
-                    "ORDER_CUSTOMER_CANCELLED",
+                    context,
+                    context.orderAuditAction,
                     "ORDER",
                     order.id,
                     reasonCode,
                     now,
                     "$sourcePrefix:order",
                     correlationId,
-                    mapOf("state" to "PAID"),
-                    mapOf("state" to "CANCELLED", "cause" to "CUSTOMER_REQUEST"),
+                    mapOf("state" to previousState),
+                    mapOf("state" to "CANCELLED", "cause" to context.cause.name),
                 ),
                 audit(
-                    customerId,
+                    context,
                     "ORDER_COMPENSATION_CASE_CREATED",
                     "ORDER_COMPENSATION_CASE",
                     caseId,
@@ -649,7 +752,7 @@ internal class CustomerCancellationTransaction(
                         ),
                 ),
                 audit(
-                    customerId,
+                    context,
                     "PAYMENT_CANCELLATION_RECOVERY_SNAPSHOT_CREATED",
                     "PAYMENT_CANCELLATION_RECOVERY_SNAPSHOT",
                     payment.snapshotId,
@@ -666,7 +769,7 @@ internal class CustomerCancellationTransaction(
                         ),
                 ),
                 audit(
-                    customerId,
+                    context,
                     "ORDER_CANCELLATION_ACCEPTED_DELIVERY_CREATED",
                     "NOTIFICATION_DELIVERY",
                     deliveryId,
@@ -680,7 +783,7 @@ internal class CustomerCancellationTransaction(
         payment.refundId?.let { refundId ->
             audits +=
                 audit(
-                    customerId,
+                    context,
                     "CUSTOMER_CANCELLATION_REFUND_REQUESTED",
                     "REFUND",
                     refundId,
@@ -695,7 +798,7 @@ internal class CustomerCancellationTransaction(
     }
 
     private fun releaseAudit(
-        customerId: UUID,
+        context: CancellationExecutionContext,
         owner: String,
         targetId: UUID,
         reasonCode: CustomerCancellationReasonCode,
@@ -703,8 +806,8 @@ internal class CustomerCancellationTransaction(
         sourcePrefix: String,
         correlationId: String,
     ) = audit(
-        customerId,
-        "${owner}_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION",
+        context,
+        "${owner}_RESERVATION_RELEASED_BY_${context.releaseAuditSuffix}",
         "${owner}_RESERVATION",
         targetId,
         reasonCode,
@@ -716,7 +819,7 @@ internal class CustomerCancellationTransaction(
     )
 
     private fun audit(
-        customerId: UUID,
+        context: CancellationExecutionContext,
         action: String,
         targetType: String,
         targetId: UUID,
@@ -727,8 +830,8 @@ internal class CustomerCancellationTransaction(
         before: Map<String, String> = emptyMap(),
         after: Map<String, String> = emptyMap(),
     ) = AppendAuditRecordCommand(
-        actorId = customerId.toString(),
-        actorType = AuditActorType.CUSTOMER,
+        actorId = context.actorId.toString(),
+        actorType = context.actorType,
         category = AuditCategory.ORDER_AND_FULFILLMENT,
         action = action,
         targetType = targetType,
@@ -797,15 +900,53 @@ internal class CustomerCancellationTransaction(
             lastUpdatedAt = lastUpdatedAt,
         )
 
+    private fun applyCancellation(
+        order: OrderEntity,
+        context: CancellationExecutionContext,
+        now: Instant,
+        reasonCode: CustomerCancellationReasonCode,
+        detail: String?,
+    ) {
+        when (context.cause) {
+            OrderCancellationCause.CUSTOMER_REQUEST -> order.cancelByCustomer(now, reasonCode, detail)
+            OrderCancellationCause.SUPPORT_REQUEST -> order.cancelBySupport(now, reasonCode, detail)
+            OrderCancellationCause.PAYMENT_DECLINED -> dependency("Payment decline is not a direct cancellation command")
+        }
+    }
+
     private fun sourcePrefix(
         orderId: UUID,
         aggregateVersion: Long,
-    ) = "order:$orderId:customer-cancellation:$aggregateVersion"
+        context: CancellationExecutionContext,
+    ) = "order:$orderId:${context.sourceSegment}:$aggregateVersion"
+
+    private fun customerContext(customerId: UUID) =
+        CancellationExecutionContext(
+            customerId,
+            AuditActorType.CUSTOMER,
+            OrderCancellationCause.CUSTOMER_REQUEST,
+            "ORDER_CUSTOMER_CANCELLED",
+            "CUSTOMER_CANCELLATION",
+            "customer-cancellation",
+            true,
+        )
+
+    private fun supportContext(actorId: UUID) =
+        CancellationExecutionContext(
+            actorId,
+            AuditActorType.PLATFORM_OPERATOR,
+            OrderCancellationCause.SUPPORT_REQUEST,
+            "ORDER_SUPPORT_CANCELLED",
+            "SUPPORT_CANCELLATION",
+            "support-cancellation",
+            false,
+        )
 
     private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 
     private companion object {
         const val OPERATION = "CUSTOMER_ORDER_CANCELLATION"
         val IDEMPOTENCY_RETENTION: Duration = Duration.ofDays(90)
+        val POST_ACCEPTANCE_RESOLUTION_STATES = setOf(OrderState.PREPARING, OrderState.READY, OrderState.COMPLETED)
     }
 }

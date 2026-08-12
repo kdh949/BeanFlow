@@ -6,6 +6,7 @@ import java.util.UUID
 enum class OrderCancellationCause {
     CUSTOMER_REQUEST,
     PAYMENT_DECLINED,
+    SUPPORT_REQUEST,
 }
 
 enum class CustomerCancellationReasonCode {

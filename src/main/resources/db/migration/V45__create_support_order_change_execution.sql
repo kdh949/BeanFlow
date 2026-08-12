@@ -138,13 +138,18 @@ CREATE TABLE ordering_support_order_change_history (
     previous_pickup_slot_id uuid NOT NULL,
     current_pickup_slot_id uuid NOT NULL,
     order_version bigint NOT NULL CHECK (order_version >= 0),
+    payment_recovery_state varchar(32),
     source_reference varchar(240) NOT NULL UNIQUE CHECK (
         source_reference = btrim(source_reference)
         AND length(source_reference) BETWEEN 1 AND 240
         AND source_reference !~ '[[:cntrl:]]'
     ),
     occurred_at timestamptz NOT NULL,
-    CONSTRAINT uq_ordering_support_order_change_execution UNIQUE (support_execution_id)
+    CONSTRAINT uq_ordering_support_order_change_execution UNIQUE (support_execution_id),
+    CONSTRAINT chk_ordering_support_order_change_recovery CHECK (
+        (action = 'ORDER_CANCELLATION' AND payment_recovery_state IS NOT NULL)
+        OR (action = 'PICKUP_RESCHEDULE' AND payment_recovery_state IS NULL)
+    )
 );
 
 CREATE TRIGGER trg_ordering_support_order_change_history_append_only
@@ -209,4 +214,8 @@ INSERT INTO operations_audit_action_category (action, audit_category) VALUES
     ('SUPPORT_ORDER_CHANGE_EXECUTED', 'ORDER_AND_FULFILLMENT'),
     ('SUPPORT_ORDER_CHANGE_RESOLUTION_REQUIRED', 'ORDER_AND_FULFILLMENT'),
     ('ORDER_SUPPORT_CANCELLED', 'ORDER_AND_FULFILLMENT'),
-    ('ORDER_SUPPORT_PICKUP_RESCHEDULED', 'ORDER_AND_FULFILLMENT');
+    ('ORDER_SUPPORT_PICKUP_RESCHEDULED', 'ORDER_AND_FULFILLMENT'),
+    ('PICKUP_RESERVATION_RELEASED_BY_SUPPORT_CANCELLATION', 'ORDER_AND_FULFILLMENT'),
+    ('STOCK_RESERVATION_RELEASED_BY_SUPPORT_CANCELLATION', 'ORDER_AND_FULFILLMENT'),
+    ('COUPON_RESERVATION_RELEASED_BY_SUPPORT_CANCELLATION', 'ORDER_AND_FULFILLMENT'),
+    ('POINT_RESERVATION_RELEASED_BY_SUPPORT_CANCELLATION', 'ORDER_AND_FULFILLMENT');
