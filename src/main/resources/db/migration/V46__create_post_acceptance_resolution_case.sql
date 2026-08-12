@@ -1,5 +1,13 @@
 SET LOCAL lock_timeout = '5s';
 
+ALTER TABLE payment_refund
+    DROP CONSTRAINT chk_payment_refund_command_shape,
+    DROP CONSTRAINT chk_payment_refund_operator_reconciliation_pending,
+    ADD COLUMN support_resolution_id uuid,
+    ADD COLUMN resolution_order_state varchar(16),
+    ADD COLUMN resolution_order_completed_at timestamptz,
+    ADD COLUMN resolution_order_version bigint;
+
 ALTER TABLE support_action_request
     DROP CONSTRAINT fk_support_action_request_terminal_execution,
     DROP CONSTRAINT uq_support_action_request_terminal_execution,
@@ -86,6 +94,97 @@ CREATE INDEX idx_support_resolution_case
 
 CREATE INDEX idx_support_resolution_order
     ON support_post_acceptance_resolution (order_id, updated_at DESC, id DESC);
+
+ALTER TABLE payment_refund
+    ADD CONSTRAINT fk_payment_refund_support_resolution
+        FOREIGN KEY (support_resolution_id)
+        REFERENCES support_post_acceptance_resolution (id),
+    ADD CONSTRAINT uq_payment_refund_support_resolution UNIQUE (support_resolution_id),
+    ADD CONSTRAINT chk_payment_refund_command_shape CHECK (
+        (reason NOT IN ('PARTIAL_REFUND', 'CUSTOMER_ORDER_CANCELLED', 'SUPPORT_POST_ACCEPTANCE_RESOLUTION')
+            AND actor_id IS NULL
+            AND idempotency_key IS NULL
+            AND payload_hash IS NULL
+            AND correlation_id IS NULL
+            AND point_restoration_policy_version_id IS NULL
+            AND point_restoration_policy_trigger IS NULL
+            AND point_restoration_policy_benefit_type IS NULL
+            AND point_restoration_policy_mode IS NULL
+            AND point_restoration_policy_validity_days IS NULL
+            AND support_resolution_id IS NULL
+            AND resolution_order_state IS NULL
+            AND resolution_order_completed_at IS NULL
+            AND resolution_order_version IS NULL)
+        OR
+        (reason = 'PARTIAL_REFUND'
+            AND actor_id IS NOT NULL
+            AND idempotency_key IS NOT NULL
+            AND length(idempotency_key) BETWEEN 8 AND 128
+            AND payload_hash ~ '^[0-9a-f]{64}$'
+            AND correlation_id IS NOT NULL
+            AND length(btrim(correlation_id)) > 0
+            AND point_restoration_policy_version_id IS NOT NULL
+            AND point_restoration_policy_trigger = 'PARTIAL_REFUND'
+            AND point_restoration_policy_benefit_type = 'POINTS'
+            AND point_restoration_policy_mode IN (
+                'COMPENSATE_WITH_NEW_ISSUANCE', 'PRESERVE_ORIGINAL_EXPIRY'
+            )
+            AND point_restoration_policy_validity_days BETWEEN 1 AND 365
+            AND support_resolution_id IS NULL
+            AND resolution_order_state IS NULL
+            AND resolution_order_completed_at IS NULL
+            AND resolution_order_version IS NULL)
+        OR
+        (reason = 'CUSTOMER_ORDER_CANCELLED'
+            AND actor_id IS NULL
+            AND idempotency_key IS NULL
+            AND payload_hash IS NULL
+            AND correlation_id IS NOT NULL
+            AND length(btrim(correlation_id)) > 0
+            AND point_restoration_policy_version_id IS NULL
+            AND point_restoration_policy_trigger IS NULL
+            AND point_restoration_policy_benefit_type IS NULL
+            AND point_restoration_policy_mode IS NULL
+            AND point_restoration_policy_validity_days IS NULL
+            AND support_resolution_id IS NULL
+            AND resolution_order_state IS NULL
+            AND resolution_order_completed_at IS NULL
+            AND resolution_order_version IS NULL)
+        OR
+        (reason = 'SUPPORT_POST_ACCEPTANCE_RESOLUTION'
+            AND actor_id IS NOT NULL
+            AND idempotency_key IS NOT NULL
+            AND length(idempotency_key) BETWEEN 8 AND 128
+            AND payload_hash ~ '^[0-9a-f]{64}$'
+            AND correlation_id IS NOT NULL
+            AND length(btrim(correlation_id)) > 0
+            AND point_restoration_policy_version_id IS NULL
+            AND point_restoration_policy_trigger IS NULL
+            AND point_restoration_policy_benefit_type IS NULL
+            AND point_restoration_policy_mode IS NULL
+            AND point_restoration_policy_validity_days IS NULL
+            AND support_resolution_id IS NOT NULL
+            AND resolution_order_state IN ('PREPARING', 'READY', 'COMPLETED')
+            AND resolution_order_version >= 0
+            AND ((resolution_order_state = 'COMPLETED') = (resolution_order_completed_at IS NOT NULL)))
+    ),
+    ADD CONSTRAINT chk_payment_refund_operator_reconciliation_pending CHECK (
+        NOT operator_reconciliation_pending
+        OR (
+            reason IN ('CUSTOMER_ORDER_CANCELLED', 'SUPPORT_POST_ACCEPTANCE_RESOLUTION')
+            AND next_action = 'LOOKUP'
+            AND (
+                (state = 'UNKNOWN'
+                    AND next_attempt_at IS NOT NULL
+                    AND claim_token IS NULL
+                    AND claim_until IS NULL)
+                OR
+                (state = 'RECONCILING'
+                    AND claim_token IS NOT NULL
+                    AND claim_until IS NOT NULL)
+            )
+        )
+    );
 
 CREATE TABLE support_post_acceptance_resolution_step (
     id uuid PRIMARY KEY,
