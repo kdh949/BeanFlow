@@ -509,7 +509,7 @@ internal class NotificationDeliveryService(
             if (existing.eventType != command.eventType || existing.orderId != command.orderId ||
                 existing.recipientType != command.recipientType || existing.recipientId != command.recipientId ||
                 existing.logicalChannel != command.logicalChannel || existing.template != command.template ||
-                existing.payloadJson != payloadJson || existing.correlationId != command.correlationId ||
+                existing.payloadJson != payloadJson ||
                 existing.providerIdempotencyKey != command.providerIdempotencyKey
             ) {
                 fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_SOURCE_CONFLICT")

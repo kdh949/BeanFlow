@@ -36,13 +36,17 @@ Support는 R3/R4 raw typed payload를 저장하지 않는다. Request 시 canoni
 typed payload를 다시 제출한다. Owner command가 execution 시 digest와 current owner version을 다시 확인하고 owner-local
 Vault ciphertext, masked derivative, exact index와 append-only history를 commit한다. 고객 primary-phone은 current subject의
 기존 등록 채널에 귀속된 ENHANCED VerificationSession이 필수다. 새 전화번호만 소유했다는 증거는 기존 계정 소유 증거가
-아니며 요청·승인·실행을 만족시키지 않는다.
+아니며 요청·승인·실행을 만족시키지 않는다. 최종 owner-write transaction은 requester의 현재 request 권한, active Case
+subject link, session의 requester/Case/subject/link/purpose/scope/ENHANCED binding과 primary-phone registered-channel
+challenge를 다시 잠그고 검증한다. 승인 뒤 권한 회수·link 해제·challenge 무효화는 fail closed다.
 
 변경된 field가 notification channel이면 owner history에 저장된 old/new encrypted snapshot을 정확히 대상으로 두 개의
 durable notification intent를 만든다. 그 밖의 변경은 가능한 current registered channel에 알린다. Notification owner가
 provider call 직전에 owner snapshot을 transient하게 resolve/decrypt하며 raw destination을 delivery table, log, metric,
 Audit 또는 Support response에 저장하지 않는다. Profile/Audit commit 뒤 notification 실패는 change를 rollback하지 않고
-`RETRY_SCHEDULED` 또는 `MANUAL_REVIEW`로 남긴다.
+`RETRY_SCHEDULED` 또는 `MANUAL_REVIEW`로 남긴다. Support notification line은 immutable source timestamp와 최초
+correlation을 보존하고 `PROCESSING` claim lease를 사용한다. delivery owner commit 뒤 acknowledgement 전 장애는 만료
+claim reconciliation이 같은 logical source의 기존 delivery id에 재결합하며 owner profile write를 반복하지 않는다.
 
 ## Alternatives Considered
 

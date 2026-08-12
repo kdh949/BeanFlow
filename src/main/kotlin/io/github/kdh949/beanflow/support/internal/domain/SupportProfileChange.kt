@@ -13,6 +13,7 @@ internal enum class SupportProfileChangeState {
 internal enum class SupportProfileNotificationState {
     NOT_REQUESTED,
     PENDING,
+    PROCESSING,
     ACCEPTED,
     RETRY_SCHEDULED,
     MANUAL_REVIEW,

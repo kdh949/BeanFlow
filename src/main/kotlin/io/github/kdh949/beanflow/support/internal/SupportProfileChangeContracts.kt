@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.support.internal.domain.ProfileChangePurpose
 import io.github.kdh949.beanflow.support.internal.domain.ProfileRiskClass
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChangeState
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
@@ -259,18 +261,15 @@ internal object SupportProfilePayloadDigest {
         payload: SupportProfileChangePayload,
     ): String {
         require(expectedVersion >= 0)
-        val canonical =
+        return framedDigest(
             buildList {
-                add("support-profile-change:v1")
+                add("support-profile-change:v2")
                 add(payload.purpose.name)
                 add(subjectId.toString())
                 add(expectedVersion.toString())
-                addAll(payload.canonicalFields().map { it ?: "<null>" })
-            }.joinToString("|") { value ->
-                val bytes = value.toByteArray(StandardCharsets.UTF_8)
-                "${bytes.size}:$value"
-            }
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(StandardCharsets.UTF_8)))
+                addAll(payload.canonicalFields())
+            },
+        )
     }
 
     fun idempotency(
@@ -283,19 +282,43 @@ internal object SupportProfilePayloadDigest {
         expectedVersion: Long,
         reason: String?,
         evidenceDigest: String?,
-    ): String {
-        val canonical =
+    ): String =
+        framedDigest(
             listOf(
+                "support-profile-idempotency:v2",
                 operation,
                 actorId.toString(),
-                caseId?.toString() ?: "<null>",
-                profileChangeId?.toString() ?: "<null>",
-                verificationSessionId?.toString() ?: "<null>",
-                payloadDigest ?: "<null>",
+                caseId?.toString(),
+                profileChangeId?.toString(),
+                verificationSessionId?.toString(),
+                payloadDigest,
                 expectedVersion.toString(),
-                reason ?: "<null>",
-                evidenceDigest ?: "<null>",
-            ).joinToString("|") { value -> "${value.toByteArray(StandardCharsets.UTF_8).size}:$value" }
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(StandardCharsets.UTF_8)))
+                reason,
+                evidenceDigest,
+            ),
+        )
+
+    private fun framedDigest(fields: List<String?>): String {
+        val bytes =
+            ByteArrayOutputStream().use { buffer ->
+                DataOutputStream(buffer).use { output ->
+                    output.writeInt(fields.size)
+                    fields.forEach { value ->
+                        if (value == null) {
+                            output.writeByte(NULL_FIELD)
+                        } else {
+                            val encoded = value.toByteArray(StandardCharsets.UTF_8)
+                            output.writeByte(PRESENT_FIELD)
+                            output.writeInt(encoded.size)
+                            output.write(encoded)
+                        }
+                    }
+                }
+                buffer.toByteArray()
+            }
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
     }
+
+    private const val NULL_FIELD = 0
+    private const val PRESENT_FIELD = 1
 }

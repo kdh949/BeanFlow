@@ -369,11 +369,12 @@ internal class ExternalCourierSupportProfileChangeRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     fun currentVersion(courierId: UUID): Long =
-        jdbcTemplate.queryForObject(
-            "SELECT version FROM delivery_external_courier_support_profile WHERE external_courier_id = ?",
-            Long::class.java,
-            courierId,
-        ) ?: notFound()
+        jdbcTemplate
+            .query(
+                "SELECT version FROM delivery_external_courier_support_profile WHERE external_courier_id = ?",
+                { rs, _ -> rs.getLong("version") },
+                courierId,
+            ).singleOrNull() ?: notFound()
 
     fun lock(courierId: UUID): CourierProfileChangeRow =
         jdbcTemplate

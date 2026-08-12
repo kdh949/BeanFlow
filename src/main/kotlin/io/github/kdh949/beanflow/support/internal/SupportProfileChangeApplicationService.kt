@@ -49,6 +49,7 @@ import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
 import io.github.kdh949.beanflow.support.internal.domain.VerificationState
 import io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType
 import io.github.kdh949.beanflow.support.internal.domain.descriptor
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -69,6 +70,7 @@ internal data class ProfileChangeExecutionBinding(
 )
 
 internal data class ProfileNotificationDispatch(
+    val claimId: UUID,
     val lineId: UUID,
     val profileChangeId: UUID,
     val ownerType: ProfileNotificationOwnerType,
@@ -77,6 +79,7 @@ internal data class ProfileNotificationDispatch(
     val channel: ProfileNotificationChannel,
     val purpose: String,
     val occurredAt: Instant,
+    val correlationId: String,
 )
 
 @Service
@@ -86,12 +89,13 @@ internal class SupportProfileChangeApplicationService(
     private val stores: StoreSupportProfileChangeOperations,
     private val couriers: ExternalCourierSupportProfileChangeOperations,
     private val notifications: ProfileChangeNotificationOperations,
-    private val correlations: CorrelationIdSource,
     private val identifiers: IdentifierSource,
 ) {
     fun submit(command: SubmitSupportProfileChangeCommand): SupportProfileChangeResource {
         val payloadDigest = SupportProfilePayloadDigest.digest(command.subjectId, command.expectedProfileVersion, command.payload)
-        transactions.replaySubmit(command, payloadDigest)?.let { return it }
+        transactions.replaySubmit(command, payloadDigest)?.let {
+            return if (it.state == SupportProfileChangeState.EXECUTED) dispatchNotifications(it.profileChangeId, false) else it
+        }
         val ownerVersion = currentOwnerVersion(command.payload.purpose, command.subjectId)
         transactions.preflight(command, ownerVersion)
         val profileChangeId = identifiers.next()
@@ -105,7 +109,11 @@ internal class SupportProfileChangeApplicationService(
                 val prepared = prepare(profileChangeId, command.subjectId, command.expectedProfileVersion, command.payload)
                 transactions.executeDirect(profileChangeId, command, payloadDigest, ownerVersion, prepared)
             }
-        return if (resource.state == SupportProfileChangeState.EXECUTED) dispatchNotifications(resource.profileChangeId) else resource
+        return if (resource.state == SupportProfileChangeState.EXECUTED) {
+            dispatchNotifications(resource.profileChangeId, false)
+        } else {
+            resource
+        }
     }
 
     fun revise(command: ReviseSupportProfileChangeCommand): SupportProfileChangeResource {
@@ -119,7 +127,7 @@ internal class SupportProfileChangeApplicationService(
     }
 
     fun execute(command: ExecuteSupportProfileChangeCommand): SupportProfileChangeResource {
-        transactions.replayExecution(command)?.let { return it }
+        transactions.replayExecution(command)?.let { return dispatchNotifications(it.profileChangeId, false) }
         val binding = transactions.executionBinding(command)
         if (binding.entity.purpose != command.payload.purpose) stale()
         val digest = SupportProfilePayloadDigest.digest(binding.entity.subjectId, command.expectedProfileVersion, command.payload)
@@ -128,12 +136,12 @@ internal class SupportProfileChangeApplicationService(
         if (ownerVersion != command.expectedProfileVersion) stale()
         val prepared = prepare(command.profileChangeId, binding.entity.subjectId, command.expectedProfileVersion, command.payload)
         val resource = transactions.executeApproved(command, digest, ownerVersion, prepared)
-        return dispatchNotifications(resource.profileChangeId)
+        return dispatchNotifications(resource.profileChangeId, false)
     }
 
     fun retryNotifications(command: RetrySupportProfileNotificationCommand): SupportProfileChangeResource {
         transactions.authorizeRetry(command)
-        return dispatchNotifications(command.profileChangeId)
+        return dispatchNotifications(command.profileChangeId, true)
     }
 
     fun get(
@@ -141,9 +149,18 @@ internal class SupportProfileChangeApplicationService(
         profileChangeId: UUID,
     ): SupportProfileChangeResource = transactions.get(actorId, profileChangeId)
 
-    private fun dispatchNotifications(profileChangeId: UUID): SupportProfileChangeResource {
-        val correlationId = correlations.currentOrCreate()
-        transactions.pendingNotifications(profileChangeId).forEach { dispatch ->
+    fun recoverNotifications(): Int {
+        val profileChangeIds = transactions.recoverableNotificationProfileChangeIds()
+        profileChangeIds.forEach { dispatchNotifications(it, false) }
+        return profileChangeIds.size
+    }
+
+    private fun dispatchNotifications(
+        profileChangeId: UUID,
+        includeRetryScheduled: Boolean,
+    ): SupportProfileChangeResource {
+        val claimId = identifiers.next()
+        transactions.claimNotifications(profileChangeId, claimId, includeRetryScheduled).forEach { dispatch ->
             try {
                 val accepted =
                     notifications.requestProfileChange(
@@ -155,12 +172,12 @@ internal class SupportProfileChangeApplicationService(
                             dispatch.channel,
                             dispatch.purpose,
                             dispatch.occurredAt,
-                            correlationId,
+                            dispatch.correlationId,
                         ),
                     )
-                transactions.acceptNotification(dispatch.lineId, accepted.deliveryId)
+                transactions.acceptNotification(dispatch.lineId, dispatch.claimId, accepted.deliveryId)
             } catch (failure: RuntimeException) {
-                transactions.failNotification(dispatch.lineId, normalizedFailure(failure))
+                transactions.failNotification(dispatch.lineId, dispatch.claimId, normalizedFailure(failure))
             }
         }
         return transactions.getSystem(profileChangeId)
@@ -738,40 +755,79 @@ internal class SupportProfileChangeTransactionService(
     fun getSystem(profileChangeId: UUID): SupportProfileChangeResource =
         resource(changes.findById(profileChangeId).orElse(null) ?: notFound("ProfileChange"))
 
-    @Transactional(readOnly = true)
-    fun pendingNotifications(profileChangeId: UUID): List<ProfileNotificationDispatch> {
-        val entity = changes.findById(profileChangeId).orElse(null) ?: notFound("ProfileChange")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun claimNotifications(
+        profileChangeId: UUID,
+        claimId: UUID,
+        includeRetryScheduled: Boolean,
+    ): List<ProfileNotificationDispatch> {
+        val entity = changes.findLockedById(profileChangeId) ?: notFound("ProfileChange")
         val ownerType =
             entity.purpose
                 .descriptor()
                 .owner
                 .notificationOwnerType()
-        return notificationLines
-            .findByProfileChangeIdOrderById(profileChangeId)
-            .filter { it.state == SupportProfileNotificationState.PENDING || it.state == SupportProfileNotificationState.RETRY_SCHEDULED }
-            .map {
-                ProfileNotificationDispatch(
-                    it.id,
-                    entity.id,
-                    ownerType,
-                    it.ownerTargetId,
-                    it.targetKind,
-                    it.channelType,
-                    entity.purpose.name,
-                    entity.updatedAt,
-                )
-            }
+        val now = clock.instant()
+        val claimed =
+            notificationLines
+                .findLockedByProfileChangeId(profileChangeId)
+                .filter {
+                    it.state == SupportProfileNotificationState.PENDING ||
+                        (
+                            it.state == SupportProfileNotificationState.PROCESSING &&
+                                it.claimExpiresAt?.let { expiry -> !now.isBefore(expiry) } == true
+                        ) ||
+                        (includeRetryScheduled && it.state == SupportProfileNotificationState.RETRY_SCHEDULED)
+                }
+        claimed.forEach {
+            it.deliveryId = null
+            it.state = SupportProfileNotificationState.PROCESSING
+            it.failureCode = null
+            it.claimId = claimId
+            it.claimExpiresAt = now.plus(NOTIFICATION_CLAIM_LEASE)
+            it.updatedAt = now
+            notificationLines.save(it)
+        }
+        notificationLines.flush()
+        return claimed.map {
+            ProfileNotificationDispatch(
+                claimId,
+                it.id,
+                entity.id,
+                ownerType,
+                it.ownerTargetId,
+                it.targetKind,
+                it.channelType,
+                entity.purpose.name,
+                it.sourceOccurredAt,
+                it.sourceCorrelationId,
+            )
+        }
     }
+
+    @Transactional(readOnly = true)
+    fun recoverableNotificationProfileChangeIds(): List<UUID> =
+        notificationLines.findRecoverableProfileChangeIds(
+            clock.instant(),
+            PageRequest.of(0, MAX_NOTIFICATION_RECOVERY_BATCH),
+        )
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun acceptNotification(
         lineId: UUID,
+        claimId: UUID,
         deliveryId: UUID,
     ) {
-        val line = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
+        val snapshot = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
+        changes.findLockedById(snapshot.profileChangeId) ?: notFound("ProfileChange")
+        val line = notificationLines.findLockedById(lineId) ?: notFound("ProfileNotification")
+        if (line.state == SupportProfileNotificationState.ACCEPTED && line.deliveryId == deliveryId) return
+        if (line.state != SupportProfileNotificationState.PROCESSING || line.claimId != claimId) return
         line.deliveryId = deliveryId
         line.state = SupportProfileNotificationState.ACCEPTED
         line.failureCode = null
+        line.claimId = null
+        line.claimExpiresAt = null
         line.attemptCount++
         line.updatedAt = clock.instant()
         notificationLines.saveAndFlush(line)
@@ -781,14 +837,20 @@ internal class SupportProfileChangeTransactionService(
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun failNotification(
         lineId: UUID,
+        claimId: UUID,
         failureCode: String,
     ) {
-        val line = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
+        val snapshot = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
+        changes.findLockedById(snapshot.profileChangeId) ?: notFound("ProfileChange")
+        val line = notificationLines.findLockedById(lineId) ?: notFound("ProfileNotification")
+        if (line.state != SupportProfileNotificationState.PROCESSING || line.claimId != claimId) return
         line.deliveryId = null
         line.attemptCount++
         val manual = line.attemptCount >= MAX_NOTIFICATION_ATTEMPTS
         line.state = if (manual) SupportProfileNotificationState.MANUAL_REVIEW else SupportProfileNotificationState.RETRY_SCHEDULED
         line.failureCode = failureCode
+        line.claimId = null
+        line.claimExpiresAt = null
         line.updatedAt = clock.instant()
         notificationLines.saveAndFlush(line)
         refreshNotificationSummary(line.profileChangeId)
@@ -891,6 +953,10 @@ internal class SupportProfileChangeTransactionService(
         actorId: UUID,
         ownerVersion: Long,
     ) {
+        permissions.requireActive(entity.requesterActorId, OperatorPermission.SUPPORT_CASE_READ)
+        permissions.requireActive(entity.requesterActorId, OperatorPermission.SUPPORT_CASE_WRITE)
+        permissions.requireActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST)
+        permissions.requireActive(entity.requesterActorId, OperatorPermission.SUPPORT_PROFILE_R3_REQUEST)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
@@ -898,15 +964,38 @@ internal class SupportProfileChangeTransactionService(
         if (ownerVersion != entity.expectedProfileVersion) stale()
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         if (supportCase.currentAssigneeId != actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
+        val descriptor = entity.purpose.descriptor()
+        val link =
+            subjectLinks.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(entity.supportCaseId).singleOrNull {
+                it.subjectType == descriptor.owner.supportSubjectType() && it.subjectId == entity.subjectId
+            } ?: denied()
         val request = actionRequests.findLockedById(requireNotNull(entity.actionRequestId)) ?: notFound("SupportActionRequest")
         val revision = actionRevisions.findByRequestIdAndRevisionNumber(request.id, request.currentRevisionNumber) ?: dependency()
         val session = sessions.findLockedById(revision.verificationSessionId) ?: notFound("VerificationSession")
         if (request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION ||
             revision.actionPayloadDigest != entity.payloadDigest || revision.targetVersion != ownerVersion ||
-            !clock.instant().isBefore(revision.expiresAt) || session.state != VerificationState.VERIFIED ||
-            !clock.instant().isBefore(session.expiresAt)
+            revision.verificationSessionId != entity.verificationSessionId || !clock.instant().isBefore(revision.expiresAt)
         ) {
             stale()
+        }
+        if (session.id != entity.verificationSessionId || session.actorId != entity.requesterActorId ||
+            session.supportCaseId != entity.supportCaseId || session.subjectLinkId != link.id ||
+            session.subjectId != entity.subjectId || session.subjectType != descriptor.owner.verificationSubjectType() ||
+            session.purpose != VerificationPurpose.CASE_RESOLUTION ||
+            session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
+            session.state != VerificationState.VERIFIED || !session.requestedLevel.satisfies(VerificationLevel.ENHANCED) ||
+            !clock.instant().isBefore(session.expiresAt)
+        ) {
+            deniedVerification()
+        }
+        if (entity.purpose == ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE) {
+            val channels = challenges.findDistinctChannelsBySessionIdAndState(session.id, ChallengeState.VERIFIED)
+            if (channels.none { it == VerificationChannel.REGISTERED_PHONE || it == VerificationChannel.REGISTERED_EMAIL }) {
+                throw DomainFailure(
+                    FailureCode.VERIFICATION_REQUIRED,
+                    "Primary-phone change requires verification through a previously registered channel",
+                )
+            }
         }
     }
 
@@ -934,6 +1023,10 @@ internal class SupportProfileChangeTransactionService(
                     SupportProfileNotificationState.PENDING,
                     null,
                     0,
+                    now,
+                    correlations.currentOrCreate(),
+                    null,
+                    null,
                     now,
                     now,
                 ),
@@ -1150,5 +1243,7 @@ internal class SupportProfileChangeTransactionService(
         val ACTIVE_CASE_STATES = setOf(SupportCaseState.OPEN, SupportCaseState.IN_PROGRESS, SupportCaseState.WAITING)
         val IDEMPOTENCY_RETENTION: Duration = Duration.ofDays(90)
         const val MAX_NOTIFICATION_ATTEMPTS = 5
+        const val MAX_NOTIFICATION_RECOVERY_BATCH = 50
+        val NOTIFICATION_CLAIM_LEASE: Duration = Duration.ofMinutes(2)
     }
 }

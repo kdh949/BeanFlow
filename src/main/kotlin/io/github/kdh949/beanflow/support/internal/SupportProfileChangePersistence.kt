@@ -14,6 +14,7 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -107,6 +108,10 @@ internal class SupportProfileChangeNotificationEntity(
     @Enumerated(EnumType.STRING) @Column(nullable = false) var state: SupportProfileNotificationState,
     @Column(name = "failure_code", length = 80) var failureCode: String?,
     @Column(name = "attempt_count", nullable = false) var attemptCount: Int,
+    @Column(name = "source_occurred_at", nullable = false) val sourceOccurredAt: Instant,
+    @Column(name = "source_correlation_id", nullable = false, length = 128) val sourceCorrelationId: String,
+    @Column(name = "claim_id") var claimId: UUID?,
+    @Column(name = "claim_expires_at") var claimExpiresAt: Instant?,
     @Column(name = "created_at", nullable = false) val createdAt: Instant,
     @Column(name = "updated_at", nullable = false) var updatedAt: Instant,
 )
@@ -139,6 +144,12 @@ internal interface SupportProfileChangeJpaRepository : JpaRepository<SupportProf
 
 internal interface SupportProfileChangeNotificationJpaRepository : JpaRepository<SupportProfileChangeNotificationEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select target from SupportProfileChangeNotificationEntity target where target.id = :id")
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): SupportProfileChangeNotificationEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         "select target from SupportProfileChangeNotificationEntity target where target.profileChangeId = :profileChangeId order by target.id",
     )
@@ -147,6 +158,21 @@ internal interface SupportProfileChangeNotificationJpaRepository : JpaRepository
     ): List<SupportProfileChangeNotificationEntity>
 
     fun findByProfileChangeIdOrderById(profileChangeId: UUID): List<SupportProfileChangeNotificationEntity>
+
+    @Query(
+        """
+        select distinct target.profileChangeId
+          from SupportProfileChangeNotificationEntity target
+         where target.state = io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState.PENDING
+            or (target.state = io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState.PROCESSING
+                and target.claimExpiresAt <= :now)
+         order by target.profileChangeId
+        """,
+    )
+    fun findRecoverableProfileChangeIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
 }
 
 internal interface SupportProfileChangeIdempotencyJpaRepository : JpaRepository<SupportProfileChangeIdempotencyEntity, UUID> {

@@ -4028,7 +4028,7 @@ components:
       properties:
         targetKind: { type: string, enum: [OLD, NEW, CURRENT] }
         channel: { type: string, enum: [PHONE, EMAIL] }
-        state: { type: string, enum: [PENDING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
+        state: { type: string, enum: [PENDING, PROCESSING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
         deliveryId: { type: [string, "null"], format: uuid }
         failureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
         attempts: { type: integer, minimum: 0, maximum: 3 }

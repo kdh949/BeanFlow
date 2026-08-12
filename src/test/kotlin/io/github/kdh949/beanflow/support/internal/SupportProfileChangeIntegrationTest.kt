@@ -68,6 +68,7 @@ internal class SupportProfileChangeIntegrationTest
     constructor(
         private val mockMvc: MockMvc,
         private val profiles: SupportProfileChangeApplicationService,
+        private val profileTransactions: SupportProfileChangeTransactionService,
         private val actionRequests: SupportActionRequestApplicationService,
         private val operations: OperationsSupportInvestigationService,
         private val jdbcTemplate: JdbcTemplate,
@@ -147,6 +148,70 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
+        fun `composite typed APIs reject all-null and blank payloads as bad requests`() {
+            val binding =
+                """
+                "binding": {
+                  "subjectId": "$customerId",
+                  "expectedProfileVersion": 0,
+                  "verificationSessionId": "$sessionId",
+                  "reason": "Profile correction requested",
+                  "evidenceDigest": "$EVIDENCE_DIGEST"
+                }
+                """.trimIndent()
+            listOf(
+                "/store-public-profile-corrections" to
+                    """{$binding,"displayName":null,"publicPhone":null,"description":null,"pickupInstructions":null}""",
+                "/store-operations-contact-corrections" to """{$binding,"phone":null,"email":null}""",
+                "/courier-relay-contact-corrections" to """{$binding,"phone":null,"email":null}""",
+                "/store-public-profile-corrections" to
+                    """{$binding,"displayName":"   ","publicPhone":null,"description":null,"pickupInstructions":null}""",
+                "/store-operations-contact-corrections" to """{$binding,"phone":"   ","email":null}""",
+                "/courier-relay-contact-corrections" to """{$binding,"phone":null,"email":"   "}""",
+            ).forEachIndexed { index, (path, body) ->
+                mockMvc
+                    .perform(
+                        post("/api/v1/support/cases/$caseId/profile-changes$path")
+                            .with(jwt().jwt { it.subject(requesterId.toString()) })
+                            .header("Idempotency-Key", "invalid-composite-$index")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body),
+                    ).andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            }
+        }
+
+        @Test
+        fun `missing customer store and courier owner profiles return not found contracts`() {
+            val missing = UUID.randomUUID()
+            val binding =
+                """
+                "binding": {
+                  "subjectId": "$missing",
+                  "expectedProfileVersion": 0,
+                  "verificationSessionId": "$sessionId",
+                  "reason": "Missing owner contract check",
+                  "evidenceDigest": "$EVIDENCE_DIGEST"
+                }
+                """.trimIndent()
+            listOf(
+                "/customer-display-name-corrections" to """{$binding,"displayName":"valid name"}""",
+                "/store-public-profile-corrections" to """{$binding,"displayName":"valid store"}""",
+                "/courier-relay-contact-corrections" to """{$binding,"email":"valid@example.com"}""",
+            ).forEachIndexed { index, (path, body) ->
+                mockMvc
+                    .perform(
+                        post("/api/v1/support/cases/$caseId/profile-changes$path")
+                            .with(jwt().jwt { it.subject(requesterId.toString()) })
+                            .header("Idempotency-Key", "missing-owner-$index")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body),
+                    ).andExpect(status().isNotFound)
+                    .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+            }
+        }
+
+        @Test
         fun `R3 exact payload requires different manager and operations approvers before execution`() {
             val created = profiles.submit(primaryPhoneCommand("phone-dual-create"))
             assertThat(created.riskClass).isEqualTo(ProfileRiskClass.R3)
@@ -191,6 +256,46 @@ internal class SupportProfileChangeIntegrationTest
                     created.actionRequestId,
                 ),
             ).isEqualTo(created.profileChangeId)
+        }
+
+        @Test
+        fun `approved execution fails closed after subject link is removed`() {
+            val (created, approved) = approvePrimaryPhone("phone-link-revoked")
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, " +
+                    "unlink_reason = 'REVIEW_TEST_UNLINK', unlink_case_version = 1 WHERE support_case_id = ? AND subject_id = ?",
+                requesterId,
+                caseId,
+                customerId,
+            )
+
+            assertExecutionDenied(created, approved, FailureCode.ACCESS_DENIED)
+            assertThat(currentCustomerVersion()).isZero()
+        }
+
+        @Test
+        fun `approved execution fails closed after requester permission is revoked`() {
+            val (created, approved) = approvePrimaryPhone("phone-permission-revoked")
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_PROFILE_R3_REQUEST'",
+                requesterId,
+            )
+
+            assertExecutionDenied(created, approved, FailureCode.ACCESS_DENIED)
+            assertThat(currentCustomerVersion()).isZero()
+        }
+
+        @Test
+        fun `approved primary-phone execution fails after registered-channel challenge is invalidated`() {
+            val (created, approved) = approvePrimaryPhone("phone-challenge-invalidated")
+            jdbcTemplate.update(
+                "UPDATE support_verification_challenge SET state = 'EXPIRED' WHERE session_id = ?",
+                sessionId,
+            )
+
+            assertExecutionDenied(created, approved, FailureCode.VERIFICATION_REQUIRED)
+            assertThat(currentCustomerVersion()).isZero()
         }
 
         @Test
@@ -295,6 +400,98 @@ internal class SupportProfileChangeIntegrationTest
                 .isOne()
         }
 
+        @Test
+        fun `expired notification claim rejoins committed delivery without repeating owner write`() {
+            val command = displayNameCommand("delivery-accept-gap", "복구대상")
+            val executed = profiles.submit(command)
+            val firstDispatch = notifications.commands.single()
+            val deliveryCountAfterFirstDispatch = count("notification_delivery")
+            val staleClaim = UUID.randomUUID()
+            jdbcTemplate.update(
+                """
+                UPDATE support_profile_change_notification
+                   SET delivery_id = NULL, state = 'PROCESSING', failure_code = NULL,
+                       claim_id = ?, claim_expires_at = now() - interval '1 second', updated_at = now()
+                 WHERE profile_change_id = ?
+                """.trimIndent(),
+                staleClaim,
+                executed.profileChangeId,
+            )
+            jdbcTemplate.update(
+                """
+                UPDATE support_profile_change
+                   SET notification_state = 'PENDING', notification_failure_code = NULL,
+                       updated_at = now(), version = version + 1
+                 WHERE id = ?
+                """.trimIndent(),
+                executed.profileChangeId,
+            )
+
+            assertThat(profiles.recoverNotifications()).isOne()
+            val recovered = profiles.submit(command)
+
+            assertThat(recovered.notificationState).isEqualTo(SupportProfileNotificationState.ACCEPTED)
+            assertThat(count("identity_customer_profile_change_history")).isOne()
+            assertThat(count("notification_delivery")).isEqualTo(deliveryCountAfterFirstDispatch)
+            assertThat(notifications.commands).hasSize(2)
+            assertThat(notifications.commands.last().occurredAt).isEqualTo(firstDispatch.occurredAt)
+            assertThat(notifications.commands.last().correlationId).isEqualTo(firstDispatch.correlationId)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT delivery_id FROM support_profile_change_notification WHERE profile_change_id = ?",
+                    UUID::class.java,
+                    executed.profileChangeId,
+                ),
+            ).isNotNull()
+        }
+
+        @Test
+        fun `notification lease admits one claimant and ignores a stale claimant result`() {
+            val executed = profiles.submit(displayNameCommand("notification-lease", "임대검증"))
+            val lineId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT id FROM support_profile_change_notification WHERE profile_change_id = ?",
+                        UUID::class.java,
+                        executed.profileChangeId,
+                    ),
+                )
+            val deliveryId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT delivery_id FROM support_profile_change_notification WHERE id = ?",
+                        UUID::class.java,
+                        lineId,
+                    ),
+                )
+            jdbcTemplate.update(
+                """
+                UPDATE support_profile_change_notification
+                   SET delivery_id = NULL, state = 'RETRY_SCHEDULED', failure_code = 'DEPENDENCY_UNAVAILABLE',
+                       claim_id = NULL, claim_expires_at = NULL, updated_at = now()
+                 WHERE id = ?
+                """.trimIndent(),
+                lineId,
+            )
+            val firstClaim = UUID.randomUUID()
+            val staleClaim = UUID.randomUUID()
+
+            val claimed = profileTransactions.claimNotifications(executed.profileChangeId, firstClaim, true)
+            val concurrentlyClaimed = profileTransactions.claimNotifications(executed.profileChangeId, staleClaim, true)
+            profileTransactions.acceptNotification(lineId, firstClaim, deliveryId)
+            profileTransactions.failNotification(lineId, staleClaim, "LATE_STALE_RESULT")
+
+            assertThat(claimed).hasSize(1)
+            assertThat(concurrentlyClaimed).isEmpty()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT state FROM support_profile_change_notification WHERE id = ?",
+                    String::class.java,
+                    lineId,
+                ),
+            ).isEqualTo("ACCEPTED")
+        }
+
         private fun displayNameApi(
             key: String,
             name: String,
@@ -346,6 +543,36 @@ internal class SupportProfileChangeIntegrationTest
                 key,
                 SupportProfileChangePayload.CustomerPrimaryPhone("010-5555-7777"),
             )
+
+        private fun approvePrimaryPhone(key: String): Pair<SupportProfileChangeResource, Long> {
+            val created = profiles.submit(primaryPhoneCommand("$key-create"))
+            decideManager(requireNotNull(created.actionRequestId), managerId, "$key-manager")
+            val approved = approveOperations(requireNotNull(created.actionRequestId)).resource
+            return created to approved.supportRequestVersion
+        }
+
+        private fun assertExecutionDenied(
+            created: SupportProfileChangeResource,
+            approvedRequestVersion: Long,
+            expected: FailureCode,
+        ) {
+            assertThatThrownBy {
+                profiles.execute(
+                    ExecuteSupportProfileChangeCommand(
+                        requesterId,
+                        created.profileChangeId,
+                        1,
+                        approvedRequestVersion,
+                        created.version,
+                        0,
+                        "execute-denied-${created.profileChangeId}",
+                        SupportProfileChangePayload.CustomerPrimaryPhone("010-5555-7777"),
+                    ),
+                )
+            }.isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(expected)
+        }
 
         private fun decideManager(
             requestId: UUID,

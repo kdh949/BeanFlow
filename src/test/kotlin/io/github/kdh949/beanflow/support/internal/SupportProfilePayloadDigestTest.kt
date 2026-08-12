@@ -19,6 +19,43 @@ internal class SupportProfilePayloadDigestTest {
     }
 
     @Test
+    fun `nullable canonical fields distinguish absence literal sentinel empty and delimiters`() {
+        val absent =
+            SupportProfilePayloadDigest.digest(
+                SUBJECT,
+                4,
+                SupportProfileChangePayload.StorePublicProfile(null, null, "x", null),
+            )
+        val literalSentinel =
+            SupportProfilePayloadDigest.digest(
+                SUBJECT,
+                4,
+                SupportProfileChangePayload.StorePublicProfile("<null>", null, "x", null),
+            )
+        val empty =
+            SupportProfilePayloadDigest.digest(
+                SUBJECT,
+                4,
+                SupportProfileChangePayload.StorePublicProfile("", null, "x", null),
+            )
+        val delimiterInFirst =
+            SupportProfilePayloadDigest.digest(
+                SUBJECT,
+                4,
+                SupportProfileChangePayload.StorePublicProfile("a|b", null, "c", null),
+            )
+        val delimiterInSecond =
+            SupportProfilePayloadDigest.digest(
+                SUBJECT,
+                4,
+                SupportProfileChangePayload.StorePublicProfile("a", null, "b|c", null),
+            )
+
+        assertThat(absent).isNotEqualTo(literalSentinel).isNotEqualTo(empty)
+        assertThat(delimiterInFirst).isNotEqualTo(delimiterInSecond)
+    }
+
+    @Test
     fun `typed payload and command rendering redact raw profile values`() {
         val raw = "account-secret-reference"
         val payload = SupportProfileChangePayload.StoreSettlementAccount(raw)

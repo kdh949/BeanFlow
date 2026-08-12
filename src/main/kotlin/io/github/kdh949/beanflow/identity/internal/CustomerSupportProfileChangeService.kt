@@ -278,11 +278,12 @@ internal class CustomerSupportProfileChangeRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     fun currentVersion(customerId: UUID): Long =
-        jdbcTemplate.queryForObject(
-            "SELECT version FROM identity_customer_support_profile WHERE customer_id = ?",
-            Long::class.java,
-            customerId,
-        ) ?: notFound()
+        jdbcTemplate
+            .query(
+                "SELECT version FROM identity_customer_support_profile WHERE customer_id = ?",
+                { rs, _ -> rs.getLong("version") },
+                customerId,
+            ).singleOrNull() ?: notFound()
 
     fun lock(customerId: UUID): CustomerProfileChangeRow =
         jdbcTemplate

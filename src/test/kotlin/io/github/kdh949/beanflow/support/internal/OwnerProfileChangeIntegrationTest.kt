@@ -10,6 +10,7 @@ import io.github.kdh949.beanflow.merchant.api.StoreSupportProfileChangeOperation
 import io.github.kdh949.beanflow.shared.api.BlindIndex
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.KeyedBlindIndexPort
 import io.github.kdh949.beanflow.shared.api.NormalizedExactSearchValue
 import io.github.kdh949.beanflow.shared.api.PersonalDataCryptoPort
@@ -157,6 +158,22 @@ internal class OwnerProfileChangeIntegrationTest
             assertThat(result.notificationTargets).hasSize(1)
             assertThat(result.notificationTargets.single().kind).isEqualTo(ProfileNotificationTargetKind.CURRENT)
             assertThat(databaseContains(rawReference)).isFalse()
+        }
+
+        @Test
+        fun `missing owner profiles are resource not found rather than dependency failures`() {
+            val missing = UUID.randomUUID()
+
+            listOf<() -> Unit>(
+                { customers.currentVersion(missing) },
+                { stores.currentVersion(missing) },
+                { couriers.currentVersion(missing) },
+            ).forEach { lookup ->
+                assertThatThrownBy(lookup)
+                    .isInstanceOf(DomainFailure::class.java)
+                    .extracting("code")
+                    .isEqualTo(FailureCode.RESOURCE_NOT_FOUND)
+            }
         }
 
         private fun databaseContains(raw: String): Boolean =

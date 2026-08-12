@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -79,13 +80,21 @@ internal data class StorePublicProfileRequest(
     @field:Size(max = 32) val publicPhone: String?,
     @field:Size(max = 1000) val description: String?,
     @field:Size(max = 1000) val pickupInstructions: String?,
-) : SensitiveProfileChangeRequest()
+) : SensitiveProfileChangeRequest() {
+    @get:AssertTrue(message = "At least one nonblank store public-profile field is required")
+    val hasValidChange: Boolean
+        get() = listOf(displayName, publicPhone, description, pickupInstructions).validOptionalChange()
+}
 
 internal data class StoreOperationsContactRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:Size(max = 32) val phone: String?,
     @field:Email @field:Size(max = 320) val email: String?,
-) : SensitiveProfileChangeRequest()
+) : SensitiveProfileChangeRequest() {
+    @get:AssertTrue(message = "At least one nonblank store operations-contact field is required")
+    val hasValidChange: Boolean
+        get() = listOf(phone, email).validOptionalChange()
+}
 
 internal data class StoreRepresentativeRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
@@ -110,7 +119,13 @@ internal data class CourierRelayContactRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:Size(max = 32) val phone: String?,
     @field:Email @field:Size(max = 320) val email: String?,
-) : SensitiveProfileChangeRequest()
+) : SensitiveProfileChangeRequest() {
+    @get:AssertTrue(message = "At least one nonblank courier relay-contact field is required")
+    val hasValidChange: Boolean
+        get() = listOf(phone, email).validOptionalChange()
+}
+
+private fun List<String?>.validOptionalChange(): Boolean = any { it != null } && filterNotNull().all { it.isNotBlank() }
 
 internal data class CourierProviderIdentityRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,

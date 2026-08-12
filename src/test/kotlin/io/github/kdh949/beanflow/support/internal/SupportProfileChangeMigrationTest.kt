@@ -40,7 +40,7 @@ internal class SupportProfileChangeMigrationTest {
 
     @Test
     fun `V48 creates Support workflow and owner-local history reset and notification targets`() {
-        assertThat(appliedVersions()).contains("48")
+        assertThat(appliedVersions()).contains("48", "49")
         assertThat(
             jdbcTemplate.queryForList(
                 """
@@ -61,6 +61,22 @@ internal class SupportProfileChangeMigrationTest {
                 String::class.java,
             ),
         ).hasSize(12)
+    }
+
+    @Test
+    fun `V49 adds immutable notification source and exclusive recoverable claim`() {
+        assertThat(columns("support_profile_change_notification"))
+            .contains("source_occurred_at", "source_correlation_id", "claim_id", "claim_expires_at")
+        val definition =
+            jdbcTemplate.queryForObject(
+                """
+                SELECT string_agg(pg_get_constraintdef(oid), ' ' ORDER BY conname)
+                  FROM pg_constraint
+                 WHERE conrelid = 'support_profile_change_notification'::regclass
+                """.trimIndent(),
+                String::class.java,
+            )
+        assertThat(definition).contains("PROCESSING", "claim_id IS NOT NULL", "source_occurred_at")
     }
 
     @Test

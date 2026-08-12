@@ -79,12 +79,14 @@ R3/R4: AWAITING_APPROVAL -> READY_FOR_EXECUTION -> EXECUTED
 new revision / owner version or digest mismatch -> STALE (owner write does not run)
 
 notificationState after EXECUTED:
-PENDING -> ACCEPTED
-PENDING -> RETRY_SCHEDULED -> ACCEPTED | MANUAL_REVIEW
+PENDING -> PROCESSING -> ACCEPTED
+                    -> RETRY_SCHEDULED -> PROCESSING -> ACCEPTED | MANUAL_REVIEW
 ```
 
 `EXECUTED`는 owner history/current row 또는 reset intent, Support result, S60 one-time approval consumption과
 PII-free Audit의 단일 commit을 뜻한다. Notification은 그 뒤의 독립 경계이며 retry가 owner write를 반복하지 않는다.
+`PROCESSING` line은 2분 claim lease와 immutable source timestamp·최초 correlation을 가진다. delivery commit 뒤 Support
+acknowledgement 전 장애는 lease 만료 뒤 같은 logical source의 기존 delivery id에 재결합한다.
 R4는 모든 상태에서 raw secret을 받거나 저장하지 않는다.
 
 ## Delivery

@@ -413,8 +413,12 @@ internal class StoreSupportProfileChangeRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     fun currentVersion(storeId: UUID): Long =
-        jdbcTemplate.queryForObject("SELECT version FROM merchant_store_support_profile WHERE store_id = ?", Long::class.java, storeId)
-            ?: notFound()
+        jdbcTemplate
+            .query(
+                "SELECT version FROM merchant_store_support_profile WHERE store_id = ?",
+                { rs, _ -> rs.getLong("version") },
+                storeId,
+            ).singleOrNull() ?: notFound()
 
     fun lock(storeId: UUID): StoreProfileChangeRow =
         jdbcTemplate
