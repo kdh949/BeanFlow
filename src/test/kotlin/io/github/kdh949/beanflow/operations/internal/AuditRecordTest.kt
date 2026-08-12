@@ -98,6 +98,32 @@ internal class AuditRecordTest
         }
 
         @Test
+        fun `opaque reference UUID is not mistaken for a phone number`() {
+            val phoneShapedReference = "order:abcde010-1234-5678-8abc-123456789abc:completed:7"
+
+            transactionTemplate.executeWithoutResult {
+                operations.appendAll(listOf(command(after = mapOf("itemSource" to phoneShapedReference))))
+            }
+
+            assertThat(count()).isOne()
+        }
+
+        @Test
+        fun `raw phone next to an opaque UUID is still rejected`() {
+            val unsafeReference = "order:${UUID.randomUUID()}:010-1234-5678"
+
+            assertThatThrownBy {
+                transactionTemplate.executeWithoutResult {
+                    operations.appendAll(listOf(command(after = mapOf("note" to unsafeReference))))
+                }
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+            }
+
+            assertThat(count()).isZero()
+        }
+
+        @Test
         fun `duplicate audit key is rejected instead of overwriting append only history`() {
             val command = command()
             transactionTemplate.executeWithoutResult { operations.appendAll(listOf(command)) }
