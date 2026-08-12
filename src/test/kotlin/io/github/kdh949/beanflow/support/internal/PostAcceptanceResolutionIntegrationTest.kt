@@ -284,7 +284,6 @@ internal class PostAcceptanceResolutionIntegrationTest
             val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.FULL_REFUND)
             val resolutionId = service.create(fixture.createCommand("concurrent-plan")).resolutionId
             gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-concurrent-refund"))
-            val block = gateway.blockNextRefund()
             val command =
                 ExecutePostAcceptanceResolutionCommand(
                     EXECUTOR_ID,
@@ -294,20 +293,27 @@ internal class PostAcceptanceResolutionIntegrationTest
                     ORDER_VERSION,
                     "concurrent-execute",
                 )
+            val ready = CountDownLatch(2)
+            val start = CountDownLatch(1)
             val executor = Executors.newFixedThreadPool(2)
             try {
-                val first = executor.submit<PostAcceptanceResolutionResource> { service.execute(command) }
-                assertThat(block.awaitStarted(20, TimeUnit.SECONDS)).isTrue()
-                val second = executor.submit<PostAcceptanceResolutionResource> { service.execute(command) }
-                block.release()
-                first.get(30, TimeUnit.SECONDS)
-                second.get(30, TimeUnit.SECONDS)
+                val futures =
+                    (1..2).map {
+                        executor.submit<PostAcceptanceResolutionResource> {
+                            ready.countDown()
+                            check(start.await(30, TimeUnit.SECONDS))
+                            service.execute(command)
+                        }
+                    }
+                assertThat(ready.await(30, TimeUnit.SECONDS)).isTrue()
+                start.countDown()
+                futures.forEach { it.get(60, TimeUnit.SECONDS) }
 
                 assertThat(gateway.rejectionRefundCalls.get()).isOne()
                 assertThat(count("payment_refund")).isOne()
                 assertThat(service.get(EXECUTOR_ID, resolutionId).state.name).isEqualTo("RESOLVED")
             } finally {
-                block.release()
+                start.countDown()
                 executor.shutdownNow()
             }
         }

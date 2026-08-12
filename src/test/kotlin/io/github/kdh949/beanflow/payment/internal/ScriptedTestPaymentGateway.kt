@@ -145,10 +145,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
         private val started = CountDownLatch(1)
         private val release = CountDownLatch(1)
 
-        fun awaitStarted(
-            timeout: Long = 5,
-            unit: TimeUnit = TimeUnit.SECONDS,
-        ): Boolean = started.await(timeout, unit)
+        fun awaitStarted(): Boolean = started.await(5, TimeUnit.SECONDS)
 
         fun release() {
             release.countDown()
