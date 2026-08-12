@@ -45,6 +45,7 @@ internal class SupportOrderChangeAuthorization private constructor(
     val expiresAt: Instant,
     val maxSuccessfulUses: Int,
     val costResponsibility: SupportOrderChangeCostResponsibility,
+    val revokedAt: Instant?,
     private val uses: MutableMap<UUID, ConsumeSupportOrderChangeAuthorizationCommand> = linkedMapOf(),
 ) {
     val successfulUses: Int
@@ -53,9 +54,25 @@ internal class SupportOrderChangeAuthorization private constructor(
     init {
         require(action == SupportActionType.ORDER_CANCELLATION || action == SupportActionType.PICKUP_RESCHEDULE)
         require(policyVersion.length in 1..160 && policyVersion.none(Char::isISOControl))
+        require(policyVersion == INITIAL_POLICY_VERSION)
         require(authorizedAt.isBefore(expiresAt))
         require(maxSuccessfulUses > 0)
         require(costResponsibility == SupportOrderChangeCostResponsibility.STORE)
+        require(revokedAt == null || !revokedAt.isBefore(authorizedAt))
+        when (type) {
+            SupportOrderChangeAuthorizationType.CONFIRMATION -> {
+                require(requestId != null && revisionNumber != null && revisionNumber > 0)
+                require(payloadDigest != null && payloadDigest.matches(SHA_256))
+                require(targetVersion != null && targetVersion >= 0)
+                require(maxSuccessfulUses == 1)
+            }
+
+            SupportOrderChangeAuthorizationType.DELEGATION -> {
+                require(requestId == null && revisionNumber == null && payloadDigest == null && targetVersion == null)
+                val (ttl, budget) = delegationLimit(action)
+                require(expiresAt == authorizedAt.plus(ttl) && maxSuccessfulUses == budget)
+            }
+        }
     }
 
     fun consume(
@@ -71,6 +88,7 @@ internal class SupportOrderChangeAuthorization private constructor(
             require(previous == command)
             return SupportOrderChangeAuthorizationConsumption.ALREADY_APPLIED
         }
+        check(revokedAt == null)
         check(now.isBefore(expiresAt))
         check(successfulUses < maxSuccessfulUses)
         uses[command.executionId] = command
@@ -117,6 +135,7 @@ internal class SupportOrderChangeAuthorization private constructor(
                 requestExpiresAt,
                 1,
                 costResponsibility,
+                null,
             )
 
         fun delegation(
@@ -129,12 +148,7 @@ internal class SupportOrderChangeAuthorization private constructor(
             costResponsibility: SupportOrderChangeCostResponsibility,
         ): SupportOrderChangeAuthorization {
             require(policyVersion == INITIAL_POLICY_VERSION)
-            val (ttl, budget) =
-                when (action) {
-                    SupportActionType.ORDER_CANCELLATION -> Duration.ofMinutes(10) to 1
-                    SupportActionType.PICKUP_RESCHEDULE -> Duration.ofMinutes(30) to 3
-                    SupportActionType.POST_ACCEPTANCE_RESOLUTION -> throw IllegalArgumentException("Unsupported delegated action")
-                }
+            val (ttl, budget) = delegationLimit(action)
             return SupportOrderChangeAuthorization(
                 id,
                 storeId,
@@ -150,7 +164,52 @@ internal class SupportOrderChangeAuthorization private constructor(
                 authorizedAt.plus(ttl),
                 budget,
                 costResponsibility,
+                null,
             )
         }
+
+        fun reconstitute(
+            id: UUID,
+            storeId: UUID,
+            action: SupportActionType,
+            type: SupportOrderChangeAuthorizationType,
+            policyVersion: String,
+            requestId: UUID?,
+            revisionNumber: Int?,
+            payloadDigest: String?,
+            targetVersion: Long?,
+            authorizedByActorId: UUID,
+            authorizedAt: Instant,
+            expiresAt: Instant,
+            maxSuccessfulUses: Int,
+            costResponsibility: SupportOrderChangeCostResponsibility,
+            revokedAt: Instant?,
+            uses: List<ConsumeSupportOrderChangeAuthorizationCommand>,
+        ): SupportOrderChangeAuthorization =
+            SupportOrderChangeAuthorization(
+                id,
+                storeId,
+                action,
+                type,
+                policyVersion,
+                requestId,
+                revisionNumber,
+                payloadDigest,
+                targetVersion,
+                authorizedByActorId,
+                authorizedAt,
+                expiresAt,
+                maxSuccessfulUses,
+                costResponsibility,
+                revokedAt,
+                uses.associateByTo(linkedMapOf()) { it.executionId },
+            )
+
+        private fun delegationLimit(action: SupportActionType): Pair<Duration, Int> =
+            when (action) {
+                SupportActionType.ORDER_CANCELLATION -> Duration.ofMinutes(10) to 1
+                SupportActionType.PICKUP_RESCHEDULE -> Duration.ofMinutes(30) to 3
+                SupportActionType.POST_ACCEPTANCE_RESOLUTION -> throw IllegalArgumentException("Unsupported delegated action")
+            }
     }
 }

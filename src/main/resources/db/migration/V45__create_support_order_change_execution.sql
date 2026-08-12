@@ -20,6 +20,12 @@ CREATE TABLE support_order_change_authorization (
     action_payload_digest varchar(64),
     target_version bigint,
     authorized_by_actor_id uuid NOT NULL,
+    idempotency_key varchar(128) NOT NULL CHECK (
+        idempotency_key = btrim(idempotency_key)
+        AND length(idempotency_key) BETWEEN 8 AND 128
+        AND idempotency_key !~ '[[:cntrl:]]'
+    ),
+    payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
     authorized_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
     max_successful_uses integer NOT NULL CHECK (max_successful_uses BETWEEN 1 AND 3),
@@ -31,7 +37,8 @@ CREATE TABLE support_order_change_authorization (
     CONSTRAINT chk_support_order_change_authorization_time CHECK (
         authorized_at < expires_at AND (revoked_at IS NULL OR revoked_at >= authorized_at)
     ),
-    CONSTRAINT chk_support_order_change_authorization_cost CHECK (cost_responsibility = 'STORE')
+    CONSTRAINT chk_support_order_change_authorization_cost CHECK (cost_responsibility = 'STORE'),
+    CONSTRAINT uq_support_order_change_authorization_command UNIQUE (authorized_by_actor_id, idempotency_key)
 );
 
 ALTER TABLE support_order_change_authorization
@@ -74,7 +81,12 @@ CREATE TABLE support_order_change_execution (
     payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
     action_payload_digest varchar(64) NOT NULL CHECK (action_payload_digest ~ '^[0-9a-f]{64}$'),
     expected_target_version bigint NOT NULL CHECK (expected_target_version >= 0),
-    target_version_after bigint CHECK (target_version_after >= 0),
+    target_version_after bigint NOT NULL CHECK (target_version_after >= 0),
+    previous_target_state varchar(32) NOT NULL,
+    current_target_state varchar(32) NOT NULL,
+    previous_pickup_slot_id uuid NOT NULL,
+    current_pickup_slot_id uuid NOT NULL,
+    payment_recovery_state varchar(32),
     authorization_id uuid REFERENCES support_order_change_authorization (id),
     outcome varchar(32) NOT NULL CHECK (outcome IN ('EXECUTED', 'RESOLUTION_REQUIRED')),
     reason_code varchar(40) NOT NULL CHECK (
@@ -88,9 +100,10 @@ CREATE TABLE support_order_change_execution (
         REFERENCES support_action_revision (request_id, id, revision_number),
     CONSTRAINT uq_support_order_change_execution_command UNIQUE (actor_id, idempotency_key),
     CONSTRAINT uq_support_order_change_execution_request UNIQUE (request_id),
-    CONSTRAINT chk_support_order_change_execution_outcome CHECK (
-        (outcome = 'EXECUTED' AND target_version_after IS NOT NULL)
-        OR (outcome = 'RESOLUTION_REQUIRED' AND target_version_after IS NULL)
+    CONSTRAINT chk_support_order_change_execution_recovery CHECK (
+        (action = 'ORDER_CANCELLATION' AND outcome = 'EXECUTED' AND payment_recovery_state IS NOT NULL)
+        OR (action = 'ORDER_CANCELLATION' AND outcome = 'RESOLUTION_REQUIRED' AND payment_recovery_state IS NULL)
+        OR (action = 'PICKUP_RESCHEDULE' AND payment_recovery_state IS NULL)
     ),
     CONSTRAINT chk_support_order_change_execution_retention CHECK (
         retention_expires_at = occurred_at + INTERVAL '90 days'
@@ -178,6 +191,20 @@ CREATE INDEX idx_fulfillment_pickup_reschedule_order
 CREATE TRIGGER trg_fulfillment_pickup_reschedule_history_append_only
     BEFORE UPDATE OR DELETE ON fulfillment_pickup_reschedule_history
     FOR EACH ROW EXECUTE FUNCTION reject_support_case_history_mutation();
+
+ALTER TABLE notification_delivery
+    DROP CONSTRAINT chk_notification_delivery_template,
+    ADD CONSTRAINT chk_notification_delivery_template CHECK (
+        template IN (
+            'STORE_ACCEPTANCE_WARNING',
+            'ORDER_REJECTED',
+            'ORDER_READY',
+            'ORDER_CANCELLATION_ACCEPTED',
+            'CUSTOMER_CANCELLATION_REFUND_SUCCEEDED',
+            'CUSTOMER_CANCELLATION_REFUND_DELAYED',
+            'SUPPORT_PICKUP_RESCHEDULED'
+        )
+    );
 
 ALTER TABLE ordering_order
     DROP CONSTRAINT chk_order_cancellation_reason_fields,

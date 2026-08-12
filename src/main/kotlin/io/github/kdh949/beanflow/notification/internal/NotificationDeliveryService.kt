@@ -6,8 +6,11 @@ import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.notification.api.AcceptedCustomerCancellationNotification
+import io.github.kdh949.beanflow.notification.api.AcceptedSupportOrderChangeNotification
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
+import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDelivery
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
@@ -72,7 +75,8 @@ internal class NotificationDeliveryService(
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.notification.claim-lease:PT1M}")
     private val claimLease: Duration,
-) : CustomerCancellationNotificationOperations {
+) : CustomerCancellationNotificationOperations,
+    SupportOrderChangeNotificationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun requestAccepted(
         command: RequestCustomerCancellationAcceptedNotificationCommand,
@@ -103,6 +107,38 @@ internal class NotificationDeliveryService(
                 ),
             )
         return AcceptedCustomerCancellationNotification(delivery.id, delivery.state.name)
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun requestPickupRescheduled(
+        command: RequestSupportPickupRescheduledNotificationCommand,
+    ): AcceptedSupportOrderChangeNotification {
+        val delivery =
+            request(
+                NewNotificationDelivery(
+                    eventId = command.executionId,
+                    eventType = "SupportPickupRescheduledV1",
+                    logicalSource = "order:${command.orderId}:support-pickup-reschedule:${command.orderAggregateVersion}",
+                    providerIdempotencyKey =
+                        "notification:support-pickup-reschedule:${command.orderId}:${command.orderAggregateVersion}",
+                    orderId = command.orderId,
+                    recipientType = NotificationRecipientType.CUSTOMER,
+                    recipientId = command.customerId,
+                    logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                    template = NotificationTemplate.SUPPORT_PICKUP_RESCHEDULED,
+                    payload =
+                        mapOf(
+                            "orderId" to command.orderId,
+                            "storeId" to command.storeId,
+                            "previousPickupSlotId" to command.previousPickupSlotId,
+                            "currentPickupSlotId" to command.currentPickupSlotId,
+                            "rescheduledAt" to command.occurredAt,
+                        ),
+                    correlationId = command.correlationId,
+                    occurredAt = command.occurredAt,
+                ),
+            )
+        return AcceptedSupportOrderChangeNotification(delivery.id, delivery.state.name)
     }
 
     @Transactional

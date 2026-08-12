@@ -21,6 +21,7 @@ internal enum class NotificationTemplate {
     ORDER_CANCELLATION_ACCEPTED,
     CUSTOMER_CANCELLATION_REFUND_SUCCEEDED,
     CUSTOMER_CANCELLATION_REFUND_DELAYED,
+    SUPPORT_PICKUP_RESCHEDULED,
 }
 
 internal enum class NotificationDeliveryState {

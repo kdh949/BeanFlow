@@ -124,6 +124,8 @@ internal class ApiExceptionHandler(
             FailureCode.VERIFICATION_REQUIRED,
             FailureCode.DATA_ACCESS_GRANT_REQUIRED,
             FailureCode.DATA_ACCESS_SCOPE_MISMATCH,
+            FailureCode.SUPPORT_ORDER_CHANGE_AUTHORIZATION_REQUIRED,
+            FailureCode.SUPPORT_ORDER_CHANGE_AUTHORIZATION_SCOPE_MISMATCH,
             -> HttpStatus.FORBIDDEN
 
             FailureCode.PAYMENT_DECLINED,

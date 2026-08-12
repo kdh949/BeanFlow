@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupCommand
 import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupResult
+import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
+import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
@@ -26,6 +28,7 @@ internal class OrderingSupportPickupRescheduleService(
     private val orders: OrderJpaRepository,
     private val histories: OrderingSupportOrderChangeHistoryJpaRepository,
     private val pickupReservations: PickupReservationOperations,
+    private val notifications: SupportOrderChangeNotificationOperations,
     private val audits: AuditRecordOperations,
     private val identifiers: IdentifierSource,
     private val correlations: CorrelationIdSource,
@@ -66,7 +69,21 @@ internal class OrderingSupportPickupRescheduleService(
                 now,
             )
         histories.save(history)
-        appendAudit(command, history)
+        val correlationId = correlations.currentOrCreate()
+        notifications.requestPickupRescheduled(
+            RequestSupportPickupRescheduledNotificationCommand(
+                command.supportExecutionId,
+                order.id,
+                order.customerId,
+                order.storeId,
+                order.version + 1,
+                previousSlotId,
+                order.pickupSlotId,
+                now,
+                correlationId,
+            ),
+        )
+        appendAudit(command, history, correlationId)
         return history.report(SupportOrderChangeOwnerResult.APPLIED)
     }
 
@@ -117,6 +134,7 @@ internal class OrderingSupportPickupRescheduleService(
     private fun appendAudit(
         command: SupportPickupRescheduleCommand,
         history: OrderingSupportOrderChangeHistoryEntity,
+        correlationId: String,
     ) {
         audits.appendAll(
             listOf(
@@ -131,7 +149,7 @@ internal class OrderingSupportPickupRescheduleService(
                     reason = "SUPPORT_CASE_RESOLUTION",
                     beforeSummary = mapOf("state" to history.previousState, "pickupSlotChanged" to "false"),
                     afterSummary = mapOf("state" to history.currentState, "pickupSlotChanged" to "true"),
-                    correlationId = correlations.currentOrCreate(),
+                    correlationId = correlationId,
                     sourceReference = "${command.sourceReference}:order-audit",
                 ),
             ),

@@ -56,6 +56,8 @@ internal class SupportActionRequestEntity(
     var supportApproverActorId: UUID?,
     @Column(name = "operations_approver_actor_id")
     var operationsApproverActorId: UUID?,
+    @Column(name = "terminal_execution_id")
+    var terminalExecutionId: UUID?,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
@@ -74,6 +76,7 @@ internal class SupportActionRequestEntity(
             state = state,
             supportApproverActorId = supportApproverActorId,
             operationsApproverActorId = operationsApproverActorId,
+            terminalExecutionId = terminalExecutionId,
             version = version,
             lastChangedAt = updatedAt,
         )
@@ -84,6 +87,7 @@ internal class SupportActionRequestEntity(
         state = aggregate.state
         supportApproverActorId = aggregate.supportApproverActorId
         operationsApproverActorId = aggregate.operationsApproverActorId
+        terminalExecutionId = aggregate.terminalExecutionId
         updatedAt = aggregate.currentRevision.createdAt.coerceAtLeast(updatedAt)
         version = aggregate.version
     }

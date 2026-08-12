@@ -86,6 +86,12 @@ internal class SupportOrderChangeMigrationTest {
 
         assertThat(definitions).contains("EXECUTED", "RESOLUTION_REQUIRED", "CONFIRMATION", "DELEGATION")
         assertThat(definitions).contains("STORE", "SUPPORT_REQUEST")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_notification_delivery_template'",
+                String::class.java,
+            ),
+        ).contains("SUPPORT_PICKUP_RESCHEDULED")
     }
 
     private fun flyway(cleanDisabled: Boolean = true): Flyway =
