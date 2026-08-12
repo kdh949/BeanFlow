@@ -14,6 +14,9 @@ import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificati
 import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificationView
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
+import io.github.kdh949.beanflow.notification.api.AcceptedProfileChangeNotification
+import io.github.kdh949.beanflow.notification.api.ProfileChangeNotificationOperations
+import io.github.kdh949.beanflow.notification.api.RequestProfileChangeNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestGoodwillCompensationNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
@@ -80,13 +83,15 @@ internal class NotificationDeliveryService(
     private val reprocessingCaseOperations: NotificationReprocessingCaseOperations,
     private val identifierSource: IdentifierSource,
     private val objectMapper: ObjectMapper,
+    private val profileTargets: ProfileNotificationTargetResolver,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.notification.claim-lease:PT1M}")
     private val claimLease: Duration,
 ) : CustomerCancellationNotificationOperations,
     SupportOrderChangeNotificationOperations,
     PostAcceptanceResolutionNotificationOperations,
-    GoodwillCompensationNotificationOperations {
+    GoodwillCompensationNotificationOperations,
+    ProfileChangeNotificationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun requestAccepted(
         command: RequestCustomerCancellationAcceptedNotificationCommand,
@@ -234,6 +239,42 @@ internal class NotificationDeliveryService(
             .orElse(null)
             ?.takeIf { it.template == NotificationTemplate.SUPPORT_GOODWILL_COMPENSATION_ISSUED }
             ?.let { GoodwillCompensationNotificationView(it.id, it.state.name, it.updatedAt) }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun requestProfileChange(
+        command: RequestProfileChangeNotificationCommand,
+    ): AcceptedProfileChangeNotification {
+        if (command.purpose !in PROFILE_CHANGE_PURPOSES || command.correlationId.isBlank()) {
+            fail(FailureCode.INVALID_REQUEST, "Profile change notification command is invalid")
+        }
+        val delivery =
+            request(
+                NewNotificationDelivery(
+                    eventId = command.ownerTargetId,
+                    eventType = "SupportProfileChangedV1",
+                    logicalSource = "support-profile-change:${command.profileChangeId}:target:${command.ownerTargetId}",
+                    providerIdempotencyKey = "notification:support-profile-change:${command.profileChangeId}:${command.ownerTargetId}",
+                    orderId = command.profileChangeId,
+                    recipientType = NotificationRecipientType.PROFILE_TARGET,
+                    recipientId = command.ownerTargetId,
+                    logicalChannel = command.targetKind.logicalChannel(),
+                    template = NotificationTemplate.SUPPORT_PROFILE_CHANGED,
+                    payload =
+                        mapOf(
+                            "profileChangeId" to command.profileChangeId,
+                            "ownerType" to command.ownerType.name,
+                            "targetKind" to command.targetKind.name,
+                            "channel" to command.channel.name,
+                            "purpose" to command.purpose,
+                            "occurredAt" to command.occurredAt,
+                            "locale" to "ko-KR",
+                        ),
+                    correlationId = command.correlationId,
+                    occurredAt = command.occurredAt,
+                ),
+            )
+        return AcceptedProfileChangeNotification(delivery.id, delivery.state.name)
+    }
 
     @Transactional
     fun requestWarning(event: StoreAcceptanceWarningRequestedV1) {
@@ -393,8 +434,14 @@ internal class NotificationDeliveryService(
         }
     }
 
-    fun callProvider(claim: ClaimedNotificationDelivery): NotificationProviderResult =
-        provider.send(
+    fun callProvider(claim: ClaimedNotificationDelivery): NotificationProviderResult {
+        val destination =
+            if (claim.recipientType == NotificationRecipientType.PROFILE_TARGET) {
+                profileTargets.resolve(claim.recipientId, claim.logicalChannel, claim.payloadJson).destinationBytes()
+            } else {
+                null
+            }
+        return provider.send(
             NotificationProviderRequest(
                 deliveryId = claim.deliveryId,
                 recipientType = claim.recipientType,
@@ -403,8 +450,10 @@ internal class NotificationDeliveryService(
                 template = claim.template,
                 payloadJson = claim.payloadJson,
                 providerIdempotencyKey = claim.providerIdempotencyKey,
+                destination = destination,
             ),
         )
+    }
 
     @Transactional
     fun recordResult(
@@ -694,6 +743,23 @@ internal class NotificationDeliveryService(
     ): Nothing = throw DomainFailure(code, message)
 
     private companion object {
+        val PROFILE_CHANGE_PURPOSES =
+            setOf(
+                "CUSTOMER_DISPLAY_NAME",
+                "CUSTOMER_LEGAL_NAME_TYPO",
+                "CUSTOMER_PRIMARY_PHONE",
+                "CUSTOMER_CREDENTIAL_RESET",
+                "STORE_PUBLIC_PROFILE",
+                "STORE_OPERATIONS_CONTACT",
+                "STORE_REPRESENTATIVE",
+                "STORE_SETTLEMENT_ACCOUNT",
+                "STORE_ACCESS_REREGISTRATION",
+                "COURIER_DISPLAY_NAME",
+                "COURIER_RELAY_CONTACT",
+                "COURIER_PROVIDER_IDENTITY",
+                "COURIER_PAYOUT_REFERENCE",
+                "COURIER_PROVIDER_REREGISTRATION",
+            )
         const val MAX_ATTEMPTS = 4
         val RETRY_DELAYS: List<Duration> =
             listOf(

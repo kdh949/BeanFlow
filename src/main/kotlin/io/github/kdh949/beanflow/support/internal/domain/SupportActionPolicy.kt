@@ -8,6 +8,7 @@ internal enum class SupportActionType {
     PICKUP_RESCHEDULE,
     POST_ACCEPTANCE_RESOLUTION,
     GOODWILL_COMPENSATION,
+    PROFILE_CHANGE,
 }
 
 internal enum class SupportActionOrderState {
@@ -168,6 +169,10 @@ internal class SupportActionPolicy {
             }
 
             SupportActionType.GOODWILL_COMPENSATION -> {
+                null
+            }
+
+            SupportActionType.PROFILE_CHANGE -> {
                 null
             }
         }
