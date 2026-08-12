@@ -341,5 +341,297 @@ internal data class SupportCompensationCostSnapshot(
 
     companion object {
         private val HEX_SHA_256 = Regex("^[0-9a-f]{64}$")
+
+        fun platform(): SupportCompensationCostSnapshot =
+            SupportCompensationCostSnapshot(
+                responsibility = SupportCompensationResponsibility.PLATFORM,
+                evidenceBasis = null,
+                evidenceDigest = null,
+                platformShareBps = 10_000,
+                storeShareBps = 0,
+            )
+    }
+}
+
+internal enum class SupportCompensationRequestState {
+    AWAITING_APPROVAL,
+    READY_FOR_EXECUTION,
+    BENEFIT_ISSUED,
+    NOTIFICATION_RETRY,
+    NOTIFIED,
+    MANUAL_REVIEW,
+}
+
+internal data class SupportCompensationBenefitChange(
+    val benefitId: UUID,
+    val previousState: SupportCompensationRequestState,
+    val currentState: SupportCompensationRequestState,
+    val requestVersion: Long,
+    val occurredAt: Instant,
+    val replayed: Boolean,
+)
+
+internal class SupportCompensationRequest private constructor(
+    val id: UUID,
+    val supportCaseId: UUID,
+    val customerId: UUID,
+    val incidentId: UUID,
+    val orderId: UUID?,
+    val storeId: UUID?,
+    val requesterActorId: UUID,
+    var executorActorId: UUID,
+    val benefitType: SupportCompensationBenefitType,
+    val amountKrw: Long,
+    val couponTemplateId: UUID?,
+    val policyVersionId: UUID,
+    val band: SupportCompensationBand,
+    val route: SupportActionApprovalRoute,
+    val verificationSessionId: UUID,
+    val targetVersion: Long,
+    val costSnapshot: SupportCompensationCostSnapshot,
+    val payloadDigest: String,
+    val evidenceDigest: String,
+    val actionRequestId: UUID?,
+    var state: SupportCompensationRequestState,
+    var terminalBenefitId: UUID?,
+    var notificationDeliveryId: UUID?,
+    var notificationFailureCode: String?,
+    var version: Long,
+    private var lastChangedAt: Instant,
+) {
+    fun markApprovalReady(
+        approvalRequestId: UUID,
+        expectedVersion: Long,
+        occurredAt: Instant,
+    ) {
+        check(state == SupportCompensationRequestState.AWAITING_APPROVAL) { "Compensation request is not awaiting approval" }
+        check(actionRequestId == approvalRequestId) { "Compensation approval request binding is stale" }
+        check(version == expectedVersion) { "Compensation request version is stale" }
+        requireChronology(occurredAt)
+        state = SupportCompensationRequestState.READY_FOR_EXECUTION
+        version += 1
+        lastChangedAt = occurredAt
+    }
+
+    fun completeBenefit(
+        benefitId: UUID,
+        actorId: UUID,
+        exactPayloadDigest: String,
+        currentTargetVersion: Long,
+        occurredAt: Instant,
+    ): SupportCompensationBenefitChange {
+        require(actorId == executorActorId) { "Only the assigned actor can execute compensation" }
+        check(exactPayloadDigest == payloadDigest) { "Compensation payload binding is stale" }
+        check(currentTargetVersion == targetVersion) { "Compensation target version is stale" }
+        requireChronology(occurredAt)
+        terminalBenefitId?.let { existing ->
+            check(existing == benefitId) { "Compensation request already issued another benefit" }
+            return SupportCompensationBenefitChange(existing, state, state, version, occurredAt, true)
+        }
+        check(state == SupportCompensationRequestState.READY_FOR_EXECUTION) { "Compensation request is not ready for execution" }
+        val previous = state
+        terminalBenefitId = benefitId
+        state = SupportCompensationRequestState.BENEFIT_ISSUED
+        version += 1
+        lastChangedAt = occurredAt
+        return SupportCompensationBenefitChange(benefitId, previous, state, version, occurredAt, false)
+    }
+
+    fun markNotificationRetry(
+        failureCode: String,
+        occurredAt: Instant,
+    ) {
+        check(state == SupportCompensationRequestState.BENEFIT_ISSUED || state == SupportCompensationRequestState.NOTIFICATION_RETRY) {
+            "Only issued compensation can schedule notification retry"
+        }
+        require(failureCode.matches(FAILURE_CODE)) { "Notification failure code is invalid" }
+        requireChronology(occurredAt)
+        state = SupportCompensationRequestState.NOTIFICATION_RETRY
+        notificationFailureCode = failureCode
+        version += 1
+        lastChangedAt = occurredAt
+    }
+
+    fun completeNotification(
+        deliveryId: UUID,
+        occurredAt: Instant,
+    ) {
+        if (state == SupportCompensationRequestState.NOTIFIED && notificationDeliveryId == deliveryId) return
+        check(state == SupportCompensationRequestState.BENEFIT_ISSUED || state == SupportCompensationRequestState.NOTIFICATION_RETRY) {
+            "Compensation notification is not pending"
+        }
+        requireChronology(occurredAt)
+        state = SupportCompensationRequestState.NOTIFIED
+        notificationDeliveryId = deliveryId
+        notificationFailureCode = null
+        version += 1
+        lastChangedAt = occurredAt
+    }
+
+    fun markManualReview(
+        failureCode: String,
+        occurredAt: Instant,
+    ) {
+        check(terminalBenefitId != null) { "Only terminal compensation can require manual review" }
+        require(failureCode.matches(FAILURE_CODE)) { "Manual review failure code is invalid" }
+        requireChronology(occurredAt)
+        state = SupportCompensationRequestState.MANUAL_REVIEW
+        notificationFailureCode = failureCode
+        version += 1
+        lastChangedAt = occurredAt
+    }
+
+    private fun requireChronology(occurredAt: Instant) {
+        require(!occurredAt.isBefore(lastChangedAt)) { "Compensation time cannot move backward" }
+    }
+
+    companion object {
+        fun open(
+            id: UUID,
+            supportCaseId: UUID,
+            customerId: UUID,
+            incidentId: UUID,
+            orderId: UUID?,
+            storeId: UUID?,
+            requesterActorId: UUID,
+            executorActorId: UUID,
+            benefitType: SupportCompensationBenefitType,
+            amountKrw: Long,
+            couponTemplateId: UUID?,
+            policyVersionId: UUID,
+            band: SupportCompensationBand,
+            route: SupportActionApprovalRoute,
+            verificationSessionId: UUID,
+            targetVersion: Long,
+            costSnapshot: SupportCompensationCostSnapshot,
+            payloadDigest: String,
+            evidenceDigest: String,
+            actionRequestId: UUID?,
+            createdAt: Instant,
+        ): SupportCompensationRequest {
+            require(amountKrw > 0) { "Compensation amount must be positive" }
+            require(targetVersion >= 0) { "Compensation target version cannot be negative" }
+            require(payloadDigest.matches(SHA_256) && evidenceDigest.matches(SHA_256)) { "Compensation digest is invalid" }
+            require((benefitType == SupportCompensationBenefitType.COUPON) == (couponTemplateId != null)) {
+                "Coupon compensation must bind exactly one template"
+            }
+            require((route != SupportActionApprovalRoute.NONE) == (actionRequestId != null)) {
+                "Approval route must bind exactly one action request"
+            }
+            require(
+                costSnapshot.responsibility == SupportCompensationResponsibility.PLATFORM || storeId != null,
+            ) { "Store cost responsibility requires a related store" }
+            val initialState =
+                if (route == SupportActionApprovalRoute.NONE) {
+                    SupportCompensationRequestState.READY_FOR_EXECUTION
+                } else {
+                    SupportCompensationRequestState.AWAITING_APPROVAL
+                }
+            return SupportCompensationRequest(
+                id,
+                supportCaseId,
+                customerId,
+                incidentId,
+                orderId,
+                storeId,
+                requesterActorId,
+                executorActorId,
+                benefitType,
+                amountKrw,
+                couponTemplateId,
+                policyVersionId,
+                band,
+                route,
+                verificationSessionId,
+                targetVersion,
+                costSnapshot,
+                payloadDigest,
+                evidenceDigest,
+                actionRequestId,
+                initialState,
+                null,
+                null,
+                null,
+                0,
+                createdAt,
+            )
+        }
+
+        fun reconstitute(
+            id: UUID,
+            supportCaseId: UUID,
+            customerId: UUID,
+            incidentId: UUID,
+            orderId: UUID?,
+            storeId: UUID?,
+            requesterActorId: UUID,
+            executorActorId: UUID,
+            benefitType: SupportCompensationBenefitType,
+            amountKrw: Long,
+            couponTemplateId: UUID?,
+            policyVersionId: UUID,
+            band: SupportCompensationBand,
+            route: SupportActionApprovalRoute,
+            verificationSessionId: UUID,
+            targetVersion: Long,
+            costSnapshot: SupportCompensationCostSnapshot,
+            payloadDigest: String,
+            evidenceDigest: String,
+            actionRequestId: UUID?,
+            state: SupportCompensationRequestState,
+            terminalBenefitId: UUID?,
+            notificationDeliveryId: UUID?,
+            notificationFailureCode: String?,
+            version: Long,
+            lastChangedAt: Instant,
+        ): SupportCompensationRequest {
+            require(version >= 0) { "Compensation request version is invalid" }
+            require((terminalBenefitId != null) == (state in TERMINAL_BENEFIT_STATES)) {
+                "Compensation terminal binding is invalid"
+            }
+            require((notificationDeliveryId != null) == (state == SupportCompensationRequestState.NOTIFIED)) {
+                "Compensation notification binding is invalid"
+            }
+            return open(
+                id,
+                supportCaseId,
+                customerId,
+                incidentId,
+                orderId,
+                storeId,
+                requesterActorId,
+                executorActorId,
+                benefitType,
+                amountKrw,
+                couponTemplateId,
+                policyVersionId,
+                band,
+                route,
+                verificationSessionId,
+                targetVersion,
+                costSnapshot,
+                payloadDigest,
+                evidenceDigest,
+                actionRequestId,
+                lastChangedAt,
+            ).also {
+                it.state = state
+                it.terminalBenefitId = terminalBenefitId
+                it.notificationDeliveryId = notificationDeliveryId
+                it.notificationFailureCode = notificationFailureCode
+                it.version = version
+                it.lastChangedAt = lastChangedAt
+            }
+        }
+
+        private val SHA_256 = Regex("^[0-9a-f]{64}$")
+        private val FAILURE_CODE = Regex("^[A-Z0-9_]{1,80}$")
+        private val TERMINAL_BENEFIT_STATES =
+            setOf(
+                SupportCompensationRequestState.BENEFIT_ISSUED,
+                SupportCompensationRequestState.NOTIFICATION_RETRY,
+                SupportCompensationRequestState.NOTIFIED,
+                SupportCompensationRequestState.MANUAL_REVIEW,
+            )
     }
 }
