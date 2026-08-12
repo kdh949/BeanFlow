@@ -1,11 +1,11 @@
 # 위험도와 immutable 정책에 묶인 goodwill compensation을 발급한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s60-approval-operations-investigation.md`, `docs/exec-plans/completed/customer-support-s80-post-acceptance-resolution.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 Progress, discoveries, decisions와 실제 validation evidence를
 계속 갱신한다.
@@ -25,7 +25,8 @@ HIGH/EXCEPTIONAL은 Operations 조사로 보내며, 실행 순간 rolling limit�
 - target/runtime OpenAPI에는 S90의 5개 operation까지 75 paths/79 operations/212 schemas가 동일하게 반영됐다.
 - 2026-08-12 사용자가 SP-21의 보수적 차등 rolling hard cap을 선택했다.
 - Analytics active plan은 ready metadata만 있고 branch/PR/acquisition evidence가 없다. Productization worktree의 schema
-  draft는 S70 scheduling decision으로 동결됐다. 이 branch가 2026-08-12 S90 V47 sole migration-writer lease를 획득한다.
+  draft는 S70 scheduling decision으로 동결됐다. 이 branch는 2026-08-12 S90 V47 sole migration-writer lease를 획득했고
+  full validation 뒤 release했다.
 
 ## Definitions
 
@@ -171,7 +172,7 @@ target/runtime OpenAPI, orchestration과 이 plan을 actual outcome에 맞게 �
 - [x] S60/Operations approval integration
 - [x] Loyalty/Promotion/Notification owner issuance
 - [x] Support API/OpenAPI/security/failure integration
-- [ ] focused/full/build/docs validation and completion handoff
+- [x] focused/full/build/docs validation and completion handoff
 
 ## Surprises & Discoveries
 
@@ -195,6 +196,10 @@ execution now loads the request's immutable policy version while new evaluation/
 One focused test run failed before test execution with a corrupted Kotlin incremental cache (`EOFException`). A clean
 focused run rebuilt the cache and passed; this is recorded as tool-state recovery rather than a product failure.
 
+The first full regression found one S10 follower assertion that still fixed the latest Flyway version at V46. The actual
+fresh migration was correctly at V47 and no permission assertion failed. Updating that follower to V47 passed alone, and
+the same full 892-test command then passed from start to finish.
+
 ## Decision Log
 
 | Date | Decision | Rationale | Record |
@@ -202,11 +207,37 @@ focused run rebuilt the cache and passed; this is recorded as tool-state recover
 | 2026-08-12 | select conservative differentiated rolling hard caps | preserve HIGH investigation while bounding actor/store mass issuance | SP-21, ADR-086 |
 | 2026-08-12 | reuse S60 typed action revision/Operations callback | one exact approval truth and reviewer/executor separation | ADR-084/086 |
 | 2026-08-12 | acquire V47 on S80 stacked head | V46 released, Analytics has no actual lease, Productization remains frozen by Support priority | this plan |
+| 2026-08-12 | complete S90 and release V47 | focused owner/security/API tests plus 892-test full regression, build and documentation gates pass | completed plan, orchestration |
 
 ## Outcomes & Retrospective
 
-Not completed. Record only measured implementation and validation results here.
+S90 now persists immutable policy versions/head and five rolling rules, one-benefit Support requests, lifetime incident
+terminal rows and exact command idempotency. LOW issues directly, MEDIUM consumes a distinct Support Manager decision and
+HIGH/EXCEPTIONAL consumes a distinct Operations investigation; the reviewer cannot execute. Execution rechecks the
+request's immutable policy version, current Case/verification/owner fact and five inclusive rolling windows, then commits
+the owner Point/Coupon, terminal incident, consumption, S60 one-time use and Audit atomically.
+
+Loyalty creates PointLot/transaction and exact PLATFORM/STORE funding legs without direct balance mutation. Promotion
+materializes only an approved fixed template and carries issuance cost shares into future redemption/Settlement input.
+Notification persistence occurs after the financial commit; failure leaves `NOTIFICATION_RETRY` and never reissues the
+benefit. The five no-store endpoints are identical in target/runtime OpenAPI at 75 paths/79 operations/212 schemas.
+
+Validation evidence:
+
+- `./gradlew --no-daemon test --tests '*SupportCompensation*' --tests '*GoodwillCompensation*'` — BUILD SUCCESSFUL in 36s.
+- `./gradlew --no-daemon test --tests '*SupportActionRequest*' --tests '*OperationsSupportInvestigation*'` — BUILD SUCCESSFUL in 43s.
+- `./gradlew --no-daemon test --tests '*RuntimeOpenApiParityTest' --tests '*ArchitectureTest' --tests '*ModularityTests'` — BUILD SUCCESSFUL in 17s.
+- `./gradlew --no-daemon spotlessCheck test` — first run: 892 tests, 1 follower failure, 1 skipped; after the V47 follower fix: BUILD SUCCESSFUL in 10m 40s, 892 tests, 0 failures, 0 errors, 1 skipped.
+- `./gradlew --no-daemon build` — BUILD SUCCESSFUL in 7s.
+- `./scripts/verify-docs.sh` — target/runtime 75 paths/79 operations, 212 schemas; 33 policies, 92 ADRs,
+  237 Markdown files and 43 ExecPlans validated. `git diff --check` passed with no output.
+
+No production performance, deployment or external Provider delivery claim is made. S100 remains a separate next-turn
+stage; S60/S30 inputs are available, while its customer/legal/payout/rider owner-model gaps must be resolved during S100
+authoring rather than hidden in S90.
 
 ## Revision Notes
 
 - 2026-08-12: authored from verified S80 head, accepted SP-21 initial limits and acquired V47 lease.
+- 2026-08-12: completed V47/domain/owner/API implementation, corrected the V47 migration follower, passed full validation,
+  released the lease and handed S100 readiness back to orchestration.
