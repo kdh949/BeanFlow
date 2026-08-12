@@ -122,6 +122,7 @@ internal data class SupportActionRequestResource(
     val approvalSteps: List<SupportApprovalStepResource>,
     val terminalExecutionId: UUID?,
     val terminalResolutionId: UUID?,
+    val terminalCompensationId: UUID? = null,
 )
 
 internal sealed interface SupportActionCommandOutcome {
@@ -190,8 +191,13 @@ internal class SupportActionRequestApplicationService(
 
     fun decideSupportManager(command: DecideSupportManagerApprovalCommand): SupportActionCommandOutcome {
         val guard = transactions.managerGuard(command.actorId, command.requestId)
-        val order = ordering.findOrderSnapshots(setOf(guard.targetId)).singleOrNull() ?: notFound("Order")
-        return transactions.decideSupportManager(command, order.version)
+        val currentTargetVersion =
+            if (guard.action == SupportActionType.GOODWILL_COMPENSATION) {
+                transactions.compensationTargetVersion(guard.targetId)
+            } else {
+                ordering.findOrderSnapshots(setOf(guard.targetId)).singleOrNull()?.version ?: notFound("Order")
+            }
+        return transactions.decideSupportManager(command, currentTargetVersion)
     }
 
     fun get(
@@ -215,6 +221,7 @@ internal class SupportActionRequestTransactionService(
     private val caseAssignments: SupportCaseAssignmentHistoryJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
     private val sessions: VerificationSessionJpaRepository,
+    private val compensationRequests: SupportCompensationRequestJpaRepository,
     private val ordering: OrderingSupportTimelineOperations,
     private val permissions: OperatorPermissionAuthorization,
     private val commandLock: SupportCaseCommandLock,
@@ -305,14 +312,22 @@ internal class SupportActionRequestTransactionService(
         requestId: UUID,
     ): SupportActionRequestGuard {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
-        permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
-        permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
         val entity = requests.findLockedById(requestId) ?: notFound("SupportActionRequest")
+        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+            permissions.requireActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+        } else {
+            permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
+            permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+        }
         if (entity.requesterActorId == actorId || entity.executorActorId == actorId) {
             throw DomainFailure(FailureCode.SUPPORT_APPROVER_MUST_DIFFER, "Support approver must differ from requester and executor")
         }
         return entity.guard()
     }
+
+    @Transactional(readOnly = true)
+    fun compensationTargetVersion(compensationId: UUID): Long =
+        compensationRequests.findById(compensationId).orElse(null)?.version ?: notFound("SupportCompensationRequest")
 
     @Transactional
     fun revise(
@@ -398,12 +413,16 @@ internal class SupportActionRequestTransactionService(
     ): SupportActionCommandOutcome {
         val normalized = command.normalized()
         permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_READ)
-        permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ORDER_READ)
-        permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
         commandLock.lock(null, normalized.actorId, MANAGER.name, normalized.idempotencyKey)
         val payloadHash = normalized.managerPayloadHash()
         replay(normalized.actorId, MANAGER, normalized.idempotencyKey, payloadHash)?.let { return it }
         val entity = requests.findLockedById(normalized.requestId) ?: notFound("SupportActionRequest")
+        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+        } else {
+            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ORDER_READ)
+            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+        }
         if (entity.currentRevisionNumber != normalized.revisionNumber || entity.version != normalized.expectedRequestVersion) stale()
         val revision = currentRevision(entity)
         val aggregate = entity.toAggregate(revision)
@@ -443,6 +462,7 @@ internal class SupportActionRequestTransactionService(
         val visible =
             actorId == entity.requesterActorId || actorId == entity.executorActorId ||
                 permissions.hasActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE) ||
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE) ||
                 permissions.hasActive(actorId, OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION)
         if (!visible) denied()
         val revision = currentRevision(entity)
@@ -457,10 +477,7 @@ internal class SupportActionRequestTransactionService(
             val change = aggregate.expire(now)
             persistApprovalChange(entity, aggregate, revision, change, "REVISION_EXPIRED", now)
         } else if (entity.state == SupportActionRequestState.READY_FOR_EXECUTION &&
-            (
-                !permissions.hasActive(entity.executorActorId, OperatorPermission.SUPPORT_ACTION_EXECUTE) ||
-                    !permissions.hasActive(entity.executorActorId, entity.action.capabilityPermission())
-            )
+            !hasExecutionPermission(entity)
         ) {
             aggregate.requireReassignment(now)
             entity.apply(aggregate, now)
@@ -498,8 +515,12 @@ internal class SupportActionRequestTransactionService(
             conflict("Support action executor is already assigned")
         }
         permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_CASE_WRITE)
-        permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
-        permissions.requireActive(normalized.assigneeId, entity.action.capabilityPermission())
+        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+            permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_COMPENSATION_EXECUTE)
+        } else {
+            permissions.requireActive(normalized.assigneeId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
+            permissions.requireActive(normalized.assigneeId, entity.action.executionCapabilityPermission())
+        }
 
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         if (supportCase.version != normalized.expectedCaseVersion || supportCase.state !in ACTIVE_CASE_STATES) stale()
@@ -594,8 +615,13 @@ internal class SupportActionRequestTransactionService(
             )
         }
 
-        val order = ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull() ?: notFound("Order")
-        val invalidity = approvalInvalidity(entity, revision, aggregate, order.version, command.occurredAt)
+        val currentTargetVersion =
+            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+                compensationRequests.findById(entity.targetId).orElse(null)?.version ?: notFound("SupportCompensationRequest")
+            } else {
+                ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull()?.version ?: notFound("Order")
+            }
+        val invalidity = approvalInvalidity(entity, revision, aggregate, currentTargetVersion, command.occurredAt)
         if (invalidity != null) {
             val (change, code) = invalidity
             persistApprovalChange(entity, aggregate, revision, change, "OPERATIONS_POLICY_RECHECK", command.occurredAt)
@@ -646,9 +672,19 @@ internal class SupportActionRequestTransactionService(
                 session.purpose == VerificationPurpose.CASE_RESOLUTION && now.isBefore(session.expiresAt) &&
                 session.expiresAt == revision.expiresAt
         val validRequester =
-            permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
-                permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
-        if (!validSession || !validRequester || revision.policyVersion != SupportActionPolicy.POLICY_VERSION ||
+            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+                permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
+            } else {
+                permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
+                    permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
+            }
+        val validPolicyVersion =
+            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+                compensationRequests.findById(entity.targetId).orElse(null)?.policyVersionId?.toString() == revision.policyVersion
+            } else {
+                revision.policyVersion == SupportActionPolicy.POLICY_VERSION
+            }
+        if (!validSession || !validRequester || !validPolicyVersion ||
             revision.targetVersion != currentTargetVersion
         ) {
             return Triple(
@@ -659,6 +695,14 @@ internal class SupportActionRequestTransactionService(
         }
         return null
     }
+
+    private fun hasExecutionPermission(entity: SupportActionRequestEntity): Boolean =
+        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
+            permissions.hasActive(entity.executorActorId, OperatorPermission.SUPPORT_COMPENSATION_EXECUTE)
+        } else {
+            permissions.hasActive(entity.executorActorId, OperatorPermission.SUPPORT_ACTION_EXECUTE) &&
+                permissions.hasActive(entity.executorActorId, entity.action.executionCapabilityPermission())
+        }
 
     private fun persistApprovalChange(
         entity: SupportActionRequestEntity,
@@ -782,6 +826,7 @@ internal class SupportActionRequestTransactionService(
         approvalSteps.map { SupportApprovalStepResource(it.stepType, it.state, it.decidedByActorId, it.decidedAt) },
         entity.terminalExecutionId,
         entity.terminalResolutionId,
+        entity.terminalCompensationId,
     )
 
     private fun replay(
@@ -927,7 +972,7 @@ internal class SupportActionRequestTransactionService(
             id,
             supportCaseId,
             currentRevision.action,
-            SupportActionTargetType.ORDER,
+            currentRevision.action.targetType(),
             currentRevision.targetId,
             requesterActorId,
             executorActorId,
@@ -941,6 +986,7 @@ internal class SupportActionRequestTransactionService(
             now,
             now,
             version,
+            terminalCompensationId,
         )
 
     private fun SupportActionRevision.toEntity(requestId: UUID) =
@@ -949,7 +995,7 @@ internal class SupportActionRequestTransactionService(
             requestId,
             revisionNumber,
             action,
-            SupportActionTargetType.ORDER,
+            action.targetType(),
             targetId,
             actionPayloadDigest,
             verificationSessionId,
@@ -962,6 +1008,13 @@ internal class SupportActionRequestTransactionService(
             createdByActorId,
             createdAt,
         )
+
+    private fun SupportActionType.targetType(): SupportActionTargetType =
+        if (this == SupportActionType.GOODWILL_COMPENSATION) {
+            SupportActionTargetType.COMPENSATION_REQUEST
+        } else {
+            SupportActionTargetType.ORDER
+        }
 
     private fun SupportActionRequestEntity.guard() =
         SupportActionRequestGuard(id, supportCaseId, action, targetId, currentRevisionNumber, version)

@@ -48,6 +48,7 @@ internal enum class SupportCompensationReasonCode {
     COST_RESPONSIBILITY_UNDETERMINED,
     DUPLICATE_TERMINAL_INCIDENT,
     INSUFFICIENT_VERIFICATION,
+    STALE_TARGET_VERSION,
 }
 
 internal enum class SupportCompensationLimitScope {
@@ -122,6 +123,7 @@ internal data class SupportCompensationPolicyInput(
     val responsibility: SupportCompensationResponsibility,
     val verificationLevel: VerificationLevel,
     val hasTerminalIncidentBenefit: Boolean,
+    val targetVersionMatches: Boolean = true,
 ) {
     init {
         require(amountKrw > 0) { "compensation amount must be positive" }
@@ -160,7 +162,9 @@ internal class SupportCompensationPolicy {
             }
         val executable =
             !input.hasTerminalIncidentBenefit &&
-                input.responsibility != SupportCompensationResponsibility.UNDETERMINED
+                input.responsibility != SupportCompensationResponsibility.UNDETERMINED &&
+                input.targetVersionMatches &&
+                (input.responsibility == SupportCompensationResponsibility.PLATFORM || input.storeId != null)
         val baseDecision =
             when {
                 input.hasTerminalIncidentBenefit -> SupportCompensationDecision.DENIED
@@ -172,11 +176,14 @@ internal class SupportCompensationPolicy {
         if (!verificationSufficient) {
             reasons += SupportCompensationReasonCode.INSUFFICIENT_VERIFICATION
         }
+        if (!input.targetVersionMatches) {
+            reasons += SupportCompensationReasonCode.STALE_TARGET_VERSION
+        }
 
         return SupportCompensationPolicyResult(
             policyVersionId = version.id,
             band = band,
-            decision = if (verificationSufficient) baseDecision else SupportCompensationDecision.DENIED,
+            decision = if (verificationSufficient && input.targetVersionMatches) baseDecision else SupportCompensationDecision.DENIED,
             approvalRoute = route,
             requiredVerificationLevel = requiredVerification,
             executable = executable && verificationSufficient,
@@ -358,7 +365,7 @@ internal enum class SupportCompensationRequestState {
     READY_FOR_EXECUTION,
     BENEFIT_ISSUED,
     NOTIFICATION_RETRY,
-    NOTIFIED,
+    NOTIFICATION_ACCEPTED,
     MANUAL_REVIEW,
 }
 
@@ -456,12 +463,12 @@ internal class SupportCompensationRequest private constructor(
         deliveryId: UUID,
         occurredAt: Instant,
     ) {
-        if (state == SupportCompensationRequestState.NOTIFIED && notificationDeliveryId == deliveryId) return
+        if (state == SupportCompensationRequestState.NOTIFICATION_ACCEPTED && notificationDeliveryId == deliveryId) return
         check(state == SupportCompensationRequestState.BENEFIT_ISSUED || state == SupportCompensationRequestState.NOTIFICATION_RETRY) {
             "Compensation notification is not pending"
         }
         requireChronology(occurredAt)
-        state = SupportCompensationRequestState.NOTIFIED
+        state = SupportCompensationRequestState.NOTIFICATION_ACCEPTED
         notificationDeliveryId = deliveryId
         notificationFailureCode = null
         version += 1
@@ -589,7 +596,7 @@ internal class SupportCompensationRequest private constructor(
             require((terminalBenefitId != null) == (state in TERMINAL_BENEFIT_STATES)) {
                 "Compensation terminal binding is invalid"
             }
-            require((notificationDeliveryId != null) == (state == SupportCompensationRequestState.NOTIFIED)) {
+            require((notificationDeliveryId != null) == (state == SupportCompensationRequestState.NOTIFICATION_ACCEPTED)) {
                 "Compensation notification binding is invalid"
             }
             return open(
@@ -630,7 +637,7 @@ internal class SupportCompensationRequest private constructor(
             setOf(
                 SupportCompensationRequestState.BENEFIT_ISSUED,
                 SupportCompensationRequestState.NOTIFICATION_RETRY,
-                SupportCompensationRequestState.NOTIFIED,
+                SupportCompensationRequestState.NOTIFICATION_ACCEPTED,
                 SupportCompensationRequestState.MANUAL_REVIEW,
             )
     }

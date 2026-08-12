@@ -67,7 +67,7 @@ class SupportCompensationRequestTest {
         assertThat(request.notificationFailureCode).isEqualTo("DEPENDENCY_UNAVAILABLE")
 
         request.completeNotification(UUID.randomUUID(), now.plusSeconds(3))
-        assertThat(request.state).isEqualTo(SupportCompensationRequestState.NOTIFIED)
+        assertThat(request.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
         assertThat(request.terminalBenefitId).isNotNull()
         assertThat(request.notificationFailureCode).isNull()
     }

@@ -698,6 +698,10 @@ internal class SupportOrderChangeExecutionTransactionService(
             SupportActionType.POST_ACCEPTANCE_RESOLUTION -> {
                 invalid("Post-acceptance resolution is owned by S80")
             }
+
+            SupportActionType.GOODWILL_COMPENSATION -> {
+                invalid("Goodwill compensation is owned by S90")
+            }
         }
     }
 
@@ -788,6 +792,10 @@ internal class SupportOrderChangeExecutionTransactionService(
 
                 SupportActionType.POST_ACCEPTANCE_RESOLUTION -> {
                     invalid("Post-acceptance resolution is owned by S80")
+                }
+
+                SupportActionType.GOODWILL_COMPENSATION -> {
+                    invalid("Goodwill compensation is owned by S90")
                 }
             }
         }

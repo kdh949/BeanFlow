@@ -268,6 +268,7 @@ private fun PointTransactionViewType.allows(effect: PointBalanceEffect): Boolean
         PointTransactionViewType.ACCRUAL,
         PointTransactionViewType.RESTORE,
         PointTransactionViewType.COMPENSATION,
+        PointTransactionViewType.GOODWILL_COMPENSATION,
         -> effect == PointBalanceEffect.CREDIT
 
         PointTransactionViewType.USE,

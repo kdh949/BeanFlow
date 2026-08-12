@@ -136,6 +136,7 @@ internal enum class PointTransactionType {
     ACCRUAL,
     RECOVERY,
     ADJUSTMENT,
+    GOODWILL_COMPENSATION,
 }
 
 internal enum class PointBalanceEffect {
@@ -192,6 +193,7 @@ private fun PointTransactionType.defaultBalanceEffect(): PointBalanceEffect =
         PointTransactionType.ACCRUAL,
         PointTransactionType.RESTORE,
         PointTransactionType.COMPENSATION,
+        PointTransactionType.GOODWILL_COMPENSATION,
         -> PointBalanceEffect.CREDIT
 
         PointTransactionType.USE,
@@ -209,6 +211,7 @@ private fun PointTransactionType.allows(effect: PointBalanceEffect): Boolean =
         PointTransactionType.ACCRUAL,
         PointTransactionType.RESTORE,
         PointTransactionType.COMPENSATION,
+        PointTransactionType.GOODWILL_COMPENSATION,
         -> effect == PointBalanceEffect.CREDIT
 
         PointTransactionType.USE,

@@ -7,6 +7,7 @@ internal enum class SupportActionType {
     ORDER_CANCELLATION,
     PICKUP_RESCHEDULE,
     POST_ACCEPTANCE_RESOLUTION,
+    GOODWILL_COMPENSATION,
 }
 
 internal enum class SupportActionOrderState {
@@ -165,6 +166,8 @@ internal class SupportActionPolicy {
                     else -> null
                 }
             }
+
+            SupportActionType.GOODWILL_COMPENSATION -> null
         }
 
     private data class PolicyRule(

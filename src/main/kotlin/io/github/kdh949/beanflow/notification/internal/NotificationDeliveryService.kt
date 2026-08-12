@@ -11,6 +11,10 @@ import io.github.kdh949.beanflow.notification.api.AcceptedSupportOrderChangeNoti
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
+import io.github.kdh949.beanflow.notification.api.AcceptedGoodwillCompensationNotification
+import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificationOperations
+import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificationView
+import io.github.kdh949.beanflow.notification.api.RequestGoodwillCompensationNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
@@ -81,7 +85,8 @@ internal class NotificationDeliveryService(
     private val claimLease: Duration,
 ) : CustomerCancellationNotificationOperations,
     SupportOrderChangeNotificationOperations,
-    PostAcceptanceResolutionNotificationOperations {
+    PostAcceptanceResolutionNotificationOperations,
+    GoodwillCompensationNotificationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun requestAccepted(
         command: RequestCustomerCancellationAcceptedNotificationCommand,
@@ -188,6 +193,49 @@ internal class NotificationDeliveryService(
             .orElse(null)
             ?.takeIf { it.template == NotificationTemplate.SUPPORT_POST_ACCEPTANCE_RESOLUTION }
             ?.let { PostAcceptanceResolutionNotificationView(it.id, it.state.name, it.updatedAt) }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun requestGoodwill(
+        command: RequestGoodwillCompensationNotificationCommand,
+    ): AcceptedGoodwillCompensationNotification {
+        if (command.benefitType !in setOf("POINT", "COUPON") || command.amountKrw <= 0 || command.correlationId.isBlank()) {
+            fail(FailureCode.INVALID_REQUEST, "Goodwill compensation notification command is invalid")
+        }
+        val delivery =
+            request(
+                NewNotificationDelivery(
+                    eventId = command.compensationRequestId,
+                    eventType = "SupportGoodwillCompensationIssuedV1",
+                    logicalSource = "support-compensation:${command.compensationRequestId}:customer-notification",
+                    providerIdempotencyKey = "notification:support-compensation:${command.compensationRequestId}",
+                    orderId = command.relatedOrderId ?: command.compensationRequestId,
+                    recipientType = NotificationRecipientType.CUSTOMER,
+                    recipientId = command.customerId,
+                    logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                    template = NotificationTemplate.SUPPORT_GOODWILL_COMPENSATION_ISSUED,
+                    payload =
+                        buildMap {
+                            command.relatedOrderId?.let { put("relatedOrderId", it) }
+                            command.storeId?.let { put("storeId", it) }
+                            put("benefitType", command.benefitType)
+                            put("amountKrw", command.amountKrw)
+                            put("issuedAt", command.issuedAt)
+                            put("locale", "ko-KR")
+                        },
+                    correlationId = command.correlationId,
+                    occurredAt = command.issuedAt,
+                ),
+            )
+        return AcceptedGoodwillCompensationNotification(delivery.id, delivery.state.name)
+    }
+
+    @Transactional(readOnly = true)
+    override fun findGoodwill(deliveryId: UUID): GoodwillCompensationNotificationView? =
+        deliveryRepository
+            .findById(deliveryId)
+            .orElse(null)
+            ?.takeIf { it.template == NotificationTemplate.SUPPORT_GOODWILL_COMPENSATION_ISSUED }
+            ?.let { GoodwillCompensationNotificationView(it.id, it.state.name, it.updatedAt) }
 
     @Transactional
     fun requestWarning(event: StoreAcceptanceWarningRequestedV1) {

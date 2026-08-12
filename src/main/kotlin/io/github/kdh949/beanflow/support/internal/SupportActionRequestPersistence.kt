@@ -23,6 +23,7 @@ import java.util.UUID
 
 internal enum class SupportActionTargetType {
     ORDER,
+    COMPENSATION_REQUEST,
 }
 
 @Entity
@@ -66,6 +67,8 @@ internal class SupportActionRequestEntity(
     var updatedAt: Instant,
     @Column(nullable = false)
     var version: Long,
+    @Column(name = "terminal_compensation_id")
+    var terminalCompensationId: UUID? = null,
 ) {
     fun toAggregate(revision: SupportActionRevisionEntity): SupportActionRequest =
         SupportActionRequest.reconstitute(
@@ -80,6 +83,7 @@ internal class SupportActionRequestEntity(
             operationsApproverActorId = operationsApproverActorId,
             terminalExecutionId = terminalExecutionId,
             terminalResolutionId = terminalResolutionId,
+            terminalCompensationId = terminalCompensationId,
             version = version,
             lastChangedAt = updatedAt,
         )
@@ -92,6 +96,7 @@ internal class SupportActionRequestEntity(
         operationsApproverActorId = aggregate.operationsApproverActorId
         terminalExecutionId = aggregate.terminalExecutionId
         terminalResolutionId = aggregate.terminalResolutionId
+        terminalCompensationId = aggregate.terminalCompensationId
         updatedAt = aggregate.currentRevision.createdAt.coerceAtLeast(updatedAt)
         version = aggregate.version
     }

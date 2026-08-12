@@ -133,6 +133,7 @@ internal class SupportActionRequest private constructor(
     var operationsApproverActorId: UUID?,
     var terminalExecutionId: UUID?,
     var terminalResolutionId: UUID?,
+    var terminalCompensationId: UUID?,
     var version: Long,
     private var lastChangedAt: Instant,
 ) {
@@ -349,6 +350,30 @@ internal class SupportActionRequest private constructor(
         )
     }
 
+    fun completeCompensationExecution(
+        compensationId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+    ): SupportActionExecutionChange {
+        require(currentRevision.action == SupportActionType.GOODWILL_COMPENSATION) {
+            "Only a goodwill request can be consumed by a compensation"
+        }
+        return finishExecution(
+            compensationId,
+            actorId,
+            revisionNumber,
+            payloadDigest,
+            targetVersion,
+            occurredAt,
+            SupportActionRequestState.EXECUTED,
+            resolution = false,
+            compensation = true,
+        )
+    }
+
     fun requirePostAcceptanceResolution(
         executionId: UUID,
         actorId: UUID,
@@ -377,12 +402,18 @@ internal class SupportActionRequest private constructor(
         occurredAt: Instant,
         terminalState: SupportActionRequestState,
         resolution: Boolean,
+        compensation: Boolean = false,
     ): SupportActionExecutionChange {
         require(actorId == executorActorId) { "Only the assigned actor can execute the action" }
         check(revisionNumber == currentRevision.revisionNumber) { "Action execution revision is stale" }
         check(payloadDigest == currentRevision.actionPayloadDigest) { "Action execution payload is stale" }
         check(targetVersion == currentRevision.targetVersion) { "Action execution target version is stale" }
-        val terminalId = if (resolution) terminalResolutionId else terminalExecutionId
+        val terminalId =
+            when {
+                compensation -> terminalCompensationId
+                resolution -> terminalResolutionId
+                else -> terminalExecutionId
+            }
         if (state == terminalState && terminalId == executionId) {
             return SupportActionExecutionChange(executionId, state, state, version, occurredAt, true)
         }
@@ -391,11 +422,14 @@ internal class SupportActionRequest private constructor(
         require(occurredAt >= lastChangedAt) { "Action execution time cannot move backward" }
         val previous = state
         state = terminalState
-        if (resolution) {
-            check(terminalExecutionId == null) { "Action request already has a direct terminal execution" }
+        if (compensation) {
+            check(terminalExecutionId == null && terminalResolutionId == null) { "Action request already has another terminal result" }
+            terminalCompensationId = executionId
+        } else if (resolution) {
+            check(terminalExecutionId == null && terminalCompensationId == null) { "Action request already has a direct terminal execution" }
             terminalResolutionId = executionId
         } else {
-            check(terminalResolutionId == null) { "Action request already has a terminal ResolutionCase" }
+            check(terminalResolutionId == null && terminalCompensationId == null) { "Action request already has another terminal result" }
             terminalExecutionId = executionId
         }
         version += 1
@@ -460,6 +494,7 @@ internal class SupportActionRequest private constructor(
                 null,
                 null,
                 null,
+                null,
                 0,
                 revision.createdAt,
             )
@@ -479,6 +514,7 @@ internal class SupportActionRequest private constructor(
             lastChangedAt: Instant,
             terminalExecutionId: UUID? = null,
             terminalResolutionId: UUID? = null,
+            terminalCompensationId: UUID? = null,
         ): SupportActionRequest {
             require(version >= 0) { "Action request version is invalid" }
             require(lastChangedAt >= revision.createdAt) { "Action request change time is invalid" }
@@ -493,15 +529,21 @@ internal class SupportActionRequest private constructor(
             require(executorActorId != supportApproverActorId && executorActorId != operationsApproverActorId) {
                 "Approver cannot be action executor"
             }
-            require(terminalExecutionId == null || terminalResolutionId == null) {
-                "Action request cannot have two terminal results"
+            require(listOfNotNull(terminalExecutionId, terminalResolutionId, terminalCompensationId).size <= 1) {
+                "Action request cannot have multiple terminal results"
             }
             require(
                 (state == SupportActionRequestState.EXECUTED || state == SupportActionRequestState.RESOLUTION_REQUIRED) ==
-                    (terminalExecutionId != null || terminalResolutionId != null),
+                    (terminalExecutionId != null || terminalResolutionId != null || terminalCompensationId != null),
             ) { "Action request terminal state binding is invalid" }
             require(terminalResolutionId == null || state == SupportActionRequestState.EXECUTED) {
                 "ResolutionCase can only bind an executed action request"
+            }
+            require(terminalCompensationId == null || state == SupportActionRequestState.EXECUTED) {
+                "Compensation can only bind an executed action request"
+            }
+            require(terminalCompensationId == null || revision.action == SupportActionType.GOODWILL_COMPENSATION) {
+                "Only goodwill actions can bind compensation"
             }
             return SupportActionRequest(
                 id,
@@ -515,6 +557,7 @@ internal class SupportActionRequest private constructor(
                 operationsApproverActorId,
                 terminalExecutionId,
                 terminalResolutionId,
+                terminalCompensationId,
                 version,
                 lastChangedAt,
             )
