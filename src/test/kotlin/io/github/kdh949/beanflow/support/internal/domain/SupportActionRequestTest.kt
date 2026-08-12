@@ -190,6 +190,28 @@ class SupportActionRequestTest {
         assertEquals(true, replay.replayed)
     }
 
+    @Test
+    fun `approved profile request binds only its profile change as terminal result`() {
+        val request = request(SupportActionApprovalRoute.SUPPORT_MANAGER_THEN_OPERATIONS, SupportActionType.PROFILE_CHANGE)
+        request.decideSupportManager(MANAGER, 1, SupportApprovalDecision.APPROVE, NOW.plusSeconds(1))
+        request.decideOperations(OPERATIONS, 1, OperationsInvestigationDecision.APPROVE, NOW.plusSeconds(2))
+
+        val change =
+            request.completeProfileChangeExecution(
+                EXECUTION_ID,
+                REQUESTER,
+                1,
+                PAYLOAD_DIGEST_1,
+                7,
+                NOW.plusSeconds(3),
+            )
+
+        assertEquals(SupportActionRequestState.EXECUTED, request.state)
+        assertEquals(EXECUTION_ID, request.terminalProfileChangeId)
+        assertNull(request.terminalExecutionId)
+        assertEquals(false, change.replayed)
+    }
+
     private fun request(
         route: SupportActionApprovalRoute,
         action: SupportActionType = SupportActionType.ORDER_CANCELLATION,

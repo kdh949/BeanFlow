@@ -91,6 +91,7 @@ internal class SupportProfileChangeApplicationService(
 ) {
     fun submit(command: SubmitSupportProfileChangeCommand): SupportProfileChangeResource {
         val payloadDigest = SupportProfilePayloadDigest.digest(command.subjectId, command.expectedProfileVersion, command.payload)
+        transactions.replaySubmit(command, payloadDigest)?.let { return it }
         val ownerVersion = currentOwnerVersion(command.payload.purpose, command.subjectId)
         transactions.preflight(command, ownerVersion)
         val profileChangeId = identifiers.next()
@@ -105,6 +106,7 @@ internal class SupportProfileChangeApplicationService(
     }
 
     fun revise(command: ReviseSupportProfileChangeCommand): SupportProfileChangeResource {
+        transactions.replayRevision(command)?.let { return it }
         val binding = transactions.revisionBinding(command)
         if (binding.purpose != command.payload.purpose) stale()
         val digest = SupportProfilePayloadDigest.digest(binding.subjectId, command.expectedProfileVersion, command.payload)
@@ -114,6 +116,7 @@ internal class SupportProfileChangeApplicationService(
     }
 
     fun execute(command: ExecuteSupportProfileChangeCommand): SupportProfileChangeResource {
+        transactions.replayExecution(command)?.let { return it }
         val binding = transactions.executionBinding(command)
         if (binding.entity.purpose != command.payload.purpose) stale()
         val digest = SupportProfilePayloadDigest.digest(binding.entity.subjectId, command.expectedProfileVersion, command.payload)
@@ -265,6 +268,46 @@ internal class SupportProfileChangeTransactionService(
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) {
+    @Transactional(readOnly = true)
+    fun replaySubmit(
+        command: SubmitSupportProfileChangeCommand,
+        payloadDigest: String,
+    ): SupportProfileChangeResource? {
+        val operation = "CREATE_${command.payload.purpose.name}"
+        val payloadHash = submitIdempotencyHash(operation, command, payloadDigest)
+        return replay(command.actorId, operation, command.idempotencyKey, payloadHash)?.let(::resource)
+    }
+
+    @Transactional(readOnly = true)
+    fun replayRevision(command: ReviseSupportProfileChangeCommand): SupportProfileChangeResource? {
+        val operation = "REVISE_${command.payload.purpose.name}"
+        val existing = idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
+            ?: return null
+        val entity = changes.findById(existing.profileChangeId).orElse(null) ?: dependency()
+        val digest = SupportProfilePayloadDigest.digest(entity.subjectId, command.expectedProfileVersion, command.payload)
+        val hash =
+            SupportProfilePayloadDigest.idempotency(
+                operation, command.actorId, null, command.profileChangeId, command.verificationSessionId,
+                digest, command.expectedActionRequestVersion, command.reason, command.evidenceDigest,
+            )
+        return replay(command.actorId, operation, command.idempotencyKey, hash)?.let(::resource)
+    }
+
+    @Transactional(readOnly = true)
+    fun replayExecution(command: ExecuteSupportProfileChangeCommand): SupportProfileChangeResource? {
+        val operation = "EXECUTE_${command.payload.purpose.name}"
+        val existing = idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
+            ?: return null
+        val entity = changes.findById(existing.profileChangeId).orElse(null) ?: dependency()
+        val digest = SupportProfilePayloadDigest.digest(entity.subjectId, command.expectedProfileVersion, command.payload)
+        val hash =
+            SupportProfilePayloadDigest.idempotency(
+                operation, command.actorId, null, command.profileChangeId, null, digest,
+                command.expectedActionRequestVersion, null, null,
+            )
+        return replay(command.actorId, operation, command.idempotencyKey, hash)?.let(::resource)
+    }
+
     @Transactional
     fun preflight(command: SubmitSupportProfileChangeCommand, ownerVersion: Long): ProfileChangePreflight {
         validateSubmit(command)
@@ -362,7 +405,7 @@ internal class SupportProfileChangeTransactionService(
         return response
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun revisionBinding(command: ReviseSupportProfileChangeCommand): SupportProfileChangeResource {
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_PROFILE_R3_REQUEST)
         val entity = changes.findById(command.profileChangeId).orElse(null) ?: notFound("ProfileChange")
@@ -485,6 +528,15 @@ internal class SupportProfileChangeTransactionService(
 
     @Transactional
     fun authorizeRetry(command: RetrySupportProfileNotificationCommand) {
+        command.idempotencyKey.requireKey()
+        val operation = "RETRY_PROFILE_NOTIFICATIONS"
+        commandLock.lock(null, command.actorId, operation, command.idempotencyKey)
+        val hash =
+            SupportProfilePayloadDigest.idempotency(
+                operation, command.actorId, null, command.profileChangeId, null, null,
+                command.expectedProfileChangeVersion, null, null,
+            )
+        replay(command.actorId, operation, command.idempotencyKey, hash)?.let { return }
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
         if (entity.version != command.expectedProfileChangeVersion ||
@@ -492,10 +544,21 @@ internal class SupportProfileChangeTransactionService(
         ) stale()
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         if (supportCase.currentAssigneeId != command.actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
-        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_NOTIFICATION_RETRY", "RETRY_REQUESTED", clock.instant())
+        val now = clock.instant()
+        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_NOTIFICATION_RETRY", "RETRY_REQUESTED", now)
+        saveIdempotency(
+            command.actorId,
+            operation,
+            command.idempotencyKey,
+            hash,
+            entity.id,
+            resource(entity),
+            200,
+            now,
+        )
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun get(actorId: UUID, profileChangeId: UUID): SupportProfileChangeResource {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val entity = changes.findById(profileChangeId).orElse(null) ?: notFound("ProfileChange")
