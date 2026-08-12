@@ -27,6 +27,7 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.support.internal.BreakGlassApplicationService
 import io.github.kdh949.beanflow.support.internal.DataAccessGrantApplicationService
+import io.github.kdh949.beanflow.support.internal.PostAcceptanceResolutionApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportActionEvaluationApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportActionRequestApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportCaseApplicationService
@@ -135,6 +136,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var supportOrderChangeExecutionApplicationService: SupportOrderChangeExecutionApplicationService
+
+    @MockitoBean
+    private lateinit var postAcceptanceResolutionApplicationService: PostAcceptanceResolutionApplicationService
 
     @MockitoBean
     private lateinit var operationsSupportInvestigationService: OperationsSupportInvestigationService

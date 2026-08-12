@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-11
+  x-beanflow-contract-date: 2026-08-12
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -572,6 +572,14 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1executions"
   /stores/{storeId}/support-order-change-authorizations:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-authorizations"
+  /support/orders/{orderId}/post-acceptance-resolutions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1post-acceptance-resolutions"
+  /support/post-acceptance-resolutions/{resolutionId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1post-acceptance-resolutions~1{resolutionId}"
+  /support/post-acceptance-resolutions/{resolutionId}/executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1post-acceptance-resolutions~1{resolutionId}~1executions"
+  /support/post-acceptance-resolutions/{resolutionId}/reconciliations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1post-acceptance-resolutions~1{resolutionId}~1reconciliations"
   /operations/investigations/{investigationId}/decisions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations~1{investigationId}~1decisions"
   /support/cases/{caseId}/verification-sessions:

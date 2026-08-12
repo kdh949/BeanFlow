@@ -57,7 +57,7 @@ internal class SupportActionRequestOpenApiContractTest {
         assertThat(schema(target, "OperationsSupportInvestigationDecision"))
             .contains("APPROVE", "DENY", "RETURN_FOR_REVISION", "ESCALATE")
         assertThat(schema(target, "SupportActionRequestResource"))
-            .contains("actionPayloadDigest", "evidenceDigest", "approvalSteps")
+            .contains("actionPayloadDigest", "evidenceDigest", "approvalSteps", "terminalExecutionId", "terminalResolutionId")
             .doesNotContain("reason:", "rawPayload", "proof", "otp", "token")
         assertThat(pathItem(target, "/operations/investigations/{investigationId}/decisions"))
             .contains("callback or Audit failure rolls")

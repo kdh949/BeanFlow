@@ -1989,6 +1989,136 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/post-acceptance-resolutions:
+    post:
+      tags: [Support]
+      operationId: createPostAcceptanceResolution
+      summary: Plan an approved post-acceptance resolution without rewriting Order facts
+      description: |
+        Consumes only the exact approved S60 POST_ACCEPTANCE_RESOLUTION revision.
+        The canonical action digest uses support-command-payload/v1 operation
+        POST_ACCEPTANCE_RESOLUTION_ACTION_V1 with ordered orderId, outcome,
+        responsibility, cashRefundKrw, restorePoints, restoreCoupon,
+        settlementAdjustmentKrw and evidenceDigest fields. No owner command runs
+        until the separate execution operation consumes the revision.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostAcceptanceResolutionRequest"
+      responses:
+        "201":
+          description: Immutable resolution plan created or the first exact response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}:
+    get:
+      tags: [Support]
+      operationId: getPostAcceptanceResolution
+      summary: Read one visible post-acceptance resolution and typed owner states
+      description: Returns closed step state and references only; evidence, Provider payloads and PII are never returned.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+      responses:
+        "200":
+          description: Current resolution plan and explicit partial, unknown or terminal owner states
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}/executions:
+    post:
+      tags: [Support]
+      operationId: executePostAcceptanceResolution
+      summary: Consume the exact approval and advance owner-specific resolution steps
+      description: |
+        Rechecks the assigned executor, persistent permissions, active Case/order
+        relationship, exact request/revision/Order versions and current owner fact.
+        Support claims one durable step before invoking its owner outside the Support
+        transaction. Owner success is not presented until the following Support Audit
+        and state commit succeeds. Provider timeout stays UNKNOWN/RECONCILING; a later
+        recovery performs lookup and never assumes success or silently reissues work.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutePostAcceptanceResolutionRequest"
+      responses:
+        "200":
+          description: Latest durable partial, unknown, manual-review or resolved state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}/reconciliations:
+    post:
+      tags: [Support]
+      operationId: reconcilePostAcceptanceResolution
+      summary: Explicitly reconcile a manual-review Payment refund by owner lookup
+      description: |
+        Initial S80 permits only PAYMENT_REFUND. The exact resolution/Order versions
+        and idempotency payload are rechecked; POINT, COUPON, SETTLEMENT and notification
+        reissue through this operator endpoint is rejected as unsafe.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcilePostAcceptanceResolutionRequest"
+      responses:
+        "200":
+          description: Latest durable reconciliation outcome
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /operations/investigations/{investigationId}/decisions:
     post:
       tags: [Operations]
@@ -2475,6 +2605,12 @@ components:
     SupportActionRequestId:
       in: path
       name: requestId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    PostAcceptanceResolutionId:
+      in: path
+      name: resolutionId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -5060,7 +5196,7 @@ components:
     SupportActionRequestResource:
       type: object
       additionalProperties: false
-      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps, terminalExecutionId]
+      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps, terminalExecutionId, terminalResolutionId]
       properties:
         requestId:
           $ref: "#/components/schemas/Identifier"
@@ -5116,6 +5252,181 @@ components:
         terminalExecutionId:
           type: [string, "null"]
           format: uuid
+        terminalResolutionId:
+          type: [string, "null"]
+          format: uuid
+    PostAcceptanceResolutionOutcome:
+      type: string
+      enum: [FULL_REFUND, PARTIAL_REFUND, NO_MONETARY_RESOLUTION, MANUAL_SETTLEMENT_REVIEW]
+    PostAcceptanceResolutionResponsibility:
+      type: string
+      enum: [CUSTOMER, STORE, PLATFORM, SHARED, UNDETERMINED]
+    PostAcceptanceResolutionState:
+      type: string
+      enum: [PLANNED, EXECUTING, PARTIALLY_RESOLVED, RECONCILING, RESOLVED, MANUAL_REVIEW]
+    PostAcceptanceResolutionStepType:
+      type: string
+      enum: [PAYMENT_REFUND, POINT_RESTORATION, COUPON_RESTORATION, SETTLEMENT_ADJUSTMENT, CUSTOMER_NOTIFICATION]
+    PostAcceptanceResolutionStepState:
+      type: string
+      enum: [PENDING, PROCESSING, RETRY_SCHEDULED, SUCCEEDED, NOT_REQUIRED, UNKNOWN, RECONCILING, MANUAL_REVIEW, BLOCKED]
+    CreatePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, revisionNumber, expectedRequestVersion, expectedOrderVersion, outcome, responsibility, cashRefundKrw, restorePoints, restoreCoupon, evidenceDigest]
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        outcome:
+          $ref: "#/components/schemas/PostAcceptanceResolutionOutcome"
+        responsibility:
+          $ref: "#/components/schemas/PostAcceptanceResolutionResponsibility"
+        cashRefundKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        restorePoints:
+          type: boolean
+        restoreCoupon:
+          type: boolean
+        settlementAdjustmentKrw:
+          type: [integer, "null"]
+          format: int64
+          maximum: -1
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+      description: |
+        FULL_REFUND/PARTIAL_REFUND require positive cashRefundKrw. Non-refund
+        outcomes require zero cash and no benefit restoration. STORE/SHARED require
+        an exact negative settlementAdjustmentKrw except MANUAL_SETTLEMENT_REVIEW.
+        CUSTOMER/PLATFORM/UNDETERMINED forbid an automatic Settlement adjustment.
+    ExecutePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedResolutionVersion, expectedRequestVersion, expectedOrderVersion]
+      properties:
+        expectedResolutionVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    ReconcilePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [stepType, expectedResolutionVersion, expectedOrderVersion]
+      properties:
+        stepType:
+          type: string
+          const: PAYMENT_REFUND
+        expectedResolutionVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    PostAcceptanceResolutionStepResource:
+      type: object
+      additionalProperties: false
+      required: [type, state, attemptCount, resultReference, failureCode, nextAttemptAt, ownerState]
+      properties:
+        type:
+          $ref: "#/components/schemas/PostAcceptanceResolutionStepType"
+        state:
+          $ref: "#/components/schemas/PostAcceptanceResolutionStepState"
+        attemptCount:
+          type: integer
+          minimum: 0
+        resultReference:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 240
+        failureCode:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9_]{1,80}$"
+        nextAttemptAt:
+          type: [string, "null"]
+          format: date-time
+        ownerState:
+          type: [string, "null"]
+          description: Current Notification delivery state for CUSTOMER_NOTIFICATION; null for financial owner steps.
+    PostAcceptanceResolutionResource:
+      type: object
+      additionalProperties: false
+      required: [resolutionId, supportCaseId, requestId, revisionNumber, orderId, triggerOrderState, triggerOrderVersion, outcome, responsibility, cashRefundKrw, restorePoints, restoreCoupon, settlementAdjustmentKrw, state, version, createdAt, updatedAt, steps]
+      properties:
+        resolutionId:
+          $ref: "#/components/schemas/Identifier"
+        supportCaseId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        triggerOrderState:
+          type: string
+          enum: [PREPARING, READY, COMPLETED]
+        triggerOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        outcome:
+          $ref: "#/components/schemas/PostAcceptanceResolutionOutcome"
+        responsibility:
+          $ref: "#/components/schemas/PostAcceptanceResolutionResponsibility"
+        cashRefundKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        restorePoints:
+          type: boolean
+        restoreCoupon:
+          type: boolean
+        settlementAdjustmentKrw:
+          type: [integer, "null"]
+          format: int64
+          maximum: -1
+        state:
+          $ref: "#/components/schemas/PostAcceptanceResolutionState"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/PostAcceptanceResolutionStepResource"
     SupportOrderChangeAuthorizationType:
       type: string
       enum: [CONFIRMATION, DELEGATION]
