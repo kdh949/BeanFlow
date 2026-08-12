@@ -1,7 +1,7 @@
 # Support Profile Change Policy
 
-> **Status:** R0-R4 classification, R3 approval/actor separation and purpose-specific owner commands are Accepted in
-> ADR-087; exact field mapping and endpoint DTOs remain DRAFT until owner models exist.
+> **Status:** R0-R4 classification, S100 initial field mapping, R3 approval/actor separation and purpose-specific owner
+> commands are Accepted in ADR-087/SP-22. Endpoint DTOs become runtime contracts only with S100 implementation evidence.
 
 ## Field risk classes
 
@@ -12,3 +12,20 @@
 - R4: password, MFA secret, OTP, token, PG raw token, PAN/CVC, key. 조회·직접 수정 금지; reset/re-registration만.
 
 범용 profile PATCH를 제공하지 않고 목적별 typed workflow를 사용한다. 고위험 변경 후 가능한 경우 기존·신규 채널에 모두 알리며, notification 실패는 변경을 rollback하지 않고 retry/warning으로 남긴다.
+
+## S100 initial owner mapping
+
+- Customer: R1 display name, R2 verified legal-name typo, R3 primary login/recovery phone, R4 credential reset intent.
+- Store: R1 public display/phone/description/pickup instructions, R2 operations phone/email, R3 legal representative and
+  opaque settlement-account reference, R4 access reset/re-registration intent.
+- External courier: R1 display name, R2 relay phone/email, R3 provider identity and opaque payout reference, R4 provider
+  re-registration intent. This is not a first-party Rider workforce model.
+
+R1은 BASIC+`SUPPORT_PROFILE_R1_CHANGE`, R2는 ENHANCED+`SUPPORT_PROFILE_R2_CHANGE`다. R3/R4 intent는 ENHANCED+
+`SUPPORT_PROFILE_R3_REQUEST`, S60 exact revision의 Support Manager→Operations 승인과 assigned agent execution을
+요구한다. Requester, 두 reviewer는 pairwise distinct하고 reviewer는 실행할 수 없다.
+
+Support는 raw change payload를 저장하지 않는다. R3/R4 request에는 canonical digest만 남고 execution이 같은 typed
+payload를 다시 제출한다. Owner가 latest version, digest, encryption/index/history를 최종 검증한다. Primary-phone은
+기존 등록 채널에 귀속된 ENHANCED session 없이는 처리하지 않으며 새 전화번호만으로는 계정 소유를 입증할 수 없다.
+R4 API는 password, OTP, MFA secret, token 또는 key를 입력·반환하지 않고 reset/re-registration intent만 만든다.
