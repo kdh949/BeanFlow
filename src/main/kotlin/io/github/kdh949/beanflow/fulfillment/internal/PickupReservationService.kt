@@ -98,15 +98,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup confirmation source does not match")
         }
@@ -146,15 +143,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup release source does not match")
         }
@@ -188,15 +182,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup expiry source does not match")
         }
@@ -229,17 +220,14 @@ internal class PickupReservationService(
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun releaseConfirmedAfterTermination(command: ReleasePickupAfterTerminationCommand): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(command.orderId)
+        val reservation =
+            reservationRepository.findLockedByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE).also {
                     recordRestoration(command, ReservationTransitionResult.NOT_ELIGIBLE)
                 }
         val slot =
-            slotRepository.findLockedById(current.slotId)
+            slotRepository.findLockedById(reservation.slotId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed pickup slot is missing")
-        val reservation =
-            reservationRepository.findLockedByOrderId(command.orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         if (reservation.state == PickupReservationState.RELEASED_AFTER_TERMINATION) {
             return if (reservation.restorationSourceReference == command.sourceReference &&
                 reservation.restorationTrigger == command.trigger
