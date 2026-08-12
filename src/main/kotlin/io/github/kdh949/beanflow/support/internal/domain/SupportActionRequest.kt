@@ -134,6 +134,7 @@ internal class SupportActionRequest private constructor(
     var terminalExecutionId: UUID?,
     var terminalResolutionId: UUID?,
     var terminalCompensationId: UUID?,
+    var terminalProfileChangeId: UUID?,
     var version: Long,
     private var lastChangedAt: Instant,
 ) {
@@ -374,6 +375,30 @@ internal class SupportActionRequest private constructor(
         )
     }
 
+    fun completeProfileChangeExecution(
+        profileChangeId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+    ): SupportActionExecutionChange {
+        require(currentRevision.action == SupportActionType.PROFILE_CHANGE) {
+            "Only a profile-change request can be consumed by a profile change"
+        }
+        return finishExecution(
+            profileChangeId,
+            actorId,
+            revisionNumber,
+            payloadDigest,
+            targetVersion,
+            occurredAt,
+            SupportActionRequestState.EXECUTED,
+            resolution = false,
+            profileChange = true,
+        )
+    }
+
     fun requirePostAcceptanceResolution(
         executionId: UUID,
         actorId: UUID,
@@ -403,6 +428,7 @@ internal class SupportActionRequest private constructor(
         terminalState: SupportActionRequestState,
         resolution: Boolean,
         compensation: Boolean = false,
+        profileChange: Boolean = false,
     ): SupportActionExecutionChange {
         require(actorId == executorActorId) { "Only the assigned actor can execute the action" }
         check(revisionNumber == currentRevision.revisionNumber) { "Action execution revision is stale" }
@@ -410,6 +436,7 @@ internal class SupportActionRequest private constructor(
         check(targetVersion == currentRevision.targetVersion) { "Action execution target version is stale" }
         val terminalId =
             when {
+                profileChange -> terminalProfileChangeId
                 compensation -> terminalCompensationId
                 resolution -> terminalResolutionId
                 else -> terminalExecutionId
@@ -422,16 +449,25 @@ internal class SupportActionRequest private constructor(
         require(occurredAt >= lastChangedAt) { "Action execution time cannot move backward" }
         val previous = state
         state = terminalState
-        if (compensation) {
-            check(terminalExecutionId == null && terminalResolutionId == null) { "Action request already has another terminal result" }
+        if (profileChange) {
+            check(terminalExecutionId == null && terminalResolutionId == null && terminalCompensationId == null) {
+                "Action request already has another terminal result"
+            }
+            terminalProfileChangeId = executionId
+        } else if (compensation) {
+            check(terminalExecutionId == null && terminalResolutionId == null && terminalProfileChangeId == null) {
+                "Action request already has another terminal result"
+            }
             terminalCompensationId = executionId
         } else if (resolution) {
             check(
-                terminalExecutionId == null && terminalCompensationId == null,
+                terminalExecutionId == null && terminalCompensationId == null && terminalProfileChangeId == null,
             ) { "Action request already has a direct terminal execution" }
             terminalResolutionId = executionId
         } else {
-            check(terminalResolutionId == null && terminalCompensationId == null) { "Action request already has another terminal result" }
+            check(terminalResolutionId == null && terminalCompensationId == null && terminalProfileChangeId == null) {
+                "Action request already has another terminal result"
+            }
             terminalExecutionId = executionId
         }
         version += 1
@@ -497,6 +533,7 @@ internal class SupportActionRequest private constructor(
                 null,
                 null,
                 null,
+                null,
                 0,
                 revision.createdAt,
             )
@@ -517,6 +554,7 @@ internal class SupportActionRequest private constructor(
             terminalExecutionId: UUID? = null,
             terminalResolutionId: UUID? = null,
             terminalCompensationId: UUID? = null,
+            terminalProfileChangeId: UUID? = null,
         ): SupportActionRequest {
             require(version >= 0) { "Action request version is invalid" }
             require(lastChangedAt >= revision.createdAt) { "Action request change time is invalid" }
@@ -531,12 +569,15 @@ internal class SupportActionRequest private constructor(
             require(executorActorId != supportApproverActorId && executorActorId != operationsApproverActorId) {
                 "Approver cannot be action executor"
             }
-            require(listOfNotNull(terminalExecutionId, terminalResolutionId, terminalCompensationId).size <= 1) {
+            require(listOfNotNull(terminalExecutionId, terminalResolutionId, terminalCompensationId, terminalProfileChangeId).size <= 1) {
                 "Action request cannot have multiple terminal results"
             }
             require(
                 (state == SupportActionRequestState.EXECUTED || state == SupportActionRequestState.RESOLUTION_REQUIRED) ==
-                    (terminalExecutionId != null || terminalResolutionId != null || terminalCompensationId != null),
+                    (
+                        terminalExecutionId != null || terminalResolutionId != null || terminalCompensationId != null ||
+                            terminalProfileChangeId != null
+                    ),
             ) { "Action request terminal state binding is invalid" }
             require(terminalResolutionId == null || state == SupportActionRequestState.EXECUTED) {
                 "ResolutionCase can only bind an executed action request"
@@ -546,6 +587,12 @@ internal class SupportActionRequest private constructor(
             }
             require(terminalCompensationId == null || revision.action == SupportActionType.GOODWILL_COMPENSATION) {
                 "Only goodwill actions can bind compensation"
+            }
+            require(terminalProfileChangeId == null || state == SupportActionRequestState.EXECUTED) {
+                "Profile change can only bind an executed action request"
+            }
+            require(terminalProfileChangeId == null || revision.action == SupportActionType.PROFILE_CHANGE) {
+                "Only profile-change actions can bind a profile change"
             }
             return SupportActionRequest(
                 id,
@@ -560,6 +607,7 @@ internal class SupportActionRequest private constructor(
                 terminalExecutionId,
                 terminalResolutionId,
                 terminalCompensationId,
+                terminalProfileChangeId,
                 version,
                 lastChangedAt,
             )

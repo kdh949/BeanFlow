@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.operations.api.OpenOperationsSupportInvestigationCommand
+import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationOperations
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationReturnHandler
 import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnResult
 import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnState
@@ -123,6 +125,7 @@ internal data class SupportActionRequestResource(
     val terminalExecutionId: UUID?,
     val terminalResolutionId: UUID?,
     val terminalCompensationId: UUID? = null,
+    val terminalProfileChangeId: UUID? = null,
 )
 
 internal sealed interface SupportActionCommandOutcome {
@@ -150,6 +153,8 @@ internal data class SupportActionRequestGuard(
 internal class SupportActionRequestApplicationService(
     private val evaluations: SupportActionEvaluationApplicationService,
     private val ordering: OrderingSupportTimelineOperations,
+    private val profileVersions: SupportProfileChangeTargetVersionOperations,
+    private val investigations: OperationsSupportInvestigationOperations,
     private val transactions: SupportActionRequestTransactionService,
 ) {
     fun create(command: CreateSupportActionRequestCommand): SupportActionRequestResource {
@@ -189,15 +194,35 @@ internal class SupportActionRequestApplicationService(
         return transactions.revise(command, evaluation)
     }
 
+    @Transactional
     fun decideSupportManager(command: DecideSupportManagerApprovalCommand): SupportActionCommandOutcome {
         val guard = transactions.managerGuard(command.actorId, command.requestId)
         val currentTargetVersion =
-            if (guard.action == SupportActionType.GOODWILL_COMPENSATION) {
-                transactions.compensationTargetVersion(guard.targetId)
-            } else {
-                ordering.findOrderSnapshots(setOf(guard.targetId)).singleOrNull()?.version ?: notFound("Order")
+            when (guard.action) {
+                SupportActionType.GOODWILL_COMPENSATION -> transactions.compensationTargetVersion(guard.targetId)
+                SupportActionType.PROFILE_CHANGE -> profileVersions.currentVersion(guard.targetId)
+                else -> ordering.findOrderSnapshots(setOf(guard.targetId)).singleOrNull()?.version ?: notFound("Order")
             }
-        return transactions.decideSupportManager(command, currentTargetVersion)
+        val outcome = transactions.decideSupportManager(command, currentTargetVersion)
+        if (outcome is SupportActionCommandOutcome.Succeeded &&
+            outcome.resource.action == SupportActionType.PROFILE_CHANGE &&
+            outcome.resource.state == SupportActionRequestState.AWAITING_OPERATIONS
+        ) {
+            val binding = transactions.profileInvestigationBinding(outcome.resource.requestId)
+            investigations.open(
+                OpenOperationsSupportInvestigationCommand(
+                    binding.requestId,
+                    binding.revisionId,
+                    binding.revisionNumber,
+                    binding.requesterActorId,
+                    binding.supportApproverActorId,
+                    binding.executorActorId,
+                    binding.expiresAt,
+                    binding.occurredAt,
+                ),
+            )
+        }
+        return outcome
     }
 
     fun get(
@@ -223,6 +248,8 @@ internal class SupportActionRequestTransactionService(
     private val sessions: VerificationSessionJpaRepository,
     private val compensationRequests: SupportCompensationRequestJpaRepository,
     private val ordering: OrderingSupportTimelineOperations,
+    private val profileVersions: SupportProfileChangeTargetVersionOperations,
+    private val reassignmentProjection: SupportActionReassignmentProjectionUpdater,
     private val permissions: OperatorPermissionAuthorization,
     private val commandLock: SupportCaseCommandLock,
     private val canonicalizer: SupportCommandPayloadCanonicalizer,
@@ -232,6 +259,175 @@ internal class SupportActionRequestTransactionService(
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : OperationsSupportInvestigationReturnHandler {
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun openProfileChangeApproval(command: OpenProfileChangeApprovalCommand): SupportActionRequestResource {
+        val revision =
+            SupportActionRevision(
+                command.revisionId,
+                1,
+                SupportActionType.PROFILE_CHANGE,
+                command.profileChangeId,
+                command.payloadDigest,
+                command.verificationSessionId,
+                PROFILE_CHANGE_POLICY_VERSION,
+                command.expectedProfileVersion,
+                null,
+                command.reason,
+                command.evidenceDigest,
+                command.expiresAt,
+                command.actorId,
+                command.occurredAt,
+            )
+        val aggregate =
+            SupportActionRequest.open(
+                command.requestId,
+                command.caseId,
+                command.actorId,
+                command.actorId,
+                SupportActionApprovalRoute.SUPPORT_MANAGER_THEN_OPERATIONS,
+                revision,
+            )
+        val entity = aggregate.toEntity(command.occurredAt)
+        requests.saveAndFlush(entity)
+        val revisionEntity = revision.toEntity(entity.id)
+        revisions.saveAndFlush(revisionEntity)
+        return resource(entity, revisionEntity, emptyList())
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun reviseProfileChangeApproval(command: ReviseProfileChangeApprovalCommand): SupportActionRequestResource {
+        val entity = requests.findLockedById(command.actionRequestId) ?: notFound("SupportActionRequest")
+        if (entity.action != SupportActionType.PROFILE_CHANGE || entity.targetId != command.profileChangeId ||
+            entity.requesterActorId != command.actorId || entity.version != command.expectedRequestVersion
+        ) {
+            stale()
+        }
+        val current = currentRevision(entity)
+        val aggregate = entity.toAggregate(current)
+        val next =
+            SupportActionRevision(
+                identifiers.next(),
+                current.revisionNumber + 1,
+                SupportActionType.PROFILE_CHANGE,
+                command.profileChangeId,
+                command.payloadDigest,
+                command.verificationSessionId,
+                PROFILE_CHANGE_POLICY_VERSION,
+                command.expectedProfileVersion,
+                null,
+                command.reason,
+                command.evidenceDigest,
+                command.expiresAt,
+                command.actorId,
+                command.occurredAt,
+            )
+        val change =
+            try {
+                aggregate.revise(next, command.actorId, command.occurredAt)
+            } catch (_: IllegalArgumentException) {
+                stale()
+            } catch (_: IllegalStateException) {
+                conflict("Profile change approval does not allow revision")
+            }
+        change.staleStepTypes.forEach { type ->
+            if (!steps.existsByRequestIdAndRevisionNumberAndStepType(entity.id, current.revisionNumber, type)) {
+                steps.saveAndFlush(
+                    stepEntity(
+                        entity.id,
+                        current,
+                        type,
+                        SupportApprovalStepState.STALE,
+                        null,
+                        "PROFILE_PAYLOAD_REVISED",
+                        command.occurredAt,
+                    ),
+                )
+            }
+        }
+        entity.apply(aggregate, command.occurredAt)
+        requests.saveAndFlush(entity)
+        val nextEntity = next.toEntity(entity.id)
+        revisions.saveAndFlush(nextEntity)
+        appendAudits(
+            listOf(
+                audit(
+                    entity,
+                    command.actorId,
+                    "SUPPORT_ACTION_REVISION_CREATED",
+                    "PROFILE_PAYLOAD_REVISED",
+                    null,
+                    entity.state,
+                    command.occurredAt,
+                ),
+            ),
+        )
+        return resource(entity, nextEntity, emptyList())
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun completeProfileChangeApproval(command: ProfileChangeExecutionApprovalCommand): SupportActionRequestResource {
+        val entity = requests.findLockedById(command.actionRequestId) ?: notFound("SupportActionRequest")
+        if (entity.action != SupportActionType.PROFILE_CHANGE || entity.targetId != command.profileChangeId ||
+            entity.version != command.expectedRequestVersion
+        ) {
+            stale()
+        }
+        val revision = currentRevision(entity)
+        val aggregate = entity.toAggregate(revision)
+        val change =
+            try {
+                aggregate.completeProfileChangeExecution(
+                    command.profileChangeId,
+                    command.actorId,
+                    command.revisionNumber,
+                    command.payloadDigest,
+                    command.expectedProfileVersion,
+                    command.occurredAt,
+                )
+            } catch (_: IllegalArgumentException) {
+                denied()
+            } catch (_: IllegalStateException) {
+                stale()
+            }
+        entity.apply(aggregate, command.occurredAt)
+        requests.saveAndFlush(entity)
+        if (!change.replayed) {
+            appendAudits(
+                listOf(
+                    audit(
+                        entity,
+                        command.actorId,
+                        "SUPPORT_ACTION_REQUEST_EXECUTED",
+                        "PROFILE_CHANGE_EXECUTED",
+                        change.previousState,
+                        change.currentState,
+                        command.occurredAt,
+                    ),
+                ),
+            )
+        }
+        return resource(entity, revision, currentSteps(entity))
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    fun profileInvestigationBinding(requestId: UUID): ProfileChangeInvestigationBinding {
+        val entity = requests.findById(requestId).orElse(null) ?: notFound("SupportActionRequest")
+        if (entity.action != SupportActionType.PROFILE_CHANGE || entity.state != SupportActionRequestState.AWAITING_OPERATIONS) {
+            conflict("Profile change is not awaiting Operations")
+        }
+        val revision = currentRevision(entity)
+        return ProfileChangeInvestigationBinding(
+            entity.id,
+            revision.id,
+            revision.revisionNumber,
+            entity.requesterActorId,
+            entity.supportApproverActorId ?: dependency("Support approver binding is missing"),
+            entity.executorActorId,
+            revision.expiresAt,
+            clock.instant(),
+        )
+    }
+
     @Transactional
     fun create(
         command: CreateSupportActionRequestCommand,
@@ -313,11 +509,20 @@ internal class SupportActionRequestTransactionService(
     ): SupportActionRequestGuard {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val entity = requests.findLockedById(requestId) ?: notFound("SupportActionRequest")
-        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-            permissions.requireActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
-        } else {
-            permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
-            permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+        when (entity.action) {
+            SupportActionType.GOODWILL_COMPENSATION -> {
+                permissions.requireActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            }
+
+            SupportActionType.PROFILE_CHANGE -> {
+                permissions.requireActive(actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
+                permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+            }
+
+            else -> {
+                permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
+                permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+            }
         }
         if (entity.requesterActorId == actorId || entity.executorActorId == actorId) {
             throw DomainFailure(FailureCode.SUPPORT_APPROVER_MUST_DIFFER, "Support approver must differ from requester and executor")
@@ -417,11 +622,20 @@ internal class SupportActionRequestTransactionService(
         val payloadHash = normalized.managerPayloadHash()
         replay(normalized.actorId, MANAGER, normalized.idempotencyKey, payloadHash)?.let { return it }
         val entity = requests.findLockedById(normalized.requestId) ?: notFound("SupportActionRequest")
-        if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
-        } else {
-            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ORDER_READ)
-            permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+        when (entity.action) {
+            SupportActionType.GOODWILL_COMPENSATION -> {
+                permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            }
+
+            SupportActionType.PROFILE_CHANGE -> {
+                permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
+                permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+            }
+
+            else -> {
+                permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ORDER_READ)
+                permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+            }
         }
         if (entity.currentRevisionNumber != normalized.revisionNumber || entity.version != normalized.expectedRequestVersion) stale()
         val revision = currentRevision(entity)
@@ -463,6 +677,7 @@ internal class SupportActionRequestTransactionService(
             actorId == entity.requesterActorId || actorId == entity.executorActorId ||
                 permissions.hasActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE) ||
                 permissions.hasActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE) ||
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE) ||
                 permissions.hasActive(actorId, OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION)
         if (!visible) denied()
         val revision = currentRevision(entity)
@@ -544,6 +759,7 @@ internal class SupportActionRequestTransactionService(
             }
 
         entity.apply(requestAggregate, now)
+        reassignmentProjection.update(entity.id, entity.action, normalized.assigneeId, now)
         supportCase.applyActionAggregate(caseAggregate)
         requests.saveAndFlush(entity)
         cases.saveAndFlush(supportCase)
@@ -616,10 +832,18 @@ internal class SupportActionRequestTransactionService(
         }
 
         val currentTargetVersion =
-            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-                compensationRequests.findById(entity.targetId).orElse(null)?.version ?: notFound("SupportCompensationRequest")
-            } else {
-                ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull()?.version ?: notFound("Order")
+            when (entity.action) {
+                SupportActionType.GOODWILL_COMPENSATION -> {
+                    compensationRequests.findById(entity.targetId).orElse(null)?.version ?: notFound("SupportCompensationRequest")
+                }
+
+                SupportActionType.PROFILE_CHANGE -> {
+                    profileVersions.currentVersion(entity.targetId)
+                }
+
+                else -> {
+                    ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull()?.version ?: notFound("Order")
+                }
             }
         val invalidity = approvalInvalidity(entity, revision, aggregate, currentTargetVersion, command.occurredAt)
         if (invalidity != null) {
@@ -672,21 +896,33 @@ internal class SupportActionRequestTransactionService(
                 session.purpose == VerificationPurpose.CASE_RESOLUTION && now.isBefore(session.expiresAt) &&
                 session.expiresAt == revision.expiresAt
         val validRequester =
-            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-                permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
-            } else {
-                permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
-                    permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
+            when (entity.action) {
+                SupportActionType.GOODWILL_COMPENSATION -> {
+                    permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
+                }
+
+                else -> {
+                    permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
+                        permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
+                }
             }
         val validPolicyVersion =
-            if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-                compensationRequests
-                    .findById(entity.targetId)
-                    .orElse(null)
-                    ?.policyVersionId
-                    ?.toString() == revision.policyVersion
-            } else {
-                revision.policyVersion == SupportActionPolicy.POLICY_VERSION
+            when (entity.action) {
+                SupportActionType.GOODWILL_COMPENSATION -> {
+                    compensationRequests
+                        .findById(entity.targetId)
+                        .orElse(null)
+                        ?.policyVersionId
+                        ?.toString() == revision.policyVersion
+                }
+
+                SupportActionType.PROFILE_CHANGE -> {
+                    revision.policyVersion == PROFILE_CHANGE_POLICY_VERSION
+                }
+
+                else -> {
+                    revision.policyVersion == SupportActionPolicy.POLICY_VERSION
+                }
             }
         if (!validSession || !validRequester || !validPolicyVersion ||
             revision.targetVersion != currentTargetVersion
@@ -831,6 +1067,7 @@ internal class SupportActionRequestTransactionService(
         entity.terminalExecutionId,
         entity.terminalResolutionId,
         entity.terminalCompensationId,
+        entity.terminalProfileChangeId,
     )
 
     private fun replay(
@@ -991,6 +1228,7 @@ internal class SupportActionRequestTransactionService(
             now,
             version,
             terminalCompensationId,
+            terminalProfileChangeId,
         )
 
     private fun SupportActionRevision.toEntity(requestId: UUID) =
@@ -1014,10 +1252,10 @@ internal class SupportActionRequestTransactionService(
         )
 
     private fun SupportActionType.targetType(): SupportActionTargetType =
-        if (this == SupportActionType.GOODWILL_COMPENSATION) {
-            SupportActionTargetType.COMPENSATION_REQUEST
-        } else {
-            SupportActionTargetType.ORDER
+        when (this) {
+            SupportActionType.GOODWILL_COMPENSATION -> SupportActionTargetType.COMPENSATION_REQUEST
+            SupportActionType.PROFILE_CHANGE -> SupportActionTargetType.PROFILE_CHANGE_REQUEST
+            else -> SupportActionTargetType.ORDER
         }
 
     private fun SupportActionRequestEntity.guard() =

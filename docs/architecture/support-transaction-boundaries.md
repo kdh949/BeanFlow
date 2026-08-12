@@ -1,6 +1,6 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S90 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S100 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
 ## Implemented S10–S70 boundaries
@@ -98,6 +98,18 @@
 - S90 Notification intent는 benefit commit 뒤 `REQUIRES_NEW` owner transaction에서 생성한다. 실패하면 terminal
   benefit/limit은 유지하고 Support를 `NOTIFICATION_RETRY`로 기록한다. Retry는 같은 logical source만 재사용하며
   Point/Coupon을 다시 발급하지 않는다.
+- S100 preflight transaction은 Case/active subject link, bound VerificationSession, persistent purpose permission과 current
+  owner version을 검사한다. R3/R4는 exact S60 revision/approval/assigned executor도 검사한다. Vault encrypt/HMAC 준비는
+  이 transaction 밖에서 수행되며, idempotency replay는 owner version 조회나 crypto 전에 terminal Support 결과를
+  반환해 이미 성공한 명령이 이후 target 변경 때문에 stale로 오판되지 않게 한다.
+- S100 final transaction은 authorization/version/digest를 다시 검사하고 Identity/Merchant/Delivery public owner API를
+  `MANDATORY`로 호출한다. owner current/history/index 또는 reset intent, Support result, S60 one-time consumption,
+  idempotency와 PII-free Audit가 모두 commit되기 전에는 성공이 없다. Support는 owner Repository/table을 직접 쓰지
+  않으며 Audit 실패는 owner change도 rollback한다.
+- S100 Notification target/intents는 owner change commit 뒤 `REQUIRES_NEW` transaction에서 만든다. contact change는
+  owner-local OLD/NEW snapshot을, 그 외 purpose는 CURRENT snapshot을 사용한다. persistence/Provider 실패는 terminal
+  profile change를 되돌리지 않고 `NOTIFICATION_RETRY`/`MANUAL_REVIEW`로 남는다. retry는 같은 owner history/reset
+  reference만 재사용하고 owner write 또는 approval consumption을 반복하지 않는다.
 
 ## Local atomic candidates
 
@@ -108,11 +120,12 @@
 - owner-local pickup slot swap (S70 implemented)
 - Resolution plan/claim/result + PII-free Audit (S80 implemented)
 - owner-local point/coupon issuance + compensation execution result (S90 implemented)
+- owner-local profile/history/reset write + Support/S60/Audit result (S100 implemented)
 - provider webhook Inbox insert
 - deletion component transition + deletion ledger result
 
 ## Cross-context orchestration
 
-Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs, S40 owner-local reveal APIs, S50 bounded timeline/snapshot APIs and S70 Ordering/Fulfillment owner commands expose public contracts only; Support never imports their repositories/entities. S70 uses the existing shared database transaction so owner change and Support/Audit durability commit together. A future separately deployed owner requires an Accepted durability ADR before implementation.
+Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs, S40 owner-local reveal APIs, S50 bounded timeline/snapshot APIs, S70 Ordering/Fulfillment owner commands and S100 typed Identity/Merchant/Delivery profile commands expose public contracts only; Support never imports their repositories/entities. S70 and S100 use the existing shared database transaction so owner change and Support/Audit durability commit together. A future separately deployed owner requires an Accepted durability ADR before implementation.
 
 External OTP/email/PG/Delivery/notification/object-storage calls occur outside long DB transactions. Intent/claim is committed before call and result is committed afterward. Timeout or ACK loss produces `UNKNOWN`/`RECONCILING`, never guessed success/failure. Notification failure after confirmed change leaves the change intact and schedules retry/manual review.

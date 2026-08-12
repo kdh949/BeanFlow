@@ -23,11 +23,11 @@ public view를 통해 검증하며, accepted decision은 Settlement public Adjus
 
 ## Status codes
 
-### Support draft surface
+### Support staged surface
 
-The 55 Support/Delivery/LegalHold operations are kept in
-[`support-api-surface.md`](support-api-surface.md). S20's nine Case, S30's one masked-search and S40's twelve
-verification/access operations are implemented in both canonical OpenAPI files; later rows remain `DRAFT`. An owning Stage adds endpoint-specific request, response/page, error and
+The 80 Support/Delivery/LegalHold operations are kept in
+[`support-api-surface.md`](support-api-surface.md). S20–S100 implement 74 Support/Operations operations in both
+canonical OpenAPI files; S110 and later inventory rows remain `DRAFT`. An owning Stage adds endpoint-specific request, response/page, error and
 security schemas to target OpenAPI only when its model is implementable. Runtime OpenAPI still requires a matching
 Controller, contract, authorization and failure tests.
 

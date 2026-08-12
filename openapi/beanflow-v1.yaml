@@ -2686,6 +2686,703 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-display-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCustomerDisplayNameCorrection
+      summary: Correct a customer display name under the R1 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerDisplayNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-legal-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCustomerLegalNameCorrection
+      summary: Correct a customer legal-name typo under the R2 specialist workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLegalNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-primary-phone-requests:
+    post:
+      tags: [Support]
+      operationId: createCustomerPrimaryPhoneChange
+      summary: Request an R3 customer primary-phone change
+      description: A bound ENHANCED verification through a previously registered channel is required; the new phone alone is never sufficient.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-credential-reset-requests:
+    post:
+      tags: [Support]
+      operationId: createCustomerCredentialReset
+      summary: Request an R4 customer credential reset without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCredentialResetProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-public-profile-corrections:
+    post:
+      tags: [Support]
+      operationId: createStorePublicProfileCorrection
+      summary: Correct one or more R1 public store-profile fields
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorePublicProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-operations-contact-corrections:
+    post:
+      tags: [Support]
+      operationId: createStoreOperationsContactCorrection
+      summary: Correct R2 store operations contact fields
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreOperationsContactProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-representative-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreRepresentativeChange
+      summary: Request an R3 store representative change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-settlement-account-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreSettlementAccountChange
+      summary: Request an R3 opaque store settlement-account reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-access-reregistration-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreAccessReregistration
+      summary: Request an R4 store access re-registration without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreAccessReregistrationProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-display-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCourierDisplayNameCorrection
+      summary: Correct an external courier display name under the R1 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierDisplayNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-relay-contact-corrections:
+    post:
+      tags: [Support]
+      operationId: createCourierRelayContactCorrection
+      summary: Correct external-courier relay contact fields under the R2 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierRelayContactProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-provider-identity-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierProviderIdentityChange
+      summary: Request an R3 external-provider courier identity-reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-payout-reference-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierPayoutReferenceChange
+      summary: Request an R3 opaque external-courier payout-reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-provider-reregistration-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierProviderReregistration
+      summary: Request an R4 external-courier provider re-registration without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderReregistrationProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}:
+    get:
+      tags: [Support]
+      operationId: getSupportProfileChange
+      summary: Read one masked purpose-specific profile-change workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCustomerPrimaryPhoneChange
+      summary: Replace the exact R3 customer-phone approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCustomerCredentialReset
+      summary: Replace the exact R4 customer-reset approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-representative-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreRepresentativeChange
+      summary: Replace the exact R3 store-representative approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-settlement-account-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreSettlementAccountChange
+      summary: Replace the exact R3 settlement-reference approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreAccessReregistration
+      summary: Replace the exact R4 store-access approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierProviderIdentityChange
+      summary: Replace the exact R3 courier provider-identity approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierPayoutReferenceChange
+      summary: Replace the exact R3 courier payout-reference approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierProviderReregistration
+      summary: Replace the exact R4 courier re-registration approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-executions:
+    post:
+      tags: [Support]
+      operationId: executeCustomerPrimaryPhoneChange
+      summary: Execute the exact approved R3 customer-phone payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-executions:
+    post:
+      tags: [Support]
+      operationId: executeCustomerCredentialReset
+      summary: Execute the exact approved R4 customer reset intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-representative-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreRepresentativeChange
+      summary: Execute the exact approved R3 store-representative payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-settlement-account-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreSettlementAccountChange
+      summary: Execute the exact approved R3 settlement-reference payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreAccessReregistration
+      summary: Execute the exact approved R4 store access re-registration intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierProviderIdentityChange
+      summary: Execute the exact approved R3 courier provider-identity payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierPayoutReferenceChange
+      summary: Execute the exact approved R3 courier payout-reference payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierProviderReregistration
+      summary: Execute the exact approved R4 courier provider re-registration intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/notification-retries:
+    post:
+      tags: [Support]
+      operationId: retrySupportProfileChangeNotifications
+      summary: Retry only failed old/new/current profile notification intents
+      description: Never repeats the owner write or consumes approval again; the command and owner notification logical sources are idempotent.
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrySupportProfileChangeNotificationsRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
 components:
   securitySchemes:
     bearerAuth:
@@ -2772,6 +3469,12 @@ components:
     SupportCompensationRequestId:
       in: path
       name: compensationRequestId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportProfileChangeId:
+      in: path
+      name: profileChangeId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -2938,6 +3641,24 @@ components:
       schema:
         type: string
   responses:
+    SupportProfileChangeCreated:
+      description: Purpose-specific workflow created or its exact idempotent result replayed
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SupportProfileChangeResource"
+    SupportProfileChangeOk:
+      description: Current masked workflow, exact approval binding and independent notification state
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SupportProfileChangeResource"
     BadRequest:
       description: Request syntax or field validation failed
       content:
@@ -3068,6 +3789,282 @@ components:
         type: string
         const: no-store
   schemas:
+    ProfileChangeBinding:
+      type: object
+      additionalProperties: false
+      required: [subjectId, expectedProfileVersion, verificationSessionId, reason, evidenceDigest]
+      properties:
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        expectedProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    ProfileChangeRevisionBinding:
+      type: object
+      additionalProperties: false
+      required: [expectedProfileChangeVersion, expectedActionRequestVersion, expectedProfileVersion, verificationSessionId, reason, evidenceDigest]
+      properties:
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+        expectedActionRequestVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        evidenceDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+    ProfileChangeExecutionBinding:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedActionRequestVersion, expectedProfileChangeVersion, expectedProfileVersion]
+      properties:
+        revisionNumber: { type: integer, minimum: 1 }
+        expectedActionRequestVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+    CustomerDisplayNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, displayName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    CustomerLegalNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, legalName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        legalName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    CustomerPrimaryPhoneProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    CustomerCredentialResetProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    StorePublicProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: [string, "null"], minLength: 1, maxLength: 200, writeOnly: true }
+        publicPhone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        description: { type: [string, "null"], minLength: 1, maxLength: 1000, writeOnly: true }
+        pickupInstructions: { type: [string, "null"], minLength: 1, maxLength: 1000, writeOnly: true }
+    StoreOperationsContactProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        phone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        email: { type: [string, "null"], format: email, maxLength: 320, writeOnly: true }
+    StoreRepresentativeProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    StoreSettlementAccountProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    StoreAccessReregistrationProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    CourierDisplayNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, displayName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    CourierRelayContactProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        phone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        email: { type: [string, "null"], format: email, maxLength: 320, writeOnly: true }
+    CourierProviderIdentityProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierPayoutReferenceProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierProviderReregistrationProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    CustomerPrimaryPhoneProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    EmptyProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+    StoreRepresentativeProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    StoreSettlementAccountProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierProviderIdentityProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierPayoutReferenceProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CustomerPrimaryPhoneProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    EmptyProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+    StoreRepresentativeProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    StoreSettlementAccountProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierProviderIdentityProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierPayoutReferenceProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    RetrySupportProfileChangeNotificationsRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedProfileChangeVersion]
+      properties:
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+    SupportProfileChangeNotificationResource:
+      type: object
+      additionalProperties: false
+      required: [targetKind, channel, state, deliveryId, failureCode, attempts]
+      properties:
+        targetKind: { type: string, enum: [OLD, NEW, CURRENT] }
+        channel: { type: string, enum: [PHONE, EMAIL] }
+        state: { type: string, enum: [PENDING, PROCESSING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
+        deliveryId: { type: [string, "null"], format: uuid }
+        failureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
+        attempts: { type: integer, minimum: 0, maximum: 3 }
+    SupportProfileChangeResource:
+      type: object
+      additionalProperties: false
+      description: Raw before/after values, verification proof, evidence and secrets are deliberately excluded.
+      required: [profileChangeId, caseId, subjectType, subjectId, purpose, riskClass, requesterActorId, executorActorId, verificationSessionId, expectedProfileVersion, currentProfileVersion, payloadDigest, actionRequestId, state, notificationState, notificationFailureCode, maskedBefore, maskedAfter, version, createdAt, updatedAt, notifications]
+      properties:
+        profileChangeId: { $ref: "#/components/schemas/Identifier" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        subjectType: { type: string, enum: [CUSTOMER, STORE, RIDER] }
+        subjectId: { $ref: "#/components/schemas/Identifier" }
+        purpose:
+          type: string
+          enum: [CUSTOMER_DISPLAY_NAME, CUSTOMER_LEGAL_NAME_TYPO, CUSTOMER_PRIMARY_PHONE, CUSTOMER_CREDENTIAL_RESET, STORE_PUBLIC_PROFILE, STORE_OPERATIONS_CONTACT, STORE_REPRESENTATIVE, STORE_SETTLEMENT_ACCOUNT, STORE_ACCESS_REREGISTRATION, COURIER_DISPLAY_NAME, COURIER_RELAY_CONTACT, COURIER_PROVIDER_IDENTITY, COURIER_PAYOUT_REFERENCE, COURIER_PROVIDER_REREGISTRATION]
+        riskClass: { type: string, enum: [R1, R2, R3, R4] }
+        requesterActorId: { $ref: "#/components/schemas/Identifier" }
+        executorActorId: { $ref: "#/components/schemas/Identifier" }
+        verificationSessionId: { $ref: "#/components/schemas/Identifier" }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+        currentProfileVersion: { type: [integer, "null"], format: int64, minimum: 0 }
+        payloadDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        actionRequestId: { type: [string, "null"], format: uuid }
+        state: { type: string, enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, EXECUTED] }
+        notificationState: { type: string, enum: [PENDING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
+        notificationFailureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
+        maskedBefore: { type: [string, "null"], maxLength: 1000 }
+        maskedAfter: { type: [string, "null"], maxLength: 1000 }
+        version: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        notifications:
+          type: array
+          maxItems: 4
+          items: { $ref: "#/components/schemas/SupportProfileChangeNotificationResource" }
     Identifier:
       type: string
       minLength: 1

@@ -215,11 +215,12 @@ internal fun SupportActionType.capabilityPermission(): OperatorPermission =
         SupportActionType.PICKUP_RESCHEDULE -> OperatorPermission.SUPPORT_PICKUP_RESCHEDULE
         SupportActionType.POST_ACCEPTANCE_RESOLUTION -> OperatorPermission.SUPPORT_RESOLUTION_REQUEST
         SupportActionType.GOODWILL_COMPENSATION -> OperatorPermission.SUPPORT_COMPENSATION_REQUEST
+        SupportActionType.PROFILE_CHANGE -> OperatorPermission.SUPPORT_PROFILE_R3_REQUEST
     }
 
 internal fun SupportActionType.executionCapabilityPermission(): OperatorPermission =
-    if (this == SupportActionType.GOODWILL_COMPENSATION) {
-        OperatorPermission.SUPPORT_COMPENSATION_EXECUTE
-    } else {
-        capabilityPermission()
+    when (this) {
+        SupportActionType.GOODWILL_COMPENSATION -> OperatorPermission.SUPPORT_COMPENSATION_EXECUTE
+        SupportActionType.PROFILE_CHANGE -> OperatorPermission.SUPPORT_PROFILE_R3_REQUEST
+        else -> capabilityPermission()
     }

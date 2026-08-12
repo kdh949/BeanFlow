@@ -702,6 +702,10 @@ internal class SupportOrderChangeExecutionTransactionService(
             SupportActionType.GOODWILL_COMPENSATION -> {
                 invalid("Goodwill compensation is owned by S90")
             }
+
+            SupportActionType.PROFILE_CHANGE -> {
+                invalid("Profile change is owned by S100")
+            }
         }
     }
 
@@ -796,6 +800,10 @@ internal class SupportOrderChangeExecutionTransactionService(
 
                 SupportActionType.GOODWILL_COMPENSATION -> {
                     invalid("Goodwill compensation is owned by S90")
+                }
+
+                SupportActionType.PROFILE_CHANGE -> {
+                    invalid("Profile change is owned by S100")
                 }
             }
         }

@@ -211,6 +211,7 @@ internal class SupportOrderChangeAuthorization private constructor(
                 SupportActionType.PICKUP_RESCHEDULE -> Duration.ofMinutes(30) to 3
                 SupportActionType.POST_ACCEPTANCE_RESOLUTION -> throw IllegalArgumentException("Unsupported delegated action")
                 SupportActionType.GOODWILL_COMPENSATION -> throw IllegalArgumentException("Unsupported delegated action")
+                SupportActionType.PROFILE_CHANGE -> throw IllegalArgumentException("Unsupported delegated action")
             }
     }
 }
