@@ -321,6 +321,23 @@ internal data class SupportCompensationExecutionBinding(
     val orderId: UUID?,
 )
 
+private data class CompensationLimitScopeSnapshot(
+    val customerId: UUID,
+    val orderId: UUID?,
+    val incidentId: UUID,
+    val executorActorId: UUID,
+    val storeId: UUID?,
+) {
+    fun scopeIds(): Map<SupportCompensationLimitScope, UUID> =
+        buildMap {
+            put(SupportCompensationLimitScope.CUSTOMER, customerId)
+            orderId?.let { put(SupportCompensationLimitScope.ORDER, it) }
+            put(SupportCompensationLimitScope.INCIDENT, incidentId)
+            put(SupportCompensationLimitScope.ACTOR, executorActorId)
+            storeId?.let { put(SupportCompensationLimitScope.STORE, it) }
+        }
+}
+
 @Service
 internal class SupportCompensationTransactionService(
     private val requests: SupportCompensationRequestJpaRepository,
@@ -483,14 +500,18 @@ internal class SupportCompensationTransactionService(
         ) {
             stale()
         }
+        val actionEntity = exactActionRequest(entity)
+        val actionRevision = actionEntity?.let(::currentRevision)
+        val effectiveExecutorActorId = actionEntity?.executorActorId ?: entity.executorActorId
+        if (command.actorId != effectiveExecutorActorId) denied()
         val executedAt = now()
-        val evaluationCommand = entity.evaluationCommand(command.actorId)
+        val evaluationCommand = entity.evaluationCommand(entity.requesterActorId)
         val evaluated =
             evaluateCurrent(
                 evaluationCommand,
                 order,
                 executedAt,
-                requireAssignee = false,
+                caseActorId = effectiveExecutorActorId,
                 policyVersionId = entity.policyVersionId,
             )
         if (evaluated.version.id != entity.policyVersionId || evaluated.result.band != entity.band ||
@@ -499,8 +520,6 @@ internal class SupportCompensationTransactionService(
         ) {
             stale()
         }
-        val actionEntity = entity.actionRequestId?.let { actionRequests.findLockedById(it) ?: dependency("Action request is missing") }
-        val actionRevision = actionEntity?.let(::currentRevision)
         if (actionEntity != null) {
             if (actionEntity.state != SupportActionRequestState.READY_FOR_EXECUTION || actionEntity.targetId != entity.id ||
                 actionEntity.action != SupportActionType.GOODWILL_COMPENSATION ||
@@ -511,12 +530,12 @@ internal class SupportCompensationTransactionService(
         }
         val aggregate = entity.toAggregate()
         if (actionEntity != null) {
-            aggregate.executorActorId = actionEntity.executorActorId
-            if (command.actorId != actionEntity.executorActorId) denied()
+            aggregate.executorActorId = effectiveExecutorActorId
             aggregate.markApprovalReady(actionEntity.id, entity.version, executedAt)
         }
         if (command.actorId != aggregate.executorActorId) denied()
-        lockAndCheckLimits(entity, evaluated.version.limits, executedAt)
+        val limitScope = entity.limitScope(effectiveExecutorActorId)
+        lockAndCheckLimits(limitScope, entity.amountKrw, evaluated.version.limits, executedAt)
         terminals.findByIncidentId(entity.incidentId)?.let { conflict("Incident already has a terminal goodwill benefit") }
         val owner = issueBenefit(entity, executedAt)
         val benefitChange =
@@ -549,7 +568,7 @@ internal class SupportCompensationTransactionService(
                 executedAt,
             ),
         )
-        saveConsumptions(entity, executedAt)
+        saveConsumptions(entity, limitScope, executedAt)
         audits.appendAll(listOf(benefitAudit(entity, command.actorId, executedAt)))
         saveIdempotency(
             command.actorId,
@@ -568,7 +587,10 @@ internal class SupportCompensationTransactionService(
     @Transactional
     fun prepareNotificationRetry(command: RetrySupportCompensationNotificationCommand): SupportCompensationResource {
         val normalized = command.normalized()
+        permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_COMPENSATION_EXECUTE)
+        val entity = requests.findLockedById(normalized.compensationRequestId) ?: notFound()
+        requireNotificationRetryAuthorization(normalized.actorId, entity)
         replay(
             normalized.actorId,
             SupportCompensationCommandOperation.RETRY_NOTIFICATION,
@@ -577,8 +599,7 @@ internal class SupportCompensationTransactionService(
         )?.let { existing ->
             return resource(requests.findById(existing.compensationRequestId).orElse(null) ?: dependency("Compensation request is missing"))
         }
-        val entity = requests.findLockedById(normalized.compensationRequestId) ?: notFound()
-        if (entity.state !in setOf(SupportCompensationRequestState.BENEFIT_ISSUED, SupportCompensationRequestState.NOTIFICATION_RETRY)) {
+        if (entity.state != SupportCompensationRequestState.NOTIFICATION_RETRY) {
             conflict("Compensation notification is not retryable")
         }
         return resource(entity)
@@ -641,20 +662,22 @@ internal class SupportCompensationTransactionService(
         compensationRequestId: UUID,
     ): SupportCompensationResource {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
-        return resource(requests.findById(compensationRequestId).orElse(null) ?: notFound())
+        val entity = requests.findLockedById(compensationRequestId) ?: notFound()
+        requireCompensationVisibility(actorId, entity)
+        return resource(entity)
     }
 
     private fun evaluateCurrent(
         command: EvaluateSupportCompensationCommand,
         order: GoodwillCompensationOrderFact?,
         evaluatedAt: Instant,
-        requireAssignee: Boolean = true,
+        caseActorId: UUID = command.actorId,
         policyVersionId: UUID? = null,
     ): EvaluatedCompensation {
-        permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_CASE_READ)
+        permissions.requireActive(caseActorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
         val supportCase = cases.findLockedById(command.caseId) ?: notFound("SupportCase")
-        if ((requireAssignee && supportCase.currentAssigneeId != command.actorId) || supportCase.state !in ACTIVE_CASE_STATES) denied()
+        if (supportCase.currentAssigneeId != caseActorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
         val session = sessions.findLockedById(command.verificationSessionId) ?: verificationRequired()
         if (session.actorId != command.actorId || session.supportCaseId != command.caseId ||
             session.subjectType != VerificationSubjectType.CUSTOMER || session.state != VerificationState.VERIFIED ||
@@ -736,11 +759,12 @@ internal class SupportCompensationTransactionService(
     }
 
     private fun lockAndCheckLimits(
-        entity: SupportCompensationRequestEntity,
+        scope: CompensationLimitScopeSnapshot,
+        amountKrw: Long,
         rules: List<SupportCompensationLimitRule>,
         now: Instant,
     ) {
-        val scopeIds = entity.scopeIds()
+        val scopeIds = scope.scopeIds()
         val byScope = rules.associateBy { it.scope }
         scopeIds.toSortedMap(compareBy { it.ordinal }).forEach { (scope, scopeId) ->
             limitLocks.insertIfAbsent(scope.name, scopeId)
@@ -749,7 +773,7 @@ internal class SupportCompensationTransactionService(
             val used = consumptions.sumInWindow(scope, scopeId, now.minus(rule.window))
             val next =
                 try {
-                    Math.addExact(used, entity.amountKrw)
+                    Math.addExact(used, amountKrw)
                 } catch (_: ArithmeticException) {
                     policyDenied()
                 }
@@ -759,15 +783,16 @@ internal class SupportCompensationTransactionService(
 
     private fun saveConsumptions(
         entity: SupportCompensationRequestEntity,
+        scope: CompensationLimitScopeSnapshot,
         issuedAt: Instant,
     ) {
         consumptions.saveAllAndFlush(
-            entity.scopeIds().map { (scope, scopeId) ->
+            scope.scopeIds().map { (limitScope, scopeId) ->
                 SupportCompensationLimitConsumptionEntity(
                     identifiers.next(),
                     entity.id,
                     entity.policyVersionId,
-                    scope,
+                    limitScope,
                     scopeId,
                     entity.amountKrw,
                     issuedAt,
@@ -910,6 +935,67 @@ internal class SupportCompensationTransactionService(
         actionRevisions.findByRequestIdAndRevisionNumber(action.id, action.currentRevisionNumber)
             ?: dependency("Action revision is missing")
 
+    private fun exactActionRequest(entity: SupportCompensationRequestEntity): SupportActionRequestEntity? =
+        entity.actionRequestId?.let { actionRequestId ->
+            val action = actionRequests.findLockedById(actionRequestId) ?: dependency("Action request is missing")
+            if (action.targetId != entity.id || action.targetType != SupportActionTargetType.COMPENSATION_REQUEST ||
+                action.action != SupportActionType.GOODWILL_COMPENSATION
+            ) {
+                dependency("Compensation action request binding is invalid")
+            }
+            action
+        }
+
+    private fun requireCompensationVisibility(
+        actorId: UUID,
+        entity: SupportCompensationRequestEntity,
+    ) {
+        val supportCase = requireActiveObjectScope(entity)
+        val action = exactActionRequest(entity)
+        val effectiveExecutorActorId = action?.executorActorId ?: entity.executorActorId
+        val visible =
+            actorId == entity.requesterActorId ||
+                (actorId == effectiveExecutorActorId && actorId == supportCase.currentAssigneeId) ||
+                actorId == action?.supportApproverActorId ||
+                actorId == action?.operationsApproverActorId
+        if (!visible) denied()
+    }
+
+    private fun requireNotificationRetryAuthorization(
+        actorId: UUID,
+        entity: SupportCompensationRequestEntity,
+    ) {
+        val supportCase = requireActiveObjectScope(entity)
+        val effectiveExecutorActorId = exactActionRequest(entity)?.executorActorId ?: entity.executorActorId
+        if (actorId != effectiveExecutorActorId || supportCase.currentAssigneeId != actorId) denied()
+    }
+
+    private fun requireActiveObjectScope(entity: SupportCompensationRequestEntity): SupportCaseEntity {
+        val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
+        if (supportCase.state !in ACTIVE_CASE_STATES) denied()
+        val session = sessions.findLockedById(entity.verificationSessionId) ?: verificationRequired()
+        val customerLink = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, entity.supportCaseId)
+        if (session.supportCaseId != entity.supportCaseId || session.subjectType != VerificationSubjectType.CUSTOMER ||
+            session.subjectId != entity.customerId ||
+            customerLink == null || customerLink.unlinkedAt != null || customerLink.subjectType != SupportSubjectType.CUSTOMER ||
+            customerLink.subjectId != entity.customerId
+        ) {
+            denied()
+        }
+        entity.orderId?.let { orderId ->
+            if (!subjectLinks.existsBySupportCaseIdAndSubjectTypeAndSubjectIdAndRelationshipAndUnlinkedAtIsNull(
+                    entity.supportCaseId,
+                    SupportSubjectType.ORDER,
+                    orderId,
+                    SupportSubjectRelationship.RELATED_ORDER,
+                )
+            ) {
+                denied()
+            }
+        }
+        return supportCase
+    }
+
     private fun replay(
         actorId: UUID,
         operation: SupportCompensationCommandOperation,
@@ -1037,14 +1123,8 @@ internal class SupportCompensationTransactionService(
             createdAt,
         )
 
-    private fun SupportCompensationRequestEntity.scopeIds(): Map<SupportCompensationLimitScope, UUID> =
-        buildMap {
-            put(SupportCompensationLimitScope.CUSTOMER, customerId)
-            orderId?.let { put(SupportCompensationLimitScope.ORDER, it) }
-            put(SupportCompensationLimitScope.INCIDENT, incidentId)
-            put(SupportCompensationLimitScope.ACTOR, executorActorId)
-            storeId?.let { put(SupportCompensationLimitScope.STORE, it) }
-        }
+    private fun SupportCompensationRequestEntity.limitScope(executorActorId: UUID) =
+        CompensationLimitScopeSnapshot(customerId, orderId, incidentId, executorActorId, storeId)
 
     private fun SupportCompensationRequestEntity.costSnapshot() =
         SupportCompensationCostSnapshot(responsibility, evidenceBasis, costEvidenceDigest, platformShareBps, storeShareBps)

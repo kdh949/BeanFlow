@@ -80,6 +80,7 @@ internal class SupportCompensationIntegrationTest
         private val requesterId = UUID.fromString("75000000-0000-0000-0000-000000000001")
         private val managerId = UUID.fromString("75000000-0000-0000-0000-000000000002")
         private val operationsId = UUID.fromString("75000000-0000-0000-0000-000000000003")
+        private val replacementId = UUID.fromString("75000000-0000-0000-0000-000000000004")
         private lateinit var fixture: OrderCreationFixture
         private lateinit var caseId: UUID
         private lateinit var sessionId: UUID
@@ -365,6 +366,146 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
+        fun `compensation get is limited to exact active request lineage`() {
+            val unrelatedActor = UUID.fromString("75000000-0000-0000-0000-000000000005")
+            grant(unrelatedActor, "SUPPORT_CASE_READ")
+            val created = compensations.create(command(UUID.randomUUID(), 100, "visibility-create-001"))
+
+            assertThatThrownBy { compensations.get(unrelatedActor, created.compensationRequestId) }
+                .isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.ACCESS_DENIED)
+            assertThat(compensations.get(requesterId, created.compensationRequestId).compensationRequestId)
+                .isEqualTo(created.compensationRequestId)
+
+            val medium = compensations.create(command(UUID.randomUUID(), 3_001, "visibility-medium-create"))
+            approveManager(requireNotNull(medium.actionRequestId), managerId, "visibility-medium-approve")
+            assertThat(compensations.get(managerId, medium.compensationRequestId).compensationRequestId)
+                .isEqualTo(medium.compensationRequestId)
+        }
+
+        @Test
+        fun `ordinary case reassignment blocks the old compensation executor`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "ordinary-reassign-create"))
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                replacementId,
+                caseId,
+            )
+
+            assertThatThrownBy { execute(created, "ordinary-reassign-execute") }
+                .isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.ACCESS_DENIED)
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+        }
+
+        @Test
+        fun `explicit action reassignment lets the new executor use requester bound verification`() {
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "action-reassign-create"))
+            val approved =
+                approveManager(requireNotNull(created.actionRequestId), managerId, "action-reassign-approve")
+                    as SupportActionCommandOutcome.Succeeded
+            prepareReplacementExecutor()
+            grant(managerId, "SUPPORT_CASE_ASSIGN")
+            val reassigned =
+                actionRequests.reassign(
+                    ReassignSupportActionRequestCommand(
+                        managerId,
+                        approved.resource.requestId,
+                        approved.resource.revisionNumber,
+                        approved.resource.requestVersion,
+                        caseVersion(),
+                        replacementId,
+                        "HANDOFF_TO_CURRENT_EXECUTOR",
+                        "action-reassign-command",
+                    ),
+                )
+
+            assertThat(reassigned.executorActorId).isEqualTo(replacementId)
+            val issued = executeAs(created, replacementId, "action-reassign-execute")
+            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
+        }
+
+        @Test
+        fun `reassigned actor hard cap locks checks and consumes the same actor scope`() {
+            val prior = compensations.create(command(UUID.randomUUID(), 100, "actor-cap-prior-create"))
+            val created = compensations.create(command(UUID.randomUUID(), 30_000, "actor-cap-create"))
+            approveOperations(created)
+            prepareReplacementExecutor()
+            grant(managerId, "SUPPORT_CASE_ASSIGN")
+            val action = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
+            actionRequests.reassign(
+                ReassignSupportActionRequestCommand(
+                    managerId,
+                    action.requestId,
+                    action.revisionNumber,
+                    action.requestVersion,
+                    caseVersion(),
+                    replacementId,
+                    "HANDOFF_FOR_LIMIT_CHECK",
+                    "actor-cap-reassign",
+                ),
+            )
+            jdbcTemplate.update(
+                "INSERT INTO support_compensation_limit_consumption (id, request_id, policy_version_id, scope, scope_id, amount_krw, issued_at) VALUES (?, ?, ?, 'ACTOR', ?, 90000, now())",
+                UUID.randomUUID(),
+                prior.compensationRequestId,
+                prior.policyVersionId,
+                replacementId,
+            )
+
+            assertThatThrownBy { executeAs(created, replacementId, "actor-cap-execute") }
+                .isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.SUPPORT_ACTION_POLICY_DENIED)
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+        }
+
+        @Test
+        fun `notification retry requires current exact executor and retry state`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "retry-auth-create"))
+            insertConflictingNotification(created.compensationRequestId)
+            val retryable = execute(created, "retry-auth-execute")
+            assertThat(retryable.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_RETRY)
+            prepareReplacementExecutor()
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                replacementId,
+                caseId,
+            )
+
+            listOf(replacementId, requesterId).forEachIndexed { index, actorId ->
+                assertThatThrownBy {
+                    compensations.retryNotification(
+                        RetrySupportCompensationNotificationCommand(actorId, created.compensationRequestId, "retry-auth-$index"),
+                    )
+                }.isInstanceOf(DomainFailure::class.java)
+                    .extracting("code")
+                    .isEqualTo(FailureCode.ACCESS_DENIED)
+            }
+            assertThat(count("notification_delivery", "event_id", created.compensationRequestId)).isOne()
+
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                requesterId,
+                caseId,
+            )
+            jdbcTemplate.update(
+                "UPDATE support_compensation_request SET state = 'BENEFIT_ISSUED', notification_failure_code = NULL, version = version + 1 WHERE id = ?",
+                created.compensationRequestId,
+            )
+            assertThatThrownBy {
+                compensations.retryNotification(
+                    RetrySupportCompensationNotificationCommand(requesterId, created.compensationRequestId, "retry-benefit-issued"),
+                )
+            }.isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STATE_CONFLICT)
+            assertThat(count("notification_delivery", "event_id", created.compensationRequestId)).isOne()
+        }
+
+        @Test
         fun `policy head change preserves an existing request version and applies the new version only to new evaluations`() {
             val created = compensations.create(command(UUID.randomUUID(), 100, "policy-boundary-create-001"))
             val nextPolicyVersionId = activateNextPolicyVersion()
@@ -516,9 +657,15 @@ internal class SupportCompensationIntegrationTest
         private fun execute(
             resource: SupportCompensationResource,
             key: String,
+        ) = executeAs(resource, requesterId, key)
+
+        private fun executeAs(
+            resource: SupportCompensationResource,
+            actorId: UUID,
+            key: String,
         ) = compensations.execute(
             ExecuteSupportCompensationCommand(
-                requesterId,
+                actorId,
                 resource.compensationRequestId,
                 resource.version,
                 orderVersion,
@@ -526,6 +673,15 @@ internal class SupportCompensationIntegrationTest
                 key,
             ),
         )
+
+        private fun prepareReplacementExecutor() {
+            grant(replacementId, "SUPPORT_CASE_WRITE")
+            grant(replacementId, "SUPPORT_CASE_READ")
+            grant(replacementId, "SUPPORT_COMPENSATION_EXECUTE")
+        }
+
+        private fun caseVersion(): Long =
+            requireNotNull(jdbcTemplate.queryForObject("SELECT version FROM support_case WHERE id = ?", Long::class.java, caseId))
 
         private fun seedSupportScope() {
             val openedAt = Instant.now().minusSeconds(30)
