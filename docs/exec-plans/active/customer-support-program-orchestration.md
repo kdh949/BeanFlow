@@ -22,8 +22,9 @@ S60은 S50 verified stacked head에서 immutable request revision, Support/Opera
 구현·검증하고 lease를 해제했다. S70은 completed S60 lineage에서 cancellation/reschedule owner command,
 new-slot-first swap, exact store authorization과 V45를 구현·검증하고 lease를 해제했다.
 S80은 S70 actual outcome에서 S60 approval reuse, partial owner step과 unknown responsibility 정책을 확정한 뒤
-V46와 네 runtime operation을 구현·검증하고 lease를 해제했다. S90은 completed S60/S80 input으로 detailed plan을
-작성할 준비가 됐고, S100~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 작성한다.
+V46와 네 runtime operation을 구현·검증하고 lease를 해제했다. S90은 completed S60/S80 input과 사용자 선택 SP-21
+rolling hard cap으로 detailed plan을 작성하고 S80 stacked head에서 V47 sole writer lease를 획득했다. S100~S140은
+predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 작성한다.
 
 ## Current State
 
@@ -155,7 +156,7 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 | S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | COMPLETED — V44/runtime/full validation; lease released |
 | S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | COMPLETED — V45/runtime/833-test validation; lease released |
 | S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | COMPLETED — V46/runtime/865-test validation; lease released |
-| S90 | versioned goodwill compensation | completed S60 approval/investigation and S80 refund/restoration separation | READY TO AUTHOR — immutable policy/bucket/cost-owner decisions belong in its detailed plan |
+| S90 | versioned goodwill compensation | completed S60 approval/investigation and S80 refund/restoration separation | ACTIVE — SP-21/ADR-086 initial policy fixed; V47 lease acquired on S80 stacked head |
 | S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | S60/S30 inputs satisfied; customer/legal/payout/rider models remain incomplete |
 | S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | Provider selection/auth contract and Delivery module absent |
 | S120 | LegalHold and component deletion automation | completed owner retention ports from S20~S110 | legal review and backup replay procedure required |
@@ -226,6 +227,7 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 - [x] S80 V46/case-step/owner orchestration/4 runtime operation 구현, 865-test full validation과 V46 lease release
 - [x] S80 direct successor readiness 재계산 — S90은 completed S60/S80 input으로 detailed plan 작성 가능;
   S100의 독립 customer/legal/payout/rider owner-model gate는 유지
+- [x] S90 initial rolling hard cap을 SP-21/ADR-086으로 확정하고 S80 stacked head에서 detailed plan/V47 sole writer lease 시작
 
 ## Surprises & Discoveries
 
@@ -280,6 +282,7 @@ V45 composite FK/check constraint review는 execution·authorization·terminal r
 | 2026-08-12 | S70 completion | complete V45, owner commands and 2 runtime operations; release lease and pass output to S80 | focused PostgreSQL/security/API plus 833-test full build and docs gates passed | completed S70 |
 | 2026-08-12 | S80 authoring/lease | reuse S60 exact approval and block only cost attribution for `UNDETERMINED`; acquire V46 | avoids duplicate approval truth and cost-owner fallback while customer remediation progresses | SP-20, ADR-085, active S80 |
 | 2026-08-12 | S80 completion | complete V46, owner-local resolution steps and 4 runtime operations; release lease and pass separation output to S90 | focused PostgreSQL/security/API plus 865-test full build and docs gates passed | completed S80 |
+| 2026-08-12 | S90 authoring/lease | select differentiated rolling hard caps, author S90 and acquire V47 | explicit execution limits remove the last policy gap while preserving HIGH Operations review | SP-21, ADR-086, active S90 |
 
 ## Outcomes & Retrospective
 
@@ -321,3 +324,4 @@ gate를 유지한다.
   acquired the V46 sole migration-writer lease.
 - 2026-08-12: completed S80 V46/owner/orchestration/runtime and 865-test validation, moved its plan to completed,
   released the migration lane and marked S90 ready to author without preselecting its independent policy values.
+- 2026-08-12: selected SP-21 initial limits, authored active S90 from S80 and acquired the V47 sole migration-writer lease.
