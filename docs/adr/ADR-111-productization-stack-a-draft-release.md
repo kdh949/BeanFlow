@@ -20,6 +20,11 @@ Plan 00~60의 검증을 한 흐름으로 계속하므로 범위가 명시된 추
 따라서 최초의 recorded root와 combined release PR 정책을 아래의 provisional Plan 00 baseline과 정확히
 일곱 개의 Draft PR 정책으로 개정한다.
 
+Plan 10 완료 뒤 Support S70~S100도 연속 Flyway migration과 stacked PR을 필요로 한다는 충돌이
+확인됐다. 사용자는 2026-08-12에 Support를 우선하도록 결정했다. 따라서 이 ADR의 Stack A lease
+연속성은 Plan 10 완료 시점에서 일시 중단하고, Support stack이 완료되기 전에는 Plan 20을 시작하지
+않는 것으로 개정한다.
+
 ## Decision
 
 ### Exact scope와 순서
@@ -39,6 +44,10 @@ productization-00-design-capability-contract
 Plan 70, 80, 90과 100은 이 stack에 포함하지 않는다. dependency graph상 여러 plan이 ready여도
 executor는 위 순서에서 아직 완료되지 않은 첫 plan 하나만 선택한다. orchestration plan은 실행 후보가
 아니다.
+
+현재 실행은 Plan 10 completion에서 **동결**한다. Plan 20은 dependency가 완료됐더라도
+`Implementation-Ready=false`이며, Support S70~S100 completion과 migration lease release, 통합 기준
+branch와 다음 Flyway 번호가 모두 다시 기록되기 전에는 후보가 아니다.
 
 ### Provisional baseline과 branch/PR 체인
 
@@ -69,6 +78,11 @@ head가 expected predecessor tree와 정확히 일치할 때만 재사용한다.
 다르면 force-push하지 않고 중단한다. PR head는 맞고 base만 틀린 경우에는 head를 바꾸지 않고 표의
 base로 정정한다.
 
+동결 중에는 기존 Plan 00/10 Draft PR을 merge·close·force-push하지 않는다. Support S100 뒤 resume은
+현재 V43/V44를 그대로 재사용하는 작업이 아니다. 먼저 Support 통합 기준 tree에서 migration inventory를
+다시 계산하고, Plan 10의 두 migration과 후속 Plan 20~60 번호를 재할당할 branch/PR 전환 방식을 별도
+결정 기록으로 확정해야 한다.
+
 ### Stack 내부 completion
 
 stack branch에서 plan을 `COMPLETED`로 이동할 수 있는 조건은 다음과 같다.
@@ -87,14 +101,16 @@ merge, production deployment, Support 통합 또는 프로그램 완료를 뜻�
 
 ### Migration-writer lease
 
-Plan 00은 migration을 쓰지 않는다. Plan 10을 시작하기 직전에 repository-wide migration-writer lease를
-획득하고 Plan 60 Draft PR 생성과 최종 topology validation이 끝날 때까지 같은 lease를 유지한다.
+Plan 00은 migration을 쓰지 않는다. Plan 10 시작 직전에 획득한 repository-wide migration-writer lease는
+Plan 10 완료 검증 뒤 2026-08-12에 해제했다. 다음 sole writer는 Support S70이며 Support stacked
+inventory의 V44 다음 번호인 V45부터 사용한다.
 
 - Plan 10은 exact predecessor tree의 combined migration inventory에서 마지막 번호 다음을 선택한다.
-- Plan 20~60은 직전 stack head의 combined inventory에서 다음 번호를 선택한다.
+- Plan 10 branch의 V43/V44는 검증된 Draft 산출물이지만 Support branch의 동명 migration과 합칠 수 없다.
+- Plan 20~60은 Support S100 완료 전 시작하거나 번호를 예약하지 않는다.
+- resume 시 Support 통합 기준 tree의 마지막 번호 다음에서 Plan 10 migration부터 순서대로 재번호화한다.
 - lease가 살아 있는 동안 unrelated schema-writing plan을 시작하지 않는다.
-- 번호 예약 manifest, duplicate DDL, checksum repair, 이미 작성한 migration 재번호화로 경쟁을
-  보정하지 않는다.
+- duplicate DDL, checksum repair 또는 같은 버전의 서로 다른 migration 병합으로 경쟁을 보정하지 않는다.
 
 ### Final seven-PR topology
 
@@ -102,7 +118,8 @@ Plan 60 검증과 completion commit 뒤 새 release branch나 combined PR을 만
 표의 정확히 일곱 개 open Draft PR이다. `feature/productization-plans`를 head로 하는 PR,
 `feature/productization-stack-a-release`, Plan 70+ branch/PR 또는 여러 plan을 합친 추가 PR은 금지한다.
 각 PR의 head SHA가 local·remote와 일치하고 base가 표와 일치하며, Plan 60 head에서 전체 required
-validation이 통과한 뒤 lease를 해제한다. automation은 어떤 PR도 merge하거나 닫지 않는다.
+validation이 통과한 뒤 resumed Stack A lease를 해제한다. 현재 동결 상태는 Plan 00/10 두 Draft PR만
+존재하며 나머지 다섯 PR을 미리 만들지 않는다. automation은 어떤 PR도 merge하거나 닫지 않는다.
 
 ### Mandatory stop conditions
 
@@ -114,6 +131,7 @@ validation이 통과한 뒤 lease를 해제한다. automation은 어떤 PR도 me
 - exact predecessor/head SHA 불일치, base-only 정정으로 해소할 수 없는 branch/PR 충돌
 - 중요한 제품·보안·정합성 결정을 추측해야 함
 - migration 충돌, 적용 여부 불명 또는 외부 Provider 결과 `UNKNOWN`
+- Support S100 completion/lease release 또는 productization 재번호화 기준이 아직 없음
 - credential, approval 또는 GitHub 권한 부족
 
 ## Alternatives Considered
@@ -142,9 +160,9 @@ Plan 10~60의 migration 번호와 schema baseline이 경쟁하고, GitHub PR의 
 - Plan별 Draft PR로 review 가능한 diff와 검증 checkpoint를 유지한다.
 - stack tip에서 dependency와 completion evidence가 연속되므로 하나의 Goal이 다음 plan을 결정적으로
   선택할 수 있다.
-- Plan 10 시작부터 Plan 60 최종 검증까지 repository-wide migration writer lane을 독점한다.
-- Support와 Stack A의 통합 순서는 GitHub merge 단계에 남으며 Stack A 검증은 provisional baseline에서
-  계속된다.
+- Plan 10 완료 산출물은 Draft PR에 보존하되 productization writer lane은 Support에 양보한다.
+- Support S70~S100 동안 Plan 20~60 구현이 중단되며, resume 시 Plan 10 이후 schema branch를 다시
+  구성하고 전체 검증을 재실행해야 한다.
 - `origin/main` drift가 자동 진행을 중단시키지 않으므로 각 PR의 exact predecessor/head 검증이 더 중요하다.
 - Stack A 완료는 P0 Core 중간 통합점이며 전체 제품화 프로그램 완료가 아니다.
 

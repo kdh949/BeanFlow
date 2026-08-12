@@ -292,6 +292,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   맞게 갱신했다.
 - 2026-08-12: 필수 검증을 완료했다. Ordering 224 tests는 0 failure/0 skipped, 전체 build는 782 tests 중
   0 failure/1 skipped로 통과했다. Spotless와 문서/OpenAPI 검증도 통과했다.
+- 2026-08-12: 완료 뒤 사용자가 Support S70~S100을 우선하도록 결정해 Stack A migration-writer lease를
+  해제했다. 이 branch의 V43/V44는 Draft 검증 증거로 보존하지만 Support branch의 동명 migration과
+  병합하지 않으며 productization resume 시 새 통합 tree 기준으로 재번호화한다.
 
 ## Surprises & Discoveries
 
@@ -330,6 +333,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 예약 replay의 시각도 최초 grant 값으로 고정하기 위해 Fulfillment reservation에 slot window snapshot을 저장 | [ADR-098](../../adr/ADR-098-order-display-snapshots.md) |
 | 2026-08-12 | 신규 공개번호 route만 내부 UUID를 제거하고 기존 UUID route는 후속 화면 전환까지 유지 | [API conventions](../../api/api-conventions.md) |
 | 2026-08-12 | OpenAPI 입력은 대소문자를 허용하고 응답·저장값은 대문자 canonical 형식만 허용 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
+| 2026-08-12 | Plan 10 뒤 writer lease를 Support S70~S100에 양보하고 V43/V44는 resume 시 재번호화 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 
 ## Outcomes & Retrospective
 
@@ -353,3 +357,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 - 2026-08-11: 최초 작성.
 - 2026-08-12: 구현, 회귀 fixture 교정, 필수 검증과 완료 결과를 기록.
+- 2026-08-12: Support 우선 migration lane과 후속 재번호화 조건을 기록.

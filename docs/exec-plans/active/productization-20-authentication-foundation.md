@@ -2,7 +2,7 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `true`
+> **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-00-design-capability-contract.md`
 > **Completed-At:** `—`
@@ -259,7 +259,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다.
+- 2026-08-12: 사용자 Support 우선 결정에 따라 Plan 10 뒤 Stack A migration lease를 해제했다.
+  Support S70~S100 completion, lease release와 productization migration 재번호화 기준이 기록될 때까지
+  이 plan은 실행 후보가 아니며 schema/code 구현을 시작하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -276,6 +278,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 공통 `/me` 대신 actor별 경로를 사용하고 고객·점주 endpoint는 계정 plan이 소유한다 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md) |
 | 2026-08-12 | 고객·점주별 Session 수명과 동시 한도 적용 | [BR-36](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 credential 웹 관리용 explicit permission을 foundation migration에서 선등록 | [BR-46](../../product/business-policy-decisions.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md) |
+| 2026-08-12 | Support S70~S100을 우선하고 Plan 20 readiness와 migration lease를 일시 해제 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 
 ## Outcomes & Retrospective
 
@@ -284,3 +287,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-12: Support 우선 migration lane 결정으로 `Implementation-Ready=false` 전환.
