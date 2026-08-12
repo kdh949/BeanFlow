@@ -20,6 +20,8 @@ internal enum class SupportActionRequestState {
     EXPIRED,
     STALE,
     MANUAL_REVIEW,
+    EXECUTED,
+    RESOLUTION_REQUIRED,
 }
 
 internal enum class SupportApprovalStepType {
@@ -110,6 +112,15 @@ internal data class SupportActionReassignmentChange(
     val occurredAt: Instant,
 )
 
+internal data class SupportActionExecutionChange(
+    val executionId: UUID,
+    val previousState: SupportActionRequestState,
+    val currentState: SupportActionRequestState,
+    val requestVersion: Long,
+    val occurredAt: Instant,
+    val replayed: Boolean,
+)
+
 internal class SupportActionRequest private constructor(
     val id: UUID,
     val supportCaseId: UUID,
@@ -120,6 +131,7 @@ internal class SupportActionRequest private constructor(
     var state: SupportActionRequestState,
     var supportApproverActorId: UUID?,
     var operationsApproverActorId: UUID?,
+    var terminalExecutionId: UUID?,
     var version: Long,
     private var lastChangedAt: Instant,
 ) {
@@ -294,6 +306,61 @@ internal class SupportActionRequest private constructor(
         return SupportActionReassignmentChange(previousActor, targetActorId, previousState, state, version, occurredAt)
     }
 
+    fun completeExecution(
+        executionId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+    ): SupportActionExecutionChange =
+        finishExecution(executionId, actorId, revisionNumber, payloadDigest, targetVersion, occurredAt, SupportActionRequestState.EXECUTED)
+
+    fun requirePostAcceptanceResolution(
+        executionId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+    ): SupportActionExecutionChange =
+        finishExecution(
+            executionId,
+            actorId,
+            revisionNumber,
+            payloadDigest,
+            targetVersion,
+            occurredAt,
+            SupportActionRequestState.RESOLUTION_REQUIRED,
+        )
+
+    private fun finishExecution(
+        executionId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+        terminalState: SupportActionRequestState,
+    ): SupportActionExecutionChange {
+        require(actorId == executorActorId) { "Only the assigned actor can execute the action" }
+        check(revisionNumber == currentRevision.revisionNumber) { "Action execution revision is stale" }
+        check(payloadDigest == currentRevision.actionPayloadDigest) { "Action execution payload is stale" }
+        check(targetVersion == currentRevision.targetVersion) { "Action execution target version is stale" }
+        if (state == terminalState && terminalExecutionId == executionId) {
+            return SupportActionExecutionChange(executionId, state, state, version, occurredAt, true)
+        }
+        check(state == SupportActionRequestState.READY_FOR_EXECUTION) { "Action request is not ready for execution" }
+        check(occurredAt.isBefore(currentRevision.expiresAt)) { "Action revision has expired" }
+        require(occurredAt >= lastChangedAt) { "Action execution time cannot move backward" }
+        val previous = state
+        state = terminalState
+        terminalExecutionId = executionId
+        version += 1
+        lastChangedAt = occurredAt
+        return SupportActionExecutionChange(executionId, previous, state, version, occurredAt, false)
+    }
+
     private fun approvalChange(
         stepType: SupportApprovalStepType,
         stepState: SupportApprovalStepState,
@@ -349,6 +416,7 @@ internal class SupportActionRequest private constructor(
                 route.initialState(),
                 null,
                 null,
+                null,
                 0,
                 revision.createdAt,
             )
@@ -366,6 +434,7 @@ internal class SupportActionRequest private constructor(
             operationsApproverActorId: UUID?,
             version: Long,
             lastChangedAt: Instant,
+            terminalExecutionId: UUID? = null,
         ): SupportActionRequest {
             require(version >= 0) { "Action request version is invalid" }
             require(lastChangedAt >= revision.createdAt) { "Action request change time is invalid" }
@@ -390,6 +459,7 @@ internal class SupportActionRequest private constructor(
                 state,
                 supportApproverActorId,
                 operationsApproverActorId,
+                terminalExecutionId,
                 version,
                 lastChangedAt,
             )

@@ -113,6 +113,52 @@ class SupportActionRequestTest {
         }
     }
 
+    @Test
+    fun `execution is bound to executor revision payload target version and expiry`() {
+        val request = request(SupportActionApprovalRoute.NONE)
+
+        assertThrows<IllegalArgumentException> {
+            request.completeExecution(EXECUTION_ID, OTHER_MANAGER, 1, PAYLOAD_DIGEST_1, 7, NOW.plusSeconds(1))
+        }
+        assertThrows<IllegalStateException> {
+            request.completeExecution(EXECUTION_ID, REQUESTER, 1, PAYLOAD_DIGEST_2, 7, NOW.plusSeconds(1))
+        }
+        assertThrows<IllegalStateException> {
+            request.completeExecution(EXECUTION_ID, REQUESTER, 1, PAYLOAD_DIGEST_1, 8, NOW.plusSeconds(1))
+        }
+        assertThrows<IllegalStateException> {
+            request.completeExecution(EXECUTION_ID, REQUESTER, 1, PAYLOAD_DIGEST_1, 7, EXPIRY)
+        }
+
+        val change = request.completeExecution(EXECUTION_ID, REQUESTER, 1, PAYLOAD_DIGEST_1, 7, NOW.plusSeconds(1))
+
+        assertEquals(SupportActionRequestState.EXECUTED, request.state)
+        assertEquals(EXECUTION_ID, request.terminalExecutionId)
+        assertEquals(false, change.replayed)
+
+        val replay = request.completeExecution(EXECUTION_ID, REQUESTER, 1, PAYLOAD_DIGEST_1, 7, NOW.plusSeconds(2))
+        assertEquals(true, replay.replayed)
+    }
+
+    @Test
+    fun `preparing race becomes an explicit resolution required terminal`() {
+        val request = request(SupportActionApprovalRoute.NONE)
+
+        val change =
+            request.requirePostAcceptanceResolution(
+                EXECUTION_ID,
+                REQUESTER,
+                1,
+                PAYLOAD_DIGEST_1,
+                7,
+                NOW.plusSeconds(1),
+            )
+
+        assertEquals(SupportActionRequestState.RESOLUTION_REQUIRED, request.state)
+        assertEquals(EXECUTION_ID, request.terminalExecutionId)
+        assertEquals(false, change.replayed)
+    }
+
     private fun request(route: SupportActionApprovalRoute): SupportActionRequest =
         SupportActionRequest.open(
             id = REQUEST_ID,
@@ -150,6 +196,7 @@ class SupportActionRequestTest {
         val CASE_ID: UUID = UUID.fromString("10000000-0000-0000-0000-000000000002")
         val ORDER_ID: UUID = UUID.fromString("10000000-0000-0000-0000-000000000003")
         val SESSION_ID: UUID = UUID.fromString("10000000-0000-0000-0000-000000000004")
+        val EXECUTION_ID: UUID = UUID.fromString("10000000-0000-0000-0000-000000000010")
         val REQUESTER: UUID = UUID.fromString("10000000-0000-0000-0000-000000000005")
         val MANAGER: UUID = UUID.fromString("10000000-0000-0000-0000-000000000006")
         val OTHER_MANAGER: UUID = UUID.fromString("10000000-0000-0000-0000-000000000007")
