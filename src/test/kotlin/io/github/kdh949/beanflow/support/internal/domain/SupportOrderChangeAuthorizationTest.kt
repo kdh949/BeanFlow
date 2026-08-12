@@ -79,6 +79,31 @@ class SupportOrderChangeAuthorizationTest {
         assertEquals(3, authorization.successfulUses)
     }
 
+    @Test
+    fun `cancellation delegation expires at ten minutes and allows one successful use`() {
+        val authorization =
+            SupportOrderChangeAuthorization.delegation(
+                AUTHORIZATION_ID,
+                STORE_ID,
+                SupportActionType.ORDER_CANCELLATION,
+                SupportOrderChangeAuthorization.INITIAL_POLICY_VERSION,
+                STORE_ACTOR_ID,
+                NOW,
+                SupportOrderChangeCostResponsibility.STORE,
+            )
+
+        assertEquals(NOW.plusSeconds(600), authorization.expiresAt)
+        assertEquals(1, authorization.maxSuccessfulUses)
+        assertThrows<IllegalStateException> { authorization.consume(command(), NOW.plusSeconds(600)) }
+        assertEquals(
+            SupportOrderChangeAuthorizationConsumption.APPLIED,
+            authorization.consume(command(), NOW.plusSeconds(599)),
+        )
+        assertThrows<IllegalStateException> {
+            authorization.consume(command(executionId = UUID.randomUUID()), NOW.plusSeconds(599))
+        }
+    }
+
     private fun command(
         executionId: UUID = EXECUTION_ID,
         action: SupportActionType = SupportActionType.ORDER_CANCELLATION,

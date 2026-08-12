@@ -236,6 +236,30 @@ internal class SupportOrderChangeExecutionIntegrationTest
             assertThat(count("support_order_change_authorization_use")).isZero()
         }
 
+        @Test
+        fun `store cancellation delegation has one-use policy and exact creation replay`() {
+            insertStoreMembership()
+
+            val first =
+                createDelegation("delegation-cancel-001", SupportActionType.ORDER_CANCELLATION)
+                    .andExpect(status().isCreated)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.authorizationType").value("DELEGATION"))
+                    .andExpect(jsonPath("$.action").value("ORDER_CANCELLATION"))
+                    .andExpect(jsonPath("$.maxSuccessfulUses").value(1))
+                    .andExpect(jsonPath("$.successfulUses").value(0))
+                    .andExpect(jsonPath("$.requestId").isEmpty)
+                    .andReturn()
+
+            createDelegation("delegation-cancel-001", SupportActionType.ORDER_CANCELLATION)
+                .andExpect(status().isCreated)
+                .andExpect(jsonPath("$.authorizationId").value(authorizationId(first).toString()))
+
+            createDelegation("delegation-cancel-001", SupportActionType.PICKUP_RESCHEDULE)
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+        }
+
         private fun seedSupportScope() {
             val now = Instant.now().minusSeconds(30)
             expiresAt = now.plusSeconds(900)
@@ -452,6 +476,29 @@ internal class SupportOrderChangeExecutionIntegrationTest
                         """.trimIndent(),
                     ),
             )
+
+        private fun createDelegation(
+            key: String,
+            action: SupportActionType,
+        ) = mockMvc.perform(
+            post("/api/v1/stores/${fixture.storeId}/support-order-change-authorizations")
+                .with(
+                    jwt()
+                        .jwt {
+                            it
+                                .subject(storeActorId.toString())
+                                .claim("roles", listOf("STORE_STAFF"))
+                        }.authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF")),
+                ).header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"authorizationType":"DELEGATION","action":"$action",
+                     "policyVersion":"${SupportOrderChangeAuthorization.INITIAL_POLICY_VERSION}",
+                     "costResponsibility":"STORE"}
+                    """.trimIndent(),
+                ),
+        )
 
         private fun makeAccepted(newSlotId: UUID) {
             val now = Instant.now().minusSeconds(30)
