@@ -45,8 +45,13 @@ financial Resolution을 rollback하지 않는다.
 - Payment cumulative succeeded Refund는 승인 금액을 넘지 않으며 기존 unresolved Refund가 있으면 새 Refund를
   만들지 않는다. Provider timeout은 `UNKNOWN`, lookup은 `RECONCILING`, exhaustion은 `MANUAL_REVIEW`다.
 - Loyalty와 Promotion은 resolution source에 묶인 owner-local idempotent restoration을 수행한다. Order
-  termination trigger를 가장하거나 S90 goodwill benefit을 발급하지 않는다.
+  termination trigger를 가장하거나 S90 goodwill benefit을 발급하지 않는다. Resolution 생성 시점에 이미 만료된
+  원 PointLot/Coupon은 `SKIPPED_EXPIRED`로 기록하고 새 유효기간의 대체 혜택을 만들지 않는다. 별도 고객 배려
+  혜택이 필요하면 S90 goodwill workflow를 사용한다.
 - Settlement는 confirmed fact를 overwrite하지 않고 immutable adjustment만 추가한다.
 - owner success 뒤 다른 step이 실패해도 성공 결과를 rollback하지 않는다. 같은 source/payload replay로 Support
   result를 복구하며 다른 payload reuse는 거부한다.
 - Order는 PREPARING/READY/COMPLETED에서 과거 상태로 rollback하거나 CANCELLED로 변경하지 않는다.
+
+운영 조사와 안전한 Payment lookup 절차는
+[Support Post-Acceptance Resolution Runbook](../operations/support-post-acceptance-resolution-runbook.md)을 따른다.

@@ -1,7 +1,7 @@
 # Support Aggregate Responsibilities and Invariants
 
 > **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase, S40 Verification/DataAccessGrant/BreakGlass, S60
-> SupportActionRequest approval and S70 order-change execution/authorization rules are persisted and tested.
+> SupportActionRequest approval, S70 order-change execution/authorization and S80 post-acceptance resolution rules are persisted and tested.
 > Future Aggregate names and constraints remain Stage-owned planning inputs unless anchored by an Accepted ADR/policy.
 
 ## Implemented S10 foundation
@@ -70,9 +70,22 @@ budget. Replay, validation failure, slot conflict, rollback and `RESOLUTION_REQU
 exhausted, revoked or scope-mismatched authorization never falls back to local approval. Store authorizer identity and
 STORE responsibility are retained as opaque identifiers/closed values and separation from all Support actors is enforced.
 
-## CompensationRequest and ResolutionCase
+## PostAcceptanceResolutionCase
 
-One compensation request issues one benefit type and snapshots immutable policy/cost responsibility. Duplicate terminal benefit and rolling limit are transactionally prevented. Resolution preserves trigger Order facts; partial effects remain partially resolved; unknown responsibility never receives a default cost owner.
+S80 consumes one exact approved `POST_ACCEPTANCE_RESOLUTION` revision and binds it to the SupportCase, immutable
+revision/action digest and PREPARING/READY/COMPLETED Order fact. The aggregate owns five typed steps, claim leases,
+attempt count and explicit partial/unknown/reconciling/manual states. It never changes the Order fact. Requester,
+reviewers and executor separation is inherited from and rechecked against the consumed S60 request.
+
+Payment, Point, Coupon, Settlement and Notification effects use immutable owner source/payload bindings. Support records
+an owner result only with its current claim and PII-free Audit. Owner success remains durable if a later step fails;
+expired Support claims become `UNKNOWN` and are reconciled against the same owner source instead of reissued.
+`UNDETERMINED` permits approved customer-value steps but fixes Settlement to `BLOCKED`; only STORE/SHARED can append
+an exact negative Settlement adjustment. Notification is independent and cannot regress the financial state.
+
+## CompensationRequest
+
+One compensation request issues one benefit type and snapshots immutable policy/cost responsibility. Duplicate terminal benefit and rolling limit are transactionally prevented.
 
 ## DeliveryFulfillment
 

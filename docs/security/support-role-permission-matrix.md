@@ -2,11 +2,11 @@
 
 > **Status:** `PARTIALLY IMPLEMENTED`; S20 Case는 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`,
 > `SUPPORT_CASE_ASSIGN`, S30 exact search는 `SUPPORT_SUBJECT_SEARCH`, S40 verification/reveal/break-glass와 S50
-> timeline/action evaluation, S60 request/approval/investigation/reassignment와 S70 order change execution은 아래
+> timeline/action evaluation, S60 request/approval/investigation/reassignment, S70 order change와 S80 resolution execution은 아래
 > 전용 persistent grant를 사용한다.
 > Role bundle과 이후 Support capability는 DRAFT다.
 
-Roles are coarse bundles; S20–S70 use case는 active Operations-owned persistent grant를 요구한다.
+Roles are coarse bundles; S20–S80 use case는 active Operations-owned persistent grant를 요구한다.
 S30은 추가로 structured reason과 persistent actor rate budget을 요구하고 Vault 호출 뒤 grant를 재확인한다. S50
 action evaluation은 action-bound verification과 latest ActionPolicy까지 추가로 요구한다. JWT role alone is never a
 fallback.
@@ -66,3 +66,10 @@ ACCEPTED direct change의 store confirmation/delegation은 Support permission이
 membership을 별도로 확인하고 store authorizer는 requester·reviewer·executor와 달라야 한다. authorization은
 STORE 비용 책임의 명시 수락만 허용하며 UNKNOWN/PLATFORM 책임을 자동 귀속하지 않는다. 그 밖의 future
 permission은 owning use case 전까지 dormant다.
+
+S80 plan/execute/reconcile은 current executor와 Case assignee 일치, `SUPPORT_ACTION_EXECUTE`,
+`SUPPORT_RESOLUTION_EXECUTE`를 재검사하고 원 requester의 `SUPPORT_ACTION_REQUEST`,
+`SUPPORT_RESOLUTION_REQUEST`도 plan 생성 시 active여야 한다. 실행자는 requester·Support reviewer·Operations
+reviewer와 달라야 한다. 별도 `SUPPORT_RESOLUTION_APPROVE` 경로는 사용하지 않으며 S60 exact revision만 승인
+source다. 조회는 `SUPPORT_CASE_READ`와 request visibility를 요구한다. 권한/assignment 회수, 책임 미확정 또는
+owner 장애는 local executor, cost owner, fake/no-op으로 fallback하지 않는다.

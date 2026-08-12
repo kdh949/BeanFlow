@@ -1,11 +1,11 @@
 # 제조 이후 주문 사실을 보존하는 사후 해결을 조정한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s70-order-cancellation-pickup-reschedule.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -20,22 +20,17 @@ step으로 남고, 일부만 성공하거나 PG 결과가 불명확하면 `RESOL
 
 ## Current State
 
-- S60은 `POST_ACCEPTANCE_RESOLUTION` SupportActionRequest, immutable revision digest, Support Manager 승인,
-  actor separation, one-time terminal execution과 reassignment를 제공한다.
-- S70은 latest Order가 PREPARING/READY/COMPLETED이면 직접 취소·slot 변경 없이
-  `RESOLUTION_REQUIRED` handoff를 기록한다. V45와 833-test regression은 완료됐고 writer lease는 release됐다.
-- Payment는 누적 환불 상한, Provider REQUEST/LOOKUP, `UNKNOWN/RECONCILING/MANUAL_REVIEW`를 가진 Refund를
-  소유하지만 Support Resolution 전용 typed command와 projection은 없다.
-- Loyalty/Promotion은 주문 종료 및 partial Refund 복구 경로를 갖지만 Order fact를 종료 상태로 바꾸지 않는
-  resolution source contract가 없다.
-- SettlementAdjustment는 confirmed Item에 append-only로 생성되고 source replay를 지원하지만 order/resolution
-  bound command와 responsibility guard가 없다.
-- Notification은 durable delivery/retry/manual-review를 갖지만 resolution outcome template와 owner port가 없다.
-- `docs/api/support-api-surface.md`의 S80 네 operation은 DRAFT inventory다. 별도 S80 approval operation은
-  S60의 Accepted approval source와 중복되므로 canonical runtime으로 승격하지 않는다.
-- 현재 마지막 Flyway migration은 V45다. open PR 중 schema writer인 Productization PR #57은 commit
-  `8aa3704`에서 `Implementation-Ready=false`와 S100 뒤 재번호화를 기록했고, Analytics active plan은 아직
-  branch/PR/number를 획득하지 않았다. 사용자의 Support 우선 결정에 따라 이 plan이 V46 sole writer lease를 갖는다.
+- S60 `POST_ACCEPTANCE_RESOLUTION` exact revision은 별도 승인 source 없이 assigned executor가 한 번 소비한다.
+- `PostAcceptanceResolutionCase`와 closed step model은 PREPARING/READY/COMPLETED Order fact를 변경하지 않고
+  `PLANNED | EXECUTING | PARTIALLY_RESOLVED | RECONCILING | RESOLVED | MANUAL_REVIEW` 결과를 보존한다.
+- Payment는 resolution-bound Refund, 누적 성공 상한, unresolved 중복 차단과 Provider UNKNOWN/LOOKUP 재조정을
+  제공한다. Loyalty/Promotion은 원혜택만 exact source로 복구하고 만료 혜택을 `SKIPPED_EXPIRED`로 기록한다.
+- Settlement는 STORE/SHARED approved amount만 append-only adjustment로 기록한다. `UNDETERMINED`는 고객 회복을
+  허용하면서 비용 귀속을 차단하며 어떤 Store/Platform fallback도 만들지 않는다.
+- Notification delivery는 financial outcome과 독립된 durable intent/result다. Support API는 plan 생성·조회·실행과
+  Payment safe reconciliation 네 operation을 strict/no-store 계약으로 공개한다.
+- V46은 Support/owner binding, claim/command idempotency와 audit mapping을 생성하는 마지막 Flyway migration이며
+  full validation 뒤 sole migration-writer lease가 release됐다.
 
 ## Definitions
 
@@ -138,7 +133,7 @@ step으로 남고, 일부만 성공하거나 PG 결과가 불명확하면 `RESOL
 
 ## Data and Migration
 
-V46 forward migration will add:
+V46 forward migration adds:
 
 - `support_post_acceptance_resolution`: immutable request/revision/order/trigger/plan/responsibility binding, state,
   command idempotency and version.
@@ -191,27 +186,36 @@ not overwritten. V46 is the sole writer number; another schema writer appearance
 
 ## Validation Commands
 
-- `./gradlew test --tests '*PostAcceptanceResolution*' --tests '*SupportResolution*'`
-- `./gradlew test --tests '*Payment*Refund*' --tests '*Loyalty*Restoration*' --tests '*Coupon*Restoration*'`
-- `./gradlew test --tests '*SettlementAdjustment*' --tests '*Notification*'`
-- `./gradlew test --tests '*Support*Postgres*' --tests '*Migration*'`
-- `./gradlew test --tests '*ModularityTests' --tests '*Architecture*'`
-- `./gradlew clean build`
-- `bash scripts/verify-docs.sh`
-- `git diff --check`
+- PASS — `./gradlew test --tests '*PostAcceptanceResolutionIntegrationTest' --rerun-tasks`: 11 tests,
+  0 failures, `BUILD SUCCESSFUL in 30s`.
+- PASS — `./gradlew test --tests '*PostAcceptanceResolutionPaymentIntegrationTest' --tests
+  '*PostAcceptanceResolutionBenefitOwnerIntegrationTest' --tests '*SettlementRefundAdjustmentIntegrationTest'
+  --rerun-tasks`: Payment 4, Benefit 2, Settlement 8 tests, 0 failures, `BUILD SUCCESSFUL in 35s`.
+- PASS — `./gradlew test --tests '*PostAcceptanceResolution*' --tests '*SupportActionRequest*' --tests
+  '*SettlementRefundAdjustmentIntegrationTest' --tests '*RuntimeOpenApiParityTest' --rerun-tasks`: 62 tests,
+  0 failures, `BUILD SUCCESSFUL in 1m 17s`.
+- PASS — `./gradlew test --tests '*ModularityTests' --tests '*ArchitectureTest' --tests
+  '*RuntimeOpenApiParityTest' --rerun-tasks`: 0 failures, `BUILD SUCCESSFUL in 19s`.
+- PASS — `./gradlew test --tests '*AuditRetentionPolicyMigrationTest' --rerun-tasks`: 4 tests, 0 failures,
+  `BUILD SUCCESSFUL in 23s`.
+- PASS — final `./gradlew clean build`: 865 tests, 864 passed, 1 skipped, 0 failures/errors;
+  Spotless/assemble/check included, `BUILD SUCCESSFUL in 9m 19s`.
+- PASS — `bash scripts/verify-docs.sh`: target/runtime 70 paths/74 operations, 200 schemas; 33 business policies,
+  92 ADRs, 235 Markdown files and 42 ExecPlans validated.
+- PASS — `git diff --check`: no whitespace errors before completion commit.
+- NOT MEASURED — no performance improvement claim or benchmark is part of S80.
 
-모든 명령은 exact test count/result와 함께 기록한다. 실행하지 않은 검증은 `Not run`, 성능은 동일 fixture의
-측정 전까지 `Not measured`로 둔다.
+Two full-build preflight failures were corrected before the final pass: Spotless identified 14 S80 Kotlin files and the
+fresh-migration test still expected V45 instead of the leased V46. Owner fixture binding failures found by the 62-test
+suite were also corrected and the entire suite was rerun. No failed result is treated as completion evidence.
 
 ## Observability
 
-- `beanflow.support.resolution.command.count{operation,outcome}`
-- `beanflow.support.resolution.step.count{step_type,state}`
-- `beanflow.support.resolution.claim.lag{step_type}`
-- Payment 기존 closed refund mode/outcome metric과 Notification delivery metric을 재사용한다.
-
-metric tag는 closed enum만 사용한다. case/order/customer/payment/refund/adjustment ID, amount, reason, evidence,
-Provider reference는 tag/log에 넣지 않는다.
+Support case/step/command rows, committed PII-free Operations Audit, no-store case projection과 owner result reference가
+durable operational evidence다. Payment의 closed refund mode/outcome metric과 Notification delivery metric을 재사용한다.
+새 Support 전용 meter는 S80에서 추가하지 않았으므로 별도 counter/lag metric 제공을 주장하지 않는다. 기존 metric
+tag와 Audit에는 case/order/customer/payment/refund/adjustment ID, amount, reason, evidence나 Provider response를 넣지
+않는다.
 
 ## Documentation Updates
 
@@ -229,11 +233,11 @@ Provider reference는 tag/log에 넣지 않는다.
 - [x] S70 stacked head에서 `feature/support-post-acceptance-resolution` branch 생성
 - [x] S60 approval reuse and attribution-only blocking policy selected and documented
 - [x] V46 sole migration-writer lease acquired under Support-priority scheduling
-- [ ] contract/domain RED tests and state machine implementation
-- [ ] V46 persistence and PostgreSQL constraint/concurrency evidence
-- [ ] Payment/Loyalty/Promotion/Settlement owner commands and result projections
-- [ ] orchestration/retry/reconciliation/notification/API/OpenAPI implementation
-- [ ] focused/full validation, review, completion move, successor readiness and PR
+- [x] contract/domain RED tests and state machine implementation
+- [x] V46 persistence and PostgreSQL constraint/concurrency evidence
+- [x] Payment/Loyalty/Promotion/Settlement owner commands and result projections
+- [x] orchestration/retry/reconciliation/notification/API/OpenAPI implementation
+- [x] focused/full validation, review, completion move, successor readiness and PR preparation
 
 ## Surprises & Discoveries
 
@@ -243,6 +247,10 @@ Provider reference는 tag/log에 넣지 않는다.
   coupled to pre-acceptance OrderCompensation and cannot be called as a Support shortcut.
 - Existing Loyalty/Promotion restoration contracts require termination semantics. S80 needs owner-local source contracts
   that preserve the current Order lifecycle instead of fabricating a termination trigger.
+- Owner fixture inserts exposed a command-actor column binding shift only when all owner suites ran together; exact
+  PostgreSQL types caught the defect before completion.
+- The first full build correctly failed the formatting gate, and the next run caught a stale V45 migration assertion.
+  Applying Spotless and updating the explicit V46 expectation made the final 865-test build pass without suppressing gates.
 
 ## Decision Log
 
@@ -254,8 +262,20 @@ Provider reference는 tag/log에 넣지 않는다.
 
 ## Outcomes & Retrospective
 
-Not completed. Runtime behavior and validation evidence must not be inferred from this plan.
+S80 is complete. V46, `PostAcceptanceResolutionCase`, four no-store Support operations and typed Payment/Loyalty/
+Promotion/Settlement/Notification owner contracts preserve Order history while making partial and unknown outcomes
+visible. S60 exact approval remains the sole authorization truth; executor/approver separation, latest versions,
+idempotency keys, owner source hashes, claim leases and Audit commits are rechecked at their respective boundaries.
+
+The recommended policy proved implementable without a cost-owner fallback: `UNDETERMINED` customer value recovery can
+finish while Settlement remains blocked/manual, and expired original benefits end as `SKIPPED_EXPIRED` rather than being
+silently replaced by S90 goodwill. Final evidence is 865 tests with 864 passed, 1 skipped and no failures/errors, plus
+OpenAPI/document verification. V46 lease is released. S90 is ready for detailed authoring from S60 approval/investigation
+and the now-completed S80 refund/restoration separation; its immutable policy, rolling bucket and cost-owner decisions
+remain S90 work rather than hidden S80 defaults.
 
 ## Revision Notes
 
 - 2026-08-12: authored from S70 actual outcome, accepted S60-reuse/attribution-only-block model and acquired V46 lease.
+- 2026-08-12: implemented V46/domain/owner/orchestration/runtime, passed focused and 865-test full validation, released
+  the migration lease, moved the plan to completed and marked S90 ready to author.

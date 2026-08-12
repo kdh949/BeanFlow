@@ -1,6 +1,6 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S70 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S80 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
 ## Implemented S10–S70 boundaries
@@ -75,6 +75,17 @@
 - pickup reschedule 성공은 같은 transaction에서 durable Notification `PENDING` intent만 생성한다. Provider worker는
   commit 뒤 별도 transaction/call 경계에서 `PROCESSING`, `SUCCEEDED`, `RETRY_SCHEDULED`, `MANUAL_REVIEW`를
   기록한다. Provider 실패는 slot swap을 되돌리거나 성공으로 위장하지 않는다.
+- S80 plan transaction은 SupportActionRequest → SupportCase → ResolutionCase 순서로 잠그고 exact approved revision,
+  assignment/separation, permission/verification/policy/expiry와 최신 Order version을 검증한다. immutable plan/steps,
+  PII-free Audit와 생성 idempotency가 함께 commit하며 이 경계에서는 owner command를 호출하지 않는다.
+- S80 execution은 짧은 Support transaction에서 승인 revision을 한 번 소비하고 다음 owner step claim을 commit한
+  뒤 Payment/Loyalty/Promotion/Settlement/Notification public API를 transaction 밖에서 호출한다. 이어지는 짧은
+  result transaction이 current claim, aggregate state와 Audit를 함께 commit한다. Audit/result commit 실패 뒤 owner
+  success를 추정하지 않고 claim expiry에서 같은 source를 조회/replay한다. Payment timeout은 `UNKNOWN`, explicit
+  operator reconciliation은 Payment lookup만 허용하며 다른 owner step을 blind reissue하지 않는다.
+- 각 S80 owner는 owner-local transaction에서 최신 불변식과 exact source/payload를 최종 검증한다. 성공한
+  Refund/restoration/Settlement adjustment는 이후 step 실패로 rollback하지 않는다. Notification intent는 financial
+  terminal state 이후 독립적으로 생성되며 delivery 실패가 financial result를 되돌리지 않는다.
 
 ## Local atomic candidates
 
@@ -83,6 +94,7 @@
 - grant activation/reveal authorization + pre-reveal Audit (S40 implemented)
 - ActionRequest revision + policy snapshot; ApprovalStep + request state (S60 implemented)
 - owner-local pickup slot swap (S70 implemented)
+- Resolution plan/claim/result + PII-free Audit (S80 implemented)
 - owner-local point/coupon issuance + compensation execution result
 - provider webhook Inbox insert
 - deletion component transition + deletion ledger result

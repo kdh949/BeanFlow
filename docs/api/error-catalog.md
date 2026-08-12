@@ -30,7 +30,7 @@
 | PAYMENT_REFUND_UNKNOWN | 202 representation | Poll | 환불 결과 불명, reconciliation 중이며 성공 환불액에 아직 포함하지 않음 |
 | PAYMENT_REFUND_EXCEEDED | 409 | No | 누적 환불이 승인액 초과 |
 | PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
-| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 |
+| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | immutable source/금액 guard 불충족 또는 S80에서 Payment lookup 외 owner step의 수동 재실행 요청 |
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
 | REPROCESSING_PROPOSAL_STALE | 409 | Yes, after reviewing current state | 제안 뒤 case·snapshot·Refund 상태가 바뀌어 fingerprint 재검증 실패 |
@@ -69,7 +69,9 @@ terminal response를 추정하지 않는다.
 S70의 `RESOLUTION_REQUIRED`는 오류 envelope가 아니다. execution endpoint가 latest owner state를 잠근 뒤
 `PREPARING`, `READY` 또는 `COMPLETED`를 확인했음을 나타내는 terminal 200 representation이며 Order와 store
 authorization successful-use budget은 바뀌지 않는다. 실제 refund/benefit/settlement resolution 생성은 S80이
-소유한다.
+소유한다. S80의 `PARTIALLY_RESOLVED`, `RECONCILING`, `MANUAL_REVIEW`도 확정 성공으로 축약하지 않는 200
+representation state다. Payment Provider timeout은 step `UNKNOWN`으로 남고, 안전한 lookup은 reconcile operation이
+수행한다. `UNDETERMINED`의 Settlement `BLOCKED`는 503이 아니라 비용 귀속이 정해지지 않았다는 durable state다.
 
 `REORDER_ITEMS_UNAVAILABLE.details`는 source line 순서로 정렬하고 같은 line에서는 reason
 우선순위와 `optionId` 오름차순으로 정렬한다. stable reason은 다음과 같다.
