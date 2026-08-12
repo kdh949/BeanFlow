@@ -198,16 +198,22 @@ not overwritten. V46 is the sole writer number; another schema writer appearance
   '*RuntimeOpenApiParityTest' --rerun-tasks`: 0 failures, `BUILD SUCCESSFUL in 19s`.
 - PASS — `./gradlew test --tests '*AuditRetentionPolicyMigrationTest' --rerun-tasks`: 4 tests, 0 failures,
   `BUILD SUCCESSFUL in 23s`.
-- PASS — final `./gradlew clean build`: 865 tests, 864 passed, 1 skipped, 0 failures/errors;
-  Spotless/assemble/check included, `BUILD SUCCESSFUL in 9m 19s`.
+- PASS — CI remediation regression set covering Audit, Payment, Ordering and Support Resolution: 35 tests,
+  0 failures, `BUILD SUCCESSFUL in 53s`.
+- PASS — final `clean build` with the installed Gradle 9.6.1 distribution and isolated Gradle home: 868 tests,
+  867 passed, 1 skipped, 0 failures/errors; Spotless/assemble/check included, `BUILD SUCCESSFUL in 10m 13s`.
 - PASS — `bash scripts/verify-docs.sh`: target/runtime 70 paths/74 operations, 200 schemas; 33 business policies,
   92 ADRs, 235 Markdown files and 42 ExecPlans validated.
 - PASS — `git diff --check`: no whitespace errors before completion commit.
 - NOT MEASURED — no performance improvement claim or benchmark is part of S80.
 
-Two full-build preflight failures were corrected before the final pass: Spotless identified 14 S80 Kotlin files and the
+Two initial full-build preflight failures were corrected before the final pass: Spotless identified 14 S80 Kotlin files and the
 fresh-migration test still expected V45 instead of the leased V46. Owner fixture binding failures found by the 62-test
-suite were also corrected and the entire suite was rerun. No failed result is treated as completion evidence.
+suite were also corrected. GitHub CI then exposed PostgreSQL microsecond rounding at the immediate Refund claim boundary
+and a phone-shaped UUID embedded in an opaque Audit reference. Payment now persists the due instant at database precision,
+and the Audit PII scanner removes only UUID tokens before applying the existing raw-PII patterns. The latter keeps the
+ADR-068 `itemSource` audit contract intact while still rejecting raw phone values adjacent to an opaque UUID. The focused
+35-test set and the entire 868-test suite were rerun. No failed result is treated as completion evidence.
 
 ## Observability
 
@@ -250,7 +256,11 @@ tag와 Audit에는 case/order/customer/payment/refund/adjustment ID, amount, rea
 - Owner fixture inserts exposed a command-actor column binding shift only when all owner suites ran together; exact
   PostgreSQL types caught the defect before completion.
 - The first full build correctly failed the formatting gate, and the next run caught a stale V45 migration assertion.
-  Applying Spotless and updating the explicit V46 expectation made the final 865-test build pass without suppressing gates.
+  Applying Spotless and updating the explicit V46 expectation kept both gates enabled.
+- Linux CI exposed the sub-microsecond `Instant`/PostgreSQL `timestamptz` boundary that macOS clocks did not reproduce.
+  Normalizing the Refund creation instant at the Payment owner boundary makes an immediate claim deterministically due.
+- Audit source references can contain UUID text that happens to include a Korean phone-shaped digit sequence. Redacting
+  only canonical UUID tokens for detection prevents that false positive without permitting a raw phone beside the token.
 
 ## Decision Log
 
@@ -269,7 +279,7 @@ idempotency keys, owner source hashes, claim leases and Audit commits are rechec
 
 The recommended policy proved implementable without a cost-owner fallback: `UNDETERMINED` customer value recovery can
 finish while Settlement remains blocked/manual, and expired original benefits end as `SKIPPED_EXPIRED` rather than being
-silently replaced by S90 goodwill. Final evidence is 865 tests with 864 passed, 1 skipped and no failures/errors, plus
+silently replaced by S90 goodwill. Final evidence is 868 tests with 867 passed, 1 skipped and no failures/errors, plus
 OpenAPI/document verification. V46 lease is released. S90 is ready for detailed authoring from S60 approval/investigation
 and the now-completed S80 refund/restoration separation; its immutable policy, rolling bucket and cost-owner decisions
 remain S90 work rather than hidden S80 defaults.
@@ -277,5 +287,5 @@ remain S90 work rather than hidden S80 defaults.
 ## Revision Notes
 
 - 2026-08-12: authored from S70 actual outcome, accepted S60-reuse/attribution-only-block model and acquired V46 lease.
-- 2026-08-12: implemented V46/domain/owner/orchestration/runtime, passed focused and 865-test full validation, released
+- 2026-08-12: implemented V46/domain/owner/orchestration/runtime, passed focused and 868-test full validation, released
   the migration lease, moved the plan to completed and marked S90 ready to author.

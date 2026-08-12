@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
@@ -29,6 +30,7 @@ internal class PostAcceptanceResolutionPaymentService(
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun request(command: RequestPostAcceptanceResolutionRefundCommand): PostAcceptanceResolutionRefundView {
         validate(command)
+        val recordedAt = command.now.truncatedTo(ChronoUnit.MICROS)
         val payment =
             payments.findLockedByOrderId(command.orderId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Approved Payment is missing")
@@ -50,7 +52,7 @@ internal class PostAcceptanceResolutionPaymentService(
                 reason = REASON,
                 providerIdempotencyKey = "refund:support-resolution:${command.resolutionId}",
                 sourceReference = command.sourceReference,
-                now = command.now,
+                now = recordedAt,
             )
         return refunds
             .saveAndFlush(

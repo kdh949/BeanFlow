@@ -106,6 +106,19 @@ internal class PostAcceptanceResolutionPaymentIntegrationTest
         }
 
         @Test
+        fun `sub microsecond request time remains immediately claimable after persistence`() {
+            val fixture = fixture()
+            val requestAt = NOW.plusNanos(789)
+            val refund = operations.request(command(fixture).copy(now = requestAt))
+            gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-sub-microsecond-refund"))
+
+            val succeeded = operations.execute(refund.refundId, requestAt)
+
+            assertThat(succeeded.state).isEqualTo(PostAcceptanceResolutionRefundState.SUCCEEDED)
+            assertThat(gateway.rejectionRefundCalls.get()).isOne()
+        }
+
+        @Test
         fun `an unresolved provider result blocks another resolution refund`() {
             val fixture = fixture()
             val first = operations.request(command(fixture))
