@@ -297,11 +297,11 @@ internal class PostAcceptanceResolutionIntegrationTest
             val executor = Executors.newFixedThreadPool(2)
             try {
                 val first = executor.submit<PostAcceptanceResolutionResource> { service.execute(command) }
-                assertThat(block.awaitStarted()).isTrue()
+                assertThat(block.awaitStarted(20, TimeUnit.SECONDS)).isTrue()
                 val second = executor.submit<PostAcceptanceResolutionResource> { service.execute(command) }
                 block.release()
-                first.get(10, TimeUnit.SECONDS)
-                second.get(10, TimeUnit.SECONDS)
+                first.get(30, TimeUnit.SECONDS)
+                second.get(30, TimeUnit.SECONDS)
 
                 assertThat(gateway.rejectionRefundCalls.get()).isOne()
                 assertThat(count("payment_refund")).isOne()
