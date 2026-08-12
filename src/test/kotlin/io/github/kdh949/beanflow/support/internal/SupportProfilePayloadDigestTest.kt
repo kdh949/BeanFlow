@@ -39,6 +39,24 @@ internal class SupportProfilePayloadDigestTest {
         assertThat(command.toString()).doesNotContain(raw).contains("values=<redacted>")
     }
 
+    @Test
+    fun `http request rendering redacts raw profile values and binding evidence`() {
+        val raw = "account-secret-reference"
+        val evidence = "e".repeat(64)
+        val request =
+            StoreSettlementAccountRequest(
+                ProfileChangeBindingRequest(SUBJECT, 1, SESSION, "private reason", evidence),
+                raw,
+            )
+
+        assertThat(request.toString())
+            .doesNotContain(raw)
+            .doesNotContain(evidence)
+            .doesNotContain("private reason")
+            .contains("values=<redacted>")
+        assertThat(request.binding.toString()).doesNotContain(evidence).contains("values=<redacted>")
+    }
+
     private companion object {
         val SUBJECT: UUID = UUID.fromString("81000000-0000-0000-0000-000000000001")
         val CASE: UUID = UUID.fromString("81000000-0000-0000-0000-000000000002")

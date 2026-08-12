@@ -26,13 +26,17 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
+internal abstract class SensitiveProfileChangeRequest : StrictSupportRequest {
+    final override fun toString(): String = "SensitiveProfileChangeRequest(values=<redacted>)"
+}
+
 internal data class ProfileChangeBindingRequest(
     @field:NotNull val subjectId: UUID?,
     @field:PositiveOrZero val expectedProfileVersion: Long,
     @field:NotNull val verificationSessionId: UUID?,
     @field:NotBlank @field:Size(max = 500) val reason: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$") val evidenceDigest: String?,
-)
+) : SensitiveProfileChangeRequest()
 
 internal data class ProfileChangeRevisionBindingRequest(
     @field:PositiveOrZero val expectedProfileChangeVersion: Long,
@@ -41,33 +45,33 @@ internal data class ProfileChangeRevisionBindingRequest(
     @field:NotNull val verificationSessionId: UUID?,
     @field:NotBlank @field:Size(max = 500) val reason: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$") val evidenceDigest: String?,
-)
+) : SensitiveProfileChangeRequest()
 
 internal data class ProfileChangeExecutionBindingRequest(
     @field:Positive val revisionNumber: Int,
     @field:PositiveOrZero val expectedActionRequestVersion: Long,
     @field:PositiveOrZero val expectedProfileChangeVersion: Long,
     @field:PositiveOrZero val expectedProfileVersion: Long,
-)
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerDisplayNameRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Size(max = 200) val displayName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerLegalNameRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Size(max = 200) val legalName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerPrimaryPhoneRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Size(max = 32) val primaryPhone: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerCredentialResetRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StorePublicProfileRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
@@ -75,118 +79,118 @@ internal data class StorePublicProfileRequest(
     @field:Size(max = 32) val publicPhone: String?,
     @field:Size(max = 1000) val description: String?,
     @field:Size(max = 1000) val pickupInstructions: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreOperationsContactRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:Size(max = 32) val phone: String?,
     @field:Email @field:Size(max = 320) val email: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreRepresentativeRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Size(max = 200) val representativeName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreSettlementAccountRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val accountReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreAccessReregistrationRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierDisplayNameRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Size(max = 200) val displayName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierRelayContactRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:Size(max = 32) val phone: String?,
     @field:Email @field:Size(max = 320) val email: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierProviderIdentityRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val providerReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierPayoutReferenceRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val payoutReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierProviderReregistrationRequest(
     @field:Valid val binding: ProfileChangeBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerPrimaryPhoneRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
     @field:NotBlank @field:Size(max = 32) val primaryPhone: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerCredentialResetRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreRepresentativeRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
     @field:NotBlank @field:Size(max = 200) val representativeName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreSettlementAccountRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val accountReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreAccessReregistrationRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierProviderIdentityRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val providerReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierPayoutReferenceRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val payoutReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierProviderReregistrationRevisionRequest(
     @field:Valid val binding: ProfileChangeRevisionBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CustomerPrimaryPhoneExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
     @field:NotBlank @field:Size(max = 32) val primaryPhone: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class EmptyProfileExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreRepresentativeExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
     @field:NotBlank @field:Size(max = 200) val representativeName: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class StoreSettlementAccountExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val accountReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierProviderIdentityExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val providerReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class CourierPayoutReferenceExecutionRequest(
     @field:Valid val binding: ProfileChangeExecutionBindingRequest,
     @field:NotBlank @field:Pattern(regexp = "^[A-Za-z0-9:_-]{4,200}$") val payoutReference: String?,
-) : StrictSupportRequest
+) : SensitiveProfileChangeRequest()
 
 internal data class RetryProfileNotificationsRequest(
     @field:PositiveOrZero val expectedProfileChangeVersion: Long,
