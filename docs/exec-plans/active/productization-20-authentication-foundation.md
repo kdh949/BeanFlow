@@ -277,6 +277,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   JDBC 4.1.0 공식 PostgreSQL DDL, Flyway-owned `initialize-schema=never`, closed permission 확장과
   default grant 0건을 구현한 뒤 신규 migration 3 tests와 AuditRetention/SupportCompensation/
   OperatorPermission 회귀를 합친 focused suite가 통과했다.
+- 2026-08-13: `CurrentActor` RED는 새 API/resolver 부재로 compile 실패했다. Customer/Merchant/Operator
+  actor와 JWT/검증된 browser authentication resolver를 구현한 첫 GREEN에서 테스트 reflection fixture
+  오기 1건만 실패했고 이를 교정한 뒤 resolver 4 tests가 통과했다. actor 유형 불일치는 403
+  `ACCESS_DENIED`로 고정하고 Controller에는 `Jwt`를 노출하지 않는다.
 
 ## Surprises & Discoveries
 
