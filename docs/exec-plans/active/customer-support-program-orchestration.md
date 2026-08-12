@@ -21,7 +21,9 @@ S50은 S40 verified stacked head에서 Case/Order timeline, typed ActionPolicy�
 S60은 S50 verified stacked head에서 immutable request revision, Support/Operations 승인·조사·재할당과 V44를
 구현·검증하고 lease를 해제했다. S70은 completed S60 lineage에서 cancellation/reschedule owner command,
 new-slot-first swap, exact store authorization과 V45를 구현·검증하고 lease를 해제했다.
-S80~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 새 detailed ExecPlan을 작성한다.
+S80은 S70 actual outcome에서 S60 approval reuse, partial owner step과 unknown responsibility 정책을 확정하고
+V46 detailed ExecPlan/sole writer lease를 시작했다. S90~S140은 predecessor actual outcome과 각자의 독립 모델
+게이트가 충족된 뒤 새 detailed ExecPlan을 작성한다.
 
 ## Current State
 
@@ -49,6 +51,9 @@ S80~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 �
 - S70 completed plan은 V45와 2개 runtime operation, exact request/revision/policy/verification/target 재검사,
   PENDING_PAYMENT/PAID/조건부 ACCEPTED owner execution, new-slot-first swap과 PREPARING handoff를 기록한다.
   833-test full regression과 build/docs validation 뒤 V45 writer lease는 release됐다.
+- S80 active plan은 S60 exact revision을 단일 approval source로 재사용하고 `UNDETERMINED`에서는 고객 가치
+  복구와 비용 귀속을 분리하는 SP-20을 확정했다. `feature/support-post-acceptance-resolution`이 V46 sole
+  migration-writer lease를 보유하며 runtime은 아직 구현 중이다.
 - Support API inventory 54개 중 S20의 9개 Case operation, S30의 1개 protected search operation, S40의 12개
   operation, S50의 3개 timeline/evaluation operation, S60의 6개 request/investigation operation과 S70의 2개
   execution/authorization operation, 총 33개가 canonical target/runtime contract에 구현됐고 나머지는 DRAFT다.
@@ -148,7 +153,7 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 | S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | COMPLETED — V43/runtime/full validation; lease released |
 | S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | COMPLETED — V44/runtime/full validation; lease released |
 | S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | COMPLETED — V45/runtime/833-test validation; lease released |
-| S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | READY TO AUTHOR — S70 outcome available; responsibility/step persistence plan required |
+| S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | ACTIVE — SP-20/ADR-085 accepted, detailed plan authored, V46 lease acquired |
 | S90 | versioned goodwill compensation | completed S60 approval/investigation foundation | S60 input satisfied; policy/bucket/cost-owner schema still required |
 | S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | S60/S30 inputs satisfied; customer/legal/payout/rider models remain incomplete |
 | S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | Provider selection/auth contract and Delivery module absent |
@@ -216,6 +221,7 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
   V45 lease release
 - [x] direct successor S80 readiness 재계산 — completed S70 outcome으로 detailed plan 작성 가능; S90/S100의
   독립 policy/owner-model gate는 유지
+- [x] S70 head에서 S80 stacked branch/detailed plan 작성, SP-20/ADR-085 상태 모델 확정과 V46 sole writer lease 획득
 
 ## Surprises & Discoveries
 
@@ -268,6 +274,7 @@ V45 composite FK/check constraint review는 execution·authorization·terminal r
 | 2026-08-12 | S70 authoring/lease | freeze Productization after Plan 10, author S70 and acquire V45 lane | user prioritizes Support stack; delegation limits were the remaining implementation gate | active S70, Productization ADR-111 |
 | 2026-08-12 | S70 policy gate | accept cancellation 10m/1-use and reschedule 30m/3-use delegation with STORE responsibility | user selected recommended risk-differentiated limits; no unknown cost-owner fallback | SP-19, ADR-085, active S70 |
 | 2026-08-12 | S70 completion | complete V45, owner commands and 2 runtime operations; release lease and pass output to S80 | focused PostgreSQL/security/API plus 833-test full build and docs gates passed | completed S70 |
+| 2026-08-12 | S80 authoring/lease | reuse S60 exact approval and block only cost attribution for `UNDETERMINED`; acquire V46 | avoids duplicate approval truth and cost-owner fallback while customer remediation progresses | SP-20, ADR-085, active S80 |
 
 ## Outcomes & Retrospective
 
@@ -275,7 +282,8 @@ S10 foundation, S20 runtime Case, S30 protected exact search/remediation, S40 ve
 timeline/ActionPolicy, S60 approval/Operations investigation와 S70 cancellation/reschedule execution이 complete다.
 S70 full regression은 833 tests를 통과했고 target/runtime은 33개 Support/Operations operation을 노출하며 V45
 lease는 release됐다. S80은 이 actual owner outcome에서 detailed plan을 작성할 수 있다. S90과 S100은 S60
-input을 보유하지만 각자의 독립 policy/owner-model gate를 유지한다.
+input을 보유하지만 각자의 독립 policy/owner-model gate를 유지한다. S80 detailed plan은 active이고 V46 lease를
+보유하지만 아직 runtime outcome이나 validation evidence는 없다.
 
 ## Revision Notes
 
@@ -304,3 +312,5 @@ input을 보유하지만 각자의 독립 policy/owner-model gate를 유지한�
 - 2026-08-12: accepted SP-19 cancellation 10m/1-use and reschedule 30m/3-use delegation limits and made S70 ready.
 - 2026-08-12: completed S70 V45/owner/runtime and 833-test validation, moved its plan to completed, released the
   migration lane and marked direct successor S80 ready to author.
+- 2026-08-12: authored active S80 from S70, accepted SP-20/ADR-085 S60-reuse and attribution-blocking policy, and
+  acquired the V46 sole migration-writer lease.

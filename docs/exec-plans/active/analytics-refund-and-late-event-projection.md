@@ -14,6 +14,10 @@
 > clean build와 migration test로 검증해 writer lease를 해제했다. 이 plan은 최신 V38 다음 migration
 > 번호를 다시 확인한 뒤 schema 작업을 시작할 수 있다.
 
+> **Migration lane deferred (2026-08-12):** 사용자가 Support stack을 우선했고 S80 active plan이 completed
+> S70 V45 다음 V46 sole writer lease를 획득했다. 이 plan은 S100 Support stack completion과 lease release 뒤
+> latest Flyway 번호를 다시 확인하고 재번호화해야 하며 현재 migration branch/number/PR을 소유하지 않는다.
+
 ## Purpose / Big Picture
 
 Analytics는 거래 Aggregate를 소유하지 않는 read-only projection Context다.
