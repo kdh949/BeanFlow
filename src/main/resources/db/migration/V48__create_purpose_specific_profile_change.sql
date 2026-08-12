@@ -107,6 +107,7 @@ ALTER TABLE merchant_store_support_profile
     );
 
 ALTER TABLE delivery_external_courier_support_profile
+    ADD COLUMN masked_provider_courier_reference varchar(200),
     ADD COLUMN payout_reference_ciphertext varchar(16384),
     ADD COLUMN payout_reference_key_version integer,
     ADD COLUMN payout_reference_aad_version smallint,
@@ -123,6 +124,12 @@ ALTER TABLE delivery_external_courier_support_profile
             AND length(masked_payout_reference) BETWEEN 3 AND 200
             AND masked_payout_reference LIKE '%*%'
             AND masked_payout_reference !~ '[[:cntrl:]]'
+        )
+    ),
+    ADD CONSTRAINT chk_delivery_courier_provider_reference_mask CHECK (
+        masked_provider_courier_reference IS NULL OR (
+            masked_provider_courier_reference LIKE '%*%'
+            AND masked_provider_courier_reference !~ '[[:cntrl:]]'
         )
     );
 
@@ -210,6 +217,7 @@ CREATE TABLE support_profile_change_notification (
     delivery_id uuid UNIQUE REFERENCES notification_delivery(id),
     state varchar(24) NOT NULL CHECK (state IN ('PENDING', 'ACCEPTED', 'RETRY_SCHEDULED', 'MANUAL_REVIEW')),
     failure_code varchar(80) CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z0-9_]{1,80}$'),
+    attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 5),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     CONSTRAINT uq_support_profile_change_notification_target UNIQUE (
