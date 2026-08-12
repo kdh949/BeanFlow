@@ -186,6 +186,142 @@ ALTER TABLE payment_refund
         )
     );
 
+ALTER TABLE loyalty_point_reservation
+    DROP CONSTRAINT chk_point_reservation_restoration_metadata,
+    ADD CONSTRAINT chk_point_reservation_restoration_metadata CHECK (
+        (state = 'RESTORED'
+            AND restoration_source_reference IS NOT NULL
+            AND (
+                (restoration_trigger IN ('STORE_REJECTION', 'CUSTOMER_CANCELLATION')
+                    AND restoration_policy_version_id IS NOT NULL)
+                OR
+                (restoration_trigger = 'POST_ACCEPTANCE_RESOLUTION'
+                    AND restoration_policy_version_id IS NULL)
+            ))
+        OR
+        (state <> 'RESTORED'
+            AND restoration_source_reference IS NULL
+            AND restoration_trigger IS NULL
+            AND restoration_policy_version_id IS NULL)
+    );
+
+ALTER TABLE loyalty_point_transaction
+    DROP CONSTRAINT chk_point_transaction_restoration_metadata,
+    ADD CONSTRAINT chk_point_transaction_restoration_metadata CHECK (
+        (type NOT IN ('RESTORE', 'COMPENSATION', 'RESTORE_SKIPPED_EXPIRED')
+            AND refund_id IS NULL
+            AND order_line_id IS NULL
+            AND point_reservation_allocation_id IS NULL
+            AND restoration_trigger IS NULL
+            AND restoration_policy_version_id IS NULL
+            AND restoration_disposition IS NULL)
+        OR
+        (type IN ('RESTORE', 'COMPENSATION', 'RESTORE_SKIPPED_EXPIRED')
+            AND refund_id IS NOT NULL
+            AND order_line_id IS NOT NULL
+            AND point_reservation_allocation_id IS NOT NULL
+            AND restoration_trigger = 'PARTIAL_REFUND'
+            AND restoration_policy_version_id IS NOT NULL
+            AND (
+                (type = 'RESTORE' AND restoration_disposition = 'ORIGINAL_LOT')
+                OR (type = 'COMPENSATION' AND restoration_disposition = 'COMPENSATION_LOT')
+                OR (type = 'RESTORE_SKIPPED_EXPIRED' AND restoration_disposition = 'SKIPPED_EXPIRED')
+            ))
+        OR
+        (type IN ('RESTORE', 'COMPENSATION', 'RESTORE_SKIPPED_EXPIRED')
+            AND refund_id IS NULL
+            AND order_line_id IS NULL
+            AND point_reservation_allocation_id IS NOT NULL
+            AND restoration_trigger IN ('STORE_REJECTION', 'CUSTOMER_CANCELLATION')
+            AND restoration_policy_version_id IS NOT NULL
+            AND (
+                (type = 'RESTORE' AND restoration_disposition = 'ORIGINAL_LOT')
+                OR (type = 'COMPENSATION' AND restoration_disposition = 'COMPENSATION_LOT')
+                OR (type = 'RESTORE_SKIPPED_EXPIRED' AND restoration_disposition = 'SKIPPED_EXPIRED')
+            ))
+        OR
+        (type IN ('RESTORE', 'RESTORE_SKIPPED_EXPIRED')
+            AND refund_id IS NULL
+            AND order_line_id IS NULL
+            AND point_reservation_allocation_id IS NOT NULL
+            AND restoration_trigger = 'POST_ACCEPTANCE_RESOLUTION'
+            AND restoration_policy_version_id IS NULL
+            AND (
+                (type = 'RESTORE' AND restoration_disposition = 'ORIGINAL_LOT')
+                OR (type = 'RESTORE_SKIPPED_EXPIRED' AND restoration_disposition = 'SKIPPED_EXPIRED')
+            ))
+    );
+
+CREATE UNIQUE INDEX uq_point_transaction_support_resolution_allocation
+    ON loyalty_point_transaction (point_reservation_allocation_id)
+    WHERE restoration_trigger = 'POST_ACCEPTANCE_RESOLUTION';
+
+ALTER TABLE promotion_coupon_reservation
+    DROP CONSTRAINT chk_coupon_reservation_restoration_metadata,
+    ADD CONSTRAINT chk_coupon_reservation_restoration_metadata CHECK (
+        (state = 'RESTORED'
+            AND restoration_source_reference IS NOT NULL
+            AND restoration_disposition IN (
+                'ORIGINAL_RESTORED', 'COMPENSATION_ISSUED', 'SKIPPED_EXPIRED'
+            )
+            AND (
+                (restoration_trigger IN ('STORE_REJECTION', 'CUSTOMER_CANCELLATION')
+                    AND restoration_policy_version_id IS NOT NULL)
+                OR
+                (restoration_trigger = 'POST_ACCEPTANCE_RESOLUTION'
+                    AND restoration_policy_version_id IS NULL
+                    AND restoration_disposition <> 'COMPENSATION_ISSUED')
+            ))
+        OR
+        (state <> 'RESTORED'
+            AND restoration_source_reference IS NULL
+            AND restoration_trigger IS NULL
+            AND restoration_policy_version_id IS NULL
+            AND restoration_disposition IS NULL)
+    );
+
+CREATE TABLE loyalty_support_resolution_point_restoration (
+    id uuid PRIMARY KEY,
+    resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution(id),
+    order_id uuid NOT NULL,
+    point_reservation_id uuid REFERENCES loyalty_point_reservation(id),
+    source_reference varchar(240) NOT NULL UNIQUE CHECK (
+        source_reference = btrim(source_reference)
+        AND length(source_reference) BETWEEN 1 AND 240
+        AND source_reference !~ '[[:cntrl:]]'
+    ),
+    payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+    disposition varchar(32) NOT NULL CHECK (
+        disposition IN ('RESTORED', 'PARTIALLY_RESTORED', 'SKIPPED_EXPIRED', 'NOT_ELIGIBLE')
+    ),
+    restored_amount_krw bigint NOT NULL CHECK (restored_amount_krw >= 0),
+    restored_at timestamptz NOT NULL,
+    UNIQUE (resolution_id),
+    CHECK (
+        (disposition IN ('RESTORED', 'PARTIALLY_RESTORED') AND restored_amount_krw > 0)
+        OR
+        (disposition IN ('SKIPPED_EXPIRED', 'NOT_ELIGIBLE') AND restored_amount_krw = 0)
+    )
+);
+
+CREATE TABLE promotion_support_resolution_coupon_restoration (
+    id uuid PRIMARY KEY,
+    resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution(id),
+    order_id uuid NOT NULL,
+    coupon_reservation_id uuid REFERENCES promotion_coupon_reservation(id),
+    source_reference varchar(240) NOT NULL UNIQUE CHECK (
+        source_reference = btrim(source_reference)
+        AND length(source_reference) BETWEEN 1 AND 240
+        AND source_reference !~ '[[:cntrl:]]'
+    ),
+    payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+    disposition varchar(32) NOT NULL CHECK (
+        disposition IN ('RESTORED', 'SKIPPED_EXPIRED', 'NOT_ELIGIBLE')
+    ),
+    restored_at timestamptz NOT NULL,
+    UNIQUE (resolution_id)
+);
+
 CREATE TABLE support_post_acceptance_resolution_step (
     id uuid PRIMARY KEY,
     resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution (id),

@@ -1,7 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
-import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -107,9 +106,8 @@ internal class PointReservationEntity(
     var updatedAt: Instant,
     @Column(name = "restoration_source_reference", length = 240)
     var restorationSourceReference: String? = null,
-    @Enumerated(EnumType.STRING)
     @Column(name = "restoration_trigger")
-    var restorationTrigger: OrderTerminationTrigger? = null,
+    var restorationTrigger: String? = null,
     @Column(name = "restoration_policy_version_id")
     var restorationPolicyVersionId: Long? = null,
     @Version
@@ -270,6 +268,29 @@ internal class PartialRefundRestorationEntity(
     val restoredAt: Instant,
 )
 
+@Entity
+@Table(name = "loyalty_support_resolution_point_restoration")
+internal class SupportResolutionPointRestorationEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "resolution_id", nullable = false)
+    val resolutionId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "point_reservation_id")
+    val pointReservationId: UUID?,
+    @Column(name = "source_reference", nullable = false, length = 240)
+    val sourceReference: String,
+    @Column(name = "payload_hash", nullable = false, length = 64)
+    val payloadHash: String,
+    @Column(nullable = false, length = 32)
+    val disposition: String,
+    @Column(name = "restored_amount_krw", nullable = false)
+    val restoredAmountKrw: Long,
+    @Column(name = "restored_at", nullable = false)
+    val restoredAt: Instant,
+)
+
 internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select account from PointAccountEntity account where account.id = :accountId")
@@ -368,4 +389,9 @@ internal interface PartialRefundRestorationJpaRepository : JpaRepository<Partial
     fun sumRestoredAmountByAllocationId(
         @Param("allocationId") allocationId: UUID,
     ): Long
+}
+
+internal interface SupportResolutionPointRestorationJpaRepository :
+    JpaRepository<SupportResolutionPointRestorationEntity, UUID> {
+    fun findBySourceReference(sourceReference: String): SupportResolutionPointRestorationEntity?
 }

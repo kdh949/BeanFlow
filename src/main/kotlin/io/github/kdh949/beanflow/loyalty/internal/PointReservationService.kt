@@ -120,7 +120,7 @@ internal class PointReservationService(
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         if (reservation.state == PointReservationState.RESTORED) {
             return if (reservation.restorationSourceReference == command.sourceReference &&
-                reservation.restorationTrigger == command.trigger &&
+                reservation.restorationTrigger == command.trigger.name &&
                 reservation.restorationPolicyVersionId == command.policyVersionId
             ) {
                 report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
@@ -222,7 +222,7 @@ internal class PointReservationService(
         }
         reservation.state = PointReservationState.RESTORED
         reservation.restorationSourceReference = command.sourceReference
-        reservation.restorationTrigger = command.trigger
+        reservation.restorationTrigger = command.trigger.name
         reservation.restorationPolicyVersionId = command.policyVersionId
         reservation.updatedAt = command.terminatedAt
         return report(ReservationTransitionResult.APPLIED, reservation.id)

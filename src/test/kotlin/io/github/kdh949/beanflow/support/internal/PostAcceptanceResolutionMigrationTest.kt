@@ -40,13 +40,17 @@ internal class PostAcceptanceResolutionMigrationTest {
                  WHERE table_schema = 'public'
                    AND table_name IN (
                        'support_post_acceptance_resolution',
-                       'support_post_acceptance_resolution_step'
+                       'support_post_acceptance_resolution_step',
+                       'loyalty_support_resolution_point_restoration',
+                       'promotion_support_resolution_coupon_restoration'
                    )
                  ORDER BY table_name
                 """.trimIndent(),
                 String::class.java,
             ),
         ).containsExactly(
+            "loyalty_support_resolution_point_restoration",
+            "promotion_support_resolution_coupon_restoration",
             "support_post_acceptance_resolution",
             "support_post_acceptance_resolution_step",
         )
@@ -87,8 +91,11 @@ internal class PostAcceptanceResolutionMigrationTest {
                          'uq_support_resolution_request',
                          'uq_support_resolution_step_type',
                          'fk_support_resolution_revision',
-                         'fk_support_action_request_terminal_resolution',
-                         'chk_support_action_request_terminal_result'
+                        'fk_support_action_request_terminal_resolution',
+                        'chk_support_action_request_terminal_result',
+                        'chk_payment_refund_command_shape',
+                        'chk_point_reservation_restoration_metadata',
+                        'chk_coupon_reservation_restoration_metadata'
                      )
                      ORDER BY conname
                     """.trimIndent(),
@@ -99,6 +106,7 @@ internal class PostAcceptanceResolutionMigrationTest {
         assertThat(definitions).contains("PARTIALLY_RESOLVED", "UNKNOWN", "RECONCILING", "BLOCKED")
         assertThat(definitions).contains("UNDETERMINED", "STORE", "SHARED", "settlement_adjustment_krw")
         assertThat(definitions).contains("request_id", "revision_id", "terminal_resolution_id")
+        assertThat(definitions).contains("SUPPORT_POST_ACCEPTANCE_RESOLUTION", "POST_ACCEPTANCE_RESOLUTION")
     }
 
     @Test
