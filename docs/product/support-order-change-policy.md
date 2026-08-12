@@ -1,7 +1,7 @@
 # Support Order Change Policy
 
 > **Status:** Lifecycle-aware direct change and ACCEPTED initial confirmation/delegation limits are Accepted in
-> ADR-085/SP-19. Command/DTO implementation remains S70-owned.
+> ADR-085/SP-19 and implemented by S70 typed Support/Ordering/Fulfillment contracts.
 
 ## ACCEPTED store authorization
 
@@ -34,3 +34,8 @@ version으로만 수행하고 기존 row를 소급 수정하지 않는다.
 | CANCELLED/REJECTED/EXPIRED | 재취소·상태복구 금지; 누락 부수효과 reconcile만 | 금지 |
 
 새 slot 확보가 실패하면 기존 예약은 유지한다. ACCEPTED와 PREPARING 경쟁에서는 최신 잠금 상태가 PREPARING이면 직접 변경을 거부하고 post-acceptance resolution로 전환한다. Support는 고객을 가장하지 않고 Ordering/Fulfillment의 별도 공개 command를 호출한다.
+
+S70 runtime은 `POST /support/action-requests/{requestId}/executions`에서 canonical action payload를 다시 hash하고
+exact ready revision, policy, verification, permissions와 Ordering version을 검사한다. ACCEPTED authorization은
+`POST /stores/{storeId}/support-order-change-authorizations`에서만 생성한다. 실행 결과는 owner before/after
+state/version과 closed recovery summary만 포함하고 모든 성공 응답은 `Cache-Control: no-store`다.

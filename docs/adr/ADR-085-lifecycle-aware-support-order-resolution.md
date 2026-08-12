@@ -27,10 +27,19 @@ Ordering/Fulfillment public commands와 resolution orchestration이 필요하다
 SP-19의 immutable versioned policy가 소유하고 실제 delegation data와 책임분쟁 패턴에 따라 새 policy
 version으로만 변경한다. 기존 delegation의 expiry/budget은 소급 변경하지 않는다.
 
+S70 implements the direct-change half through typed Support execution and store-authorization APIs. Support coordinates
+the transaction but Ordering and Fulfillment public Application APIs own final state/version and slot/refund invariants.
+The direct endpoint commits either an owner-confirmed `EXECUTED` outcome or an unchanged-order
+`RESOLUTION_REQUIRED` handoff; S80 still owns the actual post-acceptance ResolutionCase and adjustment orchestration.
+
 ## Verification
 
 State matrix, ACCEPTED↔PREPARING race, exact confirmation binding, delegation expiry/use concurrency와 replay,
 new-slot failure old-slot retained, cumulative refund, partial/unknown resolution tests.
+
+Implementation evidence: V45 constraints, `SupportOrderChangeExecutionIntegrationTest`,
+`OrderingSupportOrderChangeIntegrationTest`, `FulfillmentSupportPickupRescheduleIntegrationTest` and target/runtime
+OpenAPI parity tests.
 
 ## Metrics
 

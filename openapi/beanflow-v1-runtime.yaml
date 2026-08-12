@@ -568,6 +568,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1support-manager-decisions"
   /support/action-requests/{requestId}/reassignments:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1reassignments"
+  /support/action-requests/{requestId}/executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1executions"
+  /stores/{storeId}/support-order-change-authorizations:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-authorizations"
   /operations/investigations/{investigationId}/decisions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations~1{investigationId}~1decisions"
   /support/cases/{caseId}/verification-sessions:

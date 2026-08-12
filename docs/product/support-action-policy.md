@@ -1,7 +1,7 @@
 # Support ActionPolicy
 
 > **Status:** Core ALLOWED/APPROVAL_REQUIRED/DENIED and exact approval binding are Accepted in ADR-084. S50 initial
-> typed evaluator and advisory API are implemented; S60 request revision/approval/investigation is in progress.
+> typed evaluator/advisory API, S60 request revision/approval/investigation and S70 order-change execution are implemented.
 
 ## Decision
 
@@ -18,7 +18,8 @@ expiry는 bound action VerificationSession의 exact expiry이며 boundary는 `no
 `NONE` 또는 `SUPPORT_MANAGER` route만 선택한다. `OPERATIONS`와 `SUPPORT_MANAGER_THEN_OPERATIONS`는 future typed
 compensation/profile policy가 server-side로 선택할 때까지 dormant이고 client가 route를 보낼 수 없다.
 
-승인 결과는 `READY_FOR_EXECUTION` lineage이며 실제 owner 변경 성공이 아니다. S70/S80/S90/S100 typed owner command가
+승인 결과는 `READY_FOR_EXECUTION` lineage이며 실제 owner 변경 성공이 아니다. S70 order-change command와 이후
+S80/S90/S100 typed owner command가
 동일 canonical payload digest와 최신 permission/verification/policy/target version을 다시 확인하고 approval을 consume한다.
 
 S70 ACCEPTED direct change는 ActionPolicy approval 외에 SP-19의 exact store confirmation 또는 active
@@ -43,4 +44,6 @@ required permission/verification/approval을 포함하지만 실행 권한은 �
 구현은 client가 role, permission, verification level, relation, current owner state 또는 decision을 보내지 못하게 한다.
 Support가 Case/current assignment/active Order link를 확인하고 Ordering public snapshot을 읽은 뒤 persistent grant와
 action-bound session을 다시 잠가 평가한다. Owner query/persistence 장애는 `DENIED`로 축소하지 않고 503이며,
-실행 endpoint가 생기는 S60 이후에는 같은 immutable evaluator와 최신 owner version을 다시 사용해야 한다.
+S70 execution은 같은 immutable policy identifier, exact request revision/action payload digest와 최신 owner version을
+다시 검사한다. `PREPARING`/`READY`/`COMPLETED` race는 stale UI decision을 실행하지 않고 durable
+`RESOLUTION_REQUIRED`로 전환하며 owner Order fact를 보존한다.

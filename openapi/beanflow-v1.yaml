@@ -1912,6 +1912,83 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/executions:
+    post:
+      tags: [Support]
+      operationId: executeSupportOrderChange
+      summary: Execute one exact cancellation or pickup-reschedule revision
+      description: |
+        Recomputes the canonical action payload digest and rechecks the assigned
+        executor, active Case and relationship, verification, persistent permissions,
+        immutable policy, exact revision/request/target versions and latest owner state.
+        ACCEPTED requires a matching active store confirmation or delegation. A
+        PREPARING/READY/COMPLETED race commits RESOLUTION_REQUIRED without changing
+        the Order or consuming authorization. Owner changes, authorization use,
+        PII-free Audit, notification intent and the terminal response commit in one
+        local transaction; an Audit or persistence failure rolls all of them back.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteSupportOrderChangeRequest"
+      responses:
+        "200":
+          description: Durable owner and Support outcome, or the first exact response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportOrderChangeExecutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/support-order-change-authorizations:
+    post:
+      tags: [Support]
+      operationId: createSupportOrderChangeAuthorization
+      summary: Confirm one exact accepted-order change or create a bounded delegation
+      description: |
+        Requires active store membership and an explicit STORE cost-responsibility
+        acceptance. CONFIRMATION is bound to the exact request, revision, canonical
+        action payload digest, target version and request expiry. DELEGATION is bound
+        to store, action and support-order-change-policy/2026-08-12/v1: cancellation
+        lasts ten minutes for one successful use and pickup reschedule lasts thirty
+        minutes for three successful uses. now >= expiresAt is expired. Validation
+        failure, rollback and RESOLUTION_REQUIRED do not consume a use.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportOrderChangeAuthorizationRequest"
+      responses:
+        "201":
+          description: Store authorization created or the first exact creation response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportOrderChangeAuthorizationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /operations/investigations/{investigationId}/decisions:
     post:
       tags: [Operations]
@@ -3222,12 +3299,13 @@ components:
       type: string
       description: |
         System-determined cancellation origin. CUSTOMER_REQUEST is a customer
-        cancellation command; PAYMENT_DECLINED is a cancellation caused by an
-        explicit Provider approval decline. Only CUSTOMER_REQUEST cancellations
-        carry a customer-declared reason code.
+        command, SUPPORT_REQUEST is an approved Support owner command and
+        PAYMENT_DECLINED is caused by an explicit Provider approval decline.
+        CUSTOMER_REQUEST and SUPPORT_REQUEST carry a structured reason code.
       enum:
         - CUSTOMER_REQUEST
         - PAYMENT_DECLINED
+        - SUPPORT_REQUEST
     StoreOrder:
       description: |
         Store-facing Order projection. Store members see the cancellation fact
@@ -4828,6 +4906,8 @@ components:
         - EXPIRED
         - STALE
         - MANUAL_REVIEW
+        - EXECUTED
+        - RESOLUTION_REQUIRED
     SupportApprovalStepType:
       type: string
       enum: [SUPPORT_MANAGER, OPERATIONS]
@@ -4980,7 +5060,7 @@ components:
     SupportActionRequestResource:
       type: object
       additionalProperties: false
-      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps]
+      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps, terminalExecutionId]
       properties:
         requestId:
           $ref: "#/components/schemas/Identifier"
@@ -5033,6 +5113,208 @@ components:
           maxItems: 2
           items:
             $ref: "#/components/schemas/SupportApprovalStepResource"
+        terminalExecutionId:
+          type: [string, "null"]
+          format: uuid
+    SupportOrderChangeAuthorizationType:
+      type: string
+      enum: [CONFIRMATION, DELEGATION]
+    SupportOrderChangeCostResponsibility:
+      type: string
+      enum: [STORE, PLATFORM, UNKNOWN]
+      description: Only STORE is accepted by the S70 direct-change authorization endpoint.
+    SupportOrderChangePolicyVersion:
+      type: string
+      const: support-order-change-policy/2026-08-12/v1
+    CreateSupportOrderChangeAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [authorizationType, action, policyVersion, costResponsibility]
+      properties:
+        authorizationType:
+          $ref: "#/components/schemas/SupportOrderChangeAuthorizationType"
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        policyVersion:
+          $ref: "#/components/schemas/SupportOrderChangePolicyVersion"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        costResponsibility:
+          $ref: "#/components/schemas/SupportOrderChangeCostResponsibility"
+      description: |
+        CONFIRMATION requires requestId, revisionNumber and expectedRequestVersion.
+        DELEGATION forbids all three request-specific properties.
+    SupportOrderChangeAuthorizationResource:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, storeId, authorizationType, action, policyVersion, requestId, revisionNumber, actionPayloadDigest, targetVersion, authorizedByActorId, authorizedAt, expiresAt, maxSuccessfulUses, successfulUses, costResponsibility]
+      properties:
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        authorizationType:
+          $ref: "#/components/schemas/SupportOrderChangeAuthorizationType"
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        policyVersion:
+          $ref: "#/components/schemas/SupportOrderChangePolicyVersion"
+        requestId:
+          type: [string, "null"]
+          format: uuid
+        revisionNumber:
+          type: [integer, "null"]
+          minimum: 1
+        actionPayloadDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        targetVersion:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        authorizedByActorId:
+          $ref: "#/components/schemas/Identifier"
+        authorizedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        maxSuccessfulUses:
+          type: integer
+          minimum: 1
+          maximum: 3
+        successfulUses:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Creation response snapshot. Exact creation replay returns the same zero-use snapshot.
+        costResponsibility:
+          type: string
+          const: STORE
+    ExecuteSupportOrderChangeRequest:
+      oneOf:
+        - $ref: "#/components/schemas/ExecuteSupportOrderCancellationRequest"
+        - $ref: "#/components/schemas/ExecuteSupportPickupRescheduleRequest"
+      discriminator:
+        propertyName: action
+        mapping:
+          ORDER_CANCELLATION: "#/components/schemas/ExecuteSupportOrderCancellationRequest"
+          PICKUP_RESCHEDULE: "#/components/schemas/ExecuteSupportPickupRescheduleRequest"
+      description: |
+        Canonical action digest uses the length-prefixed support-command-payload/v1
+        representation with operation SUPPORT_ORDER_CHANGE_ACTION_V1 and ordered
+        fields action, orderId, cancellationReasonCode and newPickupSlotId. The
+        inapplicable action field is represented as null and authorizationId is not
+        part of the action digest.
+    ExecuteSupportOrderCancellationRequest:
+      type: object
+      additionalProperties: false
+      required: [action, revisionNumber, expectedRequestVersion, expectedTargetVersion, reasonCode]
+      properties:
+        action:
+          type: string
+          const: ORDER_CANCELLATION
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reasonCode:
+          $ref: "#/components/schemas/CancellationReasonCode"
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+    ExecuteSupportPickupRescheduleRequest:
+      type: object
+      additionalProperties: false
+      required: [action, revisionNumber, expectedRequestVersion, expectedTargetVersion, newPickupSlotId]
+      properties:
+        action:
+          type: string
+          const: PICKUP_RESCHEDULE
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        newPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+    SupportOrderChangeExecutionOutcome:
+      type: string
+      enum: [EXECUTED, RESOLUTION_REQUIRED]
+    SupportOrderChangeExecutionResource:
+      type: object
+      additionalProperties: false
+      required: [executionId, requestId, revisionNumber, action, outcome, previousTargetState, currentTargetState, previousPickupSlotId, currentPickupSlotId, expectedTargetVersion, targetVersionAfter, paymentRecoveryState, authorizationId, occurredAt, requestState, requestVersion]
+      properties:
+        executionId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        outcome:
+          $ref: "#/components/schemas/SupportOrderChangeExecutionOutcome"
+        previousTargetState:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        currentTargetState:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        previousPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        currentPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        targetVersionAfter:
+          type: integer
+          format: int64
+          minimum: 0
+        paymentRecoveryState:
+          type: [string, "null"]
+          enum: [NOT_REQUIRED, REQUESTED, null]
+        authorizationId:
+          type: [string, "null"]
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        requestState:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
     OperationsSupportInvestigationDecisionResource:
       type: object
       additionalProperties: false

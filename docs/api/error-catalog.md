@@ -52,6 +52,10 @@
 | SUPPORT_ACTION_REQUEST_EXPIRED | 409 | Yes, with a new verified revision | exact verification-bound approval expiry에 도달함 (`now >= expiresAt`) |
 | SUPPORT_APPROVER_MUST_DIFFER | 409 | Yes, with a distinct eligible actor | requester, executor, Support reviewer, Operations reviewer의 분리 또는 reviewer-as-executor 규칙 위반 |
 | SUPPORT_INVESTIGATION_STATE_CONFLICT | 409 | Yes, after reading the current investigation | Operations investigation이 이미 terminal이거나 요청한 decision 전이를 허용하지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_REQUIRED | 403 | Yes, after exact store authorization | ACCEPTED direct change에 exact confirmation 또는 action/policy-bound delegation이 없음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_EXPIRED | 409 | Yes, after new authorization | authorization boundary `now >= expiresAt`; expired authorization은 실행·소비되지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_EXHAUSTED | 409 | Yes, after new authorization | delegation successful-use budget 소진; replay가 아닌 새 owner change는 실행되지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_SCOPE_MISMATCH | 403 | No for this authorization; create exact authorization | store/action/policy 또는 confirmation의 request/revision/digest/target binding 불일치, STORE 책임 미수락이나 Support actor separation 위반 포함 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
@@ -61,6 +65,11 @@ Idempotency-Key에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retr
 [Fast Reorder Runbook](../operations/fast-reorder-runbook.md)의 읽기 전용 조사 절차를 따른다.
 현재는 감사 가능한 해결 command가 없으므로 DB row를 직접 `COMPLETED`/`FAILED`로 바꾸거나
 terminal response를 추정하지 않는다.
+
+S70의 `RESOLUTION_REQUIRED`는 오류 envelope가 아니다. execution endpoint가 latest owner state를 잠근 뒤
+`PREPARING`, `READY` 또는 `COMPLETED`를 확인했음을 나타내는 terminal 200 representation이며 Order와 store
+authorization successful-use budget은 바뀌지 않는다. 실제 refund/benefit/settlement resolution 생성은 S80이
+소유한다.
 
 `REORDER_ITEMS_UNAVAILABLE.details`는 source line 순서로 정렬하고 같은 line에서는 reason
 우선순위와 `optionId` 오름차순으로 정렬한다. stable reason은 다음과 같다.
@@ -122,7 +131,6 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 | AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |
 | SUPPORT_ACTION_APPROVAL_REQUIRED | 409 representation | after approval | 실행 전 approval 필요 |
 | PICKUP_SLOT_UNAVAILABLE | 409 | choose slot | new slot capacity 불가; old slot 유지 |
-| POST_ACCEPTANCE_RESOLUTION_REQUIRED | 409 | create resolution | direct change가 허용되지 않는 lifecycle |
 | COMPENSATION_LIMIT_EXCEEDED | 422 | investigation/policy | rolling/band 한도 |
 | DUPLICATE_COMPENSATION | 409 | no | terminal duplicate incident benefit |
 | COMPENSATION_INVESTIGATION_REQUIRED | 409 representation | Operations handoff | high/exceptional 보상 |

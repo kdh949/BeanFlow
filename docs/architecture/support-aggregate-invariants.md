@@ -1,6 +1,7 @@
 # Support Aggregate Responsibilities and Invariants
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase and S40 Verification/DataAccessGrant/BreakGlass rules are persisted and tested.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 SupportCase, S40 Verification/DataAccessGrant/BreakGlass, S60
+> SupportActionRequest approval and S70 order-change execution/authorization rules are persisted and tested.
 > Future Aggregate names and constraints remain Stage-owned planning inputs unless anchored by an Accepted ADR/policy.
 
 ## Implemented S10 foundation
@@ -53,6 +54,21 @@ can return only through its required Support owner callback. Executor permission
 `REASSIGNMENT_REQUIRED`; explicit reassignment atomically updates the SupportCase assignment and request executor after exact
 request/Case versions and target eligibility are checked. DB uniqueness/check constraints plus pessimistic/advisory locks protect
 revision lineage, one terminal step, investigation replay and command idempotency. S60 never executes Ordering or another owner.
+
+## Support order-change execution and authorization
+
+S70 extends only `ORDER_CANCELLATION` and `PICKUP_RESCHEDULE` ready revisions. A request can acquire one terminal
+execution ID and moves to `EXECUTED` only after the owner command commits, or to `RESOLUTION_REQUIRED` when latest
+Ordering state is `PREPARING`, `READY` or `COMPLETED`. Exact actor+operation+idempotency replay returns the same terminal
+resource; another payload cannot consume or replace it. The execution stores closed before/after state, version, slot and
+payment-recovery summaries, never raw cancellation text or personal data.
+
+`SupportOrderChangeAuthorization` is an immutable store+action+policy binding. Confirmation additionally binds exact
+request/revision/action digest/target version/request expiry; delegation has server policy TTL and successful-use budget.
+Only an owner change committed in the same transaction inserts one unique authorization-use row and increments the
+budget. Replay, validation failure, slot conflict, rollback and `RESOLUTION_REQUIRED` do not consume a use. Expired,
+exhausted, revoked or scope-mismatched authorization never falls back to local approval. Store authorizer identity and
+STORE responsibility are retained as opaque identifiers/closed values and separation from all Support actors is enforced.
 
 ## CompensationRequest and ResolutionCase
 

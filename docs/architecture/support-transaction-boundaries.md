@@ -1,9 +1,9 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S60 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S70 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
-## Implemented S10–S60 boundaries
+## Implemented S10–S70 boundaries
 
 - privileged use case가 Audit를 쓰면 caller-local transaction에서 current retention policy head를 잠그고
   immutable policy version/category/class/expiry를 snapshot한다. policy/Audit 실패는 caller를 rollback한다.
@@ -62,6 +62,19 @@
   Case-write/action-execute/capability grant와 reviewer separation을 확인한다. SupportCase assignment, request executor,
   양쪽 append-only history, 두 Audit와 idempotency response가 한 transaction에서 commit한다. ready executor 권한이
   회수되면 조회가 `REASSIGNMENT_REQUIRED`를 materialize하며 자동 대체하지 않는다.
+- S70 store authorization create는 Identity StoreMembership, policy version, actor separation과 STORE 책임을
+  검사한 뒤 Support-owned immutable confirmation/delegation과 idempotency response/Audit를 한 local transaction에
+  commit한다. Confirmation은 exact request/revision/action digest/target version/request expiry에 묶이고,
+  delegation expiry/budget은 server policy로만 계산한다.
+- S70 execution은 Support request/Case/authorization/permission row와 Ordering Order/Fulfillment reservation을
+  owner public Application API를 통해 같은 local transaction에서 잠근다. Support가 owner repository/table을 직접
+  쓰지 않으며, owner가 최신 state/version과 cancellation/refund 또는 new-slot-first swap 불변식을 최종 검증한다.
+  owner change, terminal Support execution, authorization-use row와 PII-free Audits 중 하나라도 실패하면 전부
+  rollback한다. `PREPARING`/`READY`/`COMPLETED` race는 Order를 바꾸지 않고 terminal `RESOLUTION_REQUIRED`만
+  commit하며 authorization budget을 소비하지 않는다.
+- pickup reschedule 성공은 같은 transaction에서 durable Notification `PENDING` intent만 생성한다. Provider worker는
+  commit 뒤 별도 transaction/call 경계에서 `PROCESSING`, `SUCCEEDED`, `RETRY_SCHEDULED`, `MANUAL_REVIEW`를
+  기록한다. Provider 실패는 slot swap을 되돌리거나 성공으로 위장하지 않는다.
 
 ## Local atomic candidates
 
@@ -69,13 +82,13 @@
 - verification outcome + append-only attempt/lock update (S40 implemented)
 - grant activation/reveal authorization + pre-reveal Audit (S40 implemented)
 - ActionRequest revision + policy snapshot; ApprovalStep + request state (S60 implemented)
-- owner-local pickup slot swap
+- owner-local pickup slot swap (S70 implemented)
 - owner-local point/coupon issuance + compensation execution result
 - provider webhook Inbox insert
 - deletion component transition + deletion ledger result
 
 ## Cross-context orchestration
 
-Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs, S40 owner-local reveal APIs and S50 bounded timeline/snapshot APIs expose public contracts only; Support never imports their repositories/entities. If a future owner change and Audit share the same database/local transaction, high-risk change and target Audit commit together; otherwise an Accepted durability ADR is required before implementation.
+Support transaction stores intent and immutable references, then calls owner public Application API. No Support transaction updates owner tables. S30 masked owner APIs, S40 owner-local reveal APIs, S50 bounded timeline/snapshot APIs and S70 Ordering/Fulfillment owner commands expose public contracts only; Support never imports their repositories/entities. S70 uses the existing shared database transaction so owner change and Support/Audit durability commit together. A future separately deployed owner requires an Accepted durability ADR before implementation.
 
 External OTP/email/PG/Delivery/notification/object-storage calls occur outside long DB transactions. Intent/claim is committed before call and result is committed afterward. Timeout or ACK loss produces `UNKNOWN`/`RECONCILING`, never guessed success/failure. Notification failure after confirmed change leaves the change intact and schedules retry/manual review.

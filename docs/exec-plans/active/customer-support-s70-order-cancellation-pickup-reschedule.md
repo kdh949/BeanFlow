@@ -174,7 +174,7 @@ body는 request revision/version, expected owner version, exact action payload�
 다시 계산해 S60 revision digest와 비교한다.
 
 `ORDER_CANCELLATION`은 reason code, expected Order version과 ACCEPTED에서 필요한 store authorization
-reference를 사용한다. `PICKUP_RESCHEDULE`은 new slot ID, expected Order/reservation version과 같은
+reference를 사용한다. `PICKUP_RESCHEDULE`은 new slot ID, expected Order version과 같은
 authorization reference를 사용한다. 별도 customer identity나 금액, item/store 변경 필드는 받지 않는다.
 
 건별 confirmation/delegation은 Support-owned `SupportOrderChangeAuthorization`으로 기록하되 store actor
@@ -194,8 +194,9 @@ history는 같은 transaction에서 갱신한다. 같은 execution replay는 sto
 Support execution row는 exact request/revision/executor/idempotency/payload digest, owner before/after
 version, result, refund projection summary와 occurredAt만 저장한다. raw reason/PII/provider payload는
 저장하지 않는다. 성공 뒤 ActionRequest는 `EXECUTED`, PREPARING race는
-`RESOLUTION_REQUIRED`, owner 결과를 확정할 수 없는 local durability gap만 `UNKNOWN` 또는
-`MANUAL_REVIEW`로 남긴다.
+`RESOLUTION_REQUIRED`다. local owner/Support/Audit commit은 하나의 transaction이므로 중간 durability
+gap을 성공이나 별도 UNKNOWN으로 저장하지 않고 전부 rollback한다. 외부 refund의 불명확성만 기존
+Payment projection에서 `UNKNOWN`/`RECONCILING`으로 보존한다.
 
 ## Transaction Boundaries
 
@@ -223,8 +224,8 @@ PG를 호출하고 별도 transaction으로 `SUCCEEDED | FAILED | UNKNOWN | RECO
 
 ### TxN — Notification
 
-TxE의 local transaction event/outbox intent 뒤 worker가 provider를 호출한다. provider failure는
-`RETRY_SCHEDULED | MANUAL_REVIEW | SENT` 같은 explicit state로 남고 이미 확정된 order change를
+TxE의 durable Notification `PENDING` intent 뒤 worker가 provider를 호출한다. provider 결과는
+`PROCESSING | SUCCEEDED | RETRY_SCHEDULED | MANUAL_REVIEW` 같은 explicit state로 남고 이미 확정된 order change를
 rollback하지 않는다.
 
 ## Failure Semantics
@@ -235,7 +236,7 @@ rollback하지 않는다.
 - request/order/slot/authorization 없음: 404
 - same key/different payload, stale request/revision/owner/reservation version, disallowed state, slot full,
   approval/authorization expiry: 409 with stable closed code
-- latest state PREPARING: 409-compatible `RESOLUTION_REQUIRED` resource with durable outcome; direct
+- latest state PREPARING/READY/COMPLETED: 200 `RESOLUTION_REQUIRED` resource with durable outcome; direct
   cancellation/reschedule side effect 없음
 - Audit/permission/owner DB unavailable: 503 and full TxE rollback
 - payment provider timeout/ACK loss after TxE: 200/202 owner outcome with explicit refund
@@ -439,6 +440,18 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 - 2026-08-12: 사용자가 권장 delegation policy를 선택했다. SP-19/ADR-085/order-change policy에
   cancellation 10분/1회와 reschedule 30분/3회, exact confirmation, STORE 책임과 S80 fallback 금지를
   기록하고 `Implementation-Ready=true`로 전환했다.
+- 2026-08-12: commits `b9b95d6`와 `de40d3e`에서 terminal execution/store authorization domain 및 V45
+  closed constraints/unique execution/use budget/idempotency schema를 구현했다.
+- 2026-08-12: commits `b2cceb4`와 `1b2f3db`에서 Fulfillment new-slot-first atomic swap과 Ordering
+  Support cancellation/reschedule public owner commands를 구현했다. 기존 Payment/Loyalty/Promotion/Inventory/
+  Settlement cancellation pipeline은 typed `SUPPORT_REQUEST` cause로 재사용한다.
+- 2026-08-12: commit `081e36f`에서 Support authorization/execution API, current permission/assignment/
+  revision/policy/verification/target rechecks, exact replay, Audit atomicity와 pickup notification intent를
+  구현했다. PostgreSQL integration은 pending cancellation, ACCEPTED confirmation/use, PREPARING handoff,
+  permission revoke와 Audit rollback을 검증한다.
+- 2026-08-12: target/runtime OpenAPI에 discriminator 기반 execution과 store authorization을 추가했고
+  `SupportOrderChangeOpenApiContractTest`, `SupportActionRequestOpenApiContractTest`,
+  `RuntimeOpenApiParityTest`가 통과했다.
 
 ## Surprises & Discoveries
 
@@ -449,6 +462,10 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
   추출하는 편이 invariant drift를 줄인다.
 - Fulfillment reservation은 order당 한 row와 immutable slot ID를 전제로 해 reschedule에 필요한
   version/history/atomic swap이 새 owner capability다.
+- Store membership owner는 Merchant가 아니라 Identity public API에 이미 존재했다. S70은 Support에
+  membership/role claim을 복제하지 않고 `StoreMembershipOperations`로 active OWNER/STAFF를 검증한다.
+- existing Notification engine은 provider 호출과 retry/manual-review를 이미 transaction 밖에서 처리한다.
+  S70은 새 pickup-rescheduled template의 durable `PENDING` intent만 execution transaction에서 생성한다.
 
 ## Decision Log
 
@@ -463,9 +480,11 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 
 ## Outcomes & Retrospective
 
-아직 완료되지 않았다. V45/domain/API 구현, focused/full validation, atomic
-completion/readiness handoff와 S60 base PR이 남아 있다.
+V45/domain/owner/API 구현과 focused contract/integration validation은 완료했다. full suite/build/docs 검증,
+self-review, atomic completion/readiness handoff와 S60 base PR이 남아 있다.
 
 ## Revision Notes
 
 - 2026-08-12: initial S70 preflight, migration lease transfer와 implementation gate 기록.
+- 2026-08-12: actual V45/domain/owner/API implementation and focused validation evidence recorded; planned
+  reservation-version and local-UNKNOWN descriptions aligned to the implemented owner lock/atomic rollback model.

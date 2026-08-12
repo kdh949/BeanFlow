@@ -46,7 +46,14 @@ internal class SupportActionRequestOpenApiContractTest {
         }
 
         assertThat(schema(target, "SupportActionRequestState"))
-            .contains("AWAITING_SUPPORT_MANAGER", "AWAITING_OPERATIONS", "READY_FOR_EXECUTION", "REASSIGNMENT_REQUIRED")
+            .contains(
+                "AWAITING_SUPPORT_MANAGER",
+                "AWAITING_OPERATIONS",
+                "READY_FOR_EXECUTION",
+                "REASSIGNMENT_REQUIRED",
+                "EXECUTED",
+                "RESOLUTION_REQUIRED",
+            )
         assertThat(schema(target, "OperationsSupportInvestigationDecision"))
             .contains("APPROVE", "DENY", "RETURN_FOR_REVISION", "ESCALATE")
         assertThat(schema(target, "SupportActionRequestResource"))
