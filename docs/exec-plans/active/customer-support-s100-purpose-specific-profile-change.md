@@ -198,6 +198,10 @@ repeat against the same current profile version, so V48 uses a non-R4 partial hi
 uniqueness remains source/idempotency-bound. Notification integration tests also require a persisted `notification_delivery`
 parent before target metadata because V48 intentionally enforces that foreign key.
 
+The first full regression found that Notification's explicit Modulith allowlist did not yet name the three public owner
+APIs used to resolve owner-local notification snapshots. The resolver already depended only on named `:: api` interfaces;
+the module declaration was expanded to those three public APIs and the architecture test is rerun with the full suite.
+
 ## Decision Log
 
 | Date | Status | Decision | Rationale | Record |
