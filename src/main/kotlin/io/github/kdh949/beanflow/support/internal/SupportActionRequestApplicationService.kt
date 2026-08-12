@@ -680,7 +680,11 @@ internal class SupportActionRequestTransactionService(
             }
         val validPolicyVersion =
             if (entity.action == SupportActionType.GOODWILL_COMPENSATION) {
-                compensationRequests.findById(entity.targetId).orElse(null)?.policyVersionId?.toString() == revision.policyVersion
+                compensationRequests
+                    .findById(entity.targetId)
+                    .orElse(null)
+                    ?.policyVersionId
+                    ?.toString() == revision.policyVersion
             } else {
                 revision.policyVersion == SupportActionPolicy.POLICY_VERSION
             }

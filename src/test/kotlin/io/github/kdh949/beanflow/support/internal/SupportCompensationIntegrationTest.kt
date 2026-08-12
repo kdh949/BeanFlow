@@ -1,11 +1,11 @@
 package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
-import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationDecision
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationDecision
 import io.github.kdh949.beanflow.operations.internal.DecideOperationsSupportInvestigationCommand
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationOutcome
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
@@ -193,12 +193,13 @@ internal class SupportCompensationIntegrationTest
             val executor = Executors.newFixedThreadPool(2)
             try {
                 val results =
-                    executor.invokeAll(
-                        listOf(
-                            Callable { runCatching { execute(first, "high-execute-001") } },
-                            Callable { runCatching { execute(second, "high-execute-002") } },
-                        ),
-                    ).map { it.get() }
+                    executor
+                        .invokeAll(
+                            listOf(
+                                Callable { runCatching { execute(first, "high-execute-001") } },
+                                Callable { runCatching { execute(second, "high-execute-002") } },
+                            ),
+                        ).map { it.get() }
 
                 assertThat(results.count { it.isSuccess }).isOne()
                 val failure = results.single { it.isFailure }.exceptionOrNull()

@@ -167,7 +167,9 @@ internal class SupportActionPolicy {
                 }
             }
 
-            SupportActionType.GOODWILL_COMPENSATION -> null
+            SupportActionType.GOODWILL_COMPENSATION -> {
+                null
+            }
         }
 
     private data class PolicyRule(

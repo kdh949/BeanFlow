@@ -426,7 +426,9 @@ internal class SupportActionRequest private constructor(
             check(terminalExecutionId == null && terminalResolutionId == null) { "Action request already has another terminal result" }
             terminalCompensationId = executionId
         } else if (resolution) {
-            check(terminalExecutionId == null && terminalCompensationId == null) { "Action request already has a direct terminal execution" }
+            check(
+                terminalExecutionId == null && terminalCompensationId == null,
+            ) { "Action request already has a direct terminal execution" }
             terminalResolutionId = executionId
         } else {
             check(terminalResolutionId == null && terminalCompensationId == null) { "Action request already has another terminal result" }

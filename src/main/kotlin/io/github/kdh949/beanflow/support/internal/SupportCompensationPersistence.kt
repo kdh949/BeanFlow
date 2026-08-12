@@ -345,8 +345,7 @@ internal interface SupportCompensationLimitLockJpaRepository :
     ): SupportCompensationLimitLockEntity?
 }
 
-internal interface SupportCompensationLimitConsumptionJpaRepository :
-    JpaRepository<SupportCompensationLimitConsumptionEntity, UUID> {
+internal interface SupportCompensationLimitConsumptionJpaRepository : JpaRepository<SupportCompensationLimitConsumptionEntity, UUID> {
     @Query(
         "select coalesce(sum(consumption.amountKrw), 0) from SupportCompensationLimitConsumptionEntity consumption " +
             "where consumption.scope = :scope and consumption.scopeId = :scopeId and consumption.issuedAt >= :cutoff",

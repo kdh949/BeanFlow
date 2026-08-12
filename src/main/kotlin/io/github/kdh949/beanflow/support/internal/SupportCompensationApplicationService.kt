@@ -496,7 +496,8 @@ internal class SupportCompensationTransactionService(
         val actionRevision = actionEntity?.let(::currentRevision)
         if (actionEntity != null) {
             if (actionEntity.state != SupportActionRequestState.READY_FOR_EXECUTION || actionEntity.targetId != entity.id ||
-                actionEntity.action != SupportActionType.GOODWILL_COMPENSATION || actionRevision?.actionPayloadDigest != entity.payloadDigest
+                actionEntity.action != SupportActionType.GOODWILL_COMPENSATION ||
+                actionRevision?.actionPayloadDigest != entity.payloadDigest
             ) {
                 conflict("Compensation approval is not ready or is stale")
             }
@@ -555,8 +556,7 @@ internal class SupportCompensationTransactionService(
     }
 
     @Transactional(readOnly = true)
-    fun customerId(compensationRequestId: UUID): UUID =
-        requests.findById(compensationRequestId).orElse(null)?.customerId ?: notFound()
+    fun customerId(compensationRequestId: UUID): UUID = requests.findById(compensationRequestId).orElse(null)?.customerId ?: notFound()
 
     @Transactional
     fun prepareNotificationRetry(command: RetrySupportCompensationNotificationCommand): SupportCompensationResource {
@@ -734,11 +734,12 @@ internal class SupportCompensationTransactionService(
             limitLocks.findLocked(scope, scopeId) ?: dependency("Compensation rolling lock is missing")
             val rule = byScope[scope] ?: dependency("Compensation rolling rule is missing")
             val used = consumptions.sumInWindow(scope, scopeId, now.minus(rule.window))
-            val next = try {
-                Math.addExact(used, entity.amountKrw)
-            } catch (_: ArithmeticException) {
-                policyDenied()
-            }
+            val next =
+                try {
+                    Math.addExact(used, entity.amountKrw)
+                } catch (_: ArithmeticException) {
+                    policyDenied()
+                }
             if (next > rule.maximumKrw) policyDenied()
         }
     }
@@ -829,9 +830,23 @@ internal class SupportCompensationTransactionService(
         val records = mutableListOf<AppendAuditRecordCommand>()
         action?.let {
             records +=
-                audit(entity.requesterActorId, "SUPPORT_ACTION_REQUEST_CREATED", it.id, "REQUEST_CREATED", AuditCategory.OPERATIONS_POLICY, occurredAt)
+                audit(
+                    entity.requesterActorId,
+                    "SUPPORT_ACTION_REQUEST_CREATED",
+                    it.id,
+                    "REQUEST_CREATED",
+                    AuditCategory.OPERATIONS_POLICY,
+                    occurredAt,
+                )
             records +=
-                audit(entity.requesterActorId, "SUPPORT_ACTION_REVISION_CREATED", it.id, "REVISION_CREATED", AuditCategory.OPERATIONS_POLICY, occurredAt)
+                audit(
+                    entity.requesterActorId,
+                    "SUPPORT_ACTION_REVISION_CREATED",
+                    it.id,
+                    "REVISION_CREATED",
+                    AuditCategory.OPERATIONS_POLICY,
+                    occurredAt,
+                )
         }
         records +=
             audit(
@@ -1078,30 +1093,30 @@ internal class SupportCompensationTransactionService(
 
     private fun resource(entity: SupportCompensationRequestEntity) =
         terminals.findByRequestId(entity.id).let { terminal ->
-        SupportCompensationResource(
-            entity.id,
-            entity.supportCaseId,
-            entity.incidentId,
-            entity.orderId,
-            entity.storeId,
-            entity.benefitType,
-            entity.amountKrw,
-            entity.couponTemplateId,
-            entity.policyVersionId,
-            entity.band,
-            entity.approvalRoute,
-            entity.actionRequestId,
-            entity.state,
-            entity.payloadDigest,
-            entity.terminalBenefitId,
-            terminal?.issuedAt,
-            entity.notificationDeliveryId,
-            null,
-            entity.notificationFailureCode,
-            entity.version,
-            entity.createdAt,
-            entity.updatedAt,
-        )
+            SupportCompensationResource(
+                entity.id,
+                entity.supportCaseId,
+                entity.incidentId,
+                entity.orderId,
+                entity.storeId,
+                entity.benefitType,
+                entity.amountKrw,
+                entity.couponTemplateId,
+                entity.policyVersionId,
+                entity.band,
+                entity.approvalRoute,
+                entity.actionRequestId,
+                entity.state,
+                entity.payloadDigest,
+                entity.terminalBenefitId,
+                terminal?.issuedAt,
+                entity.notificationDeliveryId,
+                null,
+                entity.notificationFailureCode,
+                entity.version,
+                entity.createdAt,
+                entity.updatedAt,
+            )
         }
 
     private fun EvaluatedCompensation.resource(targetVersion: Long) =
@@ -1120,13 +1135,15 @@ internal class SupportCompensationTransactionService(
 
     private fun now(): Instant = clock.instant().truncatedTo(ChronoUnit.MICROS)
 
-    private fun String.normalizedKey(): String = trim().also {
-        if (it != this || it.length !in 8..128 || it.any(Char::isISOControl)) invalid("Idempotency-Key is invalid")
-    }
+    private fun String.normalizedKey(): String =
+        trim().also {
+            if (it != this || it.length !in 8..128 || it.any(Char::isISOControl)) invalid("Idempotency-Key is invalid")
+        }
 
-    private fun String.normalizedDigest(name: String): String = trim().also {
-        if (it != this || !it.matches(SHA_256)) invalid("$name digest is invalid")
-    }
+    private fun String.normalizedDigest(name: String): String =
+        trim().also {
+            if (it != this || !it.matches(SHA_256)) invalid("$name digest is invalid")
+        }
 
     private fun invalid(message: String): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, message)
 
@@ -1141,11 +1158,9 @@ internal class SupportCompensationTransactionService(
     private fun policyDenied(): Nothing =
         throw DomainFailure(FailureCode.SUPPORT_ACTION_POLICY_DENIED, "Current goodwill compensation policy denies this request")
 
-    private fun stale(): Nothing =
-        throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Goodwill compensation binding is stale")
+    private fun stale(): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Goodwill compensation binding is stale")
 
-    private fun conflict(message: String): Nothing =
-        throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STATE_CONFLICT, message)
+    private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STATE_CONFLICT, message)
 
     private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 

@@ -241,7 +241,9 @@ internal class SupportCompensationPolicy {
     private fun approvalRoute(band: SupportCompensationBand): SupportActionApprovalRoute =
         when (band) {
             SupportCompensationBand.LOW -> SupportActionApprovalRoute.NONE
+
             SupportCompensationBand.MEDIUM -> SupportActionApprovalRoute.SUPPORT_MANAGER
+
             SupportCompensationBand.HIGH,
             SupportCompensationBand.EXCEPTIONAL,
             -> SupportActionApprovalRoute.OPERATIONS
@@ -297,15 +299,18 @@ internal data class SupportCompensationCostSnapshot(
             SupportCompensationResponsibility.PLATFORM -> {
                 require(platformShareBps == 10_000 && storeShareBps == 0) { "platform responsibility requires full platform share" }
             }
+
             SupportCompensationResponsibility.STORE -> {
                 require(platformShareBps == 0 && storeShareBps == 10_000) { "store responsibility requires full store share" }
                 requireEvidence()
             }
+
             SupportCompensationResponsibility.SHARED -> {
                 require(platformShareBps in 1..9_999 && storeShareBps in 1..9_999) { "shared responsibility requires both shares" }
                 require(platformShareBps + storeShareBps == 10_000) { "shared responsibility must total ten thousand basis points" }
                 requireEvidence()
             }
+
             SupportCompensationResponsibility.UNDETERMINED -> {
                 require(platformShareBps == 0 && storeShareBps == 0) { "undetermined responsibility cannot allocate cost" }
                 require(evidenceBasis == null && evidenceDigest == null) { "undetermined responsibility cannot claim evidence" }
@@ -313,17 +318,23 @@ internal data class SupportCompensationCostSnapshot(
         }
     }
 
-    fun fundingLegs(amountKrw: Long, storeId: UUID?): List<SupportCompensationFundingLeg> {
+    fun fundingLegs(
+        amountKrw: Long,
+        storeId: UUID?,
+    ): List<SupportCompensationFundingLeg> {
         require(amountKrw > 0) { "compensation amount must be positive" }
         val platformAmount = allocate(amountKrw, platformShareBps)
         val storeAmount = amountKrw - platformAmount
         return when (responsibility) {
-            SupportCompensationResponsibility.PLATFORM ->
+            SupportCompensationResponsibility.PLATFORM -> {
                 listOf(SupportCompensationFundingLeg(SupportCompensationFundingIssuer.PLATFORM, null, amountKrw))
+            }
+
             SupportCompensationResponsibility.STORE -> {
                 requireNotNull(storeId) { "store responsibility requires a store" }
                 listOf(SupportCompensationFundingLeg(SupportCompensationFundingIssuer.STORE, storeId, amountKrw))
             }
+
             SupportCompensationResponsibility.SHARED -> {
                 requireNotNull(storeId) { "shared responsibility requires a store" }
                 listOf(
@@ -331,7 +342,10 @@ internal data class SupportCompensationCostSnapshot(
                     SupportCompensationFundingLeg(SupportCompensationFundingIssuer.STORE, storeId, storeAmount),
                 )
             }
-            SupportCompensationResponsibility.UNDETERMINED -> emptyList()
+
+            SupportCompensationResponsibility.UNDETERMINED -> {
+                emptyList()
+            }
         }
     }
 
@@ -340,8 +354,12 @@ internal data class SupportCompensationCostSnapshot(
         require(evidenceDigest?.matches(HEX_SHA_256) == true) { "store cost allocation requires a SHA-256 evidence digest" }
     }
 
-    private fun allocate(amountKrw: Long, shareBps: Int): Long =
-        BigInteger.valueOf(amountKrw)
+    private fun allocate(
+        amountKrw: Long,
+        shareBps: Int,
+    ): Long =
+        BigInteger
+            .valueOf(amountKrw)
             .multiply(BigInteger.valueOf(shareBps.toLong()))
             .divide(BigInteger.valueOf(10_000))
             .longValueExact()

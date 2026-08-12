@@ -176,8 +176,10 @@ internal class GoodwillCouponIssuanceService(
             command.storeShareBps !in 0..10_000 || command.platformShareBps + command.storeShareBps != 10_000 ||
             (command.responsibility == GoodwillCouponResponsibility.PLATFORM && command.platformShareBps != 10_000) ||
             (command.responsibility == GoodwillCouponResponsibility.STORE && command.storeShareBps != 10_000) ||
-            (command.responsibility == GoodwillCouponResponsibility.SHARED &&
-                (command.platformShareBps == 0 || command.storeShareBps == 0))
+            (
+                command.responsibility == GoodwillCouponResponsibility.SHARED &&
+                    (command.platformShareBps == 0 || command.storeShareBps == 0)
+            )
         ) {
             fail(FailureCode.INVALID_REQUEST, "Goodwill coupon issuance command is invalid")
         }

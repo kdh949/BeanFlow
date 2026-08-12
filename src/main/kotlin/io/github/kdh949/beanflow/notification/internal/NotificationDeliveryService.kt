@@ -6,16 +6,16 @@ import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.notification.api.AcceptedCustomerCancellationNotification
+import io.github.kdh949.beanflow.notification.api.AcceptedGoodwillCompensationNotification
 import io.github.kdh949.beanflow.notification.api.AcceptedPostAcceptanceResolutionNotification
 import io.github.kdh949.beanflow.notification.api.AcceptedSupportOrderChangeNotification
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
-import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
-import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
-import io.github.kdh949.beanflow.notification.api.AcceptedGoodwillCompensationNotification
 import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificationOperations
 import io.github.kdh949.beanflow.notification.api.GoodwillCompensationNotificationView
-import io.github.kdh949.beanflow.notification.api.RequestGoodwillCompensationNotificationCommand
+import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
+import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestGoodwillCompensationNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
 import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
@@ -195,9 +195,7 @@ internal class NotificationDeliveryService(
             ?.let { PostAcceptanceResolutionNotificationView(it.id, it.state.name, it.updatedAt) }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun requestGoodwill(
-        command: RequestGoodwillCompensationNotificationCommand,
-    ): AcceptedGoodwillCompensationNotification {
+    override fun requestGoodwill(command: RequestGoodwillCompensationNotificationCommand): AcceptedGoodwillCompensationNotification {
         if (command.benefitType !in setOf("POINT", "COUPON") || command.amountKrw <= 0 || command.correlationId.isBlank()) {
             fail(FailureCode.INVALID_REQUEST, "Goodwill compensation notification command is invalid")
         }

@@ -124,11 +124,16 @@ class SupportCompensationPolicyTest {
         assertThat(version.limits)
             .extracting(SupportCompensationLimitRule::scope, SupportCompensationLimitRule::window, SupportCompensationLimitRule::maximumKrw)
             .containsExactly(
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationLimitScope.CUSTOMER, Duration.ofDays(30), 30_000L),
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationLimitScope.ORDER, Duration.ofDays(30), 30_000L),
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationLimitScope.INCIDENT, Duration.ofDays(30), 30_000L),
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationLimitScope.ACTOR, Duration.ofDays(1), 100_000L),
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationLimitScope.STORE, Duration.ofDays(1), 300_000L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationLimitScope.CUSTOMER, Duration.ofDays(30), 30_000L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationLimitScope.ORDER, Duration.ofDays(30), 30_000L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationLimitScope.INCIDENT, Duration.ofDays(30), 30_000L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationLimitScope.ACTOR, Duration.ofDays(1), 100_000L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationLimitScope.STORE, Duration.ofDays(1), 300_000L),
             )
         assertThat(version.id).isEqualTo(SupportCompensationPolicyVersion.INITIAL_V1_ID)
     }
@@ -156,8 +161,10 @@ class SupportCompensationPolicyTest {
         assertThat(shared.fundingLegs(10_001, UUID.fromString("10000000-0000-0000-0000-000000000001")))
             .extracting(SupportCompensationFundingLeg::issuerType, SupportCompensationFundingLeg::amountKrw)
             .containsExactly(
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationFundingIssuer.PLATFORM, 3_333L),
-                org.assertj.core.groups.Tuple.tuple(SupportCompensationFundingIssuer.STORE, 6_668L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationFundingIssuer.PLATFORM, 3_333L),
+                org.assertj.core.groups.Tuple
+                    .tuple(SupportCompensationFundingIssuer.STORE, 6_668L),
             )
     }
 
