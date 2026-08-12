@@ -1,11 +1,11 @@
 # 상담원 주문 취소와 픽업 예약 변경을 owner command로 실행한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s60-approval-operations-investigation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과와 명령 증거로 계속 갱신한다.
@@ -452,6 +452,16 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 - 2026-08-12: target/runtime OpenAPI에 discriminator 기반 execution과 store authorization을 추가했고
   `SupportOrderChangeOpenApiContractTest`, `SupportActionRequestOpenApiContractTest`,
   `RuntimeOpenApiParityTest`가 통과했다.
+- 2026-08-12: 5-axis completion review에서 execution↔authorization action, request↔terminal execution,
+  authorization-use lineage를 composite FK로 닫고 Support/Ordering history의 terminal state·recovery·outcome
+  조합을 V45 check constraint로 강화했다. cancellation delegation 10분 경계/1회 소진과 API exact replay도
+  별도 regression으로 추가했다.
+- 2026-08-12: 첫 `./gradlew spotlessCheck test`는 830 tests 중 2 failures, 1 skipped였다. V45 follower
+  expectation을 갱신하고 Audit PII scanner가 canonical lower-case UUID만 식별자로 제외하도록 수정한 뒤
+  관련 17-test remediation과 37-test V45/owner suite가 통과했다.
+- 2026-08-12: 최종 `./gradlew spotlessCheck test`는 833 tests, 0 failures, 0 errors, 1 skipped로
+  9m 3s에 `BUILD SUCCESSFUL`; `./gradlew build --stacktrace`는 2s에 성공했다. docs/OpenAPI와 diff 검증 뒤
+  V45 lease를 해제하고 S80을 detailed plan 작성 가능 상태로 전환했다.
 
 ## Surprises & Discoveries
 
@@ -466,6 +476,12 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
   membership/role claim을 복제하지 않고 `StoreMembershipOperations`로 active OWNER/STAFF를 검증한다.
 - existing Notification engine은 provider 호출과 retry/manual-review를 이미 transaction 밖에서 처리한다.
   S70은 새 pickup-rescheduled template의 durable `PENDING` intent만 execution transaction에서 생성한다.
+- 첫 full regression은 새 migration을 따르는 retention test의 expected version과 UUID 안의 연속 숫자를
+  전화번호로 오인하는 Audit PII scanner 경계를 드러냈다. 임의 문자열 우회 없이 canonical UUID만 제외해
+  raw phone/email/address/card 차단을 유지했다.
+- service validation만으로 execution/authorization/request terminal lineage를 보호하면 직접 SQL이나 향후
+  persistence 변경에서 조합이 어긋날 수 있었다. V45 composite FK와 closed check constraint로 가능한 상태를
+  DB에서도 제한했다.
 
 ## Decision Log
 
@@ -477,14 +493,33 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 | 2026-08-12 | 새 slot capacity를 먼저 확보하고 old slot은 같은 transaction에서만 해제 | ADR-085, support order-change policy |
 | 2026-08-12 | ACCEPTED cancellation은 10분/1회, reschedule은 30분/3회; exact replay는 추가 소비하지 않고 committed direct change만 소비 | SP-19, ADR-085 |
 | 2026-08-12 | confirmation/delegation은 STORE 책임 명시 수락만 허용하고 unknown/PLATFORM 책임은 S80로 전달 | SP-19, ADR-085 |
+| 2026-08-12 | S70 V45/owner/API 구현을 완료하고 sole writer lease를 해제 | 833-test full regression, build/docs/OpenAPI/diff validation |
 
 ## Outcomes & Retrospective
 
-V45/domain/owner/API 구현과 focused contract/integration validation은 완료했다. full suite/build/docs 검증,
-self-review, atomic completion/readiness handoff와 S60 base PR이 남아 있다.
+S70은 V45, Support execution/store authorization, Ordering/Fulfillment public owner command와 target/runtime
+contract를 완료했다. 실제 검증 결과는 다음과 같다.
+
+- focused Support contract/domain/migration/execution: 12 tests, 모두 통과
+- Ordering/Fulfillment owner regression: 41 tests, 모두 통과
+- Audit/migration remediation: 17 tests, 모두 통과
+- 강화된 V45/owner integration: 37 tests, 모두 통과
+- delegation boundary/API replay: 9 tests, 모두 통과
+- 최초 full `spotlessCheck test`: 830 tests, 2 failures, 0 errors, 1 skipped; 실패를 숨기지 않고 수정
+- 최종 full `spotlessCheck test`: 833 tests, 0 failures, 0 errors, 1 skipped,
+  `BUILD SUCCESSFUL` in 9m 3s
+- `./gradlew build --stacktrace`: `BUILD SUCCESSFUL` in 2s
+- docs verifier: target/runtime 66 paths/70 operations, 190 schemas; 33 policies, 92 ADRs,
+  233 markdown documents, 41 ExecPlans
+- `git diff --check`: exit 0
+
+V45 sole writer lease는 해제됐다. 외부 Provider/deployment/load test는 실행하지 않았고 성능 개선을 주장하지
+않는다. PREPARING/READY/COMPLETED 실제 사후 해결은 S80 범위이며, S70은 상태 rollback 없이
+`RESOLUTION_REQUIRED` handoff까지만 구현했다.
 
 ## Revision Notes
 
 - 2026-08-12: initial S70 preflight, migration lease transfer와 implementation gate 기록.
 - 2026-08-12: actual V45/domain/owner/API implementation and focused validation evidence recorded; planned
   reservation-version and local-UNKNOWN descriptions aligned to the implemented owner lock/atomic rollback model.
+- 2026-08-12: review remediation, 833-test full validation, completed move, V45 lease release와 S80 readiness handoff.

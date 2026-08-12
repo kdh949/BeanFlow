@@ -56,6 +56,11 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 
 ## Evidence rules
 
+- S70 completion ran `spotlessCheck test` with 833 tests, 0 failures, 0 errors and 1 skipped, followed by successful
+  `build` and documentation/OpenAPI validation. The final target/runtime contract has 66 paths, 70 operations and
+  190 schemas; 33 Support/Operations operations are implemented through S70. The first full run exposed two failures
+  (V45 follower expectation and UUID/phone PII classification), both fixed and covered by focused regression before the
+  final full run.
 - S60 completion ran `spotlessCheck test` with 809 tests, 0 failures, 0 errors and 1 skipped, followed by successful
   `build` and documentation/OpenAPI validation. The final target/runtime contract has 64 paths, 68 operations and
   180 schemas; 31 of those operations are implemented Support/Operations capabilities through S60.
@@ -65,8 +70,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 - S20–S70 coverage is limited to their named test classes; it does not verify future Support stages.
 - S70 focused evidence covers pending-payment release/no-refund, paid/accepted owner reuse, exact authorization replay and
   consumption, permission revoke, Audit rollback, PREPARING handoff without consumption, new-slot-first rollback/last-slot
-  contention, target/runtime contracts and `Cache-Control: no-store`. Final full-suite counts are recorded in the completed
-  S70 ExecPlan after validation.
+  contention, target/runtime contracts and `Cache-Control: no-store`.
 - Each later Stage names exact new/current test classes and commands; generic copied validation text is insufficient.
 - Performance numbers require comparable environment and baseline.
 - Legal review is required before production and is not inferred from passing tests.
