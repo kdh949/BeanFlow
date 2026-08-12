@@ -210,15 +210,17 @@ paths:
     post:
       tags: [Payment]
       operationId: createPaymentRefund
-      summary: Create a store or platform full/item partial refund
+      summary: Create a merchant full/item partial refund
+      security: [{ merchantSession: [] }]
       description: |
-        STORE_OWNER and STORE_STAFF require active membership in the Order store;
-        PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes every
-        remaining unit. Explicit quantities consume the lowest unrefunded conceptual
-        unit positions. Coupon values are attribution only and are never restored.
+        STORE_OWNER and STORE_STAFF require a Merchant Session and active membership
+        in the Order store. Omitted lineItems consumes every remaining unit. Explicit
+        quantities consume the lowest unrefunded conceptual unit positions. Coupon
+        values are attribution only and are never restored.
       parameters:
         - $ref: "./beanflow-v1.yaml#/components/parameters/PaymentId"
         - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/MerchantCsrfToken"
       requestBody:
         required: true
         content:
@@ -250,6 +252,8 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/payments/{paymentId}/refunds:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1payments~1{paymentId}~1refunds"
   /store-orders/{orderId}:
     get:
       tags: [Store Orders]
@@ -646,6 +650,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}"
   /point-accounts/{accountId}/transactions:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}~1transactions"
+  /operations/point-accounts/{accountId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-accounts~1{accountId}"
+  /operations/point-accounts/{accountId}/transactions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-accounts~1{accountId}~1transactions"
   /operations/policies/ordinary-point-accrual/global:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1global"
   /operations/policies/ordinary-point-accrual/global/versions:

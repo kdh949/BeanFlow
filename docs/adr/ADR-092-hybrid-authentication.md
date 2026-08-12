@@ -73,6 +73,27 @@ Operator   GET /api/v1/operations/me
 - 기존 JWT `roles` claim 기반 고객·점주 인증 경로는 P0 완료 시점에 제거한다. 두 인증 방식을
   같은 경로에서 동시에 허용하지 않는다.
 
+### Actor-exclusive legacy API split amendment (2026-08-13)
+
+기존 runtime에는 한 URI에서 actor role을 분기하던 API가 있었지만 네 Chain 전환 뒤에는 같은 URI가
+Session과 운영자 JWT를 동시에 받아서는 안 된다. 기존 소비자 URI를 고객·점주 계약으로 유지하고
+운영자용 URI를 `/operations/**` 아래에 additive하게 분리한다.
+
+| 기능 | Customer/Merchant URI | Operations URI |
+|---|---|---|
+| PointAccount summary | `GET /api/v1/point-accounts/{accountId}` | `GET /api/v1/operations/point-accounts/{accountId}` |
+| PointAccount ledger | `GET /api/v1/point-accounts/{accountId}/transactions` | `GET /api/v1/operations/point-accounts/{accountId}/transactions` |
+| legacy UUID refund | `POST /api/v1/payments/{paymentId}/refunds` | `POST /api/v1/operations/payments/{paymentId}/refunds` |
+
+- PointAccount 소비자 URI는 Customer Session과 자기 소유권만 허용한다. 운영자 URI는 Bearer JWT,
+  `PLATFORM_OPERATOR`, active `POINT_ACCOUNT_READ`, required `X-Access-Reason`과 접근 Audit을 요구한다.
+- legacy refund 소비자 URI는 Merchant Session만 허용하고 현재 membership 검증을 유지한다. 운영자
+  URI는 Bearer JWT의 `PLATFORM_OPERATOR` branch를 유지한다. 두 URI는 같은 Refund Application
+  Service와 멱등성 source를 사용하므로 URI 분리가 중복 Refund나 새 Provider key를 만들지 않는다.
+- 이전 URI에 잘못된 actor 인증을 보내면 다른 Chain으로 재해석하거나 fallback하지 않고 403이다.
+  기존 운영자 client는 새 `/operations/**` URI로 전환해야 한다.
+- 이 분리는 인증 경계 변경이며 PointAccount, Refund 원장·계산·권한 정책을 변경하지 않는다.
+
 ### 전환 순서와 중간 가용성
 
 - `productization-20`은 고객·점주 보호 경로를 Session-only로 먼저 전환한다.
@@ -130,6 +151,8 @@ CSRF 대응이라는 비용이 추가되지만, 이는 표준 대응책이 명�
 ## Verification
 
 - Chain 분리: 각 경로 그룹에 대해 잘못된 인증 유형(고객 경로에 운영자 JWT, 운영 경로에 고객 Cookie)이 401/403인지 검증한다.
+- 세 분리 API 쌍에서 소비자 URI와 Operations URI의 응답·실패 계약은 유지되고, 반대 actor 인증은
+  403이며 같은 refund idempotency key가 URI를 바꿔 중복 Provider 요청을 만들지 않는지 검증한다.
 - 인증되지 않은 요청이 모든 보호 경로에서 401인지 검증한다.
 - Session Fixation: 로그인 전후 Session ID가 달라지는지 검증한다.
 - 로그아웃 후 같은 Session ID 재사용이 401인지 검증한다.

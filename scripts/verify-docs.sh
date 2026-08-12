@@ -1069,11 +1069,14 @@ else:
         '/payment-methods/{paymentMethodId}',
         '/payment-methods/{paymentMethodId}/default',
         '/payments/{paymentId}/refunds',
+        '/operations/payments/{paymentId}/refunds',
         '/payments/{paymentId}',
         '/payments/{paymentId}/confirmations',
         '/store-orders/{orderId}/status',
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
+        '/operations/point-accounts/{accountId}',
+        '/operations/point-accounts/{accountId}/transactions',
         '/operations/point-accounts/{accountId}/adjustments',
         '/operations/orders/{orderId}/customer-cancellation-refund-reconciliations',
         '/operations/reprocessing-cases/{caseId}/repair-proposals',
@@ -1127,6 +1130,7 @@ else:
         ('/payment-methods/{paymentMethodId}', 'delete'),
         ('/payment-methods/{paymentMethodId}/default', 'put'),
         ('/payments/{paymentId}/refunds', 'post'),
+        ('/operations/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
         ('/operations/point-accounts/{accountId}/adjustments', 'post'),
@@ -1534,6 +1538,7 @@ else:
         'GET /me/orders': '#/components/parameters/Limit',
         'GET /me/point-transactions': '#/components/parameters/Limit',
         'GET /point-accounts/{accountId}/transactions': '#/components/parameters/Limit',
+        'GET /operations/point-accounts/{accountId}/transactions': '#/components/parameters/Limit',
         'GET /payment-methods': '#/components/parameters/Limit',
         'GET /stores/{storeId}/disputes': '#/components/parameters/Limit',
         'GET /stores/{storeId}/settlements': '#/components/parameters/Limit',
@@ -1651,9 +1656,8 @@ else:
     }
     if point_account_parameter_refs != {
         '#/components/parameters/PointAccountId',
-        '#/components/parameters/OptionalAccessReason',
     } or set(point_account_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
-        print('Point-account summary owner/operator read contract is incomplete.', file=sys.stderr)
+        print('Customer point-account summary contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     point_transaction_get = spec['paths']['/point-accounts/{accountId}/transactions']['get']
     point_transaction_parameter_refs = {
@@ -1663,20 +1667,64 @@ else:
     }
     if point_transaction_parameter_refs != {
         '#/components/parameters/PointAccountId',
-        '#/components/parameters/OptionalAccessReason',
         '#/components/parameters/Cursor',
         '#/components/parameters/Limit',
     } or set(point_transaction_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
-        print('Point-transaction owner/operator cursor contract is incomplete.', file=sys.stderr)
+        print('Customer point-transaction cursor contract is incomplete.', file=sys.stderr)
         sys.exit(1)
-    optional_access_reason = parameters['OptionalAccessReason']
+    operations_point_get = spec['paths']['/operations/point-accounts/{accountId}']['get']
+    operations_point_transaction_get = spec['paths']['/operations/point-accounts/{accountId}/transactions']['get']
+    expected_operations_point_parameters = {
+        '#/components/parameters/PointAccountId',
+        '#/components/parameters/AccessReason',
+    }
+    operations_point_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in operations_point_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    operations_point_transaction_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in operations_point_transaction_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if operations_point_parameter_refs != expected_operations_point_parameters:
+        print('Operations point-account summary parameter contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if operations_point_transaction_parameter_refs != expected_operations_point_parameters | {
+        '#/components/parameters/Cursor',
+        '#/components/parameters/Limit',
+    }:
+        print('Operations point-transaction cursor contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    expected_point_responses = {'200', '400', '401', '403', '404', '503'}
     if (
-        optional_access_reason.get('in') != 'header'
-        or optional_access_reason.get('name') != 'X-Access-Reason'
-        or optional_access_reason.get('required') is not False
-        or 'PLATFORM_OPERATOR' not in optional_access_reason.get('description', '')
+        set(operations_point_get.get('responses', {})) != expected_point_responses
+        or set(operations_point_transaction_get.get('responses', {})) != expected_point_responses
+        or point_account_get.get('security') != [{'customerSession': []}]
+        or point_transaction_get.get('security') != [{'customerSession': []}]
+        or operations_point_get.get('security') != [{'bearerAuth': []}]
+        or operations_point_transaction_get.get('security') != [{'bearerAuth': []}]
     ):
-        print('Point-account support-read optional access-reason contract is incomplete.', file=sys.stderr)
+        print('Actor-exclusive point-account authentication contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    merchant_refund_post = spec['paths']['/payments/{paymentId}/refunds']['post']
+    operations_refund_post = spec['paths']['/operations/payments/{paymentId}/refunds']['post']
+    if (
+        merchant_refund_post.get('security') != [{'merchantSession': []}]
+        or operations_refund_post.get('security') != [{'bearerAuth': []}]
+        or '#/components/parameters/MerchantCsrfToken' not in {
+            parameter.get('$ref')
+            for parameter in merchant_refund_post.get('parameters', [])
+            if isinstance(parameter, dict)
+        }
+        or '#/components/parameters/MerchantCsrfToken' in {
+            parameter.get('$ref')
+            for parameter in operations_refund_post.get('parameters', [])
+            if isinstance(parameter, dict)
+        }
+    ):
+        print('Actor-exclusive legacy refund authentication contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     policy_get = spec['paths']['/operations/policies/expired-benefit-restoration']['get']
     policy_get_parameter_refs = {

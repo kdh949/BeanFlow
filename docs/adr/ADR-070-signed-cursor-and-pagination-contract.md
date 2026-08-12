@@ -103,6 +103,7 @@ beanflow:
 |---|---|---|
 | `GET /stores/nearby` | `(distanceMicrometers ASC, storeId ASC)` | canonical latitude/longitude/radius와 endpoint |
 | `GET /point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 endpoint |
+| `GET /operations/point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 Operations endpoint |
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
 | `GET /payment-methods` | `(isDefault DESC, createdAt DESC, paymentMethodId DESC)` | authenticated customer ID와 endpoint |

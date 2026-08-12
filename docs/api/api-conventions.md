@@ -79,6 +79,10 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 
 - Plan 13 V17/owner transaction이 `recoveryPendingKrw`, `ACCRUAL`과 `RECOVERY` storage contract를
   구현했다. Plan 14 read API는 이 값을 그대로 projection하며 0이나 ledger 합으로 대체하지 않는다.
+- Customer Session은 `GET /point-accounts/{accountId}`와 `/transactions`에서 자기 소유권만 사용한다.
+  운영자 조회는 `GET /operations/point-accounts/{accountId}`와 `/transactions`로 분리하고 Bearer JWT,
+  active `POINT_ACCOUNT_READ`, required `X-Access-Reason`과 접근 Audit을 요구한다. 한 URI에서 두 인증
+  방식을 판별하지 않는다.
 - `GET /point-accounts/{accountId}`의 `recoveryPendingKrw`는 음수 잔액이 아니라
   Loyalty `PointRecoveryPending(PENDING)` remaining 합계다.
 - `GET /point-accounts/{accountId}/transactions`의 `amountKrw`는 DB에 저장한 양수

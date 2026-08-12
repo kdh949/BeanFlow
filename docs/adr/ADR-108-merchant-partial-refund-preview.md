@@ -18,6 +18,16 @@ preview 뒤 다른 직원의 환불이 먼저 성공할 수 있으므로 preview
 
 ## Decision
 
+### Legacy UUID endpoint authentication split (2026-08-13)
+
+Plan 20의 actor-exclusive Chain 전환에서 기존 `POST /payments/{paymentId}/refunds`는 Merchant Session
+전용으로 유지하고 `PLATFORM_OPERATOR` branch는
+`POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 URI는 같은 preparation, provider
+execution, idempotency source와 결과 원장을 사용한다. URI를 idempotency scope에 추가하거나 운영자
+호출에 새 Provider key를 만들지 않는다. 이 legacy 분리는 Plan 90의 공개
+`storeId + orderReference + lineSequence` 계약을 대체하지 않으며 새 점주 화면은 계속 아래 public
+contract만 사용한다.
+
 ### Public contract
 
 ```http
@@ -110,6 +120,8 @@ TOCTOU를 줄일 수 있지만 preview 취소·만료 worker와 잠금 수명이
 
 ## Verification
 
+- legacy Merchant/Operations URI가 각각 Session/JWT만 허용하고 상대 actor 인증은 403이며, 같은
+  idempotency key와 payload를 두 URI에서 재사용해도 Provider 부수효과가 1회 이하인지 검증한다.
 - OWNER·STAFF same-store 성공과 다른 매장·revoked·role mismatch 403.
 - sequence 중복·다른 주문 범위·0/초과 수량과 lineSequence→UUID 변환 정확성.
 - preview가 Refund·Audit·Provider·Loyalty write를 만들지 않는지 검증.

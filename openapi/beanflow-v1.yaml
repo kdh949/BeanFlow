@@ -1136,17 +1136,19 @@ paths:
     post:
       tags: [Payment]
       operationId: createPaymentRefund
-      summary: Create a full or item-based partial refund
+      summary: Create a merchant full or item-based partial refund
+      security: [{ merchantSession: [] }]
       description: |
-        This is a store/platform transaction adjustment, not a customer self-service
-        command. STORE_OWNER and STORE_STAFF require active membership in the Order
-        store; PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes all
-        remaining units. Explicit quantities consume the lowest unrefunded conceptual
-        unit positions. Within each line, coupon then points are allocated deterministically
-        and cash is the residual; coupon attribution never restores the coupon.
+        This is a Merchant Session transaction adjustment, not a customer self-service
+        or operator command. STORE_OWNER and STORE_STAFF require active membership in
+        the Order store. Omitted lineItems consumes all remaining units. Explicit
+        quantities consume the lowest unrefunded conceptual unit positions. Within each
+        line, coupon then points are allocated deterministically and cash is the residual;
+        coupon attribution never restores the coupon.
       parameters:
         - $ref: "#/components/parameters/PaymentId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
       requestBody:
         required: true
         content:
@@ -1169,6 +1171,53 @@ paths:
             amount snapshots and pointsRestorationState are present. A confirmed
             points amount may exist only if its asynchronous Loyalty work already
             succeeded; HTTP 202 alone does not determine either confirmed amount.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/payments/{paymentId}/refunds:
+    post:
+      tags: [Operations, Payment]
+      operationId: createOperationsPaymentRefund
+      summary: Create a platform-operator full or item-based partial refund
+      security: [{ bearerAuth: [] }]
+      description: |
+        PLATFORM_OPERATOR only. This endpoint is the actor-exclusive Operations form
+        of the legacy UUID refund contract. It uses the same preparation, idempotency,
+        Provider key and Refund ledger as the Merchant endpoint; changing URI never
+        creates another side effect for the same actor, key and canonical payload.
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRefundRequest"
+      responses:
+        "201":
+          description: Refund resource creation and the synchronous result are confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
+        "202":
+          description: Refund result is unknown or reconciliation is in progress
           content:
             application/json:
               schema:
@@ -1698,13 +1747,12 @@ paths:
       tags: [Loyalty]
       operationId: getPointAccount
       summary: Get a point account summary
+      security: [{ customerSession: [] }]
       description: |
-        The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
-        support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason;
-        the server records the target access audit before returning 200.
+        The Customer Session actor who owns the account may read without a reason.
+        Operator support reads use the actor-exclusive Operations endpoint.
       parameters:
         - $ref: "#/components/parameters/PointAccountId"
-        - $ref: "#/components/parameters/OptionalAccessReason"
       responses:
         "200":
           description: Point account visible to its owner or an authorized operator
@@ -1727,19 +1775,81 @@ paths:
       tags: [Loyalty]
       operationId: listPointTransactions
       summary: List point ledger transactions
+      security: [{ customerSession: [] }]
       description: |
-        The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
-        support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason.
+        The Customer Session actor who owns the account may read without a reason.
         Results use the stable (occurredAt DESC, transactionId DESC) tuple; the cursor is
-        bound to this account and endpoint.
+        bound to this account and endpoint. Operator support reads use the actor-exclusive
+        Operations endpoint.
       parameters:
         - $ref: "#/components/parameters/PointAccountId"
-        - $ref: "#/components/parameters/OptionalAccessReason"
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
           description: Point transactions in stable ledger order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointTransactionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-accounts/{accountId}:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: getOperationsPointAccount
+      summary: Get a point account summary for an audited operator investigation
+      security: [{ bearerAuth: [] }]
+      description: |
+        Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
+        X-Access-Reason. The target access Audit and projection commit in one local
+        transaction before 200 is returned.
+      parameters:
+        - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/AccessReason"
+      responses:
+        "200":
+          description: Point account visible to an authorized operator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointAccount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-accounts/{accountId}/transactions:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: listOperationsPointTransactions
+      summary: List point ledger transactions for an audited operator investigation
+      security: [{ bearerAuth: [] }]
+      description: |
+        Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
+        X-Access-Reason. Results use the stable (occurredAt DESC, transactionId DESC)
+        tuple and a cursor bound to this Operations endpoint and account.
+      parameters:
+        - $ref: "#/components/parameters/PointAccountId"
+        - $ref: "#/components/parameters/AccessReason"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Point transactions visible to an authorized operator
           content:
             application/json:
               schema:
@@ -4690,16 +4800,6 @@ components:
       schema:
         type: string
         pattern: '^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$'
-    OptionalAccessReason:
-      in: header
-      name: X-Access-Reason
-      required: false
-      description: |
-        Required when a PLATFORM_OPERATOR uses a point-account support read; not
-        required for the customer who owns the account. The server trims the value,
-        requires 1 to 200 characters after trimming, and rejects control characters.
-      schema:
-        type: string
     SupportActionRequestId:
       in: path
       name: requestId

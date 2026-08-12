@@ -151,8 +151,9 @@ Application Service는 완전한 고객 취소 원천을 다시 검증한 뒤 �
 한 번만 예약한다. 다른 repair/read grant나 `PLATFORM_OPERATOR` role만으로 통과하지 않으며,
 금액·Provider 결과·금융 식별자를 입력하거나 새 REQUEST를 보내는 권한은 부여하지 않는다.
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
-`POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
-header는 optional이고 operator branch에서만 required다. operator branch는 grant 확인, projection과
+별도 `/operations/point-accounts/**` URI에서 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target
+access Audit을 요구한다. Customer URI에는 reason header를 선언하지 않고 운영자 URI에서는 required다.
+operator branch는 grant 확인, projection과
 `POINT_ACCOUNT_READ` Audit을 하나의 local transaction에서 commit해야만 200을 반환한다. missing/revoked
 grant는 403이고 grant/Audit persistence failure는 503이며 role 또는 다른 permission으로 대체하지 않는다.
 
@@ -176,6 +177,9 @@ membership이 `REVOKED`이거나 operation이 허용하지 않는 role이면 `40
 `ACTIVE` membership을 가진 매장의 주문에 실행할 수 있지만, 다른 매장이나 허용되지 않은 membership role은
 `403`이다. 실행은 사유와 `Idempotency-Key`가 필수이며 `paymentId`·`orderLineId` UUID를 사용자 입력으로
 받지 않는다. P0에서는 STAFF 금액 상한이나 점주 사전 승인을 암묵적으로 추가하지 않는다.
+기존 UUID 기반 `POST /payments/{paymentId}/refunds`는 Merchant Session 전용이고, 기존 Platform
+Operator branch는 `POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 경로는 같은
+idempotency·Refund·Provider 불변식을 공유하며 상대 actor 인증을 fallback으로 받아들이지 않는다.
 
 정산 Batch/Item 조회와 이의제기 접수는 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
 membership을 요구한다. `STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수

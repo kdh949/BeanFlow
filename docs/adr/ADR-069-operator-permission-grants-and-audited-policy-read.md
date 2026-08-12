@@ -139,13 +139,15 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 
 ### Point account read contract
 
-- customer는 자신의 PointAccount와 ledger만 reason 없이 읽을 수 있다. 다른 customer ownership은
-  403이고 Store/Settlement role은 조회할 수 없다.
+- customer는 `GET /point-accounts/{accountId}`와 하위 ledger URI에서 자신의 PointAccount와 ledger만
+  reason 없이 읽을 수 있다. 다른 customer ownership은 403이고 Store/Settlement role은 조회할 수 없다.
+- **2026-08-13 actor-exclusive URI amendment:** Platform Operator support read는
+  `GET /operations/point-accounts/{accountId}`와 하위 ledger URI로 분리한다. Customer URI에서 JWT를
+  병행 허용하지 않고 Operations URI에서 Customer Session을 해석하지 않는다.
 - Platform Operator support read는 `POINT_ACCOUNT_READ` active grant와 `X-Access-Reason`을
   요구한다. header는 policy GET과 같은 trim 1..200/control-character rule을 쓰며, account/ledger
   projection과 `POINT_ACCOUNT_READ` AuditRecord가 같은 local transaction에 저장된 경우에만 200이다.
-  header is optional at the OpenAPI parameter level only because customer reads do not send it; operator
-  branch에는 required다.
+  Operations OpenAPI parameter에서 header는 required이고 Customer URI에는 선언하지 않는다.
 - ledger order는 `(occurredAt DESC, transactionId DESC)`이고, cursor filter hash는 endpoint와
   account ID를 bind한다. this read does not expose issuer reference, raw evidence, idempotency key,
   internal recovery case or grant state.
@@ -237,6 +239,8 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   Audit save failure가 bootstrap command에서 exact terminal result와 no partial state를 남긴다.
 - customer own/other account, operator `POINT_ACCOUNT_READ` with/without reason, cursor account scope
   mismatch와 point-read Audit failure가 ownership/403/400/503 contract를 각각 지킨다.
+- Customer Session과 운영자 JWT가 각각 상대 actor의 PointAccount URI에서 403이고, 두 URI가 같은
+  projection·cursor·Audit 불변식을 지키는지 검증한다.
 - PointAccount 응답이 Plan 13 summary를 그대로 사용하고 `updatedAt` 또는 임의 0 fallback을
   포함하지 않는지 검증한다.
 - **Point adjustment enforcement evidence (2026-08-04):** endpoint method security는

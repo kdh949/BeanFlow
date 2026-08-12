@@ -267,12 +267,21 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   964 tests(0 failures, 0 errors, 1 skipped), Spotless와 문서/OpenAPI 검증을 통과했으므로
   `Implementation-Ready=true`로 복원했다. 이 plan의 migration 번호는 구현 시작 preflight의 combined
   inventory에서 V51 다음으로 할당한다.
+- 2026-08-13: 기존 Customer/Merchant URI를 유지하고 운영자 branch를 `/operations/**`로 분리하는
+  actor-exclusive API 결정을 ADR-069/070/092/108, API conventions, authorization matrix와 target/runtime
+  OpenAPI에 먼저 기록했다. 최초 문서 검증은 새 Operations ledger cursor가 shared pagination inventory에
+  없어 실패했으며 ADR-070과 검증기를 갱신한 뒤 target 153 paths/159 operations, runtime 114 paths/118
+  operations, 305 schemas, 46 policies, 111 ADRs, 273 Markdown, 57 ExecPlans 검증이 통과했다.
 
 ## Surprises & Discoveries
 
 - Support completion 뒤 Plan 10과 `origin/main`을 결합하자 V51 주문 표시 제약이 Support S80 direct-order
   fixture 16건을 깨뜨렸다. 공통 유효 fixture로 교정하고 전체 회귀를 다시 통과했으며, 실패를 Plan 10
   completion evidence에 기록했다.
+- 기존 PointAccount read와 legacy UUID refund는 한 URI에서 Customer/Platform Operator 또는
+  Merchant/Platform Operator를 role로 분기하고 있어 ADR-092의 actor별 단일 Chain과 양립하지 않았다.
+  API를 제거하지 않고 소비자 URI와 Operations URI로 분리했으며, 새 cursor URI는 ADR-070 binding과
+  문서 검증기 inventory도 함께 확장해야 했다.
 
 ## Decision Log
 
@@ -287,6 +296,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 점주 credential 웹 관리용 explicit permission을 foundation migration에서 선등록 | [BR-46](../../product/business-policy-decisions.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md) |
 | 2026-08-12 | Support S70~S100을 우선하고 Plan 20 readiness와 migration lease를 일시 해제 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-13 | Support V43~V49 main 통합과 Plan 10 V50/V51 전체 검증 뒤 Plan 20 readiness와 Stack A lease를 복원 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [Plan 10](../completed/productization-10-public-order-reference.md) |
+| 2026-08-13 | 혼합 actor API는 기존 Customer/Merchant URI를 유지하고 운영자 branch를 `/operations/**` URI로 분리 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md), [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md) |
 
 ## Outcomes & Retrospective
 
