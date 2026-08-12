@@ -391,7 +391,6 @@ internal interface PartialRefundRestorationJpaRepository : JpaRepository<Partial
     ): Long
 }
 
-internal interface SupportResolutionPointRestorationJpaRepository :
-    JpaRepository<SupportResolutionPointRestorationEntity, UUID> {
+internal interface SupportResolutionPointRestorationJpaRepository : JpaRepository<SupportResolutionPointRestorationEntity, UUID> {
     fun findBySourceReference(sourceReference: String): SupportResolutionPointRestorationEntity?
 }

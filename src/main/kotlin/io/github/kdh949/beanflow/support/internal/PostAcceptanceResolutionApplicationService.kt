@@ -281,7 +281,10 @@ internal class PostAcceptanceResolutionApplicationService(
         order: PostAcceptanceResolutionOrderFact,
     ): ResolutionOwnerResult =
         when (work.claim.stepType) {
-            PostAcceptanceResolutionStepType.PAYMENT_REFUND -> payment(work, order)
+            PostAcceptanceResolutionStepType.PAYMENT_REFUND -> {
+                payment(work, order)
+            }
+
             PostAcceptanceResolutionStepType.POINT_RESTORATION -> {
                 val result =
                     points.restore(
@@ -295,6 +298,7 @@ internal class PostAcceptanceResolutionApplicationService(
                     )
                 ResolutionOwnerResult.Success("point-restoration:${result.resultId}:${result.disposition.name}")
             }
+
             PostAcceptanceResolutionStepType.COUPON_RESTORATION -> {
                 val result =
                     coupons.restore(
@@ -308,6 +312,7 @@ internal class PostAcceptanceResolutionApplicationService(
                     )
                 ResolutionOwnerResult.Success("coupon-restoration:${result.resultId}:${result.disposition.name}")
             }
+
             PostAcceptanceResolutionStepType.SETTLEMENT_ADJUSTMENT -> {
                 val responsibility =
                     when (work.responsibility) {
@@ -331,6 +336,7 @@ internal class PostAcceptanceResolutionApplicationService(
                     )
                 ResolutionOwnerResult.Success("settlement-adjustment:${result.settlementAdjustmentId}")
             }
+
             PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION -> {
                 val result =
                     notifications.request(
@@ -390,9 +396,11 @@ internal class PostAcceptanceResolutionApplicationService(
             }
         return when (view.state) {
             PostAcceptanceResolutionRefundState.SUCCEEDED -> ResolutionOwnerResult.Success("payment-refund:${view.refundId}")
+
             PostAcceptanceResolutionRefundState.FAILED,
             PostAcceptanceResolutionRefundState.MANUAL_REVIEW,
             -> ResolutionOwnerResult.ManualReview(view.state.name)
+
             else -> ResolutionOwnerResult.Unknown(view.state.name, work.now.plusSeconds(10))
         }
     }
@@ -423,9 +431,18 @@ internal data class ClaimedResolutionWork(
 )
 
 internal sealed interface ResolutionOwnerResult {
-    data class Success(val reference: String) : ResolutionOwnerResult
-    data class Unknown(val code: String, val retryAt: Instant) : ResolutionOwnerResult
-    data class ManualReview(val code: String) : ResolutionOwnerResult
+    data class Success(
+        val reference: String,
+    ) : ResolutionOwnerResult
+
+    data class Unknown(
+        val code: String,
+        val retryAt: Instant,
+    ) : ResolutionOwnerResult
+
+    data class ManualReview(
+        val code: String,
+    ) : ResolutionOwnerResult
 }
 
 @Service
@@ -475,7 +492,8 @@ internal class PostAcceptanceResolutionTransactionService(
         val existingResolution = resolutions.findByCommandActorIdAndIdempotencyKey(command.actorId, command.idempotencyKey)
         if (existingResolution != null) {
             if (existingResolution.payloadHash != payloadHash) reused()
-            val existingRequest = requests.findLockedById(existingResolution.supportActionRequestId) ?: dependency("Resolution request is missing")
+            val existingRequest =
+                requests.findLockedById(existingResolution.supportActionRequestId) ?: dependency("Resolution request is missing")
             val existingCase = cases.findLockedById(existingResolution.supportCaseId) ?: dependency("Resolution SupportCase is missing")
             if (existingResolution.executorActorId != command.actorId || existingRequest.executorActorId != command.actorId) denied()
             requireCaseScope(existingCase, existingRequest, command.actorId)
@@ -542,9 +560,13 @@ internal class PostAcceptanceResolutionTransactionService(
         }
         requireExecutionPermissions(command.actorId)
         requireStartScope(entity, request, supportCase, command.actorId)
-        if (existingCommand == null && (entity.version != command.expectedResolutionVersion ||
-                request.version != command.expectedRequestVersion)
-        ) stale()
+        if (existingCommand == null && (
+                entity.version != command.expectedResolutionVersion ||
+                    request.version != command.expectedRequestVersion
+            )
+        ) {
+            stale()
+        }
         requireOrder(order, entity.orderId, command.expectedOrderVersion)
         val revision = currentRevision(request)
         if (!clock.instant().isBefore(revision.expiresAt) && request.state != SupportActionRequestState.EXECUTED) expired()
@@ -574,7 +596,11 @@ internal class PostAcceptanceResolutionTransactionService(
         } else if (request.state != SupportActionRequestState.EXECUTED || request.terminalResolutionId != entity.id) {
             conflict("Support action request is not bound to this ResolutionCase")
         }
-        if (existingCommand == null) saveCommand(command.actorId, PostAcceptanceResolutionCommandOperation.EXECUTE, command.idempotencyKey, hash, entity.id)
+        if (existingCommand ==
+            null
+        ) {
+            saveCommand(command.actorId, PostAcceptanceResolutionCommandOperation.EXECUTE, command.idempotencyKey, hash, entity.id)
+        }
     }
 
     @Transactional
@@ -620,7 +646,9 @@ internal class PostAcceptanceResolutionTransactionService(
         }
         saveCommand(command.actorId, PostAcceptanceResolutionCommandOperation.RECONCILE, command.idempotencyKey, hash, entity.id)
         audits.appendAll(
-            listOf(audit(command.actorId, entity.id, "SUPPORT_RESOLUTION_RECONCILIATION_SCHEDULED", command.stepType.name, clock.instant())),
+            listOf(
+                audit(command.actorId, entity.id, "SUPPORT_RESOLUTION_RECONCILIATION_SCHEDULED", command.stepType.name, clock.instant()),
+            ),
         )
     }
 
@@ -638,7 +666,8 @@ internal class PostAcceptanceResolutionTransactionService(
         requireResolutionScope(entity, request, supportCase, actorId)
         val stepEntities = steps.findByResolutionIdOrderByStepTypeAsc(entity.id)
         val domain = entity.toDomain(stepEntities)
-        stepEntities.filter { it.state in PROCESSING_STATES && it.claimUntil?.let { until -> !now.isBefore(until) } == true }
+        stepEntities
+            .filter { it.state in PROCESSING_STATES && it.claimUntil?.let { until -> !now.isBefore(until) } == true }
             .forEach { expiredStep ->
                 domain.recoverExpiredClaim(expiredStep.stepType, now)
                 expiredStep.apply(domain.step(expiredStep.stepType))
@@ -649,7 +678,8 @@ internal class PostAcceptanceResolutionTransactionService(
             }
         val selected =
             financial.firstOrNull { it.claimableAt(now) }
-                ?: stepEntities.single { it.stepType == PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION }
+                ?: stepEntities
+                    .single { it.stepType == PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION }
                     .takeIf { domain.state in TERMINAL_FINANCIAL_STATES && it.claimableAt(now) }
                 ?: return null
         val claim = domain.claim(selected.stepType, identifiers.next(), now, claimLease)
@@ -684,9 +714,23 @@ internal class PostAcceptanceResolutionTransactionService(
         val allSteps = steps.findByResolutionIdOrderByStepTypeAsc(entity.id)
         val domain = entity.toDomain(allSteps.map { if (it.id == stepEntity.id) stepEntity else it })
         when (result) {
-            is ResolutionOwnerResult.Success -> domain.recordSuccess(work.claim.stepType, work.claim.claimToken, result.reference, now)
-            is ResolutionOwnerResult.Unknown -> domain.recordUnknown(work.claim.stepType, work.claim.claimToken, result.code, now, result.retryAt)
-            is ResolutionOwnerResult.ManualReview -> domain.recordManualReview(work.claim.stepType, work.claim.claimToken, result.code, now)
+            is ResolutionOwnerResult.Success -> {
+                domain.recordSuccess(work.claim.stepType, work.claim.claimToken, result.reference, now)
+            }
+
+            is ResolutionOwnerResult.Unknown -> {
+                domain.recordUnknown(
+                    work.claim.stepType,
+                    work.claim.claimToken,
+                    result.code,
+                    now,
+                    result.retryAt,
+                )
+            }
+
+            is ResolutionOwnerResult.ManualReview -> {
+                domain.recordManualReview(work.claim.stepType, work.claim.claimToken, result.code, now)
+            }
         }
         entity.apply(domain)
         stepEntity.apply(domain.step(work.claim.stepType))
@@ -696,7 +740,9 @@ internal class PostAcceptanceResolutionTransactionService(
                     actorId,
                     entity.id,
                     "SUPPORT_RESOLUTION_STEP_RECORDED",
-                    "${work.claim.stepType.name}:${domain.step(work.claim.stepType).state.name}:attempt-${domain.step(work.claim.stepType).attemptCount}",
+                    "${work.claim.stepType.name}:${domain.step(
+                        work.claim.stepType,
+                    ).state.name}:attempt-${domain.step(work.claim.stepType).attemptCount}",
                     now,
                 ),
             ),
@@ -745,13 +791,21 @@ internal class PostAcceptanceResolutionTransactionService(
     ) {
         if (request.action != SupportActionType.POST_ACCEPTANCE_RESOLUTION ||
             request.currentRevisionNumber != revisionNumber || request.version != expectedRequestVersion
-        ) stale()
-        if (request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION) conflict("Request is not ready")
+        ) {
+            stale()
+        }
+        if (request.executorActorId != actorId ||
+            request.state != SupportActionRequestState.READY_FOR_EXECUTION
+        ) {
+            conflict("Request is not ready")
+        }
         if (actorId in setOfNotNull(request.requesterActorId, request.supportApproverActorId, request.operationsApproverActorId)) denied()
         requireCaseScope(supportCase, request, actorId)
         if (!permissions.hasActive(request.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) ||
             !permissions.hasActive(request.requesterActorId, OperatorPermission.SUPPORT_RESOLUTION_REQUEST)
-        ) stale()
+        ) {
+            stale()
+        }
     }
 
     private fun requireRevision(
@@ -765,14 +819,18 @@ internal class PostAcceptanceResolutionTransactionService(
         if (revision.policyVersion != SupportActionPolicy.POLICY_VERSION || revision.targetId != command.orderId ||
             revision.targetVersion != command.expectedOrderVersion || revision.amountKrw != command.cashRefundKrw ||
             revision.evidenceDigest != command.evidenceDigest || revision.actionPayloadDigest != payloads.actionDigest(command)
-        ) stale()
+        ) {
+            stale()
+        }
         requireOrder(order, command.orderId, command.expectedOrderVersion)
         val session = sessions.findLockedById(revision.verificationSessionId) ?: stale()
         if (session.actorId != request.requesterActorId || session.supportCaseId != request.supportCaseId ||
             session.state != VerificationState.VERIFIED || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
             session.purpose != VerificationPurpose.CASE_RESOLUTION || session.expiresAt != revision.expiresAt ||
             !now.isBefore(session.expiresAt)
-        ) stale()
+        ) {
+            stale()
+        }
         val link = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, request.supportCaseId)
         if (link == null || link.unlinkedAt != null || link.subjectId != session.subjectId) stale()
     }
@@ -785,7 +843,9 @@ internal class PostAcceptanceResolutionTransactionService(
     ) {
         if (resolution.executorActorId != actorId || request.executorActorId != actorId ||
             request.terminalResolutionId != resolution.id || request.state != SupportActionRequestState.EXECUTED
-        ) denied()
+        ) {
+            denied()
+        }
         requireCaseScope(supportCase, request, actorId)
     }
 
@@ -814,7 +874,9 @@ internal class PostAcceptanceResolutionTransactionService(
                 request.targetId,
                 SupportSubjectRelationship.RELATED_ORDER,
             )
-        ) denied()
+        ) {
+            denied()
+        }
     }
 
     private fun requireExecutionPermissions(actorId: UUID) {
@@ -962,11 +1024,17 @@ internal class PostAcceptanceResolutionTransactionService(
         state in CLAIMABLE_STATES && nextAttemptAt?.let { !now.isBefore(it) } == true
 
     private fun notFound(resource: String): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "$resource was not found")
+
     private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
+
     private fun stale(): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Resolution binding is stale")
+
     private fun expired(): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_EXPIRED, "Resolution approval expired")
+
     private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STATE_CONFLICT, message)
+
     private fun denied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Resolution access is denied")
+
     private fun reused(): Nothing = throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Resolution idempotency key was reused")
 
     private companion object {

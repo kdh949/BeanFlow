@@ -25,12 +25,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -140,18 +140,19 @@ internal class PostAcceptanceResolutionIntegrationTest
             val version = number("SELECT version FROM support_post_acceptance_resolution WHERE id = ?", resolutionId)
             gateway.enqueueRejectionRefundLookup(GatewayRefundResult.Succeeded("provider-reconciled-refund"))
 
-            mockMvc.perform(
-                post("/api/v1/support/post-acceptance-resolutions/$resolutionId/reconciliations")
-                    .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) })
-                    .header("Idempotency-Key", "reconcile-manual-review")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(
-                        """
-                        {"stepType":"PAYMENT_REFUND","expectedResolutionVersion":$version,
-                         "expectedOrderVersion":$ORDER_VERSION}
-                        """.trimIndent(),
-                    ),
-            ).andExpect(status().isOk)
+            mockMvc
+                .perform(
+                    post("/api/v1/support/post-acceptance-resolutions/$resolutionId/reconciliations")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) })
+                        .header("Idempotency-Key", "reconcile-manual-review")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            {"stepType":"PAYMENT_REFUND","expectedResolutionVersion":$version,
+                             "expectedOrderVersion":$ORDER_VERSION}
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.state").value("RESOLVED"))
 
@@ -194,8 +195,12 @@ internal class PostAcceptanceResolutionIntegrationTest
                 .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
 
             assertThat(value("SELECT state FROM payment_refund WHERE support_resolution_id = ?", resolutionId)).isEqualTo("SUCCEEDED")
-            assertThat(value("SELECT state FROM support_post_acceptance_resolution_step WHERE resolution_id = ? AND step_type = 'PAYMENT_REFUND'", resolutionId))
-                .isEqualTo("PROCESSING")
+            assertThat(
+                value(
+                    "SELECT state FROM support_post_acceptance_resolution_step WHERE resolution_id = ? AND step_type = 'PAYMENT_REFUND'",
+                    resolutionId,
+                ),
+            ).isEqualTo("PROCESSING")
             jdbc.execute("DROP TRIGGER IF EXISTS test_support_resolution_audit_fault ON operations_audit_record")
             jdbc.update(
                 "UPDATE support_post_acceptance_resolution_step SET claim_until = now() - interval '1 second' " +
@@ -232,10 +237,11 @@ internal class PostAcceptanceResolutionIntegrationTest
             val resolutionId = create(fixture, "create-read-binding").andReturn().resolutionId()
             execute(fixture, resolutionId, "execute-read-binding").andExpect(status().isOk)
 
-            mockMvc.perform(
-                get("/api/v1/support/post-acceptance-resolutions/$resolutionId")
-                    .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
-            ).andExpect(status().isOk)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/post-acceptance-resolutions/$resolutionId")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
 
@@ -591,20 +597,21 @@ internal class PostAcceptanceResolutionIntegrationTest
         private fun create(
             fixture: Fixture,
             key: String,
-        ) = mockMvc.perform(
-            post("/api/v1/support/orders/${fixture.orderId}/post-acceptance-resolutions")
-                .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) })
-                .header("Idempotency-Key", key)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {"requestId":"${fixture.requestId}","revisionNumber":1,"expectedRequestVersion":0,
-                     "expectedOrderVersion":$ORDER_VERSION,"outcome":"${fixture.outcome}",
-                     "responsibility":"${fixture.responsibility}","cashRefundKrw":${fixture.cashRefundKrw},
-                     "restorePoints":false,"restoreCoupon":false,"evidenceDigest":"$DIGEST"}
-                    """.trimIndent(),
-                ),
-        ).andExpect(header().string("Cache-Control", containsString("no-store")))
+        ) = mockMvc
+            .perform(
+                post("/api/v1/support/orders/${fixture.orderId}/post-acceptance-resolutions")
+                    .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) })
+                    .header("Idempotency-Key", key)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
+                        {"requestId":"${fixture.requestId}","revisionNumber":1,"expectedRequestVersion":0,
+                         "expectedOrderVersion":$ORDER_VERSION,"outcome":"${fixture.outcome}",
+                         "responsibility":"${fixture.responsibility}","cashRefundKrw":${fixture.cashRefundKrw},
+                         "restorePoints":false,"restoreCoupon":false,"evidenceDigest":"$DIGEST"}
+                        """.trimIndent(),
+                    ),
+            ).andExpect(header().string("Cache-Control", containsString("no-store")))
 
         private fun execute(
             fixture: Fixture,

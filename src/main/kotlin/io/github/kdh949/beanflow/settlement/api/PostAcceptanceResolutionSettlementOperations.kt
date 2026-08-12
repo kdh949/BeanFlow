@@ -30,7 +30,5 @@ data class PostAcceptanceResolutionSettlementAdjustmentResult(
 
 interface PostAcceptanceResolutionSettlementOperations {
     /** Appends to a confirmed SettlementItem; no confirmed fact or prior Adjustment is overwritten. */
-    fun create(
-        command: CreatePostAcceptanceResolutionSettlementAdjustmentCommand,
-    ): PostAcceptanceResolutionSettlementAdjustmentResult
+    fun create(command: CreatePostAcceptanceResolutionSettlementAdjustmentCommand): PostAcceptanceResolutionSettlementAdjustmentResult
 }

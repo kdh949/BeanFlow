@@ -5,11 +5,11 @@ import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
 import io.github.kdh949.beanflow.eventing.api.SettlementRefundEffect
-import io.github.kdh949.beanflow.shared.api.DomainFailure
-import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.settlement.api.CreatePostAcceptanceResolutionSettlementAdjustmentCommand
 import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementOperations
 import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementResponsibility
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach

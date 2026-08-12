@@ -63,7 +63,9 @@ internal data class PostAcceptanceResolutionPlan(
         when (outcome) {
             PostAcceptanceResolutionOutcome.FULL_REFUND,
             PostAcceptanceResolutionOutcome.PARTIAL_REFUND,
-            -> require(cashRefundKrw > 0) { "Refund resolution requires a positive cash amount" }
+            -> {
+                require(cashRefundKrw > 0) { "Refund resolution requires a positive cash amount" }
+            }
 
             PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION,
             PostAcceptanceResolutionOutcome.MANUAL_SETTLEMENT_REVIEW,
@@ -86,8 +88,10 @@ internal data class PostAcceptanceResolutionPlan(
             PostAcceptanceResolutionResponsibility.CUSTOMER,
             PostAcceptanceResolutionResponsibility.PLATFORM,
             PostAcceptanceResolutionResponsibility.UNDETERMINED,
-            -> require(settlementAdjustmentKrw == null) {
-                "Responsibility does not permit an automatic Store Settlement adjustment"
+            -> {
+                require(settlementAdjustmentKrw == null) {
+                    "Responsibility does not permit an automatic Store Settlement adjustment"
+                }
             }
         }
     }
@@ -258,8 +262,10 @@ internal class PostAcceptanceResolutionStep private constructor(
 
     private fun requireClaim(token: UUID) {
         check(
-            (state == PostAcceptanceResolutionStepState.PROCESSING ||
-                state == PostAcceptanceResolutionStepState.RECONCILING) && claimToken == token,
+            (
+                state == PostAcceptanceResolutionStepState.PROCESSING ||
+                    state == PostAcceptanceResolutionStepState.RECONCILING
+            ) && claimToken == token,
         ) { "Resolution step result requires its active claim" }
     }
 
@@ -447,22 +453,41 @@ internal class PostAcceptanceResolutionCase private constructor(
     }
 
     fun isFinanciallyResolved(): Boolean =
-        financialSteps().all { it.state == PostAcceptanceResolutionStepState.SUCCEEDED || it.state == PostAcceptanceResolutionStepState.NOT_REQUIRED }
+        financialSteps().all {
+            it.state == PostAcceptanceResolutionStepState.SUCCEEDED ||
+                it.state == PostAcceptanceResolutionStepState.NOT_REQUIRED
+        }
 
     private fun recalculate() {
         val financial = financialSteps()
         state =
             when {
-                financial.all { it.state == PostAcceptanceResolutionStepState.SUCCEEDED || it.state == PostAcceptanceResolutionStepState.NOT_REQUIRED } ->
+                financial.all {
+                    it.state == PostAcceptanceResolutionStepState.SUCCEEDED ||
+                        it.state == PostAcceptanceResolutionStepState.NOT_REQUIRED
+                } -> {
                     PostAcceptanceResolutionState.RESOLVED
-                financial.any { it.state == PostAcceptanceResolutionStepState.UNKNOWN || it.state == PostAcceptanceResolutionStepState.RECONCILING } ->
+                }
+
+                financial.any {
+                    it.state == PostAcceptanceResolutionStepState.UNKNOWN ||
+                        it.state == PostAcceptanceResolutionStepState.RECONCILING
+                } -> {
                     PostAcceptanceResolutionState.RECONCILING
+                }
+
                 financial.none { it.state in ACTIONABLE_STATES } &&
-                    financial.any { it.state == PostAcceptanceResolutionStepState.SUCCEEDED } ->
+                    financial.any { it.state == PostAcceptanceResolutionStepState.SUCCEEDED } -> {
                     PostAcceptanceResolutionState.PARTIALLY_RESOLVED
-                financial.none { it.state in ACTIONABLE_STATES } ->
+                }
+
+                financial.none { it.state in ACTIONABLE_STATES } -> {
                     PostAcceptanceResolutionState.MANUAL_REVIEW
-                else -> PostAcceptanceResolutionState.EXECUTING
+                }
+
+                else -> {
+                    PostAcceptanceResolutionState.EXECUTING
+                }
             }
     }
 
@@ -572,22 +597,42 @@ internal class PostAcceptanceResolutionCase private constructor(
             type: PostAcceptanceResolutionStepType,
         ): PostAcceptanceResolutionStepState =
             when (type) {
-                PostAcceptanceResolutionStepType.PAYMENT_REFUND ->
+                PostAcceptanceResolutionStepType.PAYMENT_REFUND -> {
                     required(plan.outcome.isRefund())
-                PostAcceptanceResolutionStepType.POINT_RESTORATION -> required(plan.restorePoints)
-                PostAcceptanceResolutionStepType.COUPON_RESTORATION -> required(plan.restoreCoupon)
-                PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION -> PostAcceptanceResolutionStepState.PENDING
-                PostAcceptanceResolutionStepType.SETTLEMENT_ADJUSTMENT ->
+                }
+
+                PostAcceptanceResolutionStepType.POINT_RESTORATION -> {
+                    required(plan.restorePoints)
+                }
+
+                PostAcceptanceResolutionStepType.COUPON_RESTORATION -> {
+                    required(plan.restoreCoupon)
+                }
+
+                PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION -> {
+                    PostAcceptanceResolutionStepState.PENDING
+                }
+
+                PostAcceptanceResolutionStepType.SETTLEMENT_ADJUSTMENT -> {
                     when {
-                        plan.outcome == PostAcceptanceResolutionOutcome.MANUAL_SETTLEMENT_REVIEW ->
+                        plan.outcome == PostAcceptanceResolutionOutcome.MANUAL_SETTLEMENT_REVIEW -> {
                             PostAcceptanceResolutionStepState.MANUAL_REVIEW
-                        plan.responsibility == PostAcceptanceResolutionResponsibility.UNDETERMINED ->
+                        }
+
+                        plan.responsibility == PostAcceptanceResolutionResponsibility.UNDETERMINED -> {
                             PostAcceptanceResolutionStepState.BLOCKED
+                        }
+
                         plan.responsibility == PostAcceptanceResolutionResponsibility.STORE ||
-                            plan.responsibility == PostAcceptanceResolutionResponsibility.SHARED ->
+                            plan.responsibility == PostAcceptanceResolutionResponsibility.SHARED -> {
                             PostAcceptanceResolutionStepState.PENDING
-                        else -> PostAcceptanceResolutionStepState.NOT_REQUIRED
+                        }
+
+                        else -> {
+                            PostAcceptanceResolutionStepState.NOT_REQUIRED
+                        }
                     }
+                }
             }
 
         private fun required(required: Boolean): PostAcceptanceResolutionStepState =
@@ -615,4 +660,8 @@ private fun String.normalizedReference(): String =
     }
 
 private fun String.normalizedFailureCode(): String =
-    trim().uppercase().replace(Regex("[^A-Z0-9_]+"), "_").take(80).ifBlank { "UNKNOWN" }
+    trim()
+        .uppercase()
+        .replace(Regex("[^A-Z0-9_]+"), "_")
+        .take(80)
+        .ifBlank { "UNKNOWN" }

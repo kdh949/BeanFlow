@@ -62,7 +62,5 @@ interface PostAcceptanceResolutionPaymentOperations {
         now: Instant,
     ): PostAcceptanceResolutionRefundView
 
-    fun scheduleReconciliation(
-        command: SchedulePostAcceptanceResolutionRefundReconciliationCommand,
-    ): PostAcceptanceResolutionRefundView
+    fun scheduleReconciliation(command: SchedulePostAcceptanceResolutionRefundReconciliationCommand): PostAcceptanceResolutionRefundView
 }

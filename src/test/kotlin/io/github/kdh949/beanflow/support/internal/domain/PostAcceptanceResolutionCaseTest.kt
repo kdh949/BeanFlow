@@ -48,7 +48,10 @@ class PostAcceptanceResolutionCaseTest {
         assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.PAYMENT_REFUND).state)
         assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.POINT_RESTORATION).state)
         assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.COUPON_RESTORATION).state)
-        assertEquals(PostAcceptanceResolutionStepState.BLOCKED, resolution.step(PostAcceptanceResolutionStepType.SETTLEMENT_ADJUSTMENT).state)
+        assertEquals(
+            PostAcceptanceResolutionStepState.BLOCKED,
+            resolution.step(PostAcceptanceResolutionStepType.SETTLEMENT_ADJUSTMENT).state,
+        )
 
         succeed(resolution, PostAcceptanceResolutionStepType.PAYMENT_REFUND, "refund-1", 1)
         succeed(resolution, PostAcceptanceResolutionStepType.POINT_RESTORATION, "points-1", 2)
@@ -145,7 +148,10 @@ class PostAcceptanceResolutionCaseTest {
 
         succeed(resolution, PostAcceptanceResolutionStepType.PAYMENT_REFUND, "refund-1", 1)
         assertEquals(PostAcceptanceResolutionState.RESOLVED, resolution.state)
-        assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION).state)
+        assertEquals(
+            PostAcceptanceResolutionStepState.PENDING,
+            resolution.step(PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION).state,
+        )
 
         manualReview(resolution, PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION, "DELIVERY_EXHAUSTED", 2)
         assertEquals(PostAcceptanceResolutionState.RESOLVED, resolution.state)
@@ -180,7 +186,10 @@ class PostAcceptanceResolutionCaseTest {
         resolution.start(NOW.plusSeconds(1))
 
         assertEquals(PostAcceptanceResolutionState.RESOLVED, resolution.state)
-        assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION).state)
+        assertEquals(
+            PostAcceptanceResolutionStepState.PENDING,
+            resolution.step(PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION).state,
+        )
     }
 
     @Test

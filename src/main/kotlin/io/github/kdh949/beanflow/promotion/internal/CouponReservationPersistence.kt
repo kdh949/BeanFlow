@@ -284,7 +284,6 @@ internal interface CompensationCouponEligibleMenuJpaRepository : JpaRepository<C
     fun findAllByCouponIssuanceId(couponIssuanceId: UUID): List<CompensationCouponEligibleMenuEntity>
 }
 
-internal interface SupportResolutionCouponRestorationJpaRepository :
-    JpaRepository<SupportResolutionCouponRestorationEntity, UUID> {
+internal interface SupportResolutionCouponRestorationJpaRepository : JpaRepository<SupportResolutionCouponRestorationEntity, UUID> {
     fun findBySourceReference(sourceReference: String): SupportResolutionCouponRestorationEntity?
 }

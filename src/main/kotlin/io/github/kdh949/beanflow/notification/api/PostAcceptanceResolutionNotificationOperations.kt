@@ -26,9 +26,7 @@ data class PostAcceptanceResolutionNotificationView(
 )
 
 interface PostAcceptanceResolutionNotificationOperations {
-    fun request(
-        command: RequestPostAcceptanceResolutionNotificationCommand,
-    ): AcceptedPostAcceptanceResolutionNotification
+    fun request(command: RequestPostAcceptanceResolutionNotificationCommand): AcceptedPostAcceptanceResolutionNotification
 
     fun find(deliveryId: UUID): PostAcceptanceResolutionNotificationView?
 }

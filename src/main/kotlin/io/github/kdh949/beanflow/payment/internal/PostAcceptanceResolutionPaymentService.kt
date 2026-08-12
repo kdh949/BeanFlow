@@ -115,7 +115,11 @@ internal class PostAcceptanceResolutionPaymentService(
 
     @Transactional(readOnly = true)
     fun current(refundId: UUID): PostAcceptanceResolutionRefundView? =
-        refunds.findById(refundId).orElse(null)?.takeIf { it.reason == REASON }?.toView(replayed = false)
+        refunds
+            .findById(refundId)
+            .orElse(null)
+            ?.takeIf { it.reason == REASON }
+            ?.toView(replayed = false)
 
     private fun validate(command: RequestPostAcceptanceResolutionRefundCommand) {
         if (command.amountKrw <= 0 || command.orderVersion < 0 ||

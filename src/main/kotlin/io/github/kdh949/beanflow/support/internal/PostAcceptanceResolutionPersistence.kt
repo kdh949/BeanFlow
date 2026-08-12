@@ -228,8 +228,7 @@ internal class PostAcceptanceResolutionCommandEntity(
     val retentionExpiresAt: Instant,
 )
 
-internal interface PostAcceptanceResolutionCommandJpaRepository :
-    JpaRepository<PostAcceptanceResolutionCommandEntity, UUID> {
+internal interface PostAcceptanceResolutionCommandJpaRepository : JpaRepository<PostAcceptanceResolutionCommandEntity, UUID> {
     fun findByActorIdAndOperationAndIdempotencyKey(
         actorId: UUID,
         operation: PostAcceptanceResolutionCommandOperation,

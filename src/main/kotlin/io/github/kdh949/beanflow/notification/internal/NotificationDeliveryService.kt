@@ -6,14 +6,14 @@ import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.notification.api.AcceptedCustomerCancellationNotification
+import io.github.kdh949.beanflow.notification.api.AcceptedPostAcceptanceResolutionNotification
 import io.github.kdh949.beanflow.notification.api.AcceptedSupportOrderChangeNotification
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
-import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
-import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
-import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
-import io.github.kdh949.beanflow.notification.api.AcceptedPostAcceptanceResolutionNotification
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
 import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
+import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
 import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDelivery
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
@@ -147,9 +147,7 @@ internal class NotificationDeliveryService(
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun request(
-        command: RequestPostAcceptanceResolutionNotificationCommand,
-    ): AcceptedPostAcceptanceResolutionNotification {
+    override fun request(command: RequestPostAcceptanceResolutionNotificationCommand): AcceptedPostAcceptanceResolutionNotification {
         if (command.outcome !in RESOLUTION_OUTCOMES || command.resolutionState !in RESOLUTION_TERMINAL_STATES ||
             command.correlationId.isBlank()
         ) {
@@ -185,7 +183,9 @@ internal class NotificationDeliveryService(
 
     @Transactional(readOnly = true)
     override fun find(deliveryId: UUID): PostAcceptanceResolutionNotificationView? =
-        deliveryRepository.findById(deliveryId).orElse(null)
+        deliveryRepository
+            .findById(deliveryId)
+            .orElse(null)
             ?.takeIf { it.template == NotificationTemplate.SUPPORT_POST_ACCEPTANCE_RESOLUTION }
             ?.let { PostAcceptanceResolutionNotificationView(it.id, it.state.name, it.updatedAt) }
 
