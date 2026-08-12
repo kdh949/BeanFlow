@@ -498,12 +498,19 @@ internal class SupportVerificationTransactions(
                     VerificationChallengeVerifyResult.INVALID -> ChallengeOutcome.INVALID
                     VerificationChallengeVerifyResult.UNKNOWN -> ChallengeOutcome.UNKNOWN
                 }
-            challengeAggregate.complete(outcome, now)
+            val completedState = challengeAggregate.complete(outcome, now)
+            val effectiveOutcome =
+                when (completedState) {
+                    ChallengeState.VERIFIED -> ChallengeOutcome.VERIFIED
+                    ChallengeState.INVALID -> ChallengeOutcome.INVALID
+                    ChallengeState.VERIFICATION_UNKNOWN -> ChallengeOutcome.UNKNOWN
+                    else -> error("Verification completion produced a non-terminal provider state")
+                }
             challenge.apply(challengeAggregate, now)
             sessionAggregate.refresh(now)
             var lockedUntil: Instant? = null
             if (sessionAggregate.state == VerificationState.PENDING) {
-                when (outcome) {
+                when (effectiveOutcome) {
                     ChallengeOutcome.VERIFIED -> sessionAggregate.recordVerifiedChannel(challenge.channel, now)
                     ChallengeOutcome.INVALID -> lockedUntil = sessionAggregate.recordInvalidAttempt(now)
                     ChallengeOutcome.UNKNOWN -> Unit
@@ -520,7 +527,7 @@ internal class SupportVerificationTransactions(
                     challenge.id,
                     start.actorId,
                     challenge.channel,
-                    outcome.name,
+                    effectiveOutcome.name,
                     now,
                 ),
             )
@@ -552,7 +559,7 @@ internal class SupportVerificationTransactions(
                         start.actorId,
                         start.correlationId,
                         now,
-                        mapOf("outcome" to outcome.name, "sessionState" to session.state.name),
+                        mapOf("outcome" to effectiveOutcome.name, "sessionState" to session.state.name),
                         "support-verification-attempt:$attemptId",
                     ),
                 ),

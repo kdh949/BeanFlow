@@ -87,6 +87,17 @@ internal class AuditRecordTest
         }
 
         @Test
+        fun `opaque UUID summary is not mistaken for a phone number`() {
+            val phoneShapedUuid = "abcde010-1234-5678-8abc-123456789abc"
+
+            transactionTemplate.executeWithoutResult {
+                operations.appendAll(listOf(command(after = mapOf("settlementItemId" to phoneShapedUuid))))
+            }
+
+            assertThat(count()).isOne()
+        }
+
+        @Test
         fun `duplicate audit key is rejected instead of overwriting append only history`() {
             val command = command()
             transactionTemplate.executeWithoutResult { operations.appendAll(listOf(command)) }

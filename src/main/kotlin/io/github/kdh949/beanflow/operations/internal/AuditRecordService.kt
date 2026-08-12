@@ -103,8 +103,12 @@ internal class AuditRecordService(
         }
     }
 
-    private fun containsRawPii(value: String): Boolean =
-        RAW_PII_PATTERNS.any { it.containsMatchIn(value) } || containsPaymentCardNumber(value)
+    private fun containsRawPii(value: String): Boolean {
+        if (value.isUuid()) return false
+        return RAW_PII_PATTERNS.any { it.containsMatchIn(value) } || containsPaymentCardNumber(value)
+    }
+
+    private fun String.isUuid(): Boolean = runCatching { UUID.fromString(this).toString() == lowercase() }.getOrDefault(false)
 
     private fun containsPaymentCardNumber(value: String): Boolean {
         if (value.any { !it.isDigit() && it != ' ' && it != '-' }) return false

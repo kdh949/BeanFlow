@@ -295,6 +295,10 @@ internal class VerificationChallenge private constructor(
     ): ChallengeState {
         check(state == ChallengeState.VERIFYING) { "Verification challenge is not awaiting an outcome" }
         require(occurredAt >= requestedAt) { "Challenge outcome time cannot move backward" }
+        if (!occurredAt.isBefore(expiresAt)) {
+            state = ChallengeState.VERIFICATION_UNKNOWN
+            return state
+        }
         state =
             when (outcome) {
                 ChallengeOutcome.VERIFIED -> ChallengeState.VERIFIED
