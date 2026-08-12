@@ -10,6 +10,10 @@ import io.github.kdh949.beanflow.notification.api.AcceptedSupportOrderChangeNoti
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutionNotificationCommand
+import io.github.kdh949.beanflow.notification.api.AcceptedPostAcceptanceResolutionNotification
+import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationOperations
+import io.github.kdh949.beanflow.notification.api.PostAcceptanceResolutionNotificationView
 import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDelivery
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
@@ -76,7 +80,8 @@ internal class NotificationDeliveryService(
     @Value("\${beanflow.notification.claim-lease:PT1M}")
     private val claimLease: Duration,
 ) : CustomerCancellationNotificationOperations,
-    SupportOrderChangeNotificationOperations {
+    SupportOrderChangeNotificationOperations,
+    PostAcceptanceResolutionNotificationOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun requestAccepted(
         command: RequestCustomerCancellationAcceptedNotificationCommand,
@@ -140,6 +145,49 @@ internal class NotificationDeliveryService(
             )
         return AcceptedSupportOrderChangeNotification(delivery.id, delivery.state.name)
     }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun request(
+        command: RequestPostAcceptanceResolutionNotificationCommand,
+    ): AcceptedPostAcceptanceResolutionNotification {
+        if (command.outcome !in RESOLUTION_OUTCOMES || command.resolutionState !in RESOLUTION_TERMINAL_STATES ||
+            command.correlationId.isBlank()
+        ) {
+            fail(FailureCode.INVALID_REQUEST, "Resolution notification command is invalid")
+        }
+        val delivery =
+            request(
+                NewNotificationDelivery(
+                    eventId = command.resolutionId,
+                    eventType = "SupportPostAcceptanceResolutionV1",
+                    logicalSource = "support-resolution:${command.resolutionId}:customer-notification",
+                    providerIdempotencyKey = "notification:support-resolution:${command.resolutionId}",
+                    orderId = command.orderId,
+                    recipientType = NotificationRecipientType.CUSTOMER,
+                    recipientId = command.customerId,
+                    logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                    template = NotificationTemplate.SUPPORT_POST_ACCEPTANCE_RESOLUTION,
+                    payload =
+                        mapOf(
+                            "orderId" to command.orderId,
+                            "storeId" to command.storeId,
+                            "outcome" to command.outcome,
+                            "resolutionState" to command.resolutionState,
+                            "occurredAt" to command.occurredAt,
+                            "locale" to "ko-KR",
+                        ),
+                    correlationId = command.correlationId,
+                    occurredAt = command.occurredAt,
+                ),
+            )
+        return AcceptedPostAcceptanceResolutionNotification(delivery.id, delivery.state.name)
+    }
+
+    @Transactional(readOnly = true)
+    override fun find(deliveryId: UUID): PostAcceptanceResolutionNotificationView? =
+        deliveryRepository.findById(deliveryId).orElse(null)
+            ?.takeIf { it.template == NotificationTemplate.SUPPORT_POST_ACCEPTANCE_RESOLUTION }
+            ?.let { PostAcceptanceResolutionNotificationView(it.id, it.state.name, it.updatedAt) }
 
     @Transactional
     fun requestWarning(event: StoreAcceptanceWarningRequestedV1) {
@@ -607,5 +655,8 @@ internal class NotificationDeliveryService(
                 Duration.ofMinutes(5),
                 Duration.ofMinutes(30),
             )
+        val RESOLUTION_OUTCOMES =
+            setOf("FULL_REFUND", "PARTIAL_REFUND", "NO_MONETARY_RESOLUTION", "MANUAL_SETTLEMENT_REVIEW")
+        val RESOLUTION_TERMINAL_STATES = setOf("PARTIALLY_RESOLVED", "RESOLVED", "MANUAL_REVIEW")
     }
 }

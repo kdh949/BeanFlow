@@ -40,9 +40,11 @@ internal class PostAcceptanceResolutionMigrationTest {
                  WHERE table_schema = 'public'
                    AND table_name IN (
                        'support_post_acceptance_resolution',
+                       'support_post_acceptance_resolution_command',
                        'support_post_acceptance_resolution_step',
                        'loyalty_support_resolution_point_restoration',
-                       'promotion_support_resolution_coupon_restoration'
+                       'promotion_support_resolution_coupon_restoration',
+                       'settlement_support_resolution_adjustment'
                    )
                  ORDER BY table_name
                 """.trimIndent(),
@@ -51,7 +53,9 @@ internal class PostAcceptanceResolutionMigrationTest {
         ).containsExactly(
             "loyalty_support_resolution_point_restoration",
             "promotion_support_resolution_coupon_restoration",
+            "settlement_support_resolution_adjustment",
             "support_post_acceptance_resolution",
+            "support_post_acceptance_resolution_command",
             "support_post_acceptance_resolution_step",
         )
         assertThat(
@@ -61,6 +65,7 @@ internal class PostAcceptanceResolutionMigrationTest {
                  WHERE table_schema = 'public'
                    AND table_name IN (
                        'support_post_acceptance_resolution',
+                       'support_post_acceptance_resolution_command',
                        'support_post_acceptance_resolution_step'
                    )
                    AND column_name IN (
@@ -89,8 +94,9 @@ internal class PostAcceptanceResolutionMigrationTest {
                          'chk_support_resolution_step_state',
                          'chk_support_resolution_step_result',
                          'uq_support_resolution_request',
-                         'uq_support_resolution_step_type',
-                         'fk_support_resolution_revision',
+                        'uq_support_resolution_step_type',
+                        'uq_support_resolution_command',
+                        'fk_support_resolution_revision',
                         'fk_support_action_request_terminal_resolution',
                         'chk_support_action_request_terminal_result',
                         'chk_payment_refund_command_shape',

@@ -166,6 +166,41 @@ class PostAcceptanceResolutionCaseTest {
         assertEquals(PostAcceptanceResolutionState.RECONCILING, resolution.state)
     }
 
+    @Test
+    fun `execution start makes a no monetary plan terminal so notification can proceed`() {
+        val resolution =
+            resolution(
+                plan =
+                    plan(
+                        outcome = PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION,
+                        cashRefundKrw = 0,
+                    ),
+            )
+
+        resolution.start(NOW.plusSeconds(1))
+
+        assertEquals(PostAcceptanceResolutionState.RESOLVED, resolution.state)
+        assertEquals(PostAcceptanceResolutionStepState.PENDING, resolution.step(PostAcceptanceResolutionStepType.CUSTOMER_NOTIFICATION).state)
+    }
+
+    @Test
+    fun `operator can explicitly move a payment manual review into reconciliation`() {
+        val resolution = resolution()
+        manualReview(resolution, PostAcceptanceResolutionStepType.PAYMENT_REFUND, "PROVIDER_REVIEW", 1)
+
+        resolution.scheduleManualReconciliation(PostAcceptanceResolutionStepType.PAYMENT_REFUND, NOW.plusSeconds(3))
+        val claim =
+            resolution.claim(
+                PostAcceptanceResolutionStepType.PAYMENT_REFUND,
+                LOOKUP_TOKEN,
+                NOW.plusSeconds(3),
+                Duration.ofMinutes(1),
+            )
+
+        assertTrue(claim.reconciliation)
+        assertEquals(PostAcceptanceResolutionState.RECONCILING, resolution.state)
+    }
+
     private fun succeed(
         resolution: PostAcceptanceResolutionCase,
         type: PostAcceptanceResolutionStepType,

@@ -248,15 +248,16 @@ internal class PostAcceptanceResolutionBenefitOwnerIntegrationTest
                     INSERT INTO support_post_acceptance_resolution (
                         id, support_case_id, request_id, revision_id, revision_number, action,
                         action_payload_digest, order_id, trigger_order_state, trigger_order_version,
-                        requester_actor_id, executor_actor_id, outcome, responsibility, cash_refund_krw,
+                        requester_actor_id, command_actor_id, executor_actor_id, outcome, responsibility, cash_refund_krw,
                         restore_points, restore_coupon, settlement_adjustment_krw, evidence_digest,
                         idempotency_key, payload_hash, state, created_at, updated_at,
                         retention_expires_at, version
                     ) VALUES (?, ?, ?, ?, 1, 'POST_ACCEPTANCE_RESOLUTION', ?, ?, 'PREPARING', 4,
-                              ?, ?, 'FULL_REFUND', 'PLATFORM', 1, true, true, NULL, ?,
+                              ?, ?, ?, 'FULL_REFUND', 'PLATFORM', 1, true, true, NULL, ?,
                               ?, ?, 'PLANNED', ?, ?, ?, 0)
                     """.trimIndent(),
                     resolutionId,
+                    UUID.randomUUID(),
                     UUID.randomUUID(),
                     UUID.randomUUID(),
                     UUID.randomUUID(),

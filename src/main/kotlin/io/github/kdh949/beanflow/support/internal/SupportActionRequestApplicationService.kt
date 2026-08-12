@@ -121,6 +121,7 @@ internal data class SupportActionRequestResource(
     val requestVersion: Long,
     val approvalSteps: List<SupportApprovalStepResource>,
     val terminalExecutionId: UUID?,
+    val terminalResolutionId: UUID?,
 )
 
 internal sealed interface SupportActionCommandOutcome {
@@ -780,6 +781,7 @@ internal class SupportActionRequestTransactionService(
         entity.version,
         approvalSteps.map { SupportApprovalStepResource(it.stepType, it.state, it.decidedByActorId, it.decidedAt) },
         entity.terminalExecutionId,
+        entity.terminalResolutionId,
     )
 
     private fun replay(

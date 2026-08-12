@@ -244,6 +244,18 @@ internal class PostAcceptanceResolutionStep private constructor(
         version += 1
     }
 
+    fun scheduleManualReconciliation(now: Instant) {
+        check(state == PostAcceptanceResolutionStepState.MANUAL_REVIEW) {
+            "Only a manual-review Resolution step can be reconciled"
+        }
+        state = PostAcceptanceResolutionStepState.UNKNOWN
+        failureCode = "OPERATOR_RECONCILIATION_SCHEDULED"
+        nextAttemptAt = now
+        clearClaim()
+        updatedAt = now
+        version += 1
+    }
+
     private fun requireClaim(token: UUID) {
         check(
             (state == PostAcceptanceResolutionStepState.PROCESSING ||
@@ -363,6 +375,12 @@ internal class PostAcceptanceResolutionCase private constructor(
 
     fun step(type: PostAcceptanceResolutionStepType): PostAcceptanceResolutionStep = requireNotNull(stepsByType[type])
 
+    fun start(now: Instant) {
+        check(state == PostAcceptanceResolutionState.PLANNED) { "Only a planned Resolution can start" }
+        recalculate()
+        changed(now)
+    }
+
     fun claim(
         type: PostAcceptanceResolutionStepType,
         token: UUID,
@@ -415,6 +433,15 @@ internal class PostAcceptanceResolutionCase private constructor(
         now: Instant,
     ) {
         step(type).recoverExpiredClaim(now)
+        recalculate()
+        changed(now)
+    }
+
+    fun scheduleManualReconciliation(
+        type: PostAcceptanceResolutionStepType,
+        now: Instant,
+    ) {
+        step(type).scheduleManualReconciliation(now)
         recalculate()
         changed(now)
     }

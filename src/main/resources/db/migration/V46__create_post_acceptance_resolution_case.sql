@@ -27,6 +27,7 @@ CREATE TABLE support_post_acceptance_resolution (
     trigger_order_state varchar(32) NOT NULL,
     trigger_order_version bigint NOT NULL CHECK (trigger_order_version >= 0),
     requester_actor_id uuid NOT NULL,
+    command_actor_id uuid NOT NULL,
     executor_actor_id uuid NOT NULL,
     outcome varchar(40) NOT NULL,
     responsibility varchar(20) NOT NULL,
@@ -54,7 +55,7 @@ CREATE TABLE support_post_acceptance_resolution (
         REFERENCES support_action_revision (request_id, id, revision_number),
     CONSTRAINT uq_support_resolution_request UNIQUE (request_id),
     CONSTRAINT uq_support_resolution_request_id UNIQUE (request_id, id),
-    CONSTRAINT uq_support_resolution_command UNIQUE (requester_actor_id, idempotency_key),
+    CONSTRAINT uq_support_resolution_command UNIQUE (command_actor_id, idempotency_key),
     CONSTRAINT chk_support_resolution_actor CHECK (requester_actor_id <> executor_actor_id),
     CONSTRAINT chk_support_resolution_trigger_state CHECK (
         trigger_order_state IN ('PREPARING', 'READY', 'COMPLETED')
@@ -94,6 +95,23 @@ CREATE INDEX idx_support_resolution_case
 
 CREATE INDEX idx_support_resolution_order
     ON support_post_acceptance_resolution (order_id, updated_at DESC, id DESC);
+
+CREATE TABLE support_post_acceptance_resolution_command (
+    id uuid PRIMARY KEY,
+    actor_id uuid NOT NULL,
+    operation varchar(16) NOT NULL CHECK (operation IN ('EXECUTE', 'RECONCILE')),
+    idempotency_key varchar(128) NOT NULL CHECK (
+        idempotency_key = btrim(idempotency_key)
+        AND length(idempotency_key) BETWEEN 8 AND 128
+        AND idempotency_key !~ '[[:cntrl:]]'
+    ),
+    payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+    resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution(id),
+    created_at timestamptz NOT NULL,
+    retention_expires_at timestamptz NOT NULL,
+    UNIQUE (actor_id, operation, idempotency_key),
+    CHECK (retention_expires_at = created_at + INTERVAL '90 days')
+);
 
 ALTER TABLE payment_refund
     ADD CONSTRAINT fk_payment_refund_support_resolution
@@ -345,6 +363,21 @@ CREATE TABLE settlement_support_resolution_adjustment (
     effective_at timestamptz NOT NULL
 );
 
+ALTER TABLE notification_delivery
+    DROP CONSTRAINT chk_notification_delivery_template,
+    ADD CONSTRAINT chk_notification_delivery_template CHECK (
+        template IN (
+            'STORE_ACCEPTANCE_WARNING',
+            'ORDER_REJECTED',
+            'ORDER_READY',
+            'ORDER_CANCELLATION_ACCEPTED',
+            'CUSTOMER_CANCELLATION_REFUND_SUCCEEDED',
+            'CUSTOMER_CANCELLATION_REFUND_DELAYED',
+            'SUPPORT_PICKUP_RESCHEDULED',
+            'SUPPORT_POST_ACCEPTANCE_RESOLUTION'
+        )
+    );
+
 CREATE TABLE support_post_acceptance_resolution_step (
     id uuid PRIMARY KEY,
     resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution (id),
@@ -450,3 +483,9 @@ ALTER TABLE support_action_request
             AND terminal_execution_id IS NULL
             AND terminal_resolution_id IS NULL)
     );
+
+INSERT INTO operations_audit_action_category (action, audit_category) VALUES
+    ('SUPPORT_RESOLUTION_PLANNED', 'ORDER_AND_FULFILLMENT'),
+    ('SUPPORT_RESOLUTION_EXECUTION_STARTED', 'ORDER_AND_FULFILLMENT'),
+    ('SUPPORT_RESOLUTION_STEP_RECORDED', 'ORDER_AND_FULFILLMENT'),
+    ('SUPPORT_RESOLUTION_RECONCILIATION_SCHEDULED', 'ORDER_AND_FULFILLMENT');

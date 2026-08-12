@@ -49,6 +49,8 @@ internal class PostAcceptanceResolutionEntity(
     val triggerOrderVersion: Long,
     @Column(name = "requester_actor_id", nullable = false)
     val requesterActorId: UUID,
+    @Column(name = "command_actor_id", nullable = false)
+    val commandActorId: UUID,
     @Column(name = "executor_actor_id", nullable = false)
     val executorActorId: UUID,
     @Enumerated(EnumType.STRING)
@@ -193,10 +195,46 @@ internal interface PostAcceptanceResolutionJpaRepository : JpaRepository<PostAcc
 
     fun findBySupportActionRequestId(supportActionRequestId: UUID): PostAcceptanceResolutionEntity?
 
-    fun findByRequesterActorIdAndIdempotencyKey(
-        requesterActorId: UUID,
+    fun findByCommandActorIdAndIdempotencyKey(
+        commandActorId: UUID,
         idempotencyKey: String,
     ): PostAcceptanceResolutionEntity?
+}
+
+internal enum class PostAcceptanceResolutionCommandOperation {
+    EXECUTE,
+    RECONCILE,
+}
+
+@Entity
+@Table(name = "support_post_acceptance_resolution_command")
+internal class PostAcceptanceResolutionCommandEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "actor_id", nullable = false)
+    val actorId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    val operation: PostAcceptanceResolutionCommandOperation,
+    @Column(name = "idempotency_key", nullable = false, length = 128)
+    val idempotencyKey: String,
+    @Column(name = "payload_hash", nullable = false, length = 64)
+    val payloadHash: String,
+    @Column(name = "resolution_id", nullable = false)
+    val resolutionId: UUID,
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Instant,
+    @Column(name = "retention_expires_at", nullable = false)
+    val retentionExpiresAt: Instant,
+)
+
+internal interface PostAcceptanceResolutionCommandJpaRepository :
+    JpaRepository<PostAcceptanceResolutionCommandEntity, UUID> {
+    fun findByActorIdAndOperationAndIdempotencyKey(
+        actorId: UUID,
+        operation: PostAcceptanceResolutionCommandOperation,
+        idempotencyKey: String,
+    ): PostAcceptanceResolutionCommandEntity?
 }
 
 internal interface PostAcceptanceResolutionStepJpaRepository : JpaRepository<PostAcceptanceResolutionStepEntity, UUID> {
