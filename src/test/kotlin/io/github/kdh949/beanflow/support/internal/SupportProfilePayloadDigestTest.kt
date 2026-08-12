@@ -24,7 +24,15 @@ internal class SupportProfilePayloadDigestTest {
         val payload = SupportProfileChangePayload.StoreSettlementAccount(raw)
         val command =
             SubmitSupportProfileChangeCommand(
-                SUBJECT, CASE, SUBJECT, 1, SESSION, "reason", "e".repeat(64), "profile-key-001", payload,
+                SUBJECT,
+                CASE,
+                SUBJECT,
+                1,
+                SESSION,
+                "reason",
+                "e".repeat(64),
+                "profile-key-001",
+                payload,
             )
 
         assertThat(payload.toString()).doesNotContain(raw)

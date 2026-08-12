@@ -18,26 +18,39 @@ internal sealed interface SupportProfileChangePayload {
 
     fun canonicalFields(): List<String?>
 
-    data class CustomerDisplayName(val displayName: String) : SupportProfileChangePayload {
+    data class CustomerDisplayName(
+        val displayName: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.CUSTOMER_DISPLAY_NAME
+
         override fun canonicalFields() = listOf(displayName)
+
         override fun toString() = "CustomerDisplayName(<redacted>)"
     }
 
-    data class CustomerLegalName(val legalName: String) : SupportProfileChangePayload {
+    data class CustomerLegalName(
+        val legalName: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.CUSTOMER_LEGAL_NAME_TYPO
+
         override fun canonicalFields() = listOf(legalName)
+
         override fun toString() = "CustomerLegalName(<redacted>)"
     }
 
-    data class CustomerPrimaryPhone(val primaryPhone: String) : SupportProfileChangePayload {
+    data class CustomerPrimaryPhone(
+        val primaryPhone: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE
+
         override fun canonicalFields() = listOf(primaryPhone)
+
         override fun toString() = "CustomerPrimaryPhone(<redacted>)"
     }
 
     data object CustomerCredentialReset : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET
+
         override fun canonicalFields() = emptyList<String>()
     }
 
@@ -48,67 +61,109 @@ internal sealed interface SupportProfileChangePayload {
         val pickupInstructions: String?,
     ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.STORE_PUBLIC_PROFILE
+
         override fun canonicalFields() = listOf(displayName, publicPhone, description, pickupInstructions)
+
         override fun toString() = "StorePublicProfile(<redacted>)"
     }
 
-    data class StoreOperationsContact(val phone: String?, val email: String?) : SupportProfileChangePayload {
+    data class StoreOperationsContact(
+        val phone: String?,
+        val email: String?,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.STORE_OPERATIONS_CONTACT
+
         override fun canonicalFields() = listOf(phone, email)
+
         override fun toString() = "StoreOperationsContact(<redacted>)"
     }
 
-    data class StoreRepresentative(val representativeName: String) : SupportProfileChangePayload {
+    data class StoreRepresentative(
+        val representativeName: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.STORE_REPRESENTATIVE
+
         override fun canonicalFields() = listOf(representativeName)
+
         override fun toString() = "StoreRepresentative(<redacted>)"
     }
 
-    data class StoreSettlementAccount(val accountReference: String) : SupportProfileChangePayload {
+    data class StoreSettlementAccount(
+        val accountReference: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.STORE_SETTLEMENT_ACCOUNT
+
         override fun canonicalFields() = listOf(accountReference)
+
         override fun toString() = "StoreSettlementAccount(<redacted>)"
     }
 
     data object StoreAccessReregistration : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.STORE_ACCESS_REREGISTRATION
+
         override fun canonicalFields() = emptyList<String>()
     }
 
-    data class CourierDisplayName(val displayName: String) : SupportProfileChangePayload {
+    data class CourierDisplayName(
+        val displayName: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.COURIER_DISPLAY_NAME
+
         override fun canonicalFields() = listOf(displayName)
+
         override fun toString() = "CourierDisplayName(<redacted>)"
     }
 
-    data class CourierRelayContact(val phone: String?, val email: String?) : SupportProfileChangePayload {
+    data class CourierRelayContact(
+        val phone: String?,
+        val email: String?,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.COURIER_RELAY_CONTACT
+
         override fun canonicalFields() = listOf(phone, email)
+
         override fun toString() = "CourierRelayContact(<redacted>)"
     }
 
-    data class CourierProviderIdentity(val providerReference: String) : SupportProfileChangePayload {
+    data class CourierProviderIdentity(
+        val providerReference: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.COURIER_PROVIDER_IDENTITY
+
         override fun canonicalFields() = listOf(providerReference)
+
         override fun toString() = "CourierProviderIdentity(<redacted>)"
     }
 
-    data class CourierPayoutReference(val payoutReference: String) : SupportProfileChangePayload {
+    data class CourierPayoutReference(
+        val payoutReference: String,
+    ) : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.COURIER_PAYOUT_REFERENCE
+
         override fun canonicalFields() = listOf(payoutReference)
+
         override fun toString() = "CourierPayoutReference(<redacted>)"
     }
 
     data object CourierProviderReregistration : SupportProfileChangePayload {
         override val purpose = ProfileChangePurpose.COURIER_PROVIDER_REREGISTRATION
+
         override fun canonicalFields() = emptyList<String>()
     }
 }
 
 internal sealed interface PreparedOwnerProfileChange {
-    data class Customer(val value: PreparedCustomerProfileChange) : PreparedOwnerProfileChange
-    data class Store(val value: PreparedStoreProfileChange) : PreparedOwnerProfileChange
-    data class Courier(val value: PreparedCourierProfileChange) : PreparedOwnerProfileChange
+    data class Customer(
+        val value: PreparedCustomerProfileChange,
+    ) : PreparedOwnerProfileChange
+
+    data class Store(
+        val value: PreparedStoreProfileChange,
+    ) : PreparedOwnerProfileChange
+
+    data class Courier(
+        val value: PreparedCourierProfileChange,
+    ) : PreparedOwnerProfileChange
 }
 
 internal data class SubmitSupportProfileChangeCommand(

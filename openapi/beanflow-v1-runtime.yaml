@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-12
+  x-beanflow-contract-date: 2026-08-13
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -590,6 +590,70 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}~1executions"
   /support/compensations/{compensationRequestId}/notification-retries:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}~1notification-retries"
+  /support/cases/{caseId}/profile-changes/customer-display-name-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1customer-display-name-corrections"
+  /support/cases/{caseId}/profile-changes/customer-legal-name-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1customer-legal-name-corrections"
+  /support/cases/{caseId}/profile-changes/customer-primary-phone-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1customer-primary-phone-requests"
+  /support/cases/{caseId}/profile-changes/customer-credential-reset-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1customer-credential-reset-requests"
+  /support/cases/{caseId}/profile-changes/store-public-profile-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1store-public-profile-corrections"
+  /support/cases/{caseId}/profile-changes/store-operations-contact-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1store-operations-contact-corrections"
+  /support/cases/{caseId}/profile-changes/store-representative-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1store-representative-requests"
+  /support/cases/{caseId}/profile-changes/store-settlement-account-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1store-settlement-account-requests"
+  /support/cases/{caseId}/profile-changes/store-access-reregistration-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1store-access-reregistration-requests"
+  /support/cases/{caseId}/profile-changes/courier-display-name-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1courier-display-name-corrections"
+  /support/cases/{caseId}/profile-changes/courier-relay-contact-corrections:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1courier-relay-contact-corrections"
+  /support/cases/{caseId}/profile-changes/courier-provider-identity-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1courier-provider-identity-requests"
+  /support/cases/{caseId}/profile-changes/courier-payout-reference-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1courier-payout-reference-requests"
+  /support/cases/{caseId}/profile-changes/courier-provider-reregistration-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-changes~1courier-provider-reregistration-requests"
+  /support/profile-changes/{profileChangeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}"
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1customer-primary-phone-revisions"
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1customer-credential-reset-revisions"
+  /support/profile-changes/{profileChangeId}/store-representative-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-representative-revisions"
+  /support/profile-changes/{profileChangeId}/store-settlement-account-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-settlement-account-revisions"
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-access-reregistration-revisions"
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-provider-identity-revisions"
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-payout-reference-revisions"
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-revisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-provider-reregistration-revisions"
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1customer-primary-phone-executions"
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1customer-credential-reset-executions"
+  /support/profile-changes/{profileChangeId}/store-representative-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-representative-executions"
+  /support/profile-changes/{profileChangeId}/store-settlement-account-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-settlement-account-executions"
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1store-access-reregistration-executions"
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-provider-identity-executions"
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-payout-reference-executions"
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1courier-provider-reregistration-executions"
+  /support/profile-changes/{profileChangeId}/notification-retries:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1notification-retries"
   /operations/investigations/{investigationId}/decisions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations~1{investigationId}~1decisions"
   /support/cases/{caseId}/verification-sessions:

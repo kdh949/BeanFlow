@@ -23,14 +23,30 @@ internal class SupportProfileChangeTest {
 
         assertThrows<IllegalArgumentException> {
             SupportProfileChange.pending(
-                CHANGE_ID, CASE_ID, SUBJECT_ID, ProfileChangePurpose.CUSTOMER_DISPLAY_NAME, ACTOR_ID,
-                SESSION_ID, 2, DIGEST, ACTION_REQUEST_ID, NOW,
+                CHANGE_ID,
+                CASE_ID,
+                SUBJECT_ID,
+                ProfileChangePurpose.CUSTOMER_DISPLAY_NAME,
+                ACTOR_ID,
+                SESSION_ID,
+                2,
+                DIGEST,
+                ACTION_REQUEST_ID,
+                NOW,
             )
         }
         assertThrows<IllegalArgumentException> {
             SupportProfileChange.direct(
-                CHANGE_ID, CASE_ID, SUBJECT_ID, ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET, ACTOR_ID,
-                SESSION_ID, 2, DIGEST, result(), NOW,
+                CHANGE_ID,
+                CASE_ID,
+                SUBJECT_ID,
+                ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET,
+                ACTOR_ID,
+                SESSION_ID,
+                2,
+                DIGEST,
+                result(),
+                NOW,
             )
         }
     }
@@ -68,12 +84,30 @@ internal class SupportProfileChangeTest {
 
     private fun direct(purpose: ProfileChangePurpose) =
         SupportProfileChange.direct(
-            CHANGE_ID, CASE_ID, SUBJECT_ID, purpose, ACTOR_ID, SESSION_ID, 2, DIGEST, result(), NOW,
+            CHANGE_ID,
+            CASE_ID,
+            SUBJECT_ID,
+            purpose,
+            ACTOR_ID,
+            SESSION_ID,
+            2,
+            DIGEST,
+            result(),
+            NOW,
         )
 
     private fun pending(purpose: ProfileChangePurpose) =
         SupportProfileChange.pending(
-            CHANGE_ID, CASE_ID, SUBJECT_ID, purpose, ACTOR_ID, SESSION_ID, 2, DIGEST, ACTION_REQUEST_ID, NOW,
+            CHANGE_ID,
+            CASE_ID,
+            SUBJECT_ID,
+            purpose,
+            ACTOR_ID,
+            SESSION_ID,
+            2,
+            DIGEST,
+            ACTION_REQUEST_ID,
+            NOW,
         )
 
     private fun result(previousVersion: Long = 2) =

@@ -72,21 +72,61 @@ internal data class ProfileChangeDescriptor(
 
 internal fun ProfileChangePurpose.descriptor(): ProfileChangeDescriptor =
     when (this) {
-        ProfileChangePurpose.CUSTOMER_DISPLAY_NAME -> descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R1)
-        ProfileChangePurpose.CUSTOMER_LEGAL_NAME_TYPO -> descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R2)
-        ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE -> descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R3)
-        ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET -> descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R4)
-        ProfileChangePurpose.STORE_PUBLIC_PROFILE -> descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R1)
-        ProfileChangePurpose.STORE_OPERATIONS_CONTACT -> descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R2)
-        ProfileChangePurpose.STORE_REPRESENTATIVE -> descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R3)
-        ProfileChangePurpose.STORE_SETTLEMENT_ACCOUNT -> descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R3)
-        ProfileChangePurpose.STORE_ACCESS_REREGISTRATION -> descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R4)
-        ProfileChangePurpose.COURIER_DISPLAY_NAME -> descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R1)
-        ProfileChangePurpose.COURIER_RELAY_CONTACT -> descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R2)
-        ProfileChangePurpose.COURIER_PROVIDER_IDENTITY -> descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R3)
-        ProfileChangePurpose.COURIER_PAYOUT_REFERENCE -> descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R3)
-        ProfileChangePurpose.COURIER_PROVIDER_REREGISTRATION ->
+        ProfileChangePurpose.CUSTOMER_DISPLAY_NAME -> {
+            descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R1)
+        }
+
+        ProfileChangePurpose.CUSTOMER_LEGAL_NAME_TYPO -> {
+            descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R2)
+        }
+
+        ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE -> {
+            descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R3)
+        }
+
+        ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET -> {
+            descriptor(ProfileOwnerType.CUSTOMER, ProfileRiskClass.R4)
+        }
+
+        ProfileChangePurpose.STORE_PUBLIC_PROFILE -> {
+            descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R1)
+        }
+
+        ProfileChangePurpose.STORE_OPERATIONS_CONTACT -> {
+            descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R2)
+        }
+
+        ProfileChangePurpose.STORE_REPRESENTATIVE -> {
+            descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R3)
+        }
+
+        ProfileChangePurpose.STORE_SETTLEMENT_ACCOUNT -> {
+            descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R3)
+        }
+
+        ProfileChangePurpose.STORE_ACCESS_REREGISTRATION -> {
+            descriptor(ProfileOwnerType.STORE, ProfileRiskClass.R4)
+        }
+
+        ProfileChangePurpose.COURIER_DISPLAY_NAME -> {
+            descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R1)
+        }
+
+        ProfileChangePurpose.COURIER_RELAY_CONTACT -> {
+            descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R2)
+        }
+
+        ProfileChangePurpose.COURIER_PROVIDER_IDENTITY -> {
+            descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R3)
+        }
+
+        ProfileChangePurpose.COURIER_PAYOUT_REFERENCE -> {
+            descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R3)
+        }
+
+        ProfileChangePurpose.COURIER_PROVIDER_REREGISTRATION -> {
             descriptor(ProfileOwnerType.EXTERNAL_COURIER, ProfileRiskClass.R4)
+        }
     }
 
 private fun descriptor(
@@ -106,9 +146,13 @@ internal object ProfileFieldRiskPolicy {
             -> null
 
             SupportProfileField.CUSTOMER_DISPLAY_NAME -> ProfileChangePurpose.CUSTOMER_DISPLAY_NAME
+
             SupportProfileField.CUSTOMER_LEGAL_NAME -> ProfileChangePurpose.CUSTOMER_LEGAL_NAME_TYPO
+
             SupportProfileField.CUSTOMER_PRIMARY_PHONE -> ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE
+
             SupportProfileField.CUSTOMER_CREDENTIAL_SECRET -> ProfileChangePurpose.CUSTOMER_CREDENTIAL_RESET
+
             SupportProfileField.STORE_PUBLIC_DISPLAY_NAME,
             SupportProfileField.STORE_PUBLIC_PHONE,
             SupportProfileField.STORE_PUBLIC_DESCRIPTION,
@@ -120,15 +164,21 @@ internal object ProfileFieldRiskPolicy {
             -> ProfileChangePurpose.STORE_OPERATIONS_CONTACT
 
             SupportProfileField.STORE_LEGAL_REPRESENTATIVE -> ProfileChangePurpose.STORE_REPRESENTATIVE
+
             SupportProfileField.STORE_SETTLEMENT_ACCOUNT_REFERENCE -> ProfileChangePurpose.STORE_SETTLEMENT_ACCOUNT
+
             SupportProfileField.STORE_ACCESS_SECRET -> ProfileChangePurpose.STORE_ACCESS_REREGISTRATION
+
             SupportProfileField.COURIER_DISPLAY_NAME -> ProfileChangePurpose.COURIER_DISPLAY_NAME
+
             SupportProfileField.COURIER_RELAY_PHONE,
             SupportProfileField.COURIER_RELAY_EMAIL,
             -> ProfileChangePurpose.COURIER_RELAY_CONTACT
 
             SupportProfileField.COURIER_PROVIDER_IDENTITY_REFERENCE -> ProfileChangePurpose.COURIER_PROVIDER_IDENTITY
+
             SupportProfileField.COURIER_PAYOUT_REFERENCE -> ProfileChangePurpose.COURIER_PAYOUT_REFERENCE
+
             SupportProfileField.COURIER_PROVIDER_SECRET -> ProfileChangePurpose.COURIER_PROVIDER_REREGISTRATION
         }
 

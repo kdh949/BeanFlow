@@ -13,8 +13,8 @@ import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigat
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.support.internal.domain.ProfileRiskClass
-import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionRequestState
+import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChangeState
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState
 import org.assertj.core.api.Assertions.assertThat
@@ -23,8 +23,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
@@ -110,15 +110,16 @@ internal class SupportProfileChangeIntegrationTest
 
         @Test
         fun `typed R1 API is no-store masked and replays after owner version advances`() {
-            val request = displayNameApi("profile-display-001", "김지원")
-                .andExpect(status().isCreated)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.riskClass").value("R1"))
-                .andExpect(jsonPath("$.state").value("EXECUTED"))
-                .andExpect(jsonPath("$.notificationState").value("ACCEPTED"))
-                .andExpect(jsonPath("$.maskedAfter").value("김*원"))
-                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("김지원"))))
-                .andReturn()
+            val request =
+                displayNameApi("profile-display-001", "김지원")
+                    .andExpect(status().isCreated)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.riskClass").value("R1"))
+                    .andExpect(jsonPath("$.state").value("EXECUTED"))
+                    .andExpect(jsonPath("$.notificationState").value("ACCEPTED"))
+                    .andExpect(jsonPath("$.maskedAfter").value("김*원"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("김지원"))))
+                    .andReturn()
 
             displayNameApi("profile-display-001", "김지원")
                 .andExpect(status().isCreated)
@@ -294,40 +295,44 @@ internal class SupportProfileChangeIntegrationTest
                 .isOne()
         }
 
-        private fun displayNameApi(key: String, name: String) =
-            mockMvc.perform(
-                post("/api/internal/support/cases/$caseId/profile-changes/customer-display-name-corrections")
-                    .with(jwt().jwt { it.subject(requesterId.toString()) })
-                    .header("Idempotency-Key", key)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(
-                        """
-                        {
-                          "binding": {
-                            "subjectId": "$customerId",
-                            "expectedProfileVersion": 0,
-                            "verificationSessionId": "$sessionId",
-                            "reason": "Customer requested a display-name correction",
-                            "evidenceDigest": "$EVIDENCE_DIGEST"
-                          },
-                          "displayName": "$name"
-                        }
-                        """.trimIndent(),
-                    ),
-            )
+        private fun displayNameApi(
+            key: String,
+            name: String,
+        ) = mockMvc.perform(
+            post("/api/v1/support/cases/$caseId/profile-changes/customer-display-name-corrections")
+                .with(jwt().jwt { it.subject(requesterId.toString()) })
+                .header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "binding": {
+                        "subjectId": "$customerId",
+                        "expectedProfileVersion": 0,
+                        "verificationSessionId": "$sessionId",
+                        "reason": "Customer requested a display-name correction",
+                        "evidenceDigest": "$EVIDENCE_DIGEST"
+                      },
+                      "displayName": "$name"
+                    }
+                    """.trimIndent(),
+                ),
+        )
 
-        private fun displayNameCommand(key: String, name: String) =
-            SubmitSupportProfileChangeCommand(
-                requesterId,
-                caseId,
-                customerId,
-                currentCustomerVersion(),
-                sessionId,
-                "Customer requested a display-name correction",
-                EVIDENCE_DIGEST,
-                key,
-                SupportProfileChangePayload.CustomerDisplayName(name),
-            )
+        private fun displayNameCommand(
+            key: String,
+            name: String,
+        ) = SubmitSupportProfileChangeCommand(
+            requesterId,
+            caseId,
+            customerId,
+            currentCustomerVersion(),
+            sessionId,
+            "Customer requested a display-name correction",
+            EVIDENCE_DIGEST,
+            key,
+            SupportProfileChangePayload.CustomerDisplayName(name),
+        )
 
         private fun primaryPhoneCommand(key: String) =
             SubmitSupportProfileChangeCommand(
@@ -342,18 +347,21 @@ internal class SupportProfileChangeIntegrationTest
                 SupportProfileChangePayload.CustomerPrimaryPhone("010-5555-7777"),
             )
 
-        private fun decideManager(requestId: UUID, actorId: UUID, key: String) =
-            actionRequests.decideSupportManager(
-                DecideSupportManagerApprovalCommand(
-                    actorId,
-                    requestId,
-                    1,
-                    0,
-                    SupportApprovalDecision.APPROVE,
-                    "Exact profile payload and verification binding reviewed",
-                    key,
-                ),
-            )
+        private fun decideManager(
+            requestId: UUID,
+            actorId: UUID,
+            key: String,
+        ) = actionRequests.decideSupportManager(
+            DecideSupportManagerApprovalCommand(
+                actorId,
+                requestId,
+                1,
+                0,
+                SupportApprovalDecision.APPROVE,
+                "Exact profile payload and verification binding reviewed",
+                key,
+            ),
+        )
 
         private fun approveOperations(requestId: UUID): OperationsSupportInvestigationOutcome.Succeeded {
             val investigationId =
@@ -478,7 +486,10 @@ internal class SupportProfileChangeIntegrationTest
             )
         }
 
-        private fun grant(actorId: UUID, permission: String) {
+        private fun grant(
+            actorId: UUID,
+            permission: String,
+        ) {
             jdbcTemplate.update(
                 """
                 INSERT INTO operations_operator_permission_grant (
@@ -504,7 +515,10 @@ internal class SupportProfileChangeIntegrationTest
                 ),
             )
 
-        private fun count(table: String, predicate: String? = null): Int =
+        private fun count(
+            table: String,
+            predicate: String? = null,
+        ): Int =
             requireNotNull(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM $table" + if (predicate == null) "" else " WHERE $predicate",
@@ -558,6 +572,7 @@ internal class ControllableProfileNotificationOperations(
     private val jdbcTemplate: JdbcTemplate,
 ) : ProfileChangeNotificationOperations {
     val commands = CopyOnWriteArrayList<RequestProfileChangeNotificationCommand>()
+
     @Volatile var fail: Boolean = false
 
     fun reset() {

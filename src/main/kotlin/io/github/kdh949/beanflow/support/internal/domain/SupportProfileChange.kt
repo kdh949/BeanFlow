@@ -49,7 +49,10 @@ internal class SupportProfileChange private constructor(
         validate()
     }
 
-    fun markReady(actorId: UUID, occurredAt: Instant) {
+    fun markReady(
+        actorId: UUID,
+        occurredAt: Instant,
+    ) {
         require(actorId == executorActorId) { "Only the assigned actor can prepare execution" }
         check(state == SupportProfileChangeState.AWAITING_APPROVAL) { "Profile change is not awaiting approval" }
         require(occurredAt >= updatedAt) { "Profile change time cannot move backward" }
@@ -163,9 +166,26 @@ internal class SupportProfileChange private constructor(
             now: Instant,
         ): SupportProfileChange =
             SupportProfileChange(
-                id, caseId, subjectId, purpose, actorId, actorId, sessionId, expectedVersion, payloadDigest,
-                actionRequestId, null, null, null, null, SupportProfileChangeState.AWAITING_APPROVAL,
-                SupportProfileNotificationState.NOT_REQUESTED, null, now, now, 0,
+                id,
+                caseId,
+                subjectId,
+                purpose,
+                actorId,
+                actorId,
+                sessionId,
+                expectedVersion,
+                payloadDigest,
+                actionRequestId,
+                null,
+                null,
+                null,
+                null,
+                SupportProfileChangeState.AWAITING_APPROVAL,
+                SupportProfileNotificationState.NOT_REQUESTED,
+                null,
+                now,
+                now,
+                0,
             )
 
         fun direct(
@@ -181,15 +201,30 @@ internal class SupportProfileChange private constructor(
             now: Instant,
         ): SupportProfileChange =
             SupportProfileChange(
-                id, caseId, subjectId, purpose, actorId, actorId, sessionId, expectedVersion, payloadDigest,
-                null, result.ownerChangeId, result.currentVersion, result.maskedBefore, result.maskedAfter,
+                id,
+                caseId,
+                subjectId,
+                purpose,
+                actorId,
+                actorId,
+                sessionId,
+                expectedVersion,
+                payloadDigest,
+                null,
+                result.ownerChangeId,
+                result.currentVersion,
+                result.maskedBefore,
+                result.maskedAfter,
                 SupportProfileChangeState.EXECUTED,
                 if (result.notificationTargets.isEmpty()) {
                     SupportProfileNotificationState.NOT_REQUESTED
                 } else {
                     SupportProfileNotificationState.PENDING
                 },
-                null, now, now, 0,
+                null,
+                now,
+                now,
+                0,
             )
 
         @Suppress("LongParameterList")
@@ -216,9 +251,26 @@ internal class SupportProfileChange private constructor(
             version: Long,
         ): SupportProfileChange =
             SupportProfileChange(
-                id, caseId, subjectId, purpose, requesterActorId, executorActorId, sessionId, expectedVersion,
-                payloadDigest, actionRequestId, ownerChangeId, currentVersion, maskedBefore, maskedAfter, state,
-                notificationState, failureCode, createdAt, updatedAt, version,
+                id,
+                caseId,
+                subjectId,
+                purpose,
+                requesterActorId,
+                executorActorId,
+                sessionId,
+                expectedVersion,
+                payloadDigest,
+                actionRequestId,
+                ownerChangeId,
+                currentVersion,
+                maskedBefore,
+                maskedAfter,
+                state,
+                notificationState,
+                failureCode,
+                createdAt,
+                updatedAt,
+                version,
             )
     }
 }

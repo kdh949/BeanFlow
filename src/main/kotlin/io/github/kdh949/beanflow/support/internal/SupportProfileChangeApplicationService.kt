@@ -96,7 +96,10 @@ internal class SupportProfileChangeApplicationService(
         transactions.preflight(command, ownerVersion)
         val profileChangeId = identifiers.next()
         val resource =
-            if (command.payload.purpose.descriptor().requiresDualApproval) {
+            if (command.payload.purpose
+                    .descriptor()
+                    .requiresDualApproval
+            ) {
                 transactions.requestApproval(profileChangeId, command, payloadDigest, ownerVersion)
             } else {
                 val prepared = prepare(profileChangeId, command.subjectId, command.expectedProfileVersion, command.payload)
@@ -133,7 +136,10 @@ internal class SupportProfileChangeApplicationService(
         return dispatchNotifications(command.profileChangeId)
     }
 
-    fun get(actorId: UUID, profileChangeId: UUID): SupportProfileChangeResource = transactions.get(actorId, profileChangeId)
+    fun get(
+        actorId: UUID,
+        profileChangeId: UUID,
+    ): SupportProfileChangeResource = transactions.get(actorId, profileChangeId)
 
     private fun dispatchNotifications(profileChangeId: UUID): SupportProfileChangeResource {
         val correlationId = correlations.currentOrCreate()
@@ -160,7 +166,10 @@ internal class SupportProfileChangeApplicationService(
         return transactions.getSystem(profileChangeId)
     }
 
-    private fun currentOwnerVersion(purpose: ProfileChangePurpose, subjectId: UUID): Long =
+    private fun currentOwnerVersion(
+        purpose: ProfileChangePurpose,
+        subjectId: UUID,
+    ): Long =
         when (purpose.descriptor().owner) {
             ProfileOwnerType.CUSTOMER -> customers.currentVersion(subjectId)
             ProfileOwnerType.STORE -> stores.currentVersion(subjectId)
@@ -174,69 +183,121 @@ internal class SupportProfileChangeApplicationService(
         payload: SupportProfileChangePayload,
     ): PreparedOwnerProfileChange =
         when (payload) {
-            is SupportProfileChangePayload.CustomerDisplayName ->
+            is SupportProfileChangePayload.CustomerDisplayName -> {
                 PreparedOwnerProfileChange.Customer(
-                    customers.prepareDisplayName(PrepareCustomerDisplayNameCorrection(profileChangeId, subjectId, expectedVersion, payload.displayName)),
+                    customers.prepareDisplayName(
+                        PrepareCustomerDisplayNameCorrection(profileChangeId, subjectId, expectedVersion, payload.displayName),
+                    ),
                 )
-            is SupportProfileChangePayload.CustomerLegalName ->
+            }
+
+            is SupportProfileChangePayload.CustomerLegalName -> {
                 PreparedOwnerProfileChange.Customer(
-                    customers.prepareLegalName(PrepareCustomerLegalNameCorrection(profileChangeId, subjectId, expectedVersion, payload.legalName)),
+                    customers.prepareLegalName(
+                        PrepareCustomerLegalNameCorrection(profileChangeId, subjectId, expectedVersion, payload.legalName),
+                    ),
                 )
-            is SupportProfileChangePayload.CustomerPrimaryPhone ->
+            }
+
+            is SupportProfileChangePayload.CustomerPrimaryPhone -> {
                 PreparedOwnerProfileChange.Customer(
-                    customers.preparePrimaryPhone(PrepareCustomerPrimaryPhoneChange(profileChangeId, subjectId, expectedVersion, payload.primaryPhone)),
+                    customers.preparePrimaryPhone(
+                        PrepareCustomerPrimaryPhoneChange(profileChangeId, subjectId, expectedVersion, payload.primaryPhone),
+                    ),
                 )
-            SupportProfileChangePayload.CustomerCredentialReset ->
+            }
+
+            SupportProfileChangePayload.CustomerCredentialReset -> {
                 PreparedOwnerProfileChange.Customer(
                     customers.prepareCredentialReset(PrepareCustomerCredentialReset(profileChangeId, subjectId, expectedVersion)),
                 )
-            is SupportProfileChangePayload.StorePublicProfile ->
+            }
+
+            is SupportProfileChangePayload.StorePublicProfile -> {
                 PreparedOwnerProfileChange.Store(
                     stores.preparePublicProfile(
                         PrepareStorePublicProfileCorrection(
-                            profileChangeId, subjectId, expectedVersion, payload.displayName, payload.publicPhone,
-                            payload.description, payload.pickupInstructions,
+                            profileChangeId,
+                            subjectId,
+                            expectedVersion,
+                            payload.displayName,
+                            payload.publicPhone,
+                            payload.description,
+                            payload.pickupInstructions,
                         ),
                     ),
                 )
-            is SupportProfileChangePayload.StoreOperationsContact ->
+            }
+
+            is SupportProfileChangePayload.StoreOperationsContact -> {
                 PreparedOwnerProfileChange.Store(
                     stores.prepareOperationsContact(
                         PrepareStoreOperationsContactCorrection(profileChangeId, subjectId, expectedVersion, payload.phone, payload.email),
                     ),
                 )
-            is SupportProfileChangePayload.StoreRepresentative ->
+            }
+
+            is SupportProfileChangePayload.StoreRepresentative -> {
                 PreparedOwnerProfileChange.Store(
-                    stores.prepareRepresentative(PrepareStoreRepresentativeChange(profileChangeId, subjectId, expectedVersion, payload.representativeName)),
+                    stores.prepareRepresentative(
+                        PrepareStoreRepresentativeChange(profileChangeId, subjectId, expectedVersion, payload.representativeName),
+                    ),
                 )
-            is SupportProfileChangePayload.StoreSettlementAccount ->
+            }
+
+            is SupportProfileChangePayload.StoreSettlementAccount -> {
                 PreparedOwnerProfileChange.Store(
-                    stores.prepareSettlementAccount(PrepareStoreSettlementAccountChange(profileChangeId, subjectId, expectedVersion, payload.accountReference)),
+                    stores.prepareSettlementAccount(
+                        PrepareStoreSettlementAccountChange(profileChangeId, subjectId, expectedVersion, payload.accountReference),
+                    ),
                 )
-            SupportProfileChangePayload.StoreAccessReregistration ->
+            }
+
+            SupportProfileChangePayload.StoreAccessReregistration -> {
                 PreparedOwnerProfileChange.Store(
                     stores.prepareAccessReregistration(PrepareStoreAccessReregistration(profileChangeId, subjectId, expectedVersion)),
                 )
-            is SupportProfileChangePayload.CourierDisplayName ->
+            }
+
+            is SupportProfileChangePayload.CourierDisplayName -> {
                 PreparedOwnerProfileChange.Courier(
-                    couriers.prepareDisplayName(PrepareCourierDisplayNameCorrection(profileChangeId, subjectId, expectedVersion, payload.displayName)),
+                    couriers.prepareDisplayName(
+                        PrepareCourierDisplayNameCorrection(profileChangeId, subjectId, expectedVersion, payload.displayName),
+                    ),
                 )
-            is SupportProfileChangePayload.CourierRelayContact ->
+            }
+
+            is SupportProfileChangePayload.CourierRelayContact -> {
                 PreparedOwnerProfileChange.Courier(
-                    couriers.prepareRelayContact(PrepareCourierRelayContactCorrection(profileChangeId, subjectId, expectedVersion, payload.phone, payload.email)),
+                    couriers.prepareRelayContact(
+                        PrepareCourierRelayContactCorrection(profileChangeId, subjectId, expectedVersion, payload.phone, payload.email),
+                    ),
                 )
-            is SupportProfileChangePayload.CourierProviderIdentity ->
+            }
+
+            is SupportProfileChangePayload.CourierProviderIdentity -> {
                 PreparedOwnerProfileChange.Courier(
-                    couriers.prepareProviderIdentity(PrepareCourierProviderIdentityChange(profileChangeId, subjectId, expectedVersion, payload.providerReference)),
+                    couriers.prepareProviderIdentity(
+                        PrepareCourierProviderIdentityChange(profileChangeId, subjectId, expectedVersion, payload.providerReference),
+                    ),
                 )
-            is SupportProfileChangePayload.CourierPayoutReference ->
+            }
+
+            is SupportProfileChangePayload.CourierPayoutReference -> {
                 PreparedOwnerProfileChange.Courier(
-                    couriers.preparePayoutReference(PrepareCourierPayoutReferenceChange(profileChangeId, subjectId, expectedVersion, payload.payoutReference)),
+                    couriers.preparePayoutReference(
+                        PrepareCourierPayoutReferenceChange(profileChangeId, subjectId, expectedVersion, payload.payoutReference),
+                    ),
                 )
-            SupportProfileChangePayload.CourierProviderReregistration ->
+            }
+
+            SupportProfileChangePayload.CourierProviderReregistration -> {
                 PreparedOwnerProfileChange.Courier(
-                    couriers.prepareProviderReregistration(PrepareCourierProviderReregistration(profileChangeId, subjectId, expectedVersion)),
+                    couriers.prepareProviderReregistration(
+                        PrepareCourierProviderReregistration(profileChangeId, subjectId, expectedVersion),
+                    ),
                 )
+            }
         }
 
     private fun normalizedFailure(failure: RuntimeException): String =
@@ -281,14 +342,22 @@ internal class SupportProfileChangeTransactionService(
     @Transactional(readOnly = true)
     fun replayRevision(command: ReviseSupportProfileChangeCommand): SupportProfileChangeResource? {
         val operation = "REVISE_${command.payload.purpose.name}"
-        val existing = idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
-            ?: return null
+        val existing =
+            idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
+                ?: return null
         val entity = changes.findById(existing.profileChangeId).orElse(null) ?: dependency()
         val digest = SupportProfilePayloadDigest.digest(entity.subjectId, command.expectedProfileVersion, command.payload)
         val hash =
             SupportProfilePayloadDigest.idempotency(
-                operation, command.actorId, null, command.profileChangeId, command.verificationSessionId,
-                digest, command.expectedActionRequestVersion, command.reason, command.evidenceDigest,
+                operation,
+                command.actorId,
+                null,
+                command.profileChangeId,
+                command.verificationSessionId,
+                digest,
+                command.expectedActionRequestVersion,
+                command.reason,
+                command.evidenceDigest,
             )
         return replay(command.actorId, operation, command.idempotencyKey, hash)?.let(::resource)
     }
@@ -296,20 +365,31 @@ internal class SupportProfileChangeTransactionService(
     @Transactional(readOnly = true)
     fun replayExecution(command: ExecuteSupportProfileChangeCommand): SupportProfileChangeResource? {
         val operation = "EXECUTE_${command.payload.purpose.name}"
-        val existing = idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
-            ?: return null
+        val existing =
+            idempotencies.findByActorIdAndOperationAndIdempotencyKey(command.actorId, operation, command.idempotencyKey)
+                ?: return null
         val entity = changes.findById(existing.profileChangeId).orElse(null) ?: dependency()
         val digest = SupportProfilePayloadDigest.digest(entity.subjectId, command.expectedProfileVersion, command.payload)
         val hash =
             SupportProfilePayloadDigest.idempotency(
-                operation, command.actorId, null, command.profileChangeId, null, digest,
-                command.expectedActionRequestVersion, null, null,
+                operation,
+                command.actorId,
+                null,
+                command.profileChangeId,
+                null,
+                digest,
+                command.expectedActionRequestVersion,
+                null,
+                null,
             )
         return replay(command.actorId, operation, command.idempotencyKey, hash)?.let(::resource)
     }
 
     @Transactional
-    fun preflight(command: SubmitSupportProfileChangeCommand, ownerVersion: Long): ProfileChangePreflight {
+    fun preflight(
+        command: SubmitSupportProfileChangeCommand,
+        ownerVersion: Long,
+    ): ProfileChangePreflight {
         validateSubmit(command)
         validateScope(
             command.actorId,
@@ -337,16 +417,34 @@ internal class SupportProfileChangeTransactionService(
         val payloadHash = submitIdempotencyHash(operation, command, payloadDigest)
         replay(command.actorId, operation, command.idempotencyKey, payloadHash)?.let { return resource(it) }
         validateScope(
-            command.actorId, command.caseId, command.subjectId, command.payload.purpose,
-            command.verificationSessionId, ownerVersion, command.expectedProfileVersion,
+            command.actorId,
+            command.caseId,
+            command.subjectId,
+            command.payload.purpose,
+            command.verificationSessionId,
+            ownerVersion,
+            command.expectedProfileVersion,
         )
-        if (command.payload.purpose.descriptor().requiresDualApproval) invalid("Approved profile change cannot use direct execution")
+        if (command.payload.purpose
+                .descriptor()
+                .requiresDualApproval
+        ) {
+            invalid("Approved profile change cannot use direct execution")
+        }
         val now = clock.instant()
         val result = applyOwner(prepared)
         val aggregate =
             SupportProfileChange.direct(
-                profileChangeId, command.caseId, command.subjectId, command.payload.purpose, command.actorId,
-                command.verificationSessionId, command.expectedProfileVersion, payloadDigest, result, now,
+                profileChangeId,
+                command.caseId,
+                command.subjectId,
+                command.payload.purpose,
+                command.actorId,
+                command.verificationSessionId,
+                command.expectedProfileVersion,
+                payloadDigest,
+                result,
+                now,
             )
         val entity = aggregate.toEntity()
         changes.saveAndFlush(entity)
@@ -369,10 +467,20 @@ internal class SupportProfileChangeTransactionService(
         val payloadHash = submitIdempotencyHash(operation, command, payloadDigest)
         replay(command.actorId, operation, command.idempotencyKey, payloadHash)?.let { return resource(it) }
         validateScope(
-            command.actorId, command.caseId, command.subjectId, command.payload.purpose,
-            command.verificationSessionId, ownerVersion, command.expectedProfileVersion,
+            command.actorId,
+            command.caseId,
+            command.subjectId,
+            command.payload.purpose,
+            command.verificationSessionId,
+            ownerVersion,
+            command.expectedProfileVersion,
         )
-        if (!command.payload.purpose.descriptor().requiresDualApproval) invalid("Direct profile change cannot request approval")
+        if (!command.payload.purpose
+                .descriptor()
+                .requiresDualApproval
+        ) {
+            invalid("Direct profile change cannot request approval")
+        }
         val now = clock.instant()
         val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
         val actionRequestId = identifiers.next()
@@ -394,8 +502,16 @@ internal class SupportProfileChangeTransactionService(
         )
         val aggregate =
             SupportProfileChange.pending(
-                profileChangeId, command.caseId, command.subjectId, command.payload.purpose, command.actorId,
-                command.verificationSessionId, command.expectedProfileVersion, payloadDigest, actionRequestId, now,
+                profileChangeId,
+                command.caseId,
+                command.subjectId,
+                command.payload.purpose,
+                command.actorId,
+                command.verificationSessionId,
+                command.expectedProfileVersion,
+                payloadDigest,
+                actionRequestId,
+                now,
             )
         val entity = aggregate.toEntity()
         changes.saveAndFlush(entity)
@@ -411,7 +527,9 @@ internal class SupportProfileChangeTransactionService(
         val entity = changes.findById(command.profileChangeId).orElse(null) ?: notFound("ProfileChange")
         if (entity.requesterActorId != command.actorId || entity.version != command.expectedProfileChangeVersion ||
             entity.actionRequestId == null || entity.state == SupportProfileChangeState.EXECUTED
-        ) stale()
+        ) {
+            stale()
+        }
         return resource(entity)
     }
 
@@ -425,17 +543,31 @@ internal class SupportProfileChangeTransactionService(
         commandLock.lock(null, command.actorId, operation, command.idempotencyKey)
         val hash =
             SupportProfilePayloadDigest.idempotency(
-                operation, command.actorId, null, command.profileChangeId, command.verificationSessionId,
-                payloadDigest, command.expectedActionRequestVersion, command.reason, command.evidenceDigest,
+                operation,
+                command.actorId,
+                null,
+                command.profileChangeId,
+                command.verificationSessionId,
+                payloadDigest,
+                command.expectedActionRequestVersion,
+                command.reason,
+                command.evidenceDigest,
             )
         replay(command.actorId, operation, command.idempotencyKey, hash)?.let { return resource(it) }
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
         if (entity.version != command.expectedProfileChangeVersion || entity.purpose != command.payload.purpose ||
             entity.requesterActorId != command.actorId || entity.actionRequestId == null
-        ) stale()
+        ) {
+            stale()
+        }
         validateScope(
-            command.actorId, entity.supportCaseId, entity.subjectId, entity.purpose,
-            command.verificationSessionId, ownerVersion, command.expectedProfileVersion,
+            command.actorId,
+            entity.supportCaseId,
+            entity.subjectId,
+            entity.purpose,
+            command.verificationSessionId,
+            ownerVersion,
+            command.expectedProfileVersion,
         )
         val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
         actionTransactions.reviseProfileChangeApproval(
@@ -454,7 +586,13 @@ internal class SupportProfileChangeTransactionService(
             ),
         )
         val aggregate = entity.toAggregate()
-        aggregate.reviseBinding(command.actorId, command.verificationSessionId, command.expectedProfileVersion, payloadDigest, clock.instant())
+        aggregate.reviseBinding(
+            command.actorId,
+            command.verificationSessionId,
+            command.expectedProfileVersion,
+            payloadDigest,
+            clock.instant(),
+        )
         entity.apply(aggregate)
         changes.saveAndFlush(entity)
         appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_REQUESTED", "REVISION_CREATED", clock.instant())
@@ -472,11 +610,15 @@ internal class SupportProfileChangeTransactionService(
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
         if (entity.version != command.expectedProfileChangeVersion || entity.actionRequestId == null ||
             entity.state == SupportProfileChangeState.EXECUTED
-        ) stale()
+        ) {
+            stale()
+        }
         val request = actionRequests.findLockedById(requireNotNull(entity.actionRequestId)) ?: notFound("SupportActionRequest")
         if (request.executorActorId != command.actorId || request.currentRevisionNumber != command.revisionNumber ||
             request.version != command.expectedActionRequestVersion || request.state != SupportActionRequestState.READY_FOR_EXECUTION
-        ) stale()
+        ) {
+            stale()
+        }
         return ProfileChangeExecutionBinding(resource(entity), request.id)
     }
 
@@ -491,14 +633,23 @@ internal class SupportProfileChangeTransactionService(
         commandLock.lock(null, command.actorId, operation, command.idempotencyKey)
         val hash =
             SupportProfilePayloadDigest.idempotency(
-                operation, command.actorId, null, command.profileChangeId, null, payloadDigest,
-                command.expectedActionRequestVersion, null, null,
+                operation,
+                command.actorId,
+                null,
+                command.profileChangeId,
+                null,
+                payloadDigest,
+                command.expectedActionRequestVersion,
+                null,
+                null,
             )
         replay(command.actorId, operation, command.idempotencyKey, hash)?.let { return resource(it) }
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
         if (entity.version != command.expectedProfileChangeVersion || entity.payloadDigest != payloadDigest ||
             entity.expectedProfileVersion != ownerVersion || entity.actionRequestId == null
-        ) stale()
+        ) {
+            stale()
+        }
         validateExecutionScope(entity, command.actorId, ownerVersion)
         val result = applyOwner(prepared)
         val now = clock.instant()
@@ -533,15 +684,24 @@ internal class SupportProfileChangeTransactionService(
         commandLock.lock(null, command.actorId, operation, command.idempotencyKey)
         val hash =
             SupportProfilePayloadDigest.idempotency(
-                operation, command.actorId, null, command.profileChangeId, null, null,
-                command.expectedProfileChangeVersion, null, null,
+                operation,
+                command.actorId,
+                null,
+                command.profileChangeId,
+                null,
+                null,
+                command.expectedProfileChangeVersion,
+                null,
+                null,
             )
         replay(command.actorId, operation, command.idempotencyKey, hash)?.let { return }
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
         if (entity.version != command.expectedProfileChangeVersion ||
             entity.notificationState != SupportProfileNotificationState.RETRY_SCHEDULED
-        ) stale()
+        ) {
+            stale()
+        }
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         if (supportCase.currentAssigneeId != command.actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
         val now = clock.instant()
@@ -559,7 +719,10 @@ internal class SupportProfileChangeTransactionService(
     }
 
     @Transactional
-    fun get(actorId: UUID, profileChangeId: UUID): SupportProfileChangeResource {
+    fun get(
+        actorId: UUID,
+        profileChangeId: UUID,
+    ): SupportProfileChangeResource {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val entity = changes.findById(profileChangeId).orElse(null) ?: notFound("ProfileChange")
         val supportCase = cases.findById(entity.supportCaseId).orElse(null) ?: notFound("SupportCase")
@@ -578,19 +741,33 @@ internal class SupportProfileChangeTransactionService(
     @Transactional(readOnly = true)
     fun pendingNotifications(profileChangeId: UUID): List<ProfileNotificationDispatch> {
         val entity = changes.findById(profileChangeId).orElse(null) ?: notFound("ProfileChange")
-        val ownerType = entity.purpose.descriptor().owner.notificationOwnerType()
-        return notificationLines.findByProfileChangeIdOrderById(profileChangeId)
+        val ownerType =
+            entity.purpose
+                .descriptor()
+                .owner
+                .notificationOwnerType()
+        return notificationLines
+            .findByProfileChangeIdOrderById(profileChangeId)
             .filter { it.state == SupportProfileNotificationState.PENDING || it.state == SupportProfileNotificationState.RETRY_SCHEDULED }
             .map {
                 ProfileNotificationDispatch(
-                    it.id, entity.id, ownerType, it.ownerTargetId, it.targetKind, it.channelType,
-                    entity.purpose.name, entity.updatedAt,
+                    it.id,
+                    entity.id,
+                    ownerType,
+                    it.ownerTargetId,
+                    it.targetKind,
+                    it.channelType,
+                    entity.purpose.name,
+                    entity.updatedAt,
                 )
             }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    fun acceptNotification(lineId: UUID, deliveryId: UUID) {
+    fun acceptNotification(
+        lineId: UUID,
+        deliveryId: UUID,
+    ) {
         val line = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
         line.deliveryId = deliveryId
         line.state = SupportProfileNotificationState.ACCEPTED
@@ -602,7 +779,10 @@ internal class SupportProfileChangeTransactionService(
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    fun failNotification(lineId: UUID, failureCode: String) {
+    fun failNotification(
+        lineId: UUID,
+        failureCode: String,
+    ) {
         val line = notificationLines.findById(lineId).orElse(null) ?: notFound("ProfileNotification")
         line.deliveryId = null
         line.attemptCount++
@@ -620,19 +800,25 @@ internal class SupportProfileChangeTransactionService(
         val aggregate = entity.toAggregate()
         val now = clock.instant()
         when {
-            lines.all { it.state == SupportProfileNotificationState.ACCEPTED } -> aggregate.notificationAccepted(now)
-            lines.any { it.state == SupportProfileNotificationState.MANUAL_REVIEW } ->
+            lines.all { it.state == SupportProfileNotificationState.ACCEPTED } -> {
+                aggregate.notificationAccepted(now)
+            }
+
+            lines.any { it.state == SupportProfileNotificationState.MANUAL_REVIEW } -> {
                 aggregate.notificationFailed(
                     lines.first { it.state == SupportProfileNotificationState.MANUAL_REVIEW }.failureCode ?: "NOTIFICATION_FAILURE",
                     true,
                     now,
                 )
-            lines.any { it.state == SupportProfileNotificationState.RETRY_SCHEDULED } ->
+            }
+
+            lines.any { it.state == SupportProfileNotificationState.RETRY_SCHEDULED } -> {
                 aggregate.notificationFailed(
                     lines.first { it.state == SupportProfileNotificationState.RETRY_SCHEDULED }.failureCode ?: "NOTIFICATION_FAILURE",
                     false,
                     now,
                 )
+            }
         }
         entity.apply(aggregate)
         changes.saveAndFlush(entity)
@@ -661,10 +847,13 @@ internal class SupportProfileChangeTransactionService(
             actorId,
             when (descriptor.risk) {
                 ProfileRiskClass.R1 -> OperatorPermission.SUPPORT_PROFILE_R1_CHANGE
+
                 ProfileRiskClass.R2 -> OperatorPermission.SUPPORT_PROFILE_R2_CHANGE
+
                 ProfileRiskClass.R3,
                 ProfileRiskClass.R4,
                 -> OperatorPermission.SUPPORT_PROFILE_R3_REQUEST
+
                 ProfileRiskClass.R0 -> invalid("R0 profile fields are immutable")
             },
         )
@@ -683,7 +872,9 @@ internal class SupportProfileChangeTransactionService(
             session.purpose != VerificationPurpose.CASE_RESOLUTION || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
             session.state != VerificationState.VERIFIED || !session.requestedLevel.satisfies(requiredLevel) ||
             !clock.instant().isBefore(session.expiresAt)
-        ) deniedVerification()
+        ) {
+            deniedVerification()
+        }
         if (purpose == ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE) {
             val channels = challenges.findDistinctChannelsBySessionIdAndState(session.id, ChallengeState.VERIFIED)
             if (channels.none { it == VerificationChannel.REGISTERED_PHONE || it == VerificationChannel.REGISTERED_EMAIL }) {
@@ -695,7 +886,11 @@ internal class SupportProfileChangeTransactionService(
         }
     }
 
-    private fun validateExecutionScope(entity: SupportProfileChangeEntity, actorId: UUID, ownerVersion: Long) {
+    private fun validateExecutionScope(
+        entity: SupportProfileChangeEntity,
+        actorId: UUID,
+        ownerVersion: Long,
+    ) {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
@@ -710,7 +905,9 @@ internal class SupportProfileChangeTransactionService(
             revision.actionPayloadDigest != entity.payloadDigest || revision.targetVersion != ownerVersion ||
             !clock.instant().isBefore(revision.expiresAt) || session.state != VerificationState.VERIFIED ||
             !clock.instant().isBefore(session.expiresAt)
-        ) stale()
+        ) {
+            stale()
+        }
     }
 
     private fun applyOwner(prepared: PreparedOwnerProfileChange): OwnerProfileChangeResult =
@@ -720,18 +917,37 @@ internal class SupportProfileChangeTransactionService(
             is PreparedOwnerProfileChange.Courier -> couriers.apply(prepared.value)
         }
 
-    private fun saveNotificationLines(entity: SupportProfileChangeEntity, result: OwnerProfileChangeResult, now: Instant) {
+    private fun saveNotificationLines(
+        entity: SupportProfileChangeEntity,
+        result: OwnerProfileChangeResult,
+        now: Instant,
+    ) {
         result.notificationTargets.forEach { target ->
             notificationLines.saveAndFlush(
                 SupportProfileChangeNotificationEntity(
-                    identifiers.next(), entity.id, target.targetId, target.kind, target.channel, null,
-                    SupportProfileNotificationState.PENDING, null, 0, now, now,
+                    identifiers.next(),
+                    entity.id,
+                    target.targetId,
+                    target.kind,
+                    target.channel,
+                    null,
+                    SupportProfileNotificationState.PENDING,
+                    null,
+                    0,
+                    now,
+                    now,
                 ),
             )
         }
     }
 
-    private fun appendAudit(entity: SupportProfileChangeEntity, actorId: UUID, action: String, event: String, now: Instant) {
+    private fun appendAudit(
+        entity: SupportProfileChangeEntity,
+        actorId: UUID,
+        action: String,
+        event: String,
+        now: Instant,
+    ) {
         audits.appendAll(
             listOf(
                 AppendAuditRecordCommand(
@@ -758,13 +974,29 @@ internal class SupportProfileChangeTransactionService(
         )
     }
 
-    private fun submitIdempotencyHash(operation: String, command: SubmitSupportProfileChangeCommand, digest: String): String =
+    private fun submitIdempotencyHash(
+        operation: String,
+        command: SubmitSupportProfileChangeCommand,
+        digest: String,
+    ): String =
         SupportProfilePayloadDigest.idempotency(
-            operation, command.actorId, command.caseId, null, command.verificationSessionId, digest,
-            command.expectedProfileVersion, command.reason, command.evidenceDigest,
+            operation,
+            command.actorId,
+            command.caseId,
+            null,
+            command.verificationSessionId,
+            digest,
+            command.expectedProfileVersion,
+            command.reason,
+            command.evidenceDigest,
         )
 
-    private fun replay(actorId: UUID, operation: String, key: String, hash: String): SupportProfileChangeEntity? {
+    private fun replay(
+        actorId: UUID,
+        operation: String,
+        key: String,
+        hash: String,
+    ): SupportProfileChangeEntity? {
         val existing = idempotencies.findByActorIdAndOperationAndIdempotencyKey(actorId, operation, key) ?: return null
         if (existing.payloadHash != hash) {
             throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency-Key was reused for another profile change")
@@ -784,8 +1016,17 @@ internal class SupportProfileChangeTransactionService(
     ) {
         idempotencies.saveAndFlush(
             SupportProfileChangeIdempotencyEntity(
-                identifiers.next(), actorId, operation, key, hash, profileChangeId, status,
-                objectMapper.writeValueAsString(response), null, now, now.plus(IDEMPOTENCY_RETENTION),
+                identifiers.next(),
+                actorId,
+                operation,
+                key,
+                hash,
+                profileChangeId,
+                status,
+                objectMapper.writeValueAsString(response),
+                null,
+                now,
+                now.plus(IDEMPOTENCY_RETENTION),
             ),
         )
     }
@@ -815,7 +1056,12 @@ internal class SupportProfileChangeTransactionService(
             entity.updatedAt,
             notificationLines.findByProfileChangeIdOrderById(entity.id).map {
                 SupportProfileChangeNotificationResource(
-                    it.targetKind.name, it.channelType.name, it.state, it.deliveryId, it.failureCode, it.attemptCount,
+                    it.targetKind.name,
+                    it.channelType.name,
+                    it.state,
+                    it.deliveryId,
+                    it.failureCode,
+                    it.attemptCount,
                 )
             },
         )
@@ -889,10 +1135,15 @@ internal class SupportProfileChangeTransactionService(
         }
 
     private fun notFound(resource: String): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "$resource was not found")
+
     private fun invalid(message: String): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, message)
+
     private fun denied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Profile change access is denied")
+
     private fun deniedVerification(): Nothing = throw DomainFailure(FailureCode.VERIFICATION_REQUIRED, "Bound verification is required")
+
     private fun stale(): Nothing = throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Profile change binding is stale")
+
     private fun dependency(): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Profile change dependency is inconsistent")
 
     private companion object {

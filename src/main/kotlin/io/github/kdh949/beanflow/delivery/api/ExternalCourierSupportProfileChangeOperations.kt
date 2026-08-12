@@ -91,9 +91,7 @@ interface ExternalCourierSupportProfileChangeOperations {
 
     fun preparePayoutReference(command: PrepareCourierPayoutReferenceChange): PreparedCourierProfileChange.PayoutReference
 
-    fun prepareProviderReregistration(
-        command: PrepareCourierProviderReregistration,
-    ): PreparedCourierProfileChange.ProviderReregistration
+    fun prepareProviderReregistration(command: PrepareCourierProviderReregistration): PreparedCourierProfileChange.ProviderReregistration
 
     fun apply(prepared: PreparedCourierProfileChange): OwnerProfileChangeResult
 

@@ -56,9 +56,26 @@ internal class SupportProfileChangeEntity(
 ) {
     fun toAggregate(): SupportProfileChange =
         SupportProfileChange.restore(
-            id, supportCaseId, subjectId, purpose, requesterActorId, executorActorId, verificationSessionId,
-            expectedProfileVersion, payloadDigest, actionRequestId, ownerChangeId, currentProfileVersion,
-            maskedBefore, maskedAfter, state, notificationState, notificationFailureCode, createdAt, updatedAt, version,
+            id,
+            supportCaseId,
+            subjectId,
+            purpose,
+            requesterActorId,
+            executorActorId,
+            verificationSessionId,
+            expectedProfileVersion,
+            payloadDigest,
+            actionRequestId,
+            ownerChangeId,
+            currentProfileVersion,
+            maskedBefore,
+            maskedAfter,
+            state,
+            notificationState,
+            notificationFailureCode,
+            createdAt,
+            updatedAt,
+            version,
         )
 
     fun apply(aggregate: SupportProfileChange) {
@@ -113,15 +130,21 @@ internal class SupportProfileChangeIdempotencyEntity(
 internal interface SupportProfileChangeJpaRepository : JpaRepository<SupportProfileChangeEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select change from SupportProfileChangeEntity change where change.id = :id")
-    fun findLockedById(@Param("id") id: UUID): SupportProfileChangeEntity?
+    fun findLockedById(
+        @Param("id") id: UUID,
+    ): SupportProfileChangeEntity?
 
     fun findByActionRequestId(actionRequestId: UUID): SupportProfileChangeEntity?
 }
 
 internal interface SupportProfileChangeNotificationJpaRepository : JpaRepository<SupportProfileChangeNotificationEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select target from SupportProfileChangeNotificationEntity target where target.profileChangeId = :profileChangeId order by target.id")
-    fun findLockedByProfileChangeId(@Param("profileChangeId") profileChangeId: UUID): List<SupportProfileChangeNotificationEntity>
+    @Query(
+        "select target from SupportProfileChangeNotificationEntity target where target.profileChangeId = :profileChangeId order by target.id",
+    )
+    fun findLockedByProfileChangeId(
+        @Param("profileChangeId") profileChangeId: UUID,
+    ): List<SupportProfileChangeNotificationEntity>
 
     fun findByProfileChangeIdOrderById(profileChangeId: UUID): List<SupportProfileChangeNotificationEntity>
 }

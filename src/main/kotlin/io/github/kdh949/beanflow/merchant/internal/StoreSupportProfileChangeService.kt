@@ -54,10 +54,17 @@ internal class StoreSupportProfileChangeService(
         val target = repository.notificationTarget(targetId)
         val field =
             when {
-                target.purpose == "STORE_PUBLIC_PROFILE" && target.kind != ProfileNotificationTargetKind.CURRENT ->
+                target.purpose == "STORE_PUBLIC_PROFILE" && target.kind != ProfileNotificationTargetKind.CURRENT -> {
                     PersonalDataField.PUBLIC_PHONE
-                target.channel == ProfileNotificationChannel.PHONE -> PersonalDataField.SUPPORT_PHONE
-                else -> PersonalDataField.SUPPORT_EMAIL
+                }
+
+                target.channel == ProfileNotificationChannel.PHONE -> {
+                    PersonalDataField.SUPPORT_PHONE
+                }
+
+                else -> {
+                    PersonalDataField.SUPPORT_EMAIL
+                }
             }
         val destination =
             crypto.decrypt(
@@ -67,9 +74,7 @@ internal class StoreSupportProfileChangeService(
         return ResolvedProfileNotificationTarget(targetId, target.kind, target.channel, destination)
     }
 
-    override fun preparePublicProfile(
-        command: PrepareStorePublicProfileCorrection,
-    ): PreparedStoreProfileChange.PublicProfile {
+    override fun preparePublicProfile(command: PrepareStorePublicProfileCorrection): PreparedStoreProfileChange.PublicProfile {
         val values =
             buildList {
                 command.displayName?.let { add(protectLabel(command.storeId, PersonalDataField.PUBLIC_DISPLAY_NAME, it)) }
@@ -88,9 +93,7 @@ internal class StoreSupportProfileChangeService(
         )
     }
 
-    override fun prepareOperationsContact(
-        command: PrepareStoreOperationsContactCorrection,
-    ): PreparedStoreProfileChange.OperationsContact {
+    override fun prepareOperationsContact(command: PrepareStoreOperationsContactCorrection): PreparedStoreProfileChange.OperationsContact {
         val values =
             buildList {
                 command.operationsPhone?.let { add(protectContact(command.storeId, PersonalDataField.SUPPORT_PHONE, it)) }
@@ -105,9 +108,7 @@ internal class StoreSupportProfileChangeService(
         )
     }
 
-    override fun prepareRepresentative(
-        command: PrepareStoreRepresentativeChange,
-    ): PreparedStoreProfileChange.Representative =
+    override fun prepareRepresentative(command: PrepareStoreRepresentativeChange): PreparedStoreProfileChange.Representative =
         PreparedStoreProfileChange.Representative(
             command.profileChangeId,
             command.storeId,
@@ -115,9 +116,7 @@ internal class StoreSupportProfileChangeService(
             protectLabel(command.storeId, PersonalDataField.LEGAL_REPRESENTATIVE, command.representativeName),
         )
 
-    override fun prepareSettlementAccount(
-        command: PrepareStoreSettlementAccountChange,
-    ): PreparedStoreProfileChange.SettlementAccount =
+    override fun prepareSettlementAccount(command: PrepareStoreSettlementAccountChange): PreparedStoreProfileChange.SettlementAccount =
         PreparedStoreProfileChange.SettlementAccount(
             command.profileChangeId,
             command.storeId,
@@ -129,9 +128,7 @@ internal class StoreSupportProfileChangeService(
             ),
         )
 
-    override fun prepareAccessReregistration(
-        command: PrepareStoreAccessReregistration,
-    ): PreparedStoreProfileChange.AccessReregistration =
+    override fun prepareAccessReregistration(command: PrepareStoreAccessReregistration): PreparedStoreProfileChange.AccessReregistration =
         PreparedStoreProfileChange.AccessReregistration(
             command.profileChangeId,
             command.storeId,
@@ -173,18 +170,27 @@ internal class StoreSupportProfileChangeService(
             )
             val contactValues =
                 values.filter {
-                    it.field in setOf(
-                        PersonalDataField.PUBLIC_PHONE,
-                        PersonalDataField.SUPPORT_PHONE,
-                        PersonalDataField.SUPPORT_EMAIL,
-                    )
+                    it.field in
+                        setOf(
+                            PersonalDataField.PUBLIC_PHONE,
+                            PersonalDataField.SUPPORT_PHONE,
+                            PersonalDataField.SUPPORT_EMAIL,
+                        )
                 }
             val targets =
                 if (contactValues.isNotEmpty()) {
                     buildList {
                         contactValues.forEach { value ->
                             row.notification(value.field)?.let {
-                                add(repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.OLD, it, clock.instant()))
+                                add(
+                                    repository.insertTarget(
+                                        identifiers.next(),
+                                        historyId,
+                                        ProfileNotificationTargetKind.OLD,
+                                        it,
+                                        clock.instant(),
+                                    ),
+                                )
                             }
                             add(
                                 repository.insertTarget(
@@ -198,9 +204,17 @@ internal class StoreSupportProfileChangeService(
                         }
                     }
                 } else {
-                    listOfNotNull(row.preferredNotification()?.let {
-                        repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, clock.instant())
-                    })
+                    listOfNotNull(
+                        row.preferredNotification()?.let {
+                            repository.insertTarget(
+                                identifiers.next(),
+                                historyId,
+                                ProfileNotificationTargetKind.CURRENT,
+                                it,
+                                clock.instant(),
+                            )
+                        },
+                    )
                 }
             OwnerProfileChangeResult(historyId, row.version, nextVersion, before, after, targets)
         } catch (failure: DomainFailure) {
@@ -231,9 +245,11 @@ internal class StoreSupportProfileChangeService(
         )
         repository.insertResetIntent(identifiers.next(), row.storeId, historyId, now)
         val targets =
-            listOfNotNull(row.preferredNotification()?.let {
-                repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
-            })
+            listOfNotNull(
+                row.preferredNotification()?.let {
+                    repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
+                },
+            )
         return OwnerProfileChangeResult(
             historyId,
             row.version,
@@ -299,8 +315,7 @@ internal class StoreSupportProfileChangeService(
         masked: List<String>,
         prepared: PreparedStoreProfileChange,
         before: Boolean,
-    ): String =
-        (masked.ifEmpty { listOf(if (before) "PUBLIC_PROFILE_PRESENT" else "PUBLIC_TEXT_UPDATED") }).joinToString(";").take(1000)
+    ): String = (masked.ifEmpty { listOf(if (before) "PUBLIC_PROFILE_PRESENT" else "PUBLIC_TEXT_UPDATED") }).joinToString(";").take(1000)
 
     private fun publicText(raw: String): String =
         Normalizer.normalize(raw.trim(), Normalizer.Form.NFKC).also {
@@ -347,10 +362,13 @@ private fun PreparedStoreProfileChange.purpose(): String =
 private fun PreparedStoreProfileChange.risk(): String =
     when (this) {
         is PreparedStoreProfileChange.PublicProfile -> "R1"
+
         is PreparedStoreProfileChange.OperationsContact -> "R2"
+
         is PreparedStoreProfileChange.Representative,
         is PreparedStoreProfileChange.SettlementAccount,
         -> "R3"
+
         is PreparedStoreProfileChange.AccessReregistration -> "R4"
     }
 
@@ -368,7 +386,9 @@ private fun PersonalDataField.criterionType(): ExactSearchCriterionType =
         PersonalDataField.PUBLIC_PHONE,
         PersonalDataField.SUPPORT_PHONE,
         -> ExactSearchCriterionType.PHONE
+
         PersonalDataField.SUPPORT_EMAIL -> ExactSearchCriterionType.EMAIL
+
         else -> throw IllegalArgumentException("Profile field is not a contact")
     }
 
@@ -384,7 +404,8 @@ internal data class StoreProfileChangeRow(
 
     fun notification(field: PersonalDataField): StoreNotificationValue? = values[field]
 
-    fun preferredNotification(): StoreNotificationValue? = values[PersonalDataField.SUPPORT_PHONE] ?: values[PersonalDataField.SUPPORT_EMAIL]
+    fun preferredNotification(): StoreNotificationValue? =
+        values[PersonalDataField.SUPPORT_PHONE] ?: values[PersonalDataField.SUPPORT_EMAIL]
 }
 
 @Repository
@@ -419,21 +440,27 @@ internal class StoreSupportProfileChangeRepository(
                     StoreProfileChangeRow(
                         rs.getObject("store_id", UUID::class.java),
                         buildMap {
-                            rs.value("public_display_name", "masked_public_display_name", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value("public_display_name", "masked_public_display_name", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.PUBLIC_DISPLAY_NAME, it) }
-                            rs.value("public_phone", "masked_public_phone", ProfileNotificationChannel.PHONE)
+                            rs
+                                .value("public_phone", "masked_public_phone", ProfileNotificationChannel.PHONE)
                                 ?.let { put(PersonalDataField.PUBLIC_PHONE, it) }
-                            rs.value("support_phone", "masked_support_phone", ProfileNotificationChannel.PHONE)
+                            rs
+                                .value("support_phone", "masked_support_phone", ProfileNotificationChannel.PHONE)
                                 ?.let { put(PersonalDataField.SUPPORT_PHONE, it) }
-                            rs.value("support_email", "masked_support_email", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value("support_email", "masked_support_email", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.SUPPORT_EMAIL, it) }
-                            rs.value("legal_representative", "masked_legal_representative", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value("legal_representative", "masked_legal_representative", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.LEGAL_REPRESENTATIVE, it) }
-                            rs.value(
-                                "settlement_account_reference",
-                                "masked_settlement_account_reference",
-                                ProfileNotificationChannel.EMAIL,
-                            )?.let { put(PersonalDataField.SETTLEMENT_ACCOUNT_REFERENCE, it) }
+                            rs
+                                .value(
+                                    "settlement_account_reference",
+                                    "masked_settlement_account_reference",
+                                    ProfileNotificationChannel.EMAIL,
+                                )?.let { put(PersonalDataField.SETTLEMENT_ACCOUNT_REFERENCE, it) }
                         },
                         rs.getLong("version"),
                     )
@@ -671,7 +698,7 @@ internal class StoreSupportProfileChangeRepository(
             jdbcTemplate.query(
                 "SELECT id, target_kind, channel_type, masked_destination FROM $targetTable " +
                     "WHERE profile_change_history_id = ? " +
-                        "ORDER BY CASE target_kind WHEN 'OLD' THEN 0 WHEN 'NEW' THEN 1 ELSE 2 END, channel_type, id",
+                    "ORDER BY CASE target_kind WHEN 'OLD' THEN 0 WHEN 'NEW' THEN 1 ELSE 2 END, channel_type, id",
                 { rs, _ ->
                     OwnerProfileNotificationTarget(
                         rs.getObject("id", UUID::class.java),

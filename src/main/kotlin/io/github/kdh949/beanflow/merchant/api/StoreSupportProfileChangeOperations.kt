@@ -90,19 +90,13 @@ interface StoreSupportProfileChangeOperations {
 
     fun preparePublicProfile(command: PrepareStorePublicProfileCorrection): PreparedStoreProfileChange.PublicProfile
 
-    fun prepareOperationsContact(
-        command: PrepareStoreOperationsContactCorrection,
-    ): PreparedStoreProfileChange.OperationsContact
+    fun prepareOperationsContact(command: PrepareStoreOperationsContactCorrection): PreparedStoreProfileChange.OperationsContact
 
     fun prepareRepresentative(command: PrepareStoreRepresentativeChange): PreparedStoreProfileChange.Representative
 
-    fun prepareSettlementAccount(
-        command: PrepareStoreSettlementAccountChange,
-    ): PreparedStoreProfileChange.SettlementAccount
+    fun prepareSettlementAccount(command: PrepareStoreSettlementAccountChange): PreparedStoreProfileChange.SettlementAccount
 
-    fun prepareAccessReregistration(
-        command: PrepareStoreAccessReregistration,
-    ): PreparedStoreProfileChange.AccessReregistration
+    fun prepareAccessReregistration(command: PrepareStoreAccessReregistration): PreparedStoreProfileChange.AccessReregistration
 
     fun apply(prepared: PreparedStoreProfileChange): OwnerProfileChangeResult
 

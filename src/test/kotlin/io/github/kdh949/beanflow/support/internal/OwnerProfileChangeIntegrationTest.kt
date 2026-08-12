@@ -10,8 +10,8 @@ import io.github.kdh949.beanflow.merchant.api.StoreSupportProfileChangeOperation
 import io.github.kdh949.beanflow.shared.api.BlindIndex
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
-import io.github.kdh949.beanflow.shared.api.NormalizedExactSearchValue
 import io.github.kdh949.beanflow.shared.api.KeyedBlindIndexPort
+import io.github.kdh949.beanflow.shared.api.NormalizedExactSearchValue
 import io.github.kdh949.beanflow.shared.api.PersonalDataCryptoPort
 import io.github.kdh949.beanflow.shared.api.PersonalDataEncryptionContext
 import io.github.kdh949.beanflow.shared.api.PersonalDataField
@@ -22,10 +22,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Primary
 import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.support.TransactionTemplate
@@ -93,26 +93,33 @@ internal class OwnerProfileChangeIntegrationTest
             assertThat(replay.ownerChangeId).isEqualTo(result.ownerChangeId)
             assertThat(replay.currentVersion).isEqualTo(result.currentVersion)
             assertThat(replay.notificationTargets).containsExactlyElementsOf(result.notificationTargets)
-            assertThat(jdbcTemplate.queryForObject(
-                "SELECT version FROM identity_customer_support_profile WHERE customer_id = ?",
-                Long::class.java,
-                CUSTOMER_ID,
-            )).isEqualTo(1)
-            assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM identity_customer_support_profile_exact_index WHERE customer_id = ? AND criterion_type = 'PHONE'",
-                Int::class.java,
-                CUSTOMER_ID,
-            )).isOne()
-            assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM identity_customer_profile_change_history WHERE support_profile_change_id = ?",
-                Int::class.java,
-                changeId,
-            )).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT version FROM identity_customer_support_profile WHERE customer_id = ?",
+                    Long::class.java,
+                    CUSTOMER_ID,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM identity_customer_support_profile_exact_index WHERE customer_id = ? AND criterion_type = 'PHONE'",
+                    Int::class.java,
+                    CUSTOMER_ID,
+                ),
+            ).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM identity_customer_profile_change_history WHERE support_profile_change_id = ?",
+                    Int::class.java,
+                    changeId,
+                ),
+            ).isOne()
             assertThat(databaseContains("010-5555-6666")).isFalse()
 
-            val stale = customers.preparePrimaryPhone(
-                PrepareCustomerPrimaryPhoneChange(UUID.randomUUID(), CUSTOMER_ID, 0, "010-7777-8888"),
-            )
+            val stale =
+                customers.preparePrimaryPhone(
+                    PrepareCustomerPrimaryPhoneChange(UUID.randomUUID(), CUSTOMER_ID, 0, "010-7777-8888"),
+                )
             assertThatThrownBy { transactionTemplate.execute { customers.apply(stale) } }
                 .isInstanceOf(DomainFailure::class.java)
         }
@@ -242,7 +249,9 @@ internal class OwnerProfileChangeTestConfiguration {
     fun recordingProfileCrypto(): RecordingProfileCrypto = RecordingProfileCrypto()
 }
 
-internal class RecordingProfileCrypto : PersonalDataCryptoPort, KeyedBlindIndexPort {
+internal class RecordingProfileCrypto :
+    PersonalDataCryptoPort,
+    KeyedBlindIndexPort {
     private val ciphertextSequence = AtomicInteger()
     val decryptContexts = CopyOnWriteArrayList<PersonalDataEncryptionContext>()
 
@@ -251,24 +260,35 @@ internal class RecordingProfileCrypto : PersonalDataCryptoPort, KeyedBlindIndexP
         decryptContexts.clear()
     }
 
-    override fun encrypt(plaintext: ByteArray, context: PersonalDataEncryptionContext): EncryptedPersonalData =
+    override fun encrypt(
+        plaintext: ByteArray,
+        context: PersonalDataEncryptionContext,
+    ): EncryptedPersonalData =
         EncryptedPersonalData(
             "vault:v7:${context.field.name.lowercase()}-${ciphertextSequence.incrementAndGet()}",
             7,
             1,
         )
 
-    override fun decrypt(encrypted: EncryptedPersonalData, context: PersonalDataEncryptionContext): ByteArray {
+    override fun decrypt(
+        encrypted: EncryptedPersonalData,
+        context: PersonalDataEncryptionContext,
+    ): ByteArray {
         decryptContexts += context
         return "+821055556666".toByteArray()
     }
 
-    override fun rewrap(encrypted: EncryptedPersonalData, context: PersonalDataEncryptionContext): EncryptedPersonalData = encrypted
+    override fun rewrap(
+        encrypted: EncryptedPersonalData,
+        context: PersonalDataEncryptionContext,
+    ): EncryptedPersonalData = encrypted
 
     override fun writeKeyVersion(): Int = 3
 
     override fun activeSearchKeyVersions(): Set<Int> = setOf(3)
 
-    override fun generate(normalizedValue: NormalizedExactSearchValue, keyVersions: Set<Int>): List<BlindIndex> =
-        keyVersions.sorted().map { BlindIndex(it, ByteArray(32) { 4 }) }
+    override fun generate(
+        normalizedValue: NormalizedExactSearchValue,
+        keyVersions: Set<Int>,
+    ): List<BlindIndex> = keyVersions.sorted().map { BlindIndex(it, ByteArray(32) { 4 }) }
 }

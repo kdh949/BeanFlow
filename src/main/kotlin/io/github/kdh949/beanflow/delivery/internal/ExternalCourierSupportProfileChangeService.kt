@@ -62,9 +62,7 @@ internal class ExternalCourierSupportProfileChangeService(
         return ResolvedProfileNotificationTarget(targetId, target.kind, target.channel, destination)
     }
 
-    override fun prepareDisplayName(
-        command: PrepareCourierDisplayNameCorrection,
-    ): PreparedCourierProfileChange.DisplayName =
+    override fun prepareDisplayName(command: PrepareCourierDisplayNameCorrection): PreparedCourierProfileChange.DisplayName =
         PreparedCourierProfileChange.DisplayName(
             command.profileChangeId,
             command.externalCourierId,
@@ -72,9 +70,7 @@ internal class ExternalCourierSupportProfileChangeService(
             protectLabel(command.externalCourierId, PersonalDataField.DISPLAY_NAME, command.displayName),
         )
 
-    override fun prepareRelayContact(
-        command: PrepareCourierRelayContactCorrection,
-    ): PreparedCourierProfileChange.RelayContact {
+    override fun prepareRelayContact(command: PrepareCourierRelayContactCorrection): PreparedCourierProfileChange.RelayContact {
         val values =
             buildList {
                 command.relayPhone?.let { add(protectContact(command.externalCourierId, PersonalDataField.RELAY_PHONE, it)) }
@@ -89,9 +85,7 @@ internal class ExternalCourierSupportProfileChangeService(
         )
     }
 
-    override fun prepareProviderIdentity(
-        command: PrepareCourierProviderIdentityChange,
-    ): PreparedCourierProfileChange.ProviderIdentity =
+    override fun prepareProviderIdentity(command: PrepareCourierProviderIdentityChange): PreparedCourierProfileChange.ProviderIdentity =
         PreparedCourierProfileChange.ProviderIdentity(
             command.profileChangeId,
             command.externalCourierId,
@@ -103,9 +97,7 @@ internal class ExternalCourierSupportProfileChangeService(
             ),
         )
 
-    override fun preparePayoutReference(
-        command: PrepareCourierPayoutReferenceChange,
-    ): PreparedCourierProfileChange.PayoutReference =
+    override fun preparePayoutReference(command: PrepareCourierPayoutReferenceChange): PreparedCourierProfileChange.PayoutReference =
         PreparedCourierProfileChange.PayoutReference(
             command.profileChangeId,
             command.externalCourierId,
@@ -131,7 +123,12 @@ internal class ExternalCourierSupportProfileChangeService(
             if (prepared is PreparedCourierProfileChange.ProviderReregistration) return applyReset(prepared, row)
 
             val values = prepared.values()
-            val before = values.mapNotNull { row.values[it.field]?.masked }.ifEmpty { listOf("NOT_SET") }.joinToString(";").take(1000)
+            val before =
+                values
+                    .mapNotNull { row.values[it.field]?.masked }
+                    .ifEmpty { listOf("NOT_SET") }
+                    .joinToString(";")
+                    .take(1000)
             val after = values.map(ProtectedProfileChangeValue::masked).joinToString(";").take(1000)
             values.forEach { repository.updateValue(row.externalCourierId, it) }
             values.filter { it.field in INDEXED_FIELDS }.forEach { value ->
@@ -163,7 +160,15 @@ internal class ExternalCourierSupportProfileChangeService(
                     buildList {
                         contacts.forEach { value ->
                             row.values[value.field]?.let {
-                                add(repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.OLD, it, clock.instant()))
+                                add(
+                                    repository.insertTarget(
+                                        identifiers.next(),
+                                        historyId,
+                                        ProfileNotificationTargetKind.OLD,
+                                        it,
+                                        clock.instant(),
+                                    ),
+                                )
                             }
                             add(
                                 repository.insertTarget(
@@ -177,9 +182,17 @@ internal class ExternalCourierSupportProfileChangeService(
                         }
                     }
                 } else {
-                    listOfNotNull(row.preferredNotification()?.let {
-                        repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, clock.instant())
-                    })
+                    listOfNotNull(
+                        row.preferredNotification()?.let {
+                            repository.insertTarget(
+                                identifiers.next(),
+                                historyId,
+                                ProfileNotificationTargetKind.CURRENT,
+                                it,
+                                clock.instant(),
+                            )
+                        },
+                    )
                 }
             OwnerProfileChangeResult(historyId, row.version, nextVersion, before, after, targets)
         } catch (failure: DomainFailure) {
@@ -210,9 +223,11 @@ internal class ExternalCourierSupportProfileChangeService(
         )
         repository.insertResetIntent(identifiers.next(), row.externalCourierId, historyId, now)
         val targets =
-            listOfNotNull(row.preferredNotification()?.let {
-                repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
-            })
+            listOfNotNull(
+                row.preferredNotification()?.let {
+                    repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
+                },
+            )
         return OwnerProfileChangeResult(
             historyId,
             row.version,
@@ -312,10 +327,13 @@ private fun PreparedCourierProfileChange.purpose(): String =
 private fun PreparedCourierProfileChange.risk(): String =
     when (this) {
         is PreparedCourierProfileChange.DisplayName -> "R1"
+
         is PreparedCourierProfileChange.RelayContact -> "R2"
+
         is PreparedCourierProfileChange.ProviderIdentity,
         is PreparedCourierProfileChange.PayoutReference,
         -> "R3"
+
         is PreparedCourierProfileChange.ProviderReregistration -> "R4"
     }
 
@@ -343,8 +361,7 @@ internal data class CourierProfileChangeRow(
     val values: Map<PersonalDataField, CourierNotificationValue>,
     val version: Long,
 ) {
-    fun preferredNotification(): CourierNotificationValue? =
-        values[PersonalDataField.RELAY_PHONE] ?: values[PersonalDataField.RELAY_EMAIL]
+    fun preferredNotification(): CourierNotificationValue? = values[PersonalDataField.RELAY_PHONE] ?: values[PersonalDataField.RELAY_EMAIL]
 }
 
 @Repository
@@ -377,18 +394,23 @@ internal class ExternalCourierSupportProfileChangeRepository(
                     CourierProfileChangeRow(
                         rs.getObject("external_courier_id", UUID::class.java),
                         buildMap {
-                            rs.value("display_name", "masked_display_name", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value("display_name", "masked_display_name", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.DISPLAY_NAME, it) }
-                            rs.value("relay_phone", "masked_relay_phone", ProfileNotificationChannel.PHONE)
+                            rs
+                                .value("relay_phone", "masked_relay_phone", ProfileNotificationChannel.PHONE)
                                 ?.let { put(PersonalDataField.RELAY_PHONE, it) }
-                            rs.value("relay_email", "masked_relay_email", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value("relay_email", "masked_relay_email", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.RELAY_EMAIL, it) }
-                            rs.value(
-                                "provider_courier_reference",
-                                "masked_provider_courier_reference",
-                                ProfileNotificationChannel.EMAIL,
-                            )?.let { put(PersonalDataField.PROVIDER_COURIER_REFERENCE, it) }
-                            rs.value("payout_reference", "masked_payout_reference", ProfileNotificationChannel.EMAIL)
+                            rs
+                                .value(
+                                    "provider_courier_reference",
+                                    "masked_provider_courier_reference",
+                                    ProfileNotificationChannel.EMAIL,
+                                )?.let { put(PersonalDataField.PROVIDER_COURIER_REFERENCE, it) }
+                            rs
+                                .value("payout_reference", "masked_payout_reference", ProfileNotificationChannel.EMAIL)
                                 ?.let { put(PersonalDataField.PAYOUT_REFERENCE, it) }
                         },
                         rs.getLong("version"),

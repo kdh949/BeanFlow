@@ -574,8 +574,10 @@ internal class SupportActionRequest private constructor(
             }
             require(
                 (state == SupportActionRequestState.EXECUTED || state == SupportActionRequestState.RESOLUTION_REQUIRED) ==
-                    (terminalExecutionId != null || terminalResolutionId != null || terminalCompensationId != null ||
-                        terminalProfileChangeId != null),
+                    (
+                        terminalExecutionId != null || terminalResolutionId != null || terminalCompensationId != null ||
+                            terminalProfileChangeId != null
+                    ),
             ) { "Action request terminal state binding is invalid" }
             require(terminalResolutionId == null || state == SupportActionRequestState.EXECUTED) {
                 "ResolutionCase can only bind an executed action request"

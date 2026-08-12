@@ -65,9 +65,7 @@ internal class CustomerSupportProfileChangeService(
         return ResolvedProfileNotificationTarget(targetId, target.kind, target.channel, destination)
     }
 
-    override fun prepareDisplayName(
-        command: PrepareCustomerDisplayNameCorrection,
-    ): PreparedCustomerProfileChange.DisplayName =
+    override fun prepareDisplayName(command: PrepareCustomerDisplayNameCorrection): PreparedCustomerProfileChange.DisplayName =
         PreparedCustomerProfileChange.DisplayName(
             command.profileChangeId,
             command.customerId,
@@ -75,9 +73,7 @@ internal class CustomerSupportProfileChangeService(
             protectLabel(command.customerId, PersonalDataField.DISPLAY_NAME, command.displayName),
         )
 
-    override fun prepareLegalName(
-        command: PrepareCustomerLegalNameCorrection,
-    ): PreparedCustomerProfileChange.LegalName =
+    override fun prepareLegalName(command: PrepareCustomerLegalNameCorrection): PreparedCustomerProfileChange.LegalName =
         PreparedCustomerProfileChange.LegalName(
             command.profileChangeId,
             command.customerId,
@@ -85,9 +81,7 @@ internal class CustomerSupportProfileChangeService(
             protectLabel(command.customerId, PersonalDataField.LEGAL_NAME, command.legalName),
         )
 
-    override fun preparePrimaryPhone(
-        command: PrepareCustomerPrimaryPhoneChange,
-    ): PreparedCustomerProfileChange.PrimaryPhone {
+    override fun preparePrimaryPhone(command: PrepareCustomerPrimaryPhoneChange): PreparedCustomerProfileChange.PrimaryPhone {
         val version = requireVersion(command.expectedVersion)
         val normalized = PersonalDataNormalizer.normalize(ExactSearchCriterionType.PHONE, command.primaryPhone)
         val canonicalPhone = PersonalDataNormalizer.normalizePhoneForMasking(command.primaryPhone)
@@ -105,9 +99,7 @@ internal class CustomerSupportProfileChangeService(
         )
     }
 
-    override fun prepareCredentialReset(
-        command: PrepareCustomerCredentialReset,
-    ): PreparedCustomerProfileChange.CredentialReset =
+    override fun prepareCredentialReset(command: PrepareCustomerCredentialReset): PreparedCustomerProfileChange.CredentialReset =
         PreparedCustomerProfileChange.CredentialReset(
             command.profileChangeId,
             command.customerId,
@@ -183,9 +175,11 @@ internal class CustomerSupportProfileChangeService(
                     )
                 }
             } else {
-                listOfNotNull(row.preferredNotificationValue()?.let {
-                    repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, clock.instant())
-                })
+                listOfNotNull(
+                    row.preferredNotificationValue()?.let {
+                        repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, clock.instant())
+                    },
+                )
             }
         return OwnerProfileChangeResult(historyId, row.version, nextVersion, before, value.masked, targets)
     }
@@ -210,9 +204,11 @@ internal class CustomerSupportProfileChangeService(
         )
         repository.insertResetIntent(identifiers.next(), row.customerId, historyId, now)
         val targets =
-            listOfNotNull(row.preferredNotificationValue()?.let {
-                repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
-            })
+            listOfNotNull(
+                row.preferredNotificationValue()?.let {
+                    repository.insertTarget(identifiers.next(), historyId, ProfileNotificationTargetKind.CURRENT, it, now)
+                },
+            )
         return OwnerProfileChangeResult(
             historyId,
             row.version,

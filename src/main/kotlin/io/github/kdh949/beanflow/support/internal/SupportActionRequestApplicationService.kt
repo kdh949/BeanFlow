@@ -4,9 +4,9 @@ import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
-import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationReturnHandler
 import io.github.kdh949.beanflow.operations.api.OpenOperationsSupportInvestigationCommand
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationOperations
+import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationReturnHandler
 import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnResult
 import io.github.kdh949.beanflow.operations.api.OperationsSupportReturnState
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
@@ -510,12 +510,15 @@ internal class SupportActionRequestTransactionService(
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val entity = requests.findLockedById(requestId) ?: notFound("SupportActionRequest")
         when (entity.action) {
-            SupportActionType.GOODWILL_COMPENSATION ->
+            SupportActionType.GOODWILL_COMPENSATION -> {
                 permissions.requireActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            }
+
             SupportActionType.PROFILE_CHANGE -> {
                 permissions.requireActive(actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
                 permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
             }
+
             else -> {
                 permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
                 permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
@@ -620,12 +623,15 @@ internal class SupportActionRequestTransactionService(
         replay(normalized.actorId, MANAGER, normalized.idempotencyKey, payloadHash)?.let { return it }
         val entity = requests.findLockedById(normalized.requestId) ?: notFound("SupportActionRequest")
         when (entity.action) {
-            SupportActionType.GOODWILL_COMPENSATION ->
+            SupportActionType.GOODWILL_COMPENSATION -> {
                 permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            }
+
             SupportActionType.PROFILE_CHANGE -> {
                 permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
                 permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
             }
+
             else -> {
                 permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ORDER_READ)
                 permissions.requireActive(normalized.actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
@@ -827,10 +833,17 @@ internal class SupportActionRequestTransactionService(
 
         val currentTargetVersion =
             when (entity.action) {
-                SupportActionType.GOODWILL_COMPENSATION ->
+                SupportActionType.GOODWILL_COMPENSATION -> {
                     compensationRequests.findById(entity.targetId).orElse(null)?.version ?: notFound("SupportCompensationRequest")
-                SupportActionType.PROFILE_CHANGE -> profileVersions.currentVersion(entity.targetId)
-                else -> ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull()?.version ?: notFound("Order")
+                }
+
+                SupportActionType.PROFILE_CHANGE -> {
+                    profileVersions.currentVersion(entity.targetId)
+                }
+
+                else -> {
+                    ordering.findOrderSnapshots(setOf(entity.targetId)).singleOrNull()?.version ?: notFound("Order")
+                }
             }
         val invalidity = approvalInvalidity(entity, revision, aggregate, currentTargetVersion, command.occurredAt)
         if (invalidity != null) {
@@ -884,20 +897,32 @@ internal class SupportActionRequestTransactionService(
                 session.expiresAt == revision.expiresAt
         val validRequester =
             when (entity.action) {
-                SupportActionType.GOODWILL_COMPENSATION ->
+                SupportActionType.GOODWILL_COMPENSATION -> {
                     permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
-                else -> permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
-                    permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
+                }
+
+                else -> {
+                    permissions.hasActive(entity.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) &&
+                        permissions.hasActive(entity.requesterActorId, entity.action.capabilityPermission())
+                }
             }
         val validPolicyVersion =
             when (entity.action) {
-                SupportActionType.GOODWILL_COMPENSATION -> compensationRequests
-                    .findById(entity.targetId)
-                    .orElse(null)
-                    ?.policyVersionId
-                    ?.toString() == revision.policyVersion
-                SupportActionType.PROFILE_CHANGE -> revision.policyVersion == PROFILE_CHANGE_POLICY_VERSION
-                else -> revision.policyVersion == SupportActionPolicy.POLICY_VERSION
+                SupportActionType.GOODWILL_COMPENSATION -> {
+                    compensationRequests
+                        .findById(entity.targetId)
+                        .orElse(null)
+                        ?.policyVersionId
+                        ?.toString() == revision.policyVersion
+                }
+
+                SupportActionType.PROFILE_CHANGE -> {
+                    revision.policyVersion == PROFILE_CHANGE_POLICY_VERSION
+                }
+
+                else -> {
+                    revision.policyVersion == SupportActionPolicy.POLICY_VERSION
+                }
             }
         if (!validSession || !validRequester || !validPolicyVersion ||
             revision.targetVersion != currentTargetVersion

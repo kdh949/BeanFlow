@@ -34,6 +34,7 @@ import io.github.kdh949.beanflow.support.internal.SupportCaseApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportCompensationApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportOrderChangeAuthorizationApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportOrderChangeExecutionApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportProfileChangeApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportSubjectSearchApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportTimelineApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportVerificationApplicationService
@@ -143,6 +144,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var supportCompensationApplicationService: SupportCompensationApplicationService
+
+    @MockitoBean
+    private lateinit var supportProfileChangeApplicationService: SupportProfileChangeApplicationService
 
     @MockitoBean
     private lateinit var operationsSupportInvestigationService: OperationsSupportInvestigationService

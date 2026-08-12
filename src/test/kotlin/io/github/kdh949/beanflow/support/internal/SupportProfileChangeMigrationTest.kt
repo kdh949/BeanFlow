@@ -174,21 +174,23 @@ internal class SupportProfileChangeMigrationTest {
     }
 
     private fun columns(table: String): List<String> =
-        jdbcTemplate.queryForList(
-            """
-            SELECT column_name FROM information_schema.columns
-             WHERE table_schema = 'public' AND table_name = ?
-             ORDER BY ordinal_position
-            """.trimIndent(),
-            String::class.java,
-            table,
-        ).filterNotNull()
+        jdbcTemplate
+            .queryForList(
+                """
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = ?
+                 ORDER BY ordinal_position
+                """.trimIndent(),
+                String::class.java,
+                table,
+            ).filterNotNull()
 
     private fun appliedVersions(): List<String> =
-        jdbcTemplate.queryForList(
-            "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank",
-            String::class.java,
-        ).filterNotNull()
+        jdbcTemplate
+            .queryForList(
+                "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank",
+                String::class.java,
+            ).filterNotNull()
 
     private fun flyway(cleanDisabled: Boolean = true): Flyway =
         Flyway

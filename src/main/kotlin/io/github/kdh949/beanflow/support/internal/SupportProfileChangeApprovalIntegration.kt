@@ -6,8 +6,8 @@ import io.github.kdh949.beanflow.merchant.api.StoreSupportProfileChangeOperation
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.support.internal.domain.ProfileOwnerType
-import io.github.kdh949.beanflow.support.internal.domain.descriptor
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
+import io.github.kdh949.beanflow.support.internal.domain.descriptor
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
