@@ -2,7 +2,7 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s60-approval-operations-investigation.md`
 > **Completed-At:** `—`
@@ -44,20 +44,18 @@ S70은 상담원이 고객 API를 가장하지 않고 전용 Support execution c
   readiness를 해제하고 S70~S100에 migration writer를 양보했다. Productization V43/V44는 별도 Draft
   branch의 산출물이고 Support stack과 병합하지 않는다.
 
-## Open Decision / Implementation Gate
+## Resolved Implementation Gate
 
-`docs/product/support-order-change-policy.md`와 ADR-085는 ACCEPTED 작업에 건별 매장 동의 또는
-versioned delegation을 요구하지만 delegation 시간·횟수는 S70의 Initial assumption으로 남아 있다.
-이 값은 반복 취소 권한과 금전 책임 범위를 바꾸므로 다음 중 하나를 사용자가 선택하기 전에는
-`Implementation-Ready=true`로 전환하지 않는다.
+사용자는 2026-08-12에 권장안을 선택했다. SP-19/ADR-085가
+`support-order-change-policy/2026-08-12/v1` 아래 다음 값을 소유한다.
 
-1. 권장: 취소 10분·성공 1회, 예약 변경 30분·성공 3회
-2. 보수적: 두 작업 모두 10분·성공 1회
-3. 운영 편의: 두 작업 모두 15분·성공 3회
+- ACCEPTED cancellation delegation: 10분, successful owner execution 1회
+- ACCEPTED pickup reschedule delegation: 30분, successful owner execution 3회
+- `now >= expiresAt` expiry, exact idempotent replay는 추가 소비 없음
+- exact confirmation은 request/revision/action payload digest/target version/request expiry bound
+- store actor가 STORE 비용 책임을 명시 수락하며 unknown/PLATFORM 책임은 S80 resolution
 
-공통 규칙은 store/action/policy-version binding, `now >= expiresAt` expiry, 성공한 local owner
-execution만 use count 소비, 실패 transaction rollback이다. 선택 결과는 BR, ADR-085, order-change
-policy와 이 plan에 먼저 기록한다.
+정책, ADR, migration lane과 predecessor가 모두 확정돼 `Implementation-Ready=true`다.
 
 ## Business Rules and Domain Invariants
 
@@ -438,8 +436,9 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
   `8aa3704`를 push해 Plan 20 readiness/lease를 해제하고, 상세 PR 본문과 docs validation을 확인했다.
 - 2026-08-12: current code/schema/OpenAPI를 재검사하고 V44 다음 V45 sole writer 범위, owner command,
   new-slot-first transaction, refund/notification failure semantics와 test slices를 이 plan에 기록했다.
-- 2026-08-12: ACCEPTED delegation 시간·횟수 정책은 사용자 선택 대기 중이므로
-  `Implementation-Ready=false`이고 production code/migration은 아직 작성하지 않았다.
+- 2026-08-12: 사용자가 권장 delegation policy를 선택했다. SP-19/ADR-085/order-change policy에
+  cancellation 10분/1회와 reschedule 30분/3회, exact confirmation, STORE 책임과 S80 fallback 금지를
+  기록하고 `Implementation-Ready=true`로 전환했다.
 
 ## Surprises & Discoveries
 
@@ -459,11 +458,12 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 | 2026-08-12 | S70은 Support stacked V44 다음 V45 sole writer | 이 plan, S60 completed outcome |
 | 2026-08-12 | Support는 customer API를 가장하지 않고 public owner command만 호출 | ADR-081/084/085 |
 | 2026-08-12 | 새 slot capacity를 먼저 확보하고 old slot은 같은 transaction에서만 해제 | ADR-085, support order-change policy |
-| 2026-08-12 | ACCEPTED delegation 수치는 사용자 선택 전 구현 gate | support order-change policy의 DRAFT assumption |
+| 2026-08-12 | ACCEPTED cancellation은 10분/1회, reschedule은 30분/3회; exact replay는 추가 소비하지 않고 committed direct change만 소비 | SP-19, ADR-085 |
+| 2026-08-12 | confirmation/delegation은 STORE 책임 명시 수락만 허용하고 unknown/PLATFORM 책임은 S80로 전달 | SP-19, ADR-085 |
 
 ## Outcomes & Retrospective
 
-아직 완료되지 않았다. delegation policy 선택, V45/domain/API 구현, focused/full validation, atomic
+아직 완료되지 않았다. V45/domain/API 구현, focused/full validation, atomic
 completion/readiness handoff와 S60 base PR이 남아 있다.
 
 ## Revision Notes

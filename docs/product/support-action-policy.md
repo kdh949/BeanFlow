@@ -21,6 +21,11 @@ compensation/profile policy가 server-side로 선택할 때까지 dormant이고 
 승인 결과는 `READY_FOR_EXECUTION` lineage이며 실제 owner 변경 성공이 아니다. S70/S80/S90/S100 typed owner command가
 동일 canonical payload digest와 최신 permission/verification/policy/target version을 다시 확인하고 approval을 consume한다.
 
+S70 ACCEPTED direct change는 ActionPolicy approval 외에 SP-19의 exact store confirmation 또는 active
+`support-order-change-policy/2026-08-12/v1` delegation을 요구한다. cancellation delegation은
+10분/성공 1회, pickup reschedule은 30분/성공 3회이며 STORE 비용 책임 명시 수락이 없으면 실행하지
+않는다. ActionPolicy approval은 store authorization이나 owner latest-state check를 대체하지 않는다.
+
 범용 DB JSON/SpEL/Drools DSL은 도입하지 않고 typed Kotlin policy를 계획한다. Owner Context가 최종 불변식을 재검증하며 승인도 owner 거부를 우회하지 않는다.
 
 ## S50 initial policy

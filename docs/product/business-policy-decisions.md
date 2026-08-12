@@ -1651,6 +1651,7 @@
 | SP-16 | Accepted initial policy | S20 Case 상태는 `OPEN`, `IN_PROGRESS`, `WAITING`, `RESOLVED`, `CLOSED`이고 Aggregate 전이 matrix는 SupportCase Policy에 고정한다. S20은 reopen endpoint를 노출하지 않으며 `OTHER`는 구조화된 상세 사유를 요구한다. S20에는 `DataAccessGrant`가 없고, S40 Grant 도입 시 terminal Case의 active Grant 철회와 terminal Case에서의 Grant 활성화·reveal 차단을 같은 Case 경계에서 구현한다. | [case](support-case-policy.md) |
 | SP-17 | Accepted initial policy | S30은 Identity 고객, Merchant 매장, Delivery 외부 courier 최소 프로필을 owner-local Vault Transit 암호문·별도 versioned HMAC blind index로 보관하고 Support에는 masked DTO만 반환한다. 지원 계약은 exact phone/email을 POST body로만 받고 query parameter를 거부한다. 결과 최대 20, PostgreSQL clock 기준 actor당 fixed 5분 30회, rate row 24시간 보존과 기본 100행 bounded cleanup, 구조화 사유와 PII-free Audit을 요구한다. fixed-window 경계 burst는 initial-policy limitation이다. | [protected search](support-protected-search-policy.md), ADR-083 |
 | SP-18 | Accepted initial policy | S40 VerificationSession 15분, challenge 5분, invalid proof 5회와 Case+Subject 30분 lockout을 사용한다. BASIC은 등록 채널 1개, ENHANCED는 서로 다른 등록 채널 2개다. display-name BASIC Grant는 10분/3회, phone/email/provider-reference SENSITIVE Grant는 ENHANCED+distinct approval+5분/1회다. BREAK_GLASS는 별도 one-field 2분/1회 path이며 distinct 사전승인, durable security notification과 mandatory 사후검토를 요구한다. Provider가 secret을 소유하고 Audit-committed reveal attempt는 downstream 실패에도 budget을 소비한다. | [verification](support-verification-policy.md), ADR-106 |
+| SP-19 | Accepted initial policy | S70 ACCEPTED pre-preparation의 versioned store delegation은 store+action+`support-order-change-policy/2026-08-12/v1`에 고정한다. 취소는 발급 후 10분 동안 성공 1회, pickup reschedule은 30분 동안 성공 3회다. `now >= expiresAt`이면 만료이며 동일 idempotent replay는 추가 소비하지 않고 owner direct change가 commit된 실행만 1회를 소비한다. 건별 confirmation은 exact request/revision/action payload digest/target version과 그 request expiry에 고정한다. 둘 다 store actor가 STORE 비용 책임을 명시 수락해야 하며 책임 미확정 또는 PLATFORM 귀속 건은 direct change가 아니라 post-acceptance resolution로 보낸다. | [order](support-order-change-policy.md), ADR-085 |
 
 ## Support implementation gates
 
@@ -1664,4 +1665,6 @@
 - S40은 SP-18/ADR-106으로 challenge Provider와 terminal-Case Grant transaction gate를 해소하고 V42/runtime/full
   validation을 완료했다. Production enablement는 challenge/security-notification provider provisioning 없이는
   startup guard가 fail-closed한다.
+- S70은 SP-19/ADR-085로 ACCEPTED confirmation/delegation expiry·budget·책임 gate를 해소했다. Runtime
+  release는 V45 owner command, concurrency/Audit/API validation과 S70 completion 전에는 허용하지 않는다.
 - R3, exceptional compensation, Delivery와 retention automation은 threat model, owner model, OpenAPI와 failure tests가 확정되기 전 노출하지 않는다.

@@ -20,7 +20,7 @@ full validation 뒤 lease를 해제했다.
 S50은 S40 verified stacked head에서 Case/Order timeline, typed ActionPolicy와 V43을 구현·검증하고 lease를 해제했다.
 S60은 S50 verified stacked head에서 immutable request revision, Support/Operations 승인·조사·재할당과 V44를
 구현·검증하고 lease를 해제했다. S70은 completed S60 lineage에서 detailed plan과 V45 sole-writer lane을
-시작했지만 ACCEPTED delegation 시간·횟수 정책 선택 전까지 implementation-ready가 아니다.
+시작했고 SP-19/ADR-085의 권장 delegation policy 확정으로 implementation-ready다.
 S80~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 새 detailed ExecPlan을 작성한다.
 
 ## Current State
@@ -48,7 +48,8 @@ S80~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 �
   build/docs validation을 통과했고 V44 writer lease는 release됐다.
 - S70 active plan은 S60 head `065dae6`에서 분기해 owner cancellation/reschedule command, new-slot-first
   swap, PREPARING race와 external refund outcome을 설계했다. Productization PR #57은 commit `8aa3704`로
-  lease/readiness를 해제했고 S70이 V45 sole lane을 보유한다. delegation 수치는 사용자 선택 대기 중이다.
+  lease/readiness를 해제했고 S70이 V45 sole lane을 보유한다. SP-19는 cancellation 10분/1회와
+  reschedule 30분/3회를 확정했다.
 - 55개 endpoint 중 S20의 9개 Case operation, S30의 1개 protected search operation, S40의 12개 operation과 S50의
   3개 timeline/evaluation operation, S60의 6개 request/investigation operation, 총 31개가 canonical target/runtime
   contract에 구현됐고 나머지는 DRAFT inventory다.
@@ -146,7 +147,7 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 |---|---|---|---|
 | S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | COMPLETED — V43/runtime/full validation; lease released |
 | S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | COMPLETED — V44/runtime/full validation; lease released |
-| S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | ACTIVE / NOT READY — V45 lease acquired; ACCEPTED delegation limit decision pending |
+| S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | ACTIVE / READY — SP-19/ADR-085 fixed; V45 sole lease |
 | S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | responsibility/step persistence required |
 | S90 | versioned goodwill compensation | completed S60 approval/investigation foundation | S60 input satisfied; policy/bucket/cost-owner schema still required |
 | S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | S60/S30 inputs satisfied; customer/legal/payout/rider models remain incomplete |
@@ -210,7 +211,7 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
   owner-specific model and policy gates
 - [x] Productization Stack A를 Plan 10 뒤 동결하고 PR #57 commit `8aa3704`로 migration lane/readiness 해제
 - [x] S60 head에서 S70 stacked branch와 detailed plan을 작성하고 V45 sole writer lane 획득
-- [ ] ACCEPTED cancellation/reschedule delegation 시간·성공 횟수 정책 선택과 BR/ADR-085 반영
+- [x] ACCEPTED cancellation/reschedule delegation 시간·성공 횟수 정책을 SP-19/ADR-085에 반영
 
 ## Surprises & Discoveries
 
@@ -233,7 +234,8 @@ S60 첫 full regression은 마지막 Flyway version을 43으로 고정한 follow
 idempotency terminal outcome을 DB constraint로도 보호해야 함을 확인해 V44와 관련 테스트를 강화했다.
 S70 preflight는 별도 Productization Draft branch도 V43/V44를 사용하고 있음을 확인했다. 사용자는 Support를
 우선했고 Productization ADR-111/Plan 20을 commit `8aa3704`로 동결해 V45 sole lane을 명시했다. 또한
-ACCEPTED delegation 시간·횟수는 policy가 의도적으로 S70 결정으로 남겨 임의 구현할 수 없음을 확인했다.
+ACCEPTED delegation 시간·횟수는 policy가 의도적으로 S70 결정으로 남겨 임의 구현할 수 없음을 확인했고,
+사용자가 권장 위험 차등안을 선택해 SP-19/ADR-085로 해소했다.
 
 ## Decision Log
 
@@ -256,15 +258,16 @@ ACCEPTED delegation 시간·횟수는 policy가 의도적으로 S70 결정으로
 | 2026-08-12 | S50 completion | complete V43, two timelines and typed advisory evaluation; release lease and pass output to S60 | focused PostgreSQL/security/API plus 784-test full build and docs gates passed | completed S50 |
 | 2026-08-12 | S60 authoring/lease | bind approval to immutable revision and acquire the V44 lane | completed S50 evaluation plus ADR-084 remove the approval-lineage gate | ADR-084, active S60 |
 | 2026-08-12 | S60 completion | complete V44, 6 runtime operations and Support/Operations lineage; release lease and pass output to S70 | focused PostgreSQL/security/API plus 809-test full build and docs gates passed | completed S60 |
-| 2026-08-12 | S70 authoring/lease | freeze Productization after Plan 10, author S70 and acquire V45 lane | user prioritizes Support stack; exact delegation limits remain an implementation gate | active S70, Productization ADR-111 |
+| 2026-08-12 | S70 authoring/lease | freeze Productization after Plan 10, author S70 and acquire V45 lane | user prioritizes Support stack; delegation limits were the remaining implementation gate | active S70, Productization ADR-111 |
+| 2026-08-12 | S70 policy gate | accept cancellation 10m/1-use and reschedule 30m/3-use delegation with STORE responsibility | user selected recommended risk-differentiated limits; no unknown cost-owner fallback | SP-19, ADR-085, active S70 |
 
 ## Outcomes & Retrospective
 
 S10 foundation, S20 runtime Case, S30 protected exact search/remediation, S40 verification/DataAccessGrant, S50
 timeline/ActionPolicy and S60 approval/Operations investigation are complete. S60 full regression passed 809 tests,
 target/runtime expose 31 Support/Operations operations and its V44 lease was released. S70 is ready for detailed plan
-authoring from the actual S60 outcome. Its active plan and V45 lane now exist, but production implementation waits for
-the ACCEPTED delegation limit decision. S90 and S100 have their S60 input but remain blocked on their independently
+authoring from the actual S60 outcome. Its active plan, SP-19 policy and V45 lane now make it implementation-ready.
+S90 and S100 have their S60 input but remain blocked on their independently
 recorded policy and owner-model gates.
 
 ## Revision Notes
@@ -290,5 +293,5 @@ recorded policy and owner-model gates.
   the migration lane and marked only direct successor S60 ready to author.
 - 2026-08-12: completed S60 V44/request revision/Support·Operations decision/reassignment runtime and full validation,
   moved the plan to completed, released the migration lane and marked only direct successor S70 ready to author.
-- 2026-08-12: froze Productization after Plan 10, authored active S70 from S60 and acquired V45; delegation limits remain
-  the explicit implementation-ready gate.
+- 2026-08-12: froze Productization after Plan 10, authored active S70 from S60 and acquired V45.
+- 2026-08-12: accepted SP-19 cancellation 10m/1-use and reschedule 30m/3-use delegation limits and made S70 ready.
