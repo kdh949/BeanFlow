@@ -325,16 +325,19 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
-        fun `policy head change makes an unexecuted request stale without issuing`() {
+        fun `policy head change preserves an existing request version and applies the new version only to new evaluations`() {
             val created = compensations.create(command(UUID.randomUUID(), 100, "policy-boundary-create-001"))
-            activateNextPolicyVersion()
+            val nextPolicyVersionId = activateNextPolicyVersion()
 
-            assertThatThrownBy { execute(created, "policy-boundary-execute-001") }
-                .isInstanceOf(DomainFailure::class.java)
-                .extracting("code")
-                .isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE)
-            assertThat(count("loyalty_goodwill_point_issuance", "compensation_request_id", created.compensationRequestId)).isZero()
-            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+            val issued = execute(created, "policy-boundary-execute-001")
+            assertThat(issued.policyVersionId).isEqualTo(created.policyVersionId)
+            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
+            assertThat(
+                compensations
+                    .evaluate(
+                        command(UUID.randomUUID(), 100, "unused-policy-evaluation-key").evaluation(),
+                    ).policyVersionId,
+            ).isEqualTo(nextPolicyVersionId)
         }
 
         private fun evaluateApi(
@@ -595,7 +598,7 @@ internal class SupportCompensationIntegrationTest
             )
         }
 
-        private fun activateNextPolicyVersion() {
+        private fun activateNextPolicyVersion(): UUID {
             val policyVersionId = UUID.randomUUID()
             jdbcTemplate.update(
                 """
@@ -634,6 +637,7 @@ internal class SupportCompensationIntegrationTest
                     "version = version + 1 WHERE name = 'GOODWILL'",
                 policyVersionId,
             )
+            return policyVersionId
         }
 
         private fun count(

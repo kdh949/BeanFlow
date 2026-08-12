@@ -485,7 +485,14 @@ internal class SupportCompensationTransactionService(
         }
         val executedAt = now()
         val evaluationCommand = entity.evaluationCommand(command.actorId)
-        val evaluated = evaluateCurrent(evaluationCommand, order, executedAt, requireAssignee = false)
+        val evaluated =
+            evaluateCurrent(
+                evaluationCommand,
+                order,
+                executedAt,
+                requireAssignee = false,
+                policyVersionId = entity.policyVersionId,
+            )
         if (evaluated.version.id != entity.policyVersionId || evaluated.result.band != entity.band ||
             evaluated.result.approvalRoute != entity.approvalRoute || evaluated.result.decision == SupportCompensationDecision.DENIED ||
             !evaluated.result.executable
@@ -642,6 +649,7 @@ internal class SupportCompensationTransactionService(
         order: GoodwillCompensationOrderFact?,
         evaluatedAt: Instant,
         requireAssignee: Boolean = true,
+        policyVersionId: UUID? = null,
     ): EvaluatedCompensation {
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
@@ -685,7 +693,7 @@ internal class SupportCompensationTransactionService(
         } else if (command.couponTemplateId != null) {
             invalid("Point compensation cannot bind a coupon template")
         }
-        val version = currentPolicyVersion()
+        val version = policyVersionId?.let(::policyVersion) ?: currentPolicyVersion()
         val customerRule = version.limits.single { it.scope == SupportCompensationLimitScope.CUSTOMER }
         val priorCustomerAmount =
             consumptions.sumInWindow(
@@ -716,7 +724,12 @@ internal class SupportCompensationTransactionService(
 
     private fun currentPolicyVersion(): SupportCompensationPolicyVersion {
         val head = policyHeads.findById(POLICY_HEAD).orElse(null) ?: dependency("Compensation policy head is missing")
-        val version = policyVersions.findById(head.currentVersionId).orElse(null) ?: dependency("Compensation policy version is missing")
+        return policyVersion(head.currentVersionId)
+    }
+
+    private fun policyVersion(policyVersionId: UUID): SupportCompensationPolicyVersion {
+        val version =
+            policyVersions.findById(policyVersionId).orElse(null) ?: dependency("Compensation policy version is missing")
         val rules = limitRules.findAllByPolicyVersionId(version.id)
         if (rules.size != SupportCompensationLimitScope.entries.size) dependency("Compensation rolling rules are incomplete")
         return version.toDomain(rules)
