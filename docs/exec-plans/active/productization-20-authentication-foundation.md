@@ -272,6 +272,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   OpenAPI에 먼저 기록했다. 최초 문서 검증은 새 Operations ledger cursor가 shared pagination inventory에
   없어 실패했으며 ADR-070과 검증기를 갱신한 뒤 target 153 paths/159 operations, runtime 114 paths/118
   operations, 305 schemas, 46 policies, 111 ADRs, 273 Markdown, 57 ExecPlans 검증이 통과했다.
+- 2026-08-13: V52 migration RED에서 Spring Session 두 table 부재, latest version 51,
+  `MERCHANT_CREDENTIAL_MANAGE` enum/DB vocabulary 부재로 새 테스트 3건이 모두 실패했다. Spring Session
+  JDBC 4.1.0 공식 PostgreSQL DDL, Flyway-owned `initialize-schema=never`, closed permission 확장과
+  default grant 0건을 구현한 뒤 신규 migration 3 tests와 AuditRetention/SupportCompensation/
+  OperatorPermission 회귀를 합친 focused suite가 통과했다.
 
 ## Surprises & Discoveries
 

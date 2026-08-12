@@ -22,6 +22,10 @@ spring:
     password: ${BEANFLOW_DB_PASSWORD}
   flyway:
     enabled: true
+  session:
+    jdbc:
+      # Flyway V52 owns the official PostgreSQL Spring Session schema.
+      initialize-schema: never
   jpa:
     hibernate:
       ddl-auto: validate

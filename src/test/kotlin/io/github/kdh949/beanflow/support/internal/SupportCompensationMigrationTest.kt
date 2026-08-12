@@ -125,13 +125,13 @@ internal class SupportCompensationMigrationTest {
     }
 
     @Test
-    fun `V51 is the latest Flyway version`() {
+    fun `V52 is the latest Flyway version`() {
         assertThat(
             jdbcTemplate.queryForObject(
                 "SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success",
                 Int::class.java,
             ),
-        ).isEqualTo(51)
+        ).isEqualTo(52)
     }
 
     private fun flyway(cleanDisabled: Boolean = true): Flyway =
