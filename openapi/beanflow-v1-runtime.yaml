@@ -580,6 +580,16 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1post-acceptance-resolutions~1{resolutionId}~1executions"
   /support/post-acceptance-resolutions/{resolutionId}/reconciliations:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1post-acceptance-resolutions~1{resolutionId}~1reconciliations"
+  /support/cases/{caseId}/compensation-evaluations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1compensation-evaluations"
+  /support/cases/{caseId}/compensations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1compensations"
+  /support/compensations/{compensationRequestId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}"
+  /support/compensations/{compensationRequestId}/executions:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}~1executions"
+  /support/compensations/{compensationRequestId}/notification-retries:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}~1notification-retries"
   /operations/investigations/{investigationId}/decisions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations~1{investigationId}~1decisions"
   /support/cases/{caseId}/verification-sessions:

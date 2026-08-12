@@ -2119,6 +2119,161 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/compensation-evaluations:
+    post:
+      tags: [Support]
+      operationId: evaluateSupportCompensation
+      summary: Evaluate one versioned goodwill point or coupon request
+      description: |
+        Advises the LOW/MEDIUM/HIGH/EXCEPTIONAL band and route from the current
+        immutable policy version. The evaluation is case, customer, incident,
+        optional Order version and verification-session bound. It does not issue a
+        benefit and is re-evaluated at execution. Cost responsibility has no hidden
+        platform fallback and raw evidence is never accepted or returned.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateSupportCompensationRequest"
+      responses:
+        "200":
+          description: Advisory evaluation with the exact immutable policy version
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationEvaluationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/compensations:
+    post:
+      tags: [Support]
+      operationId: createSupportCompensation
+      summary: Create one exact goodwill benefit request
+      description: |
+        Persists one POINT or immutable-template COUPON request and its exact policy,
+        target, verification, cost-allocation and digest bindings. MEDIUM creates an
+        S60 Support-manager approval; HIGH and EXCEPTIONAL create an Operations
+        investigation. Creation never issues the benefit.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportCompensationRequest"
+      responses:
+        "201":
+          description: Exact request created or its first idempotent response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}:
+    get:
+      tags: [Support]
+      operationId: getSupportCompensation
+      summary: Read one masked goodwill request and owner delivery state
+      description: Returns identifiers and closed typed states only; customer PII, evidence and raw notification payloads are excluded.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+      responses:
+        "200":
+          description: Current request, terminal benefit and notification state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}/executions:
+    post:
+      tags: [Support]
+      operationId: executeSupportCompensation
+      summary: Re-evaluate and issue one approved goodwill benefit exactly once
+      description: |
+        Rechecks the assigned actor, persistent permissions, active Case and Order,
+        exact request/target/payload versions, current immutable policy and approval
+        or investigation. Sorted CUSTOMER/ORDER/INCIDENT/ACTOR/STORE locks serialize
+        the inclusive rolling-window decision. The owner Point Ledger/Lot or Coupon,
+        terminal incident marker, limit consumption, approval consumption, Audit and
+        idempotency record commit atomically. Audit failure rolls the issuance back.
+        Notification is requested only after commit and its failure remains visible.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteSupportCompensationRequest"
+      responses:
+        "200":
+          description: Durable terminal benefit and independent notification state, or exact replay
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}/notification-retries:
+    post:
+      tags: [Support]
+      operationId: retrySupportCompensationNotification
+      summary: Retry only the independent goodwill notification intent
+      description: Reuses the terminal benefit and never reissues Points or Coupons. Exact retry commands are idempotent.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Current durable request and notification owner state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /operations/investigations/{investigationId}/decisions:
     post:
       tags: [Operations]
@@ -2611,6 +2766,12 @@ components:
     PostAcceptanceResolutionId:
       in: path
       name: resolutionId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportCompensationRequestId:
+      in: path
+      name: compensationRequestId
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
@@ -5255,6 +5416,244 @@ components:
         terminalResolutionId:
           type: [string, "null"]
           format: uuid
+    SupportCompensationBenefitType:
+      type: string
+      enum: [POINT, COUPON]
+    SupportCompensationBand:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, EXCEPTIONAL]
+    SupportCompensationDecision:
+      type: string
+      enum: [ALLOWED, APPROVAL_REQUIRED, INVESTIGATION_REQUIRED, DENIED]
+    SupportCompensationResponsibility:
+      type: string
+      enum: [PLATFORM, STORE, SHARED, UNDETERMINED]
+    SupportCompensationEvidenceBasis:
+      type: string
+      enum: [STORE_CONSENT, OPERATIONS_FINDING, CONTRACTUAL_RULE]
+    SupportCompensationReasonCode:
+      type: string
+      enum:
+        - RELATED_ORDER_MISSING
+        - AMOUNT_ABOVE_LOW_LIMIT
+        - AMOUNT_ABOVE_HIGH_LIMIT
+        - AMOUNT_ABOVE_SUPPORTED_LIMIT
+        - ORDER_RATIO_ABOVE_LOW_LIMIT
+        - REPEATED_CUSTOMER_COMPENSATION
+        - STORE_COST_RESPONSIBILITY
+        - COST_RESPONSIBILITY_UNDETERMINED
+        - DUPLICATE_TERMINAL_INCIDENT
+        - INSUFFICIENT_VERIFICATION
+        - STALE_TARGET_VERSION
+    SupportCompensationRequestState:
+      type: string
+      enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, BENEFIT_ISSUED, NOTIFICATION_RETRY, NOTIFICATION_ACCEPTED]
+    EvaluateSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [incidentId, expectedTargetVersion, benefitType, amountKrw, responsibility, platformShareBps, storeShareBps, verificationSessionId]
+      properties:
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        responsibility:
+          $ref: "#/components/schemas/SupportCompensationResponsibility"
+        evidenceBasis:
+          oneOf:
+            - $ref: "#/components/schemas/SupportCompensationEvidenceBasis"
+            - type: "null"
+        costEvidenceDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+      description: |
+        POINT forbids couponTemplateId; COUPON requires an immutable template whose
+        fixed amount equals amountKrw. Shares must total 10000. STORE/SHARED require
+        explicit evidence basis and SHA-256 evidence digest. UNDETERMINED is denied.
+    CreateSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [incidentId, expectedTargetVersion, benefitType, amountKrw, responsibility, platformShareBps, storeShareBps, verificationSessionId, evidenceDigest]
+      properties:
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        responsibility:
+          $ref: "#/components/schemas/SupportCompensationResponsibility"
+        evidenceBasis:
+          oneOf:
+            - $ref: "#/components/schemas/SupportCompensationEvidenceBasis"
+            - type: "null"
+        costEvidenceDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+      description: Persists only evidence digests; raw evidence and customer PII are forbidden.
+    ExecuteSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRequestVersion, expectedTargetVersion, expectedPayloadDigest]
+      properties:
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    SupportCompensationEvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [policyVersionId, band, decision, approvalRoute, requiredVerificationLevel, executable, reasonCodes, targetVersion, evaluatedAt, expiresAt]
+      properties:
+        policyVersionId:
+          $ref: "#/components/schemas/Identifier"
+        band:
+          $ref: "#/components/schemas/SupportCompensationBand"
+        decision:
+          $ref: "#/components/schemas/SupportCompensationDecision"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        requiredVerificationLevel:
+          $ref: "#/components/schemas/VerificationLevel"
+        executable:
+          type: boolean
+        reasonCodes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportCompensationReasonCode"
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        evaluatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    SupportCompensationResource:
+      type: object
+      additionalProperties: false
+      required: [compensationRequestId, supportCaseId, incidentId, orderId, storeId, benefitType, amountKrw, couponTemplateId, policyVersionId, band, approvalRoute, actionRequestId, state, payloadDigest, terminalBenefitId, benefitIssuedAt, notificationDeliveryId, notificationState, notificationFailureCode, version, createdAt, updatedAt]
+      properties:
+        compensationRequestId:
+          $ref: "#/components/schemas/Identifier"
+        supportCaseId:
+          $ref: "#/components/schemas/Identifier"
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        storeId:
+          type: [string, "null"]
+          format: uuid
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        policyVersionId:
+          $ref: "#/components/schemas/Identifier"
+        band:
+          $ref: "#/components/schemas/SupportCompensationBand"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        actionRequestId:
+          type: [string, "null"]
+          format: uuid
+        state:
+          $ref: "#/components/schemas/SupportCompensationRequestState"
+        payloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        terminalBenefitId:
+          type: [string, "null"]
+          format: uuid
+        benefitIssuedAt:
+          type: [string, "null"]
+          format: date-time
+        notificationDeliveryId:
+          type: [string, "null"]
+          format: uuid
+        notificationState:
+          type: [string, "null"]
+          enum: [PENDING, PROCESSING, SUCCEEDED, RETRY_SCHEDULED, MANUAL_REVIEW, null]
+        notificationFailureCode:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9_]{1,80}$"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: Deliberately excludes customer ID, PII, evidence digests, raw provider payloads and cost evidence.
     PostAcceptanceResolutionOutcome:
       type: string
       enum: [FULL_REFUND, PARTIAL_REFUND, NO_MONETARY_RESOLUTION, MANUAL_SETTLEMENT_REVIEW]

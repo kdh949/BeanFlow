@@ -12,6 +12,9 @@ import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigat
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
+import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
+import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
@@ -67,6 +70,7 @@ internal class SupportCompensationIntegrationTest
         private val compensations: SupportCompensationApplicationService,
         private val actionRequests: SupportActionRequestApplicationService,
         private val operations: OperationsSupportInvestigationService,
+        private val coupons: CouponReservationOperations,
         private val audits: AuditRecordOperations,
         private val objectMapper: ObjectMapper,
         private val transactionManager: PlatformTransactionManager,
@@ -260,6 +264,78 @@ internal class SupportCompensationIntegrationTest
             ).isEqualTo("READY_FOR_EXECUTION")
         }
 
+        @Test
+        fun `shared goodwill coupon preserves exact cost legs through redemption quote`() {
+            val created =
+                compensations.create(
+                    couponCommand(
+                        incidentId = UUID.randomUUID(),
+                        key = "shared-coupon-create-001",
+                    ),
+                )
+            assertThat(created.band.name).isEqualTo("HIGH")
+            approveOperations(created)
+
+            val issued = execute(created, "shared-coupon-execute-001")
+            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
+            val couponIssuanceId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT coupon_issuance_id FROM promotion_goodwill_coupon_issuance WHERE compensation_request_id = ?",
+                        UUID::class.java,
+                        created.compensationRequestId,
+                    ),
+                )
+
+            val quote =
+                TransactionTemplate(transactionManager).execute {
+                    coupons.reserve(
+                        ReserveCouponCommand(
+                            orderId = UUID.randomUUID(),
+                            customerId = fixture.customerId,
+                            storeId = fixture.storeId,
+                            couponIssuanceId = couponIssuanceId,
+                            lines = listOf(CouponPricingLine(0, fixture.menuId, 5_000)),
+                            reservationExpiresAt = Instant.now().plusSeconds(300),
+                            sourceReference = "shared-goodwill-redemption-${created.compensationRequestId}",
+                        ),
+                    )
+                }
+            assertThat(quote).isNotNull()
+            assertThat(quote?.discountKrw).isEqualTo(3_000)
+            assertThat(quote?.platformShareBps).isEqualTo(3_333)
+            assertThat(quote?.storeShareBps).isEqualTo(6_667)
+            assertThat(quote?.platformCouponCostKrw).isEqualTo(1_000)
+            assertThat(quote?.storeCouponCostKrw).isEqualTo(2_000)
+        }
+
+        @Test
+        fun `notification failure remains retryable without rolling back terminal benefit`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "notification-failure-create-001"))
+            insertConflictingNotification(created.compensationRequestId)
+
+            val issued = execute(created, "notification-failure-execute-001")
+
+            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_RETRY)
+            assertThat(issued.notificationFailureCode).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE.name)
+            assertThat(count("loyalty_goodwill_point_issuance", "compensation_request_id", created.compensationRequestId)).isOne()
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isOne()
+            assertThat(count("support_compensation_limit_consumption", "request_id", created.compensationRequestId)).isEqualTo(5)
+        }
+
+        @Test
+        fun `policy head change makes an unexecuted request stale without issuing`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "policy-boundary-create-001"))
+            activateNextPolicyVersion()
+
+            assertThatThrownBy { execute(created, "policy-boundary-execute-001") }
+                .isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE)
+            assertThat(count("loyalty_goodwill_point_issuance", "compensation_request_id", created.compensationRequestId)).isZero()
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+        }
+
         private fun evaluateApi(
             incidentId: UUID,
             amount: Long,
@@ -325,6 +401,28 @@ internal class SupportCompensationIntegrationTest
             null,
             10_000,
             0,
+            sessionId,
+            EVIDENCE_DIGEST,
+            key,
+        )
+
+        private fun couponCommand(
+            incidentId: UUID,
+            key: String,
+        ) = CreateSupportCompensationCommand(
+            requesterId,
+            caseId,
+            incidentId,
+            orderId,
+            orderVersion,
+            SupportCompensationBenefitType.COUPON,
+            3_000,
+            GOODWILL_COUPON_TEMPLATE_ID,
+            SupportCompensationResponsibility.SHARED,
+            SupportCompensationEvidenceBasis.OPERATIONS_FINDING,
+            COST_EVIDENCE_DIGEST,
+            3_333,
+            6_667,
             sessionId,
             EVIDENCE_DIGEST,
             key,
@@ -473,6 +571,70 @@ internal class SupportCompensationIntegrationTest
             )
         }
 
+        private fun insertConflictingNotification(compensationRequestId: UUID) {
+            val now = Timestamp.from(Instant.now())
+            jdbcTemplate.update(
+                """
+                INSERT INTO notification_delivery (
+                    id, event_id, event_type, logical_source, order_id, recipient_type, recipient_id,
+                    logical_channel, template, payload_json, state, attempt_count, next_attempt_at,
+                    provider_idempotency_key, correlation_id, created_at, updated_at, version
+                ) VALUES (?, ?, 'ConflictingGoodwillEventV1', ?, ?, 'CUSTOMER', ?, 'CUSTOMER_APP',
+                          'SUPPORT_GOODWILL_COMPENSATION_ISSUED', '{}', 'PENDING', 0, ?, ?, 'conflict', ?, ?, 0)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                compensationRequestId,
+                "support-compensation:$compensationRequestId:customer-notification",
+                orderId,
+                fixture.customerId,
+                now,
+                "notification:test-conflict:$compensationRequestId",
+                now,
+                now,
+            )
+        }
+
+        private fun activateNextPolicyVersion() {
+            val policyVersionId = UUID.randomUUID()
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_compensation_policy_version (
+                    id, code, effective_at, low_amount_maximum_krw, high_amount_maximum_krw,
+                    supported_amount_maximum_krw, low_order_ratio_maximum_bps, created_at
+                ) VALUES (?, ?, ?, 3000, 10000, 30000, 5000, ?)
+                """.trimIndent(),
+                policyVersionId,
+                "GOODWILL_TEST_${policyVersionId.toString().replace("-", "").uppercase()}",
+                Timestamp.from(Instant.now().minusSeconds(1)),
+                Timestamp.from(Instant.now()),
+            )
+            listOf(
+                Triple("CUSTOMER", 2_592_000L, 30_000L),
+                Triple("ORDER", 2_592_000L, 30_000L),
+                Triple("INCIDENT", 2_592_000L, 30_000L),
+                Triple("ACTOR", 86_400L, 100_000L),
+                Triple("STORE", 86_400L, 300_000L),
+            ).forEach { (scope, windowSeconds, maximumKrw) ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO support_compensation_limit_rule (
+                        id, policy_version_id, scope, window_seconds, maximum_krw
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """.trimIndent(),
+                    UUID.randomUUID(),
+                    policyVersionId,
+                    scope,
+                    windowSeconds,
+                    maximumKrw,
+                )
+            }
+            jdbcTemplate.update(
+                "UPDATE support_compensation_policy_head SET current_version_id = ?, updated_at = now(), " +
+                    "version = version + 1 WHERE name = 'GOODWILL'",
+                policyVersionId,
+            )
+        }
+
         private fun count(
             table: String,
             column: String,
@@ -481,5 +643,7 @@ internal class SupportCompensationIntegrationTest
 
         private companion object {
             const val EVIDENCE_DIGEST = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            const val COST_EVIDENCE_DIGEST = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            val GOODWILL_COUPON_TEMPLATE_ID: UUID = UUID.fromString("91000000-0000-0000-0000-000000000003")
         }
     }

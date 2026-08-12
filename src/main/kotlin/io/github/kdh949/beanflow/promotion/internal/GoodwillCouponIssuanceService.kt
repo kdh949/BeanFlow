@@ -112,7 +112,7 @@ internal class GoodwillCouponIssuanceService(
                 fixedAmountKrw = template.fixedAmountKrw,
                 rateBps = null,
                 minimumEligibleSubtotalKrw = template.minimumEligibleSubtotalKrw,
-                maximumDiscountKrw = template.fixedAmountKrw,
+                maximumDiscountKrw = null,
                 allMenusEligible = true,
                 costBearer = command.responsibility.toCostBearer(),
                 platformShareBps = command.platformShareBps,

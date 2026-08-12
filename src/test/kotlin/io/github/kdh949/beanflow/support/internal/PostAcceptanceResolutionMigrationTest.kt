@@ -116,13 +116,13 @@ internal class PostAcceptanceResolutionMigrationTest {
     }
 
     @Test
-    fun `V46 is the latest Flyway version`() {
+    fun `V46 remains applied after successor migrations`() {
         assertThat(
             jdbcTemplate.queryForObject(
-                "SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success",
+                "SELECT count(*) FROM flyway_schema_history WHERE version = '46' AND success",
                 Int::class.java,
             ),
-        ).isEqualTo(46)
+        ).isOne()
     }
 
     private fun flyway(cleanDisabled: Boolean = true): Flyway =

@@ -210,8 +210,8 @@ ALTER TABLE support_action_request
 
 CREATE TABLE support_compensation_terminal_benefit (
     id uuid PRIMARY KEY,
-    request_id uuid NOT NULL UNIQUE REFERENCES support_compensation_request(id),
-    incident_id uuid NOT NULL UNIQUE,
+    request_id uuid NOT NULL REFERENCES support_compensation_request(id),
+    incident_id uuid NOT NULL,
     benefit_type varchar(16) NOT NULL CHECK (benefit_type IN ('POINT', 'COUPON')),
     owner_reference varchar(240) NOT NULL UNIQUE CHECK (
         owner_reference = btrim(owner_reference)
@@ -220,7 +220,9 @@ CREATE TABLE support_compensation_terminal_benefit (
     ),
     amount_krw bigint NOT NULL CHECK (amount_krw > 0),
     policy_version_id uuid NOT NULL REFERENCES support_compensation_policy_version(id),
-    issued_at timestamptz NOT NULL
+    issued_at timestamptz NOT NULL,
+    CONSTRAINT uq_support_compensation_request_terminal UNIQUE (request_id),
+    CONSTRAINT uq_support_compensation_incident_terminal UNIQUE (incident_id)
 );
 
 CREATE TRIGGER trg_support_compensation_terminal_benefit_append_only
@@ -241,7 +243,7 @@ CREATE TABLE support_compensation_limit_consumption (
     scope_id uuid NOT NULL,
     amount_krw bigint NOT NULL CHECK (amount_krw > 0),
     issued_at timestamptz NOT NULL,
-    UNIQUE (request_id, scope)
+    CONSTRAINT uq_support_compensation_consumption_scope UNIQUE (request_id, scope)
 );
 
 CREATE INDEX idx_support_compensation_limit_window
@@ -264,7 +266,7 @@ CREATE TABLE support_compensation_command_idempotency (
     compensation_request_id uuid NOT NULL REFERENCES support_compensation_request(id),
     created_at timestamptz NOT NULL,
     retention_expires_at timestamptz NOT NULL,
-    UNIQUE (actor_id, operation, idempotency_key),
+    CONSTRAINT uq_support_compensation_command UNIQUE (actor_id, operation, idempotency_key),
     CHECK (retention_expires_at = created_at + INTERVAL '90 days')
 );
 
