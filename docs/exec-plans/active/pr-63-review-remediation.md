@@ -69,10 +69,10 @@ database dependency failure remains 503. No raw PII, verification proof, notific
 - [x] PR head, six authoritative review threads, mandatory docs and current schema inspected
 - [x] all six findings accepted as valid; no Accepted ADR/policy conflict found
 - [x] sole V49 migration-writer lease acquired
-- [ ] RED regression tests
-- [ ] security/API/digest fixes
-- [ ] notification claim/lease recovery and reconciliation
-- [ ] focused/full/build/docs validation
+- [x] RED regression tests
+- [x] security/API/digest fixes
+- [x] notification claim/lease recovery and reconciliation
+- [x] focused/full/build/docs validation
 - [ ] push, thread replies/resolution, completion move and lease release
 
 ## Decision Log
@@ -84,8 +84,22 @@ database dependency failure remains 503. No raw PII, verification proof, notific
 
 ## Outcomes & Retrospective
 
-Pending implementation and validation.
+Final execution now locks and repeats the requester permission, active subject link, full ENHANCED session binding and registered
+channel challenge checks. Nullable digests use typed binary framing, composite API payloads reject null/blank requests with 400, and
+owner absence alone maps to 404. V49 adds immutable notification source identity plus a two-minute exclusive claim lease; scheduled
+recovery and terminal command replay rejoin an already committed Notification delivery without repeating the owner write.
+
+Validation evidence before push:
+
+- focused profile/owner/migration/Notification/OpenAPI regression — `BUILD SUCCESSFUL` in 54s;
+- Support Architecture, Modulith and runtime OpenAPI parity — `BUILD SUCCESSFUL` in 17s;
+- first full `spotlessCheck test` — 941 tests, only two expected-latest-migration assertions failed after V49;
+- both inventory tests after update — `BUILD SUCCESSFUL` in 31s;
+- final full `spotlessCheck test` — `BUILD SUCCESSFUL` in 11m 48s; 941 tests, 0 failures, 0 errors, 1 skipped;
+- final `build` — `BUILD SUCCESSFUL` in 8s;
+- docs/OpenAPI — 107 paths/111 operations/244 schemas; 33 policies, 92 ADRs, 239 Markdown files and 45 ExecPlans.
 
 ## Revision Notes
 
 - 2026-08-13: opened from PR #63 unresolved review findings and acquired the sole V49 writer lease.
+- 2026-08-13: implemented all six remediations and passed focused, architecture, full regression, build and documentation gates.
