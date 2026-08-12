@@ -226,7 +226,8 @@ internal class DataAccessGrantTransactions(
                 val session = sessions.findLockedById(command.verificationSessionId) ?: verificationRequired()
                 val link = activeLink(supportCase.id, session.subjectLinkId)
                 if (session.actorId != command.actorId || session.purpose != command.purpose ||
-                    session.supportCaseId != supportCase.id || session.subjectId != link.subjectId
+                    session.supportCaseId != supportCase.id || session.subjectId != link.subjectId ||
+                    session.actionScope != VerificationActionScope.PERSONAL_DATA_REVEAL
                 ) {
                     verificationRequired()
                 }
@@ -624,7 +625,7 @@ private fun VerificationSessionEntity.toVerificationAggregate(channels: Set<Veri
         subjectId,
         actorId,
         purpose,
-        VerificationActionScope.PERSONAL_DATA_REVEAL,
+        actionScope,
         requestedLevel,
         startedAt,
         expiresAt,

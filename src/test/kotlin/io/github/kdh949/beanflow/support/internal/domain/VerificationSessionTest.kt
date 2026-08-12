@@ -77,7 +77,31 @@ class VerificationSessionTest {
         assertThat(basic.satisfies(VerificationLevel.ENHANCED, startedAt.plusSeconds(2))).isFalse()
     }
 
-    private fun session(level: VerificationLevel): VerificationSession =
+    @Test
+    fun `support action scope is accepted only for case resolution purpose`() {
+        val actionSession = session(VerificationLevel.BASIC, VerificationActionScope.SUPPORT_ACTION)
+
+        assertThat(actionSession.actionScope).isEqualTo(VerificationActionScope.SUPPORT_ACTION)
+        assertThatThrownBy {
+            VerificationSession.start(
+                id = UUID.randomUUID(),
+                caseId = caseId,
+                subjectLinkId = subjectLinkId,
+                subjectType = VerificationSubjectType.CUSTOMER,
+                subjectId = subjectId,
+                actorId = actorId,
+                purpose = VerificationPurpose.CONTACT_CONFIRMATION,
+                actionScope = VerificationActionScope.SUPPORT_ACTION,
+                requestedLevel = VerificationLevel.BASIC,
+                startedAt = startedAt,
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    private fun session(
+        level: VerificationLevel,
+        actionScope: VerificationActionScope = VerificationActionScope.PERSONAL_DATA_REVEAL,
+    ): VerificationSession =
         VerificationSession.start(
             id = sessionId,
             caseId = caseId,
@@ -86,7 +110,7 @@ class VerificationSessionTest {
             subjectId = subjectId,
             actorId = actorId,
             purpose = VerificationPurpose.CASE_RESOLUTION,
-            actionScope = VerificationActionScope.PERSONAL_DATA_REVEAL,
+            actionScope = actionScope,
             requestedLevel = level,
             startedAt = startedAt,
         )

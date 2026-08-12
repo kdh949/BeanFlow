@@ -1,8 +1,11 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
+import io.github.kdh949.beanflow.fulfillment.api.PickupRescheduleReport
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
+import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupCommand
+import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupResult
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -25,6 +28,7 @@ import java.util.UUID
 internal class PickupReservationService(
     private val slotRepository: PickupSlotJpaRepository,
     private val reservationRepository: PickupReservationJpaRepository,
+    private val rescheduleHistoryRepository: PickupRescheduleHistoryJpaRepository,
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
@@ -108,15 +112,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup confirmation source does not match")
         }
@@ -156,15 +157,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup release source does not match")
         }
@@ -198,15 +196,12 @@ internal class PickupReservationService(
         now: Instant,
         sourceReference: String,
     ): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
-        val slot =
-            slotRepository.findLockedById(current.slotId)
-                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         val reservation =
             reservationRepository.findLockedByOrderId(orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
+        val slot =
+            slotRepository.findLockedById(reservation.slotId)
+                ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Reserved pickup slot is missing")
         if (reservation.sourceReference != sourceReference) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup expiry source does not match")
         }
@@ -239,17 +234,14 @@ internal class PickupReservationService(
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun releaseConfirmedAfterTermination(command: ReleasePickupAfterTerminationCommand): ReservationTransitionReport {
-        val current =
-            reservationRepository.findByOrderId(command.orderId)
+        val reservation =
+            reservationRepository.findLockedByOrderId(command.orderId)
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE).also {
                     recordRestoration(command, ReservationTransitionResult.NOT_ELIGIBLE)
                 }
         val slot =
-            slotRepository.findLockedById(current.slotId)
+            slotRepository.findLockedById(reservation.slotId)
                 ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Confirmed pickup slot is missing")
-        val reservation =
-            reservationRepository.findLockedByOrderId(command.orderId)
-                ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         if (reservation.state == PickupReservationState.RELEASED_AFTER_TERMINATION) {
             return if (reservation.restorationSourceReference == command.sourceReference &&
                 reservation.restorationTrigger == command.trigger
@@ -273,6 +265,122 @@ internal class PickupReservationService(
             recordRestoration(command, ReservationTransitionResult.APPLIED)
         }
     }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun reschedule(command: ReschedulePickupCommand): PickupRescheduleReport {
+        validateReschedule(command)
+        rescheduleHistoryRepository.findBySourceReference(command.sourceReference)?.let { history ->
+            if (history.orderId != command.orderId || history.currentSlotId != command.newPickupSlotId) {
+                fail(FailureCode.COMPENSATION_SOURCE_CONFLICT, "Pickup reschedule source reference was reused")
+            }
+            return history.report(ReschedulePickupResult.ALREADY_APPLIED)
+        }
+        return performReschedule(command)
+    }
+
+    private fun performReschedule(command: ReschedulePickupCommand): PickupRescheduleReport {
+        val reservation =
+            reservationRepository.findLockedByOrderId(command.orderId)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Pickup reservation was not found")
+        if (reservation.slotId == command.newPickupSlotId) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup reservation already uses the requested slot")
+        }
+        val slots = lockSlots(reservation.slotId, command.newPickupSlotId)
+        val previousSlot = requireNotNull(slots[reservation.slotId])
+        val nextSlot = requireNotNull(slots[command.newPickupSlotId])
+        if (previousSlot.storeId != command.storeId || nextSlot.storeId != command.storeId) {
+            fail(FailureCode.INVALID_REQUEST, "Pickup slots belong to another store")
+        }
+        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
+        requireAvailableNextSlot(nextSlot, now)
+        transferCapacity(reservation, previousSlot, nextSlot, now)
+        return persistReschedule(command, reservation, previousSlot, nextSlot, now)
+    }
+
+    private fun lockSlots(
+        previousSlotId: UUID,
+        nextSlotId: UUID,
+    ): Map<UUID, PickupSlotEntity> =
+        listOf(previousSlotId, nextSlotId)
+            .sortedBy(UUID::toString)
+            .associateWith { slotId ->
+                slotRepository.findLockedById(slotId)
+                    ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Pickup slot is missing")
+            }
+
+    private fun requireAvailableNextSlot(
+        nextSlot: PickupSlotEntity,
+        now: Instant,
+    ) {
+        if (!nextSlot.startsAt.isAfter(now)) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Requested pickup slot has already started")
+        }
+        if (nextSlot.reservedCount + nextSlot.confirmedCount >= nextSlot.capacity) {
+            fail(FailureCode.PICKUP_SLOT_FULL, "Pickup slot capacity is exhausted")
+        }
+    }
+
+    private fun transferCapacity(
+        reservation: PickupReservationEntity,
+        previousSlot: PickupSlotEntity,
+        nextSlot: PickupSlotEntity,
+        now: Instant,
+    ) {
+        when (reservation.state) {
+            PickupReservationState.RESERVED -> {
+                if (!now.isBefore(reservation.expiresAt)) {
+                    fail(FailureCode.RESERVATION_EXPIRED, "Pickup reservation has expired")
+                }
+                nextSlot.reserveOne()
+                previousSlot.releaseOne()
+                reservation.expiresAt = minOf(reservation.expiresAt, nextSlot.startsAt)
+            }
+
+            PickupReservationState.CONFIRMED -> {
+                nextSlot.reserveConfirmedOne()
+                previousSlot.releaseConfirmedOne()
+            }
+
+            else -> {
+                fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup reservation state does not allow reschedule")
+            }
+        }
+    }
+
+    private fun persistReschedule(
+        command: ReschedulePickupCommand,
+        reservation: PickupReservationEntity,
+        previousSlot: PickupSlotEntity,
+        nextSlot: PickupSlotEntity,
+        now: Instant,
+    ): PickupRescheduleReport {
+        val history =
+            PickupRescheduleHistoryEntity(
+                identifierSource.next(),
+                reservation.id,
+                reservation.orderId,
+                previousSlot.id,
+                nextSlot.id,
+                reservation.state,
+                command.sourceReference,
+                now,
+            )
+        reservation.slotId = nextSlot.id
+        reservation.updatedAt = now
+        rescheduleHistoryRepository.save(history)
+        return history.report(ReschedulePickupResult.APPLIED)
+    }
+
+    private fun validateReschedule(command: ReschedulePickupCommand) {
+        if (command.sourceReference.trim() != command.sourceReference || command.sourceReference.length !in 1..240 ||
+            command.sourceReference.any(Char::isISOControl)
+        ) {
+            fail(FailureCode.INVALID_REQUEST, "Pickup reschedule source reference is invalid")
+        }
+    }
+
+    private fun PickupRescheduleHistoryEntity.report(result: ReschedulePickupResult) =
+        PickupRescheduleReport(result, reservationId, previousSlotId, currentSlotId, reservationState.name)
 
     private fun report(
         result: ReservationTransitionResult,

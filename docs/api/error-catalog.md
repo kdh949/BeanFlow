@@ -39,7 +39,7 @@
 | PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
 | REFUND_PREVIEW_STALE | 409 | Yes, fetch a new preview | preview 이후 Order·Payment·Refund watermark·잔여 unit·복원 policy version 중 하나가 바뀌어 실행 입력을 재검증할 수 없음 |
 | REFUND_OUTCOME_UNRESOLVED | 409 | Yes, after reconciliation | 미확정 Refund 때문에 새 점주 preview 또는 실행의 남은 승인액을 확정할 수 없음. 새 Provider 요청을 만들지 않음 |
-| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 |
+| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 또는 S80에서 Payment lookup 외 owner step의 수동 재실행 요청 |
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
 | REPROCESSING_PROPOSAL_STALE | 409 | Yes, after reviewing current state | 제안 뒤 case·snapshot·Refund 상태가 바뀌어 fingerprint 재검증 실패 |
@@ -56,6 +56,16 @@
 | VERIFICATION_LOCKED | 429 + Retry-After | Yes, after lock expiry | invalid proof 5회로 같은 Case+Subject binding이 30분 잠김 |
 | DATA_ACCESS_GRANT_REQUIRED | 403 | Yes, after new matching grant | active matching Grant가 없거나 만료·철회·소진됨 |
 | DATA_ACCESS_SCOPE_MISMATCH | 403 | No; request an allowed field | 요청 field가 Grant 또는 subject owner allowlist 밖임 |
+| SUPPORT_ACTION_POLICY_DENIED | 409 | Yes, after state/policy/input changes | current typed ActionPolicy가 request/revision 생성을 거부함; owner command는 실행되지 않음 |
+| SUPPORT_ACTION_REQUEST_STATE_CONFLICT | 409 | Yes, after reviewing current state | request가 해당 revision/approval/reassignment 전이를 허용하지 않음 |
+| SUPPORT_ACTION_REQUEST_STALE | 409 | Yes, after reading current versions and creating a new revision when needed | request revision, target/policy/verification/permission 또는 Case/request version binding이 현재 값과 다름 |
+| SUPPORT_ACTION_REQUEST_EXPIRED | 409 | Yes, with a new verified revision | exact verification-bound approval expiry에 도달함 (`now >= expiresAt`) |
+| SUPPORT_APPROVER_MUST_DIFFER | 409 | Yes, with a distinct eligible actor | requester, executor, Support reviewer, Operations reviewer의 분리 또는 reviewer-as-executor 규칙 위반 |
+| SUPPORT_INVESTIGATION_STATE_CONFLICT | 409 | Yes, after reading the current investigation | Operations investigation이 이미 terminal이거나 요청한 decision 전이를 허용하지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_REQUIRED | 403 | Yes, after exact store authorization | ACCEPTED direct change에 exact confirmation 또는 action/policy-bound delegation이 없음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_EXPIRED | 409 | Yes, after new authorization | authorization boundary `now >= expiresAt`; expired authorization은 실행·소비되지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_EXHAUSTED | 409 | Yes, after new authorization | delegation successful-use budget 소진; replay가 아닌 새 owner change는 실행되지 않음 |
+| SUPPORT_ORDER_CHANGE_AUTHORIZATION_SCOPE_MISMATCH | 403 | No for this authorization; create exact authorization | store/action/policy 또는 confirmation의 request/revision/digest/target binding 불일치, STORE 책임 미수락이나 Support actor separation 위반 포함 |
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
@@ -65,6 +75,13 @@ Idempotency-Key에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retr
 [Fast Reorder Runbook](../operations/fast-reorder-runbook.md)의 읽기 전용 조사 절차를 따른다.
 현재는 감사 가능한 해결 command가 없으므로 DB row를 직접 `COMPLETED`/`FAILED`로 바꾸거나
 terminal response를 추정하지 않는다.
+
+S70의 `RESOLUTION_REQUIRED`는 오류 envelope가 아니다. execution endpoint가 latest owner state를 잠근 뒤
+`PREPARING`, `READY` 또는 `COMPLETED`를 확인했음을 나타내는 terminal 200 representation이며 Order와 store
+authorization successful-use budget은 바뀌지 않는다. 실제 refund/benefit/settlement resolution 생성은 S80이
+소유한다. S80의 `PARTIALLY_RESOLVED`, `RECONCILING`, `MANUAL_REVIEW`도 확정 성공으로 축약하지 않는 200
+representation state다. Payment Provider timeout은 step `UNKNOWN`으로 남고, 안전한 lookup은 reconcile operation이
+수행한다. `UNDETERMINED`의 Settlement `BLOCKED`는 503이 아니라 비용 귀속이 정해지지 않았다는 durable state다.
 
 `REORDER_ITEMS_UNAVAILABLE.details`는 source line 순서로 정렬하고 같은 line에서는 reason
 우선순위와 `optionId` 오름차순으로 정렬한다. stable reason은 다음과 같다.
@@ -112,6 +129,27 @@ envelope의 확정 실패가 아니다. 각각 target OpenAPI의 202 진행 repr
 manual-review 상태를 노출하지 않는다. `PAYMENT_METHOD_PROVIDER_UNAVAILABLE`은 raw Provider
 code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은 key로만 재시도한다.
 
+## S90 goodwill compensation error mapping
+
+S90은 새 coarse 오류명을 추가하지 않고 existing stable envelope를 endpoint semantics에 맞게 사용한다.
+
+| Code | HTTP | Retry | S90 meaning |
+|---|---:|---|---|
+| INVALID_REQUEST | 400 | after correction | benefit/template/share/digest/idempotency shape가 유효하지 않음 |
+| ACCESS_DENIED | 403 | after authorization change | Case assignment/object scope 또는 executor separation 불일치 |
+| VERIFICATION_REQUIRED | 403 | after step-up | action-bound BASIC/ENHANCED session이 없거나 만료됨 |
+| RESOURCE_NOT_FOUND | 404 | no for same ID | Case/request/template 또는 owner fact 부재 |
+| SUPPORT_ACTION_POLICY_DENIED | 409 | only after policy/input change | duplicate incident, rolling cap, `UNDETERMINED`, template/amount 등 current policy가 발급 거부 |
+| SUPPORT_ACTION_REQUEST_STALE | 409 | refresh exact binding | request/payload/target/approval revision이 달라짐; policy head 변경은 기존 request에 소급하지 않음 |
+| SUPPORT_ACTION_REQUEST_STATE_CONFLICT | 409 | after valid state transition | manager/Operations 승인이 준비되지 않았거나 notification retry 대상이 아님 |
+| IDEMPOTENCY_KEY_REUSED | 409 | new key | 같은 actor/operation key를 다른 canonical payload에 재사용 |
+| COMPENSATION_SOURCE_CONFLICT | 409 | reconcile owner fact | owner issuance source가 다른 payload에 이미 귀속됨 |
+| DEPENDENCY_UNAVAILABLE | 503 | yes, exact command | DB/Audit/owner persistence failure; financial transaction이면 전체 rollback, post-commit Notification이면 terminal benefit 유지와 retry state |
+
+`COMPENSATION_LIMIT_EXCEEDED`, `DUPLICATE_COMPENSATION`, `COMPENSATION_INVESTIGATION_REQUIRED` 후보는 S90 runtime
+code로 승격하지 않았다. band/route는 성공 evaluation/request representation이고, execution denial은
+`SUPPORT_ACTION_POLICY_DENIED`의 closed reason으로 처리한다.
+
 ## Proposed Support error-code candidates
 
 | Code | HTTP/representation | Retry | Meaning |
@@ -124,18 +162,8 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 | DATA_ACCESS_GRANT_EXPIRED | 403 | new grant | 만료/철회/소진 grant |
 | FIELD_SCOPE_NOT_ALLOWED | 403 | no | grant보다 넓은 필드 또는 R4 |
 | AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |
-| SUPPORT_ACTION_DENIED | 403/422 | after state/policy change | server policy denial |
 | SUPPORT_ACTION_APPROVAL_REQUIRED | 409 representation | after approval | 실행 전 approval 필요 |
-| SELF_APPROVAL_NOT_ALLOWED | 403 | different reviewer | requester가 review 시도 |
-| SEPARATION_OF_DUTIES_VIOLATION | 403 | distinct actor | reviewer step/executor 충돌 |
-| APPROVAL_EXPIRED | 409 | new revision/review | 승인 expiry |
-| APPROVAL_STALE | 409 | re-evaluate | payload/policy/verification/target version 변경 |
-| REQUEST_REVISION_MISMATCH | 409 | latest revision | 실행 revision 불일치 |
 | PICKUP_SLOT_UNAVAILABLE | 409 | choose slot | new slot capacity 불가; old slot 유지 |
-| POST_ACCEPTANCE_RESOLUTION_REQUIRED | 409 | create resolution | direct change가 허용되지 않는 lifecycle |
-| COMPENSATION_LIMIT_EXCEEDED | 422 | investigation/policy | rolling/band 한도 |
-| DUPLICATE_COMPENSATION | 409 | no | terminal duplicate incident benefit |
-| COMPENSATION_INVESTIGATION_REQUIRED | 409 representation | Operations handoff | high/exceptional 보상 |
 | PROFILE_FIELD_IMMUTABLE | 422 | adjustment workflow | R0/R4 direct change 금지 |
 | DELIVERY_PROVIDER_OUTCOME_UNKNOWN | 202 representation | reconcile/poll | Provider 결과 불명; 새 dispatch 금지 |
 | DELIVERY_STATE_CONFLICT | 409 | reconcile | 역순/terminal conflict |

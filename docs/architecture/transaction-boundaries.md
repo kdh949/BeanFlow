@@ -678,4 +678,4 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - timeout/ACK loss는 UNKNOWN/RECONCILING이고 retry가 같은 외부 부수효과를 만들지 않아야 한다.
 - retention deletion은 component별 상태와 ledger를 원자적으로 전이하되 외부 object/index 삭제는 부분 실패를 명시한다.
 
-S20–S40 command/query/reveal 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.
+S20–S50 command/query/reveal/evaluation 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.

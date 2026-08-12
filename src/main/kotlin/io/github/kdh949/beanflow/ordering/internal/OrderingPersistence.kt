@@ -35,7 +35,7 @@ internal class OrderEntity(
     @Column(name = "store_id", nullable = false)
     val storeId: UUID,
     @Column(name = "pickup_slot_id", nullable = false)
-    val pickupSlotId: UUID,
+    var pickupSlotId: UUID,
     @Column(name = "public_reference", nullable = false, length = 12)
     val publicReference: String,
     @Column(name = "pickup_business_date", nullable = false)
@@ -260,6 +260,38 @@ internal class OrderEntity(
         updatedAt = now
     }
 
+    fun cancelBySupport(
+        now: Instant,
+        reasonCode: CustomerCancellationReasonCode,
+        detail: String?,
+    ) {
+        if (state != OrderState.PENDING_PAYMENT && state != OrderState.PAID && state != OrderState.ACCEPTED) {
+            conflict("Order state does not allow support cancellation")
+        }
+        val normalizedDetail = CanonicalCustomerCancellationPayload.normalizeDetail(detail)
+        state = OrderState.CANCELLED
+        reservationExpiresAt = null
+        cancelledAt = now
+        cancellationCause = OrderCancellationCause.SUPPORT_REQUEST
+        cancellationReasonCode = reasonCode
+        cancellationDetail = normalizedDetail
+        updatedAt = now
+    }
+
+    fun reschedulePickupBySupport(
+        now: Instant,
+        nextPickupSlotId: UUID,
+    ) {
+        if (state != OrderState.PENDING_PAYMENT && state != OrderState.PAID && state != OrderState.ACCEPTED) {
+            conflict("Order state does not allow support pickup reschedule")
+        }
+        if (pickupSlotId == nextPickupSlotId) {
+            conflict("Order already uses the requested pickup slot")
+        }
+        pickupSlotId = nextPickupSlotId
+        updatedAt = now
+    }
+
     private fun requireState(
         expected: OrderState,
         message: String,
@@ -335,6 +367,43 @@ internal enum class OptionSelectionSnapshotState {
     LEGACY_UNAVAILABLE,
     SNAPSHOTTED,
 }
+
+internal enum class OrderingSupportOrderChangeAction {
+    ORDER_CANCELLATION,
+    PICKUP_RESCHEDULE,
+}
+
+@Entity
+@Table(name = "ordering_support_order_change_history")
+internal class OrderingSupportOrderChangeHistoryEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "support_request_id", nullable = false)
+    val supportRequestId: UUID,
+    @Column(name = "support_execution_id", nullable = false)
+    val supportExecutionId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 40)
+    val action: OrderingSupportOrderChangeAction,
+    @Column(name = "previous_state", nullable = false, length = 32)
+    val previousState: String,
+    @Column(name = "current_state", nullable = false, length = 32)
+    val currentState: String,
+    @Column(name = "previous_pickup_slot_id", nullable = false)
+    val previousPickupSlotId: UUID,
+    @Column(name = "current_pickup_slot_id", nullable = false)
+    val currentPickupSlotId: UUID,
+    @Column(name = "order_version", nullable = false)
+    val orderVersion: Long,
+    @Column(name = "payment_recovery_state", length = 32)
+    val paymentRecoveryState: String?,
+    @Column(name = "source_reference", nullable = false, length = 240)
+    val sourceReference: String,
+    @Column(name = "occurred_at", nullable = false)
+    val occurredAt: Instant,
+)
 
 internal enum class IdempotencyStatus {
     PROCESSING,
@@ -475,6 +544,10 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
 
 internal interface OrderLineJpaRepository : JpaRepository<OrderLineEntity, UUID> {
     fun findAllByOrderIdOrderByLineSequence(orderId: UUID): List<OrderLineEntity>
+}
+
+internal interface OrderingSupportOrderChangeHistoryJpaRepository : JpaRepository<OrderingSupportOrderChangeHistoryEntity, UUID> {
+    fun findBySourceReference(sourceReference: String): OrderingSupportOrderChangeHistoryEntity?
 }
 
 internal interface IdempotencyRecordJpaRepository : JpaRepository<IdempotencyRecordEntity, UUID> {

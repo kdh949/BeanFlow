@@ -2387,8 +2387,9 @@ paths:
       summary: Start purpose-bound step-up verification
       description: |
         Starts a 15-minute BASIC or ENHANCED session bound to the assigned active Case,
-        one active subject link, the authenticated operator, a purpose, and the fixed
-        PERSONAL_DATA_REVEAL action scope. No OTP, raw link, answer, or proof is stored.
+        one active subject link, the authenticated operator, a purpose, and a closed
+        action scope. Omitted scope means PERSONAL_DATA_REVEAL; SUPPORT_ACTION is valid
+        only with CASE_RESOLUTION. No OTP, raw link, answer, or proof is stored.
       parameters:
         - $ref: "#/components/parameters/SupportCaseId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -3105,6 +3106,1349 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}/executions:
+    post:
+      tags: [Support]
+      operationId: executeSupportCompensation
+      summary: Re-evaluate and issue one approved goodwill benefit exactly once
+      description: |
+        Rechecks the assigned actor, persistent permissions, active Case and Order,
+        exact request/target/payload versions, current immutable policy and approval
+        or investigation. Sorted CUSTOMER/ORDER/INCIDENT/ACTOR/STORE locks serialize
+        the inclusive rolling-window decision. The owner Point Ledger/Lot or Coupon,
+        terminal incident marker, limit consumption, approval consumption, Audit and
+        idempotency record commit atomically. Audit failure rolls the issuance back.
+        Notification is requested only after commit and its failure remains visible.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteSupportCompensationRequest"
+      responses:
+        "200":
+          description: Durable terminal benefit and independent notification state, or exact replay
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-settlement-account-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreSettlementAccountChange
+      summary: Replace the exact R3 settlement-reference approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/compensations:
+    post:
+      tags: [Support]
+      operationId: createSupportCompensation
+      summary: Create one exact goodwill benefit request
+      description: |
+        Persists one POINT or immutable-template COUPON request and its exact policy,
+        target, verification, cost-allocation and digest bindings. MEDIUM creates an
+        S60 Support-manager approval; HIGH and EXCEPTIONAL create an Operations
+        investigation. Creation never issues the benefit.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportCompensationRequest"
+      responses:
+        "201":
+          description: Exact request created or its first idempotent response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/post-acceptance-resolutions:
+    post:
+      tags: [Support]
+      operationId: createPostAcceptanceResolution
+      summary: Plan an approved post-acceptance resolution without rewriting Order facts
+      description: |
+        Consumes only the exact approved S60 POST_ACCEPTANCE_RESOLUTION revision.
+        The canonical action digest uses support-command-payload/v1 operation
+        POST_ACCEPTANCE_RESOLUTION_ACTION_V1 with ordered orderId, outcome,
+        responsibility, cashRefundKrw, restorePoints, restoreCoupon,
+        settlementAdjustmentKrw and evidenceDigest fields. No owner command runs
+        until the separate execution operation consumes the revision.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostAcceptanceResolutionRequest"
+      responses:
+        "201":
+          description: Immutable resolution plan created or the first exact response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-executions:
+    post:
+      tags: [Support]
+      operationId: executeCustomerPrimaryPhoneChange
+      summary: Execute the exact approved R3 customer-phone payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-credential-reset-requests:
+    post:
+      tags: [Support]
+      operationId: createCustomerCredentialReset
+      summary: Request an R4 customer credential reset without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCredentialResetProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-public-profile-corrections:
+    post:
+      tags: [Support]
+      operationId: createStorePublicProfileCorrection
+      summary: Correct one or more R1 public store-profile fields
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorePublicProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-legal-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCustomerLegalNameCorrection
+      summary: Correct a customer legal-name typo under the R2 specialist workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLegalNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-payout-reference-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierPayoutReferenceChange
+      summary: Request an R3 opaque external-courier payout-reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-relay-contact-corrections:
+    post:
+      tags: [Support]
+      operationId: createCourierRelayContactCorrection
+      summary: Correct external-courier relay contact fields under the R2 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierRelayContactProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/timeline:
+    get:
+      tags: [Support]
+      operationId: listSupportOrderTimeline
+      summary: List owner facts for an Order linked to one SupportCase
+      description: |
+        Requires both Support Case/Order read permissions, current assignment and
+        an active RELATED_ORDER link. SUPPORT is not a valid explicit source for
+        this owner-only endpoint. Authorization is rechecked before response release.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/SupportOrderTimelineCaseId"
+        - $ref: "#/components/parameters/SupportTimelineSources"
+        - $ref: "#/components/parameters/SupportTimelineTypes"
+        - $ref: "#/components/parameters/SupportTimelineCursor"
+        - $ref: "#/components/parameters/SupportTimelineLimit"
+      responses:
+        "200":
+          description: Globally ordered masked owner facts
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportTimelinePage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-access-reregistration-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreAccessReregistration
+      summary: Request an R4 store access re-registration without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreAccessReregistrationProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierPayoutReferenceChange
+      summary: Execute the exact approved R3 courier payout-reference payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/executions:
+    post:
+      tags: [Support]
+      operationId: executeSupportOrderChange
+      summary: Execute one exact cancellation or pickup-reschedule revision
+      description: |
+        Recomputes the canonical action payload digest and rechecks the assigned
+        executor, active Case and relationship, verification, persistent permissions,
+        immutable policy, exact revision/request/target versions and latest owner state.
+        ACCEPTED requires a matching active store confirmation or delegation. A
+        PREPARING/READY/COMPLETED race commits RESOLUTION_REQUIRED without changing
+        the Order or consuming authorization. Owner changes, authorization use,
+        PII-free Audit, notification intent and the terminal response commit in one
+        local transaction; an Audit or persistence failure rolls all of them back.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteSupportOrderChangeRequest"
+      responses:
+        "200":
+          description: Durable owner and Support outcome, or the first exact response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportOrderChangeExecutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-provider-reregistration-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierProviderReregistration
+      summary: Request an R4 external-courier provider re-registration without accepting a secret
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderReregistrationProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/revisions:
+    post:
+      tags: [Support]
+      operationId: reviseSupportActionRequest
+      summary: Replace a returned request with a new immutable revision
+      description: Existing approval steps remain immutable and become stale lineage.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviseSupportActionRequest"
+      responses:
+        "200":
+          description: New revision created or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/action-requests:
+    post:
+      tags: [Support]
+      operationId: createSupportActionRequest
+      summary: Create an immutable revision-bound Support action request
+      description: |
+        Persists only SHA-256 action/evidence digests and an exact binding to the
+        Case, target version, verification session, policy version and expiry.
+        This endpoint creates approval work only and never executes an owner command.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportActionRequest"
+      responses:
+        "201":
+          description: Action request created or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-representative-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreRepresentativeChange
+      summary: Replace the exact R3 store-representative approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierProviderIdentityChange
+      summary: Execute the exact approved R3 courier provider-identity payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCustomerCredentialReset
+      summary: Replace the exact R4 customer-reset approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/investigations/{investigationId}/decisions:
+    post:
+      tags: [Operations]
+      operationId: decideOperationsSupportInvestigation
+      summary: Decide an Operations investigation for one Support request revision
+      description: |
+        Requires a distinct Operations reviewer. The Operations row and required
+        Support callback commit in one transaction; callback or Audit failure rolls
+        back both owners and does not claim a decision.
+      parameters:
+        - $ref: "#/components/parameters/OperationsInvestigationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideOperationsSupportInvestigationRequest"
+      responses:
+        "200":
+          description: Investigation decision and Support callback committed, or exact replay
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsSupportInvestigationDecisionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-display-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCustomerDisplayNameCorrection
+      summary: Correct a customer display name under the R1 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerDisplayNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-provider-identity-requests:
+    post:
+      tags: [Support]
+      operationId: createCourierProviderIdentityChange
+      summary: Request an R3 external-provider courier identity-reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-operations-contact-corrections:
+    post:
+      tags: [Support]
+      operationId: createStoreOperationsContactCorrection
+      summary: Correct R2 store operations contact fields
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreOperationsContactProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/compensation-evaluations:
+    post:
+      tags: [Support]
+      operationId: evaluateSupportCompensation
+      summary: Evaluate one versioned goodwill point or coupon request
+      description: |
+        Advises the LOW/MEDIUM/HIGH/EXCEPTIONAL band and route from the current
+        immutable policy version. The evaluation is case, customer, incident,
+        optional Order version and verification-session bound. It does not issue a
+        benefit and is re-evaluated at execution. Cost responsibility has no hidden
+        platform fallback and raw evidence is never accepted or returned.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateSupportCompensationRequest"
+      responses:
+        "200":
+          description: Advisory evaluation with the exact immutable policy version
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationEvaluationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/customer-primary-phone-requests:
+    post:
+      tags: [Support]
+      operationId: createCustomerPrimaryPhoneChange
+      summary: Request an R3 customer primary-phone change
+      description: A bound ENHANCED verification through a previously registered channel is required; the new phone alone is never sufficient.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-representative-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreRepresentativeChange
+      summary: Execute the exact approved R3 store-representative payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-settlement-account-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreSettlementAccountChange
+      summary: Execute the exact approved R3 settlement-reference payload
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/action-evaluations:
+    post:
+      tags: [Support]
+      operationId: evaluateSupportAction
+      summary: Evaluate one typed Support action against current server state
+      description: |
+        Returns advisory ALLOWED, APPROVAL_REQUIRED or DENIED with closed reasons,
+        current target version, immutable policy version and two-minute expiry.
+        The server reads role-independent persistent permissions, Case/relationship,
+        action-bound verification and the current Ordering snapshot. Execution must
+        re-evaluate and this response is never an execution capability.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateSupportActionRequest"
+      responses:
+        "200":
+          description: Current advisory decision, including closed denial reasons
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionEvaluationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-credential-reset-executions:
+    post:
+      tags: [Support]
+      operationId: executeCustomerCredentialReset
+      summary: Execute the exact approved R4 customer reset intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-payout-reference-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierPayoutReferenceChange
+      summary: Replace the exact R3 courier payout-reference approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierPayoutReferenceProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/customer-primary-phone-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCustomerPrimaryPhoneChange
+      summary: Replace the exact R3 customer-phone approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPrimaryPhoneProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/timeline:
+    get:
+      tags: [Support]
+      operationId: listSupportCaseTimeline
+      summary: List a bounded cross-context timeline for one SupportCase
+      description: |
+        Merges closed, masked Support and owner facts using the stable tuple
+        occurredAt DESC, source rank ASC, itemId DESC. The signed cursor is bound
+        to the Case and canonical source/type filters for 15 minutes. A required
+        owner failure returns 503; it is never converted to a partial or empty page.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/SupportTimelineSources"
+        - $ref: "#/components/parameters/SupportTimelineTypes"
+        - $ref: "#/components/parameters/SupportTimelineCursor"
+        - $ref: "#/components/parameters/SupportTimelineLimit"
+      responses:
+        "200":
+          description: Globally ordered masked transaction facts
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportTimelinePage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-executions:
+    post:
+      tags: [Support]
+      operationId: executeCourierProviderReregistration
+      summary: Execute the exact approved R4 courier provider re-registration intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-identity-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierProviderIdentityChange
+      summary: Replace the exact R3 courier provider-identity approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierProviderIdentityProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-executions:
+    post:
+      tags: [Support]
+      operationId: executeStoreAccessReregistration
+      summary: Execute the exact approved R4 store access re-registration intent
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeExecutionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/support-manager-decisions:
+    post:
+      tags: [Support]
+      operationId: decideSupportManagerApproval
+      summary: Decide the Support-manager step for one exact revision
+      description: |
+        The reviewer must differ from the requester and executor. Permission,
+        verification, policy, target version and exact expiry are rechecked under lock.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideSupportManagerApprovalRequest"
+      responses:
+        "200":
+          description: Decision committed or the first identical response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/store-access-reregistration-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseStoreAccessReregistration
+      summary: Replace the exact R4 store-access approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/notification-retries:
+    post:
+      tags: [Support]
+      operationId: retrySupportProfileChangeNotifications
+      summary: Retry only failed old/new/current profile notification intents
+      description: Never repeats the owner write or consumes approval again; the command and owner notification logical sources are idempotent.
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrySupportProfileChangeNotificationsRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/support-order-change-authorizations:
+    post:
+      tags: [Support]
+      operationId: createSupportOrderChangeAuthorization
+      summary: Confirm one exact accepted-order change or create a bounded delegation
+      description: |
+        Requires active store membership and an explicit STORE cost-responsibility
+        acceptance. CONFIRMATION is bound to the exact request, revision, canonical
+        action payload digest, target version and request expiry. DELEGATION is bound
+        to store, action and support-order-change-policy/2026-08-12/v1: cancellation
+        lasts ten minutes for one successful use and pickup reschedule lasts thirty
+        minutes for three successful uses. now >= expiresAt is expired. Validation
+        failure, rollback and RESOLUTION_REQUIRED do not consume a use.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportOrderChangeAuthorizationRequest"
+      responses:
+        "201":
+          description: Store authorization created or the first exact creation response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportOrderChangeAuthorizationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}:
+    get:
+      tags: [Support]
+      operationId: getSupportCompensation
+      summary: Read one masked goodwill request and owner delivery state
+      description: Returns identifiers and closed typed states only; customer PII, evidence and raw notification payloads are excluded.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+      responses:
+        "200":
+          description: Current request, terminal benefit and notification state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}:
+    get:
+      tags: [Support]
+      operationId: getSupportProfileChange
+      summary: Read one masked purpose-specific profile-change workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}:
+    get:
+      tags: [Support]
+      operationId: getSupportActionRequest
+      summary: Read one visible Support action request and materialize due terminal state
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+      responses:
+        "200":
+          description: Current request revision, approval lineage and execution readiness
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-representative-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreRepresentativeChange
+      summary: Request an R3 store representative change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRepresentativeProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/store-settlement-account-requests:
+    post:
+      tags: [Support]
+      operationId: createStoreSettlementAccountChange
+      summary: Request an R3 opaque store settlement-account reference change
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSettlementAccountProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/profile-changes/courier-display-name-corrections:
+    post:
+      tags: [Support]
+      operationId: createCourierDisplayNameCorrection
+      summary: Correct an external courier display name under the R1 workflow
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourierDisplayNameProfileChangeRequest"
+      responses:
+        "201": { $ref: "#/components/responses/SupportProfileChangeCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}/executions:
+    post:
+      tags: [Support]
+      operationId: executePostAcceptanceResolution
+      summary: Consume the exact approval and advance owner-specific resolution steps
+      description: |
+        Rechecks the assigned executor, persistent permissions, active Case/order
+        relationship, exact request/revision/Order versions and current owner fact.
+        Support claims one durable step before invoking its owner outside the Support
+        transaction. Owner success is not presented until the following Support Audit
+        and state commit succeeds. Provider timeout stays UNKNOWN/RECONCILING; a later
+        recovery performs lookup and never assumes success or silently reissues work.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutePostAcceptanceResolutionRequest"
+      responses:
+        "200":
+          description: Latest durable partial, unknown, manual-review or resolved state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}:
+    get:
+      tags: [Support]
+      operationId: getPostAcceptanceResolution
+      summary: Read one visible post-acceptance resolution and typed owner states
+      description: Returns closed step state and references only; evidence, Provider payloads and PII are never returned.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+      responses:
+        "200":
+          description: Current resolution plan and explicit partial, unknown or terminal owner states
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/compensations/{compensationRequestId}/notification-retries:
+    post:
+      tags: [Support]
+      operationId: retrySupportCompensationNotification
+      summary: Retry only the independent goodwill notification intent
+      description: Reuses the terminal benefit and never reissues Points or Coupons. Exact retry commands are idempotent.
+      parameters:
+        - $ref: "#/components/parameters/SupportCompensationRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Current durable request and notification owner state
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportCompensationResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/profile-changes/{profileChangeId}/courier-provider-reregistration-revisions:
+    post:
+      tags: [Support]
+      operationId: reviseCourierProviderReregistration
+      summary: Replace the exact R4 courier re-registration approval revision
+      parameters:
+        - $ref: "#/components/parameters/SupportProfileChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyProfileChangeRevisionRequest"
+      responses:
+        "200": { $ref: "#/components/responses/SupportProfileChangeOk" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/post-acceptance-resolutions/{resolutionId}/reconciliations:
+    post:
+      tags: [Support]
+      operationId: reconcilePostAcceptanceResolution
+      summary: Explicitly reconcile a manual-review Payment refund by owner lookup
+      description: |
+        Initial S80 permits only PAYMENT_REFUND. The exact resolution/Order versions
+        and idempotency payload are rechecked; POINT, COUPON, SETTLEMENT and notification
+        reissue through this operator endpoint is rejected as unsafe.
+      parameters:
+        - $ref: "#/components/parameters/PostAcceptanceResolutionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcilePostAcceptanceResolutionRequest"
+      responses:
+        "200":
+          description: Latest durable reconciliation outcome
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAcceptanceResolutionResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/action-requests/{requestId}/reassignments:
+    post:
+      tags: [Support]
+      operationId: reassignSupportActionRequest
+      summary: Atomically reassign a ready request and its SupportCase
+      description: |
+        Requires exact request revision/version and Case version. The target must
+        hold active Case-write, action-execute and capability-specific permissions
+        and must not be an approver for this revision.
+      parameters:
+        - $ref: "#/components/parameters/SupportActionRequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReassignSupportActionRequest"
+      responses:
+        "200":
+          description: Case and request reassigned atomically, or the first response replayed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportActionRequestResource"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
 components:
   securitySchemes:
     bearerAuth:
@@ -3356,6 +4700,91 @@ components:
         requires 1 to 200 characters after trimming, and rejects control characters.
       schema:
         type: string
+    SupportActionRequestId:
+      in: path
+      name: requestId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportOrderTimelineCaseId:
+      in: query
+      name: caseId
+      required: true
+      description: SupportCase that currently has the target Order linked as RELATED_ORDER.
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportTimelineLimit:
+      in: query
+      name: limit
+      required: false
+      description: Maximum globally merged facts. Defaults to 20 and may not exceed 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OperationsInvestigationId:
+      in: path
+      name: investigationId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportProfileChangeId:
+      in: path
+      name: profileChangeId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    PostAcceptanceResolutionId:
+      in: path
+      name: resolutionId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    SupportTimelineTypes:
+      in: query
+      name: types
+      required: false
+      description: Closed fact-type filter. Omission selects every type valid for the endpoint.
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        maxItems: 15
+        items:
+          $ref: "#/components/schemas/SupportTimelineType"
+    SupportTimelineCursor:
+      in: query
+      name: cursor
+      required: false
+      description: |
+        Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
+        canonical source/type filters. It expires after 15 minutes; malformed,
+        expired or scope-mismatched values return 400 INVALID_REQUEST.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    SupportTimelineSources:
+      in: query
+      name: sources
+      required: false
+      description: Closed source filter. Omission selects every source valid for the endpoint.
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        maxItems: 9
+        items:
+          $ref: "#/components/schemas/SupportTimelineSource"
+    SupportCompensationRequestId:
+      in: path
+      name: compensationRequestId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
   responses:
     AuthenticationFailed:
       description: Credentials are invalid, the account is absent, locked, or expired; these cases are not distinguished.
@@ -3498,6 +4927,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    SupportProfileChangeOk:
+      description: Current masked workflow, exact approval binding and independent notification state
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SupportProfileChangeResource"
+    SupportProfileChangeCreated:
+      description: Purpose-specific workflow created or its exact idempotent result replayed
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SupportProfileChangeResource"
   headers:
     NoStore:
       required: true
@@ -4731,12 +6178,13 @@ components:
       type: string
       description: |
         System-determined cancellation origin. CUSTOMER_REQUEST is a customer
-        cancellation command; PAYMENT_DECLINED is a cancellation caused by an
-        explicit Provider approval decline. Only CUSTOMER_REQUEST cancellations
-        carry a customer-declared reason code.
+        command, SUPPORT_REQUEST is an approved Support owner command and
+        PAYMENT_DECLINED is caused by an explicit Provider approval decline.
+        CUSTOMER_REQUEST and SUPPORT_REQUEST carry a structured reason code.
       enum:
         - CUSTOMER_REQUEST
         - PAYMENT_DECLINED
+        - SUPPORT_REQUEST
     StoreOrder:
       description: |
         Store-facing Order projection. Store members see the cancellation fact
@@ -6165,6 +7613,10 @@ components:
           enum: [BASIC, ENHANCED]
         purpose:
           $ref: "#/components/schemas/VerificationPurpose"
+        actionScope:
+          allOf:
+            - $ref: "#/components/schemas/VerificationActionScope"
+          default: PERSONAL_DATA_REVEAL
     IssueVerificationChallengeRequest:
       type: object
       additionalProperties: false
@@ -6205,7 +7657,7 @@ components:
     VerificationSessionResource:
       type: object
       additionalProperties: false
-      required: [sessionId, caseId, subjectLinkId, subjectType, subjectId, purpose, requestedLevel, achievedLevel, state, invalidAttempts, startedAt, expiresAt, version, challenges]
+      required: [sessionId, caseId, subjectLinkId, subjectType, subjectId, purpose, actionScope, requestedLevel, achievedLevel, state, invalidAttempts, startedAt, expiresAt, version, challenges]
       properties:
         sessionId:
           $ref: "#/components/schemas/Identifier"
@@ -6219,6 +7671,8 @@ components:
           $ref: "#/components/schemas/Identifier"
         purpose:
           $ref: "#/components/schemas/VerificationPurpose"
+        actionScope:
+          $ref: "#/components/schemas/VerificationActionScope"
         requestedLevel:
           $ref: "#/components/schemas/VerificationLevel"
         achievedLevel:
@@ -6824,3 +8278,1339 @@ components:
           type: integer
           format: int64
           minimum: 0
+    DecideOperationsSupportInvestigationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, decision, reason, evidenceDigest]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decision:
+          $ref: "#/components/schemas/OperationsSupportInvestigationDecision"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    CustomerPrimaryPhoneProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    ReconcilePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [stepType, expectedResolutionVersion, expectedOrderVersion]
+      properties:
+        stepType:
+          type: string
+          const: PAYMENT_REFUND
+        expectedResolutionVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    StorePublicProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: [string, "null"], minLength: 1, maxLength: 200, writeOnly: true }
+        publicPhone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        description: { type: [string, "null"], minLength: 1, maxLength: 1000, writeOnly: true }
+        pickupInstructions: { type: [string, "null"], minLength: 1, maxLength: 1000, writeOnly: true }
+    PostAcceptanceResolutionStepType:
+      type: string
+      enum: [PAYMENT_REFUND, POINT_RESTORATION, COUPON_RESTORATION, SETTLEMENT_ADJUSTMENT, CUSTOMER_NOTIFICATION]
+    ExecutePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedResolutionVersion, expectedRequestVersion, expectedOrderVersion]
+      properties:
+        expectedResolutionVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    CourierProviderIdentityProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    SupportActionReasonCode:
+      type: string
+      enum:
+        - POLICY_ALLOWED
+        - POLICY_APPROVAL_REQUIRED
+        - UNSUPPORTED_TARGET_STATE
+        - CASE_NOT_ELIGIBLE
+        - TARGET_RELATIONSHIP_MISMATCH
+        - MISSING_PERMISSION
+        - VERIFICATION_SCOPE_MISMATCH
+        - VERIFICATION_PURPOSE_MISMATCH
+        - INSUFFICIENT_VERIFICATION
+        - STALE_TARGET_VERSION
+    StoreSettlementAccountProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    EvaluateSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, expectedTargetVersion, verificationSessionId]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+    CreateSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, expectedTargetVersion, verificationSessionId, actionPayloadDigest, reason, evidenceDigest]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    StoreRepresentativeProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    SupportApprovalStepState:
+      type: string
+      enum: [PENDING, APPROVED, DENIED, RETURNED, EXPIRED, STALE, ESCALATED]
+    SupportTimelineSource:
+      type: string
+      enum: [SUPPORT, ORDERING, PAYMENT, LOYALTY, PROMOTION, FULFILLMENT, SETTLEMENT, NOTIFICATION, OPERATIONS]
+    SupportApprovalStepResource:
+      type: object
+      additionalProperties: false
+      required: [stepType, state, decidedByActorId, decidedAt]
+      properties:
+        stepType:
+          $ref: "#/components/schemas/SupportApprovalStepType"
+        state:
+          $ref: "#/components/schemas/SupportApprovalStepState"
+        decidedByActorId:
+          type: [string, "null"]
+          format: uuid
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+    EvaluateSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [incidentId, expectedTargetVersion, benefitType, amountKrw, responsibility, platformShareBps, storeShareBps, verificationSessionId]
+      properties:
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        responsibility:
+          $ref: "#/components/schemas/SupportCompensationResponsibility"
+        evidenceBasis:
+          oneOf:
+            - $ref: "#/components/schemas/SupportCompensationEvidenceBasis"
+            - type: "null"
+        costEvidenceDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+      description: |
+        POINT forbids couponTemplateId; COUPON requires an immutable template whose
+        fixed amount equals amountKrw. Shares must total 10000. STORE/SHARED require
+        explicit evidence basis and SHA-256 evidence digest. UNDETERMINED is denied.
+    CreateSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [incidentId, expectedTargetVersion, benefitType, amountKrw, responsibility, platformShareBps, storeShareBps, verificationSessionId, evidenceDigest]
+      properties:
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        responsibility:
+          $ref: "#/components/schemas/SupportCompensationResponsibility"
+        evidenceBasis:
+          oneOf:
+            - $ref: "#/components/schemas/SupportCompensationEvidenceBasis"
+            - type: "null"
+        costEvidenceDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+      description: Persists only evidence digests; raw evidence and customer PII are forbidden.
+    SupportActionRequestResource:
+      type: object
+      additionalProperties: false
+      required: [requestId, caseId, action, targetId, requesterActorId, executorActorId, revisionNumber, state, approvalRoute, actionPayloadDigest, verificationSessionId, policyVersion, targetVersion, amountKrw, evidenceDigest, expiresAt, requestVersion, approvalSteps, terminalExecutionId, terminalResolutionId]
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        caseId:
+          $ref: "#/components/schemas/Identifier"
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        targetId:
+          $ref: "#/components/schemas/Identifier"
+        requesterActorId:
+          $ref: "#/components/schemas/Identifier"
+        executorActorId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        policyVersion:
+          type: string
+          minLength: 1
+          maxLength: 160
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        amountKrw:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        expiresAt:
+          type: string
+          format: date-time
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        approvalSteps:
+          type: array
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/SupportApprovalStepResource"
+        terminalExecutionId:
+          type: [string, "null"]
+          format: uuid
+        terminalResolutionId:
+          type: [string, "null"]
+          format: uuid
+    CustomerCredentialResetProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    PostAcceptanceResolutionResource:
+      type: object
+      additionalProperties: false
+      required: [resolutionId, supportCaseId, requestId, revisionNumber, orderId, triggerOrderState, triggerOrderVersion, outcome, responsibility, cashRefundKrw, restorePoints, restoreCoupon, settlementAdjustmentKrw, state, version, createdAt, updatedAt, steps]
+      properties:
+        resolutionId:
+          $ref: "#/components/schemas/Identifier"
+        supportCaseId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        triggerOrderState:
+          type: string
+          enum: [PREPARING, READY, COMPLETED]
+        triggerOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        outcome:
+          $ref: "#/components/schemas/PostAcceptanceResolutionOutcome"
+        responsibility:
+          $ref: "#/components/schemas/PostAcceptanceResolutionResponsibility"
+        cashRefundKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        restorePoints:
+          type: boolean
+        restoreCoupon:
+          type: boolean
+        settlementAdjustmentKrw:
+          type: [integer, "null"]
+          format: int64
+          maximum: -1
+        state:
+          $ref: "#/components/schemas/PostAcceptanceResolutionState"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/PostAcceptanceResolutionStepResource"
+    SupportCompensationRequestState:
+      type: string
+      enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, BENEFIT_ISSUED, NOTIFICATION_RETRY, NOTIFICATION_ACCEPTED]
+    PostAcceptanceResolutionStepResource:
+      type: object
+      additionalProperties: false
+      required: [type, state, attemptCount, resultReference, failureCode, nextAttemptAt, ownerState]
+      properties:
+        type:
+          $ref: "#/components/schemas/PostAcceptanceResolutionStepType"
+        state:
+          $ref: "#/components/schemas/PostAcceptanceResolutionStepState"
+        attemptCount:
+          type: integer
+          minimum: 0
+        resultReference:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 240
+        failureCode:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9_]{1,80}$"
+        nextAttemptAt:
+          type: [string, "null"]
+          format: date-time
+        ownerState:
+          type: [string, "null"]
+          description: Current Notification delivery state for CUSTOMER_NOTIFICATION; null for financial owner steps.
+    SupportTimelineType:
+      type: string
+      enum:
+        - CASE_STATE
+        - CASE_ASSIGNMENT
+        - CASE_INTERACTION
+        - CASE_NOTE
+        - SUBJECT_LINK
+        - ORDER_STATE
+        - PAYMENT_STATE
+        - REFUND_STATE
+        - POINT_RESERVATION
+        - COUPON_RESERVATION
+        - PICKUP_RESERVATION
+        - SETTLEMENT_ITEM
+        - SETTLEMENT_ADJUSTMENT
+        - NOTIFICATION_DELIVERY
+        - OPERATION_AUDIT
+    ExecuteSupportOrderChangeRequest:
+      oneOf:
+        - $ref: "#/components/schemas/ExecuteSupportOrderCancellationRequest"
+        - $ref: "#/components/schemas/ExecuteSupportPickupRescheduleRequest"
+      discriminator:
+        propertyName: action
+        mapping:
+          ORDER_CANCELLATION: "#/components/schemas/ExecuteSupportOrderCancellationRequest"
+          PICKUP_RESCHEDULE: "#/components/schemas/ExecuteSupportPickupRescheduleRequest"
+      description: |
+        Canonical action digest uses the length-prefixed support-command-payload/v1
+        representation with operation SUPPORT_ORDER_CHANGE_ACTION_V1 and ordered
+        fields action, orderId, cancellationReasonCode and newPickupSlotId. The
+        inapplicable action field is represented as null and authorizationId is not
+        part of the action digest.
+    SupportActionEvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [action, orderId, decision, reasonCodes, requiredPermissions, requiredVerificationLevel, approvalRequirements, policyVersion, targetVersion, evaluatedAt, expiresAt]
+      properties:
+        action:
+          $ref: "#/components/schemas/SupportActionType"
+        orderId:
+          $ref: "#/components/schemas/Identifier"
+        decision:
+          $ref: "#/components/schemas/SupportActionDecision"
+        reasonCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionReasonCode"
+        requiredPermissions:
+          type: array
+          minItems: 2
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionPermission"
+        requiredVerificationLevel:
+          type: string
+          enum: [BASIC, ENHANCED]
+        approvalRequirements:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportActionApprovalRequirement"
+        policyVersion:
+          type: string
+          const: support-action-policy/2026-08-12/v1
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        evaluatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    CustomerPrimaryPhoneProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    ExecuteSupportCompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRequestVersion, expectedTargetVersion, expectedPayloadDigest]
+      properties:
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    ProfileChangeExecutionBinding:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedActionRequestVersion, expectedProfileChangeVersion, expectedProfileVersion]
+      properties:
+        revisionNumber: { type: integer, minimum: 1 }
+        expectedActionRequestVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+    StoreSettlementAccountProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    SupportTimelineItem:
+      type: object
+      additionalProperties: false
+      required: [itemId, source, type, state, summary, amountKrw, occurredAt]
+      properties:
+        itemId:
+          $ref: "#/components/schemas/Identifier"
+        source:
+          $ref: "#/components/schemas/SupportTimelineSource"
+        type:
+          $ref: "#/components/schemas/SupportTimelineType"
+        state:
+          $ref: "#/components/schemas/SupportTimelineState"
+        summary:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Server-generated closed type/state label; never owner free text or PII.
+        amountKrw:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        occurredAt:
+          type: string
+          format: date-time
+    CourierProviderReregistrationProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    SupportOrderChangeExecutionOutcome:
+      type: string
+      enum: [EXECUTED, RESOLUTION_REQUIRED]
+    OperationsSupportInvestigationState:
+      type: string
+      enum: [OPEN, APPROVED, DENIED, RETURNED, ESCALATED, EXPIRED, STALE]
+    CustomerPrimaryPhoneProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, primaryPhone]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        primaryPhone: { type: string, minLength: 1, maxLength: 32, writeOnly: true }
+    CustomerLegalNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, legalName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        legalName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    CourierRelayContactProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        phone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        email: { type: [string, "null"], format: email, maxLength: 320, writeOnly: true }
+    CreateSupportOrderChangeAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [authorizationType, action, policyVersion, costResponsibility]
+      properties:
+        authorizationType:
+          $ref: "#/components/schemas/SupportOrderChangeAuthorizationType"
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        policyVersion:
+          $ref: "#/components/schemas/SupportOrderChangePolicyVersion"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        costResponsibility:
+          type: string
+          const: STORE
+      description: |
+        CONFIRMATION requires requestId, revisionNumber and expectedRequestVersion.
+        DELEGATION forbids all three request-specific properties.
+    SupportCompensationReasonCode:
+      type: string
+      enum:
+        - RELATED_ORDER_MISSING
+        - AMOUNT_ABOVE_LOW_LIMIT
+        - AMOUNT_ABOVE_HIGH_LIMIT
+        - AMOUNT_ABOVE_SUPPORTED_LIMIT
+        - ORDER_RATIO_ABOVE_LOW_LIMIT
+        - REPEATED_CUSTOMER_COMPENSATION
+        - STORE_COST_RESPONSIBILITY
+        - COST_RESPONSIBILITY_UNDETERMINED
+        - DUPLICATE_TERMINAL_INCIDENT
+        - INSUFFICIENT_VERIFICATION
+        - STALE_TARGET_VERSION
+    SupportProfileChangeNotificationResource:
+      type: object
+      additionalProperties: false
+      required: [targetKind, channel, state, deliveryId, failureCode, attempts]
+      properties:
+        targetKind: { type: string, enum: [OLD, NEW, CURRENT] }
+        channel: { type: string, enum: [PHONE, EMAIL] }
+        state: { type: string, enum: [PENDING, PROCESSING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
+        deliveryId: { type: [string, "null"], format: uuid }
+        failureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
+        attempts: { type: integer, minimum: 0, maximum: 3 }
+    ExecuteSupportPickupRescheduleRequest:
+      type: object
+      additionalProperties: false
+      required: [action, revisionNumber, expectedRequestVersion, expectedTargetVersion, newPickupSlotId]
+      properties:
+        action:
+          type: string
+          const: PICKUP_RESCHEDULE
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        newPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+    SupportActionType:
+      type: string
+      enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION]
+    SupportActionApprovalRoute:
+      type: string
+      enum: [NONE, SUPPORT_MANAGER, OPERATIONS, SUPPORT_MANAGER_THEN_OPERATIONS]
+    SupportOrderChangeAuthorizationType:
+      type: string
+      enum: [CONFIRMATION, DELEGATION]
+    SupportActionApprovalRequirement:
+      type: string
+      enum: [SUPPORT_MANAGER]
+    CourierDisplayNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, displayName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    SupportCompensationResponsibility:
+      type: string
+      enum: [PLATFORM, STORE, SHARED, UNDETERMINED]
+    RetrySupportProfileChangeNotificationsRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedProfileChangeVersion]
+      properties:
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+    OperationsSupportInvestigationDecision:
+      type: string
+      enum: [APPROVE, DENY, RETURN_FOR_REVISION, ESCALATE]
+    SupportApprovalDecision:
+      type: string
+      enum: [APPROVE, DENY, RETURN_FOR_REVISION]
+    VerificationActionScope:
+      type: string
+      enum: [PERSONAL_DATA_REVEAL, SUPPORT_ACTION]
+    SupportCompensationEvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [policyVersionId, band, decision, approvalRoute, requiredVerificationLevel, executable, reasonCodes, targetVersion, evaluatedAt, expiresAt]
+      properties:
+        policyVersionId:
+          $ref: "#/components/schemas/Identifier"
+        band:
+          $ref: "#/components/schemas/SupportCompensationBand"
+        decision:
+          $ref: "#/components/schemas/SupportCompensationDecision"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        requiredVerificationLevel:
+          $ref: "#/components/schemas/VerificationLevel"
+        executable:
+          type: boolean
+        reasonCodes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/SupportCompensationReasonCode"
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        evaluatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    ProfileChangeRevisionBinding:
+      type: object
+      additionalProperties: false
+      required: [expectedProfileChangeVersion, expectedActionRequestVersion, expectedProfileVersion, verificationSessionId, reason, evidenceDigest]
+      properties:
+        expectedProfileChangeVersion: { type: integer, format: int64, minimum: 0 }
+        expectedActionRequestVersion: { type: integer, format: int64, minimum: 0 }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        evidenceDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+    ReviseSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevisionNumber, expectedRequestVersion, expectedTargetVersion, verificationSessionId, actionPayloadDigest, reason, evidenceDigest]
+      properties:
+        expectedRevisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        actionPayloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    CourierProviderIdentityProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    SupportOrderChangeExecutionResource:
+      type: object
+      additionalProperties: false
+      required: [executionId, requestId, revisionNumber, action, outcome, previousTargetState, currentTargetState, previousPickupSlotId, currentPickupSlotId, expectedTargetVersion, targetVersionAfter, paymentRecoveryState, authorizationId, occurredAt, requestState, requestVersion]
+      properties:
+        executionId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        outcome:
+          $ref: "#/components/schemas/SupportOrderChangeExecutionOutcome"
+        previousTargetState:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        currentTargetState:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        previousPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        currentPickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        targetVersionAfter:
+          type: integer
+          format: int64
+          minimum: 0
+        paymentRecoveryState:
+          type: [string, "null"]
+          enum: [NOT_REQUIRED, REQUESTED, null]
+        authorizationId:
+          type: [string, "null"]
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        requestState:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportApprovalStepType:
+      type: string
+      enum: [SUPPORT_MANAGER, OPERATIONS]
+    CustomerDisplayNameProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, displayName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        displayName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    PostAcceptanceResolutionOutcome:
+      type: string
+      enum: [FULL_REFUND, PARTIAL_REFUND, NO_MONETARY_RESOLUTION, MANUAL_SETTLEMENT_REVIEW]
+    PostAcceptanceResolutionState:
+      type: string
+      enum: [PLANNED, EXECUTING, PARTIALLY_RESOLVED, RECONCILING, RESOLVED, MANUAL_REVIEW]
+    SupportTimelineState:
+      type: string
+      enum:
+        - OPEN
+        - PENDING_CUSTOMER
+        - PENDING_STORE
+        - ESCALATED
+        - RESOLVED
+        - CLOSED
+        - ASSIGNED
+        - INBOUND
+        - OUTBOUND
+        - INTERNAL
+        - RECORDED
+        - LINKED
+        - UNLINKED
+        - PENDING_PAYMENT
+        - PAID
+        - ACCEPTED
+        - PREPARING
+        - READY
+        - COMPLETED
+        - REJECTED
+        - EXPIRED
+        - CANCELLED
+        - APPROVING
+        - APPROVED
+        - FAILED
+        - UNKNOWN
+        - RECONCILING
+        - MANUAL_REVIEW
+        - REQUESTED
+        - PROCESSING
+        - SUCCEEDED
+        - RESERVED
+        - USED
+        - RELEASED
+        - CONFIRMED
+        - ITEM_CREATED
+        - ADJUSTMENT_RECORDED
+        - PENDING
+        - RETRY_SCHEDULED
+    SupportProfileChangeResource:
+      type: object
+      additionalProperties: false
+      description: Raw before/after values, verification proof, evidence and secrets are deliberately excluded.
+      required: [profileChangeId, caseId, subjectType, subjectId, purpose, riskClass, requesterActorId, executorActorId, verificationSessionId, expectedProfileVersion, currentProfileVersion, payloadDigest, actionRequestId, state, notificationState, notificationFailureCode, maskedBefore, maskedAfter, version, createdAt, updatedAt, notifications]
+      properties:
+        profileChangeId: { $ref: "#/components/schemas/Identifier" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        subjectType: { type: string, enum: [CUSTOMER, STORE, RIDER] }
+        subjectId: { $ref: "#/components/schemas/Identifier" }
+        purpose:
+          type: string
+          enum: [CUSTOMER_DISPLAY_NAME, CUSTOMER_LEGAL_NAME_TYPO, CUSTOMER_PRIMARY_PHONE, CUSTOMER_CREDENTIAL_RESET, STORE_PUBLIC_PROFILE, STORE_OPERATIONS_CONTACT, STORE_REPRESENTATIVE, STORE_SETTLEMENT_ACCOUNT, STORE_ACCESS_REREGISTRATION, COURIER_DISPLAY_NAME, COURIER_RELAY_CONTACT, COURIER_PROVIDER_IDENTITY, COURIER_PAYOUT_REFERENCE, COURIER_PROVIDER_REREGISTRATION]
+        riskClass: { type: string, enum: [R1, R2, R3, R4] }
+        requesterActorId: { $ref: "#/components/schemas/Identifier" }
+        executorActorId: { $ref: "#/components/schemas/Identifier" }
+        verificationSessionId: { $ref: "#/components/schemas/Identifier" }
+        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
+        currentProfileVersion: { type: [integer, "null"], format: int64, minimum: 0 }
+        payloadDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        actionRequestId: { type: [string, "null"], format: uuid }
+        state: { type: string, enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, EXECUTED] }
+        notificationState: { type: string, enum: [PENDING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
+        notificationFailureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
+        maskedBefore: { type: [string, "null"], maxLength: 1000 }
+        maskedAfter: { type: [string, "null"], maxLength: 1000 }
+        version: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        notifications:
+          type: array
+          maxItems: 4
+          items: { $ref: "#/components/schemas/SupportProfileChangeNotificationResource" }
+    CourierPayoutReferenceProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    StoreAccessReregistrationProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+    SupportActionDecision:
+      type: string
+      enum: [ALLOWED, APPROVAL_REQUIRED, DENIED]
+    CourierPayoutReferenceProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    EmptyProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+    SupportTimelinePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/SupportTimelineItem"
+        nextCursor:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 2048
+    CreatePostAcceptanceResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, revisionNumber, expectedRequestVersion, expectedOrderVersion, outcome, responsibility, cashRefundKrw, restorePoints, restoreCoupon, evidenceDigest]
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedOrderVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        outcome:
+          $ref: "#/components/schemas/PostAcceptanceResolutionOutcome"
+        responsibility:
+          $ref: "#/components/schemas/PostAcceptanceResolutionResponsibility"
+        cashRefundKrw:
+          type: integer
+          format: int64
+          minimum: 0
+        restorePoints:
+          type: boolean
+        restoreCoupon:
+          type: boolean
+        settlementAdjustmentKrw:
+          type: [integer, "null"]
+          format: int64
+          maximum: -1
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+      description: |
+        FULL_REFUND/PARTIAL_REFUND require positive cashRefundKrw. Non-refund
+        outcomes require zero cash and no benefit restoration. STORE/SHARED require
+        an exact negative settlementAdjustmentKrw except MANUAL_SETTLEMENT_REVIEW.
+        CUSTOMER/PLATFORM/UNDETERMINED forbid an automatic Settlement adjustment.
+    StoreSettlementAccountProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, accountReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        accountReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    CourierPayoutReferenceProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, payoutReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        payoutReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    SupportActionRequestState:
+      type: string
+      enum:
+        - AWAITING_SUPPORT_MANAGER
+        - AWAITING_OPERATIONS
+        - READY_FOR_EXECUTION
+        - REASSIGNMENT_REQUIRED
+        - REVISION_REQUIRED
+        - DENIED
+        - EXPIRED
+        - STALE
+        - MANUAL_REVIEW
+        - EXECUTED
+        - RESOLUTION_REQUIRED
+    PostAcceptanceResolutionResponsibility:
+      type: string
+      enum: [CUSTOMER, STORE, PLATFORM, SHARED, UNDETERMINED]
+    SupportCompensationEvidenceBasis:
+      type: string
+      enum: [STORE_CONSENT, OPERATIONS_FINDING, CONTRACTUAL_RULE]
+    SupportActionPermission:
+      type: string
+      enum: [SUPPORT_ACTION_REQUEST, SUPPORT_ORDER_CANCEL, SUPPORT_PICKUP_RESCHEDULE, SUPPORT_RESOLUTION_REQUEST]
+    SupportCompensationDecision:
+      type: string
+      enum: [ALLOWED, APPROVAL_REQUIRED, INVESTIGATION_REQUIRED, DENIED]
+    OperationsSupportInvestigationDecisionResource:
+      type: object
+      additionalProperties: false
+      required: [investigationId, requestId, revisionId, revisionNumber, state, supportRequestState, supportRequestVersion, decidedByActorId, decidedAt, version]
+      properties:
+        investigationId:
+          $ref: "#/components/schemas/Identifier"
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        revisionId:
+          $ref: "#/components/schemas/Identifier"
+        revisionNumber:
+          type: integer
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/OperationsSupportInvestigationState"
+        supportRequestState:
+          $ref: "#/components/schemas/SupportActionRequestState"
+        supportRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decidedByActorId:
+          type: [string, "null"]
+          format: uuid
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    SupportOrderChangePolicyVersion:
+      type: string
+      const: support-order-change-policy/2026-08-12/v1
+    SupportCompensationResource:
+      type: object
+      additionalProperties: false
+      required: [compensationRequestId, supportCaseId, incidentId, orderId, storeId, benefitType, amountKrw, couponTemplateId, policyVersionId, band, approvalRoute, actionRequestId, state, payloadDigest, terminalBenefitId, benefitIssuedAt, notificationDeliveryId, notificationState, notificationFailureCode, version, createdAt, updatedAt]
+      properties:
+        compensationRequestId:
+          $ref: "#/components/schemas/Identifier"
+        supportCaseId:
+          $ref: "#/components/schemas/Identifier"
+        incidentId:
+          $ref: "#/components/schemas/Identifier"
+        orderId:
+          type: [string, "null"]
+          format: uuid
+        storeId:
+          type: [string, "null"]
+          format: uuid
+        benefitType:
+          $ref: "#/components/schemas/SupportCompensationBenefitType"
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+        couponTemplateId:
+          type: [string, "null"]
+          format: uuid
+        policyVersionId:
+          $ref: "#/components/schemas/Identifier"
+        band:
+          $ref: "#/components/schemas/SupportCompensationBand"
+        approvalRoute:
+          $ref: "#/components/schemas/SupportActionApprovalRoute"
+        actionRequestId:
+          type: [string, "null"]
+          format: uuid
+        state:
+          $ref: "#/components/schemas/SupportCompensationRequestState"
+        payloadDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        terminalBenefitId:
+          type: [string, "null"]
+          format: uuid
+        benefitIssuedAt:
+          type: [string, "null"]
+          format: date-time
+        notificationDeliveryId:
+          type: [string, "null"]
+          format: uuid
+        notificationState:
+          type: [string, "null"]
+          enum: [PENDING, PROCESSING, SUCCEEDED, RETRY_SCHEDULED, MANUAL_REVIEW, null]
+        notificationFailureCode:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9_]{1,80}$"
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: Deliberately excludes customer ID, PII, evidence digests, raw provider payloads and cost evidence.
+    CourierProviderIdentityProfileChangeExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, providerReference]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeExecutionBinding" }
+        providerReference: { type: string, pattern: "^[A-Za-z0-9:_-]{4,200}$", writeOnly: true }
+    StoreRepresentativeProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    SupportCompensationBand:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, EXCEPTIONAL]
+    SupportOrderChangeCostResponsibility:
+      type: string
+      enum: [STORE, PLATFORM, UNKNOWN]
+      description: Only STORE is accepted by the S70 direct-change authorization endpoint.
+    StoreRepresentativeProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding, representativeName]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }
+        representativeName: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    ExecuteSupportOrderCancellationRequest:
+      type: object
+      additionalProperties: false
+      required: [action, revisionNumber, expectedRequestVersion, expectedTargetVersion, reasonCode]
+      properties:
+        action:
+          type: string
+          const: ORDER_CANCELLATION
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedTargetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reasonCode:
+          $ref: "#/components/schemas/CancellationReasonCode"
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+    PostAcceptanceResolutionStepState:
+      type: string
+      enum: [PENDING, PROCESSING, RETRY_SCHEDULED, SUCCEEDED, NOT_REQUIRED, UNKNOWN, RECONCILING, MANUAL_REVIEW, BLOCKED]
+    SupportCompensationBenefitType:
+      type: string
+      enum: [POINT, COUPON]
+    ReassignSupportActionRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedRequestVersion, expectedCaseVersion, assigneeId, reason]
+      properties:
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedCaseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        assigneeId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    StoreOperationsContactProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      minProperties: 2
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeBinding" }
+        phone: { type: [string, "null"], minLength: 1, maxLength: 32, writeOnly: true }
+        email: { type: [string, "null"], format: email, maxLength: 320, writeOnly: true }
+    SupportOrderChangeAuthorizationResource:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, storeId, authorizationType, action, policyVersion, requestId, revisionNumber, actionPayloadDigest, targetVersion, authorizedByActorId, authorizedAt, expiresAt, maxSuccessfulUses, successfulUses, costResponsibility]
+      properties:
+        authorizationId:
+          $ref: "#/components/schemas/Identifier"
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        authorizationType:
+          $ref: "#/components/schemas/SupportOrderChangeAuthorizationType"
+        action:
+          type: string
+          enum: [ORDER_CANCELLATION, PICKUP_RESCHEDULE]
+        policyVersion:
+          $ref: "#/components/schemas/SupportOrderChangePolicyVersion"
+        requestId:
+          type: [string, "null"]
+          format: uuid
+        revisionNumber:
+          type: [integer, "null"]
+          minimum: 1
+        actionPayloadDigest:
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        targetVersion:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        authorizedByActorId:
+          $ref: "#/components/schemas/Identifier"
+        authorizedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        maxSuccessfulUses:
+          type: integer
+          minimum: 1
+          maximum: 3
+        successfulUses:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Creation response snapshot. Exact creation replay returns the same zero-use snapshot.
+        costResponsibility:
+          type: string
+          const: STORE
+    DecideSupportManagerApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionNumber, expectedRequestVersion, decision, reason]
+      properties:
+        revisionNumber:
+          type: integer
+          minimum: 1
+        expectedRequestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        decision:
+          $ref: "#/components/schemas/SupportApprovalDecision"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ProfileChangeBinding:
+      type: object
+      additionalProperties: false
+      required: [subjectId, expectedProfileVersion, verificationSessionId, reason, evidenceDigest]
+      properties:
+        subjectId:
+          $ref: "#/components/schemas/Identifier"
+        expectedProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        verificationSessionId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidenceDigest:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+    EmptyProfileChangeRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [binding]
+      properties:
+        binding: { $ref: "#/components/schemas/ProfileChangeRevisionBinding" }

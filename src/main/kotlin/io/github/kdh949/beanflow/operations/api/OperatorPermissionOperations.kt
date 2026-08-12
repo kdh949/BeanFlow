@@ -56,4 +56,10 @@ interface OperatorPermissionAuthorization {
         actorId: UUID,
         permission: OperatorPermission,
     )
+
+    /** Locks the persistent grant and returns its current state in the caller's local transaction. */
+    fun hasActive(
+        actorId: UUID,
+        permission: OperatorPermission,
+    ): Boolean
 }

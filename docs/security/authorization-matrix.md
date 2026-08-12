@@ -241,3 +241,15 @@ Support Manager, Operations reviewer와 executor separation을 서버와 DB 제�
 정확한 capability 표와 negative fixture 계획은 [Support role matrix](support-role-permission-matrix.md),
 [object authorization](support-object-level-authorization.md),
 [planned test strategy](../testing/support-test-strategy.md)를 따른다.
+
+### S90 goodwill compensation
+
+| Operation | Persistent permissions | Object and separation checks |
+|---|---|---|
+| evaluate/create | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_REQUEST` | active assigned Case, linked customer/order, exact action-bound verification; HIGH/EXCEPTIONAL requires ENHANCED |
+| read | `SUPPORT_CASE_READ` | Case-scoped visibility; customer PII/evidence/cost evidence excluded |
+| execute | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_EXECUTE` | assigned executor, exact request/payload/target/policy version, manager/Operations approval; reviewer cannot execute |
+| notification retry | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_EXECUTE` | terminal benefit already exists and Support state is `NOTIFICATION_RETRY`; no benefit input or reissue |
+
+JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row는 caller transaction에서 잠그므로 revoke와
+실행이 직렬화된다. Operations reviewer는 exact request를 반환할 뿐 Point/Coupon을 발급하지 않는다.

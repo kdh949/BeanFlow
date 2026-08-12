@@ -34,6 +34,7 @@ internal enum class VerificationPurpose {
 
 internal enum class VerificationActionScope {
     PERSONAL_DATA_REVEAL,
+    SUPPORT_ACTION,
 }
 
 internal enum class VerificationChannel {
@@ -69,6 +70,9 @@ internal class VerificationSession private constructor(
 
     init {
         require(requestedLevel != VerificationLevel.UNVERIFIED) { "A verification session must request BASIC or ENHANCED" }
+        require(actionScope != VerificationActionScope.SUPPORT_ACTION || purpose == VerificationPurpose.CASE_RESOLUTION) {
+            "Support action verification must use the case-resolution purpose"
+        }
         require(expiresAt == startedAt.plus(SESSION_TTL)) { "Verification session lifetime must be fifteen minutes" }
         require(invalidAttempts in 0..MAX_INVALID_ATTEMPTS) { "Verification invalid-attempt count is invalid" }
         validateState()
@@ -295,6 +299,10 @@ internal class VerificationChallenge private constructor(
     ): ChallengeState {
         check(state == ChallengeState.VERIFYING) { "Verification challenge is not awaiting an outcome" }
         require(occurredAt >= requestedAt) { "Challenge outcome time cannot move backward" }
+        if (!occurredAt.isBefore(expiresAt)) {
+            state = ChallengeState.VERIFICATION_UNKNOWN
+            return state
+        }
         state =
             when (outcome) {
                 ChallengeOutcome.VERIFIED -> ChallengeState.VERIFIED

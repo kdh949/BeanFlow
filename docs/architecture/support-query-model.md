@@ -1,9 +1,9 @@
 # Support Query Model
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list and S30 protected exact search are implemented. Timeline and
-> cross-context owner-composed views remain proposed implementation models.
-> **Canonical API status:** S20 Case-list and S30 exact-search schemas are accepted/runtime-backed; S50 timeline/action
-> query schemas are not yet accepted or present in OpenAPI.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case list, S30 protected exact search and S50 Case/Order timeline are implemented.
+> Later Delivery and additional cross-context views remain proposed implementation models.
+> **Canonical API status:** S20 Case-list, S30 exact-search and S50 timeline/action-evaluation schemas are
+> accepted/runtime-backed.
 
 ## S20 Case list
 
@@ -26,7 +26,30 @@ assignee-only가 assignee index scan(2.060ms, 14 buffers), state+assignee가 ass
 state+assignee composite index는 유지한다. 이 fixture 결과는 production SLO나 일반 성능 수치가 아니며, data
 distribution이나 query projection이 달라지면 동일 조건으로 재측정한다.
 
-## Future support query model
+## S50 integrated timeline contract
+
+S50 composes Case and Order timelines from owner public query DTOs. Ordering, Payment, Loyalty, Promotion, Fulfillment,
+Settlement, Notification and Operations each execute at most one bounded query for the supplied Order ID set; Support
+does not loop owner calls per Case link. Local Case history, interaction, note metadata and subject-link lifecycle remain
+Support-owned projections. The global tuple is `(occurredAt DESC, sourceRank ASC, itemId DESC)` and the signed endpoint/
+filter contract is recorded in ADR-070.
+
+The response uses closed source/type/state vocabulary and a server-created masked summary. It never returns note content,
+interaction free text, payment/provider reference, notification payload, Audit before/after summary, recipient identity or
+raw profile data. A required owner query failure is a non-success response, not an empty partial timeline. V43 adds the two
+missing Order-history indexes and the owning Stage records an identical-fixture EXPLAIN baseline/re-measure before claiming
+an index effect.
+
+### S50 timeline-index evidence (2026-08-12)
+
+PostgreSQL 17.5 Testcontainers에서 각 table 20,000행, target Order 1행, `LIMIT 20`의 동일 fixture를 사용했다.
+`payment_refund`는 V43 index 제거 시 19,999행을 제거하는 sequential scan(604 shared buffers)이었고 index 재생성
+후 `(order_id, updated_at DESC, id DESC)` index scan(3 shared buffers)을 선택했다. `notification_delivery`도 같은
+조건에서 sequential scan(19,999행 제거, 840 buffers)에서 V43 index scan(3 buffers)으로 전환됐다.
+`SupportTimelineQueryPlanTest`가 두 baseline/re-measure 계획을 모두 출력하고 scan type을 검증한다. 이 결과는
+해당 synthetic fixture의 plan evidence이며 production latency나 일반 성능 향상 주장이 아니다.
+
+## Later support query model
 
 `SupportSearchQueryService`, `SupportSubjectSummary`, `SupportOrderTimeline`, `SupportDeliveryView` and `SupportActionAvailabilityView` compose owner DTOs without adding JPA relationships to write models.
 
@@ -37,7 +60,7 @@ exception. ADR-083 fixes Vault Transit AEAD ciphertext and a separate versioned 
 the minimal owner profile tables and masked DTOs; Support stores neither raw criteria nor long-lived owner profile
 copies. The product scope is exact bounded search; Elasticsearch requires measured need and a new Accepted decision.
 
-Each timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
+Each later timeline Stage must define its endpoint-specific item type, stable ordering tuple, canonical filters and page bounds
 from the implemented owner DTOs before adopting ADR-070. The S20 Case-list tuple is not a shared Support tuple. Items
 expose only the source, public state, masked summary and correlation/causation reference that their typed contract
 allows. Dependency failure is non-success, never an empty 200. A materialized projection is allowed only when lag,

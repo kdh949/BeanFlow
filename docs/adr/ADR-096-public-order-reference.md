@@ -132,7 +132,7 @@ ALTER TABLE ordering_order ADD CONSTRAINT ck_ordering_order_public_reference
 
 ## Implementation Outcome (2026-08-12)
 
-- V43가 nullable 컬럼, 영구 registry, 카운터를 열고 V44가 backfill preflight 뒤 Unique/FK/NOT NULL과
+- V50가 nullable 컬럼, 영구 registry, 카운터를 열고 V51이 backfill preflight 뒤 Unique/FK/NOT NULL과
   불변 trigger를 닫는다.
 - `OrderReferenceBackfillService`는 `(created_at, id)` keyset과 bounded transaction으로 재시작 가능하게
   구현됐고, 별도 Gradle CLI와 운영 runbook을 제공한다.

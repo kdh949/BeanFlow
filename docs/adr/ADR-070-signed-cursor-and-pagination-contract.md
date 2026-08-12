@@ -107,6 +107,8 @@ beanflow:
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
 | `GET /payment-methods` | `(isDefault DESC, createdAt DESC, paymentMethodId DESC)` | authenticated customer ID와 endpoint |
 | `GET /support/cases` | `(openedAt DESC, caseId DESC)` | endpoint, optional state와 optional assignee ID |
+| `GET /support/cases/{caseId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, sorted distinct source/type filters |
+| `GET /support/orders/{orderId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, Order ID, sorted distinct source/type filters |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
@@ -123,6 +125,15 @@ cursor는 400이다. default 또는 lifecycle 상태가 page 요청 사이 바�
 lowercase canonical UUID를 string array로 인코딩한다. endpoint identifier는 `support-cases`, filter hash는
 endpoint와 optional state/assignee ID의 canonical value로 계산하고, expiry는 15분이다. interaction/note는
 Case Aggregate collection에 올리지 않으며 cursor response에도 포함하지 않는다.
+
+2026-08-12 S50 amendment: Support timeline cursor는 `occurredAt` UTC ISO-8601 Instant, 두 자리 zero-padded
+decimal `sourceRank`, lowercase canonical UUID `itemId`를 이 순서의 string array로 인코딩한다. Case endpoint
+identifier는 `support-case-timeline`, Order endpoint identifier는 `support-order-timeline`이며 expiry는 모두
+15분이다. filter hash canonical form은 property 순서가 고정된 JSON으로 endpoint, lowercase Case ID,
+Order endpoint에만 lowercase Order ID, alphabetical order의 중복 없는 source/type 배열을 포함한다. 빈 filter
+배열은 all-source/all-type을 뜻하고 생략과 같은 canonical value를 사용한다. page limit은 common default 20,
+maximum 100이다. Source rank는 공개 contract의 closed vocabulary에 고정되며 새 source가 추가돼도 기존 rank를
+재배치하지 않는다. 매 page에서 Case scope, active Order link, persistent permission을 다시 확인한다.
 
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고

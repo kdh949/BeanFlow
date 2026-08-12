@@ -25,6 +25,12 @@ Plan 10 완료 뒤 Support S70~S100도 연속 Flyway migration과 stacked PR을 
 연속성은 Plan 10 완료 시점에서 일시 중단하고, Support stack이 완료되기 전에는 Plan 20을 시작하지
 않는 것으로 개정한다.
 
+2026-08-13 `origin/main`은 Support S50~S100과 PR #63 remediation을 모두 포함해 V43~V49를
+완료했고 migration lease를 해제했다. 사용자는 최신 `origin/main`을 현재 Plan 10 branch에 가져와
+반영하고, 더 이상 병렬 writer가 없음을 명시했다. 따라서 동결 조건은 충족됐으며, 기존 Plan 10
+history를 rebase하거나 force-push하지 않고 `origin/main`을 merge한 뒤 미적용 Plan 10 migration을
+V50/V51로 재번호화하고 전체 검증을 다시 수행하는 resume 예외가 필요하다.
+
 ## Decision
 
 ### Exact scope와 순서
@@ -45,9 +51,11 @@ Plan 70, 80, 90과 100은 이 stack에 포함하지 않는다. dependency graph�
 executor는 위 순서에서 아직 완료되지 않은 첫 plan 하나만 선택한다. orchestration plan은 실행 후보가
 아니다.
 
-현재 실행은 Plan 10 completion에서 **동결**한다. Plan 20은 dependency가 완료됐더라도
-`Implementation-Ready=false`이며, Support S70~S100 completion과 migration lease release, 통합 기준
-branch와 다음 Flyway 번호가 모두 다시 기록되기 전에는 후보가 아니다.
+2026-08-12의 Plan 10 completion 동결은 Support S70~S100 completion, V49 lease release와
+`origin/main` 통합 기준을 확인한 2026-08-13에 해제한다. Plan 10은 V50/V51 재번호화와 전체 검증을
+다시 통과해야 하며, 그 completion head가 확정되기 전까지 Plan 20의
+`Implementation-Ready=false`는 유지한다. 검증 완료와 같은 기록 변경에서 Plan 20을 다시
+`Implementation-Ready=true`로 전환한다.
 
 ### Provisional baseline과 branch/PR 체인
 
@@ -61,6 +69,10 @@ commit이 그 head의 ancestor이고 필요한 Support 파일과 migration이 ex
 `SUPPORT_INTEGRATION_PENDING`으로 기록하고 Stack A를 중단하지 않는다. observed `origin/main` SHA는
 증거로 남기지만 이후 변화도 중단·restack·force-push 사유가 아니다. 구현 branch와 Draft PR base는
 다음으로 고정한다.
+
+2026-08-13 기준 두 commit과 Support S50~S100 후속 이력은 `origin/main`의 ancestor이며
+`SUPPORT_INTEGRATION_PENDING`은 해소됐다. 위 문단은 최초 provisional baseline의 허용 조건을 보존하는
+역사적 규칙이고, 현재 resume 기준은 아래 merge commit과 V49 inventory다.
 
 | Plan | Branch | Draft PR base |
 |---|---|---|
@@ -78,10 +90,11 @@ head가 expected predecessor tree와 정확히 일치할 때만 재사용한다.
 다르면 force-push하지 않고 중단한다. PR head는 맞고 base만 틀린 경우에는 head를 바꾸지 않고 표의
 base로 정정한다.
 
-동결 중에는 기존 Plan 00/10 Draft PR을 merge·close·force-push하지 않는다. Support S100 뒤 resume은
-현재 V43/V44를 그대로 재사용하는 작업이 아니다. 먼저 Support 통합 기준 tree에서 migration inventory를
-다시 계산하고, Plan 10의 두 migration과 후속 Plan 20~60 번호를 재할당할 branch/PR 전환 방식을 별도
-결정 기록으로 확정해야 한다.
+기존 Plan 00/10 Draft PR은 merge·close·force-push하지 않는다. Resume은 Plan 10의 V43/V44를 그대로
+재사용하는 작업이 아니다. 현재 Plan 10 remote head `8aa3704014c0943aa7e80e8205c007caaf3a28d2`를
+first parent로 유지하고, Support V43~V49를 포함한 `origin/main`
+`48a0b6166751d2f4e991408ce618d1182b592380`을 second parent로 하는 history-preserving merge를
+사용한다. Plan 10의 두 migration은 V50/V51로 옮기고 PR #57의 base는 Plan 00 branch로 유지한다.
 
 ### Stack 내부 completion
 
@@ -93,7 +106,9 @@ stack branch에서 plan을 `COMPLETED`로 이동할 수 있는 조건은 다음�
 3. 같은 atomic completion commit에서 active→completed 이동, status/date 변경, 모든 direct
    successor path 갱신, 새로 ready가 된 successor의 `Implementation-Ready=true`와 문서 graph 검증을
    함께 수행한다.
-4. completion commit의 parent가 이 ADR에 지정된 exact predecessor head다.
+4. completion commit의 parent가 이 ADR에 지정된 exact predecessor head다. 단, 2026-08-13 Plan 10
+   resume completion은 위에 기록한 Plan 10 remote head와 `origin/main`을 두 parent로 갖는 merge
+   commit이며, Plan 00 verified completion이 first-parent history의 ancestor여야 한다.
 5. commit과 Draft PR head가 remote에서 동일한 SHA로 확인된다.
 
 Stack A branch의 `COMPLETED`는 **기록된 predecessor 위에서 구현과 검증을 마쳤다**는 뜻이다. `main`
@@ -102,15 +117,19 @@ merge, production deployment, Support 통합 또는 프로그램 완료를 뜻�
 ### Migration-writer lease
 
 Plan 00은 migration을 쓰지 않는다. Plan 10 시작 직전에 획득한 repository-wide migration-writer lease는
-Plan 10 완료 검증 뒤 2026-08-12에 해제했다. 다음 sole writer는 Support S70이며 Support stacked
-inventory의 V44 다음 번호인 V45부터 사용한다.
+Plan 10 완료 검증 뒤 2026-08-12에 해제했고 Support S70~S100이 V45~V48을 사용했다. PR #63 review
+remediation의 V49까지 `origin/main`에 통합되고 lease가 해제된 것을 2026-08-13에 확인했으므로, 현재
+sole writer를 Productization Stack A로 되돌린다.
 
-- Plan 10은 exact predecessor tree의 combined migration inventory에서 마지막 번호 다음을 선택한다.
-- Plan 10 branch의 V43/V44는 검증된 Draft 산출물이지만 Support branch의 동명 migration과 합칠 수 없다.
-- Plan 20~60은 Support S100 완료 전 시작하거나 번호를 예약하지 않는다.
-- resume 시 Support 통합 기준 tree의 마지막 번호 다음에서 Plan 10 migration부터 순서대로 재번호화한다.
+- Plan 10은 merged combined inventory의 V49 다음인 V50 expand와 V51 contract를 사용한다.
+- Plan 10 branch의 기존 V43/V44와 중간 보정 V45/V46은 배포·적용되지 않았으며 최종 tree에 남기지 않는다.
+- Plan 20~60은 직전 plan의 실제 completion 시점에 combined inventory의 다음 번호를 배정한다.
 - lease가 살아 있는 동안 unrelated schema-writing plan을 시작하지 않는다.
 - duplicate DDL, checksum repair 또는 같은 버전의 서로 다른 migration 병합으로 경쟁을 보정하지 않는다.
+
+이 resume은 사용자가 병렬 작업 종료를 명시했고 `origin/main`의 Support V43~V49 completion 및 lease
+release를 확인한 현재 실행에 한정한다. 새 writer나 deployment가 발견되면 V50/V51을 release하지 않고
+다시 중단한다.
 
 ### Final seven-PR topology
 
@@ -118,8 +137,8 @@ Plan 60 검증과 completion commit 뒤 새 release branch나 combined PR을 만
 표의 정확히 일곱 개 open Draft PR이다. `feature/productization-plans`를 head로 하는 PR,
 `feature/productization-stack-a-release`, Plan 70+ branch/PR 또는 여러 plan을 합친 추가 PR은 금지한다.
 각 PR의 head SHA가 local·remote와 일치하고 base가 표와 일치하며, Plan 60 head에서 전체 required
-validation이 통과한 뒤 resumed Stack A lease를 해제한다. 현재 동결 상태는 Plan 00/10 두 Draft PR만
-존재하며 나머지 다섯 PR을 미리 만들지 않는다. automation은 어떤 PR도 merge하거나 닫지 않는다.
+validation이 통과한 뒤 resumed Stack A lease를 해제한다. Resume 시작 시점에는 Plan 00/10 두 Draft
+PR만 존재하며 나머지 다섯 PR을 미리 만들지 않는다. automation은 어떤 PR도 merge하거나 닫지 않는다.
 
 ### Mandatory stop conditions
 
@@ -131,7 +150,7 @@ validation이 통과한 뒤 resumed Stack A lease를 해제한다. 현재 동결
 - exact predecessor/head SHA 불일치, base-only 정정으로 해소할 수 없는 branch/PR 충돌
 - 중요한 제품·보안·정합성 결정을 추측해야 함
 - migration 충돌, 적용 여부 불명 또는 외부 Provider 결과 `UNKNOWN`
-- Support S100 completion/lease release 또는 productization 재번호화 기준이 아직 없음
+- Support V43~V49를 포함한 통합 기준, productization 재번호화 또는 sole-writer 상태가 다시 불명확해짐
 - credential, approval 또는 GitHub 권한 부족
 
 ## Alternatives Considered
@@ -160,9 +179,9 @@ Plan 10~60의 migration 번호와 schema baseline이 경쟁하고, GitHub PR의 
 - Plan별 Draft PR로 review 가능한 diff와 검증 checkpoint를 유지한다.
 - stack tip에서 dependency와 completion evidence가 연속되므로 하나의 Goal이 다음 plan을 결정적으로
   선택할 수 있다.
-- Plan 10 완료 산출물은 Draft PR에 보존하되 productization writer lane은 Support에 양보한다.
-- Support S70~S100 동안 Plan 20~60 구현이 중단되며, resume 시 Plan 10 이후 schema branch를 다시
-  구성하고 전체 검증을 재실행해야 한다.
+- Plan 10 최초 완료 산출물은 Draft PR에 보존한 채 productization writer lane을 Support에 양보했다.
+- Support S70~S100 동안 Plan 20~60 구현을 중단했고, resume 시 Plan 10 branch에 `origin/main`을 merge해
+  schema baseline을 V49로 올리고 V50/V51 및 전체 검증을 다시 적용한다.
 - `origin/main` drift가 자동 진행을 중단시키지 않으므로 각 PR의 exact predecessor/head 검증이 더 중요하다.
 - Stack A 완료는 P0 Core 중간 통합점이며 전체 제품화 프로그램 완료가 아니다.
 
@@ -171,6 +190,8 @@ Plan 10~60의 migration 번호와 schema baseline이 경쟁하고, GitHub PR의 
 - 각 iteration 시작 시 provisional baseline, exact predecessor SHA와 clean worktree를 확인한다.
 - Checkpoint 1에서 두 Support commit의 Plan 00 ancestry, `origin/main` ancestry와 필수 파일/migration을
   확인하고 비통합은 `SUPPORT_INTEGRATION_PENDING`으로 기록한다.
+- Resume checkpoint에서 `origin/main` V43~V49 inventory, S100/PR #63 completion과 lease release,
+  Plan 10 merge parents 및 V50/V51 단일성을 확인한다.
 - `bash scripts/verify-docs.sh`로 active/completed path, metadata와 dependency graph를 검증한다.
 - 각 plan의 required test와 validation 결과를 해당 ExecPlan과 orchestration Progress에 기록한다.
 - Draft PR의 base/head와 local/remote commit SHA가 일치하는지 확인한다.

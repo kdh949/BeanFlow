@@ -25,13 +25,26 @@ import javax.sql.DataSource
 @Testcontainers(disabledWithoutDocker = true)
 internal class OrderReferenceMigrationTest {
     @Test
-    fun `V43 opens a backfill window and initializes the legacy pickup counter`() {
+    fun `Plan 10 migrations follow the completed Support V43 through V49 inventory`() {
+        val migrations =
+            flyway(database("order_reference_inventory"))
+                .load()
+                .info()
+                .all()
+                .associate { it.description to it.version.version }
+
+        assertThat(migrations["expand public order reference and display identity"]).isEqualTo("50")
+        assertThat(migrations["contract public order reference and display identity"]).isEqualTo("51")
+    }
+
+    @Test
+    fun `V50 opens a backfill window and initializes the legacy pickup counter`() {
         val dataSource = database("order_reference_expand")
-        flyway(dataSource).target("42").load().migrate()
+        flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         val fixture = insertLegacyOrder(jdbc)
 
-        flyway(dataSource).target("43").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
 
         assertThat(columns(jdbc)).contains(
             "public_reference",
@@ -50,12 +63,12 @@ internal class OrderReferenceMigrationTest {
     }
 
     @Test
-    fun `V44 closes the window and makes six display identity fields immutable`() {
+    fun `V51 closes the window and makes six display identity fields immutable`() {
         val dataSource = database("order_reference_contract")
-        flyway(dataSource).target("42").load().migrate()
+        flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         val fixture = insertLegacyOrder(jdbc)
-        flyway(dataSource).target("43").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
         val reference = "BF-2345-6789"
         jdbc.update(
             "INSERT INTO ordering_public_reference_registry (public_reference, allocated_at) VALUES (?, ?)",
@@ -89,11 +102,11 @@ internal class OrderReferenceMigrationTest {
     @Test
     fun `bounded backfill is restartable and ranks legacy orders by creation time and id`() {
         val dataSource = database("order_reference_backfill")
-        flyway(dataSource).target("42").load().migrate()
+        flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         val later = insertLegacyOrder(jdbc, createdAt = FIXED_NOW.plusSeconds(1))
         val earlier = insertLegacyOrder(jdbc, existing = later, createdAt = FIXED_NOW)
-        flyway(dataSource).target("43").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
         val references = listOf("BF-2345-6789", "BF-ABCD-EFGH")
         val cursor = AtomicInteger()
         val backfill =
@@ -123,10 +136,10 @@ internal class OrderReferenceMigrationTest {
     @Test
     fun `backfill fails without a verified profile and never writes a placeholder`() {
         val dataSource = database("order_reference_backfill_missing_profile")
-        flyway(dataSource).target("42").load().migrate()
+        flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         insertLegacyOrder(jdbc, includeProfile = false)
-        flyway(dataSource).target("43").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
         val backfill =
             OrderReferenceBackfillService(
                 jdbc,
@@ -144,9 +157,9 @@ internal class OrderReferenceMigrationTest {
     }
 
     @Test
-    fun `V44 rejects a missing locked pickup grant window instead of inventing a timestamp`() {
+    fun `V51 rejects a missing locked pickup grant window instead of inventing a timestamp`() {
         val dataSource = database("order_reference_missing_grant")
-        flyway(dataSource).target("42").load().migrate()
+        flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         val fixture = insertLegacyOrder(jdbc)
         jdbc.update(
@@ -164,7 +177,7 @@ internal class OrderReferenceMigrationTest {
             Timestamp.from(FIXED_NOW),
             Timestamp.from(FIXED_NOW),
         )
-        flyway(dataSource).target("43").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
         OrderReferenceBackfillService(
             jdbc,
             PublicOrderReferenceCandidateGenerator { PublicOrderReference.parse("BF-2345-6789") },

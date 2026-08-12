@@ -41,6 +41,6 @@ the exact organization/permission mapping is finalized by its owning implementat
 - 제품 수치와 정책: [Business Policy Decisions](business-policy-decisions.md)
 - Case와 작업 정책: 이 디렉터리의 `support-*.md`
 - 구조와 상태: `docs/architecture/support-*.md`
-- API inventory: `docs/api/support-api-surface.md`; S20–S40의 Case/search/verification/Grant/break-glass 22개
-  operation은 canonical OpenAPI에 구현됐고 이후 typed Stage contract만 추가한다
+- API inventory: `docs/api/support-api-surface.md`; S20–S50의 Case/search/verification/Grant/break-glass/timeline/
+  action-evaluation 25개 operation은 canonical OpenAPI에 구현됐고 이후 typed Stage contract만 추가한다
 - 구현 순서: `docs/exec-plans/active/customer-support-program-orchestration.md`와 Stage별 completed/active plan

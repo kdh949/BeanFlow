@@ -7,7 +7,9 @@ import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundSucceede
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
+import io.github.kdh949.beanflow.notification.api.ProfileNotificationOwnerType
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestProfileChangeNotificationCommand
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
@@ -19,6 +21,8 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.shared.api.ProfileNotificationChannel
+import io.github.kdh949.beanflow.shared.api.ProfileNotificationTargetKind
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -229,6 +233,31 @@ internal class NotificationDeliveryRepositoryTest
                 assertThat(it.message).contains("NOTIFICATION_SOURCE_CONFLICT")
             }
             assertThat(repository.count()).isEqualTo(1)
+        }
+
+        @Test
+        fun `profile change logical source rejoins across request correlations when semantic payload is unchanged`() {
+            val profileChangeId = UUID.randomUUID()
+            val targetId = UUID.randomUUID()
+            val first =
+                RequestProfileChangeNotificationCommand(
+                    profileChangeId,
+                    ProfileNotificationOwnerType.CUSTOMER,
+                    targetId,
+                    ProfileNotificationTargetKind.OLD,
+                    ProfileNotificationChannel.PHONE,
+                    "CUSTOMER_PRIMARY_PHONE",
+                    NOW,
+                    "first-http-correlation",
+                )
+            val retry = first.copy(correlationId = "retry-http-correlation")
+
+            val accepted = service.requestProfileChange(first)
+            val rejoined = service.requestProfileChange(retry)
+
+            assertThat(rejoined.deliveryId).isEqualTo(accepted.deliveryId)
+            assertThat(repository.count()).isOne()
+            assertThat(repository.findAll().single().correlationId).isEqualTo("first-http-correlation")
         }
 
         private fun cancellationSucceededEvent(

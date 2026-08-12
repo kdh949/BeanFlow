@@ -47,6 +47,7 @@ internal data class CreateVerificationSessionCommand(
     val subjectLinkId: UUID,
     val requestedLevel: VerificationLevel,
     val purpose: VerificationPurpose,
+    val actionScope: VerificationActionScope,
     val idempotencyKey: String,
     val correlationId: String,
 )
@@ -81,6 +82,7 @@ internal data class VerificationSessionResource(
     val subjectType: VerificationSubjectType,
     val subjectId: UUID,
     val purpose: VerificationPurpose,
+    val actionScope: VerificationActionScope,
     val requestedLevel: VerificationLevel,
     val achievedLevel: VerificationLevel,
     val state: VerificationState,
@@ -246,6 +248,7 @@ internal class SupportVerificationTransactions(
                         command.subjectLinkId,
                         command.requestedLevel,
                         command.purpose,
+                        command.actionScope,
                     ).joinToString("|"),
                 ),
                 VerificationSessionResource::class.java,
@@ -271,7 +274,7 @@ internal class SupportVerificationTransactions(
                         subjectId = link.subjectId,
                         actorId = command.actorId,
                         purpose = command.purpose,
-                        actionScope = VerificationActionScope.PERSONAL_DATA_REVEAL,
+                        actionScope = command.actionScope,
                         requestedLevel = command.requestedLevel,
                         startedAt = now,
                     )
@@ -498,12 +501,19 @@ internal class SupportVerificationTransactions(
                     VerificationChallengeVerifyResult.INVALID -> ChallengeOutcome.INVALID
                     VerificationChallengeVerifyResult.UNKNOWN -> ChallengeOutcome.UNKNOWN
                 }
-            challengeAggregate.complete(outcome, now)
+            val completedState = challengeAggregate.complete(outcome, now)
+            val effectiveOutcome =
+                when (completedState) {
+                    ChallengeState.VERIFIED -> ChallengeOutcome.VERIFIED
+                    ChallengeState.INVALID -> ChallengeOutcome.INVALID
+                    ChallengeState.VERIFICATION_UNKNOWN -> ChallengeOutcome.UNKNOWN
+                    else -> error("Verification completion produced a non-terminal provider state")
+                }
             challenge.apply(challengeAggregate, now)
             sessionAggregate.refresh(now)
             var lockedUntil: Instant? = null
             if (sessionAggregate.state == VerificationState.PENDING) {
-                when (outcome) {
+                when (effectiveOutcome) {
                     ChallengeOutcome.VERIFIED -> sessionAggregate.recordVerifiedChannel(challenge.channel, now)
                     ChallengeOutcome.INVALID -> lockedUntil = sessionAggregate.recordInvalidAttempt(now)
                     ChallengeOutcome.UNKNOWN -> Unit
@@ -520,7 +530,7 @@ internal class SupportVerificationTransactions(
                     challenge.id,
                     start.actorId,
                     challenge.channel,
-                    outcome.name,
+                    effectiveOutcome.name,
                     now,
                 ),
             )
@@ -552,7 +562,7 @@ internal class SupportVerificationTransactions(
                         start.actorId,
                         start.correlationId,
                         now,
-                        mapOf("outcome" to outcome.name, "sessionState" to session.state.name),
+                        mapOf("outcome" to effectiveOutcome.name, "sessionState" to session.state.name),
                         "support-verification-attempt:$attemptId",
                     ),
                 ),
@@ -837,6 +847,7 @@ private fun VerificationSessionEntity.toResource(challenges: List<VerificationCh
         subjectType,
         subjectId,
         purpose,
+        actionScope,
         requestedLevel,
         if (state == VerificationState.VERIFIED) requestedLevel else VerificationLevel.UNVERIFIED,
         state,

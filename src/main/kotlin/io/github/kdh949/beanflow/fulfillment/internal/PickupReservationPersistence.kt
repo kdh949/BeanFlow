@@ -49,6 +49,13 @@ internal class PickupSlotEntity(
         confirmedCount++
     }
 
+    fun reserveConfirmedOne() {
+        if (reservedCount + confirmedCount >= capacity) {
+            throw IllegalStateException("Pickup slot capacity is exhausted")
+        }
+        confirmedCount++
+    }
+
     fun releaseOne() {
         check(reservedCount > 0)
         reservedCount--
@@ -76,12 +83,12 @@ internal class PickupReservationEntity(
     @Column(name = "order_id", nullable = false)
     val orderId: UUID,
     @Column(name = "slot_id", nullable = false)
-    val slotId: UUID,
+    var slotId: UUID,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var state: PickupReservationState,
     @Column(name = "expires_at", nullable = false)
-    val expiresAt: Instant,
+    var expiresAt: Instant,
     @Column(name = "slot_starts_at_snapshot", nullable = false)
     val slotStartsAtSnapshot: Instant,
     @Column(name = "slot_ends_at_snapshot", nullable = false)
@@ -99,6 +106,28 @@ internal class PickupReservationEntity(
     var restorationTrigger: OrderTerminationTrigger? = null,
     @Version
     var version: Long = 0,
+)
+
+@Entity
+@Table(name = "fulfillment_pickup_reschedule_history")
+internal class PickupRescheduleHistoryEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "reservation_id", nullable = false)
+    val reservationId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "previous_slot_id", nullable = false)
+    val previousSlotId: UUID,
+    @Column(name = "current_slot_id", nullable = false)
+    val currentSlotId: UUID,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reservation_state", nullable = false, length = 32)
+    val reservationState: PickupReservationState,
+    @Column(name = "source_reference", nullable = false, length = 240)
+    val sourceReference: String,
+    @Column(name = "occurred_at", nullable = false)
+    val occurredAt: Instant,
 )
 
 internal interface PickupSlotJpaRepository : JpaRepository<PickupSlotEntity, UUID> {
@@ -119,4 +148,8 @@ internal interface PickupReservationJpaRepository : JpaRepository<PickupReservat
     fun findLockedByOrderId(
         @Param("orderId") orderId: UUID,
     ): PickupReservationEntity?
+}
+
+internal interface PickupRescheduleHistoryJpaRepository : JpaRepository<PickupRescheduleHistoryEntity, UUID> {
+    fun findBySourceReference(sourceReference: String): PickupRescheduleHistoryEntity?
 }

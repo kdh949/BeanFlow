@@ -4,7 +4,12 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
 import io.github.kdh949.beanflow.operations.internal.PaymentCancellationSetupIntegrityWorker
+import io.github.kdh949.beanflow.ordering.api.OrderingSupportOrderCancellationOperations
+import io.github.kdh949.beanflow.ordering.api.OrderingSupportPickupRescheduleOperations
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
+import io.github.kdh949.beanflow.ordering.api.SupportOrderCancellationCommand
+import io.github.kdh949.beanflow.ordering.api.SupportOrderChangeOwnerResult
+import io.github.kdh949.beanflow.ordering.api.SupportPickupRescheduleCommand
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.micrometer.core.instrument.MeterRegistry
@@ -56,6 +61,8 @@ internal class CustomerCancellationCommandIntegrationTest
         private val reservationExpiryUseCase: ReservationExpiryUseCase,
         private val meterRegistry: MeterRegistry,
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
+        private val supportPickupReschedules: OrderingSupportPickupRescheduleOperations,
+        private val supportOrderCancellations: OrderingSupportOrderCancellationOperations,
     ) {
         @BeforeEach
         fun cleanDatabase() {
@@ -181,6 +188,130 @@ internal class CustomerCancellationCommandIntegrationTest
             cancel(orderId, fixture.customerId, "c0-another-key", "ORDER_MISTAKE", null)
                 .also { assertThat(it.status).isEqualTo(409) }
             assertThat(countCommandAudits()).isEqualTo(6)
+        }
+
+        @Test
+        fun `support pickup reschedule updates owner models once and replays exact source`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "support-reschedule-create")
+            val nextSlotId = UUID.randomUUID()
+            insertPickupSlot(nextSlotId, fixture.storeId)
+            val orderVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
+            val command =
+                SupportPickupRescheduleCommand(
+                    supportRequestId = UUID.randomUUID(),
+                    supportExecutionId = UUID.randomUUID(),
+                    actorId = UUID.randomUUID(),
+                    orderId = orderId,
+                    expectedOrderVersion = orderVersion,
+                    newPickupSlotId = nextSlotId,
+                    acceptedStoreAuthorizationId = null,
+                    sourceReference = "support-pickup-reschedule:$orderId",
+                )
+
+            val first = supportPickupReschedules.reschedule(command)
+            val replay = supportPickupReschedules.reschedule(command)
+
+            assertThat(first.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
+            assertThat(replay.result).isEqualTo(SupportOrderChangeOwnerResult.ALREADY_APPLIED)
+            assertThat(first.orderVersion).isEqualTo(orderVersion + 1)
+            assertThat(value("SELECT pickup_slot_id::text FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo(nextSlotId.toString())
+            assertThat(value("SELECT slot_id::text FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
+                .isEqualTo(nextSlotId.toString())
+            assertThat(count("ordering_support_order_change_history")).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE action = 'ORDER_SUPPORT_PICKUP_RESCHEDULED'",
+                    Long::class.java,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `support cancellation uses dedicated cause releases pending resources and replays once`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "support-cancel-create")
+            val command = supportCancellationCommand(orderId, expectedVersion = 0)
+
+            val first = supportOrderCancellations.cancel(command)
+            val replay = supportOrderCancellations.cancel(command)
+
+            assertThat(first.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
+            assertThat(replay.result).isEqualTo(SupportOrderChangeOwnerResult.ALREADY_APPLIED)
+            assertThat(value("SELECT cancellation_cause FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("SUPPORT_REQUEST")
+            assertThat(value("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
+                .isEqualTo("RELEASED")
+            assertThat(value("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
+                .isEqualTo("RELEASED")
+            assertThat(count("ordering_support_order_change_history")).isOne()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record " +
+                        "WHERE action = 'ORDER_SUPPORT_CANCELLED' AND actor_type = 'PLATFORM_OPERATOR'",
+                    Long::class.java,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `preparing support cancellation returns resolution required without rewriting order fact`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "support-preparing-create")
+            approvePayment(orderId, fixture.customerId, 1_000)
+            jdbcTemplate.update(
+                "UPDATE ordering_order SET state = 'PREPARING', accepted_at = now(), preparing_at = now(), version = version + 2 " +
+                    "WHERE id = ?",
+                orderId,
+            )
+            val currentVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
+
+            val report = supportOrderCancellations.cancel(supportCancellationCommand(orderId, currentVersion - 1))
+
+            assertThat(report.result).isEqualTo(SupportOrderChangeOwnerResult.RESOLUTION_REQUIRED)
+            assertThat(report.currentState).isEqualTo("PREPARING")
+            assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PREPARING")
+            assertThat(count("ordering_support_order_change_history")).isZero()
+        }
+
+        @Test
+        fun `accepted support cancellation requires store authorization and exposes refund recovery`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "support-accepted-create")
+            approvePayment(orderId, fixture.customerId, 1_000)
+            val storeActorId = UUID.randomUUID()
+            insertMembership(storeActorId, fixture.storeId)
+            storeTransitionService.transition(
+                StoreTransitionActor(storeActorId, setOf(StoreActorRole.STAFF)),
+                orderId,
+                "support-accepted-store",
+                StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+            )
+            val currentVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
+            val unauthorized = supportCancellationCommand(orderId, currentVersion)
+
+            val failure = runCatching { supportOrderCancellations.cancel(unauthorized) }.exceptionOrNull()
+            assertThat(failure).isInstanceOfSatisfying(io.github.kdh949.beanflow.shared.api.DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(io.github.kdh949.beanflow.shared.api.FailureCode.ACCESS_DENIED)
+            }
+
+            val report =
+                supportOrderCancellations.cancel(
+                    unauthorized.copy(acceptedStoreAuthorizationId = UUID.randomUUID()),
+                )
+
+            assertThat(report.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
+            assertThat(report.previousState).isEqualTo("ACCEPTED")
+            assertThat(report.paymentRecoveryState).isEqualTo("REQUESTED")
+            assertThat(value("SELECT cancellation_cause FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("SUPPORT_REQUEST")
+            assertThat(value("SELECT state FROM payment_refund WHERE order_id = ?", orderId)).isEqualTo("REQUESTED")
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
         }
 
         @Test
@@ -844,6 +975,44 @@ internal class CustomerCancellationCommandIntegrationTest
                 now,
             )
         }
+
+        private fun supportCancellationCommand(
+            orderId: UUID,
+            expectedVersion: Long,
+        ) = SupportOrderCancellationCommand(
+            supportRequestId = UUID.randomUUID(),
+            supportExecutionId = UUID.randomUUID(),
+            actorId = UUID.randomUUID(),
+            orderId = orderId,
+            expectedOrderVersion = expectedVersion,
+            reasonCode = io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode.OTHER,
+            reasonDetail = null,
+            acceptedStoreAuthorizationId = null,
+            sourceReference = "support-order-cancel:$orderId",
+        )
+
+        private fun insertPickupSlot(
+            slotId: UUID,
+            storeId: UUID,
+        ) {
+            val startsAt = Instant.now().plusSeconds(3600)
+            jdbcTemplate.update(
+                """
+                INSERT INTO fulfillment_pickup_slot (
+                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+                ) VALUES (?, ?, ?, ?, 5, 0, 0, 0)
+                """.trimIndent(),
+                slotId,
+                storeId,
+                Timestamp.from(startsAt),
+                Timestamp.from(startsAt.plusSeconds(600)),
+            )
+        }
+
+        private fun number(
+            sql: String,
+            vararg args: Any,
+        ): Long = requireNotNull(jdbcTemplate.queryForObject(sql, Long::class.java, *args))
 
         private fun count(table: String): Long =
             requireNotNull(jdbcTemplate.queryForObject("SELECT count(*) FROM $table", Long::class.java))

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.architecture
 
 import com.tngtech.archunit.core.importer.ClassFileImporter
+import com.tngtech.archunit.core.importer.ImportOption
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import io.github.kdh949.beanflow.support.internal.SupportCaseEntity
 import jakarta.persistence.Entity
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.Test
 
 class SupportArchitectureTest {
     private val supportClasses =
-        ClassFileImporter().importPackages("io.github.kdh949.beanflow.support")
+        ClassFileImporter()
+            .withImportOption(ImportOption.DoNotIncludeTests())
+            .importPackages("io.github.kdh949.beanflow.support")
 
     @Test
     fun `support controllers do not depend on repositories or JPA entities`() {

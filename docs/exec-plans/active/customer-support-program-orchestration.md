@@ -17,9 +17,16 @@ outcome을 기준으로 direct successor S20 detailed plan을 만들었고, S30 
 ADR-083/SP-17에서 작성·검증했다. PR #53 review remediation도 완료돼 S30 successor input이 복구됐다.
 S40은 SP-18/ADR-106의 strict verification/Grant/break-glass model을 V42와 12개 runtime operation으로 구현하고
 full validation 뒤 lease를 해제했다.
-S50~S140은 predecessor actual outcome 뒤
-최신 main에서 새 detailed ExecPlan을 작성한다. 각 future plan은 자체 owner model, typed API와 정확한 검증을
-가져야 한다.
+S50은 S40 verified stacked head에서 Case/Order timeline, typed ActionPolicy와 V43을 구현·검증하고 lease를 해제했다.
+S60은 S50 verified stacked head에서 immutable request revision, Support/Operations 승인·조사·재할당과 V44를
+구현·검증하고 lease를 해제했다. S70은 completed S60 lineage에서 cancellation/reschedule owner command,
+new-slot-first swap, exact store authorization과 V45를 구현·검증하고 lease를 해제했다.
+S80은 S70 actual outcome에서 S60 approval reuse, partial owner step과 unknown responsibility 정책을 확정한 뒤
+V46와 네 runtime operation을 구현·검증하고 lease를 해제했다. S90은 completed S60/S80 input과 사용자 선택 SP-21
+rolling hard cap으로 V47, immutable policy/request, owner Point/Coupon issuance와 다섯 runtime operation을 구현·검증하고
+lease를 해제했다. S100은 complete three-owner R0-R4 mapping을 V48과 32 runtime operation으로 구현·검증하고,
+PR #63 remediation에서 final authorization 재검증과 V49 notification claim/lease recovery까지 검증한 뒤 lease를
+해제했다. S110~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 작성한다.
 
 ## Current State
 
@@ -38,8 +45,30 @@ S50~S140은 predecessor actual outcome 뒤
 - ADR-083 Vault Transit crypto/index는 Accepted이고 ADR-090 frontend boundary는 Proposed다.
 - S40 completed plan은 purpose-bound verification, field/time/count-bound Grant, Audit-gated owner reveal와 distinct
   break-glass lifecycle을 기록한다. V42 migration-writer lease는 full validation 뒤 release됐다.
-- 55개 endpoint 중 S20의 9개 Case operation, S30의 1개 protected search operation과 S40의 12개 operation,
-  총 22개가 canonical target/runtime contract에 구현됐고 나머지는 DRAFT inventory다.
+- S50 completed plan은 여덟 owner public query를 fixed-count로 조합하는 Case/Order timeline, action-bound verification과
+  persistent authorization을 포함한 immutable typed ActionPolicy, V43 index/scope와 no-store runtime contract를 기록한다.
+  784-test full regression과 build/docs validation 뒤 V43 writer lease는 release됐다.
+- S60 completed plan은 exact request revision, one-time Support/Operations decision, required Operations→Support callback과
+  explicit reassignment를 기록한다. V44 constraints와 6개 no-store runtime operation은 809-test full regression,
+  build/docs validation을 통과했고 V44 writer lease는 release됐다.
+- S70 completed plan은 V45와 2개 runtime operation, exact request/revision/policy/verification/target 재검사,
+  PENDING_PAYMENT/PAID/조건부 ACCEPTED owner execution, new-slot-first swap과 PREPARING handoff를 기록한다.
+  833-test full regression과 build/docs validation 뒤 V45 writer lease는 release됐다.
+- S80 completed plan은 S60 exact revision을 단일 approval source로 재사용하고 `UNDETERMINED` 고객 회복과 비용
+  귀속을 분리한다. V46, closed partial/unknown state, owner-local exact replay와 네 no-store operation이 865-test
+  full regression 및 docs gate를 통과했고 migration-writer lease는 release됐다.
+- S90 completed plan은 immutable v1/head, LOW/MEDIUM/HIGH/EXCEPTIONAL route, S60 exact approval reuse, five-scope
+  rolling serialization, Loyalty Point funding legs, Promotion fixed template/redemption cost와 independent Notification을
+  기록한다. V47과 다섯 no-store operation은 892-test full regression을 통과했고 writer lease는 release됐다.
+- S100 completed plan과 PR #63 remediation은 customer/store/Delivery external courier의 closed R0-R4 policy,
+  owner-local encrypted history/reset, final requester/link/session/challenge revalidation, S60 exact dual approval,
+  assigned-agent execution과 OLD/NEW notification claim/lease recovery를 기록한다. V48/V49와 32개 no-store runtime
+  operation은 최종 941-test full regression을 통과했고 writer lease는 release됐다.
+- Support API inventory 중 S20의 9개 Case operation, S30의 1개 protected search operation, S40의 12개
+  operation, S50의 3개 timeline/evaluation operation, S60의 6개 request/investigation operation과 S70의 2개
+  execution/authorization operation, S80의 4개 plan/execution/reconciliation operation, S90의 5개 goodwill,
+  S100의 32개 profile-change operation까지 총 74개가 canonical target/runtime contract에 구현됐고 나머지는
+  DRAFT다. 전체 target/runtime 계약은 107 paths/111 operations/244 schemas로 일치한다.
 
 ## Definitions
 
@@ -115,18 +144,40 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
   five-attempt/30m lockout, bounded normal Grant, two-phase Audit-before-reveal와 separate break-glass path를
   확정했다. V42와 12개 endpoint, stale Provider/notification recovery, post-decrypt authorization recheck까지
   구현·검증했으며 `docs/exec-plans/completed/customer-support-s40-verification-data-access-grant.md`에 evidence가 있다.
+- **S50 — integrated timeline and ActionPolicy:** 여덟 owner public query의 masked closed fact를 global signed cursor로
+  합성하고, Case relation/persistent permission/action-bound verification/current Order state-version을 immutable typed
+  policy로 평가한다. V43과 3개 runtime operation, identical-fixture EXPLAIN 및 784-test full regression evidence는
+  `docs/exec-plans/completed/customer-support-s50-integrated-timeline-action-policy.md`에 있다.
+- **S60 — exact revision approval and Operations investigation:** immutable request revision, pairwise-distinct
+  requester/Support reviewer/Operations reviewer, one-time decision, return-for-revision과 explicit reassignment를
+  V44와 6개 runtime operation으로 구현했다. owner execution은 활성화하지 않았고 evidence는
+  `docs/exec-plans/completed/customer-support-s60-approval-operations-investigation.md`에 있다.
+- **S70 — lifecycle-aware cancellation and pickup reschedule:** S60 exact revision을 owner command에
+  연결하고 PENDING_PAYMENT/PAID/조건부 ACCEPTED 취소, new-slot-first swap, PREPARING race와 explicit
+  refund outcome을 V45와 2개 runtime operation으로 구현했다. 833-test full regression, build/docs evidence와
+  released lease는 `docs/exec-plans/completed/customer-support-s70-order-cancellation-pickup-reschedule.md`에 있다.
+- **S80 — post-acceptance resolution:** PREPARING/READY/COMPLETED fact를 보존하고 refund/restoration/settlement
+  adjustment를 partial/unknown/reconciling owner step으로 실행했다. V46/4 runtime operation/865-test evidence는
+  `docs/exec-plans/completed/customer-support-s80-post-acceptance-resolution.md`에 있다.
+- **S90 — versioned goodwill compensation:** immutable version/head와 one-benefit request, five rolling scopes,
+  manager/Operations separation, Point/Coupon owner issuance와 independent Notification을 V47/5 runtime operation으로
+  구현했다. 892-test evidence는 `docs/exec-plans/completed/customer-support-s90-versioned-goodwill-compensation.md`에 있다.
+- **S100 — purpose-specific profile change:** customer/store/external-courier의 R0-R4를 closed typed workflow로
+  분류하고 owner-local encrypted history/reset, exact S60 dual approval, assigned-agent execution과 독립 OLD/NEW
+  notification을 V48/32 runtime operation으로 구현했다. 930-test evidence는
+  `docs/exec-plans/completed/customer-support-s100-purpose-specific-profile-change.md`에 있다.
 
 ### Future Stage summaries and authoring gates
 
 | Stage | Future outcome | Direct inputs required before detailed plan authoring | Known gate |
 |---|---|---|---|
-| S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | endpoint-specific signed cursor contract required; S50 plan not authored |
-| S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | actor separation DB model required |
-| S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | owner typed commands and state-race contract required |
-| S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | responsibility/step persistence required |
-| S90 | versioned goodwill compensation | completed S60 approval/investigation foundation | policy/bucket/cost-owner schema required |
-| S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | customer/legal/payout/rider models incomplete |
-| S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | Provider selection/auth contract and Delivery module absent |
+| S50 | bounded timelines and typed ActionPolicy | completed S30 masked owner DTO and completed S40 verification/grant | COMPLETED — V43/runtime/full validation; lease released |
+| S60 | immutable revisions, sequential approval, Operations investigation/reassignment | completed S50 action evaluation | COMPLETED — V44/runtime/full validation; lease released |
+| S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | COMPLETED — V45/runtime/833-test validation; lease released |
+| S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | COMPLETED — V46/runtime/865-test validation; lease released |
+| S90 | versioned goodwill compensation | completed S60 approval/investigation and S80 refund/restoration separation | COMPLETED — V47/5 runtime operations/892-test validation; lease released |
+| S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | COMPLETED — V48/V49/32 runtime operations/941-test validation; lease released |
+| S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | NOT READY — S100 external-courier owner input is complete, but Provider selection/raw-body auth and canonical Delivery module remain absent |
 | S120 | LegalHold and component deletion automation | completed owner retention ports from S20~S110 | legal review and backup replay procedure required |
 | S130 | Support Console | implemented server contracts needed by selected UX and Accepted ADR-090 | credential/CORS/CSRF/trust boundary open |
 | S140 | integrated security/resilience/retention/UI/load evidence | completed implemented capability set | environment/fixture/release owner must be fixed |
@@ -174,6 +225,38 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 - [x] S40 V42/domain/provider/reveal/break-glass implementation, 760-test full validation and V42 lease release
 - [x] S40 direct successor readiness recalculation — S50 has both predecessor inputs but remains not ready until its
   endpoint-specific signed cursor contract is decided; no S50 plan was authored in S40
+- [x] S50 plan authoring — ADR-070 timeline cursor와 ADR-084 initial action matrix를 확정하고 S40 stacked head에서
+  active S50 plan/V43 lease를 시작
+- [x] S50 V43/owner timeline/ActionPolicy/runtime implementation, 784-test full validation and V43 lease release
+- [x] S50 direct successor readiness recalculation — completed action evaluation makes S60 ready for detailed plan
+  authoring; S70/S90/S100 remain gated by completed S60 output
+- [x] S60 detailed plan authoring — exact revision, actor-separation, callback transaction을 확정하고 V44 lease 획득
+- [x] S60 V44/request revision/Support·Operations decision/reassignment/runtime implementation, 809-test full validation,
+  build/docs validation and V44 lease release
+- [x] S60 direct successor readiness recalculation — S70 is ready to author; S90/S100 have S60 input but retain their
+  owner-specific model and policy gates
+- [x] Productization Stack A를 Plan 10 뒤 동결하고 PR #57 commit `8aa3704`로 migration lane/readiness 해제
+- [x] S60 head에서 S70 stacked branch와 detailed plan을 작성하고 V45 sole writer lane 획득
+- [x] ACCEPTED cancellation/reschedule delegation 시간·성공 횟수 정책을 SP-19/ADR-085에 반영
+- [x] S70 V45/owner execution/store authorization/runtime 구현, review remediation, 833-test full validation과
+  V45 lease release
+- [x] direct successor S80 readiness 재계산 — completed S70 outcome으로 detailed plan 작성 가능; S90/S100의
+  독립 policy/owner-model gate는 유지
+- [x] S70 head에서 S80 stacked branch/detailed plan 작성, SP-20/ADR-085 상태 모델 확정과 V46 sole writer lease 획득
+- [x] S80 V46/case-step/owner orchestration/4 runtime operation 구현, 865-test full validation과 V46 lease release
+- [x] S80 direct successor readiness 재계산 — S90은 completed S60/S80 input으로 detailed plan 작성 가능;
+  S100의 독립 customer/legal/payout/rider owner-model gate는 유지
+- [x] S90 initial rolling hard cap을 SP-21/ADR-086으로 확정하고 S80 stacked head에서 detailed plan/V47 sole writer lease 시작
+- [x] S90 V47/policy/request/rolling/S60-owner integration/5 runtime operation 구현, 892-test full validation과 V47 lease release
+- [x] S90 direct successor readiness 재계산 — S100은 다음 Stage authoring 대상으로 준비; owner-model gaps는 S100
+  preflight에서 current code 기준으로 결정하고 S90에 섞지 않음
+- [x] S90 head에서 S100 stacked branch/detailed plan 작성, SP-22/ADR-087 complete three-owner mapping 확정과 V48
+  sole writer lease 획득
+- [x] S100 V48/owner history·reset/S60 execution/32 runtime operation 구현, 930-test full validation과 V48 lease release
+- [x] S100 direct successor readiness 재계산 — S110은 external-courier profile input을 받았지만 independent Provider
+  selection/raw-body authentication/canonical Delivery model gate가 남아 NOT READY
+- [x] PR #63 S100 review remediation — final authorization binding, V49 notification lease/recovery, owner 404,
+  composite 400와 typed digest를 941-test full validation으로 닫고 V49 lease release; S110 gate는 변경 없음
 
 ## Surprises & Discoveries
 
@@ -187,7 +270,23 @@ S30 outcome은 masked exact search가 Support PII copy 없이 synchronous owner 
 provider/response/rate-state 경계도 fail-closed·bounded하게 운영할 수 있음을 검증했다. S40 challenge-provider/
 terminal-Case grant design은 SP-18/ADR-106과 V42 runtime으로 해소했다. S40 review는 Case-first lock, subject relink
 lockout, assignee binding, post-decrypt authorization recheck와 stale work recovery가 필수임을 확인했다. S50 cursor
-contract는 여전히 해결하지 않는다.
+contract는 S50 시작 시 endpoint ID, global tuple과 canonical filter로 해결했다.
+S50 full regression은 per-context PostGIS container churn과 application Hikari를 재사용한 Flyway가 suite stability와
+1-connection boundary를 훼손할 수 있음을 드러냈다. JVM당 server 하나와 context별 database/Flyway connection details로
+state isolation을 유지하며 startup failure를 제거했다.
+S60 첫 full regression은 마지막 Flyway version을 43으로 고정한 follower test 한 건을 드러냈다. V44로 갱신한 뒤
+단독 follower test와 전체 809-test regression이 통과했다. 구현 review는 step/reassignment revision lineage와
+idempotency terminal outcome을 DB constraint로도 보호해야 함을 확인해 V44와 관련 테스트를 강화했다.
+S70 preflight는 별도 Productization Draft branch도 V43/V44를 사용하고 있음을 확인했다. 사용자는 Support를
+우선했고 Productization ADR-111/Plan 20을 commit `8aa3704`로 동결해 V45 sole lane을 명시했다. 또한
+ACCEPTED delegation 시간·횟수는 policy가 의도적으로 S70 결정으로 남겨 임의 구현할 수 없음을 확인했고,
+사용자가 권장 위험 차등안을 선택해 SP-19/ADR-085로 해소했다.
+S70 첫 full regression은 V45 follower expectation과 UUID를 전화번호로 오인하는 Audit PII 검사 경계를
+드러냈다. canonical lower-case UUID만 제외하도록 경계를 좁혀 raw phone/email/address/card 차단을 유지했고,
+V45 composite FK/check constraint review는 execution·authorization·terminal request lineage를 DB에서도 닫았다.
+S90 review는 current policy head로 기존 request를 재평가하면 비소급 불변식을 깨뜨린다는 점을 드러냈다. 실행은
+request에 저장된 immutable version을 사용하고 새 평가/create만 head를 읽도록 고쳤다. 첫 full regression은 마지막
+Flyway를 V46으로 고정한 S10 follower 한 건만 실패했고, V47로 갱신한 뒤 동일 892-test suite가 통과했다.
 
 ## Decision Log
 
@@ -206,14 +305,29 @@ contract는 여전히 해결하지 않는다.
 | 2026-08-11 | S30 remediation completion | complete provider/response/rate-retention fixes, release V41 writer lease and restore successor input | 155-suite full, focused security/PostgreSQL, PII, build and docs gates passed | PR #53, completed S30 |
 | 2026-08-11 | S40 authoring/lease | accept strict challenge/Grant/break-glass policy, author S40 and acquire sole V42 lease | user decision plus S10/S20/S30 actual outcomes remove the independent S40 gate | SP-18, ADR-106, active S40 |
 | 2026-08-12 | S40 completion | complete V42 and 12 runtime operations, release lease and pass S40 output to S50 | focused security/PostgreSQL/API plus 760-test full build passed; S50 cursor gate remains independent | completed S40 |
+| 2026-08-12 | S50 authoring/lease | fix two timeline cursor contracts, type the initial action matrix and acquire V43 lane | completed S30/S40 outcomes and the endpoint amendment remove the S50 gate | ADR-070/084, active S50 |
+| 2026-08-12 | S50 completion | complete V43, two timelines and typed advisory evaluation; release lease and pass output to S60 | focused PostgreSQL/security/API plus 784-test full build and docs gates passed | completed S50 |
+| 2026-08-12 | S60 authoring/lease | bind approval to immutable revision and acquire the V44 lane | completed S50 evaluation plus ADR-084 remove the approval-lineage gate | ADR-084, active S60 |
+| 2026-08-12 | S60 completion | complete V44, 6 runtime operations and Support/Operations lineage; release lease and pass output to S70 | focused PostgreSQL/security/API plus 809-test full build and docs gates passed | completed S60 |
+| 2026-08-12 | S70 authoring/lease | freeze Productization after Plan 10, author S70 and acquire V45 lane | user prioritizes Support stack; delegation limits were the remaining implementation gate | active S70, Productization ADR-111 |
+| 2026-08-12 | S70 policy gate | accept cancellation 10m/1-use and reschedule 30m/3-use delegation with STORE responsibility | user selected recommended risk-differentiated limits; no unknown cost-owner fallback | SP-19, ADR-085, active S70 |
+| 2026-08-12 | S70 completion | complete V45, owner commands and 2 runtime operations; release lease and pass output to S80 | focused PostgreSQL/security/API plus 833-test full build and docs gates passed | completed S70 |
+| 2026-08-12 | S80 authoring/lease | reuse S60 exact approval and block only cost attribution for `UNDETERMINED`; acquire V46 | avoids duplicate approval truth and cost-owner fallback while customer remediation progresses | SP-20, ADR-085, active S80 |
+| 2026-08-12 | S80 completion | complete V46, owner-local resolution steps and 4 runtime operations; release lease and pass separation output to S90 | focused PostgreSQL/security/API plus 865-test full build and docs gates passed | completed S80 |
+| 2026-08-12 | S90 authoring/lease | select differentiated rolling hard caps, author S90 and acquire V47 | explicit execution limits remove the last policy gap while preserving HIGH Operations review | SP-21, ADR-086, active S90 |
+| 2026-08-12 | S90 completion | complete V47, five goodwill operations and owner issuance; release lease and hand readiness to S100 | focused security/owner/API plus 892-test full build/docs gates pass | completed S90 |
+| 2026-08-13 | S100 policy/lease | select complete three-owner mapping and acquire V48 | user selected the recommended closed mapping; S30/S60 provide verified owner and approval inputs | SP-22, ADR-087, active S100 |
+| 2026-08-13 | S100 completion | complete V48, 32 profile operations and owner-local change/notification; release lease | focused security/owner/API plus 930-test full build/docs gates pass | completed S100 |
+| 2026-08-13 | S100 PR #63 remediation | complete final authorization recheck and V49 durable notification recovery; release lease | six review threads resolved after 941-test full build/docs validation | completed PR #63 remediation |
 
 ## Outcomes & Retrospective
 
-S10 foundation, S20 runtime Case, S30 protected exact search/remediation and S40 verification/DataAccessGrant are
-complete. S40 full build passed 760 tests and its V42 lease is released. S50 now has both completed predecessor inputs,
-but remains not ready because its endpoint-specific signed cursor contract is unresolved; consistent with one-Stage
-execution, no S50 detailed plan or code was created. S100 has the completed S30 owner models but still lacks S60 and the
-customer/legal/payout/rider models recorded in its gate.
+S10 foundation, S20 runtime Case, S30 protected exact search/remediation, S40 verification/DataAccessGrant, S50
+timeline/ActionPolicy, S60 approval/Operations investigation, S70 cancellation/reschedule, S80 post-acceptance resolution과
+S90 versioned goodwill compensation과 S100 purpose-specific profile change가 complete다. S100 PR #63 remediation까지
+최종 941 tests를 통과했고 target/runtime은 74개 Support/Operations operation을 포함해 전체 107 paths/111 operations/
+244 schemas로 일치하며 V49 lease는 release됐다. S110은 S100 external-courier profile contract를 입력으로 받았지만
+Provider selection/raw-body authentication과 canonical Delivery model이 없어 authoring/implementation ready가 아니다.
 
 ## Revision Notes
 
@@ -232,3 +346,25 @@ customer/legal/payout/rider models recorded in its gate.
 - 2026-08-11: accepted SP-18/ADR-106, authored active S40 from latest origin/main and acquired the sole V42 lease.
 - 2026-08-12: completed S40 V42/runtime/full validation, moved its plan to completed, released the lease and recalculated
   S50 readiness without authoring or implementing S50.
+- 2026-08-12: fixed ADR-070/084 S50 contracts, authored the active detailed plan and acquired the V43 writer lane on the
+  S40 stacked head.
+- 2026-08-12: completed S50 V43/timeline/ActionPolicy/runtime and full validation, moved the plan to completed, released
+  the migration lane and marked only direct successor S60 ready to author.
+- 2026-08-12: completed S60 V44/request revision/Support·Operations decision/reassignment runtime and full validation,
+  moved the plan to completed, released the migration lane and marked only direct successor S70 ready to author.
+- 2026-08-12: froze Productization after Plan 10, authored active S70 from S60 and acquired V45.
+- 2026-08-12: accepted SP-19 cancellation 10m/1-use and reschedule 30m/3-use delegation limits and made S70 ready.
+- 2026-08-12: completed S70 V45/owner/runtime and 833-test validation, moved its plan to completed, released the
+  migration lane and marked direct successor S80 ready to author.
+- 2026-08-12: authored active S80 from S70, accepted SP-20/ADR-085 S60-reuse and attribution-blocking policy, and
+  acquired the V46 sole migration-writer lease.
+- 2026-08-12: completed S80 V46/owner/orchestration/runtime and 865-test validation, moved its plan to completed,
+  released the migration lane and marked S90 ready to author without preselecting its independent policy values.
+- 2026-08-12: selected SP-21 initial limits, authored active S90 from S80 and acquired the V47 sole migration-writer lease.
+- 2026-08-12: completed S90 V47/policy/rolling/owner/runtime and 892-test validation, moved its plan to completed,
+  released the migration lane and marked S100 ready for next-turn authoring with explicit owner-model preflight.
+- 2026-08-13: accepted SP-22/ADR-087 complete three-owner mapping, authored S100 from S90 and acquired V48.
+- 2026-08-13: completed S100 V48/owner/S60/Notification/32 runtime operations and 930-test validation, moved its plan to
+  completed, released V48 and retained S110's independent Provider/auth/canonical Delivery gate as NOT READY.
+- 2026-08-13: completed PR #63 S100 remediation with V49/final authorization/notification recovery, 941-test validation,
+  six resolved review threads and lease release; S110 remains NOT READY on the same independent gates.

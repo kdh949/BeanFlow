@@ -7,11 +7,15 @@ import java.util.UUID
 internal enum class NotificationRecipientType {
     STORE,
     CUSTOMER,
+    PROFILE_TARGET,
 }
 
 internal enum class NotificationLogicalChannel {
     STORE_OPERATIONS,
     CUSTOMER_APP,
+    PROFILE_OLD,
+    PROFILE_NEW,
+    PROFILE_CURRENT,
 }
 
 internal enum class NotificationTemplate {
@@ -21,6 +25,10 @@ internal enum class NotificationTemplate {
     ORDER_CANCELLATION_ACCEPTED,
     CUSTOMER_CANCELLATION_REFUND_SUCCEEDED,
     CUSTOMER_CANCELLATION_REFUND_DELAYED,
+    SUPPORT_PICKUP_RESCHEDULED,
+    SUPPORT_POST_ACCEPTANCE_RESOLUTION,
+    SUPPORT_GOODWILL_COMPENSATION_ISSUED,
+    SUPPORT_PROFILE_CHANGED,
 }
 
 internal enum class NotificationDeliveryState {

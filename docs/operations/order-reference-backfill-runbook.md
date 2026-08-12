@@ -1,11 +1,11 @@
 # Order reference and display identity backfill
 
-This runbook applies the V43 expand migration, backfills existing orders in bounded transactions, and then permits
-V44 to close the migration window. It is the only supported procedure for the Plan 10 order display identity change.
+This runbook applies the V50 expand migration, backfills existing orders in bounded transactions, and then permits
+V51 to close the migration window. It is the only supported procedure for the Plan 10 order display identity change.
 
 ## Safety properties
 
-- V43 is additive. New application code writes all six order fields and the two pickup-reservation grant snapshots.
+- V50 is additive. New application code writes all six order fields and the two pickup-reservation grant snapshots.
 - The backfill processes orders in stable `(created_at, id)` order and skips complete rows, so the same command is
   safe to restart after interruption.
 - Public references are reserved in `ordering_public_reference_registry` in the same transaction as each batch.
@@ -13,16 +13,20 @@ V44 to close the migration window. It is the only supported procedure for the Pl
   identities fail the command. The command never writes a placeholder.
 - Backfilled `store_name_snapshot` and pickup windows are current owner values, not guaranteed historical values.
   Record this approximation in the deployment evidence.
-- V44 is forward-only. After V44, an old application that omits the new fields cannot write orders. Recover with a
+- V51 is forward-only. After V51, an old application that omits the new fields cannot write orders. Recover with a
   forward fix; do not downgrade the schema or delete registry/counter rows.
 
 ## Preconditions
 
 1. Hold the repository migration-writer lease and confirm no other branch or deployment writes a Flyway migration.
-2. Confirm the database is healthy at V42 and take the environment's normal recoverable backup/snapshot.
-3. Drain the old application version before applying V43. An old writer must not create orders during backfill.
-4. Verify the new artifact contains V43, V44, the dual-write order creation path, and this command.
-5. Prepare datasource credentials through the deployment secret mechanism. Do not put credentials in arguments,
+2. Confirm Support V43 through V49 are present in the release artifact and successfully applied to the database.
+   If the database is still below V49 or any migration is missing locally, stop and integrate the Support chain before
+   Plan 10. Do not apply V50 first or enable Flyway out-of-order mode.
+3. Confirm the database is healthy at V49 and take the environment's normal recoverable backup/snapshot.
+4. Drain the old application version before applying V50. An old writer must not create orders during backfill.
+5. Verify the new artifact contains Support V43~V49, Plan 10 V50/V51, the dual-write order creation path, and this
+   command.
+6. Prepare datasource credentials through the deployment secret mechanism. Do not put credentials in arguments,
    shell history, logs, or the deployment evidence.
 
 Baseline checks:
@@ -38,22 +42,22 @@ SELECT count(*) AS orders_before FROM ordering_order;
 
 ## Expand and dual-write
 
-Deploy the new application with Flyway temporarily capped at V43:
+Deploy the new application with Flyway temporarily capped at V50:
 
 ```text
-SPRING_FLYWAY_TARGET=43
+SPRING_FLYWAY_TARGET=50
 ```
 
 Allow traffic only after the new version is healthy. Every new order must now write `public_reference`,
 `pickup_business_date`, `pickup_sequence`, `store_name_snapshot`, and both pickup window snapshots. Do not restore
 traffic to the old version.
 
-Confirm V43 and the nullable backfill window:
+Confirm V50 and the nullable backfill window:
 
 ```sql
 SELECT version, success
   FROM flyway_schema_history
- WHERE version = '43';
+ WHERE version = '50';
 
 SELECT count(*) AS remaining
   FROM ordering_order
@@ -62,7 +66,7 @@ SELECT count(*) AS remaining
 
 ## Run the bounded backfill
 
-Use the same artifact and datasource configuration as the V43 application. Batch size must be between 1 and 1,000;
+Use the same artifact and datasource configuration as the V50 application. Batch size must be between 1 and 1,000;
 100 is the default.
 
 ```bash
@@ -78,14 +82,14 @@ order-reference-backfill completed processed=<count> batches=<count>
 The command exits non-zero on invalid input, missing owners, partial rows, collision exhaustion, or a database error.
 It does not log order, customer, store, or public-reference values. On failure:
 
-1. Keep the application capped at V43.
+1. Keep the application capped at V50.
 2. Inspect the aggregate error and database constraints using the approved operational access path.
 3. Repair the authoritative Merchant profile or Fulfillment slot; never fill a guessed name/time.
 4. Rerun the same command. Complete rows are skipped and committed reference reservations remain reserved.
 
 ## Contract preflight
 
-Both queries must return zero before allowing V44:
+Both queries must return zero before allowing V51:
 
 ```sql
 SELECT count(*) AS incomplete_orders
@@ -130,19 +134,19 @@ SELECT count(*) AS counter_regressions
     OR counter.last_sequence < actual.max_sequence;
 ```
 
-## Apply V44 and close the window
+## Apply V51 and close the window
 
-Remove `SPRING_FLYWAY_TARGET` and roll the same application version. V44 independently repeats the completeness
+Remove `SPRING_FLYWAY_TARGET` and roll the same application version. V51 independently repeats the completeness
 preflight, adds uniqueness/FK/check/NOT NULL constraints, synchronizes counters, and installs the immutable display
-identity trigger. A V44 failure is not success: keep the deployment unavailable or on the healthy V43 pool, correct
+identity trigger. A V51 failure is not success: keep the deployment unavailable or on the healthy V50 pool, correct
 the owner data, rerun the backfill, and retry the migration.
 
-After V44, verify:
+After V51, verify:
 
 ```sql
 SELECT version, success
   FROM flyway_schema_history
- WHERE version IN ('43', '44')
+ WHERE version IN ('43', '44', '45', '46', '47', '48', '49', '50', '51')
  ORDER BY version;
 
 SELECT count(*) AS nullable_display_columns

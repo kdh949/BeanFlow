@@ -61,6 +61,27 @@ class VerificationChallengeTest {
             .isInstanceOf(IllegalStateException::class.java)
     }
 
+    @Test
+    fun `provider result immediately before expiry is accepted`() {
+        val challenge = issuedChallenge()
+        val immediatelyBeforeExpiry = issuedAt.plusSeconds(5 * 60).minusNanos(1)
+        challenge.claimVerification(issuedAt.plusSeconds(1))
+
+        assertThat(challenge.complete(ChallengeOutcome.VERIFIED, immediatelyBeforeExpiry))
+            .isEqualTo(ChallengeState.VERIFIED)
+    }
+
+    @Test
+    fun `provider result at or after expiry remains unknown`() {
+        listOf(issuedAt.plusSeconds(5 * 60), issuedAt.plusSeconds(5 * 60).plusNanos(1)).forEach { completedAt ->
+            val challenge = issuedChallenge()
+            challenge.claimVerification(issuedAt.plusSeconds(1))
+
+            assertThat(challenge.complete(ChallengeOutcome.VERIFIED, completedAt))
+                .isEqualTo(ChallengeState.VERIFICATION_UNKNOWN)
+        }
+    }
+
     private fun issuedChallenge(): VerificationChallenge =
         VerificationChallenge
             .request(

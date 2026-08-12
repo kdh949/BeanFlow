@@ -279,14 +279,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-12: Checkpoint 1에서 exact predecessor
   `3c02752c114a271cec2458a1f9fcc00873d0ae1f`와 최신 migration V42를 확인하고
   `feature/productization-10-order-reference`를 그 commit에서 분기했다. Stack A migration-writer lease 아래
-  V43/V44를 할당했다.
+  처음에는 V43/V44를 할당했다.
 - 2026-08-12: 공개번호 CSPRNG 생성·registry 충돌 예약(최초 포함 5회), Seoul 영업일별 원자 pickup counter,
   주문 표시 snapshot과 `ORDER_REFERENCE_EXHAUSTED` 503 실패 계약을 구현했다.
 - 2026-08-12: Merchant 표시명 port와 Fulfillment 예약 grant 시각 snapshot을 주문 생성 transaction에
   연결하고, 기존 UUID route를 유지한 채 고객 조회·취소와 매장 조회·전이의 공개번호 route를 추가했다.
   신규 응답은 내부 `orderId`를 제거했다.
-- 2026-08-12: V43 expand, 재시작 가능한 bounded backfill CLI/runbook, V44 contract migration을 구현했다.
-  V44는 6개 필드 `NOT NULL`·유일성·registry FK·형식·불변 trigger와 Fulfillment grant window 제약을
+- 2026-08-12: expand, 재시작 가능한 bounded backfill CLI/runbook, contract migration을 구현했다.
+  contract는 6개 필드 `NOT NULL`·유일성·registry FK·형식·불변 trigger와 Fulfillment grant window 제약을
   적용한다.
 - 2026-08-12: target/runtime OpenAPI, API 규칙, 인가 매트릭스, ADR-096~098과 회귀 fixture를 실제 동작에
   맞게 갱신했다.
@@ -295,6 +295,16 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-12: 완료 뒤 사용자가 Support S70~S100을 우선하도록 결정해 Stack A migration-writer lease를
   해제했다. 이 branch의 V43/V44는 Draft 검증 증거로 보존하지만 Support branch의 동명 migration과
   병합하지 않으며 productization resume 시 새 통합 tree 기준으로 재번호화한다.
+- 2026-08-13: `origin/main`의 Support S50~S100, PR #63 remediation, V43~V49와 lease release를 확인했다.
+  remote Plan 10 head `8aa3704014c0943aa7e80e8205c007caaf3a28d2`를 first parent로 유지하고
+  `origin/main` `48a0b6166751d2f4e991408ce618d1182b592380`을 history-preserving merge했다.
+- 2026-08-13: 미적용 Plan 10 migration을 V50 expand/V51 contract로 옮기고 runbook, ADR, inventory
+  regression을 combined schema에 맞췄다. 병합 충돌은 Plan 10 표시 snapshot과 Support pickup reschedule이
+  각각 요구하는 mutable slot/expiry와 immutable display field를 모두 보존하도록 해소했다.
+- 2026-08-13: resume 검증을 완료했다. migration 집중 테스트, Ordering 231 tests, Spotless와 문서 검증이
+  통과했다. 첫 full build는 964 tests 중 17 failures/1 skipped로 실패했고, Support S80의 직접 주문 fixture
+  16건과 V49 latest assertion 1건을 고친 뒤 집중 20 tests와 최종 full build 964 tests(0 failures,
+  0 errors, 1 skipped)가 통과했다.
 
 ## Surprises & Discoveries
 
@@ -303,13 +313,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 매장 표시명은 `merchant_store`가 아니라 `merchant_store_discovery_profile.name`이 소유한다.
 - JPA insert의 unique 예외 뒤 같은 transaction 재시도는 안전하지 않아 별도 registry 예약으로 바꿨다.
 - Fulfillment의 idempotent 예약 replay가 현재 slot row를 다시 읽으면 이후 slot 변경이 과거 주문 표시를
-  바꾼다. V43에서 예약 자체에 시작·종료 snapshot을 추가하고 최초 grant와 replay가 같은 값을 반환하게
+  바꾼다. 최종 V50에서 예약 자체에 시작·종료 snapshot을 추가하고 최초 grant와 replay가 같은 값을 반환하게
   했다.
 - PostgreSQL의 non-null 개수 함수 이름은 `num_nonnull`이 아니라 `num_nonnulls`였다. backfill migration
   테스트가 첫 구현의 오타를 검출했다.
 - 공개번호 충돌 상한 실패가 공통 오류 매핑에서 처음에는 409로 변환됐다. 실제 HTTP 통합 테스트가 이를
   검출했고 `ORDER_REFERENCE_EXHAUSTED`를 명시적으로 503에 고정했다.
-- V44 `NOT NULL` 적용 뒤 기존 테스트의 여러 모듈이 `ordering_order`를 구형 column 집합으로 직접
+- 최종 V51 `NOT NULL` 적용 뒤 기존 테스트의 여러 모듈이 `ordering_order`를 구형 column 집합으로 직접
   삽입했다. 첫 전체 build는 782 tests 중 78 failures였고, 유효한 registry 예약과 표시 snapshot을 만드는
   공통 fixture로 모두 교정했다. 한 Loyalty 테스트의 일시적 `INVALID_REQUEST`도 함께 관측됐지만 집중
   재실행과 최종 전체 build에서 코드 변경 없이 재발하지 않았다.
@@ -318,6 +328,15 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 완료 diff 검토에서 target OpenAPI path parameter가 구현의 case-insensitive 입력보다 좁고 두 GET
   경로에 400 응답이 빠진 것을 발견했다. 입력용 대소문자 정규식과 canonical 출력 정규식을 분리하고
   문서 검증기·계약 테스트를 함께 고정했다. 첫 문서 재검증은 이 불일치로 실패했고 교정 후 통과했다.
+- `origin/main` merge의 target OpenAPI 충돌은 양쪽 branch가 서로 다른 key를 같은 위치에 추가한
+  text-order 충돌이었다. base 대비 변경 path/component key 교집합이 0개임을 확인하고 53개 main path와
+  107개 main component를 key 단위로 결합해 Plan 10과 Support 계약을 모두 보존했다.
+- Support S80의 두 post-acceptance 테스트 fixture는 Support 단독 V49 tree에서는 유효했지만 V51의 주문
+  표시 6필드 `NOT NULL` 계약을 충족하지 않았다. 첫 resume full build에서 16 tests가
+  `public_reference` null 제약으로 실패해 기존 공통 registry/sequence helper와 유효 snapshot을 적용했다.
+  별도 Support migration test의 latest V49 assertion도 combined inventory V51로 갱신했다.
+- 첫 집중 Gradle 검증은 사용자 Gradle cache lock에 대한 sandbox 권한 거부로 테스트 시작 전에 실패했다.
+  동일 명령을 승인된 캐시 접근 권한으로 다시 실행해 실제 테스트 결과를 얻었다.
 
 ## Decision Log
 
@@ -329,11 +348,12 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | rollback은 counter를 소비하지 않고 커밋 후 종료 번호만 재사용하지 않는다 | [ADR-097](../../adr/ADR-097-store-pickup-number.md) |
 | 2026-08-12 | 공개번호는 registry `ON CONFLICT DO NOTHING`으로 최대 5회 예약 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
 | 2026-08-12 | 매장명은 discovery profile, 픽업 시각은 lock 아래 grant에서 snapshot | [ADR-098](../../adr/ADR-098-order-display-snapshots.md) |
-| 2026-08-12 | V43 expand에서 dual-write와 bounded CLI backfill을 수행하고, V44 contract에서 완전성·불변성을 강제 | [backfill runbook](../../operations/order-reference-backfill-runbook.md) |
+| 2026-08-12 | expand에서 dual-write와 bounded CLI backfill을 수행하고 contract에서 완전성·불변성을 강제 | [backfill runbook](../../operations/order-reference-backfill-runbook.md) |
 | 2026-08-12 | 예약 replay의 시각도 최초 grant 값으로 고정하기 위해 Fulfillment reservation에 slot window snapshot을 저장 | [ADR-098](../../adr/ADR-098-order-display-snapshots.md) |
 | 2026-08-12 | 신규 공개번호 route만 내부 UUID를 제거하고 기존 UUID route는 후속 화면 전환까지 유지 | [API conventions](../../api/api-conventions.md) |
 | 2026-08-12 | OpenAPI 입력은 대소문자를 허용하고 응답·저장값은 대문자 canonical 형식만 허용 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
 | 2026-08-12 | Plan 10 뒤 writer lease를 Support S70~S100에 양보하고 V43/V44는 resume 시 재번호화 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-13 | Support V43~V49를 포함한 `origin/main`을 merge하고 미적용 Plan 10을 V50/V51로 재번호화하며 rebase·force-push 없이 전체 검증을 다시 실행 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
 
 ## Outcomes & Retrospective
 
@@ -341,7 +361,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   할당한다. rollback은 counter와 registry를 함께 되돌리고, 커밋된 종료 주문의 번호는 재사용하지 않는다.
 - 고객·점주는 대소문자 입력을 canonicalize한 공개번호로 조회·명령할 수 있다. 소유권 또는 store scope가
   다르면 403, 존재하지 않으면 404이며 신규 응답에는 내부 `orderId`가 없다.
-- 과거 주문은 V43에서 중단·재개 가능한 배치로 채우고 V44가 누락, 중복, registry 미등록, 잘못된
+- 과거 주문은 V50에서 중단·재개 가능한 배치로 채우고 V51이 누락, 중복, registry 미등록, 잘못된
   snapshot과 이후 변경을 거부한다. 누락 profile·slot은 placeholder로 대체하지 않는다.
 - 실행 검증 결과:
   - `./gradlew test --tests 'io.github.kdh949.beanflow.ordering.*'`: 성공, 최종 전체 리포트 기준 Ordering
@@ -350,6 +370,20 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - `./gradlew build --stacktrace`: 성공(13m 53s), 782 tests, 0 failures, 1 skipped.
   - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`: 성공. target 98 paths/104 operations,
     runtime 59 paths/63 operations, 213 schemas, 46 policies, 111 ADRs, 264 Markdown files, 50 ExecPlans.
+- 2026-08-13 resume 실행 검증 결과:
+  - migration 집중 테스트: 성공. V49 baseline, V50 expand, bounded backfill, V51 contract와 latest V51을
+    실제 PostgreSQL에서 검증했다.
+  - `./gradlew test --tests 'io.github.kdh949.beanflow.ordering.*' --stacktrace`: 성공(2m 33s),
+    231 tests, 0 failures, 0 errors, 0 skipped.
+  - `./gradlew spotlessCheck`: 성공(6s).
+  - 첫 `./gradlew build --stacktrace`: 실패(11m 39s), 964 tests, 17 failures, 1 skipped. 위 Support S80
+    fixture 16건과 latest migration assertion 1건이며 숨기지 않았다.
+  - 실패 집중 재실행: 성공(36s), 20 tests, 0 failures, 0 errors, 0 skipped.
+  - 최종 `./gradlew build --stacktrace`: 성공(12m 17s), 964 tests, 0 failures, 0 errors, 1 skipped.
+  - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`: 성공. target 150 paths/156 operations,
+    runtime 111 paths/115 operations, 305 schemas, 46 policies, 111 ADRs, 273 Markdown files, 57 ExecPlans.
+  - OpenAPI YAML parse, migration version duplicate scan, semantic OpenAPI merge assertion, `git diff --check`:
+    모두 성공.
 - 측정 가능한 production traffic이 없어 latency 개선이나 실사용 충돌률은 주장하지 않는다. metric과
   runbook만 제공하며 실제 배포 시 관측해야 한다.
 
@@ -358,3 +392,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-11: 최초 작성.
 - 2026-08-12: 구현, 회귀 fixture 교정, 필수 검증과 완료 결과를 기록.
 - 2026-08-12: Support 우선 migration lane과 후속 재번호화 조건을 기록.
+- 2026-08-13: `origin/main` Support V43~V49 통합, Plan 10 V50/V51 재번호화와 재검증 조건을 기록.

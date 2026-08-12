@@ -19,14 +19,20 @@ enum class PersonalDataOwnerContext {
 
 enum class PersonalDataField {
     DISPLAY_NAME,
+    LEGAL_NAME,
     PRIMARY_PHONE,
     PRIMARY_EMAIL,
     LEGAL_DISPLAY_NAME,
+    PUBLIC_DISPLAY_NAME,
+    PUBLIC_PHONE,
     SUPPORT_PHONE,
     SUPPORT_EMAIL,
+    LEGAL_REPRESENTATIVE,
+    SETTLEMENT_ACCOUNT_REFERENCE,
     PROVIDER_COURIER_REFERENCE,
     RELAY_PHONE,
     RELAY_EMAIL,
+    PAYOUT_REFERENCE,
 }
 
 data class PersonalDataEncryptionContext(

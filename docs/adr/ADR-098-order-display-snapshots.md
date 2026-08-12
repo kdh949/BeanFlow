@@ -116,7 +116,7 @@ pickup_window_end_snapshot   timestamptz 주문 생성 시점의 픽업 슬롯 �
   transaction에서 저장한다. owner 누락은 503으로 전체 rollback하며 fallback을 만들지 않는다.
 - Fulfillment reservation에도 grant 시각 snapshot을 저장한다. 슬롯이 나중에 바뀌어도 멱등 replay가
   최초 grant window를 반환하므로 Ordering snapshot이 재시도 시 달라지지 않는다.
-- V44는 여섯 order 표시/식별 필드의 직접 UPDATE를 SQLSTATE 23514로 거부하되 상태/version/updatedAt
+- V51은 여섯 order 표시/식별 필드의 직접 UPDATE를 SQLSTATE 23514로 거부하되 상태/version/updatedAt
   전이는 허용한다.
 - 매장명·슬롯 변경 뒤 고객 조회가 최초 snapshot을 유지하는 통합 테스트와, backfill 근사값/owner
   누락 실패 테스트를 추가했다.

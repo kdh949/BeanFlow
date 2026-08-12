@@ -135,7 +135,7 @@ tasks.register<JavaExec>("ordinary-accrual-policy-bootstrap") {
 
 tasks.register<JavaExec>("order-reference-backfill") {
 	group = "application"
-	description = "Backfill public order references and immutable display identity snapshots after Flyway V43"
+	description = "Backfill public order references and immutable display identity snapshots after Flyway V50"
 	classpath = sourceSets["main"].runtimeClasspath
 	mainClass.set("io.github.kdh949.beanflow.ordering.internal.OrderReferenceBackfillCli")
 }

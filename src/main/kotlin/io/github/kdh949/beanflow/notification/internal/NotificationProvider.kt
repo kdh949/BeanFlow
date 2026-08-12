@@ -5,7 +5,7 @@ import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipi
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationTemplate
 import java.util.UUID
 
-internal data class NotificationProviderRequest(
+internal class NotificationProviderRequest(
     val deliveryId: UUID,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
@@ -13,7 +13,16 @@ internal data class NotificationProviderRequest(
     val template: NotificationTemplate,
     val payloadJson: String,
     val providerIdempotencyKey: String,
-)
+    destination: ByteArray? = null,
+) {
+    private val rawDestination = destination?.copyOf()
+
+    fun destinationBytes(): ByteArray? = rawDestination?.copyOf()
+
+    override fun toString(): String =
+        "NotificationProviderRequest(deliveryId=$deliveryId, recipientType=$recipientType, recipientId=$recipientId, " +
+            "logicalChannel=$logicalChannel, template=$template, payload=<redacted>, destination=<redacted>)"
+}
 
 internal sealed interface NotificationProviderResult {
     data class Acknowledged(

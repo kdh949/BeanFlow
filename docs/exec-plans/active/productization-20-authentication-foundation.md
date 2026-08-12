@@ -2,7 +2,7 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-00-design-capability-contract.md`
 > **Completed-At:** `—`
@@ -262,10 +262,17 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-12: 사용자 Support 우선 결정에 따라 Plan 10 뒤 Stack A migration lease를 해제했다.
   Support S70~S100 completion, lease release와 productization migration 재번호화 기준이 기록될 때까지
   이 plan은 실행 후보가 아니며 schema/code 구현을 시작하지 않는다.
+- 2026-08-13: `origin/main`의 Support S50~S100/PR #63 completion과 V49 lease release를 Plan 10에
+  history-preserving merge했다. Plan 10을 V50/V51로 재번호화하고 Ordering 231 tests, 최종 full build
+  964 tests(0 failures, 0 errors, 1 skipped), Spotless와 문서/OpenAPI 검증을 통과했으므로
+  `Implementation-Ready=true`로 복원했다. 이 plan의 migration 번호는 구현 시작 preflight의 combined
+  inventory에서 V51 다음으로 할당한다.
 
 ## Surprises & Discoveries
 
-아직 없다.
+- Support completion 뒤 Plan 10과 `origin/main`을 결합하자 V51 주문 표시 제약이 Support S80 direct-order
+  fixture 16건을 깨뜨렸다. 공통 유효 fixture로 교정하고 전체 회귀를 다시 통과했으며, 실패를 Plan 10
+  completion evidence에 기록했다.
 
 ## Decision Log
 
@@ -279,12 +286,15 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 고객·점주별 Session 수명과 동시 한도 적용 | [BR-36](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 credential 웹 관리용 explicit permission을 foundation migration에서 선등록 | [BR-46](../../product/business-policy-decisions.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md) |
 | 2026-08-12 | Support S70~S100을 우선하고 Plan 20 readiness와 migration lease를 일시 해제 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-13 | Support V43~V49 main 통합과 Plan 10 V50/V51 전체 검증 뒤 Plan 20 readiness와 Stack A lease를 복원 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [Plan 10](../completed/productization-10-public-order-reference.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+Plan 10 resume completion이 Support 통합 schema와 전체 회귀를 통과해 이 plan의 모든 직접 실행 gate가
+해소됐다. 구현 자체는 아직 시작하지 않았고, 다음 branch는 verified Plan 10 completion head에서만 만든다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-12: Support 우선 migration lane 결정으로 `Implementation-Ready=false` 전환.
+- 2026-08-13: Support V43~V49 통합과 Plan 10 V50/V51 재검증 완료로 `Implementation-Ready=true` 복원.

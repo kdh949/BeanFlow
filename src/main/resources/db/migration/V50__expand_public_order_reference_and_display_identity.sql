@@ -32,9 +32,9 @@ CREATE TABLE ordering_pickup_counter (
 
 -- Expand/backfill deployment window:
 --
--- 1. Stop at V43 and deploy dual-write application code.
+-- 1. Stop at V50 and deploy dual-write application code.
 -- 2. Run the bounded order-reference backfill command.
--- 3. Apply V44 only after the command reports zero remaining rows.
+-- 3. Apply V51 only after the command reports zero remaining rows.
 --
 -- A legacy snapshot uses the current verified profile and slot window. It can therefore differ
 -- from what the customer saw when the order was originally created; the runbook requires this
@@ -43,7 +43,7 @@ CREATE TABLE ordering_pickup_counter (
 -- Initialize each valid legacy store/business-date counter to the number of existing orders so a
 -- concurrent new order starts after the reserved legacy rank range. The runtime allocator also
 -- recomputes this baseline when it creates a counter row, covering a repaired slot that was absent
--- when V43 ran.
+-- when V50 ran.
 INSERT INTO ordering_pickup_counter (store_id, business_date, last_sequence)
 SELECT legacy.store_id, legacy.business_date, count(*)
   FROM (

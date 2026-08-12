@@ -147,8 +147,8 @@ DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동�
 
 - `ordering_pickup_counter` UPSERT와 주문 insert는 같은 transaction에서 실행되며 rollback 시 함께
   되돌아간다. 커밋된 할당은 종료 상태와 무관하게 반납하지 않는다.
-- V43는 기존 매장·영업일별 주문 수를 선점하고, bounded backfill은 `(created_at, id)` rank를 기록한 뒤
-  V44가 실제 최대값으로 카운터를 재동기화한다.
+- V50는 기존 매장·영업일별 주문 수를 선점하고, bounded backfill은 `(created_at, id)` rank를 기록한 뒤
+  V51이 실제 최대값으로 카운터를 재동기화한다.
 - `Asia/Seoul` 자정 경계, 매장/일자 독립성, 동시 20건 유일성, rollback과 커밋 후 비재사용을
   PostgreSQL Testcontainers로 검증했다.
 - 순번 UPSERT와 행 잠금 대기를 `beanflow.order.pickup_sequence.allocation.duration` p95 timer로 계측한다.

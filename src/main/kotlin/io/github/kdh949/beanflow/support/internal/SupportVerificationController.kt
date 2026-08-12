@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.identity.api.SensitiveVerificationProof
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
 import io.github.kdh949.beanflow.support.internal.domain.VerificationChannel
 import io.github.kdh949.beanflow.support.internal.domain.VerificationLevel
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
@@ -35,6 +36,7 @@ internal data class CreateVerificationSessionRequest(
     val requestedLevel: VerificationLevel?,
     @field:NotNull
     val purpose: VerificationPurpose?,
+    val actionScope: VerificationActionScope? = null,
 ) : StrictSupportRequest
 
 internal data class IssueVerificationChallengeRequest(
@@ -73,6 +75,7 @@ internal class SupportVerificationController(
                     request.subjectLinkId ?: invalid(),
                     request.requestedLevel?.takeUnless { it == VerificationLevel.UNVERIFIED } ?: invalid(),
                     request.purpose ?: invalid(),
+                    request.actionScope ?: VerificationActionScope.PERSONAL_DATA_REVEAL,
                     idempotencyKey,
                     correlationIds.currentOrCreate(),
                 ),

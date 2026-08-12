@@ -132,6 +132,34 @@ internal class SupportVerificationIntegrationTest
         }
 
         @Test
+        fun `support action verification exposes its scope and rejects an incompatible purpose`() {
+            val binding = insertBinding(actorId)
+
+            mockMvc
+                .perform(
+                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "verification-action-create")
+                        .json(
+                            """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION","actionScope":"SUPPORT_ACTION"}""",
+                        ),
+                ).andExpect(status().isCreated)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.actionScope").value("SUPPORT_ACTION"))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
+                        .with(operatorJwt(actorId))
+                        .header("Idempotency-Key", "verification-action-invalid")
+                        .json(
+                            """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CONTACT_CONFIRMATION","actionScope":"SUPPORT_ACTION"}""",
+                        ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        }
+
+        @Test
         fun `five invalid one-shot challenges lock the case subject binding for thirty minutes`() {
             val binding = insertBinding(actorId)
             val sessionId = createSession(binding, "BASIC", "verification-create-1001")

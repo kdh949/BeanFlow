@@ -158,8 +158,9 @@ Customer Web / Merchant Console / Operations UI
   branch/PR topology가 불명확하면 다음 plan을 시작하지 않고 Goal을 중단한다. observed `origin/main`
   변화와 Support commit의 `origin/main` 비조상 관계는 `SUPPORT_INTEGRATION_PENDING`으로 기록하지만
   중단·restack·force-push 사유로 쓰지 않는다.
-- 2026-08-12 사용자 결정에 따라 Plan 10 완료 뒤 Stack A는 동결한다. Support S70~S100 completion과
-  lease release, productization migration 재번호화 기준이 없으면 Plan 20을 시작하지 않는다.
+- 2026-08-12 사용자 결정에 따라 Plan 10 완료 뒤 Stack A를 동결했다. 2026-08-13 Support S70~S100과
+  PR #63 remediation completion, V49 lease release, `origin/main` 통합과 Plan 10 V50/V51 재번호화 기준을
+  확인해 동결을 해제했다. Plan 10 전체 재검증이 끝나기 전에는 Plan 20을 시작하지 않는다.
 
 ## Stack A Execution Contract
 
@@ -169,8 +170,9 @@ Stack A는 P0 Core 중간 통합점인 Plan 60까지만 다음 고정 순서로 
 00 → 10 → 20 → 30 → 40 → 50 → 60
 ```
 
-현재 checkpoint는 `00 → 10` 완료 후 동결 상태다. Plan 20은 다음 논리적 단계지만 현재 실행 후보가
-아니며 `Implementation-Ready=false`다.
+현재 checkpoint는 `00 → 10` 완료 뒤 Support 통합 기준으로 Plan 10을 재검증하는 resume 상태다.
+Plan 20은 다음 논리적 단계지만 Plan 10 V50/V51과 전체 검증이 끝나기 전까지
+`Implementation-Ready=false`다.
 
 Plan 00의 verified completion head를 provisional baseline으로 기록한다. Support 구현 commit
 `35d662d0deb5808c0df12b3ae822d9ec128aa28e`와 완료 commit
@@ -189,9 +191,10 @@ Plan 00의 verified completion head를 provisional baseline으로 기록한다. 
 | 60 | `feature/productization-60-store-order-board` | Plan 50 branch |
 
 Plan completion은 required validation과 atomic active→completed/successor update가 exact predecessor
-위에서 끝났음을 뜻한다. merge, deploy 또는 Support 통합 완료를 뜻하지 않는다. Plan 10 시작 전 획득한
-migration-writer lease는 Plan 10 completion 뒤 해제하고 Support S70에 넘긴다. Plan 20~60은 Support
-S100 뒤 새 lease와 재번호화 기준을 기록한 후 재개한다.
+위에서 끝났음을 뜻한다. merge나 deploy를 뜻하지 않는다. Plan 10 시작 전 획득한 migration-writer
+lease는 최초 completion 뒤 Support S70에 넘겼고, Support S100/PR #63이 V49까지 완료·release된 뒤
+Productization Stack A가 다시 획득했다. Resume Plan 10 completion은 ADR-111에 기록한 Plan 10 remote
+head와 `origin/main` 두 parent의 history-preserving merge 예외를 사용한다.
 
 Plan 60 완료 뒤 release branch나 combined PR을 만들지 않는다. 최종 상태는 표의 정확히 일곱 open Draft
 PR이며, Plan 00은 `main`, Plan 10~60은 정확히 직전 branch를 base로 한다. base만 틀린 기존 PR은 head를
@@ -214,16 +217,17 @@ force-push는 하지 않는다. 상세 규칙은 ADR-111을 따른다.
 | 90 | 없음 | 기존 환불·정산·이의제기 조회와 frontend 통합 |
 | 100 | 있음 | 운영 read permission vocabulary와 검증된 query index |
 
-migration writer lease는 한 번에 하나만 보유한다. 현재 순서는 Productization 10 완료 → Support
-S70 → S80 → S90 → S100 → Productization 20 → 30 → 40 → 50 → 60 → 70 → 100이다. Productization
-80과 90은 migration을 쓰지 않으며 선행 dependency가 끝나면 lease 없이 실행할 수 있다.
+migration writer lease는 한 번에 하나만 보유한다. Productization 10 최초 완료 → Support
+S70 → S80 → S90 → S100 → PR #63 remediation까지 V45~V49를 사용하고 release했다. 현재 순서는
+Productization 10 V50/V51 재검증 → 20 → 30 → 40 → 50 → 60 → 70 → 100이다. Productization 80과
+90은 migration을 쓰지 않으며 선행 dependency가 끝나면 lease 없이 실행할 수 있다.
 Plan 90의 기존 dispute index가 측정 결과 부족해 schema 변경이 필요해지면 문서와 lease 순서를 먼저
 갱신한다.
 
-Plan 10 branch의 V43/V44는 Support branch의 동명 migration과 합치지 않는다. Support S100 완료 뒤
-통합 기준 tree의 마지막 번호 다음에서 Plan 10 migration부터 재번호화하고 전체 regression을 다시
-통과해야 한다. Productization resume 방식과 PR topology는 그 시점의 별도 decision record 없이는
-추측하지 않는다.
+Plan 10 branch의 기존 V43/V44와 중간 보정 V45/V46은 배포·적용되지 않았고 최종 tree에 남기지 않는다.
+Support V43~V49를 포함한 `origin/main`을 history-preserving merge한 뒤 Plan 10 migration은 V50/V51을
+사용하고 전체 regression을 다시 통과해야 한다. PR #57 base는 Plan 00 branch로 유지하고 rebase나
+force-push를 하지 않는다.
 
 ## API and Event Contracts
 
@@ -345,6 +349,18 @@ git diff --cached --check
   Plan 20의 `Implementation-Ready`를 false로 전환했다. PR #57은 open Draft로 보존하며 Support
   S70~S100 완료 전 productization schema/code를 추가하지 않는다. 기존 V43/V44는 resume 시 Support
   통합 tree의 마지막 번호 다음으로 재번호화해야 한다.
+- 2026-08-13 resume preflight: `origin/main`
+  `48a0b6166751d2f4e991408ce618d1182b592380`에 Support S50~S100과 PR #63 remediation, V43~V49,
+  941-test completion과 lease release가 포함된 것을 확인했다. 사용자는 이 워크트리 외 병렬 작업이
+  없음을 명시하고 최신 main 통합을 요청했다.
+- 2026-08-13 Plan 10 resume: remote Plan 10 head
+  `8aa3704014c0943aa7e80e8205c007caaf3a28d2`를 first parent로 유지한 채 `origin/main`을
+  `--no-ff` merge하고, 충돌한 주문/Fulfillment model과 target OpenAPI를 양쪽 계약이 공존하도록
+  해소했다. 미적용 Plan 10 migration은 combined inventory 다음 V50 expand/V51 contract로 옮겼다.
+  첫 full build의 964 tests 중 Support S80 fixture/latest-version 회귀 17건이 실패한 것을 숨기지 않고
+  공통 주문 표시 fixture와 V51 assertion으로 교정했다. Ordering 231 tests, 실패 집중 20 tests, 최종
+  full build 964 tests(0 failures, 0 errors, 1 skipped), Spotless와 문서/OpenAPI 검증이 통과해 Plan 20
+  `Implementation-Ready`를 true로 복원했다. PR #57 head 동기화는 이 merge completion commit 뒤 수행한다.
 
 ## Surprises & Discoveries
 
@@ -367,9 +383,15 @@ git diff --cached --check
   `SUPPORT_INTEGRATION_PENDING`으로 관측한다.
 - `analytics-refund-and-late-event-projection`은 metadata상 ready migration candidate지만 구현 branch와
   open PR이 없어 active writer는 아니다. Stack A lease가 해제될 때까지 실행 대상에서 제외한다.
-- V44가 주문 표시 필드를 `NOT NULL`로 닫자 Ordering 밖의 결제·정산·분쟁 테스트 fixture도 영향을
+- 최초 V44가 주문 표시 필드를 `NOT NULL`로 닫자 Ordering 밖의 결제·정산·분쟁 테스트 fixture도 영향을
   받았다. 첫 전체 build의 78 failures를 숨기지 않고 유효한 registry·snapshot fixture로 교정한 뒤 동일
   전체 build 782 tests가 통과했다.
+- `origin/main` 통합 시 target OpenAPI 양쪽 branch가 서로 다른 path/schema key를 같은 삽입 위치에
+  추가해 줄 단위 union은 invalid YAML을 만들었다. base/Plan10/main을 key 단위로 비교한 결과 변경 key
+  교집합은 0개였고, 53개 main path와 107개 main component를 semantic block merge해 양쪽 계약을 보존했다.
+- 결합 tree의 첫 full build는 Support S80 direct-order fixture 16건이 V51 표시 field `NOT NULL`을
+  충족하지 않고 latest migration test 1건이 V49를 고정해 실패했다. 기존 공통 order display fixture와
+  V51 inventory assertion으로 교정하고 집중/전체 회귀를 다시 통과했다.
 
 ## Decision Log
 
@@ -396,12 +418,14 @@ git diff --cached --check
 | 2026-08-12 | Checkpoint 1 exact tree의 마지막 migration은 V42이며 Stack A가 Plan 10부터 Plan 60 최종 검증까지 단일 writer lease를 보유한다 | 이 ExecPlan `Progress` |
 | 2026-08-12 | Plan 10은 V43 expand + bounded backfill + V44 contract로 배포 경계를 나누고 공개번호 route만 UUID를 숨긴다 | [Plan 10](../completed/productization-10-public-order-reference.md) |
 | 2026-08-12 | Plan 10 뒤 Stack A를 동결하고 migration writer를 Support S70~S100에 양보한다. Plan 20은 readiness를 잃고 기존 V43/V44는 resume 시 재번호화한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
+| 2026-08-13 | Support V43~V49가 완료·release된 `origin/main`을 Plan 10에 merge하고 미적용 Plan 10을 V50/V51로 옮긴 뒤 전체 검증으로 Stack A를 재개한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
+| 2026-08-13 | Plan 10 resume 전체 검증 통과와 같은 completion 변경에서 Plan 20 readiness를 true로 복원한다 | [Plan 10](../completed/productization-10-public-order-reference.md), [Plan 20](productization-20-authentication-foundation.md) |
 
 ## Outcomes & Retrospective
 
 - M1 Plan 10이 완료되어 주문 생성·조회 계약은 공개 주문번호, 매장·영업일 픽업번호와 불변 표시
-  snapshot을 제공한다. 그 Draft 결과는 보존하지만 migration-writer lease는 Support에 넘겼고 Plan 20은
-  S100 completion 뒤 재계획 전까지 후보가 아니다.
+  snapshot을 제공한다. Support에 넘겼던 migration-writer lease는 V49 release와 main 통합 뒤 Stack A가
+  다시 획득했고, Plan 10 V50/V51 결합 tree의 964-test 전체 재검증을 통과해 Plan 20을 후보로 복원했다.
 - 프로그램 전체 결과는 아직 완료되지 않았다. M2~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
 
 ## Revision Notes

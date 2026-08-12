@@ -37,6 +37,7 @@ enum class PointTransactionViewType {
     RESTORE_SKIPPED_EXPIRED,
     RECOVERY,
     ADJUSTMENT,
+    GOODWILL_COMPENSATION,
 }
 
 data class PointTransactionView(

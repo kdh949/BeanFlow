@@ -2,7 +2,6 @@ package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
-import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -89,9 +88,8 @@ internal class CouponIssuanceEntity(
     val originalIssuanceId: UUID? = null,
     @Column(name = "restoration_source_reference", length = 240)
     val restorationSourceReference: String? = null,
-    @Enumerated(EnumType.STRING)
     @Column(name = "restoration_trigger")
-    val restorationTrigger: OrderTerminationTrigger? = null,
+    val restorationTrigger: String? = null,
     @Column(name = "restoration_policy_version_id")
     val restorationPolicyVersionId: Long? = null,
     @Version
@@ -169,9 +167,8 @@ internal class CouponReservationEntity(
     var updatedAt: Instant,
     @Column(name = "restoration_source_reference", length = 240)
     var restorationSourceReference: String? = null,
-    @Enumerated(EnumType.STRING)
     @Column(name = "restoration_trigger")
-    var restorationTrigger: OrderTerminationTrigger? = null,
+    var restorationTrigger: String? = null,
     @Column(name = "restoration_policy_version_id")
     var restorationPolicyVersionId: Long? = null,
     @Enumerated(EnumType.STRING)
@@ -228,6 +225,27 @@ internal class CompensationCouponEligibleMenuEntity(
     val menuId: UUID,
 )
 
+@Entity
+@Table(name = "promotion_support_resolution_coupon_restoration")
+internal class SupportResolutionCouponRestorationEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "resolution_id", nullable = false)
+    val resolutionId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "coupon_reservation_id")
+    val couponReservationId: UUID?,
+    @Column(name = "source_reference", nullable = false, length = 240)
+    val sourceReference: String,
+    @Column(name = "payload_hash", nullable = false, length = 64)
+    val payloadHash: String,
+    @Column(nullable = false, length = 32)
+    val disposition: String,
+    @Column(name = "restored_at", nullable = false)
+    val restoredAt: Instant,
+)
+
 internal interface CampaignJpaRepository : JpaRepository<CampaignEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select campaign from CampaignEntity campaign where campaign.id = :id")
@@ -264,4 +282,8 @@ internal interface CompensationCouponTermsSnapshotJpaRepository : JpaRepository<
 
 internal interface CompensationCouponEligibleMenuJpaRepository : JpaRepository<CompensationCouponEligibleMenuEntity, UUID> {
     fun findAllByCouponIssuanceId(couponIssuanceId: UUID): List<CompensationCouponEligibleMenuEntity>
+}
+
+internal interface SupportResolutionCouponRestorationJpaRepository : JpaRepository<SupportResolutionCouponRestorationEntity, UUID> {
+    fun findBySourceReference(sourceReference: String): SupportResolutionCouponRestorationEntity?
 }
