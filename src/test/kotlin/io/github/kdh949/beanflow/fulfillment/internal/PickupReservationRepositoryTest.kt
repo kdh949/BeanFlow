@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReleasePickupAfterTerminationCommand
+import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupCommand
+import io.github.kdh949.beanflow.fulfillment.api.ReschedulePickupResult
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -36,6 +38,7 @@ internal class PickupReservationRepositoryTest
         private val operations: PickupReservationOperations,
         private val slotRepository: PickupSlotJpaRepository,
         private val reservationRepository: PickupReservationJpaRepository,
+        private val rescheduleHistoryRepository: PickupRescheduleHistoryJpaRepository,
         private val clock: Clock,
         private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
@@ -45,6 +48,7 @@ internal class PickupReservationRepositoryTest
         @BeforeEach
         fun cleanDatabase() {
             transactions.executeWithoutResult {
+                jdbcTemplate.execute("TRUNCATE TABLE fulfillment_pickup_reschedule_history")
                 reservationRepository.deleteAllInBatch()
                 slotRepository.deleteAllInBatch()
             }
@@ -236,6 +240,124 @@ internal class PickupReservationRepositoryTest
                 assertThat(slot.confirmedCount).isZero()
                 assertThat(reservationRepository.findByOrderId(orderId)?.state)
                     .isEqualTo(PickupReservationState.RESERVED)
+            }
+        }
+
+        @Test
+        fun `reserved pickup reschedule secures the new slot first and exact replay changes counters once`() {
+            val storeId = UUID.randomUUID()
+            val oldSlotId = UUID.randomUUID()
+            val newSlotId = UUID.randomUUID()
+            val orderId = UUID.randomUUID()
+            insertSlot(oldSlotId, storeId, capacity = 1)
+            insertSlot(newSlotId, storeId, capacity = 1)
+            transactions.executeWithoutResult {
+                operations.reserve(
+                    ReservePickupCommand(
+                        orderId,
+                        storeId,
+                        oldSlotId,
+                        clock.instant().plus(Duration.ofMinutes(5)),
+                        "pickup-order-$orderId",
+                    ),
+                )
+            }
+            val command = ReschedulePickupCommand(orderId, storeId, newSlotId, "support-reschedule-$orderId")
+
+            val first = transactions.execute { operations.reschedule(command) }
+            val replay = transactions.execute { operations.reschedule(command) }
+
+            assertThat(first?.result).isEqualTo(ReschedulePickupResult.APPLIED)
+            assertThat(replay?.result).isEqualTo(ReschedulePickupResult.ALREADY_APPLIED)
+            transactions.executeWithoutResult {
+                assertThat(slotRepository.findById(oldSlotId).orElseThrow().reservedCount).isZero()
+                assertThat(slotRepository.findById(newSlotId).orElseThrow().reservedCount).isOne()
+                assertThat(reservationRepository.findByOrderId(orderId)?.slotId).isEqualTo(newSlotId)
+                assertThat(rescheduleHistoryRepository.count()).isOne()
+            }
+        }
+
+        @Test
+        fun `confirmed pickup reschedule transfers confirmed capacity without changing lifecycle state`() {
+            val storeId = UUID.randomUUID()
+            val oldSlotId = UUID.randomUUID()
+            val newSlotId = UUID.randomUUID()
+            val orderId = UUID.randomUUID()
+            insertSlot(oldSlotId, storeId, capacity = 1)
+            insertSlot(newSlotId, storeId, capacity = 1)
+            transactions.executeWithoutResult {
+                operations.reserve(
+                    ReservePickupCommand(
+                        orderId,
+                        storeId,
+                        oldSlotId,
+                        clock.instant().plus(Duration.ofMinutes(5)),
+                        "pickup-order-$orderId",
+                    ),
+                )
+                operations.confirm(orderId, clock.instant(), "pickup-order-$orderId")
+                operations.reschedule(ReschedulePickupCommand(orderId, storeId, newSlotId, "confirmed-reschedule-$orderId"))
+            }
+
+            transactions.executeWithoutResult {
+                assertThat(slotRepository.findById(oldSlotId).orElseThrow().confirmedCount).isZero()
+                assertThat(slotRepository.findById(newSlotId).orElseThrow().confirmedCount).isOne()
+                val reservation = reservationRepository.findByOrderId(orderId)
+                assertThat(reservation?.slotId).isEqualTo(newSlotId)
+                assertThat(reservation?.state).isEqualTo(PickupReservationState.CONFIRMED)
+            }
+        }
+
+        @Test
+        fun `last reschedule slot is granted once and losing order keeps its previous slot`() {
+            val storeId = UUID.randomUUID()
+            val nextSlotId = UUID.randomUUID()
+            val orderIds = listOf(UUID.randomUUID(), UUID.randomUUID())
+            val oldSlotIds = listOf(UUID.randomUUID(), UUID.randomUUID())
+            insertSlot(nextSlotId, storeId, capacity = 1)
+            oldSlotIds.forEach { insertSlot(it, storeId, capacity = 1) }
+            transactions.executeWithoutResult {
+                orderIds.zip(oldSlotIds).forEach { (orderId, oldSlotId) ->
+                    operations.reserve(
+                        ReservePickupCommand(
+                            orderId,
+                            storeId,
+                            oldSlotId,
+                            clock.instant().plus(Duration.ofMinutes(5)),
+                            "pickup-order-$orderId",
+                        ),
+                    )
+                }
+            }
+            val barrier = CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+            val results =
+                orderIds
+                    .map { orderId ->
+                        executor.submit<Result<ReschedulePickupResult>> {
+                            barrier.await()
+                            runCatching {
+                                requireNotNull(
+                                    transactions.execute {
+                                        operations.reschedule(
+                                            ReschedulePickupCommand(orderId, storeId, nextSlotId, "contended-$orderId"),
+                                        )
+                                    },
+                                ).result
+                            }
+                        }
+                    }.map { it.get(10, TimeUnit.SECONDS) }
+            executor.shutdown()
+
+            assertThat(results.count(Result<ReschedulePickupResult>::isSuccess)).isOne()
+            assertThat(results.single(Result<ReschedulePickupResult>::isFailure).exceptionOrNull())
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.PICKUP_SLOT_FULL)
+                }
+            transactions.executeWithoutResult {
+                assertThat(slotRepository.findById(nextSlotId).orElseThrow().reservedCount).isOne()
+                assertThat(oldSlotIds.sumOf { slotRepository.findById(it).orElseThrow().reservedCount }).isOne()
+                assertThat(orderIds.count { reservationRepository.findByOrderId(it)?.slotId == nextSlotId }).isOne()
             }
         }
 

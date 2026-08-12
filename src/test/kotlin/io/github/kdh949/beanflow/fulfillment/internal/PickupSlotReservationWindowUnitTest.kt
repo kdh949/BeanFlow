@@ -25,6 +25,7 @@ import java.util.UUID
 internal class PickupSlotReservationWindowUnitTest {
     private val slots = mock<PickupSlotJpaRepository>()
     private val reservations = mock<PickupReservationJpaRepository>()
+    private val reschedules = mock<PickupRescheduleHistoryJpaRepository>()
 
     @Test
     fun `a slot starting exactly now is rejected and nothing is written`() {
@@ -62,6 +63,7 @@ internal class PickupSlotReservationWindowUnitTest {
         return PickupReservationService(
             slotRepository = slots,
             reservationRepository = reservations,
+            rescheduleHistoryRepository = reschedules,
             identifierSource = IdentifierSource { RESERVATION_ID },
             clock = Clock.fixed(NOW, ZoneOffset.UTC),
             meterRegistry = SimpleMeterRegistry(),
