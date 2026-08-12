@@ -174,10 +174,10 @@ updates direct successor S110 dependency/readiness and releases V48.
 - [x] user selected the recommended complete 3-owner field mapping
 - [x] no Accepted ADR conflict; DRAFT field/model gap resolved by SP-22/ADR-087 amendment
 - [x] S100 stacked branch and sole V48 migration-writer lease acquired
-- [ ] domain/V48 RED-GREEN slice
-- [ ] owner write/history/reset slice
-- [ ] Support/S60 orchestration and Audit slice
-- [ ] Notification/API/OpenAPI/security slice
+- [x] domain/V48 RED-GREEN slice
+- [x] owner write/history/reset slice
+- [x] Support/S60 orchestration and Audit slice
+- [x] Notification/API/OpenAPI/security slice
 - [ ] focused/full/build/docs validation
 - [ ] completion move, V48 release and S110 readiness handoff
 
@@ -187,6 +187,16 @@ S30 already provides all three owner-local protected profile roots, including De
 invent a first-party Rider Aggregate. The missing legal/payout/history/reset fields are explicit owner-model extensions. S60's
 completed contract intentionally stores only action payload digests and names S100 as the typed owner that recomputes them, so raw
 payload re-submission at execution is the existing architecture rather than a new fallback.
+
+Spring JDBC does not infer PostgreSQL `timestamptz` correctly from `Instant` in the owner update statements, so the owner
+repositories bind `Timestamp.from(instant)` explicitly. Persistent permission lookup uses a locking `SELECT`; consequently the
+profile get/revision-binding path cannot be a read-only PostgreSQL transaction even though it does not mutate Support state.
+
+Terminal idempotency replay must run before current owner-version lookup and Vault preparation. Otherwise a successful retry after
+the first write observes the incremented owner version and is incorrectly rejected as stale. R4 reset intents may legitimately
+repeat against the same current profile version, so V48 uses a non-R4 partial history uniqueness constraint while reset intent
+uniqueness remains source/idempotency-bound. Notification integration tests also require a persisted `notification_delivery`
+parent before target metadata because V48 intentionally enforces that foreign key.
 
 ## Decision Log
 
@@ -199,5 +209,5 @@ payload re-submission at execution is the existing architecture rather than a ne
 
 ## Outcomes & Retrospective
 
-Implementation and validation are in progress. No runtime endpoint, migration validation, production provisioning, performance,
-legal compliance or delivery success is claimed yet.
+Implementation is complete and focused owner/workflow/migration/OpenAPI tests pass. Full regression/build/document validation and
+the completion move remain in progress. No production provisioning, performance, legal compliance or delivery success is claimed.

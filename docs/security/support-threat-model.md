@@ -1,7 +1,7 @@
 # Support Threat Model
 
-> **Status:** S30 exact-search and S40 verification/reveal rows marked implemented have runtime evidence. Controls tied
-> to later profile change and delivery-provider endpoints remain release requirements, not current runtime evidence.
+> **Status:** S30 exact-search, S40 verification/reveal and S100 purpose-specific profile-change rows marked implemented
+> have runtime evidence. Controls tied to later delivery-provider endpoints remain release requirements.
 
 | Threat | Control | Verification |
 |---|---|---|
@@ -14,6 +14,11 @@
 | self/collusive approval (S40 implemented for privacy access) | requester/approver/reviewer separation and persistent permission recheck | normal Grant and break-glass role matrix |
 | raw response persistence (S40 implemented) | no response-body idempotency storage; replay requires manual review | DB canary and same-key replay tests |
 | notification outage (S40 implemented) | durable PII-free intent and RETRY_SCHEDULED/MANUAL_REVIEW, no no-op fallback | UNKNOWN/retry and provider-outside-transaction tests |
+| account takeover through a new contact channel (S100 implemented) | customer phone execution requires a current registered-channel-bound ENHANCED session; verification using only the proposed phone is denied | new-phone-only denial and channel-binding tests |
+| generic or misclassified profile mutation (S100 implemented) | closed owner/purpose R0-R4 policy and typed endpoints; no generic PATCH; R0 has no command and R4 accepts no secret | risk matrix, strict request and OpenAPI contract tests |
+| stale/collusive profile payload execution (S100 implemented) | digest/owner-version/exact revision binding, Support Manager then Operations separation and assigned-agent execution | stale version, self/dual reviewer, reassignment and concurrent execution tests |
+| raw profile leakage from Support (S100 implemented) | raw values are transient and redacted from request/command rendering; Support persists only digest/masked/opaque references; owner encrypts locally | database canary, rendering, owner ciphertext and masked DTO tests |
+| profile notification outage (S100 implemented) | changed contacts create OLD and NEW owner-local targets after commit; other changes use CURRENT; retry reuses terminal owner result and cannot repeat the write | old/new target, notification failure and idempotent retry tests |
 | stale payload execution | revision/hash/version binding | stale/revision race tests |
 | duplicate financial action | Idempotency-Key, owner uniqueness/locks | same/different payload concurrency |
 | Provider spoof/replay/order | raw-body authentication, inbox unique, state monotonicity | provider contract tests |

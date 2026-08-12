@@ -1,19 +1,19 @@
 # Customer Support Planned Test Strategy
 
 > **Status:** `PARTIALLY IMPLEMENTED`
-> S20–S90 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Delivery, LegalHold and
+> S20–S100 have named domain, PostgreSQL Testcontainers, API/integration, OpenAPI and ArchUnit tests. Canonical Delivery, LegalHold and
 > later Support stages remain planned; no Support production performance or k6 result is claimed.
 
 ## Coverage by layer
 
 | Layer | Current / planned coverage |
 |---|---|
-| Domain | S20 Case; S40 verification/grant; S50 default-deny policy; S60 approval; S70 authorization/execution; S90 band/cost/one-benefit/notification states |
-| Application | S20–S80 implemented use cases plus S90 immutable-version re-evaluation, S60 route reuse, five-scope rolling locks, owner issuance, exact replay and independent notification |
-| PostgreSQL Testcontainers | S20–S90 constraints/races; V47 immutable policy/template, terminal incident, consumption/idempotency and owner bindings; parallel last-cap winner and Audit rollback |
-| API contract | S20–S90 status/error/no-store/idempotency/closed schemas, PII/evidence exclusion and target/runtime Spring MVC parity |
-| Modulith/ArchUnit | Controller→Repository and Support→owner-internal production boundary; S50–S90 use owner public APIs only |
-| Security | IDOR, persistent permission/Case/verification/field/action matrix, proof/raw diagnostic redaction, scope separation, Audit failure and post-owner permission recheck |
+| Domain | S20 Case; S40 verification/grant; S50 default-deny policy; S60 approval; S70 authorization/execution; S90 band/cost; S100 closed owner/purpose R0-R4 and notification states |
+| Application | S20–S90 use cases plus S100 preflight/owner-prepare/final atomic write, exact S60 reuse, owner-version replay and independent notification |
+| PostgreSQL Testcontainers | S20–S100 constraints/races; V48 owner history/reset, digest-only workflow/idempotency and notification targets; concurrent owner-version winner and Audit rollback |
+| API contract | S20–S100 status/error/no-store/idempotency/closed schemas, write-only raw fields, PII/evidence exclusion and exact target/runtime Spring MVC parity |
+| Modulith/ArchUnit | Controller→Repository and Support→owner-internal production boundary; S50–S100 use owner public APIs only |
+| Security | IDOR, persistent permission/Case/verification/field/action matrix, new-phone denial, raw request/command redaction, role separation, Audit failure and execution-time recheck |
 | Provider/resilience | S40 challenge and security notification timeout/UNKNOWN; S70 reuses durable Payment refund reconciliation and creates pickup notification intent without provider call in the execution transaction; later Delivery paths planned |
 | Retention/restore | policy boundary, LegalHold race, partial component deletion and restore replay |
 | UI/load | selected frontend boundary, reveal expiry/navigation clearing and reproducible search/timeline/action load |
@@ -34,10 +34,11 @@ Unknown combinations expect DENIED. Repository/Audit failure expects 503/no sens
   field-boundary collision conflict
 - last pickup slot atomic swap; ACCEPTED cancellation versus PREPARING; two agents cancel one Order
 - rolling compensation bucket and duplicate terminal incident benefit
+- stale profile owner version/digest/revision; concurrent execution; notification retry without repeated owner write
 - Provider event duplicate/out-of-order, timeout versus webhook, unknown versus second Provider dispatch
 - retention worker claim contention and LegalHold create versus delete
 
-S20–S90 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
+S20–S100 tests use PostgreSQL locks/constraints and runtime contracts, not only mocks. Future stages additionally use
 deterministic Clock/IdentifierSource where their behavior requires it.
 
 ## Retention and restore scenarios to instantiate
@@ -61,6 +62,11 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
   issuance, shared Coupon redemption cost tie-out, Audit rollback, notification failure independence, no-store/masked
   API, V47 constraints and target/runtime parity. Full-suite counts are recorded in the completed S90 ExecPlan.
 
+- S100 focused evidence covers the three-owner risk matrix, new-phone-only denial, exact revision/owner-version staleness,
+  manager/Operations separation and reassignment, owner-local encryption/history/reset intent, Audit rollback, OLD/NEW
+  notification failure/retry, no-store/write-only API, V48 constraints and target/runtime parity. Full-suite counts are
+  recorded in the completed S100 ExecPlan.
+
 - S70 completion ran `spotlessCheck test` with 833 tests, 0 failures, 0 errors and 1 skipped, followed by successful
   `build` and documentation/OpenAPI validation. The final target/runtime contract has 66 paths, 70 operations and
   190 schemas; 33 Support/Operations operations are implemented through S70. The first full run exposed two failures
@@ -72,7 +78,7 @@ Inputs/labels contain no PII; thresholds remain assumptions until measured.
 - S50 completion ran `spotlessCheck test` with 784 tests, 0 failures, 0 errors and 1 skipped, followed by a successful
   build. JVM-wide PostGIS server reuse is paired with one database per Spring context and a separate Flyway connection,
   so context data isolation and the 1-connection application-pool boundary remain tested.
-- S20–S90 coverage is limited to their named test classes; it does not verify future Support stages.
+- S20–S100 coverage is limited to their named test classes; it does not verify future Support stages.
 - S70 focused evidence covers pending-payment release/no-refund, paid/accepted owner reuse, exact authorization replay and
   consumption, permission revoke, Audit rollback, PREPARING handoff without consumption, new-slot-first rollback/last-slot
   contention, target/runtime contracts and `Cache-Control: no-store`.
