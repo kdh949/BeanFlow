@@ -1,11 +1,11 @@
 # S100 R0-R4 목적별 owner profile change를 구현한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s30-protected-profile-search.md`, `docs/exec-plans/completed/customer-support-s60-approval-operations-investigation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-13`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`, `Decision Log`,
 `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -19,18 +19,18 @@ notification은 독립적으로 retry/manual review에 수렴한다.
 
 ## Current State
 
-- branch `feature/support-purpose-specific-profile-change`는 S90 verified head
-  `20a82ec7606a3faf7e06858145f0b2e661b6bb23`에서 분기했다. parent PR은 #61이다.
-- Flyway inventory는 V1-V47이며 마지막은 `V47__create_versioned_goodwill_compensation.sql`이다.
+- branch `feature/support-purpose-specific-profile-change`는 parent PR #61의 current S90 head
+  `dd4efae3e752e97a1739596abd329a531b6e4d56` 위에 최종 rebase됐다.
+- Flyway inventory는 V1-V48이며 마지막은 `V48__create_purpose_specific_profile_change.sql`이다.
 - S30은 Identity customer, Merchant store, Delivery external courier의 owner-local Vault ciphertext/masked
   derivative/exact index와 query/reveal public API를 소유한다.
 - S60은 digest-only immutable revision, manager/Operations approval, required callback과 reassignment를 구현했으며
   S100 typed owner command가 execution 직전 digest/version을 재검산해야 한다.
 - Accepted SP-22/ADR-087 amendment가 initial 3-owner R0-R4 mapping, new-phone-only denial, reset-intent-only R4와
   old/new notification boundary를 확정했다.
-- active Analytics migration plan은 2026-08-12 Support S100 completion까지 deferred됐고 branch/number/PR을 소유하지
-  않는다. Productization migration stack은 PR #57에서 동결됐다. S90 V47 lease는 release됐으며 current branch가
-  2026-08-13 sole writer lease를 획득해 V48을 선택한다.
+- active Analytics migration plan은 S100 completion까지 deferred됐고 branch/number/PR을 소유하지 않았다.
+  Productization migration stack은 PR #57에서 동결됐다. S100은 sole V48 writer lane으로 구현·검증을 마쳤고
+  이 completion에서 lease를 release한다.
 
 ## Definitions
 
@@ -178,8 +178,8 @@ updates direct successor S110 dependency/readiness and releases V48.
 - [x] owner write/history/reset slice
 - [x] Support/S60 orchestration and Audit slice
 - [x] Notification/API/OpenAPI/security slice
-- [ ] focused/full/build/docs validation
-- [ ] completion move, V48 release and S110 readiness handoff
+- [x] focused/full/build/docs validation
+- [x] completion move, V48 release and S110 readiness handoff
 
 ## Surprises & Discoveries
 
@@ -210,8 +210,40 @@ the module declaration was expanded to those three public APIs and the architect
 | 2026-08-13 | Security boundary | digest-only R3 request and typed raw re-submission at execution | owner-local PII and exact S60 approval | ADR-084/087, this plan |
 | 2026-08-13 | Owner scope | external courier is the Rider support subject | preserves SP-15/ADR-088 non-goal | SP-22, ADR-087 |
 | 2026-08-13 | Migration lease | current branch owns sole V48 lane | V47 released and other writers deferred/frozen | this plan |
+| 2026-08-13 | Completion | release V48 and keep S110 behind its independent Delivery/provider gate | S100 owner contracts are verified; canonical Delivery and provider authentication are still absent | completed plan, orchestration |
 
 ## Outcomes & Retrospective
 
-Implementation is complete and focused owner/workflow/migration/OpenAPI tests pass. Full regression/build/document validation and
-the completion move remain in progress. No production provisioning, performance, legal compliance or delivery success is claimed.
+S100 now provides a closed three-owner R0-R4 policy, 14 typed create, one masked get, eight typed revision, eight typed
+execution and one notification-retry operation. R1/R2 execute through owner public APIs with current verification,
+permission and owner-version checks. R3/R4 reuse S60 exact manager/Operations approval, pairwise role separation,
+explicit reassignment and one-time execution. Customer phone requires current-channel ENHANCED verification; R4 creates
+only reset/re-registration intent and no generic PATCH or raw-secret schema exists.
+
+Identity, Merchant and Delivery own encrypted current/history/reset/notification-target rows. Support stores only digest,
+masked values and opaque owner references. Owner change, Support/S60 result, idempotency and PII-free Audit are atomic;
+post-commit Notification failure is visible/retryable and does not repeat the owner write. V48 constraints and runtime
+contracts cover the same invariants. S110 receives the verified external-courier owner contract, but remains not ready
+because canonical DeliveryFulfillment, Provider selection and raw-body authentication are independent unresolved gates.
+
+Validation evidence:
+
+- owner integration and V48 migration focused run — BUILD SUCCESSFUL in 32s, five tests.
+- S100 workflow integration six-test run — BUILD SUCCESSFUL in 37s.
+- domain/owner/workflow/migration focused run — BUILD SUCCESSFUL in 36s.
+- OpenAPI contract and runtime parity run — BUILD SUCCESSFUL in 9s after correcting the contract assertion to inspect the shared no-store response.
+- `./gradlew --no-daemon test --tests '*ModularityTests'` — BUILD SUCCESSFUL in 16s after adding the three named owner APIs to Notification's explicit allowlist.
+- first `./gradlew --no-daemon spotlessCheck test` — 917 tests, one Modulith allowlist failure, one skipped; product tests otherwise completed. The allowlist was fixed and the same pre-rebase command passed in 13m 14s.
+- final rebased `./gradlew --no-daemon spotlessCheck test` — BUILD SUCCESSFUL in 13m 44s; 930 tests, 0 failures, 0 errors, 1 skipped across 201 suites.
+- `./gradlew --no-daemon build` — BUILD SUCCESSFUL in 6s; bootJar/assemble/check/build completed, test reused the verified output.
+- `./scripts/verify-docs.sh` — target/runtime 107 paths/111 operations, 244 schemas; 33 policies, 92 ADRs,
+  238 Markdown files and 44 ExecPlans validated. `git diff --check` and `git status --short` produced no output.
+
+No production provisioning, performance, legal compliance or external Provider delivery claim is made. V48 is released
+only by this completed move; S110 does not acquire a migration or implementation lane.
+
+## Revision Notes
+
+- 2026-08-13: selected the user-recommended complete three-owner mapping, accepted SP-22/ADR-087, authored the plan and acquired V48.
+- 2026-08-13: implemented V48, owner commands, S60 orchestration, independent Notification and 32 exact runtime operations.
+- 2026-08-13: fixed request diagnostic redaction and Notification's named public-API allowlist, rebased onto current S90 PR head, passed full validation, released V48 and handed the still-gated S110 inputs to orchestration.
