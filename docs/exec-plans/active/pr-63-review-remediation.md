@@ -5,7 +5,7 @@
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s100-purpose-specific-profile-change.md`
-> **Completed-At:** —
+> **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. PR #63의 6개 unresolved review finding을 회귀 테스트로 재현하고,
 S100의 보안·장애 복구·API 계약을 보강한 뒤에만 다시 completion을 선언한다.
