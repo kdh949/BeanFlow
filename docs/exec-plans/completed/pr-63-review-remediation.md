@@ -1,11 +1,11 @@
 # PR #63 S100 review remediation을 완료한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-support-s100-purpose-specific-profile-change.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-13`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. PR #63의 6개 unresolved review finding을 회귀 테스트로 재현하고,
 S100의 보안·장애 복구·API 계약을 보강한 뒤에만 다시 completion을 선언한다.
@@ -48,6 +48,8 @@ correlation, claim owner/expiry를 추가하고 상태 constraint를 `PROCESSING
   no branch, number or PR; Support orchestration has `Writes-Migration=false`; no other active plan records an acquired lease.
 - **Selection:** sole writer selects V49. No reservation manifest, checksum repair, renumbering or applied migration edit.
 - **Release:** only after focused/full/build/docs validation and push of the reviewed remediation.
+- **Released:** 2026-08-13 after push at `e4c34cba10d8fae68259f9511de3e7a26e40c2b0`, six thread replies/resolutions,
+  941-test full regression, build and docs/OpenAPI validation. No successor acquired V49.
 
 ## Failure Semantics
 
@@ -73,7 +75,7 @@ database dependency failure remains 503. No raw PII, verification proof, notific
 - [x] security/API/digest fixes
 - [x] notification claim/lease recovery and reconciliation
 - [x] focused/full/build/docs validation
-- [ ] push, thread replies/resolution, completion move and lease release
+- [x] push, thread replies/resolution, completion move and lease release
 
 ## Decision Log
 
@@ -81,6 +83,7 @@ database dependency failure remains 503. No raw PII, verification proof, notific
 |---|---|---|---|
 | 2026-08-13 | Accepted review remediation | fix all six PR #63 findings before merge | each finding affects a documented security, durability, idempotency or API invariant |
 | 2026-08-13 | Migration lease | add one forward-only V49 | durable claim/lease cannot be represented safely by mutable aggregate timestamps alone |
+| 2026-08-13 | Completion | release V49 after push and resolve all six review threads | local full validation passed and remote PR head contains the remediation |
 
 ## Outcomes & Retrospective
 
@@ -103,3 +106,4 @@ Validation evidence before push:
 
 - 2026-08-13: opened from PR #63 unresolved review findings and acquired the sole V49 writer lease.
 - 2026-08-13: implemented all six remediations and passed focused, architecture, full regression, build and documentation gates.
+- 2026-08-13: pushed `e4c34cb`, replied to and resolved all six GitHub review threads, released V49 and completed this plan.

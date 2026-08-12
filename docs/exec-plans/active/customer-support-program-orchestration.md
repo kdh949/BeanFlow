@@ -24,7 +24,8 @@ new-slot-first swap, exact store authorization과 V45를 구현·검증하고 le
 S80은 S70 actual outcome에서 S60 approval reuse, partial owner step과 unknown responsibility 정책을 확정한 뒤
 V46와 네 runtime operation을 구현·검증하고 lease를 해제했다. S90은 completed S60/S80 input과 사용자 선택 SP-21
 rolling hard cap으로 V47, immutable policy/request, owner Point/Coupon issuance와 다섯 runtime operation을 구현·검증하고
-lease를 해제했다. S100은 complete three-owner R0-R4 mapping을 V48과 32 runtime operation으로 구현·검증하고 lease를
+lease를 해제했다. S100은 complete three-owner R0-R4 mapping을 V48과 32 runtime operation으로 구현·검증하고,
+PR #63 remediation에서 final authorization 재검증과 V49 notification claim/lease recovery까지 검증한 뒤 lease를
 해제했다. S110~S140은 predecessor actual outcome과 각자의 독립 모델 게이트가 충족된 뒤 작성한다.
 
 ## Current State
@@ -59,9 +60,10 @@ lease를 해제했다. S100은 complete three-owner R0-R4 mapping을 V48과 32 r
 - S90 completed plan은 immutable v1/head, LOW/MEDIUM/HIGH/EXCEPTIONAL route, S60 exact approval reuse, five-scope
   rolling serialization, Loyalty Point funding legs, Promotion fixed template/redemption cost와 independent Notification을
   기록한다. V47과 다섯 no-store operation은 892-test full regression을 통과했고 writer lease는 release됐다.
-- S100 completed plan은 customer/store/Delivery external courier의 closed R0-R4 policy, owner-local encrypted
-  history/reset, S60 exact dual approval, assigned-agent execution과 OLD/NEW notification retry를 기록한다. V48과
-  32개 no-store runtime operation은 930-test full regression을 통과했고 writer lease는 release됐다.
+- S100 completed plan과 PR #63 remediation은 customer/store/Delivery external courier의 closed R0-R4 policy,
+  owner-local encrypted history/reset, final requester/link/session/challenge revalidation, S60 exact dual approval,
+  assigned-agent execution과 OLD/NEW notification claim/lease recovery를 기록한다. V48/V49와 32개 no-store runtime
+  operation은 최종 941-test full regression을 통과했고 writer lease는 release됐다.
 - Support API inventory 중 S20의 9개 Case operation, S30의 1개 protected search operation, S40의 12개
   operation, S50의 3개 timeline/evaluation operation, S60의 6개 request/investigation operation과 S70의 2개
   execution/authorization operation, S80의 4개 plan/execution/reconciliation operation, S90의 5개 goodwill,
@@ -174,7 +176,7 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 | S70 | lifecycle-aware cancellation and atomic pickup reschedule | completed S60 approval/execution lineage | COMPLETED — V45/runtime/833-test validation; lease released |
 | S80 | post-acceptance resolution with partial/unknown outcomes | completed S70 owner command outcomes | COMPLETED — V46/runtime/865-test validation; lease released |
 | S90 | versioned goodwill compensation | completed S60 approval/investigation and S80 refund/restoration separation | COMPLETED — V47/5 runtime operations/892-test validation; lease released |
-| S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | COMPLETED — V48/32 runtime operations/930-test validation; lease released |
+| S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | COMPLETED — V48/V49/32 runtime operations/941-test validation; lease released |
 | S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | NOT READY — S100 external-courier owner input is complete, but Provider selection/raw-body auth and canonical Delivery module remain absent |
 | S120 | LegalHold and component deletion automation | completed owner retention ports from S20~S110 | legal review and backup replay procedure required |
 | S130 | Support Console | implemented server contracts needed by selected UX and Accepted ADR-090 | credential/CORS/CSRF/trust boundary open |
@@ -253,6 +255,8 @@ latest main. Update target/runtime OpenAPI, ADR/Business Policy and operational 
 - [x] S100 V48/owner history·reset/S60 execution/32 runtime operation 구현, 930-test full validation과 V48 lease release
 - [x] S100 direct successor readiness 재계산 — S110은 external-courier profile input을 받았지만 independent Provider
   selection/raw-body authentication/canonical Delivery model gate가 남아 NOT READY
+- [x] PR #63 S100 review remediation — final authorization binding, V49 notification lease/recovery, owner 404,
+  composite 400와 typed digest를 941-test full validation으로 닫고 V49 lease release; S110 gate는 변경 없음
 
 ## Surprises & Discoveries
 
@@ -314,14 +318,15 @@ Flyway를 V46으로 고정한 S10 follower 한 건만 실패했고, V47로 갱�
 | 2026-08-12 | S90 completion | complete V47, five goodwill operations and owner issuance; release lease and hand readiness to S100 | focused security/owner/API plus 892-test full build/docs gates pass | completed S90 |
 | 2026-08-13 | S100 policy/lease | select complete three-owner mapping and acquire V48 | user selected the recommended closed mapping; S30/S60 provide verified owner and approval inputs | SP-22, ADR-087, active S100 |
 | 2026-08-13 | S100 completion | complete V48, 32 profile operations and owner-local change/notification; release lease | focused security/owner/API plus 930-test full build/docs gates pass | completed S100 |
+| 2026-08-13 | S100 PR #63 remediation | complete final authorization recheck and V49 durable notification recovery; release lease | six review threads resolved after 941-test full build/docs validation | completed PR #63 remediation |
 
 ## Outcomes & Retrospective
 
 S10 foundation, S20 runtime Case, S30 protected exact search/remediation, S40 verification/DataAccessGrant, S50
 timeline/ActionPolicy, S60 approval/Operations investigation, S70 cancellation/reschedule, S80 post-acceptance resolution과
-S90 versioned goodwill compensation과 S100 purpose-specific profile change가 complete다. S100 final regression은
-930 tests를 통과했고 target/runtime은 74개 Support/Operations operation을 포함해 전체 107 paths/111 operations/
-244 schemas로 일치하며 V48 lease는 release됐다. S110은 S100 external-courier profile contract를 입력으로 받았지만
+S90 versioned goodwill compensation과 S100 purpose-specific profile change가 complete다. S100 PR #63 remediation까지
+최종 941 tests를 통과했고 target/runtime은 74개 Support/Operations operation을 포함해 전체 107 paths/111 operations/
+244 schemas로 일치하며 V49 lease는 release됐다. S110은 S100 external-courier profile contract를 입력으로 받았지만
 Provider selection/raw-body authentication과 canonical Delivery model이 없어 authoring/implementation ready가 아니다.
 
 ## Revision Notes
@@ -361,3 +366,5 @@ Provider selection/raw-body authentication과 canonical Delivery model이 없어
 - 2026-08-13: accepted SP-22/ADR-087 complete three-owner mapping, authored S100 from S90 and acquired V48.
 - 2026-08-13: completed S100 V48/owner/S60/Notification/32 runtime operations and 930-test validation, moved its plan to
   completed, released V48 and retained S110's independent Provider/auth/canonical Delivery gate as NOT READY.
+- 2026-08-13: completed PR #63 S100 remediation with V49/final authorization/notification recovery, 941-test validation,
+  six resolved review threads and lease release; S110 remains NOT READY on the same independent gates.
