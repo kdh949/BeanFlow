@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -52,7 +53,12 @@ internal class StoreSupportProfileChangeService(
     override fun resolveNotificationTarget(targetId: UUID): ResolvedProfileNotificationTarget {
         val target = repository.notificationTarget(targetId)
         val field =
-            if (target.channel == ProfileNotificationChannel.PHONE) PersonalDataField.SUPPORT_PHONE else PersonalDataField.SUPPORT_EMAIL
+            when {
+                target.purpose == "STORE_PUBLIC_PROFILE" && target.kind != ProfileNotificationTargetKind.CURRENT ->
+                    PersonalDataField.PUBLIC_PHONE
+                target.channel == ProfileNotificationChannel.PHONE -> PersonalDataField.SUPPORT_PHONE
+                else -> PersonalDataField.SUPPORT_EMAIL
+            }
         val destination =
             crypto.decrypt(
                 target.encrypted,
@@ -165,7 +171,14 @@ internal class StoreSupportProfileChangeService(
                 after,
                 clock.instant(),
             )
-            val contactValues = values.filter { it.field in setOf(PersonalDataField.SUPPORT_PHONE, PersonalDataField.SUPPORT_EMAIL) }
+            val contactValues =
+                values.filter {
+                    it.field in setOf(
+                        PersonalDataField.PUBLIC_PHONE,
+                        PersonalDataField.SUPPORT_PHONE,
+                        PersonalDataField.SUPPORT_EMAIL,
+                    )
+                }
             val targets =
                 if (contactValues.isNotEmpty()) {
                     buildList {
@@ -484,7 +497,7 @@ internal class StoreSupportProfileChangeRepository(
             jdbcTemplate.update(
                 "UPDATE merchant_store_support_profile SET version = ?, updated_at = ? WHERE store_id = ? AND version = ?",
                 next,
-                now,
+                Timestamp.from(now),
                 storeId,
                 expected,
             ) != 1
@@ -515,7 +528,7 @@ internal class StoreSupportProfileChangeRepository(
                 type.name,
                 index.keyVersion,
                 index.digestBytes(),
-                now,
+                Timestamp.from(now),
             )
         }
     }
@@ -549,7 +562,7 @@ internal class StoreSupportProfileChangeRepository(
             current,
             before,
             after,
-            now,
+            Timestamp.from(now),
         )
     }
 
@@ -568,7 +581,7 @@ internal class StoreSupportProfileChangeRepository(
             id,
             storeId,
             historyId,
-            now,
+            Timestamp.from(now),
         )
     }
 
@@ -594,7 +607,7 @@ internal class StoreSupportProfileChangeRepository(
             value.encrypted.keyVersion,
             value.encrypted.aadVersion,
             value.masked,
-            now,
+            Timestamp.from(now),
         )
         return OwnerProfileNotificationTarget(id, kind, value.channel, value.masked)
     }
@@ -611,7 +624,7 @@ internal class StoreSupportProfileChangeRepository(
             .query(
                 """
                 SELECT target.target_kind, target.channel_type, target.destination_ciphertext,
-                       target.destination_key_version, target.destination_aad_version, history.store_id
+                       target.destination_key_version, target.destination_aad_version, history.store_id, history.purpose
                   FROM merchant_store_profile_notification_target target
                   JOIN merchant_store_profile_change_history history ON history.id = target.profile_change_history_id
                  WHERE target.id = ?
@@ -619,6 +632,7 @@ internal class StoreSupportProfileChangeRepository(
                 { rs, _ ->
                     StoreOwnerNotificationSnapshot(
                         rs.getObject("store_id", UUID::class.java),
+                        rs.getString("purpose"),
                         ProfileNotificationTargetKind.valueOf(rs.getString("target_kind")),
                         ProfileNotificationChannel.valueOf(rs.getString("channel_type")),
                         EncryptedPersonalData(
@@ -656,7 +670,8 @@ internal class StoreSupportProfileChangeRepository(
         val targets =
             jdbcTemplate.query(
                 "SELECT id, target_kind, channel_type, masked_destination FROM $targetTable " +
-                    "WHERE profile_change_history_id = ? ORDER BY target_kind, channel_type, id",
+                    "WHERE profile_change_history_id = ? " +
+                        "ORDER BY CASE target_kind WHEN 'OLD' THEN 0 WHEN 'NEW' THEN 1 ELSE 2 END, channel_type, id",
                 { rs, _ ->
                     OwnerProfileNotificationTarget(
                         rs.getObject("id", UUID::class.java),
@@ -688,6 +703,7 @@ internal class StoreSupportProfileChangeRepository(
 
 internal data class StoreOwnerNotificationSnapshot(
     val ownerId: UUID,
+    val purpose: String,
     val kind: ProfileNotificationTargetKind,
     val channel: ProfileNotificationChannel,
     val encrypted: EncryptedPersonalData,

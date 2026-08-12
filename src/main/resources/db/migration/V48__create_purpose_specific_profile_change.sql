@@ -274,7 +274,6 @@ CREATE TABLE identity_customer_profile_change_history (
     masked_before varchar(1000) NOT NULL CHECK (length(masked_before) BETWEEN 1 AND 1000),
     masked_after varchar(1000) NOT NULL CHECK (length(masked_after) BETWEEN 1 AND 1000),
     changed_at timestamptz NOT NULL,
-    CONSTRAINT uq_identity_customer_profile_history_version UNIQUE (customer_id, current_version, purpose),
     CONSTRAINT chk_identity_customer_profile_history_risk CHECK (
         (purpose = 'CUSTOMER_DISPLAY_NAME' AND risk_class = 'R1' AND current_version = previous_version + 1)
         OR (purpose = 'CUSTOMER_LEGAL_NAME_TYPO' AND risk_class = 'R2' AND current_version = previous_version + 1)
@@ -282,6 +281,10 @@ CREATE TABLE identity_customer_profile_change_history (
         OR (purpose = 'CUSTOMER_CREDENTIAL_RESET' AND risk_class = 'R4' AND current_version = previous_version)
     )
 );
+
+CREATE UNIQUE INDEX uq_identity_customer_profile_history_version
+    ON identity_customer_profile_change_history(customer_id, current_version)
+    WHERE risk_class <> 'R4';
 
 CREATE TABLE identity_customer_profile_reset_intent (
     id uuid PRIMARY KEY,
@@ -331,7 +334,6 @@ CREATE TABLE merchant_store_profile_change_history (
     masked_before varchar(1000) NOT NULL CHECK (length(masked_before) BETWEEN 1 AND 1000),
     masked_after varchar(1000) NOT NULL CHECK (length(masked_after) BETWEEN 1 AND 1000),
     changed_at timestamptz NOT NULL,
-    CONSTRAINT uq_merchant_store_profile_history_version UNIQUE (store_id, current_version, purpose),
     CONSTRAINT chk_merchant_store_profile_history_risk CHECK (
         (purpose = 'STORE_PUBLIC_PROFILE' AND risk_class = 'R1' AND current_version = previous_version + 1)
         OR (purpose = 'STORE_OPERATIONS_CONTACT' AND risk_class = 'R2' AND current_version = previous_version + 1)
@@ -340,6 +342,10 @@ CREATE TABLE merchant_store_profile_change_history (
         OR (purpose = 'STORE_ACCESS_REREGISTRATION' AND risk_class = 'R4' AND current_version = previous_version)
     )
 );
+
+CREATE UNIQUE INDEX uq_merchant_store_profile_history_version
+    ON merchant_store_profile_change_history(store_id, current_version)
+    WHERE risk_class <> 'R4';
 
 CREATE TABLE merchant_store_profile_reset_intent (
     id uuid PRIMARY KEY,
@@ -389,7 +395,6 @@ CREATE TABLE delivery_courier_profile_change_history (
     masked_before varchar(1000) NOT NULL CHECK (length(masked_before) BETWEEN 1 AND 1000),
     masked_after varchar(1000) NOT NULL CHECK (length(masked_after) BETWEEN 1 AND 1000),
     changed_at timestamptz NOT NULL,
-    CONSTRAINT uq_delivery_courier_profile_history_version UNIQUE (external_courier_id, current_version, purpose),
     CONSTRAINT chk_delivery_courier_profile_history_risk CHECK (
         (purpose = 'COURIER_DISPLAY_NAME' AND risk_class = 'R1' AND current_version = previous_version + 1)
         OR (purpose = 'COURIER_RELAY_CONTACT' AND risk_class = 'R2' AND current_version = previous_version + 1)
@@ -399,6 +404,10 @@ CREATE TABLE delivery_courier_profile_change_history (
             AND current_version = previous_version)
     )
 );
+
+CREATE UNIQUE INDEX uq_delivery_courier_profile_history_version
+    ON delivery_courier_profile_change_history(external_courier_id, current_version)
+    WHERE risk_class <> 'R4';
 
 CREATE TABLE delivery_courier_profile_reset_intent (
     id uuid PRIMARY KEY,

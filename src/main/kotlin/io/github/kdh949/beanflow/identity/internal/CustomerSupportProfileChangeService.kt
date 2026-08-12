@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -341,7 +342,7 @@ internal class CustomerSupportProfileChangeRepository(
                 value.encrypted.keyVersion,
                 value.encrypted.aadVersion,
                 value.masked,
-                now,
+                Timestamp.from(now),
                 nextVersion,
                 customerId,
                 expectedVersion,
@@ -371,7 +372,7 @@ internal class CustomerSupportProfileChangeRepository(
                 type.name,
                 index.keyVersion,
                 index.digestBytes(),
-                now,
+                Timestamp.from(now),
             )
         }
     }
@@ -405,7 +406,7 @@ internal class CustomerSupportProfileChangeRepository(
             currentVersion,
             maskedBefore,
             maskedAfter,
-            now,
+            Timestamp.from(now),
         )
     }
 
@@ -424,7 +425,7 @@ internal class CustomerSupportProfileChangeRepository(
             id,
             customerId,
             historyId,
-            now,
+            Timestamp.from(now),
         )
     }
 
@@ -450,7 +451,7 @@ internal class CustomerSupportProfileChangeRepository(
             value.encrypted.keyVersion,
             value.encrypted.aadVersion,
             value.masked,
-            now,
+            Timestamp.from(now),
         )
         return OwnerProfileNotificationTarget(id, kind, value.channel, value.masked)
     }
@@ -482,7 +483,8 @@ internal class CustomerSupportProfileChangeRepository(
                 SELECT id, target_kind, channel_type, masked_destination
                   FROM identity_customer_profile_notification_target
                  WHERE profile_change_history_id = ?
-                 ORDER BY target_kind, channel_type, id
+                 ORDER BY CASE target_kind WHEN 'OLD' THEN 0 WHEN 'NEW' THEN 1 ELSE 2 END,
+                          channel_type, id
                 """.trimIndent(),
                 { rs, _ ->
                     OwnerProfileNotificationTarget(
