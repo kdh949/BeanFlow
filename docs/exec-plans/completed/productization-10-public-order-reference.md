@@ -305,6 +305,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   통과했다. 첫 full build는 964 tests 중 17 failures/1 skipped로 실패했고, Support S80의 직접 주문 fixture
   16건과 V49 latest assertion 1건을 고친 뒤 집중 20 tests와 최종 full build 964 tests(0 failures,
   0 errors, 1 skipped)가 통과했다.
+- 2026-08-13: merge completion commit `50cfad0d63e69fedbc343459d29a9044c84b2c2b`을 일반 push했다.
+  local·remote·PR #57 head가 모두 그 SHA이고 PR #57은 open Draft, base는
+  `feature/productization-00-contract`임을 확인했다. 잘못 바뀌어 있던 ready 상태를 Draft로 복원하고
+  본문을 V50/V51 및 실제 재검증 결과로 갱신했다.
 
 ## Surprises & Discoveries
 
@@ -384,6 +388,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     runtime 111 paths/115 operations, 305 schemas, 46 policies, 111 ADRs, 273 Markdown files, 57 ExecPlans.
   - OpenAPI YAML parse, migration version duplicate scan, semantic OpenAPI merge assertion, `git diff --check`:
     모두 성공.
+  - 원격 확인: local/remote/PR #57 head
+    `50cfad0d63e69fedbc343459d29a9044c84b2c2b` 일치, open Draft, base Plan 00 branch.
 - 측정 가능한 production traffic이 없어 latency 개선이나 실사용 충돌률은 주장하지 않는다. metric과
   runbook만 제공하며 실제 배포 시 관측해야 한다.
 

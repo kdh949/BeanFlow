@@ -361,6 +361,12 @@ git diff --cached --check
   공통 주문 표시 fixture와 V51 assertion으로 교정했다. Ordering 231 tests, 실패 집중 20 tests, 최종
   full build 964 tests(0 failures, 0 errors, 1 skipped), Spotless와 문서/OpenAPI 검증이 통과해 Plan 20
   `Implementation-Ready`를 true로 복원했다. PR #57 head 동기화는 이 merge completion commit 뒤 수행한다.
+- 2026-08-13 Plan 10 resume completion: history-preserving merge commit
+  `50cfad0d63e69fedbc343459d29a9044c84b2c2b`을 push했다. local HEAD, remote branch와 PR #57 head가
+  모두 그 SHA이고, PR #57은 open Draft, head `feature/productization-10-order-reference`, base
+  `feature/productization-00-contract`임을 확인했다. PR 본문은 V50/V51, 첫 full build 17 failures와
+  최종 964-test 성공 증거로 갱신했다. `SUPPORT_INTEGRATION_PENDING`은 이 branch에서
+  `origin/main` V43~V49를 merge해 해소됐으며 Stack A PR merge나 force-push는 수행하지 않았다.
 
 ## Surprises & Discoveries
 
