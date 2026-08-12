@@ -132,6 +132,7 @@ internal class SupportActionRequest private constructor(
     var supportApproverActorId: UUID?,
     var operationsApproverActorId: UUID?,
     var terminalExecutionId: UUID?,
+    var terminalResolutionId: UUID?,
     var version: Long,
     private var lastChangedAt: Instant,
 ) {
@@ -314,7 +315,39 @@ internal class SupportActionRequest private constructor(
         targetVersion: Long,
         occurredAt: Instant,
     ): SupportActionExecutionChange =
-        finishExecution(executionId, actorId, revisionNumber, payloadDigest, targetVersion, occurredAt, SupportActionRequestState.EXECUTED)
+        finishExecution(
+            executionId,
+            actorId,
+            revisionNumber,
+            payloadDigest,
+            targetVersion,
+            occurredAt,
+            SupportActionRequestState.EXECUTED,
+            resolution = false,
+        )
+
+    fun completeResolutionExecution(
+        resolutionId: UUID,
+        actorId: UUID,
+        revisionNumber: Int,
+        payloadDigest: String,
+        targetVersion: Long,
+        occurredAt: Instant,
+    ): SupportActionExecutionChange {
+        require(currentRevision.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION) {
+            "Only a post-acceptance request can be consumed by a ResolutionCase"
+        }
+        return finishExecution(
+            resolutionId,
+            actorId,
+            revisionNumber,
+            payloadDigest,
+            targetVersion,
+            occurredAt,
+            SupportActionRequestState.EXECUTED,
+            resolution = true,
+        )
+    }
 
     fun requirePostAcceptanceResolution(
         executionId: UUID,
@@ -332,6 +365,7 @@ internal class SupportActionRequest private constructor(
             targetVersion,
             occurredAt,
             SupportActionRequestState.RESOLUTION_REQUIRED,
+            resolution = false,
         )
 
     private fun finishExecution(
@@ -342,12 +376,14 @@ internal class SupportActionRequest private constructor(
         targetVersion: Long,
         occurredAt: Instant,
         terminalState: SupportActionRequestState,
+        resolution: Boolean,
     ): SupportActionExecutionChange {
         require(actorId == executorActorId) { "Only the assigned actor can execute the action" }
         check(revisionNumber == currentRevision.revisionNumber) { "Action execution revision is stale" }
         check(payloadDigest == currentRevision.actionPayloadDigest) { "Action execution payload is stale" }
         check(targetVersion == currentRevision.targetVersion) { "Action execution target version is stale" }
-        if (state == terminalState && terminalExecutionId == executionId) {
+        val terminalId = if (resolution) terminalResolutionId else terminalExecutionId
+        if (state == terminalState && terminalId == executionId) {
             return SupportActionExecutionChange(executionId, state, state, version, occurredAt, true)
         }
         check(state == SupportActionRequestState.READY_FOR_EXECUTION) { "Action request is not ready for execution" }
@@ -355,7 +391,13 @@ internal class SupportActionRequest private constructor(
         require(occurredAt >= lastChangedAt) { "Action execution time cannot move backward" }
         val previous = state
         state = terminalState
-        terminalExecutionId = executionId
+        if (resolution) {
+            check(terminalExecutionId == null) { "Action request already has a direct terminal execution" }
+            terminalResolutionId = executionId
+        } else {
+            check(terminalResolutionId == null) { "Action request already has a terminal ResolutionCase" }
+            terminalExecutionId = executionId
+        }
         version += 1
         lastChangedAt = occurredAt
         return SupportActionExecutionChange(executionId, previous, state, version, occurredAt, false)
@@ -417,6 +459,7 @@ internal class SupportActionRequest private constructor(
                 null,
                 null,
                 null,
+                null,
                 0,
                 revision.createdAt,
             )
@@ -435,6 +478,7 @@ internal class SupportActionRequest private constructor(
             version: Long,
             lastChangedAt: Instant,
             terminalExecutionId: UUID? = null,
+            terminalResolutionId: UUID? = null,
         ): SupportActionRequest {
             require(version >= 0) { "Action request version is invalid" }
             require(lastChangedAt >= revision.createdAt) { "Action request change time is invalid" }
@@ -449,6 +493,16 @@ internal class SupportActionRequest private constructor(
             require(executorActorId != supportApproverActorId && executorActorId != operationsApproverActorId) {
                 "Approver cannot be action executor"
             }
+            require(terminalExecutionId == null || terminalResolutionId == null) {
+                "Action request cannot have two terminal results"
+            }
+            require(
+                (state == SupportActionRequestState.EXECUTED || state == SupportActionRequestState.RESOLUTION_REQUIRED) ==
+                    (terminalExecutionId != null || terminalResolutionId != null),
+            ) { "Action request terminal state binding is invalid" }
+            require(terminalResolutionId == null || state == SupportActionRequestState.EXECUTED) {
+                "ResolutionCase can only bind an executed action request"
+            }
             return SupportActionRequest(
                 id,
                 supportCaseId,
@@ -460,6 +514,7 @@ internal class SupportActionRequest private constructor(
                 supportApproverActorId,
                 operationsApproverActorId,
                 terminalExecutionId,
+                terminalResolutionId,
                 version,
                 lastChangedAt,
             )

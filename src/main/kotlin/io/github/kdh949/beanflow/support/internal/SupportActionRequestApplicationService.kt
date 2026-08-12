@@ -935,6 +935,7 @@ internal class SupportActionRequestTransactionService(
             supportApproverActorId,
             operationsApproverActorId,
             terminalExecutionId,
+            terminalResolutionId,
             now,
             now,
             version,

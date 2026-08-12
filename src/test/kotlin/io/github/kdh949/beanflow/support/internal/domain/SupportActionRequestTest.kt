@@ -159,23 +159,58 @@ class SupportActionRequestTest {
         assertEquals(false, change.replayed)
     }
 
-    private fun request(route: SupportActionApprovalRoute): SupportActionRequest =
+    @Test
+    fun `approved post-acceptance request is consumed once by its resolution case`() {
+        val request = request(SupportActionApprovalRoute.NONE, SupportActionType.POST_ACCEPTANCE_RESOLUTION)
+
+        val change =
+            request.completeResolutionExecution(
+                EXECUTION_ID,
+                REQUESTER,
+                1,
+                PAYLOAD_DIGEST_1,
+                7,
+                NOW.plusSeconds(1),
+            )
+
+        assertEquals(SupportActionRequestState.EXECUTED, request.state)
+        assertEquals(EXECUTION_ID, request.terminalResolutionId)
+        assertNull(request.terminalExecutionId)
+        assertEquals(false, change.replayed)
+
+        val replay =
+            request.completeResolutionExecution(
+                EXECUTION_ID,
+                REQUESTER,
+                1,
+                PAYLOAD_DIGEST_1,
+                7,
+                NOW.plusSeconds(2),
+            )
+        assertEquals(true, replay.replayed)
+    }
+
+    private fun request(
+        route: SupportActionApprovalRoute,
+        action: SupportActionType = SupportActionType.ORDER_CANCELLATION,
+    ): SupportActionRequest =
         SupportActionRequest.open(
             id = REQUEST_ID,
             supportCaseId = CASE_ID,
             requesterActorId = REQUESTER,
             executorActorId = REQUESTER,
             route = route,
-            revision = revision(1, PAYLOAD_DIGEST_1),
+            revision = revision(1, PAYLOAD_DIGEST_1, action),
         )
 
     private fun revision(
         number: Int,
         payloadDigest: String,
+        action: SupportActionType = SupportActionType.ORDER_CANCELLATION,
     ) = SupportActionRevision(
         id = UUID.nameUUIDFromBytes("revision-$number".toByteArray()),
         revisionNumber = number,
-        action = SupportActionType.ORDER_CANCELLATION,
+        action = action,
         targetId = ORDER_ID,
         actionPayloadDigest = payloadDigest,
         verificationSessionId = SESSION_ID,

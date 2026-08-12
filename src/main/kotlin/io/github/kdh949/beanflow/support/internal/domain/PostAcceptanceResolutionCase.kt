@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal.domain
 
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -111,7 +112,10 @@ internal data class PostAcceptanceResolutionStepResult(
 )
 
 internal class PostAcceptanceResolutionStep private constructor(
+    val id: UUID,
     val type: PostAcceptanceResolutionStepType,
+    val sourceReference: String,
+    val payloadHash: String,
     state: PostAcceptanceResolutionStepState,
     attemptCount: Int,
     nextAttemptAt: Instant?,
@@ -120,6 +124,7 @@ internal class PostAcceptanceResolutionStep private constructor(
     claimToken: UUID?,
     claimUntil: Instant?,
     updatedAt: Instant,
+    version: Long,
 ) {
     var state: PostAcceptanceResolutionStepState = state
         private set
@@ -137,6 +142,14 @@ internal class PostAcceptanceResolutionStep private constructor(
         private set
     var updatedAt: Instant = updatedAt
         private set
+    var version: Long = version
+        private set
+
+    init {
+        sourceReference.normalizedReference()
+        require(payloadHash.matches(SHA_256)) { "Resolution step payload hash must be lowercase SHA-256" }
+        require(attemptCount >= 0 && version >= 0) { "Resolution step counters cannot be negative" }
+    }
 
     fun claim(
         token: UUID,
@@ -162,6 +175,7 @@ internal class PostAcceptanceResolutionStep private constructor(
         claimUntil = now.plus(lease)
         nextAttemptAt = null
         updatedAt = now
+        version += 1
         return PostAcceptanceResolutionClaim(type, token, attemptCount, reconciliation, dueAt)
     }
 
@@ -182,6 +196,7 @@ internal class PostAcceptanceResolutionStep private constructor(
         nextAttemptAt = null
         clearClaim()
         updatedAt = now
+        version += 1
         return PostAcceptanceResolutionStepResult(type, state, replayed = false)
     }
 
@@ -198,6 +213,7 @@ internal class PostAcceptanceResolutionStep private constructor(
         nextAttemptAt = retryAt
         clearClaim()
         updatedAt = now
+        version += 1
     }
 
     fun recordManualReview(
@@ -211,6 +227,7 @@ internal class PostAcceptanceResolutionStep private constructor(
         nextAttemptAt = null
         clearClaim()
         updatedAt = now
+        version += 1
     }
 
     fun recoverExpiredClaim(now: Instant) {
@@ -224,6 +241,7 @@ internal class PostAcceptanceResolutionStep private constructor(
         nextAttemptAt = now
         clearClaim()
         updatedAt = now
+        version += 1
     }
 
     private fun requireClaim(token: UUID) {
@@ -240,7 +258,10 @@ internal class PostAcceptanceResolutionStep private constructor(
 
     companion object {
         fun initial(
+            id: UUID,
             type: PostAcceptanceResolutionStepType,
+            sourceReference: String,
+            payloadHash: String,
             state: PostAcceptanceResolutionStepState,
             now: Instant,
         ): PostAcceptanceResolutionStep {
@@ -250,11 +271,28 @@ internal class PostAcceptanceResolutionStep private constructor(
                     state == PostAcceptanceResolutionStepState.MANUAL_REVIEW ||
                     state == PostAcceptanceResolutionStepState.BLOCKED,
             ) { "Resolution step initial state is invalid" }
-            return PostAcceptanceResolutionStep(type, state, 0, now.takeIf { state == PostAcceptanceResolutionStepState.PENDING }, null, null, null, null, now)
+            return PostAcceptanceResolutionStep(
+                id,
+                type,
+                sourceReference,
+                payloadHash,
+                state,
+                0,
+                now.takeIf { state == PostAcceptanceResolutionStepState.PENDING },
+                null,
+                null,
+                null,
+                null,
+                now,
+                0,
+            )
         }
 
         fun restore(
+            id: UUID,
             type: PostAcceptanceResolutionStepType,
+            sourceReference: String,
+            payloadHash: String,
             state: PostAcceptanceResolutionStepState,
             attemptCount: Int,
             nextAttemptAt: Instant?,
@@ -263,9 +301,13 @@ internal class PostAcceptanceResolutionStep private constructor(
             claimToken: UUID?,
             claimUntil: Instant?,
             updatedAt: Instant,
+            version: Long,
         ): PostAcceptanceResolutionStep =
             PostAcceptanceResolutionStep(
+                id,
                 type,
+                sourceReference,
+                payloadHash,
                 state,
                 attemptCount,
                 nextAttemptAt,
@@ -274,7 +316,10 @@ internal class PostAcceptanceResolutionStep private constructor(
                 claimToken,
                 claimUntil,
                 updatedAt,
+                version,
             )
+
+        private val SHA_256 = Regex("^[0-9a-f]{64}$")
     }
 }
 
@@ -294,10 +339,16 @@ internal class PostAcceptanceResolutionCase private constructor(
     val createdAt: Instant,
     state: PostAcceptanceResolutionState,
     steps: Collection<PostAcceptanceResolutionStep>,
+    updatedAt: Instant,
+    version: Long,
 ) {
     var state: PostAcceptanceResolutionState = state
         private set
     private val stepsByType = steps.associateBy(PostAcceptanceResolutionStep::type)
+    var updatedAt: Instant = updatedAt
+        private set
+    var version: Long = version
+        private set
 
     init {
         require(triggerOrderState in POST_ACCEPTANCE_STATES) { "Resolution requires a post-acceptance Order fact" }
@@ -307,6 +358,7 @@ internal class PostAcceptanceResolutionCase private constructor(
         require(stepsByType.keys == PostAcceptanceResolutionStepType.entries.toSet()) {
             "Resolution must contain exactly one step of every type"
         }
+        require(updatedAt >= createdAt && version >= 0) { "Resolution persistence metadata is invalid" }
     }
 
     fun step(type: PostAcceptanceResolutionStepType): PostAcceptanceResolutionStep = requireNotNull(stepsByType[type])
@@ -317,7 +369,10 @@ internal class PostAcceptanceResolutionCase private constructor(
         now: Instant,
         lease: Duration,
     ): PostAcceptanceResolutionClaim =
-        step(type).claim(token, now, lease).also { recalculate() }
+        step(type).claim(token, now, lease).also {
+            recalculate()
+            changed(now)
+        }
 
     fun recordSuccess(
         type: PostAcceptanceResolutionStepType,
@@ -325,7 +380,12 @@ internal class PostAcceptanceResolutionCase private constructor(
         reference: String,
         now: Instant,
     ): PostAcceptanceResolutionStepResult =
-        step(type).recordSuccess(token, reference, now).also { recalculate() }
+        step(type).recordSuccess(token, reference, now).also {
+            if (!it.replayed) {
+                recalculate()
+                changed(now)
+            }
+        }
 
     fun recordUnknown(
         type: PostAcceptanceResolutionStepType,
@@ -336,6 +396,7 @@ internal class PostAcceptanceResolutionCase private constructor(
     ) {
         step(type).recordUnknown(token, code, now, retryAt)
         recalculate()
+        changed(now)
     }
 
     fun recordManualReview(
@@ -346,6 +407,7 @@ internal class PostAcceptanceResolutionCase private constructor(
     ) {
         step(type).recordManualReview(token, code, now)
         recalculate()
+        changed(now)
     }
 
     fun recoverExpiredClaim(
@@ -354,6 +416,7 @@ internal class PostAcceptanceResolutionCase private constructor(
     ) {
         step(type).recoverExpiredClaim(now)
         recalculate()
+        changed(now)
     }
 
     fun isFinanciallyResolved(): Boolean =
@@ -374,6 +437,12 @@ internal class PostAcceptanceResolutionCase private constructor(
                     PostAcceptanceResolutionState.MANUAL_REVIEW
                 else -> PostAcceptanceResolutionState.EXECUTING
             }
+    }
+
+    private fun changed(now: Instant) {
+        require(now >= updatedAt) { "Resolution time cannot move backward" }
+        updatedAt = now
+        version += 1
     }
 
     private fun financialSteps(): List<PostAcceptanceResolutionStep> =
@@ -410,7 +479,9 @@ internal class PostAcceptanceResolutionCase private constructor(
                 plan,
                 createdAt,
                 PostAcceptanceResolutionState.PLANNED,
-                initialSteps(plan, createdAt),
+                initialSteps(id, actionPayloadDigest, plan, createdAt),
+                createdAt,
+                0,
             )
 
         fun restore(
@@ -429,6 +500,8 @@ internal class PostAcceptanceResolutionCase private constructor(
             createdAt: Instant,
             state: PostAcceptanceResolutionState,
             steps: Collection<PostAcceptanceResolutionStep>,
+            updatedAt: Instant,
+            version: Long,
         ): PostAcceptanceResolutionCase =
             PostAcceptanceResolutionCase(
                 id,
@@ -446,14 +519,25 @@ internal class PostAcceptanceResolutionCase private constructor(
                 createdAt,
                 state,
                 steps,
+                updatedAt,
+                version,
             )
 
         private fun initialSteps(
+            resolutionId: UUID,
+            actionPayloadDigest: String,
             plan: PostAcceptanceResolutionPlan,
             now: Instant,
         ): List<PostAcceptanceResolutionStep> =
             PostAcceptanceResolutionStepType.entries.map { type ->
-                PostAcceptanceResolutionStep.initial(type, initialState(plan, type), now)
+                PostAcceptanceResolutionStep.initial(
+                    UUID.nameUUIDFromBytes("$resolutionId:${type.name}".toByteArray(StandardCharsets.UTF_8)),
+                    type,
+                    "support-resolution:$resolutionId:${type.name.lowercase()}",
+                    actionPayloadDigest,
+                    initialState(plan, type),
+                    now,
+                )
             }
 
         private fun initialState(
