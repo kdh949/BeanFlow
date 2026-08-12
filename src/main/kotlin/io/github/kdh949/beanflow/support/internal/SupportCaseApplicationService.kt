@@ -235,6 +235,7 @@ internal class SupportCaseApplicationService(
     private val identifiers: IdentifierSource,
     private val objectMapper: ObjectMapper,
     private val commandPayloads: SupportCommandPayloadCanonicalizer,
+    private val securityLifecycle: SupportCaseSecurityLifecycle,
     private val clock: Clock,
 ) {
     @Transactional
@@ -386,6 +387,9 @@ internal class SupportCaseApplicationService(
                 val change = aggregate.transitionTo(normalized.targetState, normalized.actorId, now)
                 entity.apply(aggregate)
                 cases.saveAndFlush(entity)
+                if (change.currentState == SupportCaseState.RESOLVED || change.currentState == SupportCaseState.CLOSED) {
+                    securityLifecycle.revokeForTerminalCase(entity.id, now)
+                }
                 val transitionId = identifiers.next()
                 states.saveAndFlush(
                     SupportCaseStateHistoryEntity(

@@ -1,7 +1,7 @@
 # Support Verification Policy
 
-> **Status:** Verification levels, binding and separate BREAK_GLASS path are Accepted in ADR-082; challenge provider,
-> attempt limits, expiry values and endpoint types remain DRAFT.
+> **Status:** Verification levels, binding and separate BREAK_GLASS path are Accepted in ADR-082. S40 initial
+> challenge, attempt, expiry, Grant and break-glass values are Accepted in SP-18 and ADR-106.
 
 ## Levels
 
@@ -15,3 +15,13 @@
 VerificationSession은 Case, Subject, Purpose, action scope에 묶이며 다른 Case·대상·목적으로 재사용하지 않는다. BASIC은 ENHANCED 작업을 허용하지 않는다. challenge/attempt는 replay·시도 제한·LOCKED·expiry를 명시하며 OTP, 링크, password 원문은 저장하지 않는다. Provider timeout은 성공이 아닌 pending/unknown이다.
 
 Verification은 DataAccessGrant나 domain action 권한을 자동 부여하지 않는다. 실행 시 ActionPolicy가 persistent permission, 관계, 최신 상태와 함께 재평가한다.
+
+## S40 initial policy
+
+- Session 15분, challenge 5분, invalid proof 5회와 같은 Case+Subject의 30분 lockout을 사용한다.
+- BASIC은 등록 채널 한 종류, ENHANCED는 서로 다른 등록 채널 두 종류가 필요하다.
+- display-name 계열 BASIC Grant는 10분/3회, phone/email/provider-reference SENSITIVE Grant는 ENHANCED,
+  distinct approval과 5분/1회다.
+- BREAK_GLASS는 한 field, 2분/1회, distinct pre-approval, durable security notification과 mandatory post-review다.
+- Provider가 secret 생성·전송·검증을 소유하고 Support는 opaque reference와 outcome만 보존한다.
+- Audit가 commit된 reveal attempt는 downstream 실패에도 budget을 소비하며 raw response를 반환하지 않는다.

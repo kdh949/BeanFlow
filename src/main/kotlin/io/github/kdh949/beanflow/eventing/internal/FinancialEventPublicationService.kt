@@ -469,7 +469,8 @@ internal class FinancialEventValidator {
         const val CUSTOMER_CANCELLATION_REFUND_DELAYED = "CustomerCancellationRefundDelayedV1"
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
         val ZERO_UUID: UUID = UUID(0, 0)
-        val SETTLEMENT_ADJUSTMENT_REASONS = setOf("REFUND_SUCCEEDED", "DISPUTE_ACCEPTED")
+        val SETTLEMENT_ADJUSTMENT_REASONS =
+            setOf("REFUND_SUCCEEDED", "DISPUTE_ACCEPTED", "POST_ACCEPTANCE_RESOLUTION")
         val SETTLEMENT_DISPUTE_TERMINAL_STATES = setOf("ACCEPTED", "REJECTED", "WITHDRAWN")
         val POINT_ISSUER_TYPES = setOf("PLATFORM", "BRAND", "STORE")
     }

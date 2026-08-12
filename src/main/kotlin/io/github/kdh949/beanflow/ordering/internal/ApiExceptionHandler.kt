@@ -117,7 +117,16 @@ internal class ApiExceptionHandler(
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 
-            FailureCode.SUPPORT_SEARCH_RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS
+            FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
+            FailureCode.VERIFICATION_LOCKED,
+            -> HttpStatus.TOO_MANY_REQUESTS
+
+            FailureCode.VERIFICATION_REQUIRED,
+            FailureCode.DATA_ACCESS_GRANT_REQUIRED,
+            FailureCode.DATA_ACCESS_SCOPE_MISMATCH,
+            FailureCode.SUPPORT_ORDER_CHANGE_AUTHORIZATION_REQUIRED,
+            FailureCode.SUPPORT_ORDER_CHANGE_AUTHORIZATION_SCOPE_MISMATCH,
+            -> HttpStatus.FORBIDDEN
 
             FailureCode.PAYMENT_DECLINED,
             FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,

@@ -151,6 +151,54 @@ class OrderEntityLifecycleTest {
         assertThat(order.state).isEqualTo(OrderState.PENDING_PAYMENT)
     }
 
+    @Test
+    fun `support cancellation preserves lifecycle facts and records a dedicated cause`() {
+        val pending = pendingOrder()
+        val paid = pendingOrder().also { it.markPaid(paidAt) }
+        val accepted =
+            pendingOrder().also {
+                it.markPaid(paidAt)
+                it.accept(paidAt.plusSeconds(60))
+            }
+
+        listOf(pending, paid, accepted).forEach { order ->
+            order.cancelBySupport(paidAt.plusSeconds(70), CustomerCancellationReasonCode.OTHER, null)
+            assertThat(order.state).isEqualTo(OrderState.CANCELLED)
+            assertThat(order.cancellationCause).isEqualTo(OrderCancellationCause.SUPPORT_REQUEST)
+        }
+
+        val preparing =
+            pendingOrder().also {
+                it.markPaid(paidAt)
+                it.accept(paidAt.plusSeconds(60))
+                it.startPreparing(paidAt.plusSeconds(61))
+            }
+        assertThatThrownBy {
+            preparing.cancelBySupport(paidAt.plusSeconds(70), CustomerCancellationReasonCode.OTHER, null)
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
+        assertThat(preparing.state).isEqualTo(OrderState.PREPARING)
+    }
+
+    @Test
+    fun `support pickup reschedule changes only the slot in eligible states`() {
+        val order = pendingOrder()
+        val previousSlot = order.pickupSlotId
+        val nextSlot = UUID.randomUUID()
+
+        order.reschedulePickupBySupport(paidAt.plusSeconds(10), nextSlot)
+
+        assertThat(order.pickupSlotId).isEqualTo(nextSlot)
+        assertThat(order.state).isEqualTo(OrderState.PENDING_PAYMENT)
+        assertThat(order.payableKrw).isEqualTo(1_000)
+        assertThat(previousSlot).isNotEqualTo(nextSlot)
+        assertThatThrownBy { order.reschedulePickupBySupport(paidAt.plusSeconds(11), nextSlot) }
+            .isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+            }
+    }
+
     private fun pendingOrder(): OrderEntity =
         OrderEntity(
             id = UUID.randomUUID(),

@@ -40,6 +40,7 @@ import java.util.UUID
         "beanflow.payment.refund.initial-delay-ms=3600000",
         "beanflow.payment.reconciliation.initial-delay-ms=3600000",
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
+        "beanflow.store-acceptance.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )

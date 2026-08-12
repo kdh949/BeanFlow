@@ -45,6 +45,7 @@ enum class OperatorPermission {
     OPERATIONS_LEGAL_HOLD_MANAGE,
     OPERATIONS_RETENTION_MANAGE,
     PRIVACY_AUDIT_READ,
+    PRIVACY_BREAK_GLASS_REVIEW,
 }
 
 interface OperatorPermissionAuthorization {
@@ -55,4 +56,10 @@ interface OperatorPermissionAuthorization {
         actorId: UUID,
         permission: OperatorPermission,
     )
+
+    /** Locks the persistent grant and returns its current state in the caller's local transaction. */
+    fun hasActive(
+        actorId: UUID,
+        permission: OperatorPermission,
+    ): Boolean
 }

@@ -216,7 +216,7 @@ internal class CouponReservationRepositoryTest
                 assertThat(reservationRepository.findByOrderId(orderId)?.restorationDisposition)
                     .isEqualTo(CouponRestorationDisposition.ORIGINAL_RESTORED)
                 assertThat(reservationRepository.findByOrderId(orderId)?.restorationTrigger)
-                    .isEqualTo(OrderTerminationTrigger.STORE_REJECTION)
+                    .isEqualTo(OrderTerminationTrigger.STORE_REJECTION.name)
                 operations.reserve(command(fixture, UUID.randomUUID(), "coupon-reused-${fixture.issuanceId}"))
             }
             val conflict =
@@ -260,7 +260,7 @@ internal class CouponReservationRepositoryTest
 
             assertThat(report.result).isEqualTo(ReservationTransitionResult.APPLIED)
             val compensation = issuanceRepository.findAll().single { it.originalIssuanceId == fixture.issuanceId }
-            assertThat(compensation.restorationTrigger).isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION)
+            assertThat(compensation.restorationTrigger).isEqualTo(OrderTerminationTrigger.CUSTOMER_CANCELLATION.name)
             assertThat(compensation.restorationPolicyVersionId).isEqualTo(3)
             assertThat(compensationTermsRepository.findById(compensation.id)).isPresent
             assertThat(compensationEligibleMenuRepository.findAllByCouponIssuanceId(compensation.id).map { it.menuId })

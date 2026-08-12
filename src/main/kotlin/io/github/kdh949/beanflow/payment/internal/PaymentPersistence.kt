@@ -443,6 +443,14 @@ internal class RefundEntity(
     val payloadHash: String? = null,
     @Column(name = "correlation_id")
     val correlationId: String? = null,
+    @Column(name = "support_resolution_id")
+    val supportResolutionId: UUID? = null,
+    @Column(name = "resolution_order_state", length = 16)
+    val resolutionOrderState: String? = null,
+    @Column(name = "resolution_order_completed_at")
+    val resolutionOrderCompletedAt: Instant? = null,
+    @Column(name = "resolution_order_version")
+    val resolutionOrderVersion: Long? = null,
     @Column(name = "point_restoration_policy_version_id")
     val pointRestorationPolicyVersionId: Long? = null,
     @Column(name = "point_restoration_policy_trigger")

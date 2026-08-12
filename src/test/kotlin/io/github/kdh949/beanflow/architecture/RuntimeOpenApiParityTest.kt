@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyO
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
+import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -24,8 +25,18 @@ import io.github.kdh949.beanflow.settlement.internal.SettlementBatchQueryService
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemQueryService
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.support.internal.BreakGlassApplicationService
+import io.github.kdh949.beanflow.support.internal.DataAccessGrantApplicationService
+import io.github.kdh949.beanflow.support.internal.PostAcceptanceResolutionApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportActionEvaluationApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportActionRequestApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportCaseApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportCompensationApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportOrderChangeAuthorizationApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportOrderChangeExecutionApplicationService
 import io.github.kdh949.beanflow.support.internal.SupportSubjectSearchApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportTimelineApplicationService
+import io.github.kdh949.beanflow.support.internal.SupportVerificationApplicationService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Qualifier
@@ -113,7 +124,40 @@ internal class RuntimeOpenApiParityTest(
     private lateinit var supportCaseApplicationService: SupportCaseApplicationService
 
     @MockitoBean
+    private lateinit var supportTimelineApplicationService: SupportTimelineApplicationService
+
+    @MockitoBean
+    private lateinit var supportActionEvaluationApplicationService: SupportActionEvaluationApplicationService
+
+    @MockitoBean
+    private lateinit var supportActionRequestApplicationService: SupportActionRequestApplicationService
+
+    @MockitoBean
+    private lateinit var supportOrderChangeAuthorizationApplicationService: SupportOrderChangeAuthorizationApplicationService
+
+    @MockitoBean
+    private lateinit var supportOrderChangeExecutionApplicationService: SupportOrderChangeExecutionApplicationService
+
+    @MockitoBean
+    private lateinit var postAcceptanceResolutionApplicationService: PostAcceptanceResolutionApplicationService
+
+    @MockitoBean
+    private lateinit var supportCompensationApplicationService: SupportCompensationApplicationService
+
+    @MockitoBean
+    private lateinit var operationsSupportInvestigationService: OperationsSupportInvestigationService
+
+    @MockitoBean
     private lateinit var supportSubjectSearchApplicationService: SupportSubjectSearchApplicationService
+
+    @MockitoBean
+    private lateinit var supportVerificationApplicationService: SupportVerificationApplicationService
+
+    @MockitoBean
+    private lateinit var dataAccessGrantApplicationService: DataAccessGrantApplicationService
+
+    @MockitoBean
+    private lateinit var breakGlassApplicationService: BreakGlassApplicationService
 
     @MockitoBean
     private lateinit var correlationIdSource: CorrelationIdSource

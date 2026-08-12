@@ -671,9 +671,11 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
   또는 Audit 실패는 503이며 부분/빈 결과 fallback이 없다. Support에는 criterion, digest, ciphertext 또는 masked
   candidate를 저장하지 않는다.
 - raw PII reveal과 high-risk change는 필요한 authorization fact와 target Audit이 commit된 뒤에만 응답/성공한다.
-- verification, Delivery, notification, object storage Provider 호출은 long DB transaction 밖이며 durable intent/result로 감싼다.
+- S40 verification Provider 호출은 intent/result transaction 사이, owner Vault decrypt와 break-glass security
+  notification Provider 호출은 durable reservation/claim 뒤 DB transaction 밖에서 수행한다. Delivery와 object
+  storage Provider도 같은 원칙을 따른다.
 - pickup reschedule은 owner Fulfillment transaction에서 new-slot-first swap을 수행한다.
 - timeout/ACK loss는 UNKNOWN/RECONCILING이고 retry가 같은 외부 부수효과를 만들지 않아야 한다.
 - retention deletion은 component별 상태와 ledger를 원자적으로 전이하되 외부 object/index 삭제는 부분 실패를 명시한다.
 
-S20/S30 command/query 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.
+S20–S50 command/query/reveal/evaluation 경계와 future-stage 제약은 [Support transaction boundaries](support-transaction-boundaries.md)를 따른다.

@@ -103,8 +103,14 @@ internal class AuditRecordService(
         }
     }
 
-    private fun containsRawPii(value: String): Boolean =
-        RAW_PII_PATTERNS.any { it.containsMatchIn(value) } || containsPaymentCardNumber(value)
+    private fun containsRawPii(value: String): Boolean {
+        if (value.isUuid()) return false
+        val valueWithoutOpaqueIds = UUID_TOKEN.replace(value, "opaque-id")
+        return RAW_PII_PATTERNS.any { it.containsMatchIn(valueWithoutOpaqueIds) } ||
+            containsPaymentCardNumber(valueWithoutOpaqueIds)
+    }
+
+    private fun String.isUuid(): Boolean = runCatching { UUID.fromString(this).toString() == lowercase() }.getOrDefault(false)
 
     private fun containsPaymentCardNumber(value: String): Boolean {
         if (value.any { !it.isDigit() && it != ' ' && it != '-' }) return false
@@ -206,6 +212,7 @@ internal class AuditRecordService(
                     RegexOption.IGNORE_CASE,
                 ),
             )
+        val UUID_TOKEN = Regex("(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])")
         const val PURGE_DUE_SQL =
             """
             WITH due AS (

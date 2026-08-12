@@ -29,6 +29,26 @@ data class ReleasePickupAfterTerminationCommand(
     val trigger: OrderTerminationTrigger,
 )
 
+data class ReschedulePickupCommand(
+    val orderId: UUID,
+    val storeId: UUID,
+    val newPickupSlotId: UUID,
+    val sourceReference: String,
+)
+
+enum class ReschedulePickupResult {
+    APPLIED,
+    ALREADY_APPLIED,
+}
+
+data class PickupRescheduleReport(
+    val result: ReschedulePickupResult,
+    val reservationId: UUID,
+    val previousPickupSlotId: UUID,
+    val currentPickupSlotId: UUID,
+    val reservationState: String,
+)
+
 interface PickupReservationOperations {
     /**
      * Reserves one seat in the slot. Under the slot row lock the slot must still satisfy
@@ -60,4 +80,7 @@ interface PickupReservationOperations {
     ): ReservationTransitionReport
 
     fun releaseConfirmedAfterTermination(command: ReleasePickupAfterTerminationCommand): ReservationTransitionReport
+
+    /** Atomically secures the new slot before releasing the previous slot. */
+    fun reschedule(command: ReschedulePickupCommand): PickupRescheduleReport
 }

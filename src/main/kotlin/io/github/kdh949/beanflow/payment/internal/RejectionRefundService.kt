@@ -132,6 +132,21 @@ internal class RejectionRefundService(
         }
     }
 
+    @Transactional
+    fun claimResolutionOne(
+        refundId: UUID,
+        now: Instant,
+    ): ClaimedRefund {
+        val entity =
+            refundRepository.findById(refundId).orElse(null)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Resolution Refund is missing")
+        if (entity.reason != SUPPORT_RESOLUTION_REFUND) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Refund is not a Support Resolution Refund")
+        }
+        return claimLocked(refundId, now)
+            ?: fail(FailureCode.ORDER_STATE_CONFLICT, "Resolution Refund is not claimable")
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun scheduleLookup(command: ScheduleCustomerCancellationRefundLookupCommand): ScheduledCustomerCancellationRefundLookup {
         val initialSnapshot =
@@ -290,6 +305,43 @@ internal class RejectionRefundService(
         recordResult(claim, result, null, now)
     }
 
+    @Transactional
+    fun recordResolutionResult(
+        claim: ClaimedRefund,
+        result: GatewayRefundResult,
+        now: Instant,
+    ) {
+        if (claim.reason != SUPPORT_RESOLUTION_REFUND) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Claim is not a Support Resolution Refund")
+        }
+        recordResult(claim, result, null, now)
+    }
+
+    @Transactional
+    fun scheduleResolutionLookup(
+        resolutionId: UUID,
+        refundId: UUID,
+        sourceReference: String,
+        now: Instant,
+    ): RefundEntity {
+        val entity =
+            refundRepository.findLockedById(refundId)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Resolution Refund is missing")
+        if (entity.reason != SUPPORT_RESOLUTION_REFUND || entity.supportResolutionId != resolutionId ||
+            entity.sourceReference != sourceReference
+        ) {
+            fail(FailureCode.REPROCESSING_NOT_SAFE, "Resolution Refund source is inconsistent")
+        }
+        val refund = entity.toDomain()
+        try {
+            refund.scheduleOperatorReconciliation(now)
+        } catch (failure: IllegalStateException) {
+            conflict(FailureCode.ORDER_STATE_CONFLICT, failure.message ?: "Resolution Refund cannot be reconciled")
+        }
+        entity.apply(refund)
+        return entity
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     fun recordPartialResult(
         claim: ClaimedRefund,
@@ -346,7 +398,7 @@ internal class RejectionRefundService(
                             ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Partial Refund settlement context is missing")
                     partialRefundSuccessLedger.record(entity, payment, recordedAt)
                     refundEventProducer.publishPartial(entity, payment, context, recordedAt)
-                } else {
+                } else if (entity.reason != SUPPORT_RESOLUTION_REFUND) {
                     refundEventProducer.publishPreAcceptance(entity, payment, recordedAt)
                     if (entity.reason == CUSTOMER_CANCELLATION_REASON) {
                         publishCustomerCancellationSucceeded(entity, payment, recordedAt)
@@ -490,6 +542,7 @@ internal class RejectionRefundService(
             REASON -> "store_rejection"
             CUSTOMER_CANCELLATION_REASON -> "customer_cancellation"
             PARTIAL_REFUND -> "partial_refund"
+            SUPPORT_RESOLUTION_REFUND -> "support_resolution"
             else -> "other"
         }
 
@@ -653,6 +706,7 @@ internal class RejectionRefundService(
         const val REASON = "STORE_ORDER_REJECTED"
         const val CUSTOMER_CANCELLATION_REASON = "CUSTOMER_ORDER_CANCELLED"
         const val PARTIAL_REFUND = "PARTIAL_REFUND"
+        const val SUPPORT_RESOLUTION_REFUND = "SUPPORT_POST_ACCEPTANCE_RESOLUTION"
         val COMPENSATION_REASONS = setOf(REASON, CUSTOMER_CANCELLATION_REASON)
     }
 }

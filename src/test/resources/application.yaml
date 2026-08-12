@@ -1,4 +1,6 @@
 beanflow:
+  support-verification-recovery:
+    initial-delay-ms: 3600000
   pagination:
     cursor-hmac:
       # Public deterministic test vector only; it is never a deployment or local-runtime key.

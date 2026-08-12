@@ -56,13 +56,24 @@ internal class OperatorPermissionAuthorizationService(
         actorId: UUID,
         permission: OperatorPermission,
     ) {
+        if (!hasActive(actorId, permission)) {
+            throw DomainFailure(FailureCode.ACCESS_DENIED, "Active operator permission grant is required")
+        }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun hasActive(
+        actorId: UUID,
+        permission: OperatorPermission,
+    ): Boolean {
         try {
-            repository.findActiveLocked(actorId, permission)
-                ?: run {
-                    metrics.authorization(permission, OperatorSecurityOutcome.DENIED)
-                    throw DomainFailure(FailureCode.ACCESS_DENIED, "Active operator permission grant is required")
-                }
+            val active = repository.findActiveLocked(actorId, permission) != null
+            if (!active) {
+                metrics.authorization(permission, OperatorSecurityOutcome.DENIED)
+                return false
+            }
             metrics.authorization(permission, OperatorSecurityOutcome.ACTIVE)
+            return true
         } catch (failure: DomainFailure) {
             throw failure
         } catch (failure: DataAccessException) {

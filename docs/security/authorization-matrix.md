@@ -49,11 +49,13 @@
 grant는 403, grant/Audit persistence failure는 503이다.
 
 S10은 기존 9개와 Support/Operations/Privacy 33개를 합친 42개 closed permission 값을 enum과 DB 제약에
-등록했다. 새 값은 persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만, role bundle이나
+등록했고 V42는 `PRIVACY_BREAK_GLASS_REVIEW`를 추가했다. 새 값은 persistent grant/revoke/regrant와 동일한
+lock/Audit 경계를 사용하지만, role bundle이나
 default grant로 배포되지 않는다. S20은 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`, `SUPPORT_CASE_ASSIGN`를
 active grant와 Case assignment/version 조건으로 사용한다. S30은 `SUPPORT_SUBJECT_SEARCH`를 Tx1/rate guard와
-Vault 호출 뒤 Tx2에서 모두 확인한다. PII reveal, action, Delivery, LegalHold 값은 owning endpoint가 생기기 전까지
-dormant foundation이며 capability release를 뜻하지 않는다.
+Vault 호출 뒤 Tx2에서 모두 확인한다. S40은 verification, reveal request/approval, BASIC/SENSITIVE reveal,
+break-glass request와 distinct privacy review permission을 owning transaction에서 확인한다. Action, Delivery와
+LegalHold 값은 owning endpoint가 생기기 전까지 dormant foundation이며 capability release를 뜻하지 않는다.
 
 주문 보상 case step 상세 GET은 active `ORDER_COMPENSATION_READ` grant와
 `X-Access-Reason` header를 요구하고 target Case access Audit와 조회를 한 local
@@ -164,3 +166,15 @@ Support Manager, Operations reviewer와 executor separation을 서버와 DB 제�
 정확한 capability 표와 negative fixture 계획은 [Support role matrix](support-role-permission-matrix.md),
 [object authorization](support-object-level-authorization.md),
 [planned test strategy](../testing/support-test-strategy.md)를 따른다.
+
+### S90 goodwill compensation
+
+| Operation | Persistent permissions | Object and separation checks |
+|---|---|---|
+| evaluate/create | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_REQUEST` | active assigned Case, linked customer/order, exact action-bound verification; HIGH/EXCEPTIONAL requires ENHANCED |
+| read | `SUPPORT_CASE_READ` | Case-scoped visibility; customer PII/evidence/cost evidence excluded |
+| execute | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_EXECUTE` | assigned executor, exact request/payload/target/policy version, manager/Operations approval; reviewer cannot execute |
+| notification retry | `SUPPORT_CASE_READ`, `SUPPORT_COMPENSATION_EXECUTE` | terminal benefit already exists and Support state is `NOTIFICATION_RETRY`; no benefit input or reissue |
+
+JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row는 caller transaction에서 잠그므로 revoke와
+실행이 직렬화된다. Operations reviewer는 exact request를 반환할 뿐 Point/Coupon을 발급하지 않는다.

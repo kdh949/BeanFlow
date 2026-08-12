@@ -119,7 +119,7 @@ internal class CouponReservationService(
                     .counter(
                         "beanflow.coupon.compensation.redemption.count",
                         "trigger",
-                        trigger.name.lowercase(),
+                        trigger.lowercase(),
                         "outcome",
                         "succeeded",
                     ).increment()
@@ -157,7 +157,7 @@ internal class CouponReservationService(
                 ?: return report(ReservationTransitionResult.NOT_ELIGIBLE)
         if (reservation.state == CouponReservationState.RESTORED) {
             return if (reservation.restorationSourceReference == command.sourceReference &&
-                reservation.restorationTrigger == command.trigger &&
+                reservation.restorationTrigger == command.trigger.name &&
                 reservation.restorationPolicyVersionId == command.policyVersionId
             ) {
                 report(ReservationTransitionResult.ALREADY_APPLIED, reservation.id)
@@ -183,7 +183,7 @@ internal class CouponReservationService(
             }
         reservation.state = CouponReservationState.RESTORED
         reservation.restorationSourceReference = command.sourceReference
-        reservation.restorationTrigger = command.trigger
+        reservation.restorationTrigger = command.trigger.name
         reservation.restorationPolicyVersionId = command.policyVersionId
         reservation.restorationDisposition = disposition
         reservation.updatedAt = command.terminatedAt
@@ -330,7 +330,7 @@ internal class CouponReservationService(
                 couponExpiresAt = command.terminatedAt.plusSeconds(command.compensationValidityDays.toLong() * 86_400),
                 originalIssuanceId = original.id,
                 restorationSourceReference = command.sourceReference,
-                restorationTrigger = command.trigger,
+                restorationTrigger = command.trigger.name,
                 restorationPolicyVersionId = command.policyVersionId,
             ),
         )
