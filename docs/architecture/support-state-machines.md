@@ -1,6 +1,6 @@
 # Support State Machines
 
-> **Status:** `PARTIALLY IMPLEMENTED`; S20 Case and S40 verification/access state contracts are persisted/API-backed.
+> **Status:** `PARTIALLY IMPLEMENTED`; S20–S90 implemented state contracts are persisted/API-backed.
 
 ## Case
 
@@ -56,6 +56,20 @@ REQUESTED -> STORE_CONFIRMATION_PENDING|APPROVAL_PENDING -> APPROVED -> EXECUTIN
 -> PARTIALLY_RESOLVED -> RESOLVED
 -> UNKNOWN|RECONCILING|MANUAL_REVIEW|FAILED|REJECTED|EXPIRED
 ```
+
+## Goodwill compensation
+
+```text
+AWAITING_APPROVAL -> READY_FOR_EXECUTION -> BENEFIT_ISSUED
+                                          -> NOTIFICATION_ACCEPTED
+                                          -> NOTIFICATION_RETRY -> NOTIFICATION_ACCEPTED
+```
+
+`AWAITING_APPROVAL`은 MEDIUM Support Manager 또는 HIGH/EXCEPTIONAL Operations exact revision에 묶인다.
+benefit 발급과 terminal incident/rolling limit/Audit는 원자적이며 `BENEFIT_ISSUED` 전이는 하나뿐이다.
+Notification 접수는 이 commit 뒤의 독립 경계라 실패해도 benefit state를 되돌리지 않는다. 응답의
+`notificationState`는 Notification owner의 `PENDING|PROCESSING|SUCCEEDED|RETRY_SCHEDULED|MANUAL_REVIEW`를
+별도로 보여 주며 Support의 `NOTIFICATION_ACCEPTED`는 전달 성공이 아니라 durable intent 접수만 의미한다.
 
 ## Delivery
 

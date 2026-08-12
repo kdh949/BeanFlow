@@ -119,6 +119,27 @@ envelope의 확정 실패가 아니다. 각각 target OpenAPI의 202 진행 repr
 manual-review 상태를 노출하지 않는다. `PAYMENT_METHOD_PROVIDER_UNAVAILABLE`은 raw Provider
 code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은 key로만 재시도한다.
 
+## S90 goodwill compensation error mapping
+
+S90은 새 coarse 오류명을 추가하지 않고 existing stable envelope를 endpoint semantics에 맞게 사용한다.
+
+| Code | HTTP | Retry | S90 meaning |
+|---|---:|---|---|
+| INVALID_REQUEST | 400 | after correction | benefit/template/share/digest/idempotency shape가 유효하지 않음 |
+| ACCESS_DENIED | 403 | after authorization change | Case assignment/object scope 또는 executor separation 불일치 |
+| VERIFICATION_REQUIRED | 403 | after step-up | action-bound BASIC/ENHANCED session이 없거나 만료됨 |
+| RESOURCE_NOT_FOUND | 404 | no for same ID | Case/request/template 또는 owner fact 부재 |
+| SUPPORT_ACTION_POLICY_DENIED | 409 | only after policy/input change | duplicate incident, rolling cap, `UNDETERMINED`, template/amount 등 current policy가 발급 거부 |
+| SUPPORT_ACTION_REQUEST_STALE | 409 | refresh exact binding | request/payload/target/approval revision이 달라짐; policy head 변경은 기존 request에 소급하지 않음 |
+| SUPPORT_ACTION_REQUEST_STATE_CONFLICT | 409 | after valid state transition | manager/Operations 승인이 준비되지 않았거나 notification retry 대상이 아님 |
+| IDEMPOTENCY_KEY_REUSED | 409 | new key | 같은 actor/operation key를 다른 canonical payload에 재사용 |
+| COMPENSATION_SOURCE_CONFLICT | 409 | reconcile owner fact | owner issuance source가 다른 payload에 이미 귀속됨 |
+| DEPENDENCY_UNAVAILABLE | 503 | yes, exact command | DB/Audit/owner persistence failure; financial transaction이면 전체 rollback, post-commit Notification이면 terminal benefit 유지와 retry state |
+
+`COMPENSATION_LIMIT_EXCEEDED`, `DUPLICATE_COMPENSATION`, `COMPENSATION_INVESTIGATION_REQUIRED` 후보는 S90 runtime
+code로 승격하지 않았다. band/route는 성공 evaluation/request representation이고, execution denial은
+`SUPPORT_ACTION_POLICY_DENIED`의 closed reason으로 처리한다.
+
 ## Proposed Support error-code candidates
 
 | Code | HTTP/representation | Retry | Meaning |
@@ -133,9 +154,6 @@ code/message를 details에 포함하지 않으며 설정이 고쳐진 뒤 같은
 | AUDIT_WRITE_FAILED | 503 | yes | pre-reveal/high-risk Audit commit 실패; data/body 없음 |
 | SUPPORT_ACTION_APPROVAL_REQUIRED | 409 representation | after approval | 실행 전 approval 필요 |
 | PICKUP_SLOT_UNAVAILABLE | 409 | choose slot | new slot capacity 불가; old slot 유지 |
-| COMPENSATION_LIMIT_EXCEEDED | 422 | investigation/policy | rolling/band 한도 |
-| DUPLICATE_COMPENSATION | 409 | no | terminal duplicate incident benefit |
-| COMPENSATION_INVESTIGATION_REQUIRED | 409 representation | Operations handoff | high/exceptional 보상 |
 | PROFILE_FIELD_IMMUTABLE | 422 | adjustment workflow | R0/R4 direct change 금지 |
 | DELIVERY_PROVIDER_OUTCOME_UNKNOWN | 202 representation | reconcile/poll | Provider 결과 불명; 새 dispatch 금지 |
 | DELIVERY_STATE_CONFLICT | 409 | reconcile | 역순/terminal conflict |

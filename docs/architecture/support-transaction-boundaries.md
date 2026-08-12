@@ -1,6 +1,6 @@
 # Support Transaction Boundaries
 
-> **Status:** Accepted transaction/failure principles; S10–S80 boundaries below are implemented and later owner-command
+> **Status:** Accepted transaction/failure principles; S10–S90 boundaries below are implemented and later owner-command
 > mechanics remain Stage-owned.
 
 ## Implemented S10–S70 boundaries
@@ -86,6 +86,18 @@
 - 각 S80 owner는 owner-local transaction에서 최신 불변식과 exact source/payload를 최종 검증한다. 성공한
   Refund/restoration/Settlement adjustment는 이후 step 실패로 rollback하지 않는다. Notification intent는 financial
   terminal state 이후 독립적으로 생성되며 delivery 실패가 financial result를 되돌리지 않는다.
+- S90 create는 current immutable policy head/version, Case/customer/order/verification/cost binding을 재평가하고
+  `SupportCompensationRequest`, 필요한 S60 exact revision/Operations investigation, idempotency와 PII-free Audit를
+  한 transaction에 commit한다. Head가 바뀐 뒤 새 요청은 새 version을 사용하지만 기존 요청은 저장된 immutable
+  version으로 재평가하므로 정책 변경이 소급되지 않는다.
+- S90 execute는 request/Case/approval을 잠근 뒤 CUSTOMER→ORDER→INCIDENT→ACTOR→STORE의 canonical 순서로
+  scope lock을 획득하고 `issuedAt >= now-window` consumption 합을 검사한다. Loyalty/Promotion public owner API는
+  `MANDATORY`로 같은 local transaction에 참여한다. PointLot/transaction 또는 Coupon issuance, terminal incident,
+  다섯 consumption, S60 one-time consume, Support state, command idempotency와 financial Audit 중 하나라도 실패하면
+  모두 rollback한다. Support는 owner Repository/table을 직접 쓰지 않는다.
+- S90 Notification intent는 benefit commit 뒤 `REQUIRES_NEW` owner transaction에서 생성한다. 실패하면 terminal
+  benefit/limit은 유지하고 Support를 `NOTIFICATION_RETRY`로 기록한다. Retry는 같은 logical source만 재사용하며
+  Point/Coupon을 다시 발급하지 않는다.
 
 ## Local atomic candidates
 
@@ -95,7 +107,7 @@
 - ActionRequest revision + policy snapshot; ApprovalStep + request state (S60 implemented)
 - owner-local pickup slot swap (S70 implemented)
 - Resolution plan/claim/result + PII-free Audit (S80 implemented)
-- owner-local point/coupon issuance + compensation execution result
+- owner-local point/coupon issuance + compensation execution result (S90 implemented)
 - provider webhook Inbox insert
 - deletion component transition + deletion ledger result
 

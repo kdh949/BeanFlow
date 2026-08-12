@@ -112,6 +112,7 @@
 - [Payment Approval and Reconciliation Runbook](operations/payment-reconciliation-runbook.md)
 - [Store Order Lifecycle and Rejection Recovery Runbook](operations/store-order-lifecycle-runbook.md)
 - [Customer Order Cancellation and Refund Recovery Runbook](operations/customer-order-cancellation-runbook.md)
+- [Support Goodwill Compensation Runbook](operations/support-goodwill-compensation-runbook.md)
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)

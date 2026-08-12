@@ -20,9 +20,9 @@ HIGH/EXCEPTIONAL은 Operations 조사로 보내며, 실행 순간 rolling limit�
 
 - branch는 S80 verified head `1ca19f46bf71eb22d7da459dcc424b7784779010`에서 분기한
   `feature/support-versioned-goodwill-compensation`이다.
-- Flyway inventory는 V1~V46이고 V46 S80 writer lease는 full validation 뒤 release됐다.
+- Flyway inventory는 V1~V47이다. V46 S80 writer lease는 full validation 뒤 release됐고 S90이 V47을 작성했다.
 - S60은 dormant Operations route와 exact revision/callback을, S80은 refund/restoration/goodwill source 분리를 제공한다.
-- target/runtime OpenAPI에는 S80까지 70 paths/74 operations/200 schemas가 있고 S90 4개 operation은 inventory DRAFT다.
+- target/runtime OpenAPI에는 S90의 5개 operation까지 75 paths/79 operations/212 schemas가 동일하게 반영됐다.
 - 2026-08-12 사용자가 SP-21의 보수적 차등 rolling hard cap을 선택했다.
 - Analytics active plan은 ready metadata만 있고 branch/PR/acquisition evidence가 없다. Productization worktree의 schema
   draft는 S70 scheduling decision으로 동결됐다. 이 branch가 2026-08-12 S90 V47 sole migration-writer lease를 획득한다.
@@ -41,7 +41,7 @@ HIGH/EXCEPTIONAL은 Operations 조사로 보내며, 실행 순간 rolling limit�
 ### In Scope
 
 - immutable Support compensation policy version/head와 seeded v1
-- typed evaluation/create/get/execute no-store API and target/runtime parity
+- typed evaluation/create/get/execute/notification-retry no-store API and target/runtime parity
 - S60 GOODWILL_COMPENSATION typed action target, manager/Operations route/reassignment/one-time execution
 - actual rolling scopes, terminal incident uniqueness and execution concurrency
 - Loyalty SUPPORT_COMPENSATION PointLot/transaction/funding legs
@@ -79,7 +79,7 @@ Loyalty/Promotion public API가 shared local transaction에 참여해 owner inva
 consumptions, owner result, Support/S60 terminal state와 Audit 중 하나라도 실패하면 전체 rollback한다. 외부 호출은 없다.
 
 발급 commit 뒤 outer Application Service가 Notification REQUIRES_NEW owner API를 호출한다. Notification persistence failure는
-Support notification work를 RETRY_SCHEDULED로 남기며 benefit을 rollback하지 않는다. bounded worker는 같은 logical source를
+Support request를 `NOTIFICATION_RETRY`로 남기며 benefit을 rollback하지 않는다. Notification bounded worker는 같은 logical source를
 재사용한다.
 
 ## Alternatives Considered
@@ -106,9 +106,10 @@ Notification template와 Audit action mapping을 추가한다. 기존 V1~V46은 
 ## API and Event Contracts
 
 - `POST /api/v1/support/cases/{caseId}/compensation-evaluations`
-- `POST /api/v1/support/cases/{caseId}/compensation-requests`
-- `GET /api/v1/support/compensation-requests/{requestId}`
-- `POST /api/v1/support/compensation-requests/{requestId}/executions`
+- `POST /api/v1/support/cases/{caseId}/compensations`
+- `GET /api/v1/support/compensations/{compensationRequestId}`
+- `POST /api/v1/support/compensations/{compensationRequestId}/executions`
+- `POST /api/v1/support/compensations/{compensationRequestId}/notification-retries`
 
 Write는 Idempotency-Key가 필수이고 unknown field를 거부한다. Client는 band/decision/route/policy/rolling outcome을 선택하지
 않는다. Response는 closed state, policy/approval/result references와 Notification state만 제공하고 raw reason/evidence를
@@ -165,11 +166,11 @@ target/runtime OpenAPI, orchestration과 이 plan을 actual outcome에 맞게 �
 - [x] S80 head에서 stacked branch 생성
 - [x] user selected initial v1 rolling hard caps
 - [x] V47 sole migration-writer lease acquired under Support-priority scheduling
-- [ ] domain and contract RED tests
-- [ ] V47 persistence and concurrency constraints
-- [ ] S60/Operations approval integration
-- [ ] Loyalty/Promotion/Notification owner issuance
-- [ ] Support API/OpenAPI/security/failure integration
+- [x] domain and contract RED tests
+- [x] V47 persistence and concurrency constraints
+- [x] S60/Operations approval integration
+- [x] Loyalty/Promotion/Notification owner issuance
+- [x] Support API/OpenAPI/security/failure integration
 - [ ] focused/full/build/docs validation and completion handoff
 
 ## Surprises & Discoveries
@@ -181,6 +182,18 @@ the separate conservative SP-21 hard-cap set before implementation.
 Promotion CouponIssuance is Campaign-backed. S90 will not weaken that owner contract or put free-form terms in Support;
 Promotion materializes an immutable approved template into an issuance-specific campaign/cost snapshot so existing future
 reservation and Settlement input paths remain authoritative.
+
+The existing Promotion campaign constraint requires a fixed-amount goodwill campaign to keep `maximum_discount_krw` null;
+V47 preserves that owner invariant instead of adding a Support exception. Read permission checks use row locking, so their
+Application Service path must retain a write-capable transaction even though the returned resource is read-only.
+
+Notification persistence failure handling must wrap only the post-commit Notification request. Catching a broader Support
+state transition failure would incorrectly turn a Support consistency defect into `NOTIFICATION_RETRY`. Review also found
+that execution initially re-evaluated an old request against the current head. That contradicted ADR-086 non-retroactivity;
+execution now loads the request's immutable policy version while new evaluation/create read the head.
+
+One focused test run failed before test execution with a corrupted Kotlin incremental cache (`EOFException`). A clean
+focused run rebuilt the cache and passed; this is recorded as tool-state recovery rather than a product failure.
 
 ## Decision Log
 

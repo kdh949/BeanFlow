@@ -20,6 +20,7 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBenefitType
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationEvidenceBasis
+import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationLimitScope
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationRequestState
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationResponsibility
 import org.assertj.core.api.Assertions.assertThat
@@ -72,6 +73,7 @@ internal class SupportCompensationIntegrationTest
         private val operations: OperationsSupportInvestigationService,
         private val coupons: CouponReservationOperations,
         private val audits: AuditRecordOperations,
+        private val consumptions: SupportCompensationLimitConsumptionJpaRepository,
         private val objectMapper: ObjectMapper,
         private val transactionManager: PlatformTransactionManager,
     ) {
@@ -126,6 +128,10 @@ internal class SupportCompensationIntegrationTest
                     .andExpect(jsonPath("$.evidenceDigest").doesNotExist())
                     .andReturn()
             val resource = objectMapper.readValue(created.response.contentAsString, SupportCompensationResource::class.java)
+
+            createApi(UUID.randomUUID(), 100, "goodwill-create-001")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
 
             executeApi(resource, "goodwill-execute-001")
                 .andExpect(status().isOk)
@@ -224,6 +230,40 @@ internal class SupportCompensationIntegrationTest
             } finally {
                 executor.shutdownNow()
             }
+        }
+
+        @Test
+        fun `rolling window includes the exact cutoff and later consumptions only`() {
+            val before = compensations.create(command(UUID.randomUUID(), 1, "rolling-before-create"))
+            val at = compensations.create(command(UUID.randomUUID(), 1, "rolling-at-create"))
+            val after = compensations.create(command(UUID.randomUUID(), 1, "rolling-after-create"))
+            val cutoff = Instant.parse("2026-08-12T00:00:00Z")
+
+            listOf(
+                before to cutoff.minusNanos(1_000),
+                at to cutoff,
+                after to cutoff.plusNanos(1_000),
+            ).forEach { (request, issuedAt) ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO support_compensation_limit_consumption (
+                        id, request_id, policy_version_id, scope, scope_id, amount_krw, issued_at
+                    ) VALUES (?, ?, ?, 'CUSTOMER', ?, 1, ?)
+                    """.trimIndent(),
+                    UUID.randomUUID(),
+                    request.compensationRequestId,
+                    request.policyVersionId,
+                    fixture.customerId,
+                    Timestamp.from(issuedAt),
+                )
+            }
+
+            val used =
+                TransactionTemplate(transactionManager).execute {
+                    consumptions.sumInWindow(SupportCompensationLimitScope.CUSTOMER, fixture.customerId, cutoff)
+                }
+
+            assertThat(used).isEqualTo(2)
         }
 
         @Test
