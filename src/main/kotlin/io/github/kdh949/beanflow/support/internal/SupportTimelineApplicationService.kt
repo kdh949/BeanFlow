@@ -14,6 +14,7 @@ import io.github.kdh949.beanflow.shared.api.SupportTimelineBoundary
 import io.github.kdh949.beanflow.shared.api.SupportTimelineSource
 import io.github.kdh949.beanflow.shared.api.SupportTimelineState
 import io.github.kdh949.beanflow.shared.api.SupportTimelineType
+import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
@@ -56,7 +57,7 @@ internal class SupportTimelineAuthorization(
         caseId: UUID,
     ): AuthorizedTimelineScope {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
-        requireCase(caseId)
+        requireAssignedActiveCase(actorId, caseId)
         val orderIds = queries.findActiveOrderIds(caseId, SupportOwnerTimelineQuery.MAX_ORDER_IDS + 1)
         if (orderIds.size > SupportOwnerTimelineQuery.MAX_ORDER_IDS) {
             throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "SupportCase has too many active Order links")
@@ -72,7 +73,7 @@ internal class SupportTimelineAuthorization(
     ): AuthorizedTimelineScope {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
-        requireCase(caseId)
+        requireAssignedActiveCase(actorId, caseId)
         if (!queries.hasActiveOrderLink(caseId, orderId)) denied()
         return AuthorizedTimelineScope(caseId, setOf(orderId))
     }
@@ -94,13 +95,21 @@ internal class SupportTimelineAuthorization(
         authorizeOrder(actorId, expected.caseId, expected.orderIds.single())
     }
 
-    private fun requireCase(caseId: UUID) {
-        if (cases.findLockedById(caseId) == null) {
-            throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "SupportCase was not found")
-        }
+    private fun requireAssignedActiveCase(
+        actorId: UUID,
+        caseId: UUID,
+    ) {
+        val supportCase =
+            cases.findLockedById(caseId)
+                ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "SupportCase was not found")
+        if (supportCase.currentAssigneeId != actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
     }
 
     private fun denied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Linked SupportCase scope is required")
+
+    private companion object {
+        val ACTIVE_CASE_STATES = setOf(SupportCaseState.OPEN, SupportCaseState.IN_PROGRESS, SupportCaseState.WAITING)
+    }
 }
 
 @Service

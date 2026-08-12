@@ -4,7 +4,10 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -45,6 +48,7 @@ internal class SupportTimelineIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val authorization: SupportTimelineAuthorization,
     ) {
         private val actorId = UUID.fromString("51000000-0000-0000-0000-000000000001")
         private lateinit var orderId: UUID
@@ -172,6 +176,66 @@ internal class SupportTimelineIntegrationTest
                 ).andExpect(status().isForbidden)
         }
 
+        @Test
+        fun `timeline denies an operator who is not the current case assignee`() {
+            val unrelatedActor = UUID.fromString("51000000-0000-0000-0000-000000000002")
+            grant(unrelatedActor, "SUPPORT_CASE_READ")
+            grant(unrelatedActor, "SUPPORT_ORDER_READ")
+
+            mockMvc
+                .perform(
+                    get("/api/v1/support/cases/$caseId/timeline")
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) }),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/orders/$orderId/timeline")
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) })
+                        .param("caseId", caseId.toString()),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+        }
+
+        @Test
+        fun `timeline denies a terminal case even to its assignee`() {
+            jdbcTemplate.update("UPDATE support_case SET state = 'RESOLVED', version = version + 1 WHERE id = ?", caseId)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/support/cases/$caseId/timeline")
+                        .with(jwt().jwt { it.subject(actorId.toString()) }),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+        }
+
+        @Test
+        fun `case timeline recheck rejects reassignment after owner facts were selected`() {
+            val replacementActor = UUID.fromString("51000000-0000-0000-0000-000000000003")
+            val scope = authorization.authorizeCase(actorId, caseId)
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                replacementActor,
+                caseId,
+            )
+
+            assertAccessDenied { authorization.recheckCase(actorId, scope) }
+        }
+
+        @Test
+        fun `order timeline recheck rejects link removal after owner facts were selected`() {
+            grant("SUPPORT_ORDER_READ")
+            val scope = authorization.authorizeOrder(actorId, caseId, orderId)
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, unlink_reason = 'TIMELINE_RECHECK', unlink_case_version = 1 WHERE support_case_id = ? AND subject_id = ?",
+                actorId,
+                caseId,
+                orderId,
+            )
+
+            assertAccessDenied { authorization.recheckOrder(actorId, scope) }
+        }
+
         private fun createOrder(): UUID {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -217,16 +281,30 @@ internal class SupportTimelineIntegrationTest
         }
 
         private fun grant(permission: String) {
+            grant(actorId, permission)
+        }
+
+        private fun grant(
+            actor: UUID,
+            permission: String,
+        ) {
             jdbcTemplate.update(
                 """
                 INSERT INTO operations_operator_permission_grant (
                     actor_id, permission, state, granted_at, version, audit_source_reference
                 ) VALUES (?, ?, 'ACTIVE', now(), 1, ?)
                 """.trimIndent(),
-                actorId,
+                actor,
                 permission,
-                "support-timeline-grant:$permission:$actorId",
+                "support-timeline-grant:$permission:$actor",
             )
+        }
+
+        private fun assertAccessDenied(block: () -> Unit) {
+            assertThatThrownBy(block)
+                .isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+                    assertThat(failure.code).isEqualTo(FailureCode.ACCESS_DENIED)
+                }
         }
 
         private fun json(body: String): JsonNode = JsonMapper.builder().build().readTree(body)
