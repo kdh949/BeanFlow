@@ -12,6 +12,9 @@ import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementBatchView
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemOperations
 import io.github.kdh949.beanflow.settlement.api.ConfirmedSettlementItemView
 import io.github.kdh949.beanflow.settlement.api.CreateSettlementAdjustmentCommand
+import io.github.kdh949.beanflow.settlement.api.CreatePostAcceptanceResolutionSettlementAdjustmentCommand
+import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementAdjustmentResult
+import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentReasonCode
 import io.github.kdh949.beanflow.settlement.api.SettlementAdjustmentResult
@@ -30,6 +33,7 @@ import java.util.UUID
 @Service
 internal class SettlementAdjustmentService(
     private val adjustments: SettlementAdjustmentJpaRepository,
+    private val resolutionAdjustments: SupportResolutionSettlementAdjustmentJpaRepository,
     private val items: SettlementItemJpaRepository,
     private val batches: SettlementBatchJpaRepository,
     private val audits: AuditRecordOperations,
@@ -38,8 +42,51 @@ internal class SettlementAdjustmentService(
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
 ) : SettlementAdjustmentOperations,
+    PostAcceptanceResolutionSettlementOperations,
     ConfirmedSettlementItemOperations,
     ConfirmedSettlementBatchOperations {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun create(
+        command: CreatePostAcceptanceResolutionSettlementAdjustmentCommand,
+    ): PostAcceptanceResolutionSettlementAdjustmentResult {
+        validateResolution(command)
+        resolutionAdjustments.findBySourceReference(command.sourceReference)?.let {
+            return it.exactReplay(command)
+        }
+        val item =
+            items.findByOrderId(command.orderId)
+                ?: unavailable("Confirmed SettlementItem was not found for Resolution")
+        if (item.storeId != command.storeId) {
+            sourceConflict("RESOLUTION_STORE_MISMATCH")
+        }
+        val adjustment =
+            create(
+                CreateSettlementAdjustmentCommand(
+                    settlementItemId = item.id,
+                    adjustmentSource = command.sourceReference,
+                    reasonCode = SettlementAdjustmentReasonCode.POST_ACCEPTANCE_RESOLUTION,
+                    effectiveAt = command.effectiveAt,
+                    amountKrw = command.amountKrw,
+                    correlationId = command.correlationId,
+                ),
+            )
+        return resolutionAdjustments
+            .saveAndFlush(
+                SupportResolutionSettlementAdjustmentEntity(
+                    id = identifierSource.next(),
+                    resolutionId = command.resolutionId,
+                    orderId = command.orderId,
+                    storeId = command.storeId,
+                    settlementAdjustmentId = adjustment.settlementAdjustmentId,
+                    responsibility = command.responsibility.name,
+                    amountKrw = command.amountKrw,
+                    sourceReference = command.sourceReference,
+                    payloadHash = command.payloadHash,
+                    effectiveAt = command.effectiveAt,
+                ),
+            ).toResolutionResult(false)
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun create(command: CreateSettlementAdjustmentCommand): SettlementAdjustmentResult =
         try {
@@ -152,6 +199,37 @@ internal class SettlementAdjustmentService(
         }
     }
 
+    private fun validateResolution(command: CreatePostAcceptanceResolutionSettlementAdjustmentCommand) {
+        if (command.amountKrw >= 0 || command.sourceReference.isBlank() ||
+            command.sourceReference != command.sourceReference.trim() || command.sourceReference.length > 240 ||
+            !command.payloadHash.matches(SHA_256) || command.correlationId.isBlank() ||
+            command.correlationId != command.correlationId.trim() || command.correlationId.length > 240
+        ) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Resolution SettlementAdjustment command is invalid")
+        }
+    }
+
+    private fun SupportResolutionSettlementAdjustmentEntity.exactReplay(
+        command: CreatePostAcceptanceResolutionSettlementAdjustmentCommand,
+    ): PostAcceptanceResolutionSettlementAdjustmentResult {
+        if (resolutionId != command.resolutionId || orderId != command.orderId || storeId != command.storeId ||
+            responsibility != command.responsibility.name || amountKrw != command.amountKrw ||
+            payloadHash != command.payloadHash || effectiveAt != command.effectiveAt
+        ) {
+            sourceConflict("RESOLUTION_SOURCE_REUSED")
+        }
+        return toResolutionResult(true)
+    }
+
+    private fun SupportResolutionSettlementAdjustmentEntity.toResolutionResult(replayed: Boolean) =
+        PostAcceptanceResolutionSettlementAdjustmentResult(
+            bindingId = id,
+            settlementAdjustmentId = settlementAdjustmentId,
+            sourceReference = sourceReference,
+            amountKrw = amountKrw,
+            replayed = replayed,
+        )
+
     private fun SettlementAdjustmentEntity.matches(command: CreateSettlementAdjustmentCommand): Boolean =
         settlementItemId == command.settlementItemId && adjustmentSource == command.adjustmentSource &&
             reasonCode.name == command.reasonCode.name && effectiveAt == command.effectiveAt &&
@@ -223,5 +301,6 @@ internal class SettlementAdjustmentService(
 
     private companion object {
         const val SYSTEM_ACTOR = "beanflow-settlement"
+        val SHA_256 = Regex("^[0-9a-f]{64}$")
     }
 }

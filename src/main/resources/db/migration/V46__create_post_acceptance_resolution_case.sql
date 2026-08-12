@@ -322,6 +322,29 @@ CREATE TABLE promotion_support_resolution_coupon_restoration (
     UNIQUE (resolution_id)
 );
 
+ALTER TABLE settlement_adjustment
+    DROP CONSTRAINT settlement_adjustment_reason_code_check,
+    ADD CONSTRAINT settlement_adjustment_reason_code_check CHECK (
+        reason_code IN ('REFUND_SUCCEEDED', 'DISPUTE_ACCEPTED', 'POST_ACCEPTANCE_RESOLUTION')
+    );
+
+CREATE TABLE settlement_support_resolution_adjustment (
+    id uuid PRIMARY KEY,
+    resolution_id uuid NOT NULL UNIQUE REFERENCES support_post_acceptance_resolution(id),
+    order_id uuid NOT NULL,
+    store_id uuid NOT NULL REFERENCES merchant_store(id),
+    settlement_adjustment_id uuid NOT NULL UNIQUE REFERENCES settlement_adjustment(id),
+    responsibility varchar(16) NOT NULL CHECK (responsibility IN ('STORE', 'SHARED')),
+    amount_krw bigint NOT NULL CHECK (amount_krw < 0),
+    source_reference varchar(240) NOT NULL UNIQUE CHECK (
+        source_reference = btrim(source_reference)
+        AND length(source_reference) BETWEEN 1 AND 240
+        AND source_reference !~ '[[:cntrl:]]'
+    ),
+    payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+    effective_at timestamptz NOT NULL
+);
+
 CREATE TABLE support_post_acceptance_resolution_step (
     id uuid PRIMARY KEY,
     resolution_id uuid NOT NULL REFERENCES support_post_acceptance_resolution (id),

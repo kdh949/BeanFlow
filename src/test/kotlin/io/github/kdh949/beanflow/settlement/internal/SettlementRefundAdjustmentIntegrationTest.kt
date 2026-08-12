@@ -7,6 +7,9 @@ import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
 import io.github.kdh949.beanflow.eventing.api.SettlementRefundEffect
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.settlement.api.CreatePostAcceptanceResolutionSettlementAdjustmentCommand
+import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementOperations
+import io.github.kdh949.beanflow.settlement.api.PostAcceptanceResolutionSettlementResponsibility
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -44,6 +47,7 @@ internal class SettlementRefundAdjustmentIntegrationTest
     @Autowired
     constructor(
         private val service: SettlementRefundAdjustmentService,
+        private val resolutionAdjustments: PostAcceptanceResolutionSettlementOperations,
         private val batchLifecycle: SettlementBatchLifecycleService,
         private val eventPublisher: ApplicationEventPublisher,
         private val jdbcTemplate: JdbcTemplate,
@@ -57,6 +61,7 @@ internal class SettlementRefundAdjustmentIntegrationTest
                 """
                 TRUNCATE TABLE
                     settlement_dispute,
+                    settlement_support_resolution_adjustment,
                     settlement_adjustment,
                     settlement_item,
                     settlement_batch,
@@ -66,6 +71,8 @@ internal class SettlementRefundAdjustmentIntegrationTest
                     payment_refund,
                     payment_payment,
                     payment_method,
+                    support_post_acceptance_resolution_step,
+                    support_post_acceptance_resolution,
                     ordering_order,
                     merchant_store
                 CASCADE
@@ -91,6 +98,42 @@ internal class SettlementRefundAdjustmentIntegrationTest
                     "io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1",
                 ),
             ).isOne()
+        }
+
+        @Test
+        fun `resolution adjustment is append only and exact source replay is idempotent`() {
+            val fixture = confirmedFixture()
+            val resolutionId = UUID.randomUUID()
+            insertResolution(resolutionId, fixture.event.orderId)
+            val storeId =
+                value<UUID>("SELECT store_id FROM settlement_item WHERE order_id = ?", fixture.event.orderId)
+            val command =
+                CreatePostAcceptanceResolutionSettlementAdjustmentCommand(
+                    resolutionId = resolutionId,
+                    orderId = fixture.event.orderId,
+                    storeId = storeId,
+                    responsibility = PostAcceptanceResolutionSettlementResponsibility.SHARED,
+                    amountKrw = -400,
+                    effectiveAt = REFUND_SUCCEEDED_AT,
+                    sourceReference = "support-resolution:$resolutionId:settlement",
+                    payloadHash = DIGEST,
+                    correlationId = "support-resolution-$resolutionId",
+                )
+
+            val created = resolutionAdjustments.create(command)
+            val replayed = resolutionAdjustments.create(command)
+
+            assertThat(created.settlementAdjustmentId).isEqualTo(replayed.settlementAdjustmentId)
+            assertThat(created.replayed).isFalse()
+            assertThat(replayed.replayed).isTrue()
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+            assertThat(value<String>("SELECT reason_code FROM settlement_adjustment"))
+                .isEqualTo("POST_ACCEPTANCE_RESOLUTION")
+            assertThatThrownBy { resolutionAdjustments.create(command.copy(payloadHash = OTHER_DIGEST)) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE)
+                }
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
         }
 
         @Test
@@ -392,6 +435,45 @@ internal class SettlementRefundAdjustmentIntegrationTest
                 }
             }
 
+        private fun insertResolution(
+            resolutionId: UUID,
+            orderId: UUID,
+        ) {
+            jdbcTemplate.execute("ALTER TABLE support_post_acceptance_resolution DISABLE TRIGGER ALL")
+            try {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO support_post_acceptance_resolution (
+                        id, support_case_id, request_id, revision_id, revision_number, action,
+                        action_payload_digest, order_id, trigger_order_state, trigger_order_version,
+                        requester_actor_id, executor_actor_id, outcome, responsibility, cash_refund_krw,
+                        restore_points, restore_coupon, settlement_adjustment_krw, evidence_digest,
+                        idempotency_key, payload_hash, state, created_at, updated_at,
+                        retention_expires_at, version
+                    ) VALUES (?, ?, ?, ?, 1, 'POST_ACCEPTANCE_RESOLUTION', ?, ?, 'COMPLETED', 7,
+                              ?, ?, 'FULL_REFUND', 'SHARED', 1, false, false, -400, ?,
+                              ?, ?, 'PLANNED', ?, ?, ?, 0)
+                    """.trimIndent(),
+                    resolutionId,
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    DIGEST,
+                    orderId,
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    DIGEST,
+                    "resolution-$resolutionId",
+                    DIGEST,
+                    Timestamp.from(PROCESSED_AT),
+                    Timestamp.from(PROCESSED_AT),
+                    Timestamp.from(PROCESSED_AT.plusSeconds(90L * 24 * 60 * 60)),
+                )
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE support_post_acceptance_resolution ENABLE TRIGGER ALL")
+            }
+        }
+
         private fun adjust(event: PaymentRefundedV1) {
             transactions.executeWithoutResult { service.adjust(event, PROCESSED_AT) }
         }
@@ -432,5 +514,7 @@ internal class SettlementRefundAdjustmentIntegrationTest
             val SETTLEMENT_DATE: LocalDate = COMPLETED_AT.atZone(SEOUL).toLocalDate()
             val REFUND_SUCCEEDED_AT: Instant = Instant.parse("2026-08-03T01:00:00Z")
             val PROCESSED_AT: Instant = Instant.parse("2026-08-03T01:01:00Z")
+            const val DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            const val OTHER_DIGEST = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         }
     }

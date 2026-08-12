@@ -294,6 +294,7 @@ internal class SettlementItemEntity(
 internal enum class SettlementAdjustmentReason {
     REFUND_SUCCEEDED,
     DISPUTE_ACCEPTED,
+    POST_ACCEPTANCE_RESOLUTION,
 }
 
 @Entity
@@ -342,6 +343,32 @@ internal class SettlementAdjustmentEntity(
     }
 }
 
+@Entity
+@Immutable
+@Table(name = "settlement_support_resolution_adjustment")
+internal class SupportResolutionSettlementAdjustmentEntity(
+    @Id
+    val id: UUID,
+    @Column(name = "resolution_id", nullable = false)
+    val resolutionId: UUID,
+    @Column(name = "order_id", nullable = false)
+    val orderId: UUID,
+    @Column(name = "store_id", nullable = false)
+    val storeId: UUID,
+    @Column(name = "settlement_adjustment_id", nullable = false)
+    val settlementAdjustmentId: UUID,
+    @Column(nullable = false, length = 16)
+    val responsibility: String,
+    @Column(name = "amount_krw", nullable = false)
+    val amountKrw: Long,
+    @Column(name = "source_reference", nullable = false, length = 240)
+    val sourceReference: String,
+    @Column(name = "payload_hash", nullable = false, length = 64)
+    val payloadHash: String,
+    @Column(name = "effective_at", nullable = false)
+    val effectiveAt: Instant,
+)
+
 internal interface SettlementBatchJpaRepository : JpaRepository<SettlementBatchEntity, UUID> {
     fun findByStoreIdAndSettlementDate(
         storeId: UUID,
@@ -373,4 +400,9 @@ internal interface SettlementItemJpaRepository : JpaRepository<SettlementItemEnt
 
 internal interface SettlementAdjustmentJpaRepository : JpaRepository<SettlementAdjustmentEntity, UUID> {
     fun findByAdjustmentSource(adjustmentSource: String): SettlementAdjustmentEntity?
+}
+
+internal interface SupportResolutionSettlementAdjustmentJpaRepository :
+    JpaRepository<SupportResolutionSettlementAdjustmentEntity, UUID> {
+    fun findBySourceReference(sourceReference: String): SupportResolutionSettlementAdjustmentEntity?
 }

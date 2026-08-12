@@ -7,6 +7,7 @@ import java.util.UUID
 enum class SettlementAdjustmentReasonCode {
     REFUND_SUCCEEDED,
     DISPUTE_ACCEPTED,
+    POST_ACCEPTANCE_RESOLUTION,
 }
 
 data class CreateSettlementAdjustmentCommand(
