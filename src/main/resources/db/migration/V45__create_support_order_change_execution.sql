@@ -42,6 +42,9 @@ CREATE TABLE support_order_change_authorization (
 );
 
 ALTER TABLE support_order_change_authorization
+    ADD CONSTRAINT uq_support_order_change_authorization_id_action UNIQUE (id, action);
+
+ALTER TABLE support_order_change_authorization
     ADD CONSTRAINT chk_support_order_change_authorization_binding CHECK (
         (authorization_type = 'CONFIRMATION'
             AND request_id IS NOT NULL AND revision_number > 0
@@ -87,7 +90,7 @@ CREATE TABLE support_order_change_execution (
     previous_pickup_slot_id uuid NOT NULL,
     current_pickup_slot_id uuid NOT NULL,
     payment_recovery_state varchar(32),
-    authorization_id uuid REFERENCES support_order_change_authorization (id),
+    authorization_id uuid,
     outcome varchar(32) NOT NULL CHECK (outcome IN ('EXECUTED', 'RESOLUTION_REQUIRED')),
     reason_code varchar(40) NOT NULL CHECK (
         reason_code = btrim(reason_code) AND length(reason_code) BETWEEN 1 AND 40
@@ -98,12 +101,48 @@ CREATE TABLE support_order_change_execution (
     CONSTRAINT fk_support_order_change_execution_revision
         FOREIGN KEY (request_id, revision_id, revision_number)
         REFERENCES support_action_revision (request_id, id, revision_number),
+    CONSTRAINT fk_support_order_change_execution_authorization
+        FOREIGN KEY (authorization_id, action)
+        REFERENCES support_order_change_authorization (id, action),
     CONSTRAINT uq_support_order_change_execution_command UNIQUE (actor_id, idempotency_key),
     CONSTRAINT uq_support_order_change_execution_request UNIQUE (request_id),
+    CONSTRAINT uq_support_order_change_execution_request_id UNIQUE (request_id, id),
+    CONSTRAINT uq_support_order_change_execution_authorization_id UNIQUE (id, authorization_id),
+    CONSTRAINT chk_support_order_change_execution_state CHECK (
+        previous_target_state IN (
+            'PENDING_PAYMENT', 'PAID', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED',
+            'REJECTED', 'EXPIRED', 'CANCELLED'
+        )
+        AND current_target_state IN (
+            'PENDING_PAYMENT', 'PAID', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED',
+            'REJECTED', 'EXPIRED', 'CANCELLED'
+        )
+    ),
     CONSTRAINT chk_support_order_change_execution_recovery CHECK (
-        (action = 'ORDER_CANCELLATION' AND outcome = 'EXECUTED' AND payment_recovery_state IS NOT NULL)
+        (action = 'ORDER_CANCELLATION' AND outcome = 'EXECUTED'
+            AND payment_recovery_state IN (
+                'NOT_REQUIRED', 'REQUESTED', 'PROCESSING', 'RETRY_SCHEDULED',
+                'SUCCEEDED', 'FAILED', 'UNKNOWN', 'RECONCILING', 'MANUAL_REVIEW'
+            ))
         OR (action = 'ORDER_CANCELLATION' AND outcome = 'RESOLUTION_REQUIRED' AND payment_recovery_state IS NULL)
         OR (action = 'PICKUP_RESCHEDULE' AND payment_recovery_state IS NULL)
+    ),
+    CONSTRAINT chk_support_order_change_execution_outcome CHECK (
+        (outcome = 'RESOLUTION_REQUIRED'
+            AND current_target_state IN ('PREPARING', 'READY', 'COMPLETED')
+            AND previous_target_state = current_target_state
+            AND previous_pickup_slot_id = current_pickup_slot_id
+            AND authorization_id IS NULL)
+        OR
+        (outcome = 'EXECUTED' AND action = 'ORDER_CANCELLATION'
+            AND previous_target_state IN ('PENDING_PAYMENT', 'PAID', 'ACCEPTED')
+            AND current_target_state = 'CANCELLED'
+            AND previous_pickup_slot_id = current_pickup_slot_id)
+        OR
+        (outcome = 'EXECUTED' AND action = 'PICKUP_RESCHEDULE'
+            AND previous_target_state IN ('PENDING_PAYMENT', 'PAID', 'ACCEPTED')
+            AND current_target_state = previous_target_state
+            AND previous_pickup_slot_id <> current_pickup_slot_id)
     ),
     CONSTRAINT chk_support_order_change_execution_retention CHECK (
         retention_expires_at = occurred_at + INTERVAL '90 days'
@@ -111,8 +150,8 @@ CREATE TABLE support_order_change_execution (
 );
 
 CREATE TABLE support_order_change_authorization_use (
-    execution_id uuid PRIMARY KEY REFERENCES support_order_change_execution (id),
-    authorization_id uuid NOT NULL REFERENCES support_order_change_authorization (id),
+    execution_id uuid PRIMARY KEY,
+    authorization_id uuid NOT NULL,
     request_id uuid NOT NULL,
     revision_number integer NOT NULL CHECK (revision_number > 0),
     action_payload_digest varchar(64) NOT NULL CHECK (action_payload_digest ~ '^[0-9a-f]{64}$'),
@@ -121,6 +160,11 @@ CREATE TABLE support_order_change_authorization_use (
     CONSTRAINT fk_support_order_change_authorization_use_revision
         FOREIGN KEY (request_id, revision_number)
         REFERENCES support_action_revision (request_id, revision_number),
+    CONSTRAINT fk_support_order_change_authorization_use_execution
+        FOREIGN KEY (execution_id, authorization_id)
+        REFERENCES support_order_change_execution (id, authorization_id),
+    CONSTRAINT fk_support_order_change_authorization_use_authorization
+        FOREIGN KEY (authorization_id) REFERENCES support_order_change_authorization (id),
     CONSTRAINT uq_support_order_change_authorization_use UNIQUE (authorization_id, execution_id)
 );
 
@@ -130,7 +174,8 @@ CREATE TRIGGER trg_support_order_change_authorization_use_append_only
 
 ALTER TABLE support_action_request
     ADD CONSTRAINT fk_support_action_request_terminal_execution
-        FOREIGN KEY (terminal_execution_id) REFERENCES support_order_change_execution (id),
+        FOREIGN KEY (id, terminal_execution_id)
+        REFERENCES support_order_change_execution (request_id, id),
     ADD CONSTRAINT uq_support_action_request_terminal_execution UNIQUE (terminal_execution_id),
     ADD CONSTRAINT chk_support_action_request_terminal_execution CHECK (
         (state IN ('EXECUTED', 'RESOLUTION_REQUIRED') AND terminal_execution_id IS NOT NULL)
@@ -159,9 +204,23 @@ CREATE TABLE ordering_support_order_change_history (
     ),
     occurred_at timestamptz NOT NULL,
     CONSTRAINT uq_ordering_support_order_change_execution UNIQUE (support_execution_id),
+    CONSTRAINT chk_ordering_support_order_change_state CHECK (
+        previous_state IN ('PENDING_PAYMENT', 'PAID', 'ACCEPTED')
+        AND current_state IN ('PENDING_PAYMENT', 'PAID', 'ACCEPTED', 'CANCELLED')
+    ),
     CONSTRAINT chk_ordering_support_order_change_recovery CHECK (
-        (action = 'ORDER_CANCELLATION' AND payment_recovery_state IS NOT NULL)
-        OR (action = 'PICKUP_RESCHEDULE' AND payment_recovery_state IS NULL)
+        (action = 'ORDER_CANCELLATION'
+            AND current_state = 'CANCELLED'
+            AND previous_pickup_slot_id = current_pickup_slot_id
+            AND payment_recovery_state IN (
+                'NOT_REQUIRED', 'REQUESTED', 'PROCESSING', 'RETRY_SCHEDULED',
+                'SUCCEEDED', 'FAILED', 'UNKNOWN', 'RECONCILING', 'MANUAL_REVIEW'
+            ))
+        OR
+        (action = 'PICKUP_RESCHEDULE'
+            AND current_state = previous_state
+            AND previous_pickup_slot_id <> current_pickup_slot_id
+            AND payment_recovery_state IS NULL)
     )
 );
 

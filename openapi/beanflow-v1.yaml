@@ -5148,7 +5148,8 @@ components:
           format: int64
           minimum: 0
         costResponsibility:
-          $ref: "#/components/schemas/SupportOrderChangeCostResponsibility"
+          type: string
+          const: STORE
       description: |
         CONFIRMATION requires requestId, revisionNumber and expectedRequestVersion.
         DELEGATION forbids all three request-specific properties.

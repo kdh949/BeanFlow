@@ -76,6 +76,13 @@ internal class SupportOrderChangeMigrationTest {
                          'chk_support_action_request_terminal_execution',
                          'chk_support_order_change_authorization_binding',
                          'chk_support_order_change_authorization_cost',
+                         'chk_support_order_change_execution_state',
+                         'chk_support_order_change_execution_outcome',
+                         'chk_support_order_change_execution_recovery',
+                         'chk_ordering_support_order_change_state',
+                         'chk_ordering_support_order_change_recovery',
+                         'fk_support_action_request_terminal_execution',
+                         'fk_support_order_change_authorization_use_execution',
                          'chk_order_cancellation_cause',
                          'chk_order_cancellation_reason_fields'
                      )
@@ -85,7 +92,8 @@ internal class SupportOrderChangeMigrationTest {
                 ).joinToString(" ")
 
         assertThat(definitions).contains("EXECUTED", "RESOLUTION_REQUIRED", "CONFIRMATION", "DELEGATION")
-        assertThat(definitions).contains("STORE", "SUPPORT_REQUEST")
+        assertThat(definitions).contains("PREPARING", "READY", "COMPLETED", "UNKNOWN", "RECONCILING")
+        assertThat(definitions).contains("STORE", "SUPPORT_REQUEST", "request_id", "authorization_id")
         assertThat(
             jdbcTemplate.queryForObject(
                 "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_notification_delivery_template'",
