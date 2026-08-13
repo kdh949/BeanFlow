@@ -246,9 +246,9 @@ force-push를 하지 않는다.
 | M2 | [productization-20](../completed/productization-20-authentication-foundation.md) | 4 FilterChain, Session, CSRF, `CurrentActor`, `/me`, credential 관리 permission | 완료 |
 | M3 | [productization-30](../completed/productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 완료 |
 | M4 | [productization-40](../completed/productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 완료 |
-| M5 | [productization-50](productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 준비 |
-| M6 | [productization-60](productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 대기 |
-| M7 | [productization-70](productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 대기 |
+| M5 | [productization-50](../completed/productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 완료 |
+| M6 | [productization-60](productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 준비 |
+| M7 | [productization-70](productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 준비 |
 | M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 대기 |
 | M9 | [productization-90](productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 대기 |
 | M10 | [productization-100](productization-100-operations-work-queues.md) | 운영자 PKCE, 실패 큐·정산 대사·감사·Support·점주 발급 UI | 대기 |
@@ -399,6 +399,14 @@ git diff --cached --check
   `mergeStateStatus=UNSTABLE`이며 실패 성공으로 기록하지 않는다. Support 두 commit은 모두
   `origin/main` ancestor이고 PR #54는 MERGED라 `SUPPORT_INTEGRATION_PENDING=false`다. merge·ready
   전환·force-push는 수행하지 않았다.
+- 2026-08-14 Plan 50 completion: exact Plan 40 head `2642a7e` 위에 V55 고객 최신 주문 인덱스,
+  R1/W1/R2 DTO Projection, customer/filter/date-bound signed cursor, 서버 상태 분류와 `allowedActions`,
+  공개번호 목록·상세 및 고객 주문 화면을 구현했다. 첫 Spotless formatting 실패, 첫 build의 MVC slice와
+  Flyway-head assertion 실패, 두 번째 build의 test scheduler/fixture `TRUNCATE` deadlock을 각각 formatting,
+  version-local fixture와 test-only scheduler 격리로 해소했다. 최종 ordering 251 tests,
+  `*CustomerOrderQuery*`, Spotless, full build 1,078 tests(0 failures, 0 errors, 1 skipped)와 문서/OpenAPI
+  검증이 통과했다. Plan 60과 Plan 70은 completed Plan 50을 직접 소비하므로 readiness를 true로
+  전환했지만, 이 Stack A Goal에서는 Plan 60만 실행하고 Plan 70 구현은 시작하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -435,6 +443,13 @@ git diff --cached --check
   `SqlTypes.CHAR`로 mapping contract를 일치시켰다. 성공 뒤에는 환경변수 nonce가 macOS process command에
   남지 않아 frontend stop이 보수적으로 신호를 거부하는 문제도 발견했고, Vite `--mode` 명령행 nonce와
   실제 launcher/stop 회귀 테스트로 소유권 증명을 복구했다.
+- Plan 50 전체 build는 30초 뒤 자동 scheduler 읽기와 통합 fixture의 다중 table `TRUNCATE`가 반대 lock
+  순서를 잡아 PostgreSQL deadlock을 일으켰다. test profile의 28개 initial delay와 Session cleanup을
+  비활성 시점으로 옮기되 production 기본값과 명시적 worker `runOnce()` 검증은 유지했다. 재실행은
+  57개 격리 context의 Modulith metadata/GC 때문에 11분 46초 걸렸지만 정상 종료했다.
+- Plan 50 frontend 전체 typecheck/build는 Plan 80/90이 소유한 mutation 세 곳의 CSRF header가 아직 없어
+  실패한다. read-only 고객 주문 화면 29 tests와 mobile browser layout/error-state는 통과했으며 실제
+  account-backed data browser flow는 Plan 80 전이라 완료 증거로 주장하지 않는다.
 
 ## Decision Log
 
@@ -466,6 +481,7 @@ git diff --cached --check
 | 2026-08-13 | Plan 20은 Spring Session 기본 `REQUIRES_NEW`를 `REQUIRED`로 바꿔 account lock transaction과 session rotation을 원자화하고 전체 검증 뒤 완료한다 | [Plan 20](../completed/productization-20-authentication-foundation.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
 | 2026-08-13 | Plan 30 smoke는 승인 결제 조회까지, account-backed Merchant 전환·환불 기본 전체 smoke는 Plan 40 완료 gate로 분리 | [Plan 30](../completed/productization-30-customer-account-and-login.md), [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md) |
 | 2026-08-13 | Plan 40은 account 범위 `MERCHANT` Audit actor와 Operations-owned outbound port를 사용하고, clean 전체 smoke 통과 뒤에만 Plan 50을 실행 가능하게 함 | [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
+| 2026-08-14 | Plan 50 목록은 R1 read-only candidate → bounded atomic W1 expiry → R2 fixed-candidate projection이며 빈 ACTIVE page도 scan boundary cursor를 사용 | [Plan 50](../completed/productization-50-customer-order-read-model.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 
 ## Outcomes & Retrospective
 
@@ -481,7 +497,10 @@ git diff --cached --check
 - M4 Plan 40이 완료되어 운영자 account+membership 발급, account-backed Merchant Session, 최초
   비밀번호 변경 gate와 ACTIVE 매장 목록을 제공한다. 기본 전체 demo는 고객 승인 결제 조회에서 이어져
   Merchant 주문 완료·포인트 적립·부분/잔여 환불과 UNKNOWN 결제 회복까지 통과했다.
-- 프로그램 전체 결과는 아직 완료되지 않았다. M5~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
+- M5 Plan 50이 완료되어 고객 주문 목록·상세가 Session owner, 공개 주문번호, immutable snapshot,
+  signed keyset cursor와 서버 소유 `allowedActions`를 사용한다. V55 plan evidence와 1,078-test 전체
+  regression이 통과했고 UUID 입력 고객 화면을 탭·기간 기반 목록으로 교체했다.
+- 프로그램 전체 결과는 아직 완료되지 않았다. M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
 
 ## Revision Notes
 
@@ -490,3 +509,4 @@ git diff --cached --check
 - 2026-08-13: Plan 20 completion과 Plan 30 readiness를 actual validation evidence로 반영.
 - 2026-08-13: Plan 30 completion, Plan 40 readiness와 customer/full smoke gate 분리를 반영.
 - 2026-08-13: Plan 40 completion evidence와 Plan 50 readiness, 후속 dependency path를 반영.
+- 2026-08-14: Plan 50 completion evidence와 Plan 60/70 readiness, 남은 Stack A 범위를 반영.

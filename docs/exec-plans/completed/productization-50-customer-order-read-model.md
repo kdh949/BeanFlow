@@ -1,11 +1,11 @@
 # 고객이 자기 주문을 목록으로 본다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-14`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -269,6 +269,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   build 1,078 tests(0 failures, 0 errors, opt-in benchmark 1 skipped)가 통과했다. 전체 build는 57개
   격리 Spring context를 포함해 11분 46초였다. frontend `typecheck`와 `build`는 Plan 80/90이 소유한
   mutation 세 곳의 `X-BEANFLOW-CSRF` header 미구현 때문에 실패했으며 새 주문 화면 오류는 없었다.
+- 2026-08-14: completion 이동 직후 첫 문서 검증은 ADR-099와 docs index의 active Plan 50 링크 두 개를
+  broken link로 보고해 실패했다. 두 링크를 completed 경로로 교정한 뒤 동일 검증이 46 policies,
+  111 ADRs, 276 Markdown, 57 ExecPlans와 target/runtime OpenAPI 계약으로 통과했다.
 
 ## Surprises & Discoveries
 

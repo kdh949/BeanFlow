@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Customer order read model](../exec-plans/active/productization-50-customer-order-read-model.md)
+- **Implementation owner:** [Customer order read model](../exec-plans/completed/productization-50-customer-order-read-model.md)
 
 ## Context
 
