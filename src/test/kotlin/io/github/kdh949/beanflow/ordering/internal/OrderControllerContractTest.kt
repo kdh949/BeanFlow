@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -96,6 +97,7 @@ internal class OrderControllerContractTest
             mockMvc
                 .perform(
                     post("/api/v1/orders")
+                        .with(csrf())
                         .header("Idempotency-Key", "contract-key-002")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody(fixture)),
