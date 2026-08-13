@@ -244,6 +244,31 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   `kit/OrderScreen.jsx`에 `진행 중`/`지난 주문` 탭, active 상세, snapshot 매장명·픽업번호·품목
   요약이 있음을 확인했다. target OpenAPI와 ADR-099를 대조해 `PAST`를 additive 상태 필터로
   기록했고 구현 전 계약 검토를 마쳤다.
+- 2026-08-14: 상태 분류와 `allowedActions`, signed cursor의 customer/status/date binding, 기본 서울
+  30일과 무상한 명시 기간, 공개 주문번호 owner 403/404 계약을 구현했다. V55는
+  `(customer_id, created_at DESC, id DESC)` 인덱스를 추가하고 runtime/target OpenAPI와 generated
+  frontend schema를 같은 계약으로 맞췄다.
+- 2026-08-14: 목록 transaction을 R1 read-only candidate scan, candidate window 하나를 묶는 W1 만료
+  materialization, R2 fixed-candidate projection으로 분리했다. 101건에서도 candidate/header/line 세 SQL,
+  20건 만료 rollback, 빈 ACTIVE page와 scan-boundary cursor의 다음 page 연속성, 고객 취소 후 detail의
+  축약 recovery와 내부 식별자 비노출을 PostgreSQL 통합 테스트로 고정했다.
+- 2026-08-14: 고객 `/app/orders`를 진행 중/지난 주문 탭, 서울 날짜 필터, cursor 더 보기와 공개번호
+  상세 화면으로 교체하고 UUID 입력 화면을 제거했다. frontend 29 tests가 통과했다. 390×844 실제
+  browser에서 탭·날짜·401 error/empty shell·bottom navigation과 console 무오류를 확인했지만, Plan 80의
+  Customer login facade가 아직 없어 실제 데이터 카드/detail은 component test로만 검증했다.
+- 2026-08-14: PostgreSQL 17.5 Testcontainers 10,000행 동일 fixture에서 V55 전 `Seq Scan + Sort`
+  3.924 ms, 후 named `Index Scan` 1.235 ms를 측정했다. 에뮬레이션 query-plan 근거이며 SLA나 처리량
+  개선으로 해석하지 않는다.
+- 2026-08-14: 첫 `spotlessCheck`는 두 신규 Kotlin 파일 formatting으로 실패해 `spotlessApply` 후 통과했다.
+  첫 전체 build는 MVC slice의 신규 service 누락과 V54를 Flyway 최신 head로 가정한 기존 migration
+  assertion을 드러냈고, 이를 bean mock과 V54 자체 성공 assertion으로 고쳤다. 두 번째 build는 자동
+  scheduler 읽기와 fixture `TRUNCATE`의 PostgreSQL deadlock을 드러냈다. test profile에서 모든 scheduler
+  initial delay를 1시간으로 고정하고 명시적 `runOnce()` 테스트를 유지한 뒤 재현 대상과 전체 build가
+  통과했다.
+- 2026-08-14: 최종 required validation은 ordering 251 tests, `*CustomerOrderQuery*`, Spotless, 전체
+  build 1,078 tests(0 failures, 0 errors, opt-in benchmark 1 skipped)가 통과했다. 전체 build는 57개
+  격리 Spring context를 포함해 11분 46초였다. frontend `typecheck`와 `build`는 Plan 80/90이 소유한
+  mutation 세 곳의 `X-BEANFLOW-CSRF` header 미구현 때문에 실패했으며 새 주문 화면 오류는 없었다.
 
 ## Surprises & Discoveries
 
@@ -256,6 +281,25 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - ZIP은 `진행 중`과 `지난 주문`을 별도 탭으로 요구하지만 target OpenAPI의 상태 enum은
   `ACTIVE`만 적혀 있었다. 서버가 활성·종료 분류를 소유한다는 ADR-099를 지키기 위해 기존 호출을
   깨지 않는 `PAST` 값을 추가했다.
+- 처음의 목록 구현은 candidate 조회·만료·projection을 하나의 read/write transaction에 두어 이 Plan이
+  명시한 R1/W1/R2 경계를 충족하지 않았다. proxy가 분리된 read와 expiry component로 바꿔 read-only
+  candidate snapshot과 원자적 bounded write, 이후 projection을 실제 transaction 세 개로 고정했다.
+- 전체 build의 두 번째 실패는 제품 lock 순서가 아니라 Testcontainers fixture 정리 중 background
+  scheduler가 자동으로 읽기를 시작한 테스트 환경 deadlock이었다. 개별 재시도로 숨기지 않고 test
+  application의 28개 initial-delay property와 Session cleanup cron을 비활성 시점으로 옮겼다. 제품
+  scheduler 기본값과 worker의 명시적 단위·통합 테스트는 바꾸지 않았다.
+- 전체 build는 deadlock 제거 뒤에도 57개 격리 Spring context의 Spring Modulith metadata 계산과 1GB
+  test heap GC 때문에 11분 46초가 걸렸다. thread dump에서 Test worker가 runnable이고 scheduler가
+  timed-waiting임을 확인해 정지로 오판하지 않았으며 최종 정상 종료를 기다렸다.
+- runtime OpenAPI의 CSRF header 계약이 먼저 생성되면서 frontend 전체 typecheck/build는 아직 Plan 80
+  customer mutation 두 곳과 Plan 90 operations refund 한 곳에서 실패한다. Plan 50의 read-only 화면은
+  type error가 없고 component tests는 통과했지만, 후속 소유 범위를 앞당겨 CSRF client를 구현하지 않았다.
+- 실제 browser는 Plan 80의 Customer Session facade 전이 전이라 `/me/orders`에서 명시적 401을 보였다.
+  인증을 우회하거나 cookie를 주입하지 않고 error state와 layout만 검증했으며 실제 데이터 UI 상태는
+  mock 기반 component test 증거로 한정했다.
+- 브라우저 로컬 날짜로 기본 30일을 계산하면 한국 밖 timezone과 UTC 자정 경계에서 API의
+  `Asia/Seoul` 날짜 계약과 하루가 어긋난다. `Intl.DateTimeFormat`의 서울 timezone으로 고정하고 경계
+  테스트를 추가했다.
 
 ## Decision Log
 
@@ -267,12 +311,30 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 필터를 cursor에 함께 서명해 페이지 도중 변경을 400으로 거부 | [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 2026-08-12 | 목록도 candidate window의 만료 주문을 먼저 물질화하고 실패 시 503 | [BR-03](../../product/business-policy-decisions.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-13 | 상태 생략은 전체, `ACTIVE`는 진행 주문, `PAST`는 종료 주문으로 서버가 분류 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md), [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
+| 2026-08-14 | 목록은 R1 candidate scan → bounded atomic W1 expiry → R2 fixed-candidate projection의 세 transaction으로 실행 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
+| 2026-08-14 | ACTIVE 만료로 응답 row가 비어도 `nextCursor`는 candidate scan boundary로 만들고 다음 window를 채우지 않음 | [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
+| 2026-08-14 | Plan 50 UI는 `allowedActions.CANCEL` 안내만 표시하고 CSRF mutation·실제 취소 버튼은 Plan 80까지 만들지 않음 | [productization-80](../active/productization-80-customer-web-p0-integration.md) |
+| 2026-08-14 | 통합 테스트의 background scheduler는 test profile에서 1시간 뒤로 미루고 worker 검증은 명시적 `runOnce()`로 유지 | 이 plan |
+| 2026-08-14 | 고객 주문 기본 날짜는 browser timezone이 아니라 `Asia/Seoul`로 계산 | [BR-01](../../product/business-policy-decisions.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+- V55와 DTO Projection 기반 고객 주문 목록·상세, signed cursor, 상태 분류, `allowedActions`, bounded
+  만료 materialization을 구현했다. 고객은 UUID를 입력하지 않고 공개 주문번호, immutable 매장·픽업·
+  메뉴 snapshot과 축약 환불 상태만 본다.
+- required ordering/query/Spotless/full-build 검증이 모두 통과했다. 최종 full build는 1,078 tests 중
+  failures/errors 0, 의도적으로 opt-in인 nearby benchmark 1건 skip이다. 동일 10,000행 plan capture는
+  V55가 전체 scan+sort를 named keyset index scan으로 바꿈을 증명했다.
+- frontend component 29 tests와 mobile browser의 layout/error-state QA가 통과했다. 실제 account-backed
+  browser 데이터 흐름과 CSRF mutation client는 Plan 80 소유라 완료했다고 주장하지 않으며, 현재 전체
+  frontend typecheck/build의 세 CSRF header 실패도 후속 dependency로 명시한다.
+- 초기 transaction 경계 불일치, stale Flyway-head assertion, MVC slice 누락과 test scheduler deadlock을
+  숨기지 않고 각각 proxy 경계 분리, version-local assertion, mock 보강과 test-only scheduler 격리로
+  해소했다. Plan 60은 이 completed head의 공개 주문번호와 Merchant Session을 사용해 매장 주문보드를
+  구현할 수 있다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-13: Plan 40 completion dependency와 Stack A readiness를 반영.
+- 2026-08-14: 고객 주문 read model·화면·V55와 실제 검증, 실패·복구 및 후속 범위를 기록.

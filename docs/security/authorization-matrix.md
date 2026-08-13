@@ -9,7 +9,7 @@
 | 점주 현재 Session 조회·로그아웃 (`/merchant/me`, `/auth/merchant/sessions/current`) | No | Own | Own | No | No |
 | 운영자 현재 actor 조회 (`/operations/me`) | No | No | No | Own JWT | Own JWT |
 | 접근 가능 매장 목록 (`/merchant/me/stores`) | No | ACTIVE membership만 | ACTIVE membership만 | No | No |
-| 내 주문 목록·상세 (주문번호) | Own | No | No | Read for support | No |
+| 내 주문 목록·상세 (`/me/orders`, 주문번호) | Customer Session의 own 주문만 | No | No | 별도 Support 경로만 | No |
 | 매장 주문보드 목록 | No | Owned store | Assigned store | No | No |
 | 매장 주문 상태 전이 (주문번호) | No | Owned store | Assigned store | No | No |
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
@@ -88,6 +88,9 @@ Application Service 양쪽에서 수행한다. 한 곳만 두면 새 endpoint �
 
 - 고객 경로는 주문번호와 함께 Session actor의 소유권을 검증한다. 소유자가 아니면 `403`,
   존재하지 않으면 `404`다.
+- 목록은 request parameter나 cursor에서 customer ID를 받지 않고 현재 `CustomerActor`를 owner
+  predicate와 signed cursor scope에 함께 묶는다. 다른 고객·상태·기간의 cursor는 `400`이며 빈 목록으로
+  대체하지 않는다.
 - 매장 경로는 주문번호와 함께 `StoreMembership`과 주문의 `storeId` 일치를 검증한다.
 - 공개번호 고객 취소와 매장 전이도 같은 predicate로 내부 UUID를 해석한 뒤 기존 Aggregate 명령을
   실행한다. 신규 응답과 멱등 replay 변환 결과에는 내부 `orderId`를 포함하지 않는다.

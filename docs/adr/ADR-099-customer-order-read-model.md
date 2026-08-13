@@ -132,6 +132,24 @@ allowedActions      서버가 계산한 수행 가능 행동
   `503`을 만드는지 PostgreSQL 통합 테스트로 검증한다.
 - 활성 필터에서 빈 페이지와 `nextCursor`가 함께 반환되어도 다음 호출에 누락·중복이 없는지 검증한다.
 
+## Implementation evidence (2026-08-14)
+
+- `GET /me/orders`와 `GET /me/orders/{orderReference}`는 Session의 `CustomerActor`만 사용하며 요청
+  customer ID를 받지 않는다. 존재하지 않는 공개 주문번호는 404, 다른 고객 소유 주문은 403이다.
+- 목록은 R1 read-only candidate scan, candidate window 전체를 묶는 W1 expiry transaction, R2
+  read-only fixed-candidate projection으로 분리했다. W1은 주문 ID 순으로 기존 만료 명령을 호출하며
+  한 건의 Audit/예약 해제 실패도 모든 candidate 만료를 rollback하고 503으로 드러낸다.
+- 한 건과 101건 목록 모두 candidate/header/line의 정확히 세 SQL을 사용했다. 20개 만료 candidate가
+  모두 ACTIVE 결과에서 빠져 첫 page가 비어도 scan boundary cursor를 반환하고, 다음 page의 마지막
+  candidate까지 누락·중복 없이 만료됨을 PostgreSQL 통합 테스트로 고정했다.
+- V55가 `(customer_id, created_at DESC, id DESC)` 인덱스를 설치한다. 동일한 10,000행 fixture의
+  `EXPLAIN (ANALYZE, BUFFERS)`는 `Seq Scan + Sort` 3.924 ms에서 named `Index Scan` 1.235 ms로
+  바뀌었다. 에뮬레이션 환경의 plan evidence이며 운영 SLA 주장이 아니다. 상세 조건은
+  [Customer order list query plan evidence](../quality/customer-order-list-performance-evidence.md)에 있다.
+- 상태별 `allowedActions`, 30일 기본·무상한 명시 기간, 서명 cursor의 customer/status/date binding,
+  변조·만료·형식 오류, immutable display snapshot, 축약 환불 recovery와 내부 식별자 비노출을
+  단위·HTTP·PostgreSQL 계약 테스트로 검증했다.
+
 ## Metrics
 
 - 주문 목록 조회 p50·p95·p99
