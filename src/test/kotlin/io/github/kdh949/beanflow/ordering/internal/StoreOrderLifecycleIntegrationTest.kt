@@ -27,6 +27,7 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -131,6 +132,7 @@ internal class StoreOrderLifecycleIntegrationTest
                         fixture.storeId,
                         reference.lowercase(),
                     ).with(storeJwt(actorId))
+                        .with(csrf())
                         .header("Idempotency-Key", "public-store-accept")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"targetState":"ACCEPTED","reason":null}"""),
@@ -145,6 +147,7 @@ internal class StoreOrderLifecycleIntegrationTest
                         UUID.randomUUID(),
                         reference,
                     ).with(storeJwt(actorId))
+                        .with(csrf())
                         .header("Idempotency-Key", "wrong-store-transition")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"targetState":"PREPARING","reason":null}"""),
@@ -769,6 +772,7 @@ internal class StoreOrderLifecycleIntegrationTest
         ) = mockMvc.perform(
             patch("/api/v1/store-orders/{orderId}/status", orderId)
                 .with(storeJwt(actorId))
+                .with(csrf())
                 .header("Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
@@ -821,7 +825,7 @@ internal class StoreOrderLifecycleIntegrationTest
                 it
                     .subject(actorId.toString())
                     .claim("roles", listOf(role))
-            }.authorities(SimpleGrantedAuthority("ROLE_$role"))
+            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun awaitNoOutstandingPublications() {
             await("event publications to complete") {

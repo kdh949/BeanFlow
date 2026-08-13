@@ -3,12 +3,11 @@ package io.github.kdh949.beanflow.operations.internal
 import com.fasterxml.jackson.annotation.JsonAnySetter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -73,14 +72,14 @@ internal class PaymentSetupRepairController(
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun propose(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable caseId: UUID,
         @Valid @RequestBody request: CreateRepairProposalRequest,
     ): RepairProposal =
         service.propose(
             ProposePaymentSetupRepairCommand(
-                actorId = actorId(jwt),
+                actorId = actorId(actor),
                 caseId = caseId,
                 idempotencyKey = idempotencyKey,
                 reason = request.reason,
@@ -91,7 +90,7 @@ internal class PaymentSetupRepairController(
     @PostMapping("/reprocessing-repair-proposals/{proposalId}/decisions")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun decide(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable proposalId: UUID,
         @Valid @RequestBody request: RepairProposalDecisionRequest,
@@ -100,7 +99,7 @@ internal class PaymentSetupRepairController(
             val outcome =
                 service.decide(
                     DecidePaymentSetupRepairCommand(
-                        actorId = actorId(jwt),
+                        actorId = actorId(actor),
                         proposalId = proposalId,
                         decision = request.decision,
                         idempotencyKey = idempotencyKey,
@@ -113,9 +112,9 @@ internal class PaymentSetupRepairController(
             is PaymentSetupRepairDecisionOutcome.Failed -> throw DomainFailure(outcome.code, outcome.message)
         }
 
-    private fun actorId(jwt: Jwt): UUID =
+    private fun actorId(actor: OperatorActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }

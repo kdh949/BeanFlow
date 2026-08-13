@@ -9,13 +9,12 @@ import io.github.kdh949.beanflow.operations.api.ListExpiredBenefitRestorationPol
 import io.github.kdh949.beanflow.operations.api.UpdateExpiredBenefitRestorationPolicyCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -48,12 +47,12 @@ internal class OperationsPolicyController(
     @GetMapping
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun list(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
     ): List<ExpiredBenefitRestorationPolicyHead> =
         operations.listCurrent(
             ListExpiredBenefitRestorationPoliciesCommand(
-                actorId = actorId(jwt),
+                actorId = actorId(actor),
                 accessReason = accessReason,
                 now = clock.instant(),
             ),
@@ -62,7 +61,7 @@ internal class OperationsPolicyController(
     @PatchMapping("/{trigger}/{benefitType}")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun update(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable trigger: ExpiredBenefitRestorationTrigger,
         @PathVariable benefitType: ExpiredBenefitType,
@@ -70,7 +69,7 @@ internal class OperationsPolicyController(
     ): ExpiredBenefitRestorationPolicyHead =
         operations.update(
             UpdateExpiredBenefitRestorationPolicyCommand(
-                actorId = actorId(jwt),
+                actorId = actorId(actor),
                 idempotencyKey = idempotencyKey,
                 trigger = trigger,
                 benefitType = benefitType,
@@ -82,9 +81,9 @@ internal class OperationsPolicyController(
             ),
         )
 
-    private fun actorId(jwt: Jwt): UUID =
+    private fun actorId(actor: OperatorActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }

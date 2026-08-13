@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import com.fasterxml.jackson.annotation.JsonAnySetter
+import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
@@ -8,8 +9,6 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -45,22 +44,22 @@ internal class PaymentMethodController(
     @GetMapping
     @PreAuthorize("hasRole('CUSTOMER')")
     fun list(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) limit: String?,
-    ): PaymentMethodPage = queries.list(customerId(jwt), cursor, limit)
+    ): PaymentMethodPage = queries.list(customerId(actor), cursor, limit)
 
     @PostMapping
     @PreAuthorize("hasRole('CUSTOMER')")
     fun register(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: RegisterPaymentMethodRequest,
     ): ResponseEntity<String> =
         application
             .register(
                 RegisterPaymentMethodCommand(
-                    customerId = customerId(jwt),
+                    customerId = customerId(actor),
                     idempotencyKey = idempotencyKey,
                     authorizationKey = request.authKey,
                     displayAlias = request.displayAlias,
@@ -70,18 +69,18 @@ internal class PaymentMethodController(
     @DeleteMapping("/{paymentMethodId}")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun deactivate(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable paymentMethodId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ): ResponseEntity<String> = application.deactivate(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
+    ): ResponseEntity<String> = application.deactivate(customerId(actor), paymentMethodId, idempotencyKey).toResponse()
 
     @PutMapping("/{paymentMethodId}/default")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun setDefault(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable paymentMethodId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ): ResponseEntity<String> = application.setDefault(customerId(jwt), paymentMethodId, idempotencyKey).toResponse()
+    ): ResponseEntity<String> = application.setDefault(customerId(actor), paymentMethodId, idempotencyKey).toResponse()
 
     private fun PaymentMethodHttpResult.toResponse(): ResponseEntity<String> =
         if (status == 204) {
@@ -93,9 +92,9 @@ internal class PaymentMethodController(
                 .body(body)
         }
 
-    private fun customerId(jwt: Jwt): UUID =
+    private fun customerId(actor: CustomerActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: IllegalArgumentException) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid customer ID")
         }

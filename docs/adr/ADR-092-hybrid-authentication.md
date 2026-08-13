@@ -172,6 +172,14 @@ CSRF 대응이라는 비용이 추가되지만, 이는 표준 대응책이 명�
 - Session 조회 지연 p50·p95
 - Chain별 401/403 발생 수
 
+## Implementation Outcome (2026-08-13)
+
+`productization-20`은 중앙 경로 registry와 정확히 네 `SecurityFilterChain`을 구현했다. Public과
+Operations는 stateless이고, Customer/Merchant는 서로 다른 PostgreSQL Session·CSRF Cookie만 수용한다.
+미배정 또는 중복 mapping은 startup 검증 실패다. 기존 혼합 actor API는 소비자 URI를 유지하면서
+Operations 전용 PointAccount·refund URI로 분리했으며, 반대 actor credential은 403이다. 고객·점주
+계정 loader가 아직 없을 때 보호 경로를 401/503 외의 가짜 성공으로 바꾸지 않는다.
+
 ## Revisit Conditions
 
 - 모바일 네이티브 앱 또는 제3자 클라이언트가 실제 요구가 될 때

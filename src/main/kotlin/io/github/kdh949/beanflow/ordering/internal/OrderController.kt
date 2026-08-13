@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.ordering.api.CreateOrderLineCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderCommand
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
+import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
@@ -16,8 +17,6 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -71,11 +70,11 @@ internal class OrderController(
     @PostMapping
     @PreAuthorize("hasRole('CUSTOMER')")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateOrderRequest,
     ): ResponseEntity<String> {
-        val customerId = customerId(jwt)
+        val customerId = customerId(actor)
         val result =
             createOrderUseCase.create(
                 idempotencyKey = idempotencyKey,
@@ -103,7 +102,7 @@ internal class OrderController(
     @PostMapping("/{sourceOrderId}/reorders")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun reorder(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable sourceOrderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ReorderOrderRequest,
@@ -113,7 +112,7 @@ internal class OrderController(
                 idempotencyKey = idempotencyKey,
                 command =
                     ReorderOrderCommand(
-                        customerId = customerId(jwt),
+                        customerId = customerId(actor),
                         sourceOrderId = sourceOrderId,
                         pickupSlotId = request.pickupSlotId,
                         couponIssuanceId = request.couponIssuanceId,
@@ -131,21 +130,21 @@ internal class OrderController(
     @GetMapping("/{orderId}")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable orderId: UUID,
-    ): OrderResponse = getOrderService.get(customerId(jwt), orderId)
+    ): OrderResponse = getOrderService.get(customerId(actor), orderId)
 
     @PostMapping("/{orderId}/cancellations")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun cancel(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable orderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CustomerCancellationRequest,
     ): ResponseEntity<String> {
         val result =
             customerCancellationService.cancel(
-                customerId = customerId(jwt),
+                customerId = customerId(actor),
                 orderId = orderId,
                 idempotencyKey = idempotencyKey,
                 request = request,
@@ -159,14 +158,14 @@ internal class OrderController(
     @PostMapping("/{orderId}/payment-attempts")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun preparePayment(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable orderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ) = oneTimeCheckoutService.prepare(customerId(jwt), orderId, idempotencyKey)
+    ) = oneTimeCheckoutService.prepare(customerId(actor), orderId, idempotencyKey)
 
-    private fun customerId(jwt: Jwt): UUID =
+    private fun customerId(actor: CustomerActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: IllegalArgumentException) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid customer ID")
         }

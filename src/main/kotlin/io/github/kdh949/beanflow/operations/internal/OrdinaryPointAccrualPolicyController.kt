@@ -13,14 +13,13 @@ import io.github.kdh949.beanflow.operations.api.PointAccrualRoundingMode
 import io.github.kdh949.beanflow.operations.api.ReadOrdinaryPointAccrualPolicyCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -72,23 +71,23 @@ internal class OrdinaryPointAccrualPolicyController(
     @GetMapping("/global")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun currentGlobal(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
-    ) = queryOperations.currentGlobal(readCommand(jwt, accessReason))
+    ) = queryOperations.currentGlobal(readCommand(actor, accessReason))
 
     @GetMapping("/global/versions")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun globalHistory(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) limit: Int?,
-    ) = queryOperations.globalHistory(historyCommand(jwt, accessReason, cursor, limit)).toResponse()
+    ) = queryOperations.globalHistory(historyCommand(actor, accessReason, cursor, limit)).toResponse()
 
     @GetMapping("/stores")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun storeHeads(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
         @RequestParam(required = false) state: OrdinaryPointAccrualPolicyState?,
         @RequestParam(required = false) cursor: String?,
@@ -96,7 +95,7 @@ internal class OrdinaryPointAccrualPolicyController(
     ) = queryOperations
         .storeHeads(
             ListStorePointAccrualPolicyHeadsCommand(
-                actorId(jwt),
+                actorId(actor),
                 accessReason,
                 state,
                 cursor,
@@ -108,32 +107,32 @@ internal class OrdinaryPointAccrualPolicyController(
     @GetMapping("/stores/{storeId}")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun currentStore(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
         @PathVariable storeId: UUID,
-    ) = queryOperations.currentStore(storeId, readCommand(jwt, accessReason))
+    ) = queryOperations.currentStore(storeId, readCommand(actor, accessReason))
 
     @GetMapping("/stores/{storeId}/versions")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun storeHistory(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("X-Access-Reason") accessReason: String,
         @PathVariable storeId: UUID,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) limit: Int?,
-    ) = queryOperations.storeHistory(storeId, historyCommand(jwt, accessReason, cursor, limit)).toResponse()
+    ) = queryOperations.storeHistory(storeId, historyCommand(actor, accessReason, cursor, limit)).toResponse()
 
     @PatchMapping("/global")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun changeGlobal(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ChangeOrdinaryPointAccrualPolicyRequest,
     ) = writeService.change(
         request.toCommand(
             OrdinaryPointAccrualPolicyScopeType.GLOBAL,
             OrdinaryPointAccrualPolicySnapshot.GLOBAL_SCOPE_REFERENCE,
-            actorId(jwt),
+            actorId(actor),
             idempotencyKey,
         ),
     )
@@ -141,23 +140,23 @@ internal class OrdinaryPointAccrualPolicyController(
     @PatchMapping("/stores/{storeId}")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun changeStore(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable storeId: UUID,
         @Valid @RequestBody request: ChangeOrdinaryPointAccrualPolicyRequest,
-    ) = writeService.change(request.toCommand(OrdinaryPointAccrualPolicyScopeType.STORE, storeId, actorId(jwt), idempotencyKey))
+    ) = writeService.change(request.toCommand(OrdinaryPointAccrualPolicyScopeType.STORE, storeId, actorId(actor), idempotencyKey))
 
     private fun readCommand(
-        jwt: Jwt,
+        actor: OperatorActor,
         accessReason: String,
-    ) = ReadOrdinaryPointAccrualPolicyCommand(actorId(jwt), accessReason, clock.instant())
+    ) = ReadOrdinaryPointAccrualPolicyCommand(actorId(actor), accessReason, clock.instant())
 
     private fun historyCommand(
-        jwt: Jwt,
+        actor: OperatorActor,
         accessReason: String,
         cursor: String?,
         limit: Int?,
-    ) = ListOrdinaryPointAccrualPolicyVersionsCommand(actorId(jwt), accessReason, cursor, limit, clock.instant())
+    ) = ListOrdinaryPointAccrualPolicyVersionsCommand(actorId(actor), accessReason, cursor, limit, clock.instant())
 
     private fun ChangeOrdinaryPointAccrualPolicyRequest.toCommand(
         scopeType: OrdinaryPointAccrualPolicyScopeType,
@@ -184,9 +183,9 @@ internal class OrdinaryPointAccrualPolicyController(
     private fun <T> OrdinaryPointAccrualPolicyPage<T>.toResponse() =
         OrdinaryPointAccrualPolicyPageResponse(items, OrdinaryPointAccrualPolicyPageInfo(nextCursor))
 
-    private fun actorId(jwt: Jwt): UUID =
+    private fun actorId(actor: OperatorActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }

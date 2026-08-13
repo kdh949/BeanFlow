@@ -51,6 +51,10 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   명령은 reason·idempotency·Audit와 [BR-46](../product/business-policy-decisions.md)의 임시 비밀번호
   1회 표시 경계를 적용한다. 어떤 role bundle이나 default grant에도 포함하지 않고 기존 offline
   bootstrap으로만 grant/revoke/regrant한다.
+- **2026-08-13 merchant credential implementation evidence:** V52가
+  `MERCHANT_CREDENTIAL_MANAGE`를 enum과 `operator_permission_grant` closed CHECK vocabulary에
+  추가했다. migration 뒤 active grant는 0건이며 기존 offline bootstrap만 grant/revoke/regrant를
+  수행한다. role·JWT claim fallback과 default seed는 추가하지 않았다.
 - **2026-08-01 migration ownership amendment:** Plan 11이
   `operator_permission_grant` schema와 위 네 값을 허용하는 closed DB vocabulary를 한
   migration에서 단독 생성한다. Plan 14와 point adjustment plan은 새 permission 값이나

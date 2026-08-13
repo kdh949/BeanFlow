@@ -25,6 +25,12 @@ tags:
   - name: Dispute
   - name: Support
 paths:
+  /auth/customer/csrf:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1csrf"
+  /auth/merchant/csrf:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1csrf"
+  /operations/me:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /stores/{storeId}/menus:

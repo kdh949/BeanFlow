@@ -42,7 +42,8 @@ Session을 쓰면 다음 위험이 새로 생긴다.
 
 ### Session lifecycle
 
-- 로그인 성공 시 Session ID를 회전한다(`changeSessionId`).
+- 로그인 성공 시 기존 Session을 삭제하고 새 JDBC Session ID를 명시적으로 저장해 회전한다. 저장은
+  response commit 시점에 맡기지 않는다.
 - CustomerAccount와 MerchantAccount에 단조 증가하는 `credentialVersion`을 둔다. Session에는 로그인
   시점의 version을 저장하고, 매 인증 요청에서 현재 계정 version과 상태를 다시 조회한다.
 - 비밀번호 변경·운영자 초기화·잠금처럼 기존 자격증명을 무효화하는 상태 전이는 계정 transaction에서
@@ -128,6 +129,14 @@ Session 저장소를 PostgreSQL에 두면 트랜잭션·백업·관측이 이미
 - CSRF 실패 수
 - Session 저장소 오류 수
 - 계정당 동시 Session 상한 도달 수
+
+## Implementation Outcome (2026-08-13)
+
+Flyway V52가 Spring Session JDBC 4.1 PostgreSQL 표준 table·index를 소유하고 framework 자동 DDL은
+`never`다. Spring Session의 기본 `REQUIRES_NEW` 저장은 로그인 owner transaction의 원자성을 깨뜨리므로
+`springSessionTransactionOperations`를 `REQUIRED`로 고정했다. PostgreSQL 통합 테스트에서 동시 점주
+로그인 상한, rotation, logout 재사용 401, insert/delete 장애 rollback을 검증했다. 정리 worker와
+active/lifecycle/lookup/store-error metrics를 연결했으며 저장소 장애 fallback은 없다.
 
 ## Revisit Conditions
 

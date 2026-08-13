@@ -17,6 +17,26 @@ spec에 반영한다. Controller를 추가·제거하거나 shape를 바꾸는 �
 component는 문서 검증이 참조 존재를 확인한다. Runtime operation inventory는 별도 수동 목록이
 아니라 `RuntimeOpenApiParityTest`가 Spring `RequestMappingHandlerMapping`과 양방향 비교한다.
 
+## Authentication chains and CSRF
+
+모든 `/api/v1` mapping은 중앙 registry에서 정확히 하나의 Chain에 명시적으로 배정한다. 새 mapping이
+미배정이거나 두 Chain에 겹치면 애플리케이션 기동과 구조 테스트가 실패한다. 나머지를 Customer로
+간주하는 default 분류는 없다.
+
+| Chain | 인증 | 경로 |
+|---|---|---|
+| Public | 없음 | health, payment config, Operations OIDC config 예약 경로 |
+| Operations | Bearer JWT | `/operations/**`, `/support/**` |
+| Merchant | PostgreSQL Session | `/auth/merchant/**`, `/merchant/**`, 매장 주문·정산 경로 |
+| Customer | PostgreSQL Session | 명시적으로 등록된 나머지 고객 `/api/v1` 경로 |
+
+Customer와 Merchant Session Cookie는 각각 `BEANFLOW_CUSTOMER_SESSION`,
+`BEANFLOW_MERCHANT_SESSION`이며 `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`다. unsafe 요청은
+`GET /auth/customer/csrf` 또는 `GET /auth/merchant/csrf`가 발급한 actor별 XSRF Cookie 값을
+`X-BEANFLOW-CSRF` header로 보내야 한다. 다른 actor의 Cookie·CSRF token이나 Operations Bearer를
+브라우저 Session Chain에 보내면 fallback하지 않고 403이다. 인증 부재·무효 Session은 401, Session
+저장소나 현재 계정 조회 장애는 503이다.
+
 `POST /settlement-items/{itemId}/disputes`는 Settlement Item 경로를 사용하지만 Dispute Context가
 소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
 public view를 통해 검증하며, accepted decision은 Settlement public Adjustment command로 넘긴다.

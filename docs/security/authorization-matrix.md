@@ -95,7 +95,11 @@ Application Service 양쪽에서 수행한다. 한 곳만 두면 새 endpoint �
 
 ## Enforcement layers
 
-- Security FilterChain: 인증 객체 구성
+- Security FilterChain: Public/Operations/Merchant/Customer 경로를 중앙 registry로 단일 배정하고,
+  Operations는 Bearer JWT, Customer/Merchant는 서로 다른 PostgreSQL Session·CSRF Cookie만 수용한다.
+- CurrentActor resolver: Controller에 `CustomerActor`, `MerchantActor`, `OperatorActor`만 전달하고
+  actor 유형 불일치를 403으로 거부한다. Controller가 `Jwt`, `Authentication`, `HttpSession`을 직접
+  받는 것은 구조 테스트가 차단한다.
 - Method Security: 역할 기반 진입점
 - Application Service: 객체 소유권·매장 membership·Operations explicit permission grant
 - Aggregate: 상태와 비즈니스 권한에 독립적인 불변식

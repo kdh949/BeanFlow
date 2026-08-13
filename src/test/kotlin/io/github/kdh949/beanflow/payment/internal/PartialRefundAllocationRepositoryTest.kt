@@ -43,6 +43,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -347,8 +348,9 @@ internal class PartialRefundAllocationRepositoryTest
                         .with(
                             jwt()
                                 .jwt { it.subject(fixture.actorId.toString()).claim("roles", listOf("STORE_OWNER")) }
-                                .authorities(SimpleGrantedAuthority("ROLE_STORE_OWNER")),
-                        ).header("Idempotency-Key", "refund-http-0001")
+                                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT")),
+                        ).with(csrf())
+                        .header("Idempotency-Key", "refund-http-0001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                             """

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import jakarta.validation.Valid
@@ -15,8 +16,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -98,7 +97,7 @@ internal class SupportActionRequestController(
     @PostMapping("/cases/{caseId}/action-requests")
     @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable caseId: UUID,
         @Valid @RequestBody request: CreateSupportActionRequestRequest,
@@ -109,7 +108,7 @@ internal class SupportActionRequestController(
             .body(
                 service.create(
                     CreateSupportActionRequestCommand(
-                        jwt.actorId(),
+                        actor.actorId(),
                         caseId,
                         request.action ?: invalid(),
                         request.orderId ?: invalid(),
@@ -127,18 +126,18 @@ internal class SupportActionRequestController(
     @GetMapping("/action-requests/{requestId}")
     @PreAuthorize("isAuthenticated()")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable requestId: UUID,
     ): ResponseEntity<SupportActionRequestResource> =
         ResponseEntity
             .ok()
             .cacheControl(CacheControl.noStore())
-            .body(service.get(jwt.actorId(), requestId))
+            .body(service.get(actor.actorId(), requestId))
 
     @PostMapping("/action-requests/{requestId}/revisions")
     @PreAuthorize("isAuthenticated()")
     fun revise(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable requestId: UUID,
         @Valid @RequestBody request: ReviseSupportActionRequestRequest,
@@ -149,7 +148,7 @@ internal class SupportActionRequestController(
             .body(
                 service.revise(
                     ReviseSupportActionRequestCommand(
-                        jwt.actorId(),
+                        actor.actorId(),
                         requestId,
                         request.expectedRevisionNumber,
                         request.expectedRequestVersion,
@@ -167,7 +166,7 @@ internal class SupportActionRequestController(
     @PostMapping("/action-requests/{requestId}/support-manager-decisions")
     @PreAuthorize("isAuthenticated()")
     fun decideSupportManager(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable requestId: UUID,
         @Valid @RequestBody request: DecideSupportManagerApprovalRequest,
@@ -175,7 +174,7 @@ internal class SupportActionRequestController(
         val outcome =
             service.decideSupportManager(
                 DecideSupportManagerApprovalCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     requestId,
                     request.revisionNumber,
                     request.expectedRequestVersion,
@@ -195,7 +194,7 @@ internal class SupportActionRequestController(
     @PostMapping("/action-requests/{requestId}/reassignments")
     @PreAuthorize("isAuthenticated()")
     fun reassign(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable requestId: UUID,
         @Valid @RequestBody request: ReassignSupportActionRequestRequest,
@@ -206,7 +205,7 @@ internal class SupportActionRequestController(
             .body(
                 service.reassign(
                     ReassignSupportActionRequestCommand(
-                        jwt.actorId(),
+                        actor.actorId(),
                         requestId,
                         request.revisionNumber,
                         request.expectedRequestVersion,
@@ -218,9 +217,9 @@ internal class SupportActionRequestController(
                 ),
             )
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             invalid()
         }

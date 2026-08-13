@@ -45,6 +45,19 @@ internal class CurrentActorArgumentResolverTest {
     }
 
     @Test
+    fun `synthetic test JWT roles resolve to browser actor types without exposing Jwt to controllers`() {
+        val customerId = UUID.randomUUID()
+        SecurityContextHolder.getContext().authentication = JwtAuthenticationToken(jwt(customerId, "CUSTOMER"))
+        assertThat(resolver.resolveArgument(parameter("customer", CustomerActor::class.java), null, webRequest(), null))
+            .isEqualTo(CustomerActor(customerId))
+
+        val merchantId = UUID.randomUUID()
+        SecurityContextHolder.getContext().authentication = JwtAuthenticationToken(jwt(merchantId, "STORE_OWNER"))
+        assertThat(resolver.resolveArgument(parameter("merchant", MerchantActor::class.java), null, webRequest(), null))
+            .isEqualTo(MerchantActor(merchantId, MerchantAccountState.ACTIVE))
+    }
+
+    @Test
     fun `validated browser authentication returns the exact current actor`() {
         val customer = CustomerActor(UUID.randomUUID())
         SecurityContextHolder.getContext().authentication = BrowserSessionAuthenticationToken(customer)
@@ -87,6 +100,17 @@ internal class CurrentActorArgumentResolverTest {
         )
 
     private fun webRequest() = ServletWebRequest(MockHttpServletRequest())
+
+    private fun jwt(
+        actorId: UUID,
+        role: String,
+    ): Jwt =
+        Jwt
+            .withTokenValue("synthetic-test-token")
+            .header("alg", "RS256")
+            .subject(actorId.toString())
+            .claim("roles", listOf(role))
+            .build()
 
     @Suppress("UNUSED_PARAMETER")
     private class TestController {

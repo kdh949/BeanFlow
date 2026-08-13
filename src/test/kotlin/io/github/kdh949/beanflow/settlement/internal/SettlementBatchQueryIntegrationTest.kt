@@ -236,5 +236,5 @@ internal class SettlementBatchQueryIntegrationTest
                 it
                     .subject(actorId.toString())
                     .claim("roles", listOf(role))
-            }.authorities(SimpleGrantedAuthority("ROLE_$role"))
+            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
     }

@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.MerchantActor
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
@@ -9,8 +11,6 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -39,9 +39,9 @@ internal class PartialRefundController(
     private val service: PartialRefundService,
 ) {
     @PostMapping("/{paymentId}/refunds")
-    @PreAuthorize("hasAnyRole('STORE_OWNER', 'STORE_STAFF', 'PLATFORM_OPERATOR')")
+    @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: MerchantActor,
         @PathVariable paymentId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateRefundRequest,
@@ -53,7 +53,11 @@ internal class PartialRefundController(
             service.create(
                 PartialRefundCommand(
                     paymentId = paymentId,
-                    actor = actor(jwt),
+                    actor =
+                        PartialRefundActor(
+                            actor.actorId,
+                            setOf(PartialRefundActorType.STORE_OWNER, PartialRefundActorType.STORE_STAFF),
+                        ),
                     idempotencyKey = idempotencyKey,
                     lines = request.lineItems?.map { PartialRefundLineInput(it.orderLineId, it.quantity) },
                     reason = request.reason,
@@ -64,22 +68,38 @@ internal class PartialRefundController(
             .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             .body(result.body)
     }
+}
 
-    private fun actor(jwt: Jwt): PartialRefundActor {
-        val actorId =
-            try {
-                UUID.fromString(jwt.subject)
-            } catch (_: IllegalArgumentException) {
-                throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid actor ID")
-            }
-        val claims = jwt.getClaimAsStringList("roles").orEmpty()
-        val types =
-            buildSet {
-                if ("STORE_OWNER" in claims) add(PartialRefundActorType.STORE_OWNER)
-                if ("STORE_STAFF" in claims) add(PartialRefundActorType.STORE_STAFF)
-                if ("PLATFORM_OPERATOR" in claims) add(PartialRefundActorType.PLATFORM_OPERATOR)
-            }
-        if (types.isEmpty()) throw DomainFailure(FailureCode.ACCESS_DENIED, "Refund actor role is required")
-        return PartialRefundActor(actorId, types)
+@Validated
+@RestController
+@RequestMapping("/api/v1/operations/payments")
+internal class OperationsPartialRefundController(
+    private val service: PartialRefundService,
+) {
+    @PostMapping("/{paymentId}/refunds")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun create(
+        actor: OperatorActor,
+        @PathVariable paymentId: UUID,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @Valid @RequestBody request: CreateRefundRequest,
+    ): ResponseEntity<String> {
+        if (request.lineItems?.isEmpty() == true) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "lineItems must be omitted or contain at least one item")
+        }
+        val result =
+            service.create(
+                PartialRefundCommand(
+                    paymentId = paymentId,
+                    actor = PartialRefundActor(actor.actorId, setOf(PartialRefundActorType.PLATFORM_OPERATOR)),
+                    idempotencyKey = idempotencyKey,
+                    lines = request.lineItems?.map { PartialRefundLineInput(it.orderLineId, it.quantity) },
+                    reason = request.reason,
+                ),
+            )
+        return ResponseEntity
+            .status(result.status)
+            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+            .body(result.body)
     }
 }

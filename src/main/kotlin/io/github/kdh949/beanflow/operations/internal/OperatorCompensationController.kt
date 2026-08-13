@@ -5,10 +5,9 @@ import io.github.kdh949.beanflow.operations.api.OperatorCompensationView
 import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.constraints.Size
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -28,22 +27,22 @@ internal class OperatorCompensationController(
     @GetMapping("/{orderId}/compensation")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable orderId: UUID,
         @RequestHeader("X-Access-Reason") @Size(min = 1, max = 200) accessReason: String,
     ): OperatorCompensationView =
         query.read(
             ReadOperatorCompensationCommand(
-                actorId = actorId(jwt),
+                actorId = actorId(actor),
                 orderId = orderId,
                 accessReason = accessReason,
                 now = clock.instant(),
             ),
         )
 
-    private fun actorId(jwt: Jwt): UUID =
+    private fun actorId(actor: OperatorActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }

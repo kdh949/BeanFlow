@@ -152,7 +152,7 @@ internal class SettlementItemQueryIntegrationTest
         }
 
         @Test
-        fun `active owner and staff succeed while missing revoked and role-mismatched memberships are forbidden`() {
+        fun `active DB membership wins while missing revoked and other-store memberships are forbidden`() {
             val storeId = insertStore()
             val batchId = insertBatch(storeId)
             val ownerId = insertMembership(storeId, "OWNER", "ACTIVE")
@@ -174,7 +174,7 @@ internal class SettlementItemQueryIntegrationTest
                 .andExpect(status().isForbidden)
             mockMvc
                 .perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_STAFF")))
-                .andExpect(status().isForbidden)
+                .andExpect(status().isOk)
             mockMvc
                 .perform(get(path(storeId, batchId)).with(storeJwt(otherStoreActor, "STORE_STAFF")))
                 .andExpect(status().isForbidden)
@@ -333,5 +333,5 @@ internal class SettlementItemQueryIntegrationTest
                 it
                     .subject(actorId.toString())
                     .claim("roles", listOf(role))
-            }.authorities(SimpleGrantedAuthority("ROLE_$role"))
+            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
     }

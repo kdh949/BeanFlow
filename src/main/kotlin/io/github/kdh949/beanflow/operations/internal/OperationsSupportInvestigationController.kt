@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAnySetter
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationDecision
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -13,8 +14,6 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -52,7 +51,7 @@ internal class OperationsSupportInvestigationController(
     @PostMapping("/{investigationId}/decisions")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun decide(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @PathVariable investigationId: UUID,
         @Valid @RequestBody request: DecideOperationsSupportInvestigationRequest,
@@ -60,7 +59,7 @@ internal class OperationsSupportInvestigationController(
         val outcome =
             service.decide(
                 DecideOperationsSupportInvestigationCommand(
-                    actorId = jwt.actorId(),
+                    actorId = actor.actorId(),
                     investigationId = investigationId,
                     expectedVersion = request.expectedVersion,
                     decision = request.decision ?: invalid(),
@@ -78,9 +77,9 @@ internal class OperationsSupportInvestigationController(
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(resource)
     }
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             invalid()
         }

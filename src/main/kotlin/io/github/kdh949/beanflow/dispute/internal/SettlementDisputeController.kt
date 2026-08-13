@@ -2,8 +2,7 @@ package io.github.kdh949.beanflow.dispute.internal
 
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
-import io.github.kdh949.beanflow.shared.api.DomainFailure
-import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.MerchantActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
@@ -11,8 +10,6 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -42,29 +39,18 @@ internal class SettlementDisputeController(
     private val correlationIds: CorrelationIdSource,
 ) {
     @PostMapping
-    @PreAuthorize("hasRole('STORE_OWNER')")
+    @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: MerchantActor,
         @PathVariable itemId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateSettlementDisputeRequest,
     ): ResponseEntity<SettlementDisputeResponse> {
-        val actorId =
-            try {
-                UUID.fromString(jwt.subject)
-            } catch (_: IllegalArgumentException) {
-                throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid actor ID")
-            }
-        val roles =
-            jwt.getClaimAsStringList("roles").orEmpty().mapNotNullTo(linkedSetOf()) {
-                if (it == "STORE_OWNER") StoreActorRole.OWNER else null
-            }
-        if (roles.isEmpty()) throw DomainFailure(FailureCode.ACCESS_DENIED, "Store owner role is required")
         val response =
             service.file(
                 FileSettlementDisputeCommand(
-                    actorId = actorId,
-                    actorRoles = roles,
+                    actorId = actor.actorId,
+                    actorRoles = setOf(StoreActorRole.OWNER),
                     settlementItemId = itemId,
                     idempotencyKey = idempotencyKey,
                     expectedAdjustmentKrw = request.expectedAdjustmentKrw,

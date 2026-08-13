@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.ExactSearchCriterionType
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -12,8 +13,6 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -53,7 +52,7 @@ internal class SupportSubjectSearchController(
     @PostMapping
     @PreAuthorize("isAuthenticated()")
     fun search(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @Valid @RequestBody request: SearchSupportSubjectsRequest,
         servletRequest: HttpServletRequest,
     ): ResponseEntity<SupportSubjectSearchResult> {
@@ -62,7 +61,7 @@ internal class SupportSubjectSearchController(
         val response =
             service.search(
                 SearchSupportSubjectsCommand(
-                    actorId = jwt.actorId(),
+                    actorId = actor.actorId(),
                     criterionType = criterion.type ?: invalid(),
                     rawCriterion = criterion.value,
                     subjectTypes = request.subjectTypes,
@@ -73,9 +72,9 @@ internal class SupportSubjectSearchController(
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response)
     }
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             invalid()
         }

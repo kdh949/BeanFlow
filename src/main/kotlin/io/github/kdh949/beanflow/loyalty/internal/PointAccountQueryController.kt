@@ -7,11 +7,11 @@ import io.github.kdh949.beanflow.loyalty.api.PointAccountReadActor
 import io.github.kdh949.beanflow.loyalty.api.PointAccountReadActorType
 import io.github.kdh949.beanflow.loyalty.api.PointTransactionPage
 import io.github.kdh949.beanflow.loyalty.api.ReadPointAccountCommand
-import io.github.kdh949.beanflow.shared.api.DomainFailure
-import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.CustomerActor
+import io.github.kdh949.beanflow.shared.api.OperatorActor
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -40,13 +40,56 @@ internal class PointAccountQueryController(
     private val clock: Clock,
 ) {
     @GetMapping("/{accountId}")
+    @PreAuthorize("hasRole('CUSTOMER')")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable accountId: UUID,
-        @RequestHeader(value = "X-Access-Reason", required = false) accessReason: String?,
     ) = queries.get(
         ReadPointAccountCommand(
-            actor = actor(jwt),
+            actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.CUSTOMER),
+            accountId = accountId,
+            accessReason = null,
+            now = clock.instant(),
+        ),
+    )
+
+    @GetMapping("/{accountId}/transactions")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun transactions(
+        actor: CustomerActor,
+        @PathVariable accountId: UUID,
+        @RequestParam(required = false) @Size(max = 2048) cursor: String?,
+        @RequestParam(required = false) limit: Int?,
+    ): PointTransactionPageResponse =
+        queries
+            .listTransactions(
+                ListPointTransactionsCommand(
+                    actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.CUSTOMER),
+                    accountId = accountId,
+                    accessReason = null,
+                    cursor = cursor,
+                    limit = limit,
+                    now = clock.instant(),
+                ),
+            ).toResponse()
+}
+
+@Validated
+@RestController
+@RequestMapping("/api/v1/operations/point-accounts")
+internal class OperationsPointAccountQueryController(
+    private val queries: PointAccountQueryOperations,
+    private val clock: Clock,
+) {
+    @GetMapping("/{accountId}")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun get(
+        actor: OperatorActor,
+        @PathVariable accountId: UUID,
+        @RequestHeader("X-Access-Reason") @NotBlank @Size(max = 500) accessReason: String,
+    ) = queries.get(
+        ReadPointAccountCommand(
+            actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.PLATFORM_OPERATOR),
             accountId = accountId,
             accessReason = accessReason,
             now = clock.instant(),
@@ -54,17 +97,18 @@ internal class PointAccountQueryController(
     )
 
     @GetMapping("/{accountId}/transactions")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun transactions(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable accountId: UUID,
-        @RequestHeader(value = "X-Access-Reason", required = false) accessReason: String?,
+        @RequestHeader("X-Access-Reason") @NotBlank @Size(max = 500) accessReason: String,
         @RequestParam(required = false) @Size(max = 2048) cursor: String?,
         @RequestParam(required = false) limit: Int?,
     ): PointTransactionPageResponse =
         queries
             .listTransactions(
                 ListPointTransactionsCommand(
-                    actor = actor(jwt),
+                    actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.PLATFORM_OPERATOR),
                     accountId = accountId,
                     accessReason = accessReason,
                     cursor = cursor,
@@ -72,21 +116,6 @@ internal class PointAccountQueryController(
                     now = clock.instant(),
                 ),
             ).toResponse()
-
-    private fun PointTransactionPage.toResponse() = PointTransactionPageResponse(items, PointAccountPageInfoResponse(nextCursor))
-
-    private fun actor(jwt: Jwt): PointAccountReadActor {
-        val actorId =
-            try {
-                UUID.fromString(jwt.subject)
-            } catch (_: RuntimeException) {
-                throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid point account actor ID")
-            }
-        val roles = jwt.getClaimAsStringList("roles").orEmpty()
-        return when {
-            "PLATFORM_OPERATOR" in roles -> PointAccountReadActor(actorId, PointAccountReadActorType.PLATFORM_OPERATOR)
-            "CUSTOMER" in roles -> PointAccountReadActor(actorId, PointAccountReadActorType.CUSTOMER)
-            else -> throw DomainFailure(FailureCode.ACCESS_DENIED, "Customer or platform operator role is required")
-        }
-    }
 }
+
+private fun PointTransactionPage.toResponse() = PointTransactionPageResponse(items, PointAccountPageInfoResponse(nextCursor))

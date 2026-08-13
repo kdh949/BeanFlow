@@ -94,13 +94,22 @@ sealed interface는 actor 유형을 컴파일 시점에 드러내고, `when` 분
 - ArchUnit: `application`·`domain` 패키지가 `org.springframework.security` 타입을 참조하지 않는지 검증한다.
 - 잘못된 actor 유형 요청이 403인지 Chain별로 검증한다.
 - 인증 없는 요청이 401인지 검증한다.
-- 요청 Body에 `customerId`를 넣어도 무시되고 Session actor가 사용되는지 검증한다.
+- 요청 Body 계약에 행위자 `customerId`가 없고 unknown field로 주입하면 400이며, 유스케이스에는
+  Session actor ID만 전달되는지 검증한다.
 - 기존 운영자 endpoint의 permission grant 테스트가 회귀 없이 통과하는지 확인한다.
 
 ## Metrics
 
 - Chain별 401/403 발생 수와 사유 분포
 - actor 유형 불일치 거부 수
+
+## Implementation Outcome (2026-08-13)
+
+`CurrentActor` sealed API, browser/JWT adapter와 MVC argument resolver를 구현했다. 모든 Controller
+method에서 `Jwt`, `Authentication`, `HttpSession` parameter를 제거하고 actor별 타입으로 바꿨다.
+Application/Domain의 Spring Security 의존과 Controller의 금지 parameter를 구조 테스트로 고정했다.
+Merchant membership과 Operations explicit permission은 Session에 넣지 않고 기존 DB source of truth를
+요청 transaction에서 계속 조회한다.
 
 ## Revisit Conditions
 

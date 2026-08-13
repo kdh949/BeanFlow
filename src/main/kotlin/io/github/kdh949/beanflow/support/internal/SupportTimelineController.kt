@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.shared.api.SupportTimelineSource
 import io.github.kdh949.beanflow.shared.api.SupportTimelineType
 import jakarta.validation.constraints.Max
@@ -10,8 +11,6 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -29,19 +28,19 @@ internal class SupportTimelineController(
     @GetMapping("/cases/{caseId}/timeline")
     @PreAuthorize("isAuthenticated()")
     fun caseTimeline(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestParam(required = false) sources: Set<SupportTimelineSource>?,
         @RequestParam(required = false) types: Set<SupportTimelineType>?,
         @RequestParam(required = false) @Size(max = 2048) cursor: String?,
         @RequestParam(required = false) @Min(1) @Max(100) limit: Int?,
     ): ResponseEntity<SupportTimelinePageResource> =
-        noStore(service.listCase(jwt.actorId(), caseId, sources.orEmpty(), types.orEmpty(), cursor, limit))
+        noStore(service.listCase(actor.actorId(), caseId, sources.orEmpty(), types.orEmpty(), cursor, limit))
 
     @GetMapping("/orders/{orderId}/timeline")
     @PreAuthorize("isAuthenticated()")
     fun orderTimeline(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable orderId: UUID,
         @RequestParam caseId: UUID,
         @RequestParam(required = false) sources: Set<SupportTimelineSource>?,
@@ -49,11 +48,11 @@ internal class SupportTimelineController(
         @RequestParam(required = false) @Size(max = 2048) cursor: String?,
         @RequestParam(required = false) @Min(1) @Max(100) limit: Int?,
     ): ResponseEntity<SupportTimelinePageResource> =
-        noStore(service.listOrder(jwt.actorId(), caseId, orderId, sources.orEmpty(), types.orEmpty(), cursor, limit))
+        noStore(service.listOrder(actor.actorId(), caseId, orderId, sources.orEmpty(), types.orEmpty(), cursor, limit))
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated actor is invalid")
         }

@@ -26,11 +26,15 @@ spring:
     jdbc:
       # Flyway V52 owns the official PostgreSQL Spring Session schema.
       initialize-schema: never
+      # BeanFlow wraps cleanup to expose explicit success/failure metrics.
+      cleanup-cron: "-"
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
 beanflow:
+  session:
+    cleanup-cron: "0 * * * * *"
   idempotency:
     retry-after-seconds: 2
     stuck-threshold: PT5M

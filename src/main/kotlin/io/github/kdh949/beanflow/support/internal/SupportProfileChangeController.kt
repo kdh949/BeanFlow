@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Email
@@ -15,8 +16,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -220,14 +219,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/customer-display-name-corrections")
     @PreAuthorize("isAuthenticated()")
     fun customerDisplayName(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerDisplayNameRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CustomerDisplayName(request.displayName!!),
@@ -238,14 +237,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/customer-legal-name-corrections")
     @PreAuthorize("isAuthenticated()")
     fun customerLegalName(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerLegalNameRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CustomerLegalName(request.legalName!!),
@@ -256,14 +255,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/customer-primary-phone-requests")
     @PreAuthorize("isAuthenticated()")
     fun customerPrimaryPhone(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerPrimaryPhoneRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CustomerPrimaryPhone(request.primaryPhone!!),
@@ -274,14 +273,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/customer-credential-reset-requests")
     @PreAuthorize("isAuthenticated()")
     fun customerCredentialReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerCredentialResetRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CustomerCredentialReset,
@@ -292,14 +291,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/store-public-profile-corrections")
     @PreAuthorize("isAuthenticated()")
     fun storePublicProfile(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StorePublicProfileRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.StorePublicProfile(
@@ -315,14 +314,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/store-operations-contact-corrections")
     @PreAuthorize("isAuthenticated()")
     fun storeOperationsContact(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreOperationsContactRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.StoreOperationsContact(request.phone, request.email),
@@ -333,14 +332,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/store-representative-requests")
     @PreAuthorize("isAuthenticated()")
     fun storeRepresentative(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreRepresentativeRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.StoreRepresentative(request.representativeName!!),
@@ -351,14 +350,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/store-settlement-account-requests")
     @PreAuthorize("isAuthenticated()")
     fun storeSettlement(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreSettlementAccountRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.StoreSettlementAccount(request.accountReference!!),
@@ -369,14 +368,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/store-access-reregistration-requests")
     @PreAuthorize("isAuthenticated()")
     fun storeAccess(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreAccessReregistrationRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.StoreAccessReregistration,
@@ -387,14 +386,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/courier-display-name-corrections")
     @PreAuthorize("isAuthenticated()")
     fun courierDisplay(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierDisplayNameRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CourierDisplayName(request.displayName!!),
@@ -405,14 +404,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/courier-relay-contact-corrections")
     @PreAuthorize("isAuthenticated()")
     fun courierRelay(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierRelayContactRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CourierRelayContact(request.phone, request.email),
@@ -423,14 +422,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/courier-provider-identity-requests")
     @PreAuthorize("isAuthenticated()")
     fun courierIdentity(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierProviderIdentityRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CourierProviderIdentity(request.providerReference!!),
@@ -441,14 +440,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/courier-payout-reference-requests")
     @PreAuthorize("isAuthenticated()")
     fun courierPayout(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierPayoutReferenceRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CourierPayoutReference(request.payoutReference!!),
@@ -459,14 +458,14 @@ internal class SupportProfileChangeCreateController(
     @PostMapping("/courier-provider-reregistration-requests")
     @PreAuthorize("isAuthenticated()")
     fun courierReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierProviderReregistrationRequest,
     ) = created(
         service.submit(
             request.binding.submit(
-                jwt.actorId(),
+                actor.actorId(),
                 caseId,
                 key,
                 SupportProfileChangePayload.CourierProviderReregistration,
@@ -487,21 +486,21 @@ internal class SupportProfileChangeWorkflowController(
     @GetMapping("/{profileChangeId}")
     @PreAuthorize("isAuthenticated()")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
-    ) = ok(service.get(jwt.actorId(), profileChangeId))
+    ) = ok(service.get(actor.actorId(), profileChangeId))
 
     @PostMapping("/{profileChangeId}/customer-primary-phone-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseCustomerPhone(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerPrimaryPhoneRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CustomerPrimaryPhone(request.primaryPhone!!),
@@ -512,14 +511,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/customer-credential-reset-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseCustomerReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerCredentialResetRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CustomerCredentialReset,
@@ -530,14 +529,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-representative-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseStoreRepresentative(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreRepresentativeRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreRepresentative(request.representativeName!!),
@@ -548,14 +547,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-settlement-account-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseStoreSettlement(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreSettlementAccountRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreSettlementAccount(request.accountReference!!),
@@ -566,14 +565,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-access-reregistration-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseStoreAccess(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreAccessReregistrationRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreAccessReregistration,
@@ -584,14 +583,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-provider-identity-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseCourierIdentity(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierProviderIdentityRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierProviderIdentity(request.providerReference!!),
@@ -602,14 +601,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-payout-reference-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseCourierPayout(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierPayoutReferenceRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierPayoutReference(request.payoutReference!!),
@@ -620,14 +619,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-provider-reregistration-revisions")
     @PreAuthorize("isAuthenticated()")
     fun reviseCourierReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierProviderReregistrationRevisionRequest,
     ) = ok(
         service.revise(
             request.binding.revise(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierProviderReregistration,
@@ -638,14 +637,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/customer-primary-phone-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeCustomerPhone(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CustomerPrimaryPhoneExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CustomerPrimaryPhone(request.primaryPhone!!),
@@ -656,14 +655,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/customer-credential-reset-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeCustomerReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: EmptyProfileExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CustomerCredentialReset,
@@ -674,14 +673,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-representative-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeStoreRepresentative(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreRepresentativeExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreRepresentative(request.representativeName!!),
@@ -692,14 +691,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-settlement-account-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeStoreSettlement(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: StoreSettlementAccountExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreSettlementAccount(request.accountReference!!),
@@ -710,14 +709,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/store-access-reregistration-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeStoreAccess(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: EmptyProfileExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.StoreAccessReregistration,
@@ -728,14 +727,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-provider-identity-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeCourierIdentity(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierProviderIdentityExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierProviderIdentity(request.providerReference!!),
@@ -746,14 +745,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-payout-reference-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeCourierPayout(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: CourierPayoutReferenceExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierPayoutReference(request.payoutReference!!),
@@ -764,14 +763,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/courier-provider-reregistration-executions")
     @PreAuthorize("isAuthenticated()")
     fun executeCourierReset(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: EmptyProfileExecutionRequest,
     ) = ok(
         service.execute(
             request.binding.execute(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 key,
                 SupportProfileChangePayload.CourierProviderReregistration,
@@ -782,14 +781,14 @@ internal class SupportProfileChangeWorkflowController(
     @PostMapping("/{profileChangeId}/notification-retries")
     @PreAuthorize("isAuthenticated()")
     fun retry(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable profileChangeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) key: String,
         @Valid @RequestBody request: RetryProfileNotificationsRequest,
     ) = ok(
         service.retryNotifications(
             RetrySupportProfileNotificationCommand(
-                jwt.actorId(),
+                actor.actorId(),
                 profileChangeId,
                 request.expectedProfileChangeVersion,
                 key,
@@ -852,9 +851,9 @@ private fun ProfileChangeExecutionBindingRequest.execute(
     payload,
 )
 
-private fun Jwt.actorId(): UUID =
+private fun OperatorActor.actorId(): UUID =
     try {
-        UUID.fromString(subject)
+        actorId
     } catch (_: IllegalArgumentException) {
         throw DomainFailure(FailureCode.INVALID_REQUEST, "Support profile change actor is invalid")
     }

@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
@@ -347,6 +348,7 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(ownerJwt(fixture.actorId))
+                        .with(csrf())
                         .header("Idempotency-Key", "http-dispute-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
@@ -359,6 +361,7 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(staffJwt(UUID.randomUUID()))
+                        .with(csrf())
                         .header("Idempotency-Key", "staff-http-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
@@ -504,12 +507,12 @@ internal class SettlementDisputeIntegrationTest
         private fun ownerJwt(actorId: UUID) =
             jwt()
                 .jwt { it.subject(actorId.toString()).claim("roles", listOf("STORE_OWNER")) }
-                .authorities(SimpleGrantedAuthority("ROLE_STORE_OWNER"))
+                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun staffJwt(actorId: UUID) =
             jwt()
                 .jwt { it.subject(actorId.toString()).claim("roles", listOf("STORE_STAFF")) }
-                .authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF"))
+                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun assertWindowClosed(block: () -> Unit) {
             assertThatThrownBy(block)

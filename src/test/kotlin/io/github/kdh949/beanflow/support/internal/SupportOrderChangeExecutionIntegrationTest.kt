@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
@@ -464,8 +465,9 @@ internal class SupportOrderChangeExecutionIntegrationTest
                                 it
                                     .subject(storeActorId.toString())
                                     .claim("roles", listOf("STORE_STAFF"))
-                            }.authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF")),
-                    ).header("Idempotency-Key", key)
+                            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT")),
+                    ).with(csrf())
+                    .header("Idempotency-Key", key)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(
                         """
@@ -488,8 +490,9 @@ internal class SupportOrderChangeExecutionIntegrationTest
                             it
                                 .subject(storeActorId.toString())
                                 .claim("roles", listOf("STORE_STAFF"))
-                        }.authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF")),
-                ).header("Idempotency-Key", key)
+                        }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT")),
+                ).with(csrf())
+                .header("Idempotency-Key", key)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """

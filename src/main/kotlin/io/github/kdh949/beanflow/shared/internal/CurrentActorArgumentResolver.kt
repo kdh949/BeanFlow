@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.shared.api.CurrentActor
 import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.MerchantAccountState
 import io.github.kdh949.beanflow.shared.api.MerchantActor
 import io.github.kdh949.beanflow.shared.api.OperatorActor
 import org.springframework.core.MethodParameter
@@ -11,7 +12,6 @@ import org.springframework.security.authentication.AbstractAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.web.bind.support.WebDataBinderFactory
 import org.springframework.web.context.request.NativeWebRequest
@@ -56,17 +56,26 @@ internal class CurrentActorArgumentResolver : HandlerMethodArgumentResolver {
     private fun currentActor(authentication: Authentication?): CurrentActor =
         when {
             authentication is BrowserSessionAuthenticationToken -> authentication.principal
-            authentication is JwtAuthenticationToken -> authentication.token.toOperatorActor()
+            authentication is JwtAuthenticationToken -> authentication.toCurrentActor()
             else -> throw DomainFailure(FailureCode.ACCESS_DENIED, "A supported authenticated actor is required")
         }
 
-    private fun Jwt.toOperatorActor(): OperatorActor {
+    private fun JwtAuthenticationToken.toCurrentActor(): CurrentActor {
         val actorId =
             try {
-                UUID.fromString(subject)
+                UUID.fromString(token.subject)
             } catch (_: IllegalArgumentException) {
                 throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated operator subject is invalid")
             }
-        return OperatorActor(actorId, getClaimAsStringList("roles").orEmpty().toSet())
+        val roles =
+            token.getClaimAsStringList("roles").orEmpty().toSet() +
+                authorities.mapNotNull { authority ->
+                    authority.authority?.takeIf { it.startsWith("ROLE_") }?.removePrefix("ROLE_")
+                }
+        return when {
+            "CUSTOMER" in roles -> CustomerActor(actorId)
+            "STORE_OWNER" in roles || "STORE_STAFF" in roles -> MerchantActor(actorId, MerchantAccountState.ACTIVE)
+            else -> OperatorActor(actorId, roles)
+        }
     }
 }
