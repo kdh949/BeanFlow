@@ -52,8 +52,11 @@ internal class MerchantAccountMigrationTest {
             "operations_merchant_credential_command_idempotency",
         )
         assertThat(
-            jdbc.queryForObject("SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Int::class.java),
-        ).isEqualTo(54)
+            jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '54'",
+                Int::class.java,
+            ),
+        ).isOne()
         assertThat(
             jdbc.queryForObject(
                 """

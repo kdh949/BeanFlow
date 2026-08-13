@@ -1,7 +1,62 @@
 beanflow:
+  acceptance-timeout-work:
+    initial-delay-ms: 3600000
+    retention-initial-delay-ms: 3600000
+  audit-retention:
+    initial-delay-ms: 3600000
   authentication:
     # Public deterministic test vector only; never a deployment key.
     attempt-hmac-key-base64-url: dGVzdC1hdHRlbXB0LWhtYWMta2V5LTMyaGFyYWN0ZXJzISE
+    attempt-retention-initial-delay-ms: 3600000
+  event-publication:
+    initial-delay-ms: 3600000
+  idempotency:
+    metrics-initial-delay-ms: 3600000
+    reconciliation-initial-delay-ms: 3600000
+  loyalty-point-adjustment-retention:
+    initial-delay-ms: 3600000
+  merchant-credential-retention:
+    initial-delay-ms: 3600000
+  notification:
+    initial-delay-ms: 3600000
+  ordering-idempotency-retention:
+    initial-delay-ms: 3600000
+  payment:
+    metrics:
+      unknown-age-initial-delay-ms: 3600000
+    point-recovery:
+      initial-delay-ms: 3600000
+    reconciliation:
+      initial-delay-ms: 3600000
+    refund:
+      initial-delay-ms: 3600000
+    refund-restoration:
+      initial-delay-ms: 3600000
+  payment-cancellation-setup:
+    initial-delay-ms: 3600000
+  payment-method:
+    maintenance:
+      initial-delay-ms: 3600000
+    retention:
+      initial-delay-ms: 3600000
+  payment-setup-repair-maintenance:
+    initial-delay-ms: 3600000
+  reservation-expiry:
+    initial-delay-ms: 3600000
+  session:
+    cleanup-cron: "-"
+  settlement:
+    batch:
+      initial-delay-ms: 3600000
+    dispute:
+      initial-delay-ms: 3600000
+  store-acceptance:
+    initial-delay-ms: 3600000
+  support-case-idempotency:
+    retention:
+      initial-delay-ms: 3600000
+  support-search-rate-retention:
+    initial-delay-ms: 3600000
   support-verification-recovery:
     initial-delay-ms: 3600000
   support-profile-notification-recovery:
