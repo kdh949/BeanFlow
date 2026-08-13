@@ -14,6 +14,7 @@
 | ORDER_REFERENCE_NOT_FOUND | 404 | No | 접근 가능한 범위에서 공개 주문번호에 해당하는 주문이 없음. 다른 고객·매장 주문은 403 정책을 유지 |
 | MERCHANT_ACCOUNT_NOT_FOUND | 404 | No | exact canonical login ID 또는 opaque account reference에 해당하는 관리 가능 점주 계정이 없음 |
 | ORDER_STATE_CONFLICT | 409 | No | 현재 상태에서 명령 불가 |
+| ORDER_ACTION_NOT_ALLOWED | 422 | No, correct action and expectedStatus | 점주 주문보드 action과 client가 본 expectedStatus 조합 자체가 허용되지 않음. 실제 Order 상태가 expectedStatus와 다르면 이 코드가 아니라 ORDER_STATE_CONFLICT |
 | REORDER_SOURCE_STATE_INVALID | 409 | No | source Order가 `COMPLETED`, `CANCELLED`, `REJECTED`, `EXPIRED`가 아니어서 빠른 재주문 불가 |
 | REORDER_ITEMS_UNAVAILABLE | 409 | Maybe, after source/current catalogue changes | source line 하나 이상을 검증된 option snapshot과 현재 Merchant 구성으로 전부 재구성할 수 없음. item별 stable reason을 반환하고 부분 Order는 만들지 않음 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |

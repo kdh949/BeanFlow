@@ -58,9 +58,24 @@ CREATE INDEX ix_ordering_order_store_acceptance_board
 ### 상태 전이의 동시성
 
 - 두 직원이 동시에 같은 주문을 전이시키는 상황을 정상 경로로 다룬다.
-- 전이는 조건부 UPDATE 또는 낙관적 잠금으로 수행하고, 진 쪽에는 409를 반환한다. 마지막 쓰기가
-  이기게 두지 않는다.
+- 전이 요청은 사용자가 보드에서 본 `expectedStatus`를 함께 보낸다. 서버는 action과
+  `expectedStatus`의 조합을 먼저 검증하고, 조합 자체가 허용되지 않으면
+  `422 ORDER_ACTION_NOT_ALLOWED`를 반환한다.
+- 전이는 기존 Order row의 `PESSIMISTIC_WRITE` 잠금과 Aggregate 전이를 재사용한다. 잠금 뒤 실제 상태가
+  `expectedStatus`와 다르면 경쟁 또는 stale 화면으로 보고 `409 ORDER_STATE_CONFLICT`를 반환한다.
+  마지막 쓰기가 이기게 두지 않는다.
 - 409를 받은 클라이언트는 목록을 재조회한다. 프론트엔드가 상태를 낙관적으로 확정하지 않는다.
+- 같은 Idempotency-Key의 exact replay는 상태 비교보다 먼저 저장된 최초 응답을 재생한다.
+
+`expectedStatus`는 별도 version token이 아니다. 각 action의 유일한 출발 상태를 명시해 경쟁 요청과
+계약상 불가능한 action/status 조합을 구분하는 command precondition이다.
+
+### 전이 응답
+
+- 실행 중 주문의 `lane`과 `PAID`의 `acceptancePhase`만 값이 있다. `COMPLETE`와 `REJECT`처럼 전이 직후
+  종료 상태가 된 응답은 `lane`과 `acceptancePhase`를 생략하고 `allowedActions=[]`를 반환한다.
+- `REJECT`는 기존 보상 경계를 유지해 202를 반환할 수 있고, 응답에는 축약
+  `compensationRecovery`만 포함한다. step, attempt, 내부 오류와 case 식별자는 포함하지 않는다.
 
 ### 조회 갱신
 
@@ -98,6 +113,8 @@ CREATE INDEX ix_ordering_order_store_acceptance_board
 - 상태 전이 API가 `orderReference` 경로로 바뀐다. 기존 `PATCH /store-orders/{orderId}/status`는
   전환 기간 동안 유지한다.
 - 409 충돌이 정상 응답이 되므로 프론트엔드가 이를 오류 화면이 아니라 재조회로 처리해야 한다.
+- command 계약에 `expectedStatus`가 추가되고, 불가능한 action/status 조합은
+  `422 ORDER_ACTION_NOT_ALLOWED`로 분리된다.
 - 완료·취소 주문의 매장 조회 경로가 별도로 필요하다. 이 ADR 범위 밖이며 P1이다.
 
 ## Verification
@@ -106,6 +123,8 @@ CREATE INDEX ix_ordering_order_store_acceptance_board
 - `REVOKED` membership이 즉시 차단되는지 검증한다.
 - 두 요청이 동시에 같은 주문을 전이시킬 때 하나만 성공하고 다른 하나가 409인지 검증한다.
 - 잘못된 상태 전이 요청이 409 또는 422로 명확히 구분되는지 검증한다.
+- `expectedStatus`가 같은 두 동시 요청 중 하나만 성공하고 패자는 409인지, action/status 조합 자체가
+  불가능하면 422인지 검증한다.
 - 활성 주문 50건 기준으로 보드 조회 SQL 수가 고정인지 검증한다.
 - `EXPLAIN ANALYZE`로 인덱스 사용을 확인하고 인덱스 추가 전후를 같은 조건에서 비교한다.
 - `allowedActions`가 실제 전이 성공 여부와 일치하는지 검증한다.

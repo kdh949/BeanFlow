@@ -166,9 +166,10 @@ StoreOrderBoard
       allowedActions       [ "ACCEPT", "REJECT", "START_PREPARING", "MARK_READY", "COMPLETE" ]
 
 POST .../transitions
-  request  { action, reason? }
-  response 200 StoreOrderBoardItem
+  request  { action, expectedStatus, reason? }
+  response 200 또는 REJECT의 202 StoreOrderBoardItem
   충돌     409 { code: "ORDER_STATE_CONFLICT" }
+  비허용   422 { code: "ORDER_ACTION_NOT_ALLOWED" }
 ```
 
 - 응답 헤더에 `ETag`를 포함한다. 요청의 `If-None-Match`가 일치하면 `304`다.
@@ -245,11 +246,17 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다.
+- 2026-08-14: exact Plan 50 completion `fcd5a2319a9e44ac2c7eb242b5db789319b82e0a`에서
+  `feature/productization-60-store-order-board`를 만들고 Plan 60 범위와 디자인 ZIP의 POS 3열 흐름을
+  다시 확인했다. A안에 따라 `expectedStatus` command precondition과 409/422 분리 계약을 먼저 기록했다.
 
 ## Surprises & Discoveries
 
-아직 없다.
+- target 계약의 `StoreOrderBoardItem.lane`과 `acceptancePhase`가 필수였지만 `COMPLETE`·`REJECT` 응답은
+  종료 상태라 활성 lane이 없다. 기존 ADR-015의 202 보상 응답을 보존하기 위해 두 필드는 실행 상태에서만
+  제공하고, REJECT 응답에는 축약 `compensationRecovery`만 제공하도록 계약을 교정한다.
+- 계획 본문의 "조건부 UPDATE" 설명과 실제 구현이 달랐다. 기존 전이 서비스는 Order row
+  `PESSIMISTIC_WRITE`로 직렬화하므로 이를 재사용하고 `expectedStatus` 비교로 경쟁 패자를 식별한다.
 
 ## Decision Log
 
@@ -259,6 +266,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-11 | 보드 전용 Query Repository를 고객 목록과 분리 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
 | 2026-08-11 | 전이 로직을 새로 만들지 않고 기존 서비스를 재사용 | 이 plan |
 | 2026-08-12 | 오늘로 제한하지 않고 모든 실행 주문을 날짜별로 반환 | [BR-06](../../product/business-policy-decisions.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
+| 2026-08-14 | action에 client가 본 `expectedStatus`를 묶고, stale/경쟁 상태는 409, 불가능한 action/status 조합은 422로 구분 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), [Error Catalog](../../api/error-catalog.md) |
 
 ## Outcomes & Retrospective
 
@@ -267,3 +275,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-14: 구현 시작과 상태 전이 precondition·종료 응답 계약을 반영.

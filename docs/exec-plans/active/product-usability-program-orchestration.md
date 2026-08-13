@@ -407,6 +407,11 @@ git diff --cached --check
   `*CustomerOrderQuery*`, Spotless, full build 1,078 tests(0 failures, 0 errors, 1 skipped)와 문서/OpenAPI
   검증이 통과했다. Plan 60과 Plan 70은 completed Plan 50을 직접 소비하므로 readiness를 true로
   전환했지만, 이 Stack A Goal에서는 Plan 60만 실행하고 Plan 70 구현은 시작하지 않는다.
+- 2026-08-14 Plan 50 Draft release: branch `feature/productization-50-customer-orders`, base
+  `feature/productization-40-merchant-account`, completion/local/remote/PR head
+  `fcd5a2319a9e44ac2c7eb242b5db789319b82e0a`이 일치한다. [Draft PR #67](https://github.com/kdh949/BeanFlow/pull/67)은
+  OPEN/Draft이고 같은 head의 open PR은 하나다. GitHub 조회 시 `mergeStateStatus=UNSTABLE`이어서 CI 성공으로
+  과장하지 않았으며, Stack A merge·ready 전환·force-push는 수행하지 않았다.
 
 ## Surprises & Discoveries
 

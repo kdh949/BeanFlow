@@ -1982,11 +1982,17 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreOrderBoardItem" }
+        "202":
+          description: Rejection committed while compensation continues independently
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderBoardItem" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/orders/{orderReference}/refund-previews:
     post:
@@ -4979,7 +4985,7 @@ components:
               - $ref: "#/components/schemas/Error"
               - $ref: "#/components/schemas/ReorderItemsUnavailableError"
     UnprocessableEntity:
-      description: Provider explicitly declined a syntactically valid command
+      description: A syntactically valid command was explicitly declined by the responsible domain or Provider
       content:
         application/json:
           schema:
@@ -5344,7 +5350,7 @@ components:
     StoreOrderBoardItem:
       type: object
       additionalProperties: false
-      required: [orderReference, pickupNumber, pickupBusinessDate, lane, status, pickupWindowStart, pickupWindowEnd, itemSummary, acceptancePhase, allowedActions]
+      required: [orderReference, pickupNumber, pickupBusinessDate, status, pickupWindowStart, pickupWindowEnd, itemSummary, allowedActions]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
@@ -5360,6 +5366,8 @@ components:
           type: array
           uniqueItems: true
           items: { $ref: "#/components/schemas/StoreOrderAction" }
+        compensationRecovery:
+          $ref: "#/components/schemas/StoreCompensationSummary"
     StoreOrderBoard:
       type: object
       additionalProperties: false
@@ -5382,9 +5390,13 @@ components:
     StoreOrderActionRequest:
       type: object
       additionalProperties: false
-      required: [action]
+      required: [action, expectedStatus]
       properties:
         action: { $ref: "#/components/schemas/StoreOrderAction" }
+        expectedStatus:
+          type: string
+          enum: [PAID, ACCEPTED, PREPARING, READY]
+          description: Order status rendered when the operator chose the action; a changed current status returns ORDER_STATE_CONFLICT.
         reason:
           type: string
           minLength: 1
