@@ -5,12 +5,14 @@ import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationService
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
+import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
@@ -187,6 +189,12 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var customerSourceIpResolver: CustomerSourceIpResolver
+
+    @MockitoBean
+    private lateinit var merchantAccountApplicationService: MerchantAccountApplicationService
+
+    @MockitoBean
+    private lateinit var merchantCredentialAdministrationApplicationService: MerchantCredentialAdministrationApplicationService
 
     @MockitoBean
     private lateinit var httpSessionIdResolver: HttpSessionIdResolver
