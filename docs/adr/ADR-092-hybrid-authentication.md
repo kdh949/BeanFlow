@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owners:** [Authentication foundation](../exec-plans/active/productization-20-authentication-foundation.md), [P0 operations console](../exec-plans/active/productization-100-operations-work-queues.md)
+- **Implementation owners:** [Authentication foundation](../exec-plans/completed/productization-20-authentication-foundation.md), [P0 operations console](../exec-plans/active/productization-100-operations-work-queues.md)
 
 ## Context
 

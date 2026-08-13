@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/productization-20-authentication-foundation.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -340,7 +340,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다.
+2026-08-13: Plan 20이 V52, 네 FilterChain, PostgreSQL Session/CSRF, typed CurrentActor와 login Session
+lifecycle를 전체 995-test build 및 문서 검증으로 완료했다. exact Plan 20 completion head가 direct
+dependency를 충족하므로 `Implementation-Ready=true`로 전환했다. 구현은 아직 시작하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -363,3 +365,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-13: Plan 20 completion path와 actual validation evidence를 반영해 readiness를 true로 전환.

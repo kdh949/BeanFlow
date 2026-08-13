@@ -1,11 +1,11 @@
 # 다중 FilterChain과 CurrentActor로 인증 기반을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-00-design-capability-contract.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-13`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -281,6 +281,34 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   actor와 JWT/검증된 browser authentication resolver를 구현한 첫 GREEN에서 테스트 reflection fixture
   오기 1건만 실패했고 이를 교정한 뒤 resolver 4 tests가 통과했다. actor 유형 불일치는 403
   `ACCESS_DENIED`로 고정하고 Controller에는 `Jwt`를 노출하지 않는다.
+- 2026-08-13: 중앙 path registry와 Public/Operations/Merchant/Customer 네 FilterChain을 구현했다.
+  미배정 mapping과 actor간 pattern 중복은 startup을 실패시키며 unknown `/api/v1/**`를 Customer로
+  자동 배정하지 않는다. Customer/Merchant는 전용 Secure Session·XSRF Cookie와 CSRF header를,
+  Operations는 stateless Bearer만 수용한다. `GET /auth/{customer|merchant}/csrf`와
+  `GET /operations/me`를 runtime OpenAPI에 반영했다.
+- 2026-08-13: 기존 Controller의 `Jwt`·`AuthenticationPrincipal` parameter를 typed
+  `CustomerActor`·`MerchantActor`·`OperatorActor`로 모두 교체했다. A 결정에 따라 Customer PointAccount와
+  Merchant refund URI는 유지하고 Operations PointAccount/refund Controller를 분리했다. Merchant role
+  claim을 권한 source로 사용하지 않고 현재 DB membership을 기존 Application transaction에서 다시
+  읽는 경계를 유지했다.
+- 2026-08-13: `LoginSessionCoordinator`와 browser authentication filter를 구현했다. Customer는 idle
+  7일/absolute 30일/5개, Merchant는 idle 30분/absolute 12시간/3개이며 oldest 정렬은
+  `(authenticatedAt, sessionId)`다. PostgreSQL 테스트에서 회전·logout 재사용 401, 동시 로그인 상한,
+  session insert/delete 장애 rollback 4건이 통과했다. 계정 loader·Session store 장애는 성공이나
+  익명으로 강등하지 않고 503이다.
+- 2026-08-13: 첫 focused Controller suite는 legacy JWT/CSRF fixture 때문에 14건 403 실패했고 fixture를
+  actor/CSRF 계약에 맞춰 교정했다. 이후 98-test focused suite는 FastReorder 7건과 Settlement Item
+  role-mismatch 기대 1건이 실패했다. CSRF fixture를 추가하고 role claim이 아니라 active DB membership이
+  source of truth임을 테스트에 반영한 뒤 두 suite가 통과했다.
+- 2026-08-13: 첫 Spotless는 42개 Controller의 import/빈 줄 위반으로 실패했고 formatter 적용 뒤
+  통과했다. 첫 전체 build는 995 tests 중 Order 무인증 POST의 CSRF 선행 기대와 malformed customer
+  subject 기대 2건이 실패했다. 유효 CSRF 뒤 무인증 401, malformed actor subject 403 계약으로 정렬한
+  뒤 최종 `build --stacktrace`가 995 tests, 0 failures, 0 errors, 1 skipped로 통과했다. skipped는
+  opt-in `NearbyStoreDiscoveryBenchmark` 한 건이다.
+- 2026-08-13: 최종 문서 검증은 target 153 paths/159 operations, runtime 117 paths/121 operations,
+  305 schemas, 46 business policies, 111 ADRs, 274 Markdown files, 57 ExecPlans를 통과했다. Session/auth
+  runbook, API conventions, authorization matrix, README와 ADR-069/092/094/095를 actual outcome으로
+  갱신했다.
 
 ## Surprises & Discoveries
 
@@ -291,6 +319,20 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   Merchant/Platform Operator를 role로 분기하고 있어 ADR-092의 actor별 단일 Chain과 양립하지 않았다.
   API를 제거하지 않고 소비자 URI와 Operations URI로 분리했으며, 새 cursor URI는 ADR-070 binding과
   문서 검증기 inventory도 함께 확장해야 했다.
+- Spring Session JDBC 4.1의 기본 repository transaction은 `PROPAGATION_REQUIRES_NEW`였다. 이 기본값은
+  로그인 owner transaction 안에서 기존 Session 삭제를 먼저 commit해 새 Session insert 실패 시
+  rotation 전체 rollback을 깨뜨렸다. 이름이 정해진 `springSessionTransactionOperations` bean을
+  `REQUIRED`로 제공해 JDBC Session 작업이 account row lock transaction에 참여하도록 했고 trigger 기반
+  insert/delete failure 테스트로 rollback을 증명했다.
+- browser chain에서 request cache를 그대로 두면 무인증 401 요청도 anonymous Session/Cookie를 만들었다.
+  Customer/Merchant request cache를 끄고 로그인 성공 coordinator만 인증 Session을 명시적으로 저장하게
+  했다.
+- Spring Security 7.1의 CSRF 설정에는 별도 `CsrfConfigurer.accessDeniedHandler`가 없었다. 공통
+  `exceptionHandling`의 `AccessDeniedHandler`에서 `CsrfException`을 분류해 403과 metric reason을
+  기록했다.
+- synthetic MockMvc JWT는 실제 browser chain의 허용 credential이 아니지만 기존 대규모 Controller
+  회귀 fixture가 사용한다. resolver adapter는 validated token의 roles claim과 ROLE authority를 테스트
+  호환 입력으로만 해석하며 실제 Customer/Merchant FilterChain은 Bearer header 자체를 403으로 거부한다.
 
 ## Decision Log
 
@@ -306,14 +348,25 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | Support S70~S100을 우선하고 Plan 20 readiness와 migration lease를 일시 해제 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-13 | Support V43~V49 main 통합과 Plan 10 V50/V51 전체 검증 뒤 Plan 20 readiness와 Stack A lease를 복원 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [Plan 10](../completed/productization-10-public-order-reference.md) |
 | 2026-08-13 | 혼합 actor API는 기존 Customer/Merchant URI를 유지하고 운영자 branch를 `/operations/**` URI로 분리 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md), [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md) |
+| 2026-08-13 | Spring Session JDBC 작업은 이름 지정 `TransactionOperations`의 `REQUIRED` 전파로 login owner transaction에 참여 | [ADR-094](../../adr/ADR-094-browser-session-security.md) |
+| 2026-08-13 | Merchant actor의 role claim은 권한 source가 아니며 기존 active DB membership 재조회가 owner/staff 권한을 결정 | [ADR-095](../../adr/ADR-095-unified-current-actor.md), [ADR-027](../../adr/ADR-027-store-membership-authorization.md) |
 
 ## Outcomes & Retrospective
 
-Plan 10 resume completion이 Support 통합 schema와 전체 회귀를 통과해 이 plan의 모든 직접 실행 gate가
-해소됐다. 구현 자체는 아직 시작하지 않았고, 다음 branch는 verified Plan 10 completion head에서만 만든다.
+Plan 10 verified head 위에 V52 Spring Session schema와 permission vocabulary, 네 인증 Chain, actor별
+Session/CSRF Cookie, typed `CurrentActor`, explicit login Session lifecycle, Operations `/me`, A 결정의
+actor-exclusive PointAccount/refund URI와 관측·runbook을 완성했다. Session store·account loader 장애는
+503으로 남고 fake/local fallback은 없다. Spring Session의 숨은 `REQUIRES_NEW` 기본값을 PostgreSQL
+failure injection으로 발견해 `REQUIRED`로 바꾼 것이 가장 중요한 구현 교정이었다.
+
+최종 검증은 Security/ArchUnit/Modulith 8 tests, Session/path/actor 21 tests, 전체 build 995 tests
+(0 failures, 0 errors, 1 opt-in benchmark skipped), Spotless와 문서/OpenAPI 검증을 통과했다. 이 completion은
+ADR-111 Draft stack 안의 verified Plan 20 head를 뜻하며 merge·deployment 완료를 뜻하지 않는다.
+Customer/Merchant 계정·login endpoint와 account-backed `BrowserActorLoader`는 범위대로 Plan 30/40에 남긴다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-12: Support 우선 migration lane 결정으로 `Implementation-Ready=false` 전환.
 - 2026-08-13: Support V43~V49 통합과 Plan 10 V50/V51 재검증 완료로 `Implementation-Ready=true` 복원.
+- 2026-08-13: V52, 4-Chain/Session/CSRF/CurrentActor 구현과 전체 검증을 actual outcome으로 기록하고 완료.
