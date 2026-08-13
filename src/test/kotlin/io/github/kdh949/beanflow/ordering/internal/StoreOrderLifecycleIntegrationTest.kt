@@ -95,6 +95,7 @@ internal class StoreOrderLifecycleIntegrationTest
                     operations_order_compensation_step,
                     operations_order_compensation_case,
                     identity_store_membership,
+                    identity_merchant_account,
                     event_publication
                 CASCADE
                 """.trimIndent(),
@@ -164,6 +165,7 @@ internal class StoreOrderLifecycleIntegrationTest
             val revokedActor = UUID.randomUUID()
             val activeActor = UUID.randomUUID()
             val activeOwner = UUID.randomUUID()
+            insertActiveMerchantAccount(noMembershipActor)
             insertMembership(otherStoreActor, UUID.randomUUID(), "STAFF", "ACTIVE")
             insertMembership(revokedActor, fixture.storeId, "STAFF", "REVOKED")
             insertMembership(activeActor, fixture.storeId, "STAFF", "ACTIVE")
@@ -745,6 +747,7 @@ internal class StoreOrderLifecycleIntegrationTest
             role: String,
             membershipStatus: String,
         ) {
+            insertActiveMerchantAccount(actorId)
             val now = Timestamp.from(Instant.now())
             jdbcTemplate.update(
                 """
@@ -758,6 +761,26 @@ internal class StoreOrderLifecycleIntegrationTest
                 storeId,
                 role,
                 membershipStatus,
+                now,
+                now,
+            )
+        }
+
+        private fun insertActiveMerchantAccount(actorId: UUID) {
+            val now = Timestamp.from(Instant.now())
+            jdbcTemplate.update(
+                """
+                INSERT INTO identity_merchant_account (
+                    id, login_id, password_hash, credential_version, display_name, state,
+                    temporary_password_expires_at, password_changed_at, locked_until,
+                    created_at, updated_at, version
+                ) VALUES (?, ?, 'test-only-password-hash', 0, 'Store lifecycle actor', 'ACTIVE',
+                          null, ?, null, ?, ?, 0)
+                ON CONFLICT (id) DO NOTHING
+                """.trimIndent(),
+                actorId,
+                "test.${actorId.toString().take(8)}",
+                now,
                 now,
                 now,
             )

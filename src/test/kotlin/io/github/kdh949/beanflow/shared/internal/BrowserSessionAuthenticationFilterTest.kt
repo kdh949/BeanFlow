@@ -89,6 +89,25 @@ class BrowserSessionAuthenticationFilterTest {
     }
 
     @Test
+    fun `credential rejection remains 401 when best-effort row deletion fails`() {
+        val response = MockHttpServletResponse()
+        val failingSession =
+            object : MockHttpSession() {
+                override fun invalidate() = error("injected cleanup failure")
+            }.apply {
+                setAttribute(ACTOR_ID_ATTRIBUTE, actorId.toString())
+                setAttribute(AUTHENTICATED_AT_ATTRIBUTE, now.toEpochMilli())
+                setAttribute(CREDENTIAL_VERSION_ATTRIBUTE, 1L)
+            }
+
+        filter(loader(BrowserActorType.CUSTOMER) { _, _ -> throw BrowserAuthenticationInvalid("credential changed") })
+            .doFilter(request(failingSession), response) { _, _ -> error("must not continue") }
+
+        assertThat(response.status).isEqualTo(401)
+        assertThat(response.contentAsString).contains("credential changed")
+    }
+
+    @Test
     fun `loader actor type mismatch is forbidden`() {
         val response = MockHttpServletResponse()
         filter(loader(BrowserActorType.CUSTOMER) { id, _ -> MerchantActor(id, MerchantAccountState.ACTIVE) })

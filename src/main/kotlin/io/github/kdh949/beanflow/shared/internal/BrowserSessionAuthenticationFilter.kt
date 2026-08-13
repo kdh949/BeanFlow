@@ -79,8 +79,7 @@ internal class BrowserSessionAuthenticationFilter(
             metrics.sessionLifecycle(actorType.name, "expire", "success")
             unauthorized(response, "Browser session actor ID is invalid")
         } catch (failure: BrowserAuthenticationInvalid) {
-            if (!invalidate(session::invalidate, response)) return
-            metrics.sessionLifecycle(actorType.name, "expire", "success")
+            invalidateRejectedCredential(session::invalidate)
             unauthorized(response, failure.message)
         } catch (failure: DomainFailure) {
             when (failure.code) {
@@ -105,6 +104,18 @@ internal class BrowserSessionAuthenticationFilter(
             unavailable(response, "Session store deletion failed")
             false
         }
+
+    private fun invalidateRejectedCredential(invalidate: () -> Unit) {
+        try {
+            invalidate()
+            metrics.sessionLifecycle(actorType.name, "expire", "success")
+        } catch (_: RuntimeException) {
+            // The authoritative account/version check already rejected authentication. Physical
+            // row deletion is retryable space cleanup and must never turn an invalid credential
+            // into an authenticated request or obscure the stable 401 contract.
+            metrics.sessionStoreError(actorType.name, "delete_rejected_credential")
+        }
+    }
 
     private fun unauthorized(
         response: HttpServletResponse,

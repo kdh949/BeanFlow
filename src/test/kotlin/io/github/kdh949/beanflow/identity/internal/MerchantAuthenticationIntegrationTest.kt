@@ -19,6 +19,7 @@ import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -29,6 +30,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class, MerchantAuthenticationTestClockConfiguration::class)
 @AutoConfigureMockMvc
@@ -50,6 +54,7 @@ internal class MerchantAuthenticationIntegrationTest(
         clock.set(DEFAULT_NOW)
         dropAuditFailureTrigger()
         dropSessionFailureTrigger()
+        dropSessionCleanupFailureTrigger()
         jdbc.execute(
             """
             TRUNCATE TABLE
@@ -70,6 +75,7 @@ internal class MerchantAuthenticationIntegrationTest(
     fun cleanupTriggers() {
         dropAuditFailureTrigger()
         dropSessionFailureTrigger()
+        dropSessionCleanupFailureTrigger()
     }
 
     @Test
@@ -97,6 +103,31 @@ internal class MerchantAuthenticationIntegrationTest(
             .andExpect(jsonPath("$.code").value("INITIAL_PASSWORD_CHANGE_REQUIRED"))
         mockMvc
             .perform(get("/api/v1/stores/$storeId/orders").cookie(initialSession))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("INITIAL_PASSWORD_CHANGE_REQUIRED"))
+        val inaccessibleId = UUID.randomUUID()
+        mockMvc
+            .perform(
+                patch("/api/v1/store-orders/$inaccessibleId/status")
+                    .cookie(initialSession, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .header("Idempotency-Key", "initial-gate-transition")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"targetState":"ACCEPTED","reason":null}"""),
+            ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("INITIAL_PASSWORD_CHANGE_REQUIRED"))
+        mockMvc
+            .perform(
+                post("/api/v1/payments/$inaccessibleId/refunds")
+                    .cookie(initialSession, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .header("Idempotency-Key", "initial-gate-refund")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"reason":"Initial gate proof"}"""),
+            ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("INITIAL_PASSWORD_CHANGE_REQUIRED"))
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/settlements").cookie(initialSession))
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.code").value("INITIAL_PASSWORD_CHANGE_REQUIRED"))
 
@@ -145,6 +176,14 @@ internal class MerchantAuthenticationIntegrationTest(
 
         clock.set(expiresAt)
         mockMvc.perform(get("/api/v1/merchant/me").cookie(session)).andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(
+                post("/api/v1/auth/merchant/password-changes")
+                    .cookie(session, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"currentPassword":"$CURRENT_PASSWORD","newPassword":"$NEW_PASSWORD"}"""),
+            ).andExpect(status().isUnauthorized)
         login(csrf, "expiry.user", CURRENT_PASSWORD)
             .andExpect(status().isUnauthorized)
             .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"))
@@ -154,6 +193,9 @@ internal class MerchantAuthenticationIntegrationTest(
                 String::class.java,
             ),
         ).isEqualTo("EXPIRED")
+
+        clock.set(expiresAt.plusNanos(1))
+        login(csrf, "expiry.user", CURRENT_PASSWORD).andExpect(status().isUnauthorized)
     }
 
     @Test
@@ -173,6 +215,57 @@ internal class MerchantAuthenticationIntegrationTest(
         login(csrf, "locked.merchant", CURRENT_PASSWORD)
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.accountState").value("INITIAL_PASSWORD"))
+    }
+
+    @Test
+    fun `concurrent merchant failures preserve every attempt and lock exactly at five`() {
+        val accountId = seedInitialAccount("concurrent.lock", CURRENT_PASSWORD, DEFAULT_NOW.plus(24, ChronoUnit.HOURS))
+        val csrf = issueCsrf()
+        val start = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(5)
+        try {
+            val futures =
+                (1..5).map {
+                    pool.submit<Int> {
+                        check(start.await(5, TimeUnit.SECONDS))
+                        login(csrf, "concurrent.lock", WRONG_PASSWORD).andReturn().response.status
+                    }
+                }
+            start.countDown()
+            assertThat(futures.map { it.get(20, TimeUnit.SECONDS) }).containsOnly(401)
+        } finally {
+            start.countDown()
+            pool.shutdownNow()
+        }
+
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT failure_count FROM identity_login_attempt WHERE actor_type = 'MERCHANT' AND scope_type = 'LOGIN_ID'",
+                Int::class.java,
+            ),
+        ).isEqualTo(5)
+        assertThat(jdbc.queryForObject("SELECT locked_until FROM identity_merchant_account WHERE id = ?", Instant::class.java, accountId))
+            .isEqualTo(DEFAULT_NOW.plus(15, ChronoUnit.MINUTES))
+    }
+
+    @Test
+    fun `active account lock expiry restores active lifecycle without state transition`() {
+        val accountId = seedActiveAccount("active.lock", CURRENT_PASSWORD)
+        jdbc.update(
+            "UPDATE identity_merchant_account SET locked_until = ?, credential_version = 1 WHERE id = ?",
+            Timestamp.from(DEFAULT_NOW.plus(15, ChronoUnit.MINUTES)),
+            accountId,
+        )
+        val csrf = issueCsrf()
+        clock.set(DEFAULT_NOW.plus(15, ChronoUnit.MINUTES).minusNanos(1))
+        login(csrf, "active.lock", CURRENT_PASSWORD).andExpect(status().isUnauthorized)
+        clock.set(DEFAULT_NOW.plus(15, ChronoUnit.MINUTES))
+        login(csrf, "active.lock", CURRENT_PASSWORD)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.accountState").value("ACTIVE"))
+        assertThat(jdbc.queryForMap("SELECT state, locked_until FROM identity_merchant_account WHERE id = ?", accountId))
+            .containsEntry("state", "ACTIVE")
+            .containsEntry("locked_until", null)
     }
 
     @Test
@@ -242,6 +335,32 @@ internal class MerchantAuthenticationIntegrationTest(
 
         dropSessionFailureTrigger()
         login(csrf, "session.failure", NEW_PASSWORD).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `old session remains unauthorized when its physical cleanup fails after password change`() {
+        seedInitialAccount("cleanup.failure", CURRENT_PASSWORD, DEFAULT_NOW.plus(24, ChronoUnit.HOURS))
+        val csrf = issueCsrf()
+        val oldSession = requireNotNull(login(csrf, "cleanup.failure", CURRENT_PASSWORD).andReturn().response.getCookie(SESSION_COOKIE))
+        val changingSession =
+            requireNotNull(login(csrf, "cleanup.failure", CURRENT_PASSWORD).andReturn().response.getCookie(SESSION_COOKIE))
+        mockMvc
+            .perform(
+                post("/api/v1/auth/merchant/password-changes")
+                    .cookie(changingSession, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"currentPassword":"$CURRENT_PASSWORD","newPassword":"$NEW_PASSWORD"}"""),
+            ).andExpect(status().isNoContent)
+
+        createSessionCleanupFailureTrigger()
+        val sessionsBeforeRejectedCleanup =
+            jdbc.queryForObject("SELECT count(*) FROM spring_session", Long::class.java)
+        mockMvc
+            .perform(get("/api/v1/merchant/me").cookie(oldSession))
+            .andExpect(status().isUnauthorized)
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM spring_session", Long::class.java))
+            .isEqualTo(sessionsBeforeRejectedCleanup)
     }
 
     private fun issueCsrf(): Cookie =
@@ -376,6 +495,25 @@ internal class MerchantAuthenticationIntegrationTest(
     private fun dropSessionFailureTrigger() {
         jdbc.execute("DROP TRIGGER IF EXISTS test_fail_merchant_session_insert ON spring_session")
         jdbc.execute("DROP FUNCTION IF EXISTS test_fail_merchant_session_insert()")
+    }
+
+    private fun dropSessionCleanupFailureTrigger() {
+        jdbc.execute("DROP TRIGGER IF EXISTS test_fail_merchant_session_delete ON spring_session")
+        jdbc.execute("DROP FUNCTION IF EXISTS test_fail_merchant_session_delete()")
+    }
+
+    private fun createSessionCleanupFailureTrigger() {
+        jdbc.execute(
+            """
+            CREATE FUNCTION test_fail_merchant_session_delete() RETURNS trigger AS ${'$'}${'$'}
+            BEGIN RAISE EXCEPTION 'forced merchant session cleanup failure'; END;
+            ${'$'}${'$'} LANGUAGE plpgsql
+            """.trimIndent(),
+        )
+        jdbc.execute(
+            "CREATE TRIGGER test_fail_merchant_session_delete BEFORE DELETE ON spring_session " +
+                "FOR EACH ROW EXECUTE FUNCTION test_fail_merchant_session_delete()",
+        )
     }
 
     private fun createSessionFailureTrigger() {

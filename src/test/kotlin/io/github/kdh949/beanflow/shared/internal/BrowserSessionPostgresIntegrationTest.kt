@@ -88,7 +88,7 @@ class BrowserSessionPostgresIntegrationTest(
     fun `caller account row lock keeps concurrent merchant logins within cap`() {
         val actorId = UUID.randomUUID()
         jdbcTemplate.update("INSERT INTO test_browser_account_lock(id) VALUES (?)", actorId)
-        create(BrowserActorType.MERCHANT, actorId, 100, 1)
+        val oldest = create(BrowserActorType.MERCHANT, actorId, 100, 1)
         create(BrowserActorType.MERCHANT, actorId, 101, 1)
         val start = CountDownLatch(1)
         val pool = Executors.newFixedThreadPool(2)
@@ -116,6 +116,7 @@ class BrowserSessionPostgresIntegrationTest(
         }
 
         assertThat(countPrincipalSessions(BrowserActorType.MERCHANT, actorId)).isEqualTo(3)
+        assertThat(countSession(oldest.sessionId)).isZero()
     }
 
     @Test

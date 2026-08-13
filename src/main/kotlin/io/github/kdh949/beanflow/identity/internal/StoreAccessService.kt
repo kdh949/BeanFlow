@@ -28,7 +28,7 @@ internal class StoreAccessService(
             denied("Store membership is revoked")
         }
         if (membership.membershipRole !in actorRoles) {
-            denied("JWT role and store membership role do not match")
+            denied("The store membership role does not allow this operation")
         }
         return StoreActor(actorId, storeId, membership.membershipRole)
     }
