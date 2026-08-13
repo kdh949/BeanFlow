@@ -377,6 +377,13 @@ git diff --cached --check
   logout을 구현했다. 최종 backend build 1,026 tests, customer demo checkpoint 17 HTTP 단계,
   Spotless와 문서/OpenAPI 검증이 통과해 Plan 40 dependency를 completed path로 바꾸고 readiness를
   true로 전환했다. Merchant 전환·환불 기본 전체 smoke는 Plan 40 required gate로 보존했다.
+- 2026-08-13 Plan 30 Draft release: branch `feature/productization-30-customer-account`, base
+  `feature/productization-20-auth-foundation`, completion/local/remote/PR head
+  `c44653efaaa58b5127666deffcff9c7d1d90cdf1`이 일치한다. [Draft PR #65](https://github.com/kdh949/BeanFlow/pull/65)는
+  OPEN/Draft이고 중복 PR이 없다. required backend/demo/docs 검증은 위 completion evidence와 같으며,
+  추가 frontend build의 Plan 80 CSRF client 미구현 실패도 PR과 completed Plan에 기록했다.
+  `SUPPORT_INTEGRATION_PENDING`은 Plan 10의 history-preserving `origin/main` 통합으로 현재 stack tree에서
+  해소됐고 merge·ready 전환·force-push는 수행하지 않았다.
 
 ## Surprises & Discoveries
 
