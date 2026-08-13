@@ -4,12 +4,11 @@ import {
   CheckoutPage,
   CustomerHelpPage,
   CustomerHomePage,
-  OrderLookupPage,
-  OrderTrackingPage,
   PaymentFailPage,
   PaymentSuccessPage,
   StoreCatalogPage,
 } from "./pages/customer/CustomerPages";
+import { CustomerOrderDetailPage, CustomerOrdersPage } from "./pages/customer/CustomerOrders";
 import { OpsDashboardPage, OpsOrderPage, OpsRefundPage, StoreDashboardPage, StoreLookupPage } from "./pages/console/ConsolePages";
 
 function NotFoundPage() {
@@ -25,8 +24,8 @@ export const router = createBrowserRouter([
       { path: "checkout/:orderId", element: <CheckoutPage /> },
       { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
       { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
-      { path: "orders", element: <OrderLookupPage /> },
-      { path: "orders/:orderId", element: <OrderTrackingPage /> },
+      { path: "orders", element: <CustomerOrdersPage /> },
+      { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
       { path: "help", element: <CustomerHelpPage /> },
     ],
   },

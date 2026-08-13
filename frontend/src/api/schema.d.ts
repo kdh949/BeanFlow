@@ -368,6 +368,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List orders owned by the current customer
+         * @description Defaults to the latest 30 Asia/Seoul calendar days; historical ranges have no product cap.
+         */
+        get: operations["listCurrentCustomerOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/orders/{orderReference}": {
         parameters: {
             query?: never;
@@ -375,8 +395,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an owned order through its canonical public reference */
-        get: operations["getCurrentCustomerOrderByReferenceRuntime"];
+        /** Get an owned order by public order reference */
+        get: operations["getCurrentCustomerOrder"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2599,26 +2619,6 @@ export interface components {
             targetState: "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED";
             reason?: string | null;
         };
-        /** @description Transitional customer projection. Plan 50 replaces this shape with CustomerOrderDetail. */
-        RuntimePublicCustomerOrder: {
-            storeId: components["schemas"]["Identifier"];
-            publicReference: string;
-            pickupNumber: string;
-            /** Format: date */
-            pickupBusinessDate: string;
-            storeName: string;
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
-            state: components["schemas"]["OrderState"];
-            lines: components["schemas"]["OrderLine"][];
-            subtotalKrw: components["schemas"]["MoneyKrw"];
-            couponDiscountKrw: components["schemas"]["MoneyKrw"];
-            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
-            payableKrw: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
-            createdAt: components["schemas"]["DateTime"];
-            updatedAt: components["schemas"]["DateTime"];
-        };
         RuntimePublicStoreOrderResult: {
             order: components["schemas"]["RuntimePublicStoreOrder"];
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
@@ -3055,6 +3055,72 @@ export interface components {
             paymentRecovery: components["schemas"]["CancellationRefundRecoverySummary"];
             cancelledAt: components["schemas"]["DateTime"];
             correlationId: string;
+        };
+        /** @enum {string} */
+        CustomerOrderAllowedAction: "CANCEL" | "REORDER" | "VIEW_REFUND";
+        CustomerOrderSummary: {
+            orderReference: string;
+            pickupNumber: string;
+            storeName: string;
+            status: components["schemas"]["OrderState"];
+            orderedAt: components["schemas"]["DateTime"];
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            totalAmountKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            itemSummary: string;
+            allowedActions: components["schemas"]["CustomerOrderAllowedAction"][];
+        };
+        CustomerOrderPage: {
+            items: components["schemas"]["CustomerOrderSummary"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        CustomerOrderLine: {
+            lineSequence: number;
+            menuName: string;
+            optionNames: string[];
+            quantity: number;
+            lineTotalKrw: components["schemas"]["MoneyKrw"];
+        };
+        CustomerCancellationPreview: {
+            /**
+             * @description Distinguishes this projection from a committed refund outcome
+             * @constant
+             */
+            estimate: true;
+            calculatedAt: components["schemas"]["DateTime"];
+            /**
+             * Format: int64
+             * @description Order version used for this estimate; display-only for the customer client
+             */
+            orderVersion: number;
+            cashRefundAmountKrw: components["schemas"]["MoneyKrw"];
+            /** Format: int64 */
+            restoredPoints: number;
+            /** @enum {string} */
+            couponRestoration: "NOT_APPLICABLE" | "WILL_RESTORE" | "WILL_NOT_RESTORE";
+            /** @enum {string} */
+            pendingAccrual: "NOT_APPLICABLE" | "WILL_NOT_ACCRUE" | "WILL_BE_REVERSED";
+        };
+        CustomerOrderDetail: {
+            orderReference: string;
+            pickupNumber: string;
+            storeName: string;
+            status: components["schemas"]["OrderState"];
+            orderedAt: components["schemas"]["DateTime"];
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            totalAmountKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            lines: components["schemas"]["CustomerOrderLine"][];
+            allowedActions: components["schemas"]["CustomerOrderAllowedAction"][];
+            /**
+             * @description Present only while CANCEL is allowed. This server-calculated projection
+             *     is an estimate, not a refund commitment. The cancellation command
+             *     revalidates the order and returns the committed outcome independently.
+             */
+            cancellationPreview?: components["schemas"]["CustomerCancellationPreview"];
+            paymentRecovery?: components["schemas"]["CancellationRefundRecoverySummary"];
         };
         CustomerCancellationResult: {
             orderReference: string;
@@ -4768,11 +4834,11 @@ export interface components {
         /** @description Terminal Order whose immutable menu and option selections are reused */
         SourceOrderId: components["schemas"]["Identifier"];
         OrderId: components["schemas"]["Identifier"];
+        /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+        Limit: number;
         /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
         OrderReference: string;
         PaymentId: components["schemas"]["Identifier"];
-        /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
-        Limit: number;
         PaymentMethodId: components["schemas"]["Identifier"];
         /**
          * @description Purpose for an audited privileged policy read. The server trims the value,
@@ -5354,7 +5420,45 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
-    getCurrentCustomerOrderByReferenceRuntime: {
+    listCurrentCustomerOrders: {
+        parameters: {
+            query?: {
+                /** @description Omit for all orders in the date range; ACTIVE and PAST are server-owned classifications. */
+                status?: "ACTIVE" | "PAST";
+                from?: string;
+                to?: string;
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable page ordered by createdAt and internal tie-breaker descending */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerOrderPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerOrder: {
         parameters: {
             query?: never;
             header?: never;
@@ -5366,13 +5470,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current UUID-era customer projection without the internal order UUID */
+            /** @description Customer-facing order without internal order UUID */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuntimePublicCustomerOrder"];
+                    "application/json": components["schemas"]["CustomerOrderDetail"];
                 };
             };
             400: components["responses"]["BadRequest"];
