@@ -41,7 +41,7 @@ UUID 입력창을 없앤다. 로그인한 고객의 활성 주문과 과거 주�
 ### In Scope
 
 - `CustomerOrderQueryRepository`와 DTO Projection
-- `GET /me/orders` 목록(활성 필터, 기간 필터, Cursor Pagination)
+- `GET /me/orders` 목록(활성·지난 주문 필터, 기간 필터, Cursor Pagination)
 - `GET /me/orders/{orderReference}` 상세
 - `allowedActions` 계산과 OpenAPI enum 고정
 - `(customer_id, created_at DESC, id DESC)` 인덱스와 실행계획 검증
@@ -143,6 +143,7 @@ CREATE INDEX ix_ordering_order_customer_recent
 
 ```http
 GET /api/v1/me/orders?status=ACTIVE
+GET /api/v1/me/orders?status=PAST
 GET /api/v1/me/orders?from=2026-01-01&to=2026-08-12&cursor=...&limit=20
 GET /api/v1/me/orders/{orderReference}
 ```
@@ -239,12 +240,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   head `feature/productization-40-merchant-account`, base `feature/productization-30-customer-account`를
   검증했다. 같은 head의 중복 PR은 없고 GitHub build check는 조회 시점 `pending`이다. exact head에서
   `feature/productization-50-customer-orders`를 만들었으며 제품 코드는 아직 변경하지 않았다.
+- 2026-08-13: 첨부 ZIP을 다시 직접 열어 41개 파일의 디자인 아카이브이며
+  `kit/OrderScreen.jsx`에 `진행 중`/`지난 주문` 탭, active 상세, snapshot 매장명·픽업번호·품목
+  요약이 있음을 확인했다. target OpenAPI와 ADR-099를 대조해 `PAST`를 additive 상태 필터로
+  기록했고 구현 전 계약 검토를 마쳤다.
 
 ## Surprises & Discoveries
 
 - 기존 `GetOrderService`가 조회 중 예약 만료를 물질화하며 BR-03은 목록에도 같은 실패 의미를
   요구한다. 목록은 page candidate window로 쓰기 범위를 제한하고, 전체 물질화 실패 시 stale
   Projection 대신 503을 반환한다.
+- 첨부 ZIP은 구현 저장소가 아니라 실제 화면 HTML, `kit/*.jsx`, 디자인 시스템과 스크린샷을 담은
+  41-file 디자인 아카이브다. `kit/OrderScreen.jsx`의 품목 요약 예시는 음료 단위 `외 1잔`이지만
+  ExecPlan의 공개 문자열 계약은 이종 메뉴에도 적용 가능한 `외 1건`이므로 후자를 유지한다.
+- ZIP은 `진행 중`과 `지난 주문`을 별도 탭으로 요구하지만 target OpenAPI의 상태 enum은
+  `ACTIVE`만 적혀 있었다. 서버가 활성·종료 분류를 소유한다는 ADR-099를 지키기 위해 기존 호출을
+  깨지 않는 `PAST` 값을 추가했다.
 
 ## Decision Log
 
@@ -255,6 +266,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 기본 30일 + `from`/`to` 필터, 과거 조회 상한 없음 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-12 | 필터를 cursor에 함께 서명해 페이지 도중 변경을 400으로 거부 | [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 2026-08-12 | 목록도 candidate window의 만료 주문을 먼저 물질화하고 실패 시 503 | [BR-03](../../product/business-policy-decisions.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
+| 2026-08-13 | 상태 생략은 전체, `ACTIVE`는 진행 주문, `PAST`는 종료 주문으로 서버가 분류 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md), [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 
 ## Outcomes & Retrospective
 

@@ -45,6 +45,8 @@ CREATE INDEX ix_ordering_order_customer_recent
 ```
 
 - 활성 주문과 종료 주문의 분류는 서버가 소유한다. 클라이언트가 상태 목록을 하드코딩하지 않는다.
+  목록 `status`는 생략 시 기간 내 전체, `ACTIVE`면 진행 주문, `PAST`면 종료 주문이다. `PAST`는
+  디자인 아카이브의 지난 주문 탭을 클라이언트 상태 추론 없이 구현하기 위한 additive 값이다.
 - 기간 필터는 `from`/`to`를 받는다. 지정하지 않으면 **최근 30일**이 기본이다. 조회 가능한 과거
   범위에 상한을 두지 않는다. keyset pagination이므로 깊은 과거 조회에 성능상 근거가 없고,
   상한 값을 정하려면 그 숫자를 정당화할 별도 근거가 필요하다.
@@ -78,6 +80,9 @@ allowedActions      서버가 계산한 수행 가능 행동
   이후 고정한 candidate ID만 다시 Projection한다. 활성 필터에서 만료 Order가 빠져 짧거나 빈
   페이지가 되더라도 다음 window를 채우기 위한 추가 materialization은 하지 않으며, `nextCursor`는
   반환 row가 아니라 candidate scan boundary를 서명한다.
+- `GET /me/orders` cursor binding은 ADR-070의 `customer-orders` endpoint, 고객 ID,
+  `ALL|ACTIVE|PAST`, 기본값이 적용된 서울 날짜 `from`/`to`와 `(createdAt DESC, orderId DESC)`를
+  사용한다.
 
 ## Alternatives Considered
 

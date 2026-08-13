@@ -275,7 +275,8 @@ paths:
         - in: query
           name: status
           required: false
-          schema: { type: string, enum: [ACTIVE] }
+          description: Omit for all orders in the date range; ACTIVE and PAST are server-owned classifications.
+          schema: { type: string, enum: [ACTIVE, PAST] }
         - in: query
           name: from
           required: false

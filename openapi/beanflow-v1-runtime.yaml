@@ -154,30 +154,10 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /me/orders:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders"
   /me/orders/{orderReference}:
-    get:
-      tags: [Ordering]
-      operationId: getCurrentCustomerOrderByReferenceRuntime
-      summary: Get an owned order through its canonical public reference
-      parameters:
-        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderReference"
-      responses:
-        "200":
-          description: Current UUID-era customer projection without the internal order UUID
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimePublicCustomerOrder"
-        "400":
-          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
-        "401":
-          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
-        "404":
-          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
-        "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
   /me/orders/{orderReference}/cancellations:
     post:
       tags: [Ordering]
@@ -875,48 +855,6 @@ components:
             - type: string
               maxLength: 500
             - type: "null"
-    RuntimePublicCustomerOrder:
-      type: object
-      description: Transitional customer projection. Plan 50 replaces this shape with CustomerOrderDetail.
-      not:
-        required: [orderId]
-      required:
-        - storeId
-        - publicReference
-        - pickupNumber
-        - pickupBusinessDate
-        - storeName
-        - pickupWindowStart
-        - pickupWindowEnd
-        - state
-        - lines
-        - subtotalKrw
-        - couponDiscountKrw
-        - pointsAppliedKrw
-        - payableKrw
-        - currency
-        - createdAt
-        - updatedAt
-      properties:
-        storeId: { $ref: "./beanflow-v1.yaml#/components/schemas/Identifier" }
-        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
-        pickupNumber: { type: string, pattern: '^A-[1-9][0-9]*$' }
-        pickupBusinessDate: { type: string, format: date }
-        storeName: { type: string, minLength: 1, maxLength: 200 }
-        pickupWindowStart: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        pickupWindowEnd: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        state: { $ref: "./beanflow-v1.yaml#/components/schemas/OrderState" }
-        lines:
-          type: array
-          minItems: 1
-          items: { $ref: "./beanflow-v1.yaml#/components/schemas/OrderLine" }
-        subtotalKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        couponDiscountKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        pointsAppliedKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        payableKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        currency: { $ref: "./beanflow-v1.yaml#/components/schemas/Currency" }
-        createdAt: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        updatedAt: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
     RuntimePublicStoreOrderResult:
       type: object
       additionalProperties: false
