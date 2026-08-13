@@ -108,6 +108,7 @@ internal class CustomerAccountMigrationTest {
         Flyway
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .target("53")
             .cleanDisabled(cleanDisabled)
             .load()
 }
