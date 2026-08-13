@@ -136,6 +136,20 @@ internal class CustomerCancellationCommandIntegrationTest
                 .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.publicReference").value(reference))
                 .andExpect(jsonPath("$.orderState").value("CANCELLED"))
+
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", reference)
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(2))
+                .andExpect(jsonPath("$.allowedActions[0]").value("REORDER"))
+                .andExpect(jsonPath("$.allowedActions[1]").value("VIEW_REFUND"))
+                .andExpect(jsonPath("$.paymentRecovery.state").value("NOT_REQUIRED"))
+                .andExpect(jsonPath("$.paymentId").doesNotExist())
+                .andExpect(jsonPath("$.providerReference").doesNotExist())
+                .andExpect(jsonPath("$.cancellationDetail").doesNotExist())
         }
 
         @Test

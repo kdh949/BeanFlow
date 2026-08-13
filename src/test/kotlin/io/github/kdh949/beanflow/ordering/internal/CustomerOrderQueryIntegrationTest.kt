@@ -287,6 +287,54 @@ internal class CustomerOrderQueryIntegrationTest
             assertThat(states()).containsOnly("EXPIRED")
         }
 
+        @Test
+        fun `active expiry can return an empty page with a cursor and the next page remains complete`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 30, stockAvailable = 30)
+            repeat(21) { index ->
+                clock.set(now.plusSeconds(index.toLong()))
+                create(fixture, "customer-query-expiry-page-${index.toString().padStart(3, '0')}")
+            }
+            val deadline =
+                jdbcTemplate
+                    .queryForObject(
+                        "SELECT max(reservation_expires_at) FROM ordering_order",
+                        java.sql.Timestamp::class.java,
+                    )!!
+                    .toInstant()
+            clock.set(deadline.plusSeconds(1))
+
+            val first =
+                mockMvc
+                    .perform(
+                        get("/api/v1/me/orders")
+                            .param("status", "ACTIVE")
+                            .param("from", "2026-08-01")
+                            .param("to", "2026-08-31")
+                            .param("limit", "20")
+                            .with(customerJwt(fixture.customerId)),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(0))
+                    .andExpect(jsonPath("$.page.nextCursor").isString)
+                    .andReturn()
+            val cursor = json(first.response.contentAsString)["page"]["nextCursor"].asText()
+            assertThat(states().count { it == "EXPIRED" }).isEqualTo(20)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders")
+                        .param("status", "ACTIVE")
+                        .param("from", "2026-08-01")
+                        .param("to", "2026-08-31")
+                        .param("limit", "20")
+                        .param("cursor", cursor)
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
+            assertThat(states()).containsOnly("EXPIRED")
+        }
+
         private fun create(
             fixture: OrderCreationFixture,
             key: String,

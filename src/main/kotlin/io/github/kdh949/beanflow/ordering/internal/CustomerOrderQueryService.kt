@@ -26,6 +26,7 @@ import java.util.UUID
 internal class CustomerOrderQueryService(
     private val paging: CustomerOrderPaging,
     private val reads: CustomerOrderReadTransaction,
+    private val expiryWrites: CustomerOrderExpiryTransaction,
     private val meterRegistry: MeterRegistry,
     private val clock: Clock,
 ) {
@@ -40,7 +41,9 @@ internal class CustomerOrderQueryService(
         observed(LIST) {
             val now = clock.instant()
             val prepared = paging.prepare(CustomerOrderListCriteria(customerId, status, from, to, cursor, limit, now))
-            reads.list(prepared, now)
+            val fetched = reads.findCandidates(prepared)
+            expiryWrites.materialize(fetched.take(prepared.limit), now)
+            reads.projectPage(prepared, fetched, now)
         }
 
     fun detail(
@@ -48,7 +51,11 @@ internal class CustomerOrderQueryService(
         rawReference: String,
     ): CustomerOrderDetailResponse =
         observed(DETAIL) {
-            reads.detail(customerId, PublicOrderReference.parse(rawReference), clock.instant())
+            val now = clock.instant()
+            val candidate = reads.findCandidate(PublicOrderReference.parse(rawReference)) ?: notFound()
+            if (candidate.customerId != customerId) accessDenied()
+            expiryWrites.materialize(listOf(candidate), now)
+            reads.projectDetail(customerId, candidate, now)
         }
 
     private fun <T> observed(
@@ -76,6 +83,10 @@ internal class CustomerOrderQueryService(
             it.initCause(cause)
         }
 
+    private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
+
+    private fun accessDenied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Order is outside the requested ownership scope")
+
     private companion object {
         const val LIST = "list"
         const val DETAIL = "detail"
@@ -85,21 +96,21 @@ internal class CustomerOrderQueryService(
 @Component
 internal class CustomerOrderReadTransaction(
     private val repository: CustomerOrderQueryRepository,
-    private val expiry: ReservationExpiryUseCase,
-    private val orders: OrderJpaRepository,
     private val signedCursorCodec: SignedCursorCodec,
     private val cancellationPayments: CustomerCancellationPaymentOperations,
     private val correlationIds: CorrelationIdSource,
     private val objectMapper: ObjectMapper,
 ) {
-    @Transactional
-    fun list(
+    @Transactional(readOnly = true)
+    fun findCandidates(prepared: PreparedCustomerOrderPage): List<CustomerOrderCandidateProjection> = repository.findCandidates(prepared)
+
+    @Transactional(readOnly = true)
+    fun projectPage(
         prepared: PreparedCustomerOrderPage,
+        fetched: List<CustomerOrderCandidateProjection>,
         now: Instant,
     ): CustomerOrderPageResponse {
-        val fetched = repository.findCandidates(prepared)
         val candidates = fetched.take(prepared.limit)
-        materializeDue(candidates, now)
         val ids = candidates.map { it.orderId }
         val headers = repository.findHeaders(ids, prepared).associateBy { it.orderId }
         val lines = repository.findLinesForList(ids).groupBy { it.orderId }
@@ -121,32 +132,18 @@ internal class CustomerOrderReadTransaction(
         return CustomerOrderPageResponse(items, CustomerOrderPageInfoResponse(nextCursor))
     }
 
-    @Transactional
-    fun detail(
+    @Transactional(readOnly = true)
+    fun findCandidate(reference: PublicOrderReference): CustomerOrderCandidateProjection? = repository.findByReference(reference.value)
+
+    @Transactional(readOnly = true)
+    fun projectDetail(
         customerId: UUID,
-        reference: PublicOrderReference,
+        candidate: CustomerOrderCandidateProjection,
         now: Instant,
     ): CustomerOrderDetailResponse {
-        val candidate = repository.findByReference(reference.value) ?: notFound()
-        if (candidate.customerId != customerId) accessDenied()
-        materializeDue(listOf(candidate), now)
         val header = repository.findDetailHeader(candidate.orderId, customerId) ?: notFound()
         val lines = repository.findDetailLines(candidate.orderId)
         return header.toDetail(lines, now)
-    }
-
-    private fun materializeDue(
-        candidates: List<CustomerOrderCandidateProjection>,
-        now: Instant,
-    ) {
-        val due =
-            candidates
-                .filter { candidate ->
-                    parseState(candidate.state) == OrderState.PENDING_PAYMENT &&
-                        (candidate.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline")) <= now
-                }.sortedBy { it.orderId.toString() }
-        due.forEach { expiry.expireIfDue(it.orderId, now) }
-        if (due.isNotEmpty()) orders.flush()
     }
 
     private fun CustomerOrderHeaderProjection.toSummary(
@@ -269,8 +266,6 @@ internal class CustomerOrderReadTransaction(
 
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
 
-    private fun accessDenied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Order is outside the requested ownership scope")
-
     private fun dependency(
         message: String,
         cause: RuntimeException? = null,
@@ -278,4 +273,34 @@ internal class CustomerOrderReadTransaction(
         throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message).also {
             if (cause != null) it.initCause(cause)
         }
+}
+
+@Component
+internal class CustomerOrderExpiryTransaction(
+    private val expiry: ReservationExpiryUseCase,
+    private val orders: OrderJpaRepository,
+) {
+    @Transactional
+    fun materialize(
+        candidates: List<CustomerOrderCandidateProjection>,
+        now: Instant,
+    ) {
+        val due =
+            candidates
+                .filter { candidate ->
+                    parseState(candidate.state) == OrderState.PENDING_PAYMENT &&
+                        (candidate.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline")) <= now
+                }.sortedBy { it.orderId.toString() }
+        due.forEach { expiry.expireIfDue(it.orderId, now) }
+        if (due.isNotEmpty()) orders.flush()
+    }
+
+    private fun parseState(raw: String): OrderState =
+        try {
+            OrderState.valueOf(raw)
+        } catch (_: IllegalArgumentException) {
+            dependency("Customer order state is unsupported")
+        }
+
+    private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 }
