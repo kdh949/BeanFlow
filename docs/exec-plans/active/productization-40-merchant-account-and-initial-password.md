@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`, `docs/exec-plans/active/productization-30-customer-account-and-login.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`, `docs/exec-plans/completed/productization-30-customer-account-and-login.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -447,7 +447,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다.
+- 2026-08-13: Plan 30이 고객 계정·Session과 공용 CUSTOMER/MERCHANT login-attempt 잠금 기반을 required
+  validation과 customer demo checkpoint로 완료했다. direct dependency가 모두 completed path의 actual
+  evidence로 충족되어 `Implementation-Ready=true`로 전환했다. Merchant 계정·Session 코드는 아직
+  시작하지 않았고, 인자 없는 기본 전체 smoke 복원은 이 Plan의 required gate로 남아 있다.
 
 ## Surprises & Discoveries
 
@@ -464,7 +467,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 고객·점주 공통 비밀번호와 로그인 제한 초기값 적용 | [BR-35](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 로그인 ID는 고객과 같은 canonical 규칙, 별도 namespace 사용 | [BR-34](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 잠금은 lifecycle 상태가 아니라 15분 `lockedUntil` overlay | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
-| 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](../completed/productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 
 ## Outcomes & Retrospective
 
@@ -473,3 +476,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-13: Plan 30 완료와 customer/full smoke 소유권 분리를 반영해 readiness를 true로 전환.

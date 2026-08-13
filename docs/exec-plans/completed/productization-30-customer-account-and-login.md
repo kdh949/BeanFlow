@@ -1,11 +1,11 @@
 # 고객이 계정을 만들고 로그인한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-13`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -485,13 +485,27 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | PointAccount provisioning은 merge가 아닌 명시적 INSERT이며 선행 row는 typed dependency failure와 전체 rollback | [ADR-109](../../adr/ADR-109-customer-point-account-provisioning.md) |
 | 2026-08-13 | local demo 고객 호출은 seeded ID/PW와 Customer Session을 사용하고 고객 JWT를 만들지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-13 | 기존 customer/merchant URI는 각 Session에 유지하고 운영자 point/refund branch는 `/operations/**`로 분리하며 상대 actor credential fallback을 두지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [authorization matrix](../../security/authorization-matrix.md) |
-| 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](../active/productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+- V53 CustomerAccount/login-attempt schema, Argon2id/HMAC credential 경계, 고객 가입·로그인·현재 actor·
+  logout과 PostgreSQL Session 회전을 구현했다. 가입은 Loyalty public port를 통해 실제 0원
+  PointAccount와 원자적으로 commit되며 실패·동시 중복·잠금·rate limit·snapshot 변경·Session 저장
+  장애가 성공으로 위장되지 않는다.
+- required identity tests, Authentication tests, Spotless, 전체 build 1,026 tests와 문서/OpenAPI 검증이
+  통과했다. clean local demo의 `--customer-checkpoint`도 실제 Customer Session으로 승인 결제 조회까지
+  17 HTTP 단계를 통과했다. 전체 build의 기존 opt-in benchmark 1건 skip과 test shutdown의
+  `PaymentRefundedV1` unfinished publication INFO 두 건은 그대로 기록했다.
+- 추가 supply-chain audit의 high 2건은 dev-only OpenAPI 생성 도구 patch로 해소해 0 vulnerabilities를
+  확인했다. 추가 frontend build는 Plan 80이 소유한 Cookie/CSRF client가 아직 없어 기존 호출 세 곳에서
+  실패했다. 이를 placeholder header나 JWT fallback으로 숨기지 않았으며 이 Plan의 backend/demo gate
+  완료를 frontend 통합 완료로 확대 해석하지 않는다.
+- Plan 30 smoke는 승인 결제 조회에서 끝난다. account-backed Merchant Session, 초기 비밀번호 변경,
+  매장 전환·포인트 적립·부분/전액 환불의 인자 없는 기본 전체 smoke는 Plan 40 완료 gate로 넘겼다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-13: Plan 20 completion path와 actual validation evidence를 반영해 readiness를 true로 전환.
+- 2026-08-13: 고객 계정·로그인과 customer demo checkpoint 검증을 완료하고 completed로 이동.

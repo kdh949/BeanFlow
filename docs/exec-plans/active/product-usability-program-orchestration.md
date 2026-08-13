@@ -244,7 +244,7 @@ force-push를 하지 않는다.
 | M0 | [productization-00](../completed/productization-00-design-capability-contract.md) | 화면별 capability 계약, 충돌 해소, ADR 승인 | 완료 |
 | M1 | [productization-10](../completed/productization-10-public-order-reference.md) | 공개 주문번호, 픽업번호, 표시 스냅샷, backfill | 완료 |
 | M2 | [productization-20](../completed/productization-20-authentication-foundation.md) | 4 FilterChain, Session, CSRF, `CurrentActor`, `/me`, credential 관리 permission | 완료 |
-| M3 | [productization-30](productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 대기 |
+| M3 | [productization-30](../completed/productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 완료 |
 | M4 | [productization-40](productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 대기 |
 | M5 | [productization-50](productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 대기 |
 | M6 | [productization-60](productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 대기 |
@@ -372,6 +372,11 @@ git diff --cached --check
   구현했다. 첫 full build의 995 tests 중 보안 계약 기대 2건이 실패한 것을 교정하고 최종 995 tests
   (0 failures, 0 errors, 1 skipped), Spotless와 target/runtime OpenAPI·문서 검증을 통과했다. Plan 30의
   direct dependency를 completed path로 바꾸고 readiness를 true로 전환했다.
+- 2026-08-13 Plan 30 completion: exact Plan 20 head `a6bf720` 위에 V53 CustomerAccount/login-attempt,
+  Argon2id/HMAC credential 경계, 원자적 0원 PointAccount provisioning과 Customer Session 가입·로그인·
+  logout을 구현했다. 최종 backend build 1,026 tests, customer demo checkpoint 17 HTTP 단계,
+  Spotless와 문서/OpenAPI 검증이 통과해 Plan 40 dependency를 completed path로 바꾸고 readiness를
+  true로 전환했다. Merchant 전환·환불 기본 전체 smoke는 Plan 40 required gate로 보존했다.
 
 ## Surprises & Discoveries
 
@@ -432,6 +437,7 @@ git diff --cached --check
 | 2026-08-13 | Support V43~V49가 완료·release된 `origin/main`을 Plan 10에 merge하고 미적용 Plan 10을 V50/V51로 옮긴 뒤 전체 검증으로 Stack A를 재개한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
 | 2026-08-13 | Plan 10 resume 전체 검증 통과와 같은 completion 변경에서 Plan 20 readiness를 true로 복원한다 | [Plan 10](../completed/productization-10-public-order-reference.md), [Plan 20](../completed/productization-20-authentication-foundation.md) |
 | 2026-08-13 | Plan 20은 Spring Session 기본 `REQUIRES_NEW`를 `REQUIRED`로 바꿔 account lock transaction과 session rotation을 원자화하고 전체 검증 뒤 완료한다 | [Plan 20](../completed/productization-20-authentication-foundation.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
+| 2026-08-13 | Plan 30 smoke는 승인 결제 조회까지, account-backed Merchant 전환·환불 기본 전체 smoke는 Plan 40 완료 gate로 분리 | [Plan 30](../completed/productization-30-customer-account-and-login.md), [Plan 40](productization-40-merchant-account-and-initial-password.md) |
 
 ## Outcomes & Retrospective
 
@@ -441,10 +447,14 @@ git diff --cached --check
 - M2 Plan 20이 완료되어 네 인증 Chain, PostgreSQL Session/CSRF, CurrentActor와 failure-visible Session
   lifecycle을 제공한다. 고객·점주 계정/로그인은 범위대로 Plan 30/40에 남아 있고 그 전 보호 경로의
   401 중간 단절을 유지한다.
-- 프로그램 전체 결과는 아직 완료되지 않았다. M3~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
+- M3 Plan 30이 완료되어 CustomerAccount, 0원 PointAccount 원자 provisioning, 고객 Session 가입·로그인·
+  logout과 승인 결제 조회까지의 demo checkpoint를 제공한다. 점주 계정/Session과 기본 전체 smoke는
+  M4 Plan 40에 남아 있다.
+- 프로그램 전체 결과는 아직 완료되지 않았다. M4~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-12: Support deferred integration과 seven-PR Stack A topology를 반영.
 - 2026-08-13: Plan 20 completion과 Plan 30 readiness를 actual validation evidence로 반영.
+- 2026-08-13: Plan 30 completion, Plan 40 readiness와 customer/full smoke gate 분리를 반영.

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-12
-- **Implementation owner:** [Customer account and login](../exec-plans/active/productization-30-customer-account-and-login.md)
+- **Implementation owner:** [Customer account and login](../exec-plans/completed/productization-30-customer-account-and-login.md)
 
 ## Context
 

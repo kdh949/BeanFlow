@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `false`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/active/productization-30-customer-account-and-login.md`, `docs/exec-plans/active/productization-50-customer-order-read-model.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/active/productization-50-customer-order-read-model.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
