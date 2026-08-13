@@ -3,7 +3,7 @@ info:
   title: BeanFlow API
   version: 0.2.0
   x-beanflow-contract-status: target
-  x-beanflow-contract-date: 2026-08-12
+  x-beanflow-contract-date: 2026-08-14
   description: |
     Pre-release target contract for BeanFlow discovery, ordering, payment,
     pickup, loyalty, settlement, and dispute workflows. An operation in this
@@ -5128,13 +5128,8 @@ components:
         currentPassword: { $ref: "#/components/schemas/Password" }
         newPassword: { $ref: "#/components/schemas/Password" }
     MerchantStoreList:
-      type: object
-      additionalProperties: false
-      required: [items]
-      properties:
-        items:
-          type: array
-          items: { $ref: "#/components/schemas/MerchantStore" }
+      type: array
+      items: { $ref: "#/components/schemas/MerchantStore" }
     MerchantStore:
       type: object
       additionalProperties: false

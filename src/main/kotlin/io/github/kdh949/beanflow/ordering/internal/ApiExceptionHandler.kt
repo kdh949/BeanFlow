@@ -140,6 +140,7 @@ internal class ApiExceptionHandler(
 
             FailureCode.PAYMENT_DECLINED,
             FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,
+            FailureCode.ORDER_ACTION_NOT_ALLOWED,
             -> HttpStatus.UNPROCESSABLE_ENTITY
 
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,

@@ -247,7 +247,7 @@ force-push를 하지 않는다.
 | M3 | [productization-30](../completed/productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 완료 |
 | M4 | [productization-40](../completed/productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 완료 |
 | M5 | [productization-50](../completed/productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 완료 |
-| M6 | [productization-60](productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 준비 |
+| M6 | [productization-60](../completed/productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 완료 |
 | M7 | [productization-70](productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 준비 |
 | M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 대기 |
 | M9 | [productization-90](productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 대기 |
@@ -412,6 +412,14 @@ git diff --cached --check
   `fcd5a2319a9e44ac2c7eb242b5db789319b82e0a`이 일치한다. [Draft PR #67](https://github.com/kdh949/BeanFlow/pull/67)은
   OPEN/Draft이고 같은 head의 open PR은 하나다. GitHub 조회 시 `mergeStateStatus=UNSTABLE`이어서 CI 성공으로
   과장하지 않았으며, Stack A merge·ready 전환·force-push는 수행하지 않았다.
+- 2026-08-14 Plan 60 completion: exact Plan 50 head `fcd5a23` 위에 V56 주문보드 index, store-scoped
+  2-statement JDBC Projection, canonical ETag/304, membership-first 목록·상세·전이, `expectedStatus` 기반
+  409/422와 별도 멱등 namespace를 구현했다. 디자인 ZIP의 3열 POS 계약에 맞춘 다점포 보드와 3초
+  polling·hidden pause·권한 상실 상태도 연결했다. 최종 backend build 1,091 tests(0 failures, 0 errors,
+  1 skipped), `*StoreOrder*`, `*OrderBoard*`, Spotless, frontend 35 tests, 문서/OpenAPI와 desktop/mobile
+  브라우저 검증이 통과했다. 추가 frontend build의 기존 Plan 80/90 CSRF 세 오류는 범위 밖 미해결로
+  기록했다. Plan 90은 completed Plan 60 dependency를 소비해 readiness만 true로 전환하고 구현은 시작하지
+  않았다. Plan 60 Draft PR과 final seven-PR topology 검증 전까지 migration lease는 유지한다.
 
 ## Surprises & Discoveries
 
@@ -455,6 +463,14 @@ git diff --cached --check
 - Plan 50 frontend 전체 typecheck/build는 Plan 80/90이 소유한 mutation 세 곳의 CSRF header가 아직 없어
   실패한다. read-only 고객 주문 화면 29 tests와 mobile browser layout/error-state는 통과했으며 실제
   account-backed data browser flow는 Plan 80 전이라 완료 증거로 주장하지 않는다.
+- Plan 60 target `MerchantStoreList`만 `items` wrapper였지만 Plan 40 구현·계약 테스트·frontend는 모두
+  top-level array였다. 이미 배포 기준이 된 Plan 40 동작을 보존하고 target/runtime를 배열로 교정했다.
+- 주문보드 read index는 20,000-row local fixture에서 intended Index Only Scan을 만들었지만 1,000-row
+  insert와 상태 전이 write sample은 각각 약 31% 느려졌다. read/write 결과를 함께 evidence에 남겼고
+  production 성능 향상이나 SLA로 일반화하지 않는다.
+- Plan 60 첫 full build는 이전 runtime OpenAPI inline-schema 기대와 Support timeline의 비결정적 timestamp
+  fixture 때문에 2건 실패했다. 실제 `$ref` 계약과 DB 시간 check를 보존하는 방향으로 교정한 뒤 같은
+  전체 build를 다시 통과시켰다.
 
 ## Decision Log
 
@@ -487,6 +503,7 @@ git diff --cached --check
 | 2026-08-13 | Plan 30 smoke는 승인 결제 조회까지, account-backed Merchant 전환·환불 기본 전체 smoke는 Plan 40 완료 gate로 분리 | [Plan 30](../completed/productization-30-customer-account-and-login.md), [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md) |
 | 2026-08-13 | Plan 40은 account 범위 `MERCHANT` Audit actor와 Operations-owned outbound port를 사용하고, clean 전체 smoke 통과 뒤에만 Plan 50을 실행 가능하게 함 | [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-14 | Plan 50 목록은 R1 read-only candidate → bounded atomic W1 expiry → R2 fixed-candidate projection이며 빈 ACTIVE page도 scan boundary cursor를 사용 | [Plan 50](../completed/productization-50-customer-order-read-model.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
+| 2026-08-14 | Plan 60 전이는 client가 본 `expectedStatus`를 command에 포함하고 stale state 409와 불가능한 조합 422를 분리하며, 디자인의 3열 중 제조 중 열은 `ACCEPTED`와 `PREPARING`을 함께 표시 | [Plan 60](../completed/productization-60-store-order-board.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
 
 ## Outcomes & Retrospective
 
@@ -505,7 +522,11 @@ git diff --cached --check
 - M5 Plan 50이 완료되어 고객 주문 목록·상세가 Session owner, 공개 주문번호, immutable snapshot,
   signed keyset cursor와 서버 소유 `allowedActions`를 사용한다. V55 plan evidence와 1,078-test 전체
   regression이 통과했고 UUID 입력 고객 화면을 탭·기간 기반 목록으로 교체했다.
-- 프로그램 전체 결과는 아직 완료되지 않았다. M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
+- M6 Plan 60이 완료되어 점주가 Session membership으로 매장을 선택하고 공개 주문번호 기반 3열 보드에서
+  접수·제조·준비·픽업 완료를 처리한다. V56 query/write evidence, 동시 전이, ETag/304와 권한 상실의
+  failure-visible UI가 전체 regression과 브라우저 검증을 통과했다.
+- Stack A 구현은 완료됐지만 Plan 60 Draft PR과 정확한 seven-Draft-PR topology 검증 및 migration lease
+  해제가 아직 남아 있다. 프로그램 전체 M7~M10은 이 Goal 밖이며 시작하지 않는다.
 
 ## Revision Notes
 
@@ -515,3 +536,4 @@ git diff --cached --check
 - 2026-08-13: Plan 30 completion, Plan 40 readiness와 customer/full smoke gate 분리를 반영.
 - 2026-08-13: Plan 40 completion evidence와 Plan 50 readiness, 후속 dependency path를 반영.
 - 2026-08-14: Plan 50 completion evidence와 Plan 60/70 readiness, 남은 Stack A 범위를 반영.
+- 2026-08-14: Plan 60 implementation completion evidence, Plan 90 readiness와 남은 release topology gate를 반영.

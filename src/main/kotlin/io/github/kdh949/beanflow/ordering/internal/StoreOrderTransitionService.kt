@@ -54,6 +54,7 @@ internal class StoreOrderTransitionService(
     private val identifierSource: IdentifierSource,
     private val correlationIdSource: CorrelationIdSource,
     private val objectMapper: ObjectMapper,
+    private val boardProjector: StoreOrderBoardProjector,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -77,6 +78,49 @@ internal class StoreOrderTransitionService(
         request: StoreOrderTransitionRequest,
     ): StoreTransitionHttpResult {
         validate(request)
+        val payloadHash = CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
+        return transition(
+            actor = actor,
+            orderId = orderId,
+            idempotencyKey = idempotencyKey,
+            request = request,
+            operation = LEGACY_OPERATION,
+            payloadHash = payloadHash,
+            expectedStatus = null,
+        ) { result, _ -> objectMapper.writeValueAsString(result) }
+    }
+
+    @Transactional
+    fun transitionBoard(
+        actor: StoreTransitionActor,
+        orderId: UUID,
+        idempotencyKey: String,
+        request: StoreOrderActionRequest,
+    ): StoreTransitionHttpResult {
+        val targetState = StoreOrderBoardPresentationPolicy.targetState(request.action, request.expectedStatus)
+        val transitionRequest = StoreOrderTransitionRequest(targetState, request.reason)
+        validate(transitionRequest)
+        return transition(
+            actor = actor,
+            orderId = orderId,
+            idempotencyKey = idempotencyKey,
+            request = transitionRequest,
+            operation = BOARD_OPERATION,
+            payloadHash = CanonicalStoreOrderTransitionPayload.hashBoardAction(orderId, request),
+            expectedStatus = request.expectedStatus,
+        ) { result, now -> objectMapper.writeValueAsString(boardProjector.transitioned(result, now)) }
+    }
+
+    private fun transition(
+        actor: StoreTransitionActor,
+        orderId: UUID,
+        idempotencyKey: String,
+        request: StoreOrderTransitionRequest,
+        operation: String,
+        payloadHash: String,
+        expectedStatus: StoreOrderExpectedStatus?,
+        responseBody: (StoreOrderResult, Instant) -> String,
+    ): StoreTransitionHttpResult {
         val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         val order =
             orderRepository.findLockedById(orderId)
@@ -87,11 +131,10 @@ internal class StoreOrderTransitionService(
                 order.storeId,
                 actor.roles,
             )
-        val payloadHash = CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
         idempotencyRepository
             .findByActorIdAndOperationAndIdempotencyKey(
                 actor.actorId,
-                OPERATION,
+                operation,
                 idempotencyKey,
             )?.let { existing ->
                 if (existing.payloadHash != payloadHash) {
@@ -102,6 +145,12 @@ internal class StoreOrderTransitionService(
                 }
                 return StoreTransitionHttpResult(existing.responseStatus, existing.responseBody)
             }
+        if (expectedStatus != null && order.state.name != expectedStatus.name) {
+            throw DomainFailure(
+                FailureCode.ORDER_STATE_CONFLICT,
+                "Order state changed after the board item was rendered",
+            )
+        }
 
         val before = order.state.name
         val correlationId = correlationIdSource.currentOrCreate()
@@ -137,19 +186,18 @@ internal class StoreOrderTransitionService(
             }
         appendAudit(order, storeActor, before, request, now, correlationId, causationId)
         val status = if (request.targetState == StoreOrderTargetState.REJECTED) 202 else 200
-        val body =
-            objectMapper.writeValueAsString(
-                StoreOrderResult(
-                    order = response(order),
-                    compensationRecovery = recovery?.toStoreSummary(),
-                ),
+        val result =
+            StoreOrderResult(
+                order = response(order),
+                compensationRecovery = recovery?.toStoreSummary(),
             )
+        val body = responseBody(result, now)
         idempotencyRepository.save(
             StoreCommandIdempotencyEntity(
                 id = identifierSource.next(),
                 actorId = actor.actorId,
                 orderId = orderId,
-                operation = OPERATION,
+                operation = operation,
                 idempotencyKey = idempotencyKey,
                 payloadHash = payloadHash,
                 responseStatus = status,
@@ -378,6 +426,7 @@ internal class StoreOrderTransitionService(
 
     private companion object {
         val IDEMPOTENCY_RETENTION: java.time.Duration = java.time.Duration.ofDays(90)
-        const val OPERATION = "STORE_ORDER_TRANSITION_V2"
+        const val LEGACY_OPERATION = "STORE_ORDER_TRANSITION_V2"
+        const val BOARD_OPERATION = "STORE_ORDER_BOARD_ACTION_V1"
     }
 }

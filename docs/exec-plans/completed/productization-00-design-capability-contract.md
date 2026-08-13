@@ -312,7 +312,7 @@ git diff --cached --check
 | 2026-08-12 | 첨부 디자인 계약 자료는 SHA-256 `a546e3f4253f35f9c0c405d0c8f1b57e3d94e98f5a7eeb32c5ce72dc3b1f612e`인 ZIP으로 고정하고 세 HTML의 48개 label을 기준으로 판독 | [Capability Map](../../product/design-to-capability-map.md) |
 | 2026-08-12 | 고객 취소 예상 환급은 `GET /me/orders/{orderReference}`의 선택적 `cancellationPreview`로 서버가 계산하며 명령 시 재검증 | [Conflicts C-7](../../product/design-contract-conflicts.md) |
 | 2026-08-12 | 고객·점주 Session Cookie 이름과 body 없는 CSRF 204 응답을 target wire contract로 고정 | [MD-2026-013](../../decisions/minor-decisions.md) |
-| 2026-08-12 | 점주 `4a 매장 비교`의 P0 매장 전환 Backend는 Plan 40, 최종 화면·상태 검증은 Plan 60이 소유 | [Capability Map](../../product/design-to-capability-map.md), [Plan 60](../active/productization-60-store-order-board.md) |
+| 2026-08-12 | 점주 `4a 매장 비교`의 P0 매장 전환 Backend는 Plan 40, 최종 화면·상태 검증은 Plan 60이 소유 | [Capability Map](../../product/design-to-capability-map.md), [Plan 60](productization-60-store-order-board.md) |
 | 2026-08-12 | Public config를 제외한 P0 고객 탐색·주문·결제 경로는 Customer Session 단일 Chain이며 unsafe request는 고객 CSRF header를 요구 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [Authorization Matrix](../../security/authorization-matrix.md) |
 
 ## Outcomes & Retrospective

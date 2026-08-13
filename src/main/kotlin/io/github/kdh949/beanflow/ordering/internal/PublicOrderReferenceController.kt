@@ -66,25 +66,35 @@ internal class PublicCustomerOrderController(
 @RequestMapping("/api/v1/stores/{storeId}/orders")
 internal class PublicStoreOrderController(
     private val service: PublicOrderReferenceService,
+    private val board: StoreOrderBoardQueryService,
 ) {
+    @GetMapping
+    @PreAuthorize("hasRole('MERCHANT')")
+    fun list(
+        actor: MerchantActor,
+        @PathVariable storeId: UUID,
+        @RequestParam(required = false) lane: StoreOrderBoardLane?,
+        @RequestHeader("If-None-Match", required = false) ifNoneMatch: String?,
+    ): ResponseEntity<StoreOrderBoardResponse> = board.list(actor.actorId, storeId, lane, ifNoneMatch)
+
     @GetMapping("/{orderReference}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('MERCHANT')")
     fun get(
         actor: MerchantActor,
         @PathVariable storeId: UUID,
         @PathVariable orderReference: String,
-    ): PublicStoreOrderResult = service.getStoreOrder(storeActor(actor), storeId, orderReference)
+    ): StoreOrderBoardItemResponse = board.detail(actor.actorId, storeId, orderReference)
 
     @PostMapping("/{orderReference}/transitions")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('MERCHANT')")
     fun transition(
         actor: MerchantActor,
         @PathVariable storeId: UUID,
         @PathVariable orderReference: String,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-        @Valid @RequestBody request: StoreOrderTransitionRequest,
+        @Valid @RequestBody request: StoreOrderActionRequest,
     ): ResponseEntity<String> {
-        val result = service.transitionStoreOrder(storeActor(actor), storeId, orderReference, idempotencyKey, request)
+        val result = service.transitionStoreOrderBoard(storeActor(actor), storeId, orderReference, idempotencyKey, request)
         return ResponseEntity.status(result.status).contentType(MediaType.APPLICATION_JSON).body(result.body)
     }
 }

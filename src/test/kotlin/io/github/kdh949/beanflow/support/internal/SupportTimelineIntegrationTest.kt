@@ -227,7 +227,7 @@ internal class SupportTimelineIntegrationTest
             grant("SUPPORT_ORDER_READ")
             val scope = authorization.authorizeOrder(actorId, caseId, orderId)
             jdbcTemplate.update(
-                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, unlink_reason = 'TIMELINE_RECHECK', unlink_case_version = 1 WHERE support_case_id = ? AND subject_id = ?",
+                "UPDATE support_case_subject_link SET unlinked_at = linked_at + interval '1 microsecond', unlinked_by_actor_id = ?, unlink_reason = 'TIMELINE_RECHECK', unlink_case_version = 1 WHERE support_case_id = ? AND subject_id = ?",
                 actorId,
                 caseId,
                 orderId,

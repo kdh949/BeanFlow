@@ -10,8 +10,8 @@
 | 운영자 현재 actor 조회 (`/operations/me`) | No | No | No | Own JWT | Own JWT |
 | 접근 가능 매장 목록 (`/merchant/me/stores`) | No | ACTIVE membership만 | ACTIVE membership만 | No | No |
 | 내 주문 목록·상세 (`/me/orders`, 주문번호) | Customer Session의 own 주문만 | No | No | 별도 Support 경로만 | No |
-| 매장 주문보드 목록 | No | Owned store | Assigned store | No | No |
-| 매장 주문 상태 전이 (주문번호) | No | Owned store | Assigned store | No | No |
+| 매장 주문보드 목록·상세 (`/stores/{storeId}/orders`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
+| 매장 주문 상태 전이 (`/stores/{storeId}/orders/{orderReference}/transitions`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 빠른 재주문 | Own terminal source only | No | No | No direct reorder | No |
 | 내 결제수단 등록·목록 | Own only | No | No | No public support endpoint | No |
@@ -181,6 +181,10 @@ terminal exit contract는 [operator permission bootstrap runbook](../operations/
 매장 주문 명령은 Merchant Session의 `MerchantActor` 유형과 Identity의 현재 `ACTIVE` membership을
 요구한다. Session에는 role을 캐시하지 않으며 요청 시점의 membership role이 세부 권한 source다.
 membership이 `REVOKED`이거나 operation이 허용하지 않는 role이면 `403`이다.
+주문보드 목록은 `store_id`를 SQL predicate에 포함하고, 상세·전이는 요청 매장 membership을
+reference 존재 확인보다 먼저 검사한다. 전이는 Order row lock을 얻은 뒤 실제 Order의 store에 대해
+membership을 다시 확인한다. 따라서 membership이 없거나 revoke된 actor에게 reference 존재 여부를
+404로 먼저 노출하지 않으며, 조회 뒤 필터링이나 Session-cached 매장 목록으로 대체하지 않는다.
 
 부분 환불 preview와 실행도 같은 객체 수준 인가를 적용한다(BR-38). `OWNER`와 `STAFF` 모두 자신이
 `ACTIVE` membership을 가진 매장의 주문에 실행할 수 있지만, 다른 매장이나 허용되지 않은 membership role은

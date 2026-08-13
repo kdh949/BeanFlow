@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-13
+  x-beanflow-contract-date: 2026-08-14
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -324,71 +324,12 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/orders:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders"
   /stores/{storeId}/orders/{orderReference}:
-    get:
-      tags: [Store Orders]
-      operationId: getStoreOrderByReferenceRuntime
-      summary: Get a store-owned order through its canonical public reference
-      parameters:
-        - $ref: "./beanflow-v1.yaml#/components/parameters/StoreId"
-        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderReference"
-      responses:
-        "200":
-          description: Current store projection without the internal order UUID
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimePublicStoreOrderResult"
-        "400":
-          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
-        "401":
-          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
-        "404":
-          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
-        "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}"
   /stores/{storeId}/orders/{orderReference}/transitions:
-    post:
-      tags: [Store Orders]
-      operationId: transitionStoreOrderByReferenceRuntime
-      summary: Transition a store-owned order through its canonical public reference
-      parameters:
-        - $ref: "./beanflow-v1.yaml#/components/parameters/StoreId"
-        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderReference"
-        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RuntimeStoreOrderTransitionRequest"
-      responses:
-        "200":
-          description: Synchronous store transition
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimePublicStoreOrderResult"
-        "202":
-          description: REJECTED committed while compensation continues independently
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimePublicStoreOrderResult"
-        "400":
-          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
-        "401":
-          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
-        "404":
-          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
-        "409":
-          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
-        "503":
-          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1transitions"
   /operations/orders/{orderId}/compensation:
     get:
       tags: [Operations]
@@ -855,57 +796,6 @@ components:
             - type: string
               maxLength: 500
             - type: "null"
-    RuntimePublicStoreOrderResult:
-      type: object
-      additionalProperties: false
-      required: [order]
-      properties:
-        order:
-          $ref: "#/components/schemas/RuntimePublicStoreOrder"
-        compensationRecovery:
-          $ref: "#/components/schemas/RuntimeStoreCompensationSummary"
-    RuntimePublicStoreOrder:
-      type: object
-      description: Transitional store projection. Plan 60 replaces this shape with StoreOrderBoardItem.
-      not:
-        required: [orderId]
-      required:
-        - storeId
-        - publicReference
-        - pickupNumber
-        - pickupBusinessDate
-        - storeName
-        - pickupWindowStart
-        - pickupWindowEnd
-        - state
-        - lines
-        - subtotalKrw
-        - couponDiscountKrw
-        - pointsAppliedKrw
-        - payableKrw
-        - currency
-        - createdAt
-        - updatedAt
-      properties:
-        storeId: { $ref: "./beanflow-v1.yaml#/components/schemas/Identifier" }
-        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
-        pickupNumber: { type: string, pattern: '^A-[1-9][0-9]*$' }
-        pickupBusinessDate: { type: string, format: date }
-        storeName: { type: string, minLength: 1, maxLength: 200 }
-        pickupWindowStart: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        pickupWindowEnd: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        state: { $ref: "./beanflow-v1.yaml#/components/schemas/OrderState" }
-        lines:
-          type: array
-          minItems: 1
-          items: { $ref: "./beanflow-v1.yaml#/components/schemas/OrderLine" }
-        subtotalKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        couponDiscountKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        pointsAppliedKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        payableKrw: { $ref: "./beanflow-v1.yaml#/components/schemas/MoneyKrw" }
-        currency: { $ref: "./beanflow-v1.yaml#/components/schemas/Currency" }
-        createdAt: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
-        updatedAt: { $ref: "./beanflow-v1.yaml#/components/schemas/DateTime" }
     RuntimeStoreOrderResult:
       type: object
       additionalProperties: false

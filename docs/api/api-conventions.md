@@ -41,6 +41,9 @@ Customer와 Merchant Session Cookie는 각각 `BEANFLOW_CUSTOMER_SESSION`,
 소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
 public view를 통해 검증하며, accepted decision은 Settlement public Adjustment command로 넘긴다.
 
+`GET /merchant/me/stores`는 현재 `ACTIVE` membership을 top-level 배열로 반환한다. 빈 배열은
+정상적인 “접근 가능한 매장 없음”이고, Identity 조회 실패는 빈 배열로 대체하지 않고 503이다.
+
 ## Status codes
 
 ### Support staged surface
@@ -69,6 +72,29 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 - `422 Unprocessable Entity`: 형식은 유효하지만 도메인 규칙 위반을 분리할 필요가 있을 때
 - `503 Service Unavailable`: 필수 의존성 일시 장애
 - 외부 결과 불명은 API 계약에 명시된 pending/unknown 표현 사용
+
+## Store order board conditional reads and actions
+
+`GET /api/v1/stores/{storeId}/orders`는 해당 매장의 모든 실행 상태
+`PAID`, `ACCEPTED`, `PREPARING`, `READY`를 픽업 영업일별로 그룹화한다. `PAID`는 API lane
+`PENDING_ACCEPTANCE`로 표현하며 새 Domain 상태가 아니다. 고객 개인정보, 내부 Order UUID와 결제
+식별자는 응답하지 않는다.
+
+- 200 응답은 정렬된 전체 `StoreOrderBoard` Projection을 canonical JSON으로 직렬화한 SHA-256 strong
+  `ETag`를 포함한다.
+- `If-None-Match`는 쉼표로 구분한 tag, weak tag와 `*`를 처리한다. 현재 tag와 일치하면 304와 빈 body를
+  반환한다. 304도 membership 확인과 Projection 조회·hash 계산을 수행한다.
+- `PAID`의 `OPEN`, `WARNING`, `TIMEOUT_PENDING` phase가 canonical Projection에 포함되므로 DB 변경이
+  없어도 2분·3분 경계에서 tag가 바뀐다. hash 또는 Projection 실패를 full 200이나 빈 보드로
+  대체하지 않고 503으로 반환한다.
+- 상세와 전이는 UUID가 아닌 canonical `orderReference`를 사용한다. 다른 매장 reference는 403,
+  접근 가능한 범위에 없는 reference는 404다.
+- 전이 body는 `{action, expectedStatus, reason?}`다. action과 예상 출발 상태 조합 자체가 불가능하면
+  `422 ORDER_ACTION_NOT_ALLOWED`, row lock 뒤 실제 상태가 달라졌으면
+  `409 ORDER_STATE_CONFLICT`다. 같은 idempotency key의 exact replay는 이 비교보다 먼저 최초 응답을
+  재생한다.
+- 일반 전이는 200, `REJECT`는 Order 거절 commit 뒤 보상 진행을 분리해 202일 수 있다. 202는 환불·
+  자원·혜택·알림 보상 완료가 아니다.
 
 ## PaymentMethod lifecycle
 

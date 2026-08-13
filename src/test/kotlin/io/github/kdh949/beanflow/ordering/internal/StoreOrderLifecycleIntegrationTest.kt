@@ -117,8 +117,8 @@ internal class StoreOrderLifecycleIntegrationTest
                     get("/api/v1/stores/{storeId}/orders/{orderReference}", fixture.storeId, reference.lowercase())
                         .with(storeJwt(actorId)),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.order.orderId").doesNotExist())
-                .andExpect(jsonPath("$.order.publicReference").value(reference))
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.orderReference").value(reference))
             mockMvc
                 .perform(
                     get("/api/v1/stores/{storeId}/orders/{orderReference}", UUID.randomUUID(), reference)
@@ -136,11 +136,11 @@ internal class StoreOrderLifecycleIntegrationTest
                         .with(csrf())
                         .header("Idempotency-Key", "public-store-accept")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"targetState":"ACCEPTED","reason":null}"""),
+                        .content("""{"action":"ACCEPT","expectedStatus":"PAID","reason":null}"""),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.order.orderId").doesNotExist())
-                .andExpect(jsonPath("$.order.publicReference").value(reference))
-                .andExpect(jsonPath("$.order.state").value("ACCEPTED"))
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.orderReference").value(reference))
+                .andExpect(jsonPath("$.status").value("ACCEPTED"))
             mockMvc
                 .perform(
                     post(
@@ -151,7 +151,7 @@ internal class StoreOrderLifecycleIntegrationTest
                         .with(csrf())
                         .header("Idempotency-Key", "wrong-store-transition")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"targetState":"PREPARING","reason":null}"""),
+                        .content("""{"action":"START_PREPARING","expectedStatus":"ACCEPTED","reason":null}"""),
                 ).andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
         }
@@ -555,6 +555,67 @@ internal class StoreOrderLifecycleIntegrationTest
                     fixture.pickupSlotId,
                 ),
             ).isZero()
+            awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `board rejection returns a terminal card while notification failure remains retryable without rollback`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "board-rejection-notification-failure")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        fixture.storeId,
+                        reference,
+                    ).with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "board-rejection-failure-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            {
+                              "action": "REJECT",
+                              "expectedStatus": "PAID",
+                              "reason": "OUT_OF_STOCK"
+                            }
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.lane").doesNotExist())
+                .andExpect(jsonPath("$.acceptancePhase").doesNotExist())
+                .andExpect(jsonPath("$.allowedActions.length()").value(0))
+                .andExpect(jsonPath("$.compensationRecovery.state").value("PROCESSING"))
+                .andExpect(jsonPath("$.compensationRecovery.steps").doesNotExist())
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+
+            await("rejection notification work") {
+                count(
+                    "SELECT count(*) FROM notification_delivery WHERE order_id = ? AND template = 'ORDER_REJECTED'",
+                    orderId,
+                ) == 1L
+            }
+            notificationProvider.enqueue(NotificationProviderResult.Failed("TEST_REJECTION_DELIVERY_FAILURE"))
+            assertThat(notificationWorker.runOnce()).isEqualTo(1)
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("REJECTED")
+            assertThat(
+                value<String>(
+                    "SELECT state FROM notification_delivery WHERE order_id = ? AND template = 'ORDER_REJECTED'",
+                    orderId,
+                ),
+            ).isEqualTo("RETRY_SCHEDULED")
+            assertThat(
+                value<String>(
+                    "SELECT state FROM operations_order_compensation_case WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo("RETRY_SCHEDULED")
             awaitNoOutstandingPublications()
         }
 

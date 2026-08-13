@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/active/productization-60-store-order-board.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/completed/productization-60-store-order-board.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -215,8 +215,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다. 선행 board/identity 완료와 기존 dispute index 실행계획 확인 후 준비 상태를
-전환한다. 이 plan 자체는 migration writer lease를 요구하지 않는다.
+2026-08-14: 선행 Plan 40과 Plan 60의 실제 Outcome·필수 검증이 모두 completed되어 dependency path와
+`Implementation-Ready=true`를 갱신했다. 구현은 시작하지 않았고 기존 dispute index 실행계획 확인은
+이 plan의 첫 milestone로 남는다. 이 plan 자체는 migration writer lease를 요구하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -238,3 +239,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-12: 최초 작성.
+- 2026-08-14: Plan 60 완료에 따라 dependency path와 readiness를 갱신. 구현은 시작하지 않음.

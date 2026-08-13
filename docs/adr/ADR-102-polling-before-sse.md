@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Store order board](../exec-plans/active/productization-60-store-order-board.md)
+- **Implementation owner:** [Store order board](../exec-plans/completed/productization-60-store-order-board.md)
 
 ## Context
 
@@ -102,6 +102,18 @@ Polling의 최대 갱신 지연은 주기와 같다. 3분 수락 정책을 근�
 - 보드 조회 p95
 - 주문 상태 변경부터 보드 반영까지의 시간
 - DB CPU와 커넥션 사용량(HikariCP active·pending)
+
+## Implementation Results
+
+2026-08-14 Plan 60에서 점주 보드에 3초 conditional polling을 구현했다. canonical
+`StoreOrderBoard` JSON의 SHA-256 strong ETag를 반환하며, weak/comma-separated `If-None-Match`와 `*`도
+처리한다. 동일 Projection은 304와 빈 body를 반환하고, hash 실패는 full response fallback 없이 503이다.
+고정 Clock 통합 테스트에서 DB 변경 없이 warning·timeout 경계마다 phase와 ETag가 바뀌는 것을 확인했다.
+
+브라우저 상태 테스트는 탭 hidden 동안 요청 0건, visible 복귀 즉시 현재 ETag를 포함한 1회 요청을
+확인한다. 전이 성공은 command response item으로 열을 갱신해 추가 GET을 만들지 않고, 409만 현재 보드를
+지운 뒤 unconditional 재조회한다. membership 403은 이전 보드와 선택을 지우고 ACTIVE 매장 목록을
+다시 읽는다. SSE 재검토 조건을 충족하는 운영 부하 측정은 아직 없으므로 transport 결정은 유지한다.
 
 ## Revisit Conditions
 

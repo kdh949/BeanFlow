@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
@@ -13,6 +14,7 @@ internal class PublicOrderReferenceService(
     private val orders: OrderJpaRepository,
     private val cancellations: CustomerCancellationService,
     private val storeOrders: StoreOrderTransitionService,
+    private val storeAccess: StoreAccessOperations,
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry,
 ) {
@@ -61,6 +63,18 @@ internal class PublicOrderReferenceService(
         val result = storeOrders.transition(actor, resolved.orderId, idempotencyKey, request)
         val stored = objectMapper.readValue(result.body, StoreOrderResult::class.java)
         return StoreTransitionHttpResult(result.status, objectMapper.writeValueAsString(stored.toPublicResponse()))
+    }
+
+    fun transitionStoreOrderBoard(
+        actor: StoreTransitionActor,
+        storeId: UUID,
+        rawReference: String,
+        idempotencyKey: String,
+        request: StoreOrderActionRequest,
+    ): StoreTransitionHttpResult {
+        storeAccess.requireOrderManagementAccess(actor.actorId, storeId, actor.roles)
+        val resolved = resolveStore(storeId, rawReference)
+        return storeOrders.transitionBoard(actor, resolved.orderId, idempotencyKey, request)
     }
 
     @Transactional(readOnly = true)

@@ -25,20 +25,19 @@ internal class PublicOrderReferenceOpenApiContractTest {
             .contains("./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}")
         assertThat(pathItem(runtime, "/me/orders/{orderReference}/cancellations"))
             .contains("OrderReference", "\"400\"", "\"403\"", "\"404\"")
-        listOf(
-            "/stores/{storeId}/orders/{orderReference}",
-            "/stores/{storeId}/orders/{orderReference}/transitions",
-        ).forEach { path ->
-            assertThat(pathItem(runtime, path)).contains("OrderReference", "\"400\"", "\"403\"", "\"404\"")
-        }
+        assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}"))
+            .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}")
+        assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}/transitions"))
+            .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1transitions")
         val inputPattern = Regex("(?ms)^    OrderReference:\\n.*?pattern: '([^']+)'").find(target)!!.groupValues[1]
         assertThat(Regex(inputPattern).matches("bf-7k3m-9q2p")).isTrue()
         assertThat(Regex(inputPattern).matches("BF-7K3I-9Q2P")).isFalse()
         assertThat(schema(target, "CustomerOrderDetail"))
             .contains("orderReference", "pickupNumber", "allowedActions")
             .doesNotContain("orderId:")
-        assertThat(schema(runtime, "RuntimePublicStoreOrder"))
-            .contains("not:", "required: [orderId]", "publicReference", "pickupNumber")
+        assertThat(schema(target, "StoreOrderBoardItem"))
+            .contains("orderReference", "pickupNumber", "allowedActions")
+            .doesNotContain("orderId:", "customerId:", "paymentId:")
         assertThat(schema(target, "CustomerCancellationResult"))
             .contains("required: [orderReference")
             .doesNotContain("orderId:")

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Store order board](../exec-plans/active/productization-60-store-order-board.md)
+- **Implementation owner:** [Store order board](../exec-plans/completed/productization-60-store-order-board.md)
 
 ## Context
 
@@ -137,6 +137,23 @@ CREATE INDEX ix_ordering_order_store_acceptance_board
 - 잘못된 전이 요청 수
 - 매장 권한 거부 수
 - 주문 생성부터 보드 노출까지의 시간
+
+## Implementation Results
+
+2026-08-14 Plan 60에서 전용 JDBC Projection을 구현했다. 목록은 Order header와 batched line 두 문장으로
+고정되며 1건과 50건 fixture가 같은 statement count를 확인한다. SQL은 `store_id`와 실행 상태를 함께
+predicate로 사용하고, 상세는 요청 매장 scope 조회 뒤 전역 존재 확인으로 403/404를 구분한다.
+
+V56은 결정한 두 인덱스를 그대로 설치한다. PostgreSQL 17 / PostGIS 3.5의 20,000행 고정 fixture에서
+일반 실행 lane은 `ix_board_fixture`, PAID deadline lane은 partial `ix_acceptance_fixture`의
+Index Only Scan을 사용했다. 1,000건 단일 실행 쓰기 표본은 두 인덱스가 있는 경우 insert와 상태 전이
+시간이 각각 약 31% 높았다. 이 결과는 SLA나 운영 성능 주장이 아니며 상세 조건과 원시는
+[성능 증거](../quality/store-order-board-performance-evidence.md)에 기록한다.
+
+전이는 기존 `PESSIMISTIC_WRITE`와 Aggregate 메서드를 재사용하고, 새 operation
+`STORE_ORDER_BOARD_ACTION_V1`에 action·expectedStatus를 포함한 canonical payload를 저장한다. exact
+replay, 409 경쟁 패자, 422 불가능 조합, 각 advertised action의 실제 성공, 거절 알림 실패 후 독립
+`RETRY_SCHEDULED`를 PostgreSQL 통합 테스트로 고정했다.
 
 ## Revisit Conditions
 

@@ -687,6 +687,23 @@ export interface paths {
         patch: operations["transitionStoreOrderStatus"];
         trace?: never;
     };
+    "/stores/{storeId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all actionable store orders, including future paid orders awaiting acceptance */
+        get: operations["listStoreOrderBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/orders/{orderReference}": {
         parameters: {
             query?: never;
@@ -694,8 +711,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a store-owned order through its canonical public reference */
-        get: operations["getStoreOrderByReferenceRuntime"];
+        /** Get a store order by public order reference */
+        get: operations["getStoreOrderByReference"];
         put?: never;
         post?: never;
         delete?: never;
@@ -713,8 +730,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Transition a store-owned order through its canonical public reference */
-        post: operations["transitionStoreOrderByReferenceRuntime"];
+        /** Apply one server-allowed store order action */
+        post: operations["transitionStoreOrderByReference"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2619,30 +2636,6 @@ export interface components {
             targetState: "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED";
             reason?: string | null;
         };
-        RuntimePublicStoreOrderResult: {
-            order: components["schemas"]["RuntimePublicStoreOrder"];
-            compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
-        };
-        /** @description Transitional store projection. Plan 60 replaces this shape with StoreOrderBoardItem. */
-        RuntimePublicStoreOrder: {
-            storeId: components["schemas"]["Identifier"];
-            publicReference: string;
-            pickupNumber: string;
-            /** Format: date */
-            pickupBusinessDate: string;
-            storeName: string;
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
-            state: components["schemas"]["OrderState"];
-            lines: components["schemas"]["OrderLine"][];
-            subtotalKrw: components["schemas"]["MoneyKrw"];
-            couponDiscountKrw: components["schemas"]["MoneyKrw"];
-            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
-            payableKrw: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
-            createdAt: components["schemas"]["DateTime"];
-            updatedAt: components["schemas"]["DateTime"];
-        };
         RuntimeStoreOrderResult: {
             order: components["schemas"]["StoreOrder"];
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
@@ -2721,9 +2714,7 @@ export interface components {
             /** @enum {string} */
             membershipRole: "OWNER" | "STAFF";
         };
-        MerchantStoreList: {
-            items: components["schemas"]["MerchantStore"][];
-        };
+        MerchantStoreList: components["schemas"]["MerchantStore"][];
         NearbyStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
@@ -3274,6 +3265,58 @@ export interface components {
          *     representation.
          */
         StoreOrder: components["schemas"]["Order"] & Record<string, never>;
+        /** @enum {string} */
+        StoreOrderAction: "ACCEPT" | "REJECT" | "START_PREPARING" | "MARK_READY" | "COMPLETE";
+        /**
+         * @description Store-facing compensation projection for a terminated order. Store
+         *     members see what terminated the order and whether owner compensation is
+         *     still running, but never the step breakdown, attempt counts, internal
+         *     error codes, case identifier or benefit policy versions. Those are
+         *     operator-only and returned by OperatorCompensationView (ADR-030,
+         *     ADR-033). Order termination does not imply compensation success.
+         */
+        StoreCompensationSummary: {
+            /** @enum {string} */
+            trigger: "STORE_REJECTION" | "CUSTOMER_CANCELLATION";
+            /** @enum {string} */
+            state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        StoreOrderBoardItem: {
+            orderReference: string;
+            pickupNumber: string;
+            /** Format: date */
+            pickupBusinessDate: string;
+            /** @enum {string} */
+            lane?: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+            status: components["schemas"]["OrderState"];
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            itemSummary: string;
+            acceptanceDeadlineAt?: components["schemas"]["DateTime"];
+            /** @enum {string} */
+            acceptancePhase?: "OPEN" | "WARNING" | "TIMEOUT_PENDING";
+            allowedActions: components["schemas"]["StoreOrderAction"][];
+            compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
+        };
+        StoreOrderBoardDateGroup: {
+            /** Format: date */
+            pickupBusinessDate: string;
+            /** @description Every item has the same pickupBusinessDate as this group. */
+            items: components["schemas"]["StoreOrderBoardItem"][];
+        };
+        StoreOrderBoard: {
+            groups: components["schemas"]["StoreOrderBoardDateGroup"][];
+        };
+        StoreOrderActionRequest: {
+            action: components["schemas"]["StoreOrderAction"];
+            /**
+             * @description Order status rendered when the operator chose the action; a changed current status returns ORDER_STATE_CONFLICT.
+             * @enum {string}
+             */
+            expectedStatus: "PAID" | "ACCEPTED" | "PREPARING" | "READY";
+            reason?: string;
+        };
         CompensationBenefitPolicyReference: {
             /** @enum {string} */
             benefitType: "COUPON" | "POINTS";
@@ -4758,7 +4801,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"] | components["schemas"]["ReorderItemsUnavailableError"];
             };
         };
-        /** @description Provider explicitly declined a syntactically valid command */
+        /** @description A syntactically valid command was explicitly declined by the responsible domain or Provider */
         UnprocessableEntity: {
             headers: {
                 [name: string]: unknown;
@@ -5994,7 +6037,45 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
-    getStoreOrderByReferenceRuntime: {
+    listStoreOrderBoard: {
+        parameters: {
+            query?: {
+                lane?: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+            };
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete board snapshot with ETag */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreOrderBoard"];
+                };
+            };
+            /** @description Board has not changed for the supplied If-None-Match value */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreOrderByReference: {
         parameters: {
             query?: never;
             header?: never;
@@ -6007,13 +6088,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current store projection without the internal order UUID */
+            /** @description Store-facing order without customer-only cancellation or refund data */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
+                    "application/json": components["schemas"]["StoreOrderBoardItem"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -6023,12 +6104,14 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
-    transitionStoreOrderByReferenceRuntime: {
+    transitionStoreOrderByReference: {
         parameters: {
             query?: never;
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -6039,26 +6122,26 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuntimeStoreOrderTransitionRequest"];
+                "application/json": components["schemas"]["StoreOrderActionRequest"];
             };
         };
         responses: {
-            /** @description Synchronous store transition */
+            /** @description Transition committed or exact idempotent result returned */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
+                    "application/json": components["schemas"]["StoreOrderBoardItem"];
                 };
             };
-            /** @description REJECTED committed while compensation continues independently */
+            /** @description Rejection committed while compensation continues independently */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
+                    "application/json": components["schemas"]["StoreOrderBoardItem"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -6066,6 +6149,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

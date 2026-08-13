@@ -1,11 +1,11 @@
 # 점주가 상태별 주문보드로 매장을 운영한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/completed/productization-50-customer-order-read-model.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-14`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -249,6 +249,28 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-14: exact Plan 50 completion `fcd5a2319a9e44ac2c7eb242b5db789319b82e0a`에서
   `feature/productization-60-store-order-board`를 만들고 Plan 60 범위와 디자인 ZIP의 POS 3열 흐름을
   다시 확인했다. A안에 따라 `expectedStatus` command precondition과 409/422 분리 계약을 먼저 기록했다.
+- 2026-08-14: V56에 store/state/pickup 정렬 index와 PAID acceptance-deadline partial index를 추가하고,
+  매장 predicate를 SQL에 고정한 JDBC Projection을 구현했다. Order header 한 문장과 line batch 한 문장으로
+  활성 주문 1건과 50건이 모두 두 SQL statement를 사용한다.
+- 2026-08-14: 목록·상세·전이 API, canonical SHA-256 ETag와 304, 매 요청 membership 확인, 403/404
+  store scope 구분, 실패 시 503, 서버 계산 `allowedActions`, `expectedStatus` 경쟁 검출과 별도
+  `STORE_ORDER_BOARD_ACTION_V1` 멱등 namespace를 구현했다. 기존 UUID lifecycle endpoint는 바꾸지 않았다.
+- 2026-08-14: 첨부 디자인 ZIP의 `kit/PosScreen.jsx`를 화면 계약으로 사용해 접수 대기/제조 중/준비 완료
+  3열 보드를 구현했다. Domain `ACCEPTED`와 `PREPARING`은 디자인의 제조 중 한 열에 함께 표시하며,
+  ACTIVE membership 단일 매장은 즉시 열고 다점포 계정만 선택기를 노출한다. UUID 입력은 제거했다.
+- 2026-08-14: PostgreSQL 17 Testcontainers에서 cross-store·REVOKED·privacy·미래 픽업·date grouping,
+  1/50건 SQL 수, ETag 시간 경계·hash 장애, exact replay·409/422, 모든 action과 2요청 동시 전이를 검증했다.
+  `*StoreOrder*`, `*OrderBoard*`, Spotless와 최종 full build 1,091 tests(0 failures, 0 errors, 1 skipped)가
+  통과했다. 첫 full build에서는 runtime 계약의 이전 inline schema 기대와 Support timeline fixture의
+  비결정적 timestamp가 각각 한 건 실패했으며, 실제 runtime `$ref`와 DB check를 보존하는 결정적 fixture로
+  고친 뒤 집중 테스트와 전체 build를 다시 통과시켰다.
+- 2026-08-14: 프론트엔드 Vitest는 6 files/35 tests가 통과했다. 브라우저에서 1440×1000 3열 배치,
+  375px 수평 보드, ETag conditional polling, visibility pause/resume, 다점포 전환과 console error 0건을
+  확인했다. 추가 `npm run build`는 Plan 80/90 소유의 기존 customer/merchant mutation 세 곳이
+  `X-BEANFLOW-CSRF`를 아직 보내지 않아 종료 코드 2로 실패했다. Plan 60 주문보드 mutation은 CSRF를
+  전송하며 이 범위 밖의 세 경로를 수정하지 않았다.
+- 2026-08-14: `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`와 `git diff --check`가 통과했다.
+  문서 완료 이동과 successor path 갱신 뒤 같은 검증을 다시 실행한다.
 
 ## Surprises & Discoveries
 
@@ -257,6 +279,21 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   제공하고, REJECT 응답에는 축약 `compensationRecovery`만 제공하도록 계약을 교정한다.
 - 계획 본문의 "조건부 UPDATE" 설명과 실제 구현이 달랐다. 기존 전이 서비스는 Order row
   `PESSIMISTIC_WRITE`로 직렬화하므로 이를 재사용하고 `expectedStatus` 비교로 경쟁 패자를 식별한다.
+- Plan 40의 `GET /merchant/me/stores` 구현과 테스트는 최상위 배열을 반환하지만 target OpenAPI의
+  `MerchantStoreList`만 `items` wrapper로 남아 있었다. 기존 동작을 깨지 않고 실제 배열 계약으로
+  target/runtime/generated type을 맞추고 계약 테스트를 추가했다.
+- 다른 매장의 공개 주문번호가 존재하는지 판별하기 전에 membership을 확인하지 않으면 membership 없는
+  actor가 404/403 차이를 관찰할 수 있었다. 전이 facade가 reference resolution 전에 membership을 확인하고,
+  locked transition에서 다시 확인하도록 두 경계를 유지했다.
+- `COMPLETE` action fixture가 결제·정산 입력 없이 Order state만 직접 바꾸면 기존 completion 경로가
+  `DEPENDENCY_UNAVAILABLE`로 올바르게 실패했다. assertion을 약화하지 않고 실제 approved Payment를 만든 뒤
+  모든 광고 action 성공을 검증했다.
+- 첫 전체 build에서 Support timeline의 `unlinked_at=now()`가 매우 드물게 `linked_at`보다 1.382ms 빨라
+  DB check를 위반했다. 정책이나 constraint를 낮추지 않고 `linked_at + interval '1 microsecond'`로
+  시간 순서를 결정적으로 만들었다.
+- 20,000-row 단일 측정에서 두 read plan은 Seq Scan+sort에서 Index Only Scan으로 바뀌었지만, 1,000-row
+  insert와 `PAID→ACCEPTED` update sample은 각각 약 31.0%, 31.3% 느려졌다. 이 결과는 emulated local
+  sample이며 성능 향상·SLA 주장이 아니다.
 
 ## Decision Log
 
@@ -267,12 +304,24 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-11 | 전이 로직을 새로 만들지 않고 기존 서비스를 재사용 | 이 plan |
 | 2026-08-12 | 오늘로 제한하지 않고 모든 실행 주문을 날짜별로 반환 | [BR-06](../../product/business-policy-decisions.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
 | 2026-08-14 | action에 client가 본 `expectedStatus`를 묶고, stale/경쟁 상태는 409, 불가능한 action/status 조합은 422로 구분 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), [Error Catalog](../../api/error-catalog.md) |
+| 2026-08-14 | 디자인의 세 열을 유지하면서 Domain `ACCEPTED`와 `PREPARING`을 화면의 제조 중 열로 합친다 | 첨부 ZIP `kit/PosScreen.jsx`, 이 plan |
+| 2026-08-14 | Plan 40의 실제 top-level 매장 배열을 canonical `MerchantStoreList` 계약으로 유지한다 | target/runtime OpenAPI, `StoreOrderBoardOpenApiContractTest` |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+- 점주는 내부 주문 UUID 없이 ACTIVE membership 매장을 선택하고, 모든 픽업 영업일의 실행 주문을
+  접수 대기/제조 중/준비 완료 열에서 확인해 공개 주문번호로 전이할 수 있다.
+- 보드는 고객·결제 식별자를 노출하지 않고 매 요청 store scope를 확인한다. 조회·hash 장애는 빈 보드나
+  stale 응답이 아닌 503이며, 권한 상실은 기존 보드를 즉시 제거한다.
+- canonical projection ETag, hidden-tab polling 정지, 304 재사용과 상태 충돌 후 새로고침으로 polling의
+  첫 운영 계약을 닫았다. SSE 전환 여부는 ADR-102 재검토 조건 전에는 열지 않는다.
+- V56 read index 효과와 write amplification을 같은 PostgreSQL fixture에서 함께 기록했다. native mixed-load
+  p95/p99는 측정하지 않았으며 production 성능으로 일반화하지 않는다.
+- Plan 60 필수 검증은 모두 통과했다. 추가 frontend 전체 build의 기존 Plan 80/90 CSRF 세 오류는
+  미해결로 명시하며, 이 완료가 해당 후속 화면의 build 완료를 뜻하지 않는다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-14: 구현 시작과 상태 전이 precondition·종료 응답 계약을 반영.
+- 2026-08-14: 구현·성능·브라우저·전체 회귀 결과와 실패 이력을 기록하고 완료 처리.

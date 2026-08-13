@@ -40,6 +40,59 @@ WHERE order_id = :order_id
 ORDER BY created_at, id;
 ```
 
+## Store order board and conditional polling
+
+점주 콘솔의 실행 보드는 다음 API를 사용한다.
+
+```text
+GET  /api/v1/stores/{storeId}/orders
+GET  /api/v1/stores/{storeId}/orders/{orderReference}
+POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions
+```
+
+목록은 픽업 날짜와 무관하게 `PAID`, `ACCEPTED`, `PREPARING`, `READY`만 반환한다. 화면의 세 열은
+`PENDING_ACCEPTANCE(PAID)`, `ACCEPTED+PREPARING`, `READY`이고, 날짜별 grouping key와 item의
+`pickupBusinessDate`는 같아야 한다. `PENDING_PAYMENT`와 종료 주문이 보이면 빈 보드로 숨기지 말고
+Projection query와 runtime 계약을 조사한다.
+
+클라이언트는 3초마다 `If-None-Match`를 보내고 탭이 숨겨지면 중단하며 복귀 즉시 조회한다. 304도 DB
+Projection을 실행한다. 304 비율 상승을 DB 부하 감소로 해석하지 않는다. `PAID`는 DB row 변경 없이도
+2분 warning과 3분 timeout 경계에서 phase와 ETag가 바뀐다.
+
+```sql
+SELECT id, public_reference, pickup_business_date, state,
+       pickup_window_start_snapshot, acceptance_warning_at, acceptance_deadline_at
+FROM ordering_order
+WHERE store_id = :store_id
+  AND state IN ('PAID', 'ACCEPTED', 'PREPARING', 'READY')
+ORDER BY pickup_business_date,
+         CASE state WHEN 'PAID' THEN 0 WHEN 'ACCEPTED' THEN 1 WHEN 'PREPARING' THEN 2 ELSE 3 END,
+         CASE WHEN state = 'PAID' THEN acceptance_deadline_at ELSE pickup_window_start_snapshot END,
+         id;
+```
+
+V56의 `ix_ordering_order_store_board`와 PAID partial
+`ix_ordering_order_store_acceptance_board`가 없거나 planner가 선택하지 않으면
+[`store-order-board-performance-evidence.md`](../quality/store-order-board-performance-evidence.md)의 고정
+fixture를 같은 조건으로 재실행한다. 운영 분포 없이 index를 강제하거나 polling 주기를 줄이지 않는다.
+
+전이는 서버가 카드에 준 `allowedActions`와 카드의 `status`를 `expectedStatus`로 함께 보낸다. 조합이
+불가능한 422는 client/contract 오류이고, `409 ORDER_STATE_CONFLICT`는 다른 작업자가 먼저 처리한 정상
+경쟁 신호라 목록을 새 ETag 없이 즉시 다시 조회한다. `REJECT`의 202 응답은 축약 보상 상태만 나타내며
+완료가 아니다. 새 endpoint의 idempotency operation은 `STORE_ORDER_BOARD_ACTION_V1`이고 기존
+`STORE_ORDER_TRANSITION_V2`와 key scope를 공유하지 않는다.
+
+관측 지표:
+
+- `beanflow.store.order.board.query.duration{operation=list|detail}`
+- `beanflow.store.order.board.query.sql{operation=list|detail}`
+- `beanflow.store.order.board.response{outcome=ok|not_modified}`
+- HTTP `ORDER_STATE_CONFLICT`, `ORDER_ACTION_NOT_ALLOWED`, `ACCESS_DENIED`,
+  `DEPENDENCY_UNAVAILABLE` 비율
+
+Projection·hash·DB 장애에서 503이 나면 이전 브라우저 보드나 빈 목록을 정상값으로 사용하지 않는다.
+membership 403이면 현재 보드를 지우고 `GET /merchant/me/stores`의 ACTIVE 목록을 다시 읽는다.
+
 고객 취소와 매장 전이 멱등 레코드는 하나의 Ordering retention worker가 기본
 1시간마다 table별 독립 transaction으로 최대 100건씩 정리한다. 두 table 모두
 `retention_expires_at = created_at + 90일`과
