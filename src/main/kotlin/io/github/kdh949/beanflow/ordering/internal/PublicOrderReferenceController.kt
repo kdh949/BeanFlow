@@ -14,20 +14,34 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/me/orders")
 internal class PublicCustomerOrderController(
     private val service: PublicOrderReferenceService,
+    private val queries: CustomerOrderQueryService,
 ) {
+    @GetMapping
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun list(
+        actor: CustomerActor,
+        @RequestParam(required = false) status: CustomerOrderStatusFilter?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) limit: Int?,
+    ): CustomerOrderPageResponse = queries.list(actor.actorId, status, from, to, cursor, limit)
+
     @GetMapping("/{orderReference}")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun get(
         actor: CustomerActor,
         @PathVariable orderReference: String,
-    ): PublicCustomerOrderResponse = service.getCustomerOrder(actor.actorId, orderReference)
+    ): CustomerOrderDetailResponse = queries.detail(actor.actorId, orderReference)
 
     @PostMapping("/{orderReference}/cancellations")
     @PreAuthorize("hasRole('CUSTOMER')")

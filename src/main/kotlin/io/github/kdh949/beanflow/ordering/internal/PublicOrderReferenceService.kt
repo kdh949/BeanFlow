@@ -11,20 +11,11 @@ import java.util.UUID
 @Service
 internal class PublicOrderReferenceService(
     private val orders: OrderJpaRepository,
-    private val getOrders: GetOrderService,
     private val cancellations: CustomerCancellationService,
     private val storeOrders: StoreOrderTransitionService,
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry,
 ) {
-    fun getCustomerOrder(
-        customerId: UUID,
-        rawReference: String,
-    ): PublicCustomerOrderResponse {
-        val resolved = resolveCustomer(customerId, rawReference)
-        return getOrders.get(customerId, resolved.orderId).toPublicResponse()
-    }
-
     fun cancelCustomerOrder(
         customerId: UUID,
         rawReference: String,

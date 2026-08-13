@@ -6,40 +6,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-internal data class PublicCustomerOrderResponse(
-    val storeId: UUID,
-    val publicReference: String,
-    val pickupNumber: String,
-    val pickupBusinessDate: LocalDate,
-    val storeName: String,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
-    val state: String,
-    val reservationExpiresAt: Instant?,
-    val paymentRecovery: CancellationRefundRecoverySummary?,
-    val paidAt: Instant?,
-    val acceptanceWarningAt: Instant?,
-    val acceptanceWarningRequestedAt: Instant?,
-    val acceptanceDeadlineAt: Instant?,
-    val acceptedAt: Instant?,
-    val rejectedAt: Instant?,
-    val preparingAt: Instant?,
-    val readyAt: Instant?,
-    val completedAt: Instant?,
-    val cancelledAt: Instant?,
-    val cancellationCause: OrderCancellationCause?,
-    val cancellationReasonCode: CustomerCancellationReasonCode?,
-    val rejectionReason: String?,
-    val lines: List<OrderLineResponse>,
-    val subtotalKrw: Long,
-    val couponDiscountKrw: Long,
-    val pointsAppliedKrw: Long,
-    val payableKrw: Long,
-    val currency: String,
-    val createdAt: Instant,
-    val updatedAt: Instant,
-)
-
 internal data class PublicCustomerCancellationResponse(
     val publicReference: String,
     val orderState: String,
@@ -85,41 +51,6 @@ internal data class PublicStoreOrderResponse(
     val createdAt: Instant,
     val updatedAt: Instant,
 )
-
-internal fun OrderResponse.toPublicResponse() =
-    PublicCustomerOrderResponse(
-        storeId = storeId,
-        publicReference = publicReference,
-        pickupNumber = pickupNumber,
-        pickupBusinessDate = pickupBusinessDate,
-        storeName = storeName,
-        pickupWindowStart = pickupWindowStart,
-        pickupWindowEnd = pickupWindowEnd,
-        state = state,
-        reservationExpiresAt = reservationExpiresAt,
-        paymentRecovery = paymentRecovery,
-        paidAt = paidAt,
-        acceptanceWarningAt = acceptanceWarningAt,
-        acceptanceWarningRequestedAt = acceptanceWarningRequestedAt,
-        acceptanceDeadlineAt = acceptanceDeadlineAt,
-        acceptedAt = acceptedAt,
-        rejectedAt = rejectedAt,
-        preparingAt = preparingAt,
-        readyAt = readyAt,
-        completedAt = completedAt,
-        cancelledAt = cancelledAt,
-        cancellationCause = cancellationCause,
-        cancellationReasonCode = cancellationReasonCode,
-        rejectionReason = rejectionReason,
-        lines = lines,
-        subtotalKrw = subtotalKrw,
-        couponDiscountKrw = couponDiscountKrw,
-        pointsAppliedKrw = pointsAppliedKrw,
-        payableKrw = payableKrw,
-        currency = currency,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
 
 internal fun StoreOrderResult.toPublicResponse() =
     PublicStoreOrderResult(

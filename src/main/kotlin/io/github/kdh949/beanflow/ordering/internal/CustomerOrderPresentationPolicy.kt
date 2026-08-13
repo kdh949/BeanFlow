@@ -50,6 +50,12 @@ internal object CustomerOrderPresentationPolicy {
             CustomerOrderStatusFilter.PAST -> state in pastStates
         }
 
+    fun states(filter: CustomerOrderStatusFilter): Set<OrderState> =
+        when (filter) {
+            CustomerOrderStatusFilter.ACTIVE -> activeStates
+            CustomerOrderStatusFilter.PAST -> pastStates
+        }
+
     fun allowedActions(
         facts: CustomerOrderActionFacts,
         now: Instant,

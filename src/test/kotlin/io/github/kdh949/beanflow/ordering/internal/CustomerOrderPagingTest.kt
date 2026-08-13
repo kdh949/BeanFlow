@@ -96,6 +96,19 @@ internal class CustomerOrderPagingTest {
         assertThat(CustomerOrderPaging.SORT_ADAPTER.decode(listOf("2026-08-13T00:00:00Z"))).isNull()
     }
 
+    @Test
+    fun `rejects an otherwise valid customer order cursor after its expiry`() {
+        val first = paging.prepare(criteria())
+        val expired =
+            codec(now.minusSeconds(2)).issue(
+                first.cursorScope,
+                CustomerOrderSort(now.minusSeconds(10), customerId),
+                now.minusSeconds(1),
+            )
+
+        assertInvalid { paging.prepare(criteria(cursor = expired)) }
+    }
+
     private fun criteria(
         customerId: UUID = this.customerId,
         status: CustomerOrderStatusFilter? = null,

@@ -67,6 +67,17 @@ internal class CustomerOrderPresentationPolicyTest {
     }
 
     @Test
+    fun `every noncancellable state exposes only commands supported by its lifecycle`() {
+        listOf(OrderState.ACCEPTED, OrderState.PREPARING, OrderState.READY).forEach { state ->
+            assertThat(CustomerOrderPresentationPolicy.allowedActions(facts(state), now)).isEmpty()
+        }
+        listOf(OrderState.COMPLETED, OrderState.REJECTED, OrderState.EXPIRED).forEach { state ->
+            assertThat(CustomerOrderPresentationPolicy.allowedActions(facts(state), now))
+                .containsExactly(CustomerOrderAllowedAction.REORDER)
+        }
+    }
+
+    @Test
     fun `missing deadline on a cancellable state is an explicit dependency failure`() {
         assertThatThrownBy {
             CustomerOrderPresentationPolicy.allowedActions(facts(OrderState.PENDING_PAYMENT), now)

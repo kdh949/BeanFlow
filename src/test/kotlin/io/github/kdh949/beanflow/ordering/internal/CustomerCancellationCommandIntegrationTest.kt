@@ -101,7 +101,7 @@ internal class CustomerCancellationCommandIntegrationTest
                         .with(customerJwt(fixture.customerId)),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.orderId").doesNotExist())
-                .andExpect(jsonPath("$.publicReference").value(reference))
+                .andExpect(jsonPath("$.orderReference").value(reference))
                 .andExpect(jsonPath("$.pickupNumber").value("A-1"))
                 .andExpect(jsonPath("$.storeName").value("BeanFlow Test Store"))
                 .andExpect(jsonPath("$.pickupWindowStart").value("2030-01-01T00:10:00Z"))
