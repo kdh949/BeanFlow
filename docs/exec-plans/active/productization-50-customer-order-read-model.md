@@ -235,6 +235,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-13: Plan 40이 account-backed Merchant Session과 기본 전체 demo smoke를 required validation으로
   완료했다. Stack A exact predecessor가 completed되어 `Implementation-Ready=true`로 전환했으며 구현은
   아직 시작하지 않았다.
+- 2026-08-13: Plan 40 completion/local/remote/PR head `2642a7e`과 Draft PR #66의 OPEN/Draft,
+  head `feature/productization-40-merchant-account`, base `feature/productization-30-customer-account`를
+  검증했다. 같은 head의 중복 PR은 없고 GitHub build check는 조회 시점 `pending`이다. exact head에서
+  `feature/productization-50-customer-orders`를 만들었으며 제품 코드는 아직 변경하지 않았다.
 
 ## Surprises & Discoveries
 

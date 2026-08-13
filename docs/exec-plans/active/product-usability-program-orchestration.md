@@ -392,6 +392,13 @@ git diff --cached --check
   Identity/StoreOrder/Spotless, clean 47-step Customer→Merchant demo와 문서/OpenAPI 검증이 통과했다.
   Plan 50 dependency를 completed Plan 40으로 닫고 readiness를 true로 전환했으며 Plan 60은 Plan 50을
   direct execution dependency로 유지해 아직 실행 가능하지 않다.
+- 2026-08-13 Plan 40 Draft release: branch `feature/productization-40-merchant-account`, base
+  `feature/productization-30-customer-account`, completion/local/remote/PR head
+  `2642a7ede4597bcee9fa257ed17a3ff0915d01d9`이 일치한다. [Draft PR #66](https://github.com/kdh949/BeanFlow/pull/66)은
+  OPEN/Draft이고 같은 head의 open PR은 하나다. GitHub build check는 조회 시점에 `pending`이라
+  `mergeStateStatus=UNSTABLE`이며 실패 성공으로 기록하지 않는다. Support 두 commit은 모두
+  `origin/main` ancestor이고 PR #54는 MERGED라 `SUPPORT_INTEGRATION_PENDING=false`다. merge·ready
+  전환·force-push는 수행하지 않았다.
 
 ## Surprises & Discoveries
 
