@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.dispute.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.ordering.internal.EventPublicationRecoveryWorker
@@ -78,6 +79,7 @@ internal class SettlementDisputeIntegrationTest
                     settlement_item,
                     settlement_batch,
                     identity_store_membership,
+                    identity_merchant_account,
                     operations_audit_record,
                     operations_reprocessing_case,
                     event_publication,
@@ -448,6 +450,7 @@ internal class SettlementDisputeIntegrationTest
             actorId: UUID,
             storeId: UUID,
         ) {
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
             jdbcTemplate.update(
                 """
                 INSERT INTO identity_store_membership (

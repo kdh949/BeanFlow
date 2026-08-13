@@ -51,6 +51,14 @@
   소유한다. 서버가 생성한 임시 비밀번호는 최초 성공 응답에서 한 번만 표시하고 이후 조회할 수 없다.
   발급은 MerchantAccount, 최초 ACTIVE StoreMembership, attempt 정리와 AuditRecord를 한 transaction에
   commit한다.
+- Operations Application Service가 사용하는 자격증명 발급 port와 그 command/result DTO는 호출자인
+  Operations public API가 소유하고 Identity가 adapter로 구현한다. Operations가 Identity public API를
+  역방향으로 참조하지 않으므로 기존 `identity -> loyalty -> operations` 모듈 방향에 순환을 만들지
+  않는다. 이 의존성 역전은 Aggregate 소유권을 바꾸지 않으며 Identity adapter는 호출자의 transaction에
+  `MANDATORY`로 참여한다.
+- Identity는 점주의 접근 가능한 매장명 조회와 self-change 원자 Audit를 위해 각각 Merchant와 Operations의
+  public API를 사용한다. 두 의존성은 Identity의 Modulith allow-list에 명시하며, Operations는 위
+  outbound port를 통해 Identity를 역참조하지 않는다.
 - 로그인 실패는 계정별·IP별로 누적하고 임계값에 도달하면 lifecycle을 바꾸지 않은 채
   `lockedUntil`을 설정한다. 만료 뒤에는 `INITIAL_PASSWORD` 또는 `ACTIVE`였던 상태로 정상 로그인을
   계속한다. 운영자는 만료 전에 조기 해제할 수 있다. 조기 해제와 비밀번호 초기화는 account의
@@ -133,6 +141,18 @@
 - 임시 비밀번호 만료율과 재발급 수
 - 계정 잠금 발생 수와 해제 수
 - `INITIAL_PASSWORD` 상태에서 차단된 요청 수
+
+## Implementation Outcome (2026-08-13)
+
+Flyway V54와 Identity `MerchantAccount`가 Hash-only 자격증명, 24시간 임시 비밀번호, lifecycle과
+`lockedUntil` overlay를 구현했다. Customer와 분리된 Merchant Session은 매 요청 계정 상태와
+`credentialVersion`을 다시 확인하며, 초기 상태의 주문·전환·환불·정산 접근을 모두 차단한다.
+
+Operations는 exact 조회, 계정+최초 membership 발급, 초기화와 잠금 해제를
+`MERCHANT_CREDENTIAL_MANAGE` grant, reason, terminal idempotency와 Audit에 묶는다. create/reset replay는
+secret을 재생하지 않고 target reference가 있는 409로 수렴하며 terminal row에는 평문·Hash·응답 body가
+없다. 로컬 전체 smoke도 legacy 점주 JWT 대신 초기 비밀번호 변경 뒤 실제 Merchant Session으로 매장
+전환과 부분/전액 환불을 수행한다.
 
 ## Revisit Conditions
 

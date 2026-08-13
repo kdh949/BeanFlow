@@ -141,10 +141,11 @@
   `productization-30`의 공통 `LoginAttemptOperations`를 재사용한다. 점주 경로가 별도 알고리즘을 복제하지
   않는다.
 - Operations Controller는 Operations Application Service만 호출한다. Service는 permission·idempotency·
-  Audit를 조정하고, Identity public `MerchantCredentialAdministrationOperations`와 Merchant public
-  `StorePolicyScopeOperations`를 호출한다. Controller가 Identity Repository를 직접 사용하거나
-  MerchantAccount와 StoreMembership 사이 JPA 연관관계를 만들지 않는다. 내부 public port는 같은
-  PostgreSQL transaction에 `MANDATORY`로 참여한다.
+  Audit를 조정하고, 호출자인 Operations public API가 소유하며 Identity adapter가 구현하는
+  `MerchantCredentialProvisioningPort`와 Merchant public `StorePolicyScopeOperations`를 호출한다.
+  Operations가 Identity public API를 역방향 참조하지 않아 기존 모듈 방향에 순환을 만들지 않는다.
+  Controller가 Identity Repository를 직접 사용하거나 MerchantAccount와 StoreMembership 사이 JPA
+  연관관계를 만들지 않는다. Identity adapter는 같은 PostgreSQL transaction에 `MANDATORY`로 참여한다.
 - CSPRNG·Hash는 DB lock 밖에서 계산하되 transaction 안에서 active permission을 다시 잠가 검증한다.
   선택적 read precheck는 CPU 낭비를 줄이는 최적화일 뿐 권한 source나 성공 조건이 아니다.
 - 성공 응답 전에 transaction이 실패하면 평문 buffer를 폐기하고 비밀번호를 반환하지 않는다. JVM의
@@ -454,6 +455,24 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-13: 비밀번호 변경 Audit의 actor vocabulary 충돌을 보고하고 사용자 결정 A를 받았다.
   ADR-022와 ADR-093에 계정 범위 `MERCHANT` actor를 먼저 기록했으며 V54 DB CHECK, 애플리케이션 enum과
   원자적 password-change Audit 구현의 기준으로 확정했다.
+- 2026-08-13: V54, MerchantAccount Aggregate, Merchant Session 로그인·logout, 최초 비밀번호 변경과
+  이중 gate, ACTIVE membership 매장 목록을 구현했다. 고정 Clock과 PostgreSQL 통합 테스트에서 24시간
+  만료, 5회 잠금, INITIAL/ACTIVE 잠금 복귀, 동시 실패 보존, credentialVersion Session 무효화와 Audit
+  rollback을 검증했다.
+- 2026-08-13: Operations exact 조회·계정+최초 membership 발급·임시 비밀번호 reset·잠금 해제를
+  `MERCHANT_CREDENTIAL_MANAGE`, reason, advisory-lock idempotency와 Audit에 연결했다. 동시 동일 key,
+  replay/mismatch, secret 비저장, Store/Audit 실패 rollback, immutable 90일 terminal row와 100개 cleanup
+  경계를 Testcontainers로 검증했다.
+- 2026-08-13: runtime OpenAPI parity에 Merchant/Operations 8개 route를 추가하고 기존 StoreOrder fixture를
+  ACTIVE MerchantAccount 불변식에 맞췄다. `*StoreOrder*`, Merchant runtime contract와 local-demo seed
+  집중 검증이 통과했다. 기본 smoke는 점주 JWT를 제거하고 초기 비밀번호 변경 뒤 Merchant Session으로
+  전환·환불을 수행하도록 복원했으며 실제 전체 환경 smoke는 최종 validation에서 실행한다.
+- 2026-08-13: 첫 전체 `build`는 1,057개 중 35개가 실패했다. 34개는 기존 membership-only 통합 fixture가
+  새 ACTIVE MerchantAccount gate를 충족하지 못한 회귀였고 1개는 Operations 자격증명 유스케이스의
+  `operations -> identity` 역방향이 기존 `identity -> loyalty -> operations`와 순환한 구조 위반이었다.
+  공용 ACTIVE account fixture와 Operations-owned security/provisioning outbound port로 원인을 수정한 뒤,
+  Spring Modulith와 실패했던 6개 통합 suite 및 Merchant credential 집중 검증이 통과했다. 전체 필수
+  `build`는 최종 validation에서 다시 실행한다.
 
 ## Surprises & Discoveries
 
@@ -461,6 +480,33 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   운영자와 시스템만 있고 계정 범위 점주 actor가 없었다. 비밀번호 변경 주체를 특정 membership 역할로
   기록하면 membership이 없거나 여러 매장 역할을 가진 계정에서 사실과 다른 감사가 된다. 사용자 결정으로
   `MERCHANT`를 별도 vocabulary로 추가한다.
+- Spring Session이 저장한 SecurityContext가 이미 authenticated이면 기존 browser filter가 account loader를
+  건너뛰어 이후 요청의 credentialVersion·만료·잠금 재검증이 생략될 수 있었다. 매 요청 loader를 실행하도록
+  early return을 제거했고, 비밀번호 변경 뒤 이전 Session과 만료 경계를 실제 HTTP로 회귀 검증했다.
+- version mismatch로 이미 거부된 Session의 물리 삭제가 실패할 때 503으로 바뀌면 ADR-094의 권한 안전성은
+  유지돼도 안정적인 401 계약을 잃었다. 이 경우에만 삭제 실패를 metric으로 남기고 401을 유지하며,
+  malformed/absolute-expiry Session 저장소 실패의 503 fail-closed 경계는 그대로 유지했다.
+- PostgreSQL `timestamptz`는 microsecond 정밀도이므로 retention DB 경계는 저장 가능한 최소 단위인
+  `-1µs / at / +1µs`로 검증했다. SQL predicate는 `<=`라 계약의 inclusive 의미는 유지되지만 `±1ns`를
+  DB round-trip 결과로 구분했다고 주장하지 않는다.
+- 집중 Gradle 실행 중 기존 IDE/daemon JVM이 OOM으로 종료되며 `java_pid14839.hprof`와 journal lock을
+  남겼다. dump임을 확인해 해당 생성물만 제거하고 stale daemon을 종료한 뒤 `--no-daemon` 검증으로
+  재실행했다. 제품 코드 실패로 숨기지 않고 최종 검증은 clean process에서 다시 수행한다.
+- V54 추가 뒤 Plan 30의 `CustomerAccountMigrationTest`가 전체 Flyway head를 암묵적으로 사용해 예상 V53
+  schema assertion보다 한 migration 앞서 실행됐다. 고객 migration 계약의 경계를 `.target("53")`으로
+  고정했고 exact Identity suite가 통과했다.
+- 첫 전체 `build`가 드러낸 35개 실패는 하나의 제품 결함이 아니었다. Merchant API 진입점이 새 account
+  gate를 정확히 적용했지만 dispute·cancellation·refund·settlement·support의 오래된 test fixture는
+  membership만 만들고 account를 만들지 않았다. 운영 코드를 완화하지 않고 공용 test fixture로 ACTIVE
+  account를 함께 seed해 원래 membership 인가 시나리오를 보존했다.
+- 처음 만든 Identity-owned 자격증명 관리 port는 `operations -> identity -> operations` Modulith 순환을
+  만들었다. 호출자인 Operations가 security/provisioning outbound port와 DTO를 소유하고 Identity가
+  adapter로 구현하도록 의존성을 역전했다. Identity의 self-change Audit와 store display name 조회는
+  `operations :: api`, `merchant :: api` allow-list에 명시했고 Spring Modulith 검증이 통과했다.
+- Kotlin incremental compiler가 Spotlight/daemon과 class 출력 경합 중 이미 사라진 class와 backup을
+  복구하려다 `FileNotFoundException`, storage double-registration과 824MB heap dump를 남겼다. 생성물만
+  제거하고 non-incremental fallback으로 동일 집중 suite가 통과했지만, 환경 오류를 성공으로 간주하지
+  않고 최종 required command는 clean한 정상 종료를 별도로 확인한다.
 
 ## Decision Log
 
@@ -475,6 +521,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 점주 잠금은 lifecycle 상태가 아니라 15분 `lockedUntil` overlay | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](../completed/productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-13 | 점주 자기 비밀번호 변경 Audit는 store membership 역할을 추론하지 않고 `MERCHANT` actor를 사용 | [ADR-022](../../adr/ADR-022-audit-record.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
+| 2026-08-13 | Operations의 점주 자격증명 유스케이스는 호출자 소유 outbound port를 Identity adapter가 구현해 모듈 순환을 막음 | [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 
 ## Outcomes & Retrospective
 

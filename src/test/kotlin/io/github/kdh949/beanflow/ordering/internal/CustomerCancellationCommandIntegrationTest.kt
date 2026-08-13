@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
@@ -961,6 +962,7 @@ internal class CustomerCancellationCommandIntegrationTest
             actorId: UUID,
             storeId: UUID,
         ) {
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
             val now = Timestamp.from(Instant.now())
             jdbcTemplate.update(
                 """

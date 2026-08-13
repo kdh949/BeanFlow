@@ -1,18 +1,18 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.identity.api.CreateMerchantCredentialCommand
-import io.github.kdh949.beanflow.identity.api.MerchantCredentialAdministrationOperations
-import io.github.kdh949.beanflow.identity.api.MerchantCredentialAdministrationSnapshot
-import io.github.kdh949.beanflow.identity.api.MerchantCredentialSecurityOperations
-import io.github.kdh949.beanflow.identity.api.ResetMerchantTemporaryPasswordCommand
-import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialMembershipRole
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialProvisioningPort
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialSecurityPort
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
+import io.github.kdh949.beanflow.operations.api.ProvisionMerchantCredentialCommand
+import io.github.kdh949.beanflow.operations.api.ProvisionedMerchantCredential
+import io.github.kdh949.beanflow.operations.api.ReplaceMerchantTemporaryPasswordCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -39,12 +39,12 @@ internal data class CreateMerchantAccountCommand(
     val loginId: String,
     val displayName: String,
     val storeId: UUID,
-    val membershipRole: StoreActorRole,
+    val membershipRole: MerchantCredentialMembershipRole,
     val reason: String,
 )
 
 internal data class MerchantAccountSecretResult(
-    val account: MerchantCredentialAdministrationSnapshot,
+    val account: ProvisionedMerchantCredential,
     val temporaryPassword: String,
 )
 
@@ -57,7 +57,7 @@ internal data class MerchantCredentialMutationCommand(
 
 @Service
 internal class MerchantCredentialAdministrationApplicationService(
-    private val credentialSecurity: MerchantCredentialSecurityOperations,
+    private val credentialSecurity: MerchantCredentialSecurityPort,
     private val transactions: MerchantCredentialAdministrationTransactions,
     private val metrics: MerchantCredentialMetrics,
     private val clock: Clock,
@@ -97,7 +97,7 @@ internal class MerchantCredentialAdministrationApplicationService(
         operatorId: UUID,
         rawLoginId: String,
         reason: String,
-    ): MerchantCredentialAdministrationSnapshot {
+    ): ProvisionedMerchantCredential {
         val loginId = credentialSecurity.canonicalizeLoginId(rawLoginId)
         validateReason(reason)
         return transactions.findExact(operatorId, loginId, reason.trim(), clock.instant())
@@ -148,7 +148,7 @@ internal class MerchantCredentialAdministrationTransactions(
     private val authorization: OperatorPermissionAuthorization,
     private val advisoryLock: DatabaseAdvisoryLock,
     private val stores: StorePolicyScopeOperations,
-    private val identity: MerchantCredentialAdministrationOperations,
+    private val identity: MerchantCredentialProvisioningPort,
     private val audits: AuditRecordOperations,
     private val correlationIds: CorrelationIdSource,
     private val entityManager: EntityManager,
@@ -181,7 +181,7 @@ internal class MerchantCredentialAdministrationTransactions(
         command: CreateMerchantAccountCommand,
         passwordHash: String,
         now: Instant,
-    ): MerchantCredentialAdministrationSnapshot {
+    ): ProvisionedMerchantCredential {
         authorization.requireActive(command.operatorId, OperatorPermission.MERCHANT_CREDENTIAL_MANAGE)
         val payloadHash =
             payloadHash("create", command.loginId, command.displayName, command.storeId, command.membershipRole, command.reason.trim())
@@ -190,7 +190,7 @@ internal class MerchantCredentialAdministrationTransactions(
         val accountId = UUID.randomUUID()
         val account =
             identity.create(
-                CreateMerchantCredentialCommand(
+                ProvisionMerchantCredentialCommand(
                     accountId,
                     command.loginId,
                     command.displayName,
@@ -227,7 +227,7 @@ internal class MerchantCredentialAdministrationTransactions(
         command: MerchantCredentialMutationCommand,
         passwordHash: String,
         now: Instant,
-    ): MerchantCredentialAdministrationSnapshot {
+    ): ProvisionedMerchantCredential {
         authorization.requireActive(command.operatorId, OperatorPermission.MERCHANT_CREDENTIAL_MANAGE)
         val payloadHash = payloadHash("reset", command.accountId, command.reason.trim())
         lockAndRejectSecretReplay(
@@ -238,7 +238,12 @@ internal class MerchantCredentialAdministrationTransactions(
         )
         val account =
             identity.resetTemporaryPassword(
-                ResetMerchantTemporaryPasswordCommand(command.accountId, passwordHash, now.plus(TEMPORARY_PASSWORD_LIFETIME), now),
+                ReplaceMerchantTemporaryPasswordCommand(
+                    command.accountId,
+                    passwordHash,
+                    now.plus(TEMPORARY_PASSWORD_LIFETIME),
+                    now,
+                ),
             )
         appendAudit(
             command.operatorId,
@@ -306,7 +311,7 @@ internal class MerchantCredentialAdministrationTransactions(
         loginId: String,
         reason: String,
         now: Instant,
-    ): MerchantCredentialAdministrationSnapshot {
+    ): ProvisionedMerchantCredential {
         authorization.requireActive(operatorId, OperatorPermission.MERCHANT_CREDENTIAL_MANAGE)
         val account =
             identity.findExact(loginId)
@@ -370,7 +375,7 @@ internal class MerchantCredentialAdministrationTransactions(
     private fun appendAudit(
         operatorId: UUID,
         action: String,
-        account: MerchantCredentialAdministrationSnapshot,
+        account: ProvisionedMerchantCredential,
         reason: String,
         now: Instant,
         before: String,

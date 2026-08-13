@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointOperations
@@ -125,6 +126,7 @@ internal class PartialRefundAllocationRepositoryTest
                     ordering_order_line,
                     ordering_order,
                     identity_store_membership,
+                    identity_merchant_account,
                     operations_audit_record
                 CASCADE
                 """.trimIndent(),
@@ -942,6 +944,7 @@ internal class PartialRefundAllocationRepositoryTest
             val campaignId = UUID.randomUUID()
             val issuanceId = UUID.randomUUID()
             val couponReservationId = UUID.randomUUID()
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, fixture.actorId)
             jdbcTemplate.update(
                 "insert into identity_store_membership values (?, ?, ?, 'OWNER', 'ACTIVE', ?, ?, 0)",
                 UUID.randomUUID(),

@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.identity.api.MerchantCredentialSecurityOperations
-import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialMembershipRole
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialSecurityPort
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -19,7 +19,7 @@ import java.time.Clock
 import java.util.UUID
 
 internal class MerchantCredentialAdministrationApplicationServiceTest {
-    private val security = mock(MerchantCredentialSecurityOperations::class.java)
+    private val security = mock(MerchantCredentialSecurityPort::class.java)
     private val transactions = mock(MerchantCredentialAdministrationTransactions::class.java)
     private val random = mock(SecureRandom::class.java)
     private val registry = SimpleMeterRegistry()
@@ -41,7 +41,7 @@ internal class MerchantCredentialAdministrationApplicationServiceTest {
                 "REPLAY.MERCHANT",
                 "Replay Merchant",
                 UUID.randomUUID(),
-                StoreActorRole.OWNER,
+                MerchantCredentialMembershipRole.OWNER,
                 "Resolve repeated create",
             )
         `when`(security.canonicalizeLoginId(command.loginId)).thenReturn("replay.merchant")

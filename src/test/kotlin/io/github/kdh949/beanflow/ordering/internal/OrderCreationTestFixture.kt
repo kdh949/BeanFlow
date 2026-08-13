@@ -94,6 +94,7 @@ internal object OrderCreationDatabaseFixture {
                 ordering_pickup_counter,
                 ordering_public_reference_registry,
                 identity_store_membership,
+                identity_merchant_account,
                 loyalty_point_accrual_result,
                 loyalty_point_recovery_result,
                 loyalty_point_recovery_pending,

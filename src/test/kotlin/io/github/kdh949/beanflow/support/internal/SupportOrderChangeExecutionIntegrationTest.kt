@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
@@ -541,6 +542,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         private fun insertStoreMembership() {
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, storeActorId)
             val now = Timestamp.from(Instant.now())
             jdbcTemplate.update(
                 """

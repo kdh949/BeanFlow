@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.settlement.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.tamperSignedCursorSignature
@@ -50,6 +51,7 @@ internal class SettlementItemQueryIntegrationTest
                 """
                 TRUNCATE TABLE
                     identity_store_membership,
+                    identity_merchant_account,
                     settlement_item,
                     settlement_batch,
                     ordering_order,
@@ -212,6 +214,7 @@ internal class SettlementItemQueryIntegrationTest
             state: String,
         ): UUID =
             UUID.randomUUID().also { actorId ->
+                MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
                 jdbcTemplate.update(
                     """
                     INSERT INTO identity_store_membership (

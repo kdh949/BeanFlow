@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.identity.api.MerchantCredentialAdministrationSnapshot
-import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.operations.api.MerchantCredentialMembershipRole
+import io.github.kdh949.beanflow.operations.api.ProvisionedMerchantCredential
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.OperatorActor
@@ -29,7 +29,7 @@ internal data class CreateMerchantAccountRequest(
     @field:Size(min = 1, max = 100)
     val displayName: String,
     val storeId: UUID,
-    val membershipRole: StoreActorRole,
+    val membershipRole: MerchantCredentialMembershipRole,
     @field:Size(min = 1, max = 200)
     val reason: String,
 )
@@ -41,7 +41,7 @@ internal data class MerchantCredentialReasonRequest(
 
 internal data class MerchantMembershipResponse(
     val storeId: UUID,
-    val role: StoreActorRole,
+    val role: MerchantCredentialMembershipRole,
 )
 
 internal data class MerchantAccountResponse(
@@ -157,7 +157,7 @@ internal class MerchantCredentialAdministrationController(
         reason: String,
     ) = MerchantCredentialMutationCommand(actorId(actor), key, accountId, reason)
 
-    private fun MerchantCredentialAdministrationSnapshot.toResponse() =
+    private fun ProvisionedMerchantCredential.toResponse() =
         MerchantAccountResponse(
             merchantAccountId = accountId,
             loginId = loginId,
