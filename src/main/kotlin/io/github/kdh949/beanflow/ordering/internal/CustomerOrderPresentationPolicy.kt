@@ -75,19 +75,22 @@ internal object CustomerOrderPresentationPolicy {
         now: Instant,
     ): Boolean =
         when (facts.state) {
-            OrderState.PENDING_PAYMENT ->
+            OrderState.PENDING_PAYMENT -> {
                 now.isBefore(
                     facts.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline"),
                 )
+            }
 
-            OrderState.PAID ->
+            OrderState.PAID -> {
                 now.isBefore(
                     facts.acceptanceDeadlineAt ?: dependency("Paid order has no acceptance deadline"),
                 )
+            }
 
-            else -> false
+            else -> {
+                false
+            }
         }
 
-    private fun dependency(message: String): Nothing =
-        throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
+    private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 }

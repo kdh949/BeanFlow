@@ -127,8 +127,7 @@ internal class CustomerOrderPaging(
         private val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
         internal val SORT_ADAPTER =
             object : CursorSortAdapter<CustomerOrderSort> {
-                override fun encode(sort: CustomerOrderSort): List<String> =
-                    listOf(sort.createdAt.toString(), sort.orderId.toString())
+                override fun encode(sort: CustomerOrderSort): List<String> = listOf(sort.createdAt.toString(), sort.orderId.toString())
 
                 override fun decode(values: List<String>): CustomerOrderSort? {
                     if (values.size != 2) return null

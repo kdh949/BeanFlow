@@ -52,15 +52,16 @@ internal class CustomerOrderPagingTest {
         val token = codec.issue(first.cursorScope, sort, first.cursorExpiresAt)
 
         assertThat(
-            paging.prepare(
-                criteria(
-                    status = CustomerOrderStatusFilter.ACTIVE,
-                    from = first.fromDate,
-                    to = first.toDate,
-                    cursor = token,
-                    limit = 100,
-                ),
-            ).after,
+            paging
+                .prepare(
+                    criteria(
+                        status = CustomerOrderStatusFilter.ACTIVE,
+                        from = first.fromDate,
+                        to = first.toDate,
+                        cursor = token,
+                        limit = 100,
+                    ),
+                ).after,
         ).isEqualTo(sort)
 
         listOf(
