@@ -1,11 +1,11 @@
 # 점주가 발급받은 계정으로 로그인하고 비밀번호를 바꾼다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`, `docs/exec-plans/completed/productization-30-customer-account-and-login.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-13`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -473,6 +473,18 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   공용 ACTIVE account fixture와 Operations-owned security/provisioning outbound port로 원인을 수정한 뒤,
   Spring Modulith와 실패했던 6개 통합 suite 및 Merchant credential 집중 검증이 통과했다. 전체 필수
   `build`는 최종 validation에서 다시 실행한다.
+- 2026-08-13: 첫 필수 demo 결합 명령은 V54의 `payload_hash char(64)`와 JPA `varchar(64)` 매핑 불일치로
+  Hibernate schema validation에서 중단되어 policy bootstrap이 `DEPENDENCY_UNAVAILABLE`로 실패했다.
+  `SqlTypes.CHAR` 매핑으로 DDL/JPA 계약을 일치시킨 뒤 clean DB에서 policy bootstrap, application startup,
+  27-row seed와 47-step Customer→Merchant 전체 smoke가 통과했다.
+- 2026-08-13: 성공 smoke 뒤 `stop.sh --reset`이 프런트 PID record를 검증하지 못해 앱·Identity·DB만
+  정리하고 Vite를 남겼다. 정확한 cwd/PID/PGID를 확인한 후 해당 demo group만 종료했고, Vite `--mode`에
+  nonce를 남겨 stop이 명령행·cwd·process group을 함께 증명하도록 보강했다. 임시 root launcher/stop
+  회귀 12개와 실제 재실행에서 세 process group 종료 및 demo DB/key 삭제가 통과했다.
+- 2026-08-13: 최종 required validation은 Identity suite 39초, `*StoreOrder*` 19초, Spotless 1초,
+  전체 build 1,058 tests(0 failures, 0 errors, 1 skipped) 11분 17초, clean demo 47-step smoke와
+  문서/OpenAPI 46 policies·111 ADRs·275 Markdown·57 ExecPlans로 모두 통과했다. generated frontend
+  OpenAPI type도 현재 runtime 계약과 동기화했다.
 
 ## Surprises & Discoveries
 
@@ -507,6 +519,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   복구하려다 `FileNotFoundException`, storage double-registration과 824MB heap dump를 남겼다. 생성물만
   제거하고 non-incremental fallback으로 동일 집중 suite가 통과했지만, 환경 오류를 성공으로 간주하지
   않고 최종 required command는 clean한 정상 종료를 별도로 확인한다.
+- 제한된 point-policy bootstrap application도 같은 `operations.internal` 패키지의 JPA repository를
+  발견해 V54 Merchant command entity를 schema validation했다. 이 검증이 `char(64)` DDL과 기본 String
+  `varchar(64)` 매핑의 불일치를 실제 demo startup에서 드러냈다. migration을 수정하거나 validation을
+  끄지 않고 field JDBC type을 `CHAR`로 고정했다.
+- 프런트 launcher의 환경변수 nonce는 macOS `ps eww -o command` 결과에서 보존되지 않아 보수적 stop이
+  매번 record를 거부했다. nonce를 Vite `--mode beanflow-local-demo-<nonce>` 인자로도 남기면 PID·PGID·
+  cwd와 함께 재검증할 수 있다. 회귀 테스트의 첫 실행은 macOS `/var`와 `/private/var` alias 때문에
+  cwd 비교가 실패했고, 임시 root를 `toRealPath()`로 정규화한 뒤 통과했다.
 
 ## Decision Log
 
@@ -522,12 +542,28 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](../completed/productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-13 | 점주 자기 비밀번호 변경 Audit는 store membership 역할을 추론하지 않고 `MERCHANT` actor를 사용 | [ADR-022](../../adr/ADR-022-audit-record.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-13 | Operations의 점주 자격증명 유스케이스는 호출자 소유 outbound port를 Identity adapter가 구현해 모듈 순환을 막음 | [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
+| 2026-08-13 | V54의 immutable SHA-256 payload column은 `char(64)`를 유지하고 JPA field를 `SqlTypes.CHAR`로 명시해 schema validation을 통과 | 이 plan |
+| 2026-08-13 | demo 프런트 소유권 nonce는 환경변수와 Vite `--mode` 명령행에 함께 남기고 stop은 PID·PGID·cwd·nonce를 모두 검증한 뒤에만 signal | 이 plan |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+- V54 MerchantAccount와 credential command schema, 계정 lifecycle, account-backed Merchant Session,
+  최초 비밀번호 변경 gate, 현재 actor·ACTIVE 매장 목록과 운영자 exact 조회·발급·reset·unlock API를
+  구현했다. 비밀번호·Hash는 응답 재생·Audit·idempotency row에 남기지 않으며 account+membership·
+  attempt 정리·Audit·command outcome은 같은 PostgreSQL transaction에서 성공하거나 rollback한다.
+- 기존 고객 URI는 Customer Session, 점주 매장 URI는 Merchant Session, 운영자 point/refund 및 credential
+  URI는 `/operations/**`로 분리했다. 점주 자기 자격증명 Audit는 특정 membership을 추론하지 않는
+  계정 범위 `MERCHANT` actor로 기록하고 DB closed CHECK까지 일치시켰다.
+- Required Identity/StoreOrder/Spotless/full build/demo/docs 검증이 모두 통과했다. 최종 full build는
+  1,058 tests 중 failures/errors 0, opt-in benchmark 1건 skip이며, demo는 Customer 승인 결제 조회 뒤
+  Merchant 최초 비밀번호 변경·매장 전환·부분/잔여 환불과 UNKNOWN 결제 회복까지 47단계를 검증했다.
+- 구현 중 드러난 membership-only fixture, Modulith cycle, Kotlin compiler/daemon race, V54 JPA type drift와
+  demo 프런트 정리 결함을 숨기지 않고 각각 fixture 정합화, outbound port 역전, clean 재검증,
+  `SqlTypes.CHAR`, 명령행 nonce로 해소했다. Plan 50은 이 completed head에서만 시작한다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-13: Plan 30 완료와 customer/full smoke 소유권 분리를 반영해 readiness를 true로 전환.
+- 2026-08-13: Merchant account/Session/Operations credential 구현, 실패·복구와 required validation 결과를
+  기록하고 completed로 이동.

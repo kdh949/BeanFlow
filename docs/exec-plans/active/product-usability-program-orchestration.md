@@ -245,8 +245,8 @@ force-push를 하지 않는다.
 | M1 | [productization-10](../completed/productization-10-public-order-reference.md) | 공개 주문번호, 픽업번호, 표시 스냅샷, backfill | 완료 |
 | M2 | [productization-20](../completed/productization-20-authentication-foundation.md) | 4 FilterChain, Session, CSRF, `CurrentActor`, `/me`, credential 관리 permission | 완료 |
 | M3 | [productization-30](../completed/productization-30-customer-account-and-login.md) | 고객 가입·로그인·로그아웃 | 완료 |
-| M4 | [productization-40](productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 대기 |
-| M5 | [productization-50](productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 대기 |
+| M4 | [productization-40](../completed/productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 완료 |
+| M5 | [productization-50](productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 준비 |
 | M6 | [productization-60](productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 대기 |
 | M7 | [productization-70](productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 대기 |
 | M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 대기 |
@@ -384,6 +384,14 @@ git diff --cached --check
   추가 frontend build의 Plan 80 CSRF client 미구현 실패도 PR과 completed Plan에 기록했다.
   `SUPPORT_INTEGRATION_PENDING`은 Plan 10의 history-preserving `origin/main` 통합으로 현재 stack tree에서
   해소됐고 merge·ready 전환·force-push는 수행하지 않았다.
+- 2026-08-13 Plan 40 completion: exact Plan 30 head `c44653e` 위에 V54 MerchantAccount와 credential
+  command schema, account-backed Merchant Session, 최초 비밀번호 변경 gate, ACTIVE 매장 목록과
+  `MERCHANT_CREDENTIAL_MANAGE` 운영 API를 구현했다. 첫 full build의 35 failures, Modulith cycle,
+  compiler/daemon race와 첫 demo bootstrap `DEPENDENCY_UNAVAILABLE`를 각각 fixture·port 방향·clean
+  재검증·`char(64)` JPA 매핑으로 해소했다. 최종 build 1,058 tests(0 failures, 0 errors, 1 skipped),
+  Identity/StoreOrder/Spotless, clean 47-step Customer→Merchant demo와 문서/OpenAPI 검증이 통과했다.
+  Plan 50 dependency를 completed Plan 40으로 닫고 readiness를 true로 전환했으며 Plan 60은 Plan 50을
+  direct execution dependency로 유지해 아직 실행 가능하지 않다.
 
 ## Surprises & Discoveries
 
@@ -415,6 +423,11 @@ git diff --cached --check
 - 결합 tree의 첫 full build는 Support S80 direct-order fixture 16건이 V51 표시 field `NOT NULL`을
   충족하지 않고 latest migration test 1건이 V49를 고정해 실패했다. 기존 공통 order display fixture와
   V51 inventory assertion으로 교정하고 집중/전체 회귀를 다시 통과했다.
+- Plan 40의 첫 clean demo는 policy bootstrap 단계에서 V54 `payload_hash char(64)`와 JPA String의
+  `varchar(64)` 기대가 달라 fail-closed했다. schema validation을 끄거나 migration을 고치지 않고
+  `SqlTypes.CHAR`로 mapping contract를 일치시켰다. 성공 뒤에는 환경변수 nonce가 macOS process command에
+  남지 않아 frontend stop이 보수적으로 신호를 거부하는 문제도 발견했고, Vite `--mode` 명령행 nonce와
+  실제 launcher/stop 회귀 테스트로 소유권 증명을 복구했다.
 
 ## Decision Log
 
@@ -444,7 +457,8 @@ git diff --cached --check
 | 2026-08-13 | Support V43~V49가 완료·release된 `origin/main`을 Plan 10에 merge하고 미적용 Plan 10을 V50/V51로 옮긴 뒤 전체 검증으로 Stack A를 재개한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
 | 2026-08-13 | Plan 10 resume 전체 검증 통과와 같은 completion 변경에서 Plan 20 readiness를 true로 복원한다 | [Plan 10](../completed/productization-10-public-order-reference.md), [Plan 20](../completed/productization-20-authentication-foundation.md) |
 | 2026-08-13 | Plan 20은 Spring Session 기본 `REQUIRES_NEW`를 `REQUIRED`로 바꿔 account lock transaction과 session rotation을 원자화하고 전체 검증 뒤 완료한다 | [Plan 20](../completed/productization-20-authentication-foundation.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
-| 2026-08-13 | Plan 30 smoke는 승인 결제 조회까지, account-backed Merchant 전환·환불 기본 전체 smoke는 Plan 40 완료 gate로 분리 | [Plan 30](../completed/productization-30-customer-account-and-login.md), [Plan 40](productization-40-merchant-account-and-initial-password.md) |
+| 2026-08-13 | Plan 30 smoke는 승인 결제 조회까지, account-backed Merchant 전환·환불 기본 전체 smoke는 Plan 40 완료 gate로 분리 | [Plan 30](../completed/productization-30-customer-account-and-login.md), [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md) |
+| 2026-08-13 | Plan 40은 account 범위 `MERCHANT` Audit actor와 Operations-owned outbound port를 사용하고, clean 전체 smoke 통과 뒤에만 Plan 50을 실행 가능하게 함 | [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 
 ## Outcomes & Retrospective
 
@@ -455,9 +469,12 @@ git diff --cached --check
   lifecycle을 제공한다. 고객·점주 계정/로그인은 범위대로 Plan 30/40에 남아 있고 그 전 보호 경로의
   401 중간 단절을 유지한다.
 - M3 Plan 30이 완료되어 CustomerAccount, 0원 PointAccount 원자 provisioning, 고객 Session 가입·로그인·
-  logout과 승인 결제 조회까지의 demo checkpoint를 제공한다. 점주 계정/Session과 기본 전체 smoke는
-  M4 Plan 40에 남아 있다.
-- 프로그램 전체 결과는 아직 완료되지 않았다. M4~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
+  logout과 승인 결제 조회까지의 demo checkpoint를 제공했다. 이 checkpoint에서 분리했던 점주
+  계정/Session과 기본 전체 smoke는 M4 Plan 40에서 완료됐다.
+- M4 Plan 40이 완료되어 운영자 account+membership 발급, account-backed Merchant Session, 최초
+  비밀번호 변경 gate와 ACTIVE 매장 목록을 제공한다. 기본 전체 demo는 고객 승인 결제 조회에서 이어져
+  Merchant 주문 완료·포인트 적립·부분/잔여 환불과 UNKNOWN 결제 회복까지 통과했다.
+- 프로그램 전체 결과는 아직 완료되지 않았다. M5~M6과 최종 seven-Draft-PR topology 검증이 남아 있다.
 
 ## Revision Notes
 
@@ -465,3 +482,4 @@ git diff --cached --check
 - 2026-08-12: Support deferred integration과 seven-PR Stack A topology를 반영.
 - 2026-08-13: Plan 20 completion과 Plan 30 readiness를 actual validation evidence로 반영.
 - 2026-08-13: Plan 30 completion, Plan 40 readiness와 customer/full smoke gate 분리를 반영.
+- 2026-08-13: Plan 40 completion evidence와 Plan 50 readiness, 후속 dependency path를 반영.

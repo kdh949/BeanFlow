@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-30-customer-account-and-login.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -232,7 +232,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다.
+- 2026-08-13: Plan 40이 account-backed Merchant Session과 기본 전체 demo smoke를 required validation으로
+  완료했다. Stack A exact predecessor가 completed되어 `Implementation-Ready=true`로 전환했으며 구현은
+  아직 시작하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -257,3 +259,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
+- 2026-08-13: Plan 40 completion dependency와 Stack A readiness를 반영.

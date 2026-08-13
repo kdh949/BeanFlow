@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Merchant account and initial password](../exec-plans/active/productization-40-merchant-account-and-initial-password.md)
+- **Implementation owner:** [Merchant account and initial password](../exec-plans/completed/productization-40-merchant-account-and-initial-password.md)
 
 ## Context
 

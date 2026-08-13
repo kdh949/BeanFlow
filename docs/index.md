@@ -79,7 +79,7 @@
 - [Productization 10 Public Order Reference](exec-plans/completed/productization-10-public-order-reference.md)
 - [Productization 20 Authentication Foundation](exec-plans/completed/productization-20-authentication-foundation.md)
 - [Productization 30 Customer Account and Login](exec-plans/completed/productization-30-customer-account-and-login.md)
-- [Productization 40 Merchant Account and Initial Password](exec-plans/active/productization-40-merchant-account-and-initial-password.md)
+- [Productization 40 Merchant Account and Initial Password](exec-plans/completed/productization-40-merchant-account-and-initial-password.md)
 - [Productization 50 Customer Order Read Model](exec-plans/active/productization-50-customer-order-read-model.md)
 - [Productization 60 Store Order Board](exec-plans/active/productization-60-store-order-board.md)
 - [Productization 70 Customer Store Discovery](exec-plans/active/productization-70-customer-store-discovery.md)

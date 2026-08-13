@@ -485,7 +485,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | PointAccount provisioning은 merge가 아닌 명시적 INSERT이며 선행 row는 typed dependency failure와 전체 rollback | [ADR-109](../../adr/ADR-109-customer-point-account-provisioning.md) |
 | 2026-08-13 | local demo 고객 호출은 seeded ID/PW와 Customer Session을 사용하고 고객 JWT를 만들지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-13 | 기존 customer/merchant URI는 각 Session에 유지하고 운영자 point/refund branch는 `/operations/**`로 분리하며 상대 actor credential fallback을 두지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [authorization matrix](../../security/authorization-matrix.md) |
-| 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](../active/productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 
 ## Outcomes & Retrospective
 
