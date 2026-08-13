@@ -59,6 +59,10 @@
 - 계정 생성, 비밀번호 초기화, 잠금 해제는 모두 `AuditRecord`를 남긴다
   ([ADR-022](ADR-022-audit-record.md)). 감사에는 대상 계정 ID, 실행 운영자, 사유가 들어가고
   비밀번호 값과 Hash는 들어가지 않는다.
+- **2026-08-13 self-change audit amendment:** 점주 자신의 비밀번호 변경도 자격증명 소유권 전환을
+  증명하는 `AuditRecord`를 같은 계정 transaction에 남긴다. 계정 범위 행위이므로 특정 매장의
+  `OWNER`/`STAFF` membership을 추론하지 않고 `MERCHANT` actor type을 사용한다. Audit에는 계정 상태와
+  credential version 전이만 요약하고 현재·새 비밀번호와 Hash를 남기지 않는다.
 - 비밀번호 변경·운영자 초기화·잠금은 계정 transaction에서 `credentialVersion`을 증가시킨다.
   비밀번호 변경 성공 뒤 새 Session은 증가한 version으로 발급하며, 기존 Session은 행 삭제 성공 여부와
   무관하게 version 불일치로 즉시 401이다([ADR-094](ADR-094-browser-session-security.md)).
@@ -115,6 +119,8 @@
 - 비밀번호 변경 후 이전 Session이 무효화되는지 검증한다.
 - 이전 Session 행 삭제 실패를 주입해도 `credentialVersion` 불일치로 재사용이 401인지 검증한다.
 - 계정 생성·초기화·잠금 해제가 `AuditRecord`를 남기고 비밀번호를 저장하지 않는지 검증한다.
+- 점주 비밀번호 변경 Audit가 `MERCHANT` actor로 원자 저장되고 Audit 실패 시 자격증명이 바뀌지 않는지
+  검증한다.
 - 발급과 최초 StoreMembership 중 하나라도 실패하면 둘 다 남지 않고, 임시 비밀번호가 최초 성공
   응답 외 DB·Audit·log·frontend storage에 남지 않는지 검증한다.
 - 동시 로그인 실패 요청에서 실패 카운터가 유실·중복되지 않는지 PostgreSQL Testcontainers로 검증한다.

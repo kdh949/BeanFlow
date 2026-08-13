@@ -451,10 +451,16 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   validation과 customer demo checkpoint로 완료했다. direct dependency가 모두 completed path의 actual
   evidence로 충족되어 `Implementation-Ready=true`로 전환했다. Merchant 계정·Session 코드는 아직
   시작하지 않았고, 인자 없는 기본 전체 smoke 복원은 이 Plan의 required gate로 남아 있다.
+- 2026-08-13: 비밀번호 변경 Audit의 actor vocabulary 충돌을 보고하고 사용자 결정 A를 받았다.
+  ADR-022와 ADR-093에 계정 범위 `MERCHANT` actor를 먼저 기록했으며 V54 DB CHECK, 애플리케이션 enum과
+  원자적 password-change Audit 구현의 기준으로 확정했다.
 
 ## Surprises & Discoveries
 
-아직 없다.
+- 기존 `AuditActorType`과 `operations_audit_record.actor_type` closed CHECK에는 고객, 매장 역할,
+  운영자와 시스템만 있고 계정 범위 점주 actor가 없었다. 비밀번호 변경 주체를 특정 membership 역할로
+  기록하면 membership이 없거나 여러 매장 역할을 가진 계정에서 사실과 다른 감사가 된다. 사용자 결정으로
+  `MERCHANT`를 별도 vocabulary로 추가한다.
 
 ## Decision Log
 
@@ -468,6 +474,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 점주 로그인 ID는 고객과 같은 canonical 규칙, 별도 namespace 사용 | [BR-34](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 잠금은 lifecycle 상태가 아니라 15분 `lockedUntil` overlay | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](../completed/productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-13 | 점주 자기 비밀번호 변경 Audit는 store membership 역할을 추론하지 않고 `MERCHANT` actor를 사용 | [ADR-022](../../adr/ADR-022-audit-record.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 
 ## Outcomes & Retrospective
 

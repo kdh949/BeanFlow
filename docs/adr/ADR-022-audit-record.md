@@ -17,6 +17,12 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
 - 애플리케이션 API로 수정·삭제하지 않는다.
 - 외부 호출 결과는 별도 owner 트랜잭션에서 상태와 AuditRecord를 함께 확정한다.
 - summary에는 secret, 원본 결제정보, 정밀 사용자 위치와 불필요한 개인정보를 넣지 않는다.
+- **2026-08-13 Merchant credential amendment:** 점주가 자기 자격증명을 변경하는 계정 범위 행위는
+  store membership 역할과 분리된 `MERCHANT` actor type으로 기록한다. `STORE_OWNER`와
+  `STORE_STAFF`는 특정 매장 객체에 대한 authoritative membership 검증을 마친 행위에만 사용한다.
+  점주 비밀번호 변경은 `MerchantAccount` target에 `MERCHANT` actor를 기록하고 비밀번호 값·Hash는
+  before/after summary, reason과 source reference 어디에도 포함하지 않는다. DB의 closed actor
+  vocabulary와 애플리케이션 enum은 같은 forward migration에서 함께 확장한다.
 
 주문 생성과 예약 lease Feature는 다음 granularity를 사용한다.
 
@@ -96,6 +102,8 @@ ADR-054는 같은 target별 granularity를 고객 취소 Tx C0/C1과 후속 owne
 - 서울 달력 5주년과 윤년 cleanup 경계
 - chunk cleanup 중단·재실행
 - 민감정보 masking/absence
+- 점주 비밀번호 변경 Audit가 `MERCHANT` actor를 사용하고 store membership 역할을 추론하지 않음
+- Audit actor closed vocabulary가 `MERCHANT`를 허용하되 미등록 값을 계속 거부함
 - 기본 30일·최대 90일 window, 과거 window와 signed cursor filter binding
 - `AUDIT_RECORD_READ` grant/reason/query/access-Audit 원자성 및 Audit 장애 fail-closed
 
