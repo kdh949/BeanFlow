@@ -420,6 +420,17 @@ git diff --cached --check
   브라우저 검증이 통과했다. 추가 frontend build의 기존 Plan 80/90 CSRF 세 오류는 범위 밖 미해결로
   기록했다. Plan 90은 completed Plan 60 dependency를 소비해 readiness만 true로 전환하고 구현은 시작하지
   않았다. Plan 60 Draft PR과 final seven-PR topology 검증 전까지 migration lease는 유지한다.
+- 2026-08-14 Plan 60 Draft release: completion commit `97412d59198cf2459cd9cb3ca7706e91e86ac452`를
+  push했고 생성 직후 local/remote/[Draft PR #68](https://github.com/kdh949/BeanFlow/pull/68) head가
+  모두 그 SHA였다. PR #68은 OPEN/Draft, head `feature/productization-60-store-order-board`, base
+  `feature/productization-50-customer-orders`이며 같은 head의 중복 PR은 없다. GitHub
+  `mergeStateStatus=UNSTABLE`을 CI 성공으로 과장하지 않았고 merge·ready 전환·force-push는 수행하지 않았다.
+- 2026-08-14 Stack A final topology gate: PR #55/#57/#64/#65/#66/#67/#68이 정확히 일곱 개의 open
+  Draft이며 각 base는 `main → 00 → 10 → 20 → 30 → 40 → 50` 순서와 일치했다. 일곱 remote branch SHA는
+  각 PR head와 일치했고, `feature/productization-stack-a-release`, Plan 70+ 구현 branch/PR,
+  `feature/productization-plans` head PR과 combined release PR은 없었다. Stack A PR 중 merge된 것은 0개다.
+  Support PR #54는 별도 범위에서 MERGED이고 `SUPPORT_INTEGRATION_PENDING=false`다. 이 최종 gate 뒤
+  `STACK_A_MIGRATION_WRITER_LEASE`를 해제했다. 이 release-evidence 문서 commit은 migration을 쓰지 않는다.
 
 ## Surprises & Discoveries
 
@@ -525,8 +536,9 @@ git diff --cached --check
 - M6 Plan 60이 완료되어 점주가 Session membership으로 매장을 선택하고 공개 주문번호 기반 3열 보드에서
   접수·제조·준비·픽업 완료를 처리한다. V56 query/write evidence, 동시 전이, ETag/304와 권한 상실의
   failure-visible UI가 전체 regression과 브라우저 검증을 통과했다.
-- Stack A 구현은 완료됐지만 Plan 60 Draft PR과 정확한 seven-Draft-PR topology 검증 및 migration lease
-  해제가 아직 남아 있다. 프로그램 전체 M7~M10은 이 Goal 밖이며 시작하지 않는다.
+- Stack A는 Plan 00~60 구현, 필수 검증, 일곱 branch push와 정확한 seven-Draft-PR topology를 완료했고
+  migration-writer lease를 해제했다. combined release PR, merge, ready 전환, force-push와 Plan 70+ 구현은
+  수행하지 않았다. 프로그램 전체 M7~M10은 이 Goal 밖이며 시작하지 않는다.
 
 ## Revision Notes
 
@@ -537,3 +549,4 @@ git diff --cached --check
 - 2026-08-13: Plan 40 completion evidence와 Plan 50 readiness, 후속 dependency path를 반영.
 - 2026-08-14: Plan 50 completion evidence와 Plan 60/70 readiness, 남은 Stack A 범위를 반영.
 - 2026-08-14: Plan 60 implementation completion evidence, Plan 90 readiness와 남은 release topology gate를 반영.
+- 2026-08-14: Plan 60 Draft PR, final seven-PR topology와 Stack A migration-writer lease 해제를 기록.
