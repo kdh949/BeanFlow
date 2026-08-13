@@ -95,7 +95,11 @@ internal class SecurityConfiguration {
             http = http,
             registry = registry,
             chain = AuthenticationChain.MERCHANT,
-            unauthenticatedEndpoints = setOf("/api/v1/auth/merchant/csrf"),
+            unauthenticatedEndpoints =
+                setOf(
+                    "/api/v1/auth/merchant/csrf",
+                    "/api/v1/auth/merchant/sessions",
+                ),
             csrfCookieName = "BEANFLOW_MERCHANT_XSRF",
             errorWriter = errorWriter,
             metrics = metrics,
@@ -156,6 +160,11 @@ internal class SecurityConfiguration {
                 AuthenticationChain.MERCHANT -> BrowserActorType.MERCHANT
                 else -> error("Browser chain must be customer or merchant")
             }
+        val browserAuthenticationFilter = BrowserSessionAuthenticationFilter(actorType, loaders, clock, errorWriter, metrics)
+        http.addFilterAfter(browserAuthenticationFilter, SecurityContextHolderFilter::class.java)
+        if (chain == AuthenticationChain.MERCHANT) {
+            http.addFilterAfter(MerchantInitialPasswordGateFilter(errorWriter), BrowserSessionAuthenticationFilter::class.java)
+        }
         return http
             .securityMatcher(registry.requestMatcher(chain))
             .sessionManagement {
@@ -167,9 +176,6 @@ internal class SecurityConfiguration {
             }.requestCache { it.disable() }
             .addFilterBefore(
                 ActorCredentialIsolationFilter(chain, errorWriter),
-                SecurityContextHolderFilter::class.java,
-            ).addFilterAfter(
-                BrowserSessionAuthenticationFilter(actorType, loaders, clock, errorWriter, metrics),
                 SecurityContextHolderFilter::class.java,
             ).csrf {
                 it.csrfTokenRepository(csrfRepository)

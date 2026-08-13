@@ -29,10 +29,6 @@ internal class BrowserSessionAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        if (SecurityContextHolder.getContext().authentication?.isAuthenticated == true) {
-            filterChain.doFilter(request, response)
-            return
-        }
         val session =
             try {
                 metrics.sessionLookup(actorType) { request.getSession(false) }

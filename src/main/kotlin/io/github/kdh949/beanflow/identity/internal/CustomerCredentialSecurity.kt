@@ -58,8 +58,11 @@ internal class CustomerCredentialSecurityConfiguration {
     ): ApplicationRunner =
         ApplicationRunner {
             jdbc
-                .queryForList("SELECT password_hash FROM identity_customer_account", String::class.java)
-                .forEach { hash -> passwords.validateStoredHash(checkNotNull(hash)) }
+                .queryForList(
+                    "SELECT password_hash FROM identity_customer_account " +
+                        "UNION ALL SELECT password_hash FROM identity_merchant_account",
+                    String::class.java,
+                ).forEach { hash -> passwords.validateStoredHash(checkNotNull(hash)) }
         }
 }
 
@@ -135,7 +138,7 @@ internal class CustomerPasswordSecurity(
     }
 
     fun validateStoredHash(hash: String) {
-        check(ARGON2ID_PHC.matches(hash)) { "Stored customer password hash violates the accepted Argon2id PHC contract" }
+        check(ARGON2ID_PHC.matches(hash)) { "Stored browser-account password hash violates the accepted Argon2id PHC contract" }
     }
 
     private companion object {

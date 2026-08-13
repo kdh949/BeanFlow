@@ -122,7 +122,9 @@ internal class ApiExceptionHandler(
             FailureCode.VERIFICATION_LOCKED,
             -> HttpStatus.TOO_MANY_REQUESTS
 
-            FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
+            FailureCode.ACCESS_DENIED,
+            FailureCode.INITIAL_PASSWORD_CHANGE_REQUIRED,
+            -> HttpStatus.FORBIDDEN
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
 

@@ -45,4 +45,11 @@ internal interface StoreMembershipJpaRepository : JpaRepository<StoreMembershipE
         actorId: UUID,
         storeId: UUID,
     ): StoreMembershipEntity?
+
+    fun findAllByActorIdAndStatusOrderByStoreIdAsc(
+        actorId: UUID,
+        status: StoreMembershipStatus,
+    ): List<StoreMembershipEntity>
+
+    fun findAllByActorIdOrderByStoreIdAsc(actorId: UUID): List<StoreMembershipEntity>
 }
