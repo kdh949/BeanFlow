@@ -89,6 +89,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/merchant/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authenticate a merchant and rotate the browser session */
+        post: operations["createMerchantSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/merchant/password-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the merchant password and rotate the session */
+        post: operations["changeMerchantPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/merchant/sessions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete the current merchant session */
+        delete: operations["deleteCurrentMerchantSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/me": {
         parameters: {
             query?: never;
@@ -115,6 +166,40 @@ export interface paths {
         };
         /** Get the current customer actor */
         get: operations["getCurrentCustomer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/merchant/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current merchant actor, including INITIAL_PASSWORD state */
+        get: operations["getCurrentMerchant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/merchant/me/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stores with current active membership */
+        get: operations["listCurrentMerchantStores"];
         put?: never;
         post?: never;
         delete?: never;
@@ -631,6 +716,58 @@ export interface paths {
         get: operations["getOrderCompensation"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/merchant-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one merchant account by exact canonical login ID */
+        get: operations["getMerchantAccountByLoginId"];
+        put?: never;
+        /** Create a merchant account and first active store membership atomically */
+        post: operations["createMerchantAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/merchant-accounts/{merchantAccountId}/temporary-password-resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace a merchant credential with a one-time-display temporary password */
+        post: operations["resetMerchantTemporaryPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/merchant-accounts/{merchantAccountId}/lock-releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release a merchant login lock and matching login-ID attempt block */
+        post: operations["releaseMerchantAccountLock"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2534,6 +2671,8 @@ export interface components {
             message: string;
             correlationId: string;
             details: components["schemas"]["ErrorDetail"][];
+            /** @description Opaque convergence target present only when a safe retry contract explicitly requires it. */
+            targetReference?: string;
         };
         /** @description Canonical lowercase login ID in an actor-specific namespace. */
         LoginId: string;
@@ -2558,11 +2697,32 @@ export interface components {
             customerId: components["schemas"]["Identifier"];
             displayName: string;
         };
+        MerchantActor: {
+            /** @constant */
+            actorType: "MERCHANT";
+            merchantId: components["schemas"]["Identifier"];
+            displayName: string;
+            /** @enum {string} */
+            accountState: "INITIAL_PASSWORD" | "ACTIVE";
+        };
+        MerchantPasswordChangeRequest: {
+            currentPassword: components["schemas"]["Password"];
+            newPassword: components["schemas"]["Password"];
+        };
         OperatorActor: {
             /** @constant */
             actorType: "OPERATOR";
             operatorId: components["schemas"]["Identifier"];
             roles: string[];
+        };
+        MerchantStore: {
+            storeId: components["schemas"]["Identifier"];
+            storeName: string;
+            /** @enum {string} */
+            membershipRole: "OWNER" | "STAFF";
+        };
+        MerchantStoreList: {
+            items: components["schemas"]["MerchantStore"][];
         };
         NearbyStore: {
             storeId: components["schemas"]["Identifier"];
@@ -3082,6 +3242,52 @@ export interface components {
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
             steps: components["schemas"]["CompensationStep"][];
             updatedAt: components["schemas"]["DateTime"];
+        };
+        MerchantMembershipView: {
+            storeId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            role: "OWNER" | "STAFF";
+        };
+        MerchantAccountView: {
+            merchantAccountId: components["schemas"]["Identifier"];
+            loginId: components["schemas"]["LoginId"];
+            displayName: string;
+            /** @enum {string} */
+            accountState: "INITIAL_PASSWORD" | "ACTIVE" | "EXPIRED";
+            lockedUntil?: components["schemas"]["DateTime"];
+            temporaryPasswordExpiresAt?: components["schemas"]["DateTime"];
+            memberships: components["schemas"]["MerchantMembershipView"][];
+        };
+        CreateMerchantAccountRequest: {
+            loginId: components["schemas"]["LoginId"];
+            displayName: string;
+            storeId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            membershipRole: "OWNER" | "STAFF";
+            reason: string;
+        };
+        MerchantAccountCreationResult: {
+            merchantAccountId: components["schemas"]["Identifier"];
+            loginId: components["schemas"]["LoginId"];
+            /** @constant */
+            accountState: "INITIAL_PASSWORD";
+            membership: components["schemas"]["MerchantMembershipView"];
+            /** @description One-time-display value present only in the first successful response. */
+            temporaryPassword: string;
+            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
+        };
+        ReasonRequest: {
+            reason: string;
+        };
+        MerchantTemporaryPasswordResult: {
+            merchantAccountId: components["schemas"]["Identifier"];
+            loginId?: components["schemas"]["LoginId"];
+            /** @constant */
+            accountState: "INITIAL_PASSWORD";
+            membership?: components["schemas"]["MerchantMembershipView"];
+            /** @description One-time-display value present only in the first successful response. */
+            temporaryPassword: string;
+            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
         };
         CustomerCancellationRefundReconciliationRequest: {
             /**
@@ -4541,6 +4747,8 @@ export interface components {
     parameters: {
         /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
         CustomerCsrfToken: string;
+        /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+        MerchantCsrfToken: string;
         Latitude: number;
         Longitude: number;
         /** @description Search radius in meters. Maximum 10000. */
@@ -4566,13 +4774,12 @@ export interface components {
         /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
         Limit: number;
         PaymentMethodId: components["schemas"]["Identifier"];
-        /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
-        MerchantCsrfToken: string;
         /**
          * @description Purpose for an audited privileged policy read. The server trims the value,
          *     requires 1 to 200 characters after trimming, and rejects control characters.
          */
         AccessReason: string;
+        MerchantAccountId: components["schemas"]["Identifier"];
         PointAccountId: components["schemas"]["Identifier"];
         SettlementBatchId: components["schemas"]["Identifier"];
         SettlementItemId: components["schemas"]["Identifier"];
@@ -4739,6 +4946,93 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    createMerchantSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Merchant session created; INITIAL_PASSWORD is still gated */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantActor"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["AuthenticationFailed"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["AuthenticationRateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    changeMerchantPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MerchantPasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed, credential version increased, and new session issued */
+            204: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    deleteCurrentMerchantSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current merchant session deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getCurrentOperator: {
         parameters: {
             query?: never;
@@ -4781,6 +5075,51 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentMerchant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current merchant actor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantActor"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentMerchantStores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete current membership list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantStoreList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -5656,6 +5995,143 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getMerchantAccountByLoginId: {
+        parameters: {
+            query: {
+                loginId: components["schemas"]["LoginId"];
+            };
+            header: {
+                /**
+                 * @description Purpose for an audited privileged policy read. The server trims the value,
+                 *     requires 1 to 200 characters after trimming, and rejects control characters.
+                 */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Merchant credential administration view; never contains a password */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantAccountView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createMerchantAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMerchantAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret-bearing first response; the temporary password is never persisted for replay */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantAccountCreationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    resetMerchantTemporaryPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                merchantAccountId: components["parameters"]["MerchantAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret-bearing first response; same-key replay returns 409 and never reproduces the password */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantTemporaryPasswordResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    releaseMerchantAccountLock: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                merchantAccountId: components["parameters"]["MerchantAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Account and matching attempt lock released atomically, or exact replay returned */
+            204: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

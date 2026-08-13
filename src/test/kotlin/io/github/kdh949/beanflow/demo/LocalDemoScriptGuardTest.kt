@@ -34,6 +34,7 @@ internal class LocalDemoScriptGuardTest {
 
     @BeforeEach
     fun copyScriptsAndStubs() {
+        root = root.toRealPath()
         scripts = root.resolve("scripts/demo")
         scripts.resolve("lib").createDirectories()
         val source = Path.of("scripts/demo")
@@ -147,6 +148,55 @@ internal class LocalDemoScriptGuardTest {
         } finally {
             unrelated.destroyForcibly()
             unrelated.waitFor(5, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `frontend launcher leaves a verifiable command marker that stop can own`() {
+        stubDocker(reportedDatabase = "beanflow_demo")
+        writeExecutable(
+            stubBin.resolve("npm"),
+            """
+            #!/usr/bin/env bash
+            trap 'exit 0' TERM INT
+            while true; do sleep 1; done
+            """.trimIndent() + "\n",
+        )
+        val launcher = root.resolve("launch-frontend.sh")
+        writeExecutable(
+            launcher,
+            """
+            #!/usr/bin/env bash
+            set -euo pipefail
+            . "${scripts.resolve("lib/common.sh").toAbsolutePath()}"
+            mkdir -p "${'$'}DEMO_RUNTIME_DIR"
+            start_owned_frontend "${'$'}DEMO_FRONTEND_PID_FILE" frontend "${'$'}DEMO_FRONTEND_LOG"
+            """.trimIndent() + "\n",
+        )
+
+        val launched = runPath(launcher)
+        assertThat(launched.exitCode).isZero()
+        val record = root.resolve(".demo-runtime/frontend.pid")
+        val pid =
+            record
+                .readText()
+                .lineSequence()
+                .single { it.startsWith("pid=") }
+                .substringAfter('=')
+                .toLong()
+        val handle = ProcessHandle.of(pid).orElseThrow()
+        try {
+            assertThat(handle.isAlive).isTrue()
+
+            val stopped = run("stop.sh")
+
+            assertThat(stopped.exitCode).isZero()
+            assertThat(stopped.output).contains("stopped owned frontend process group")
+            assertThat(handle.isAlive).isFalse()
+        } finally {
+            val descendants = handle.descendants().toList()
+            handle.destroyForcibly()
+            descendants.forEach(ProcessHandle::destroyForcibly)
         }
     }
 
@@ -417,9 +467,14 @@ internal class LocalDemoScriptGuardTest {
     private fun run(
         script: String,
         vararg arguments: String,
+    ): ScriptResult = runPath(scripts.resolve(script), *arguments)
+
+    private fun runPath(
+        script: Path,
+        vararg arguments: String,
     ): ScriptResult {
         val process =
-            ProcessBuilder(listOf("bash", scripts.resolve(script).toString()) + arguments)
+            ProcessBuilder(listOf("bash", script.toString()) + arguments)
                 .directory(root.toFile())
                 .redirectErrorStream(true)
                 .also { it.environment()["PATH"] = "${stubBin.toAbsolutePath()}:${System.getenv("PATH")}" }

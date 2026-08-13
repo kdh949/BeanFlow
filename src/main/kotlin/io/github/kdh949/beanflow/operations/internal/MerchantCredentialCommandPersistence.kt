@@ -7,6 +7,8 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.Immutable
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
@@ -41,7 +43,8 @@ internal class MerchantCredentialCommandEntity(
     val operation: MerchantCredentialOperation,
     @Column(name = "idempotency_key", nullable = false, length = 128)
     val idempotencyKey: String,
-    @Column(name = "payload_hash", nullable = false, length = 64)
+    @Column(name = "payload_hash", nullable = false, length = 64, columnDefinition = "char(64)")
+    @JdbcTypeCode(SqlTypes.CHAR)
     val payloadHash: String,
     @Column(name = "merchant_account_id", nullable = false)
     val merchantAccountId: UUID,
