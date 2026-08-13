@@ -472,7 +472,7 @@ internal class SupportVerificationTransactions(
                         challenge.toResource(),
                         session.state,
                         VerificationLevel.UNVERIFIED,
-                        session.invalidAttempts,
+                        session.invalidAttempts.toInt(),
                         null,
                     )
                 completedCommand(start.idempotencyId, response, 200, now)
@@ -551,7 +551,7 @@ internal class SupportVerificationTransactions(
                     challenge.toResource(),
                     session.state,
                     if (session.state == VerificationState.VERIFIED) session.requestedLevel else VerificationLevel.UNVERIFIED,
-                    session.invalidAttempts,
+                    session.invalidAttempts.toInt(),
                     lockedUntil,
                 )
             completedCommand(start.idempotencyId, response, 200, now)
@@ -800,7 +800,7 @@ private fun VerificationSession.toEntity(): VerificationSessionEntity =
         actionScope,
         requestedLevel,
         state,
-        invalidAttempts,
+        invalidAttempts.toShort(),
         startedAt,
         expiresAt,
         null,
@@ -822,7 +822,7 @@ private fun VerificationSessionEntity.toAggregate(channels: Set<VerificationChan
         startedAt,
         expiresAt,
         state,
-        invalidAttempts,
+        invalidAttempts.toInt(),
         channels,
     )
 
@@ -833,7 +833,7 @@ private fun VerificationSessionEntity.apply(
     val previousState = state
     val previousInvalidAttempts = invalidAttempts
     state = aggregate.state
-    invalidAttempts = aggregate.invalidAttempts
+    invalidAttempts = aggregate.invalidAttempts.toShort()
     if (previousState != state || previousInvalidAttempts != invalidAttempts) version += 1
     if (state == VerificationState.VERIFIED && verifiedAt == null) verifiedAt = now
     if (state == VerificationState.REVOKED && revokedAt == null) revokedAt = now
@@ -851,7 +851,7 @@ private fun VerificationSessionEntity.toResource(challenges: List<VerificationCh
         requestedLevel,
         if (state == VerificationState.VERIFIED) requestedLevel else VerificationLevel.UNVERIFIED,
         state,
-        invalidAttempts,
+        invalidAttempts.toInt(),
         startedAt,
         expiresAt,
         version,

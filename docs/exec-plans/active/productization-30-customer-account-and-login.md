@@ -307,7 +307,9 @@ POST /auth/customer/sessions
 - 가입 성공 후 CustomerAccount와 0원 PointAccount가 각각 한 건인지 검증한다.
 - Loyalty save/flush 장애가 CustomerAccount까지 rollback하고 503인지 PostgreSQL 통합 테스트로 검증한다.
 - Identity와 Loyalty 사이에 Repository 직접 접근·JPA 연관관계가 없는지 Modulith/ArchUnit으로 검증한다.
-- 로컬 데모 smoke가 토큰 붙여넣기 없이 통과하는지 확인한다.
+- 로컬 데모의 `--customer-checkpoint` smoke가 Customer Session으로 승인 결제 조회까지 토큰
+  붙여넣기 없이 통과하고 Merchant endpoint를 호출하지 않는지 확인한다. 매장 전환·환불을 포함한
+  기본 전체 smoke는 account-backed Merchant Session이 생기는 productization-40이 소유한다.
 
 ## Validation Commands
 
@@ -316,7 +318,7 @@ POST /auth/customer/sessions
 ./gradlew test --tests '*Authentication*'
 ./gradlew spotlessCheck
 ./gradlew build --stacktrace
-bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
+bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh --customer-checkpoint
 PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ```
 
@@ -340,13 +342,133 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-2026-08-13: Plan 20이 V52, 네 FilterChain, PostgreSQL Session/CSRF, typed CurrentActor와 login Session
-lifecycle를 전체 995-test build 및 문서 검증으로 완료했다. exact Plan 20 completion head가 direct
-dependency를 충족하므로 `Implementation-Ready=true`로 전환했다. 구현은 아직 시작하지 않았다.
+- 2026-08-13: Plan 20이 V52, 네 FilterChain, PostgreSQL Session/CSRF, typed CurrentActor와 login Session
+  lifecycle를 전체 995-test build 및 문서 검증으로 완료했다. exact Plan 20 completion head가 direct
+  dependency를 충족하므로 `Implementation-Ready=true`로 전환했다.
+- 2026-08-13: `origin/main`을 Plan 20 branch에 history-preserving merge하고 전체 회귀를 통과한 exact
+  Plan 20 completion `a6bf720` 위에서 이 plan을 시작했다. combined migration inventory의 마지막 V52를
+  확인하고 V53 lease로 `identity_customer_account`와 actor/scope HMAC 전용
+  `identity_login_attempt` schema를 추가했다. 신규 CustomerAccount에는 backfill을 만들지 않았다.
+- 2026-08-13: BR-34/35의 canonical 사용자명, versioned common-password blocklist, Bouncy Castle
+  Argon2id `m=19456,t=2,p=1`, 고정 dummy PHC와 startup stored-hash 검증을 구현했다. 운영 HMAC key는
+  필수 설정이며 누락·짧은 key·지원하지 않는 PHC는 startup 실패다. source IP는 명시한 trusted proxy
+  CIDR에서 온 forwarding header만 사용한다.
+- 2026-08-13: 가입 Application Service가 CustomerAccount INSERT, Loyalty public provisioning port의
+  세 잔액 0 PointAccount INSERT와 과거 CUSTOMER LOGIN_ID attempt 삭제를 한 transaction으로 조정한다.
+  Loyalty adapter는 `MANDATORY`와 `EntityManager.persist + flush`를 사용해 선행 PointAccount를 merge
+  성공으로 숨기지 않는다. trigger write failure와 Unique 충돌 모두 두 Aggregate 0건·503으로 rollback한다.
+- 2026-08-13: 로그인은 transaction 밖에서 canonicalization/HMAC/Argon2id를 수행하고, transaction 안에서
+  actor/scope/HMAC 정렬 attempt row, account row, Session row 순으로 잠근다. 5회 계정 잠금·30회 IP 차단,
+  15분 exact boundary, `credentialVersion` Session 무효화, 검증 중 snapshot 변경 401, 24시간 bounded
+  retention과 실패 재전파를 구현했다. 고객/점주 actor를 인자로 받는 공용 attempt 저장소로 Plan 40의
+  동일 잠금 순서를 준비했지만 점주 계정·로그인은 구현하지 않았다.
+- 2026-08-13: 고객 가입·로그인, `GET /me`, 현재 Session logout을 Customer Chain의 Session/CSRF 계약에
+  연결했다. 로그인 transaction의 `LoginSessionCoordinator`가 유일하게 ID를 회전하도록 browser chain의
+  중복 fixation rotation을 껐다. PostgreSQL에서 6번째 동시 로그인 5개 상한, session insert 실패 시
+  기존 Session 삭제와 만료 잠금 활성화 rollback, 다른 고객 주문 403과 위조 body `customerId` 무시를
+  검증했다.
+- 2026-08-13: local demo가 고정 고객 계정과 실제 0원 PointAccount를 같은 fixture에 seed하고, smoke가
+  고객 XSRF 발급→ID/PW 로그인→Session Cookie로 모든 고객 호출을 수행하도록 바꿨다. 고객 JWT는 더
+  생성하지 않는다. 모든 HTTP 호출은 기존 `call` helper를 유지하며 Demo safety/seed/guard 17 tests가
+  통과했다.
+- 2026-08-13: 첫 집중 인증 묶음은 38 tests 중 HMAC startup failure의 최상위 예외 메시지 검사 1건이
+  실패했고 root cause 계약으로 교정한 뒤 통과했다. 필수 경로 보강 뒤 Customer integration/security
+  24 tests와 Demo 17 tests가 통과했다. 정책 BR-34/35/42, ADR-092/109, authorization matrix, error
+  catalog, local demo runbook과 runtime OpenAPI를 actual outcome에 맞춰 갱신했다.
+- 2026-08-13: 첫 전체 build는 1,023 tests 중 7건이 실패했다. 새 Customer Controller 의존성을 반영하지
+  않은 runtime OpenAPI parity slice 1건, V53 이후에도 V52를 latest로 단정한 Audit/Support migration
+  test 각 1건, production Customer loader와 test loader가 충돌한 browser Session test 4건이었다. fixture와
+  latest-ownership assertion을 교정한 두 번째 전체 build는 1,023 tests, 0 failures, 0 errors, 기존 opt-in
+  benchmark 1건 skipped로 통과했다.
+- 2026-08-13: 필수 demo chain의 첫 실행은 narrow ordinary-accrual-policy bootstrap context가
+  `AuditRecordService`의 `RetentionPolicyOperations` 의존성을 포함하지 않아 step 3에서
+  `DEPENDENCY_UNAVAILABLE`로 중단됐다. Retention policy entity/repository/service를 같은 narrow context에
+  명시하고 그 context 자체를 띄우는 회귀 테스트를 추가했다. 테스트의 첫 시도는 운영 CLI만 적용하던
+  Modulith auto-configuration 제외 목록을 공유하지 않아 실패했고, production/test가 같은 상수를
+  사용하도록 교정한 뒤 관련 4 tests가 통과했다.
+- 2026-08-13: 다음 demo 기동은 `origin/main`에서 유입된 V42 Support entity의 `Int`와 PostgreSQL
+  `smallint` 불일치로 Hibernate `ddl-auto=validate`에서 중단됐다. 문자열 `columnDefinition`만 추가한
+  첫 교정은 JDBC 기대 타입이 여전히 `INTEGER`여서 실패했다. V42의 세 `smallint` 필드
+  (`invalid_attempts`, `max_reveals`, `reserved_reveals`)를 persistence `Short`로 정합화하고 domain/API
+  경계에서 `Int`로 변환한 뒤 Support/Bootstrap focused tests와 실제 application health가 통과했다.
+- 2026-08-13: 프런트엔드 의존성이 설치되지 않은 환경의 demo 실행은 `openapi-typescript: command not
+  found`로 중단됐다. 추적 파일 변경 없이 lockfile 기반 `npm ci`를 실행한 다음 start와 seed가 통과했고,
+  smoke는 고객 Session 로그인, discovery, 주문, 멱등 replay와 결제 조회까지 통과했다. 이후 Merchant
+  Session 전용 `/store-orders/**`에 legacy `STORE_OWNER` JWT를 보낸 단계는 의도대로 403이었다. fake/JWT
+  fallback이나 Plan 40 선행 구현으로 숨기지 않고 실제 sequencing conflict로 기록했다.
+- 2026-08-13: latest worktree에서 exact identity test, `*Authentication*`, `spotlessCheck`가 다시 통과했다.
+  Support persistence와 narrow bootstrap 회귀를 포함한 전체 build는 11분 33초, 1,024 tests,
+  0 failures, 0 errors, 기존 opt-in benchmark 1건 skipped로 통과했고 `git diff --check`도 통과했다.
+  문서 검증은 target OpenAPI 153 paths/159 operations, runtime 121/125, schemas 305, Business Policy 46,
+  ADR 111, Markdown 274, ExecPlan 57을 검증해 통과했다.
+- 2026-08-13: 사용자는 Plan 30 smoke를 승인 결제 조회까지의 명시적 `--customer-checkpoint`로
+  분리하고, Merchant 전환·환불 기본 전체 smoke는 Plan 40에서 account-backed Merchant Session으로
+  복원하기로 결정했다. RED에서 unknown checkpoint와 Merchant 미호출 계약 2건이 실패했고, strict
+  argument parsing과 payment query 직후 성공 terminal을 추가한 뒤 `LocalDemoScriptGuardTest` 11건이
+  통과했다. 인자 없는 기본 전체 smoke 본문은 삭제·완화하지 않고 Plan 40 검증으로 보존했다.
+- 2026-08-13: clean demo DB에서 `start.sh` → `seed.sh` → `smoke.sh --customer-checkpoint`를 실행했다.
+  policy bootstrap, application, frontend 기동과 25-row seed 뒤 실제 고객 가입·로그인 Session, discovery,
+  0원 PointAccount, 주문 생성/동일 replay/payload mismatch, 결제 prepare/confirm replay와 tamper 거부,
+  승인 결제 조회까지 17 HTTP 단계가 통과했다. 종료 뒤 `stop.sh --reset`으로 demo 상태를 정리했다.
+- 2026-08-13: 최종 exact identity tests, `*Authentication*`, `spotlessCheck`와 전체 `build --stacktrace`가
+  통과했다. 전체 build는 11분 35초, 1,026 tests, 0 failures, 0 errors, 기존 opt-in benchmark 1건
+  skipped였다. 문서 검증은 target OpenAPI 153 paths/159 operations, runtime 121/125, schemas 305,
+  Business Policy 46, ADR 111, Markdown 274, ExecPlan 57을 검증했고 `git diff --check`도 통과했다.
+- 2026-08-13: 추가 공급망 검토의 첫 `npm audit --audit-level=high`는 기존 OpenAPI 생성 도구의
+  transitive `@redocly/openapi-core 1.34.18 → js-yaml 4.3.0`에서 high 2건을 보고했다. 호환 patch인
+  `1.34.19`와 `4.3.1`로 lockfile을 갱신한 뒤 audit는 0 vulnerabilities였고 schema 재생성도
+  deterministic했다. 이어 실행한 frontend build는 기존 화면 세 호출이 필수 `X-BEANFLOW-CSRF` 타입을
+  아직 전달하지 않아 TypeScript에서 실패했다. 고객 Cookie/CSRF client와 화면 전환은 명시적인 Plan 80
+  범위이므로 이 Plan에서 placeholder header, JWT fallback 또는 OpenAPI optional 완화로 숨기지 않았다.
 
 ## Surprises & Discoveries
 
-아직 없다.
+- Spring JDBC raw `JdbcTemplate`에 `Instant`를 직접 넘긴 attempt fixture가 PostgreSQL에서 SQL grammar
+  오류로 번역됐다. production/test raw JDBC timestamp 입력을 `Timestamp.from`으로 명시해 timezone
+  의미를 유지했다.
+- 로그인 성공 transaction에서 Session ID를 이미 회전했는데 Spring Security fixation protection이
+  응답 단계에서 한 번 더 회전해 최초 `/me` 뒤 browser Cookie가 stale해졌다. coordinator가 account
+  lock과 같은 transaction에서 회전·상한을 소유하므로 Customer/Merchant browser chain의 중복 회전을
+  비활성화하고 PostgreSQL 회전·logout 테스트로 확인했다.
+- 최초 LoginAttemptRepository와 HMAC 구현이 SQL 문자열에 `CUSTOMER`를 고정해 Required Test의 고객·점주
+  공용 잠금 순서를 증명할 수 없었다. actor type을 명시 인자로 올리고 동일 actor의 동시 요청과 서로
+  다른 actor namespace를 한 저장소에서 검증했다.
+- assigned UUID를 가진 PointAccount에 `saveAndFlush`를 호출하면 Spring Data가 `persist` 대신 `merge`를
+  선택해 선행 PointAccount 충돌을 201 성공으로 숨겼다. 실패한 신규 검증이 이 결함을 드러냈고,
+  `EntityManager.persist + flush`와 typed public failure로 교정한 뒤 전체 rollback·503을 확인했다.
+- 고정 Clock을 통합 테스트에 도입한 첫 실행은 기존 `now()`/`Instant.now()` fixture 세 곳과 DB timestamp
+  constraint가 섞여 4/23 tests가 실패했다. 모든 인증 경계 입력을 하나의 mutable fixed Clock으로
+  정렬한 뒤 exact boundary와 재실행이 통과했다.
+- 새 customer login을 smoke helper 밖의 raw `curl`로 작성하자 `LocalDemoRepositorySafetyTest`가 즉시
+  실패했다. CSRF와 Session login도 기존 `call` helper를 통과하도록 확장해 첫 실패 중단·correlation
+  규칙을 보존했다.
+- seed 전용 Spring context는 17개 Demo 테스트를 통과하지만 종료 때 제외한 Modulith runtime entity를
+  조회하려는 기존 `eventPublicationRegistry`의 `UnknownEntityException` warning을 한 번 남긴다. 이는
+  non-zero 검증 실패가 아니며 product application context에서는 재현되지 않았지만 최종 결과에서
+  warning으로 보존한다.
+- narrow ordinary-accrual-policy bootstrap은 전체 application context 테스트가 통과해도 필요한
+  Operations bean을 누락할 수 있었다. `AuditRecordService`의 retention dependency가 추가된 뒤에도 CLI가
+  예외를 terminal `DEPENDENCY_UNAVAILABLE`로만 노출해 원인을 숨기지는 않았지만 진단 정보는 app log에
+  없었다. 실제 narrow context를 기동하는 회귀 테스트를 별도로 둬 production 구성 누락을 검증한다.
+- 전체 build가 통과한 뒤에도 local profile의 Hibernate `ddl-auto=validate`는 V42의 세 Support
+  `smallint`/`Int` 불일치를 순서대로 발견했다. migration constraint가 허용하는 값은 작지만 domain/API는
+  `Int`가 자연스러우므로 persistence만 `Short`로 맞추고 변환 경계를 명시했다. `columnDefinition`은 SQL
+  이름만 바꾸고 JDBC type code를 바꾸지 않아 해결책이 아니었다.
+- Plan 20은 account-backed Merchant loader가 생기는 Plan 40 전까지 Merchant 보호 경로를 401/403으로
+  닫고 JWT·fake Session fallback을 금지한다. 반면 기존 full demo smoke는 고객 주문 뒤 Merchant
+  transition과 refund가 있어 Plan 30만으로는 끝까지 진행할 수 없다. 이는 테스트 fixture 실패가 아니라
+  두 ExecPlan 완료 조건의 실제 sequencing conflict이며 사용자 결정 전에는 성공으로 축소 기록하지 않는다.
+- 이 sequencing conflict는 고객 경로 검증을 약화하지 않고 actor별 availability 시점에 맞춰 smoke
+  checkpoint 소유권을 분리해야 해결된다. Plan 30은 결제 승인 상태 조회까지, Plan 40은 Merchant Session
+  로그인 뒤 주문 전환·적립·환불과 authorization failure까지 소유한다. default full flow는 유지하므로
+  두 checkpoint가 서로 다른 대체 구현으로 갈라지지 않는다.
+- latest full build 종료 시 한 test context의 Modulith registry가 `PaymentRefundedV1` publication 두 건을
+  unfinished INFO로 보고했다. JUnit XML은 1,026 tests 중 failure/error 0이고 build exit도 0이었지만,
+  clean event backlog라고 주장하지 않고 기존 test shutdown 관측값으로 남긴다.
+- runtime OpenAPI를 생성한 TypeScript schema는 Customer unsafe operation의 필수 CSRF header를 정확히
+  드러냈고, 수동 Bearer token을 쓰는 기존 화면 세 곳의 compile failure를 노출했다. 이는 API 실패를
+  성공으로 대체한 것이 아니라 Plan 20이 허용한 브라우저 중간 단절이며, Plan 80 전에는 frontend 전체
+  build 통과를 주장하지 않는다.
 
 ## Decision Log
 
@@ -357,6 +479,13 @@ dependency를 충족하므로 `Implementation-Ready=true`로 전환했다. 구�
 | 2026-08-12 | 고객 로그인 ID는 이메일·전화번호가 아닌 사용자명이며 가입 중복은 409 | [BR-34](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 비밀번호 15~128자, 5회 계정 잠금·30회 IP 차단과 임시 비밀번호 24시간 | [BR-35](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 가입과 0원 PointAccount를 같은 transaction에서 생성 | [BR-42](../../product/business-policy-decisions.md) |
+| 2026-08-13 | Argon2id provider는 production dependency `bcprov-jdk18on:1.84`, exact constructor parameter와 startup self-test로 고정 | 이 plan, [BR-35](../../product/business-policy-decisions.md) |
+| 2026-08-13 | LoginAttempt persistence와 HMAC은 CUSTOMER/MERCHANT actor를 명시 인자로 받아 같은 정렬 잠금 구현을 공유 | 이 plan, [BR-35](../../product/business-policy-decisions.md) |
+| 2026-08-13 | Session 회전의 단일 authority는 account transaction 안의 LoginSessionCoordinator이며 FilterChain의 별도 fixation rotation은 사용하지 않음 | [ADR-094](../../adr/ADR-094-browser-session-security.md) |
+| 2026-08-13 | PointAccount provisioning은 merge가 아닌 명시적 INSERT이며 선행 row는 typed dependency failure와 전체 rollback | [ADR-109](../../adr/ADR-109-customer-point-account-provisioning.md) |
+| 2026-08-13 | local demo 고객 호출은 seeded ID/PW와 Customer Session을 사용하고 고객 JWT를 만들지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-13 | 기존 customer/merchant URI는 각 Session에 유지하고 운영자 point/refund branch는 `/operations/**`로 분리하며 상대 actor credential fallback을 두지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [authorization matrix](../../security/authorization-matrix.md) |
+| 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 
 ## Outcomes & Retrospective
 

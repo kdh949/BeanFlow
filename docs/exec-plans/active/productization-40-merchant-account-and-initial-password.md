@@ -408,6 +408,9 @@ POST /operations/merchant-accounts/{merchantAccountId}/lock-releases
   삭제·회전·저장 장애가 전체 rollback과 503을 만드는지 검증한다.
 - 24시간 임시 비밀번호와 5회 계정 잠금·30회 IP 차단의 경계를 고정 `Clock`으로 검증한다.
 - 기존 매장 주문 lifecycle 테스트가 회귀 없이 통과하는지 확인한다.
+- 로컬 데모 기본 전체 smoke가 점주 JWT나 fake Session 없이 실제 Merchant 계정의 초기 비밀번호 변경과
+  Merchant Session으로 매장 전환·부분/전액 환불을 수행하고, 고객 주문·결제 checkpoint 이후 끝까지
+  통과하는지 검증한다. Plan 30의 `--customer-checkpoint`를 전체 smoke 성공으로 대체하지 않는다.
 
 ## Validation Commands
 
@@ -416,6 +419,7 @@ POST /operations/merchant-accounts/{merchantAccountId}/lock-releases
 ./gradlew test --tests '*StoreOrder*'
 ./gradlew spotlessCheck
 ./gradlew build --stacktrace
+bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
 PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ```
 
@@ -460,6 +464,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 고객·점주 공통 비밀번호와 로그인 제한 초기값 적용 | [BR-35](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 로그인 ID는 고객과 같은 canonical 규칙, 별도 namespace 사용 | [BR-34](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 점주 잠금은 lifecycle 상태가 아니라 15분 `lockedUntil` overlay | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
+| 2026-08-13 | Merchant 전환·환불을 포함한 인자 없는 기본 전체 demo smoke는 이 Plan에서 account-backed Merchant Session으로 복원 | [productization-30](productization-30-customer-account-and-login.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 
 ## Outcomes & Retrospective
 

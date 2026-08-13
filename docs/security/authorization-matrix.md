@@ -52,7 +52,7 @@
 | Public | `/actuator/health`, `/api/v1/payment-config`, `/api/v1/auth/operations/config` | 없음 | 해당 없음 |
 | Operations | `/api/v1/operations/**`, `/api/v1/support/**` | Keycloak Bearer JWT | 적용하지 않음 |
 | Merchant | `/api/v1/auth/merchant/**`, `/api/v1/merchant/**`, 매장 범위 경로 | Session Cookie | 적용 |
-| Customer | 나머지 `/api/v1/**` | Session Cookie | 적용 |
+| Customer | `/api/v1/auth/customer/**`, `/api/v1/me/**`, `/api/v1/orders/**`, `/api/v1/payment-methods/**`, 고객 결제·포인트·매장 탐색 경로 | Session Cookie | 적용 |
 
 - 요청은 정확히 하나의 Chain에 속한다. 경로가 겹치거나 미배정이면 기동을 실패시킨다.
 - Chain을 명시하지 않은 새 endpoint는 구조 검증을 실패시킨다. Customer Chain을 암묵적
@@ -62,6 +62,8 @@
 - CSRF token은 고객 `BEANFLOW_CUSTOMER_XSRF`, 점주 `BEANFLOW_MERCHANT_XSRF` Cookie로 분리하고
   `X-BEANFLOW-CSRF` header에 복사한다. actor별 token 발급 endpoint와 다른 Chain의 token은 수용하지 않는다.
   token 발급 GET은 body 없는 204이며 해당 actor의 XSRF Cookie만 발급한다.
+- 고객 가입과 로그인은 Customer Chain 안의 anonymous entry point지만 CSRF 검증은 유지한다. 로그인
+  성공 뒤에만 `BEANFLOW_CUSTOMER_SESSION`을 발급하며, Bearer JWT를 고객 credential로 병행 수용하지 않는다.
 - 현재 actor 조회와 logout도 Chain별 경로로 분리한다. 하나의 `/me`에서 여러 Cookie와 JWT를
   동시에 해석하지 않는다.
 - 로그인 시 Session ID를 회전한다. 비밀번호 변경·로그아웃 시 해당 계정 Session을 폐기한다.

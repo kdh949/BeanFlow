@@ -111,15 +111,20 @@ internal class ApiExceptionHandler(
 
     private fun statusOf(code: FailureCode): HttpStatus =
         when (code) {
-            FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
+            FailureCode.INVALID_REQUEST,
+            FailureCode.PASSWORD_POLICY_VIOLATION,
+            -> HttpStatus.BAD_REQUEST
+
+            FailureCode.AUTHENTICATION_FAILED -> HttpStatus.UNAUTHORIZED
+
+            FailureCode.AUTHENTICATION_RATE_LIMITED,
+            FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
+            FailureCode.VERIFICATION_LOCKED,
+            -> HttpStatus.TOO_MANY_REQUESTS
 
             FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
 
             FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
-
-            FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
-            FailureCode.VERIFICATION_LOCKED,
-            -> HttpStatus.TOO_MANY_REQUESTS
 
             FailureCode.VERIFICATION_REQUIRED,
             FailureCode.DATA_ACCESS_GRANT_REQUIRED,
@@ -136,6 +141,7 @@ internal class ApiExceptionHandler(
             FailureCode.DEPENDENCY_UNAVAILABLE,
             FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,
             FailureCode.ORDER_REFERENCE_EXHAUSTED,
+            FailureCode.POINT_ACCOUNT_INTEGRITY_FAILURE,
             -> HttpStatus.SERVICE_UNAVAILABLE
 
             else -> HttpStatus.CONFLICT

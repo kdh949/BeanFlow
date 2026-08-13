@@ -3,6 +3,10 @@ package io.github.kdh949.beanflow.demo
 import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotEntity
 import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotJpaRepository
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.identity.internal.CustomerAccountEntity
+import io.github.kdh949.beanflow.identity.internal.CustomerAccountJpaRepository
+import io.github.kdh949.beanflow.identity.internal.CustomerCredentialSecurityConfiguration
+import io.github.kdh949.beanflow.identity.internal.CustomerPasswordSecurity
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipEntity
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipJpaRepository
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipStatus
@@ -59,7 +63,7 @@ import kotlin.system.exitProcess
 @EntityScan("io.github.kdh949.beanflow")
 @EnableJpaRepositories("io.github.kdh949.beanflow")
 // No component scan: the seeder is imported explicitly, like the other bootstrap CLIs.
-@Import(LocalDemoSeeder::class)
+@Import(LocalDemoSeeder::class, CustomerCredentialSecurityConfiguration::class)
 internal class LocalDemoSeedApplication {
     // SharedInfrastructureConfiguration is not component-scanned by this CLI, so the seed provides
     // the same UTC clock the application uses.
@@ -87,6 +91,8 @@ internal class LocalDemoSeeder(
     private val menuRequirements: MenuConfigurationRequirementJpaRepository,
     private val settlementTerms: StoreSettlementTermsJpaRepository,
     private val memberships: StoreMembershipJpaRepository,
+    private val customerAccounts: CustomerAccountJpaRepository,
+    private val customerPasswords: CustomerPasswordSecurity,
     private val stock: SellableStockJpaRepository,
     private val pickupSlots: PickupSlotJpaRepository,
     private val pointAccounts: PointAccountJpaRepository,
@@ -125,6 +131,7 @@ internal class LocalDemoSeeder(
             now,
             created,
         )
+        seedCustomerAccount(now, created)
         seedMenus(created)
         seedStock(created)
         seedPickupSlots(now, created)
@@ -346,6 +353,24 @@ internal class LocalDemoSeeder(
         }
     }
 
+    private fun seedCustomerAccount(
+        now: Instant,
+        created: MutableList<String>,
+    ) {
+        if (customerAccounts.existsById(LocalDemoFixture.CUSTOMER_ID)) return
+        customerAccounts.saveAndFlush(
+            CustomerAccountEntity(
+                id = LocalDemoFixture.CUSTOMER_ID,
+                loginId = LocalDemoFixture.CUSTOMER_LOGIN_ID,
+                passwordHash = customerPasswords.encode(LocalDemoFixture.CUSTOMER_PASSWORD),
+                displayName = LocalDemoFixture.CUSTOMER_DISPLAY_NAME,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        created += "customerAccount=${LocalDemoFixture.CUSTOMER_ID}"
+    }
+
     private fun seedSettlementTerms(
         now: Instant,
         created: MutableList<String>,
@@ -473,6 +498,7 @@ fun main() {
         println("LOCAL_DEMO_SEED_MENU_ID ${LocalDemoFixture.AMERICANO_MENU_ID}")
         println("LOCAL_DEMO_SEED_OPTION_ID ${LocalDemoFixture.EXTRA_SHOT_OPTION_ID}")
         println("LOCAL_DEMO_SEED_POINT_ACCOUNT_ID ${LocalDemoFixture.POINT_ACCOUNT_ID}")
+        println("LOCAL_DEMO_SEED_CUSTOMER_LOGIN_ID ${LocalDemoFixture.CUSTOMER_LOGIN_ID}")
         println("LOCAL_DEMO_SEED_PAYMENT_METHOD_ID ${LocalDemoFixture.PAYMENT_METHOD_ID}")
         println("LOCAL_DEMO_SEED_COUPON_ISSUANCE_ID ${LocalDemoFixture.COUPON_ISSUANCE_ID}")
         println("LOCAL_DEMO_SEED_STATUS OK")

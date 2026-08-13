@@ -11,6 +11,9 @@ import java.util.UUID
  */
 internal object LocalDemoFixture {
     val CUSTOMER_ID: UUID = UUID.fromString(LocalDemoIdentity.CUSTOMER_ID)
+    const val CUSTOMER_LOGIN_ID = "demo.customer"
+    const val CUSTOMER_PASSWORD = "local demo customer password 123!"
+    const val CUSTOMER_DISPLAY_NAME = "BeanFlow Demo Customer"
     val STORE_OWNER_ID: UUID = UUID.fromString(LocalDemoIdentity.STORE_OWNER_ID)
     val OTHER_STORE_OWNER_ID: UUID = UUID.fromString(LocalDemoIdentity.OTHER_STORE_OWNER_ID)
 

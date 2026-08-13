@@ -4,6 +4,125 @@
  */
 
 export interface paths {
+    "/auth/customer/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issue the customer-chain CSRF cookie */
+        get: operations["issueCustomerCsrfToken"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/customer/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register a customer account and its zero-balance point account */
+        post: operations["registerCustomerAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/customer/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authenticate a customer and rotate the browser session */
+        post: operations["createCustomerSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/customer/sessions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete the current customer session */
+        delete: operations["deleteCurrentCustomerSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/merchant/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issue the merchant-chain CSRF cookie */
+        get: operations["issueMerchantCsrfToken"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current Keycloak-backed operator actor */
+        get: operations["getCurrentOperator"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current customer actor */
+        get: operations["getCurrentCustomer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/nearby": {
         parameters: {
             query?: never;
@@ -164,6 +283,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/orders/{orderReference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned order through its canonical public reference */
+        get: operations["getCurrentCustomerOrderByReferenceRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/orders/{orderReference}/cancellations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an owned order through its canonical public reference */
+        post: operations["cancelCurrentCustomerOrderByReferenceRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payment-config": {
         parameters: {
             query?: never;
@@ -171,7 +324,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the authenticated browser's Toss V2 Standard payment-window configuration */
+        /** Get public Toss V2 Standard payment-window configuration */
         get: operations["getPaymentClientConfiguration"];
         put?: never;
         post?: never;
@@ -354,13 +507,36 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create a store or platform full/item partial refund
-         * @description STORE_OWNER and STORE_STAFF require active membership in the Order store;
-         *     PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes every
-         *     remaining unit. Explicit quantities consume the lowest unrefunded conceptual
-         *     unit positions. Coupon values are attribution only and are never restored.
+         * Create a merchant full/item partial refund
+         * @description STORE_OWNER and STORE_STAFF require a Merchant Session and active membership
+         *     in the Order store. Omitted lineItems consumes every remaining unit. Explicit
+         *     quantities consume the lowest unrefunded conceptual unit positions. Coupon
+         *     values are attribution only and are never restored.
          */
         post: operations["createPaymentRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/payments/{paymentId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a platform-operator full or item-based partial refund
+         * @description PLATFORM_OPERATOR only. This endpoint is the actor-exclusive Operations form
+         *     of the legacy UUID refund contract. It uses the same preparation, idempotency,
+         *     Provider key and Refund ledger as the Merchant endpoint; changing URI never
+         *     creates another side effect for the same actor, key and canonical payload.
+         */
+        post: operations["createOperationsPaymentRefund"];
         delete?: never;
         options?: never;
         head?: never;
@@ -404,6 +580,40 @@ export interface paths {
         head?: never;
         /** Transition an order from the store operational view */
         patch: operations["transitionStoreOrderStatus"];
+        trace?: never;
+    };
+    "/stores/{storeId}/orders/{orderReference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a store-owned order through its canonical public reference */
+        get: operations["getStoreOrderByReferenceRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/orders/{orderReference}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transition a store-owned order through its canonical public reference */
+        post: operations["transitionStoreOrderByReferenceRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/operations/orders/{orderId}/compensation": {
@@ -571,9 +781,8 @@ export interface paths {
         };
         /**
          * Get a point account summary
-         * @description The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
-         *     support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason;
-         *     the server records the target access audit before returning 200.
+         * @description The Customer Session actor who owns the account may read without a reason.
+         *     Operator support reads use the actor-exclusive Operations endpoint.
          */
         get: operations["getPointAccount"];
         put?: never;
@@ -593,12 +802,56 @@ export interface paths {
         };
         /**
          * List point ledger transactions
-         * @description The customer who owns the account may read without a reason. A PLATFORM_OPERATOR
-         *     support read requires an active POINT_ACCOUNT_READ grant and X-Access-Reason.
+         * @description The Customer Session actor who owns the account may read without a reason.
          *     Results use the stable (occurredAt DESC, transactionId DESC) tuple; the cursor is
-         *     bound to this account and endpoint.
+         *     bound to this account and endpoint. Operator support reads use the actor-exclusive
+         *     Operations endpoint.
          */
         get: operations["listPointTransactions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a point account summary for an audited operator investigation
+         * @description Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
+         *     X-Access-Reason. The target access Audit and projection commit in one local
+         *     transaction before 200 is returned.
+         */
+        get: operations["getOperationsPointAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-accounts/{accountId}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List point ledger transactions for an audited operator investigation
+         * @description Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
+         *     X-Access-Reason. Results use the stable (occurredAt DESC, transactionId DESC)
+         *     tuple and a cursor bound to this Operations endpoint and account.
+         */
+        get: operations["listOperationsPointTransactions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -774,6 +1027,1432 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/searches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exact-search protected Support profiles
+         * @description The supported contract accepts one phone or email criterion only in the JSON body and
+         *     rejects every query parameter. A client-supplied query may reach upstream infrastructure
+         *     before rejection, so ingress and container access logs for this route must omit or redact
+         *     query strings. BeanFlow does not put the raw or normalized criterion in its response, Audit
+         *     payload, application log, metric, cursor, or Support storage. Owner Contexts perform
+         *     versioned blind-index lookup and return masked projections.
+         *     Results are ordered by CUSTOMER, STORE, RIDER then subject ID, limited to 20, and expose a
+         *     match count capped at 21. A genuine no-match returns an audited empty 200 only after every
+         *     required dependency succeeds.
+         */
+        post: operations["searchSupportSubjects"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List SupportCases using a filter-bound cursor
+         * @description Ordered by openedAt descending then Case ID descending. The signed cursor is bound to state and
+         *     assigneeId, expires after 15 minutes, and never loads interactions or notes as an entity collection.
+         */
+        get: operations["listSupportCases"];
+        put?: never;
+        /**
+         * Create an assigned SupportCase
+         * @description Creates an OPEN Case assigned to the authenticated operator. The Case, initial assignment/state
+         *     histories, retention snapshot, Audit record, and stored idempotent response commit atomically.
+         *     Free text is rejected when it contains secrets or high-risk PII. No owner Context record is updated.
+         */
+        post: operations["createSupportCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a SupportCase and active identifier links */
+        get: operations["getSupportCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append a SupportCase assignment */
+        post: operations["assignSupportCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/status-transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transition an assigned active SupportCase
+         * @description Only OPEN→IN_PROGRESS, IN_PROGRESS→WAITING|RESOLVED, WAITING→IN_PROGRESS, and RESOLVED→CLOSED are valid. CLOSED is terminal.
+         */
+        post: operations["transitionSupportCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/interactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append a redacted Support interaction */
+        post: operations["appendSupportInteraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append a secret-filtered Support note */
+        post: operations["appendSupportNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/subject-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link an opaque typed identifier to an active SupportCase */
+        post: operations["linkSupportSubject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/subject-links/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Close an active Support subject link */
+        delete: operations["unlinkSupportSubject"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a bounded cross-context timeline for one SupportCase
+         * @description Merges closed, masked Support and owner facts using the stable tuple
+         *     occurredAt DESC, source rank ASC, itemId DESC. The signed cursor is bound
+         *     to the Case and canonical source/type filters for 15 minutes. A required
+         *     owner failure returns 503; it is never converted to a partial or empty page.
+         */
+        get: operations["listSupportCaseTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/orders/{orderId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List owner facts for an Order linked to one SupportCase
+         * @description Requires both Support Case/Order read permissions, current assignment and
+         *     an active RELATED_ORDER link. SUPPORT is not a valid explicit source for
+         *     this owner-only endpoint. Authorization is rechecked before response release.
+         */
+        get: operations["listSupportOrderTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/action-evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate one typed Support action against current server state
+         * @description Returns advisory ALLOWED, APPROVAL_REQUIRED or DENIED with closed reasons,
+         *     current target version, immutable policy version and two-minute expiry.
+         *     The server reads role-independent persistent permissions, Case/relationship,
+         *     action-bound verification and the current Ordering snapshot. Execution must
+         *     re-evaluate and this response is never an execution capability.
+         */
+        post: operations["evaluateSupportAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/action-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an immutable revision-bound Support action request
+         * @description Persists only SHA-256 action/evidence digests and an exact binding to the
+         *     Case, target version, verification session, policy version and expiry.
+         *     This endpoint creates approval work only and never executes an owner command.
+         */
+        post: operations["createSupportActionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one visible Support action request and materialize due terminal state */
+        get: operations["getSupportActionRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a returned request with a new immutable revision
+         * @description Existing approval steps remain immutable and become stale lineage.
+         */
+        post: operations["reviseSupportActionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/support-manager-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide the Support-manager step for one exact revision
+         * @description The reviewer must differ from the requester and executor. Permission,
+         *     verification, policy, target version and exact expiry are rechecked under lock.
+         */
+        post: operations["decideSupportManagerApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/reassignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically reassign a ready request and its SupportCase
+         * @description Requires exact request revision/version and Case version. The target must
+         *     hold active Case-write, action-execute and capability-specific permissions
+         *     and must not be an approver for this revision.
+         */
+        post: operations["reassignSupportActionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute one exact cancellation or pickup-reschedule revision
+         * @description Recomputes the canonical action payload digest and rechecks the assigned
+         *     executor, active Case and relationship, verification, persistent permissions,
+         *     immutable policy, exact revision/request/target versions and latest owner state.
+         *     ACCEPTED requires a matching active store confirmation or delegation. A
+         *     PREPARING/READY/COMPLETED race commits RESOLUTION_REQUIRED without changing
+         *     the Order or consuming authorization. Owner changes, authorization use,
+         *     PII-free Audit, notification intent and the terminal response commit in one
+         *     local transaction; an Audit or persistence failure rolls all of them back.
+         */
+        post: operations["executeSupportOrderChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/support-order-change-authorizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm one exact accepted-order change or create a bounded delegation
+         * @description Requires active store membership and an explicit STORE cost-responsibility
+         *     acceptance. CONFIRMATION is bound to the exact request, revision, canonical
+         *     action payload digest, target version and request expiry. DELEGATION is bound
+         *     to store, action and support-order-change-policy/2026-08-12/v1: cancellation
+         *     lasts ten minutes for one successful use and pickup reschedule lasts thirty
+         *     minutes for three successful uses. now >= expiresAt is expired. Validation
+         *     failure, rollback and RESOLUTION_REQUIRED do not consume a use.
+         */
+        post: operations["createSupportOrderChangeAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/orders/{orderId}/post-acceptance-resolutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan an approved post-acceptance resolution without rewriting Order facts
+         * @description Consumes only the exact approved S60 POST_ACCEPTANCE_RESOLUTION revision.
+         *     The canonical action digest uses support-command-payload/v1 operation
+         *     POST_ACCEPTANCE_RESOLUTION_ACTION_V1 with ordered orderId, outcome,
+         *     responsibility, cashRefundKrw, restorePoints, restoreCoupon,
+         *     settlementAdjustmentKrw and evidenceDigest fields. No owner command runs
+         *     until the separate execution operation consumes the revision.
+         */
+        post: operations["createPostAcceptanceResolution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/post-acceptance-resolutions/{resolutionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one visible post-acceptance resolution and typed owner states
+         * @description Returns closed step state and references only; evidence, Provider payloads and PII are never returned.
+         */
+        get: operations["getPostAcceptanceResolution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/post-acceptance-resolutions/{resolutionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume the exact approval and advance owner-specific resolution steps
+         * @description Rechecks the assigned executor, persistent permissions, active Case/order
+         *     relationship, exact request/revision/Order versions and current owner fact.
+         *     Support claims one durable step before invoking its owner outside the Support
+         *     transaction. Owner success is not presented until the following Support Audit
+         *     and state commit succeeds. Provider timeout stays UNKNOWN/RECONCILING; a later
+         *     recovery performs lookup and never assumes success or silently reissues work.
+         */
+        post: operations["executePostAcceptanceResolution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/post-acceptance-resolutions/{resolutionId}/reconciliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explicitly reconcile a manual-review Payment refund by owner lookup
+         * @description Initial S80 permits only PAYMENT_REFUND. The exact resolution/Order versions
+         *     and idempotency payload are rechecked; POINT, COUPON, SETTLEMENT and notification
+         *     reissue through this operator endpoint is rejected as unsafe.
+         */
+        post: operations["reconcilePostAcceptanceResolution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/compensation-evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate one versioned goodwill point or coupon request
+         * @description Advises the LOW/MEDIUM/HIGH/EXCEPTIONAL band and route from the current
+         *     immutable policy version. The evaluation is case, customer, incident,
+         *     optional Order version and verification-session bound. It does not issue a
+         *     benefit and is re-evaluated at execution. Cost responsibility has no hidden
+         *     platform fallback and raw evidence is never accepted or returned.
+         */
+        post: operations["evaluateSupportCompensation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/compensations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create one exact goodwill benefit request
+         * @description Persists one POINT or immutable-template COUPON request and its exact policy,
+         *     target, verification, cost-allocation and digest bindings. MEDIUM creates an
+         *     S60 Support-manager approval; HIGH and EXCEPTIONAL create an Operations
+         *     investigation. Creation never issues the benefit.
+         */
+        post: operations["createSupportCompensation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/compensations/{compensationRequestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one masked goodwill request and owner delivery state
+         * @description Returns identifiers and closed typed states only; customer PII, evidence and raw notification payloads are excluded.
+         */
+        get: operations["getSupportCompensation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/compensations/{compensationRequestId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-evaluate and issue one approved goodwill benefit exactly once
+         * @description Rechecks the assigned actor, persistent permissions, active Case and Order,
+         *     exact request/target/payload versions, current immutable policy and approval
+         *     or investigation. Sorted CUSTOMER/ORDER/INCIDENT/ACTOR/STORE locks serialize
+         *     the inclusive rolling-window decision. The owner Point Ledger/Lot or Coupon,
+         *     terminal incident marker, limit consumption, approval consumption, Audit and
+         *     idempotency record commit atomically. Audit failure rolls the issuance back.
+         *     Notification is requested only after commit and its failure remains visible.
+         */
+        post: operations["executeSupportCompensation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/compensations/{compensationRequestId}/notification-retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry only the independent goodwill notification intent
+         * @description Reuses the terminal benefit and never reissues Points or Coupons. Exact retry commands are idempotent.
+         */
+        post: operations["retrySupportCompensationNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/customer-display-name-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a customer display name under the R1 workflow */
+        post: operations["createCustomerDisplayNameCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/customer-legal-name-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a customer legal-name typo under the R2 specialist workflow */
+        post: operations["createCustomerLegalNameCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/customer-primary-phone-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request an R3 customer primary-phone change
+         * @description A bound ENHANCED verification through a previously registered channel is required; the new phone alone is never sufficient.
+         */
+        post: operations["createCustomerPrimaryPhoneChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/customer-credential-reset-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R4 customer credential reset without accepting a secret */
+        post: operations["createCustomerCredentialReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/store-public-profile-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct one or more R1 public store-profile fields */
+        post: operations["createStorePublicProfileCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/store-operations-contact-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct R2 store operations contact fields */
+        post: operations["createStoreOperationsContactCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/store-representative-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R3 store representative change */
+        post: operations["createStoreRepresentativeChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/store-settlement-account-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R3 opaque store settlement-account reference change */
+        post: operations["createStoreSettlementAccountChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/store-access-reregistration-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R4 store access re-registration without accepting a secret */
+        post: operations["createStoreAccessReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/courier-display-name-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct an external courier display name under the R1 workflow */
+        post: operations["createCourierDisplayNameCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/courier-relay-contact-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct external-courier relay contact fields under the R2 workflow */
+        post: operations["createCourierRelayContactCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/courier-provider-identity-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R3 external-provider courier identity-reference change */
+        post: operations["createCourierProviderIdentityChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/courier-payout-reference-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R3 opaque external-courier payout-reference change */
+        post: operations["createCourierPayoutReferenceChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/profile-changes/courier-provider-reregistration-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an R4 external-courier provider re-registration without accepting a secret */
+        post: operations["createCourierProviderReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one masked purpose-specific profile-change workflow */
+        get: operations["getSupportProfileChange"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/customer-primary-phone-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R3 customer-phone approval revision */
+        post: operations["reviseCustomerPrimaryPhoneChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/customer-credential-reset-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R4 customer-reset approval revision */
+        post: operations["reviseCustomerCredentialReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-representative-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R3 store-representative approval revision */
+        post: operations["reviseStoreRepresentativeChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-settlement-account-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R3 settlement-reference approval revision */
+        post: operations["reviseStoreSettlementAccountChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-access-reregistration-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R4 store-access approval revision */
+        post: operations["reviseStoreAccessReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-provider-identity-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R3 courier provider-identity approval revision */
+        post: operations["reviseCourierProviderIdentityChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-payout-reference-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R3 courier payout-reference approval revision */
+        post: operations["reviseCourierPayoutReferenceChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-provider-reregistration-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the exact R4 courier re-registration approval revision */
+        post: operations["reviseCourierProviderReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/customer-primary-phone-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R3 customer-phone payload */
+        post: operations["executeCustomerPrimaryPhoneChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/customer-credential-reset-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R4 customer reset intent */
+        post: operations["executeCustomerCredentialReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-representative-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R3 store-representative payload */
+        post: operations["executeStoreRepresentativeChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-settlement-account-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R3 settlement-reference payload */
+        post: operations["executeStoreSettlementAccountChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/store-access-reregistration-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R4 store access re-registration intent */
+        post: operations["executeStoreAccessReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-provider-identity-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R3 courier provider-identity payload */
+        post: operations["executeCourierProviderIdentityChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-payout-reference-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R3 courier payout-reference payload */
+        post: operations["executeCourierPayoutReferenceChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/courier-provider-reregistration-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute the exact approved R4 courier provider re-registration intent */
+        post: operations["executeCourierProviderReregistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/notification-retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry only failed old/new/current profile notification intents
+         * @description Never repeats the owner write or consumes approval again; the command and owner notification logical sources are idempotent.
+         */
+        post: operations["retrySupportProfileChangeNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/investigations/{investigationId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide an Operations investigation for one Support request revision
+         * @description Requires a distinct Operations reviewer. The Operations row and required
+         *     Support callback commit in one transaction; callback or Audit failure rolls
+         *     back both owners and does not claim a decision.
+         */
+        post: operations["decideOperationsSupportInvestigation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/verification-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start purpose-bound step-up verification
+         * @description Starts a 15-minute BASIC or ENHANCED session bound to the assigned active Case,
+         *     one active subject link, the authenticated operator, a purpose, and a closed
+         *     action scope. Omitted scope means PERSONAL_DATA_REVEAL; SUPPORT_ACTION is valid
+         *     only with CASE_RESOLUTION. No OTP, raw link, answer, or proof is stored.
+         */
+        post: operations["createSupportVerificationSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/verification-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current purpose-bound verification state */
+        get: operations["getSupportVerificationSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/verification-sessions/{sessionId}/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue an opaque registered-channel challenge
+         * @description Persists a challenge intent, calls the configured Identity provider outside the
+         *     database transaction, then records the definitive or UNKNOWN provider outcome.
+         */
+        post: operations["issueSupportVerificationChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/verification-challenges/{challengeId}/verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify one opaque challenge proof
+         * @description The proof is transient write-only input. Invalid proofs consume the Case+Subject
+         *     attempt budget; the fifth invalid proof creates a 30-minute persistent lockout.
+         *     Concurrent or replayed verification cannot call the provider twice.
+         */
+        post: operations["verifySupportVerificationChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/verification-sessions/{sessionId}/revocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a verification session */
+        post: operations["revokeSupportVerificationSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/data-access-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a field-scoped personal-data grant
+         * @description Binds the Grant to the Case, subject link, subject, requester and verification
+         *     purpose. BASIC display fields activate for 10 minutes and three reveals;
+         *     SENSITIVE fields require ENHANCED verification and a distinct approver before
+         *     a five-minute, one-reveal Grant can activate.
+         */
+        post: operations["requestSupportDataAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/data-access-grants/{grantId}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide a SENSITIVE DataAccessGrant
+         * @description The approver must differ from the requester and the exact Grant version must still be current.
+         */
+        post: operations["decideSupportDataAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/data-access-grants/{grantId}/reveals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal exactly the fields allowed by an active Grant
+         * @description Audit record and reveal-attempt reservation commit before owner decryption.
+         *     The owner Context decrypts outside the Support transaction. Audit or owner failure
+         *     never returns raw data, and a committed attempt consumes budget even if decryption fails.
+         *     A successful body is not persisted and same-key replay requires manual review.
+         */
+        post: operations["revealSupportPersonalData"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/break-glass-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request emergency access to one personal-data field
+         * @description BREAK_GLASS is separate from normal verification and Grant paths. It is limited
+         *     to one emergency-purpose field and emits a durable PII-free security notification.
+         */
+        post: operations["requestSupportBreakGlass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/break-glass-requests/{requestId}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pre-approve or deny one break-glass request
+         * @description Approval requires an actor distinct from the requester and activates a two-minute, one-reveal window.
+         */
+        post: operations["decideSupportBreakGlass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/break-glass-requests/{requestId}/reveals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal the exact pre-approved emergency field once
+         * @description Uses the same Audit-before-owner-decryption boundary as normal reveal, emits a
+         *     durable security notification, consumes the single attempt, and enters mandatory post-review.
+         */
+        post: operations["revealSupportBreakGlassData"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/break-glass-requests/{requestId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete mandatory post-review
+         * @description The reviewer must differ from both requester and pre-approver; the exact request version is required.
+         */
+        post: operations["reviewSupportBreakGlass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -782,6 +2461,50 @@ export interface components {
             /** @enum {string} */
             targetState: "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED";
             reason?: string | null;
+        };
+        /** @description Transitional customer projection. Plan 50 replaces this shape with CustomerOrderDetail. */
+        RuntimePublicCustomerOrder: {
+            storeId: components["schemas"]["Identifier"];
+            publicReference: string;
+            pickupNumber: string;
+            /** Format: date */
+            pickupBusinessDate: string;
+            storeName: string;
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            state: components["schemas"]["OrderState"];
+            lines: components["schemas"]["OrderLine"][];
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        RuntimePublicStoreOrderResult: {
+            order: components["schemas"]["RuntimePublicStoreOrder"];
+            compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
+        };
+        /** @description Transitional store projection. Plan 60 replaces this shape with StoreOrderBoardItem. */
+        RuntimePublicStoreOrder: {
+            storeId: components["schemas"]["Identifier"];
+            publicReference: string;
+            pickupNumber: string;
+            /** Format: date */
+            pickupBusinessDate: string;
+            storeName: string;
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            state: components["schemas"]["OrderState"];
+            lines: components["schemas"]["OrderLine"][];
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
         };
         RuntimeStoreOrderResult: {
             order: components["schemas"]["StoreOrder"];
@@ -802,7 +2525,45 @@ export interface components {
         RuntimeOperatorCompensationView: {
             compensation: components["schemas"]["CompensationSummary"];
         };
+        ErrorDetail: {
+            field?: string;
+            reason: string;
+        };
+        Error: {
+            code: string;
+            message: string;
+            correlationId: string;
+            details: components["schemas"]["ErrorDetail"][];
+        };
+        /** @description Canonical lowercase login ID in an actor-specific namespace. */
+        LoginId: string;
+        /** @description 15..128 Unicode code points and at most 512 UTF-8 bytes; never trimmed or normalized. */
+        Password: string;
+        CustomerRegistrationRequest: {
+            loginId: components["schemas"]["LoginId"];
+            password: components["schemas"]["Password"];
+            displayName: string;
+        };
+        CustomerRegistrationResult: {
+            loginId: components["schemas"]["LoginId"];
+        };
+        LoginRequest: {
+            loginId: components["schemas"]["LoginId"];
+            password: components["schemas"]["Password"];
+        };
         Identifier: string;
+        CustomerActor: {
+            /** @constant */
+            actorType: "CUSTOMER";
+            customerId: components["schemas"]["Identifier"];
+            displayName: string;
+        };
+        OperatorActor: {
+            /** @constant */
+            actorType: "OPERATOR";
+            operatorId: components["schemas"]["Identifier"];
+            roles: string[];
+        };
         NearbyStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
@@ -817,16 +2578,6 @@ export interface components {
         NearbyStorePage: {
             items: components["schemas"]["NearbyStore"][];
             page: components["schemas"]["PageInfo"];
-        };
-        ErrorDetail: {
-            field?: string;
-            reason: string;
-        };
-        Error: {
-            code: string;
-            message: string;
-            correlationId: string;
-            details: components["schemas"]["ErrorDetail"][];
         };
         /**
          * Format: int64
@@ -951,12 +2702,12 @@ export interface components {
         } & (unknown & unknown & unknown & unknown & unknown & unknown);
         /**
          * @description System-determined cancellation origin. CUSTOMER_REQUEST is a customer
-         *     cancellation command; PAYMENT_DECLINED is a cancellation caused by an
-         *     explicit Provider approval decline. Only CUSTOMER_REQUEST cancellations
-         *     carry a customer-declared reason code.
+         *     command, SUPPORT_REQUEST is an approved Support owner command and
+         *     PAYMENT_DECLINED is caused by an explicit Provider approval decline.
+         *     CUSTOMER_REQUEST and SUPPORT_REQUEST carry a structured reason code.
          * @enum {string}
          */
-        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED";
+        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "SUPPORT_REQUEST";
         /**
          * @description Customer-declared cancellation reason, independent of the system-determined cause
          * @enum {string}
@@ -965,6 +2716,13 @@ export interface components {
         Order: {
             orderId: components["schemas"]["Identifier"];
             storeId: components["schemas"]["Identifier"];
+            publicReference: string;
+            pickupNumber: string;
+            /** Format: date */
+            pickupBusinessDate: string;
+            storeName: string;
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
             state: components["schemas"]["OrderState"];
             reservationExpiresAt?: components["schemas"]["DateTime"];
             lines: components["schemas"]["OrderLine"][];
@@ -1131,6 +2889,15 @@ export interface components {
          */
         Cancellation: {
             orderId: components["schemas"]["Identifier"];
+            /** @constant */
+            orderState: "CANCELLED";
+            reasonCode: components["schemas"]["CancellationReasonCode"];
+            paymentRecovery: components["schemas"]["CancellationRefundRecoverySummary"];
+            cancelledAt: components["schemas"]["DateTime"];
+            correlationId: string;
+        };
+        CustomerCancellationResult: {
+            orderReference: string;
             /** @constant */
             orderState: "CANCELLED";
             reasonCode: components["schemas"]["CancellationReasonCode"];
@@ -1567,11 +3334,1080 @@ export interface components {
             currency: components["schemas"]["Currency"];
             filedAt: components["schemas"]["DateTime"];
         };
+        /** @enum {string} */
+        ExactSearchCriterionType: "PHONE" | "EMAIL";
+        SupportSearchCriterion: {
+            type: components["schemas"]["ExactSearchCriterionType"];
+            /** @description Raw phone or email used transiently for this body-only exact search. */
+            value: string;
+        };
+        /** @enum {string} */
+        SupportSearchSubjectType: "CUSTOMER" | "STORE" | "RIDER";
+        /** @enum {string} */
+        SupportSearchReasonCode: "CASE_INTAKE" | "ACTIVE_CASE_LOOKUP" | "DELIVERY_INCIDENT" | "PRIVACY_REQUEST";
+        SearchSupportSubjectsRequest: {
+            criterion: components["schemas"]["SupportSearchCriterion"];
+            subjectTypes: components["schemas"]["SupportSearchSubjectType"][];
+            reasonCode: components["schemas"]["SupportSearchReasonCode"];
+        };
+        SupportSubjectSearchCandidate: {
+            subjectType: components["schemas"]["SupportSearchSubjectType"];
+            /** Format: uuid */
+            subjectId: string;
+            maskedDisplayName: string;
+            matchedCriterionType: components["schemas"]["ExactSearchCriterionType"];
+            maskedMatchedValue: string;
+        };
+        SupportSubjectSearchResult: {
+            /** Format: uuid */
+            searchId: string;
+            items: components["schemas"]["SupportSubjectSearchCandidate"][];
+            /** @description Bounded count; 21 means at least 21 matches. */
+            matchedCount: number;
+            ambiguous: boolean;
+            hasMore: boolean;
+        };
+        /** @enum {string} */
+        SupportCaseState: "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
+        /** @enum {string} */
+        SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+        SupportCaseSummary: {
+            caseId: components["schemas"]["Identifier"];
+            state: components["schemas"]["SupportCaseState"];
+            priority: components["schemas"]["SupportCasePriority"];
+            assigneeId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            version: number;
+            openedAt: components["schemas"]["DateTime"];
+        };
+        SupportCasePage: {
+            items: components["schemas"]["SupportCaseSummary"][];
+            nextCursor?: string;
+        };
+        /** @enum {string} */
+        SupportRequesterType: "CUSTOMER" | "STORE_OWNER" | "STORE_MEMBER" | "RIDER" | "THIRD_PARTY" | "INTERNAL_OPERATOR" | "SYSTEM" | "UNKNOWN";
+        /** @enum {string} */
+        SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
+        CreateSupportCaseRequest: {
+            requesterType: components["schemas"]["SupportRequesterType"];
+            /** @description Opaque requester reference; it is not expanded or validated against an owner table in S20. */
+            requesterReference: string;
+            category: components["schemas"]["SupportInquiryCategory"];
+            priority: components["schemas"]["SupportCasePriority"];
+            externalReference?: string;
+            /** @description Structured operational reason; secrets and high-risk PII are rejected. */
+            reason: string;
+        } & unknown;
+        /** @enum {string} */
+        SupportSubjectType: "CUSTOMER" | "STORE" | "ORDER" | "DELIVERY";
+        /** @enum {string} */
+        SupportSubjectRelationship: "REQUESTER" | "AFFECTED_CUSTOMER" | "AFFECTED_STORE" | "RELATED_ORDER" | "RELATED_DELIVERY" | "OTHER";
+        SupportSubjectLink: {
+            linkId: components["schemas"]["Identifier"];
+            subjectType: components["schemas"]["SupportSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            relationship: components["schemas"]["SupportSubjectRelationship"];
+            linkedAt: components["schemas"]["DateTime"];
+            /** Format: int64 */
+            caseVersion?: number;
+        };
+        SupportCase: {
+            caseId: components["schemas"]["Identifier"];
+            state: components["schemas"]["SupportCaseState"];
+            priority: components["schemas"]["SupportCasePriority"];
+            assigneeId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            version: number;
+            openedAt: components["schemas"]["DateTime"];
+            closedAt?: components["schemas"]["DateTime"];
+            subjectLinks: components["schemas"]["SupportSubjectLink"][];
+        };
+        AssignSupportCaseRequest: {
+            assigneeId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        SupportCaseAssignment: {
+            assignmentId: components["schemas"]["Identifier"];
+            assigneeId: components["schemas"]["Identifier"];
+            state: components["schemas"]["SupportCaseState"];
+            /** Format: int64 */
+            caseVersion: number;
+            assignedAt: components["schemas"]["DateTime"];
+        };
+        TransitionSupportCaseRequest: {
+            targetState: components["schemas"]["SupportCaseState"];
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        SupportCaseTransition: {
+            transitionId: components["schemas"]["Identifier"];
+            previousState: components["schemas"]["SupportCaseState"];
+            currentState: components["schemas"]["SupportCaseState"];
+            /** Format: int64 */
+            caseVersion: number;
+            occurredAt: components["schemas"]["DateTime"];
+        };
+        /** @enum {string} */
+        SupportInteractionChannel: "PHONE" | "CHAT" | "EMAIL" | "IN_PERSON" | "SYSTEM";
+        /** @enum {string} */
+        SupportInteractionDirection: "INBOUND" | "OUTBOUND" | "INTERNAL";
+        AppendSupportInteractionRequest: {
+            channel: components["schemas"]["SupportInteractionChannel"];
+            direction: components["schemas"]["SupportInteractionDirection"];
+            occurredAt: components["schemas"]["DateTime"];
+            /** @description Must already exclude secrets and high-risk PII. */
+            redactedSummary: string;
+        };
+        SupportInteraction: {
+            interactionId: components["schemas"]["Identifier"];
+            channel: components["schemas"]["SupportInteractionChannel"];
+            direction: components["schemas"]["SupportInteractionDirection"];
+            /** @constant */
+            summary: "INTERACTION_RECORDED";
+            occurredAt: components["schemas"]["DateTime"];
+            recordedAt: components["schemas"]["DateTime"];
+            /** Format: int64 */
+            caseVersion: number;
+        };
+        AppendSupportNoteRequest: {
+            /** @description Secret- and high-risk-PII-filtered internal note. The successful response never returns content. */
+            content: string;
+            reason: string;
+        };
+        SupportNote: {
+            noteId: components["schemas"]["Identifier"];
+            /** @constant */
+            summary: "NOTE_RECORDED";
+            createdAt: components["schemas"]["DateTime"];
+            /** Format: int64 */
+            caseVersion: number;
+        };
+        LinkSupportSubjectRequest: {
+            subjectType: components["schemas"]["SupportSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            relationship: components["schemas"]["SupportSubjectRelationship"];
+            reason: string;
+        };
+        UnlinkSupportSubjectRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        SupportSubjectUnlink: {
+            linkId: components["schemas"]["Identifier"];
+            unlinkedAt: components["schemas"]["DateTime"];
+            /** Format: int64 */
+            caseVersion: number;
+        };
+        /** @enum {string} */
+        SupportTimelineSource: "SUPPORT" | "ORDERING" | "PAYMENT" | "LOYALTY" | "PROMOTION" | "FULFILLMENT" | "SETTLEMENT" | "NOTIFICATION" | "OPERATIONS";
+        /** @enum {string} */
+        SupportTimelineType: "CASE_STATE" | "CASE_ASSIGNMENT" | "CASE_INTERACTION" | "CASE_NOTE" | "SUBJECT_LINK" | "ORDER_STATE" | "PAYMENT_STATE" | "REFUND_STATE" | "POINT_RESERVATION" | "COUPON_RESERVATION" | "PICKUP_RESERVATION" | "SETTLEMENT_ITEM" | "SETTLEMENT_ADJUSTMENT" | "NOTIFICATION_DELIVERY" | "OPERATION_AUDIT";
+        /** @enum {string} */
+        SupportTimelineState: "OPEN" | "PENDING_CUSTOMER" | "PENDING_STORE" | "ESCALATED" | "RESOLVED" | "CLOSED" | "ASSIGNED" | "INBOUND" | "OUTBOUND" | "INTERNAL" | "RECORDED" | "LINKED" | "UNLINKED" | "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED" | "APPROVING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW" | "REQUESTED" | "PROCESSING" | "SUCCEEDED" | "RESERVED" | "USED" | "RELEASED" | "CONFIRMED" | "ITEM_CREATED" | "ADJUSTMENT_RECORDED" | "PENDING" | "RETRY_SCHEDULED";
+        SupportTimelineItem: {
+            itemId: components["schemas"]["Identifier"];
+            source: components["schemas"]["SupportTimelineSource"];
+            type: components["schemas"]["SupportTimelineType"];
+            state: components["schemas"]["SupportTimelineState"];
+            /** @description Server-generated closed type/state label; never owner free text or PII. */
+            summary: string;
+            /** Format: int64 */
+            amountKrw: number | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        SupportTimelinePage: {
+            items: components["schemas"]["SupportTimelineItem"][];
+            nextCursor: string | null;
+        };
+        /** @enum {string} */
+        SupportActionType: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION";
+        EvaluateSupportActionRequest: {
+            action: components["schemas"]["SupportActionType"];
+            orderId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+        };
+        /** @enum {string} */
+        SupportActionDecision: "ALLOWED" | "APPROVAL_REQUIRED" | "DENIED";
+        /** @enum {string} */
+        SupportActionReasonCode: "POLICY_ALLOWED" | "POLICY_APPROVAL_REQUIRED" | "UNSUPPORTED_TARGET_STATE" | "CASE_NOT_ELIGIBLE" | "TARGET_RELATIONSHIP_MISMATCH" | "MISSING_PERMISSION" | "VERIFICATION_SCOPE_MISMATCH" | "VERIFICATION_PURPOSE_MISMATCH" | "INSUFFICIENT_VERIFICATION" | "STALE_TARGET_VERSION";
+        /** @enum {string} */
+        SupportActionPermission: "SUPPORT_ACTION_REQUEST" | "SUPPORT_ORDER_CANCEL" | "SUPPORT_PICKUP_RESCHEDULE" | "SUPPORT_RESOLUTION_REQUEST";
+        /** @enum {string} */
+        SupportActionApprovalRequirement: "SUPPORT_MANAGER";
+        SupportActionEvaluationResource: {
+            action: components["schemas"]["SupportActionType"];
+            orderId: components["schemas"]["Identifier"];
+            decision: components["schemas"]["SupportActionDecision"];
+            reasonCodes: components["schemas"]["SupportActionReasonCode"][];
+            requiredPermissions: components["schemas"]["SupportActionPermission"][];
+            /** @enum {string} */
+            requiredVerificationLevel: "BASIC" | "ENHANCED";
+            approvalRequirements: components["schemas"]["SupportActionApprovalRequirement"][];
+            /** @constant */
+            policyVersion: "support-action-policy/2026-08-12/v1";
+            /** Format: int64 */
+            targetVersion: number;
+            /** Format: date-time */
+            evaluatedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        CreateSupportActionRequest: {
+            action: components["schemas"]["SupportActionType"];
+            orderId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+            actionPayloadDigest: string;
+            /** Format: int64 */
+            amountKrw?: number;
+            reason: string;
+            evidenceDigest: string;
+        };
+        /** @enum {string} */
+        SupportActionRequestState: "AWAITING_SUPPORT_MANAGER" | "AWAITING_OPERATIONS" | "READY_FOR_EXECUTION" | "REASSIGNMENT_REQUIRED" | "REVISION_REQUIRED" | "DENIED" | "EXPIRED" | "STALE" | "MANUAL_REVIEW" | "EXECUTED" | "RESOLUTION_REQUIRED";
+        /** @enum {string} */
+        SupportActionApprovalRoute: "NONE" | "SUPPORT_MANAGER" | "OPERATIONS" | "SUPPORT_MANAGER_THEN_OPERATIONS";
+        /** @enum {string} */
+        SupportApprovalStepType: "SUPPORT_MANAGER" | "OPERATIONS";
+        /** @enum {string} */
+        SupportApprovalStepState: "PENDING" | "APPROVED" | "DENIED" | "RETURNED" | "EXPIRED" | "STALE" | "ESCALATED";
+        SupportApprovalStepResource: {
+            stepType: components["schemas"]["SupportApprovalStepType"];
+            state: components["schemas"]["SupportApprovalStepState"];
+            /** Format: uuid */
+            decidedByActorId: string | null;
+            /** Format: date-time */
+            decidedAt: string | null;
+        };
+        SupportActionRequestResource: {
+            requestId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            action: components["schemas"]["SupportActionType"];
+            targetId: components["schemas"]["Identifier"];
+            requesterActorId: components["schemas"]["Identifier"];
+            executorActorId: components["schemas"]["Identifier"];
+            revisionNumber: number;
+            state: components["schemas"]["SupportActionRequestState"];
+            approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
+            actionPayloadDigest: string;
+            verificationSessionId: components["schemas"]["Identifier"];
+            policyVersion: string;
+            /** Format: int64 */
+            targetVersion: number;
+            /** Format: int64 */
+            amountKrw: number | null;
+            evidenceDigest: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: int64 */
+            requestVersion: number;
+            approvalSteps: components["schemas"]["SupportApprovalStepResource"][];
+            /** Format: uuid */
+            terminalExecutionId: string | null;
+            /** Format: uuid */
+            terminalResolutionId: string | null;
+        };
+        ReviseSupportActionRequest: {
+            expectedRevisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+            actionPayloadDigest: string;
+            /** Format: int64 */
+            amountKrw?: number;
+            reason: string;
+            evidenceDigest: string;
+        };
+        /** @enum {string} */
+        SupportApprovalDecision: "APPROVE" | "DENY" | "RETURN_FOR_REVISION";
+        DecideSupportManagerApprovalRequest: {
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            decision: components["schemas"]["SupportApprovalDecision"];
+            reason: string;
+        };
+        ReassignSupportActionRequest: {
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            assigneeId: components["schemas"]["Identifier"];
+            reason: string;
+        };
+        ExecuteSupportOrderCancellationRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "ORDER_CANCELLATION";
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            reasonCode: components["schemas"]["CancellationReasonCode"];
+            authorizationId?: components["schemas"]["Identifier"];
+        };
+        ExecuteSupportPickupRescheduleRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "PICKUP_RESCHEDULE";
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            newPickupSlotId: components["schemas"]["Identifier"];
+            authorizationId?: components["schemas"]["Identifier"];
+        };
+        /**
+         * @description Canonical action digest uses the length-prefixed support-command-payload/v1
+         *     representation with operation SUPPORT_ORDER_CHANGE_ACTION_V1 and ordered
+         *     fields action, orderId, cancellationReasonCode and newPickupSlotId. The
+         *     inapplicable action field is represented as null and authorizationId is not
+         *     part of the action digest.
+         */
+        ExecuteSupportOrderChangeRequest: components["schemas"]["ExecuteSupportOrderCancellationRequest"] | components["schemas"]["ExecuteSupportPickupRescheduleRequest"];
+        /** @enum {string} */
+        SupportOrderChangeExecutionOutcome: "EXECUTED" | "RESOLUTION_REQUIRED";
+        SupportOrderChangeExecutionResource: {
+            executionId: components["schemas"]["Identifier"];
+            requestId: components["schemas"]["Identifier"];
+            revisionNumber: number;
+            /** @enum {string} */
+            action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            outcome: components["schemas"]["SupportOrderChangeExecutionOutcome"];
+            /** @enum {string} */
+            previousTargetState: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            /** @enum {string} */
+            currentTargetState: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            previousPickupSlotId: components["schemas"]["Identifier"];
+            currentPickupSlotId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            /** Format: int64 */
+            targetVersionAfter: number;
+            /** @enum {string|null} */
+            paymentRecoveryState: "NOT_REQUIRED" | "REQUESTED" | null;
+            /** Format: uuid */
+            authorizationId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            requestState: components["schemas"]["SupportActionRequestState"];
+            /** Format: int64 */
+            requestVersion: number;
+        };
+        /** @enum {string} */
+        SupportOrderChangeAuthorizationType: "CONFIRMATION" | "DELEGATION";
+        /** @constant */
+        SupportOrderChangePolicyVersion: "support-order-change-policy/2026-08-12/v1";
+        /**
+         * @description CONFIRMATION requires requestId, revisionNumber and expectedRequestVersion.
+         *     DELEGATION forbids all three request-specific properties.
+         */
+        CreateSupportOrderChangeAuthorizationRequest: {
+            authorizationType: components["schemas"]["SupportOrderChangeAuthorizationType"];
+            /** @enum {string} */
+            action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            policyVersion: components["schemas"]["SupportOrderChangePolicyVersion"];
+            requestId?: components["schemas"]["Identifier"];
+            revisionNumber?: number;
+            /** Format: int64 */
+            expectedRequestVersion?: number;
+            /** @constant */
+            costResponsibility: "STORE";
+        };
+        SupportOrderChangeAuthorizationResource: {
+            authorizationId: components["schemas"]["Identifier"];
+            storeId: components["schemas"]["Identifier"];
+            authorizationType: components["schemas"]["SupportOrderChangeAuthorizationType"];
+            /** @enum {string} */
+            action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            policyVersion: components["schemas"]["SupportOrderChangePolicyVersion"];
+            /** Format: uuid */
+            requestId: string | null;
+            revisionNumber: number | null;
+            actionPayloadDigest: string | null;
+            /** Format: int64 */
+            targetVersion: number | null;
+            authorizedByActorId: components["schemas"]["Identifier"];
+            /** Format: date-time */
+            authorizedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            maxSuccessfulUses: number;
+            /** @description Creation response snapshot. Exact creation replay returns the same zero-use snapshot. */
+            successfulUses: number;
+            /** @constant */
+            costResponsibility: "STORE";
+        };
+        /** @enum {string} */
+        PostAcceptanceResolutionOutcome: "FULL_REFUND" | "PARTIAL_REFUND" | "NO_MONETARY_RESOLUTION" | "MANUAL_SETTLEMENT_REVIEW";
+        /** @enum {string} */
+        PostAcceptanceResolutionResponsibility: "CUSTOMER" | "STORE" | "PLATFORM" | "SHARED" | "UNDETERMINED";
+        /**
+         * @description FULL_REFUND/PARTIAL_REFUND require positive cashRefundKrw. Non-refund
+         *     outcomes require zero cash and no benefit restoration. STORE/SHARED require
+         *     an exact negative settlementAdjustmentKrw except MANUAL_SETTLEMENT_REVIEW.
+         *     CUSTOMER/PLATFORM/UNDETERMINED forbid an automatic Settlement adjustment.
+         */
+        CreatePostAcceptanceResolutionRequest: {
+            requestId: components["schemas"]["Identifier"];
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedOrderVersion: number;
+            outcome: components["schemas"]["PostAcceptanceResolutionOutcome"];
+            responsibility: components["schemas"]["PostAcceptanceResolutionResponsibility"];
+            /** Format: int64 */
+            cashRefundKrw: number;
+            restorePoints: boolean;
+            restoreCoupon: boolean;
+            /** Format: int64 */
+            settlementAdjustmentKrw?: number | null;
+            evidenceDigest: string;
+        };
+        /** @enum {string} */
+        PostAcceptanceResolutionState: "PLANNED" | "EXECUTING" | "PARTIALLY_RESOLVED" | "RECONCILING" | "RESOLVED" | "MANUAL_REVIEW";
+        /** @enum {string} */
+        PostAcceptanceResolutionStepType: "PAYMENT_REFUND" | "POINT_RESTORATION" | "COUPON_RESTORATION" | "SETTLEMENT_ADJUSTMENT" | "CUSTOMER_NOTIFICATION";
+        /** @enum {string} */
+        PostAcceptanceResolutionStepState: "PENDING" | "PROCESSING" | "RETRY_SCHEDULED" | "SUCCEEDED" | "NOT_REQUIRED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW" | "BLOCKED";
+        PostAcceptanceResolutionStepResource: {
+            type: components["schemas"]["PostAcceptanceResolutionStepType"];
+            state: components["schemas"]["PostAcceptanceResolutionStepState"];
+            attemptCount: number;
+            resultReference: string | null;
+            failureCode: string | null;
+            /** Format: date-time */
+            nextAttemptAt: string | null;
+            /** @description Current Notification delivery state for CUSTOMER_NOTIFICATION; null for financial owner steps. */
+            ownerState: string | null;
+        };
+        PostAcceptanceResolutionResource: {
+            resolutionId: components["schemas"]["Identifier"];
+            supportCaseId: components["schemas"]["Identifier"];
+            requestId: components["schemas"]["Identifier"];
+            revisionNumber: number;
+            orderId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            triggerOrderState: "PREPARING" | "READY" | "COMPLETED";
+            /** Format: int64 */
+            triggerOrderVersion: number;
+            outcome: components["schemas"]["PostAcceptanceResolutionOutcome"];
+            responsibility: components["schemas"]["PostAcceptanceResolutionResponsibility"];
+            /** Format: int64 */
+            cashRefundKrw: number;
+            restorePoints: boolean;
+            restoreCoupon: boolean;
+            /** Format: int64 */
+            settlementAdjustmentKrw: number | null;
+            state: components["schemas"]["PostAcceptanceResolutionState"];
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            steps: components["schemas"]["PostAcceptanceResolutionStepResource"][];
+        };
+        ExecutePostAcceptanceResolutionRequest: {
+            /** Format: int64 */
+            expectedResolutionVersion: number;
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedOrderVersion: number;
+        };
+        ReconcilePostAcceptanceResolutionRequest: {
+            /** @constant */
+            stepType: "PAYMENT_REFUND";
+            /** Format: int64 */
+            expectedResolutionVersion: number;
+            /** Format: int64 */
+            expectedOrderVersion: number;
+        };
+        /** @enum {string} */
+        SupportCompensationBenefitType: "POINT" | "COUPON";
+        /** @enum {string} */
+        SupportCompensationResponsibility: "PLATFORM" | "STORE" | "SHARED" | "UNDETERMINED";
+        /** @enum {string} */
+        SupportCompensationEvidenceBasis: "STORE_CONSENT" | "OPERATIONS_FINDING" | "CONTRACTUAL_RULE";
+        /**
+         * @description POINT forbids couponTemplateId; COUPON requires an immutable template whose
+         *     fixed amount equals amountKrw. Shares must total 10000. STORE/SHARED require
+         *     explicit evidence basis and SHA-256 evidence digest. UNDETERMINED is denied.
+         */
+        EvaluateSupportCompensationRequest: {
+            incidentId: components["schemas"]["Identifier"];
+            /** Format: uuid */
+            orderId?: string | null;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            benefitType: components["schemas"]["SupportCompensationBenefitType"];
+            /** Format: int64 */
+            amountKrw: number;
+            /** Format: uuid */
+            couponTemplateId?: string | null;
+            responsibility: components["schemas"]["SupportCompensationResponsibility"];
+            evidenceBasis?: components["schemas"]["SupportCompensationEvidenceBasis"] | null;
+            costEvidenceDigest?: string | null;
+            platformShareBps: number;
+            storeShareBps: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+        };
+        /** @enum {string} */
+        SupportCompensationBand: "LOW" | "MEDIUM" | "HIGH" | "EXCEPTIONAL";
+        /** @enum {string} */
+        SupportCompensationDecision: "ALLOWED" | "APPROVAL_REQUIRED" | "INVESTIGATION_REQUIRED" | "DENIED";
+        /** @enum {string} */
+        VerificationLevel: "UNVERIFIED" | "BASIC" | "ENHANCED";
+        /** @enum {string} */
+        SupportCompensationReasonCode: "RELATED_ORDER_MISSING" | "AMOUNT_ABOVE_LOW_LIMIT" | "AMOUNT_ABOVE_HIGH_LIMIT" | "AMOUNT_ABOVE_SUPPORTED_LIMIT" | "ORDER_RATIO_ABOVE_LOW_LIMIT" | "REPEATED_CUSTOMER_COMPENSATION" | "STORE_COST_RESPONSIBILITY" | "COST_RESPONSIBILITY_UNDETERMINED" | "DUPLICATE_TERMINAL_INCIDENT" | "INSUFFICIENT_VERIFICATION" | "STALE_TARGET_VERSION";
+        SupportCompensationEvaluationResource: {
+            policyVersionId: components["schemas"]["Identifier"];
+            band: components["schemas"]["SupportCompensationBand"];
+            decision: components["schemas"]["SupportCompensationDecision"];
+            approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
+            requiredVerificationLevel: components["schemas"]["VerificationLevel"];
+            executable: boolean;
+            reasonCodes: components["schemas"]["SupportCompensationReasonCode"][];
+            /** Format: int64 */
+            targetVersion: number;
+            /** Format: date-time */
+            evaluatedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description Persists only evidence digests; raw evidence and customer PII are forbidden. */
+        CreateSupportCompensationRequest: {
+            incidentId: components["schemas"]["Identifier"];
+            /** Format: uuid */
+            orderId?: string | null;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            benefitType: components["schemas"]["SupportCompensationBenefitType"];
+            /** Format: int64 */
+            amountKrw: number;
+            /** Format: uuid */
+            couponTemplateId?: string | null;
+            responsibility: components["schemas"]["SupportCompensationResponsibility"];
+            evidenceBasis?: components["schemas"]["SupportCompensationEvidenceBasis"] | null;
+            costEvidenceDigest?: string | null;
+            platformShareBps: number;
+            storeShareBps: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+            evidenceDigest: string;
+        };
+        /** @enum {string} */
+        SupportCompensationRequestState: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "BENEFIT_ISSUED" | "NOTIFICATION_RETRY" | "NOTIFICATION_ACCEPTED";
+        /** @description Deliberately excludes customer ID, PII, evidence digests, raw provider payloads and cost evidence. */
+        SupportCompensationResource: {
+            compensationRequestId: components["schemas"]["Identifier"];
+            supportCaseId: components["schemas"]["Identifier"];
+            incidentId: components["schemas"]["Identifier"];
+            /** Format: uuid */
+            orderId: string | null;
+            /** Format: uuid */
+            storeId: string | null;
+            benefitType: components["schemas"]["SupportCompensationBenefitType"];
+            /** Format: int64 */
+            amountKrw: number;
+            /** Format: uuid */
+            couponTemplateId: string | null;
+            policyVersionId: components["schemas"]["Identifier"];
+            band: components["schemas"]["SupportCompensationBand"];
+            approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
+            /** Format: uuid */
+            actionRequestId: string | null;
+            state: components["schemas"]["SupportCompensationRequestState"];
+            payloadDigest: string;
+            /** Format: uuid */
+            terminalBenefitId: string | null;
+            /** Format: date-time */
+            benefitIssuedAt: string | null;
+            /** Format: uuid */
+            notificationDeliveryId: string | null;
+            /** @enum {string|null} */
+            notificationState: "PENDING" | "PROCESSING" | "SUCCEEDED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW" | null;
+            notificationFailureCode: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ExecuteSupportCompensationRequest: {
+            /** Format: int64 */
+            expectedRequestVersion: number;
+            /** Format: int64 */
+            expectedTargetVersion: number;
+            expectedPayloadDigest: string;
+        };
+        ProfileChangeBinding: {
+            subjectId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedProfileVersion: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+            reason: string;
+            evidenceDigest: string;
+        };
+        CustomerDisplayNameProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            displayName: string;
+        };
+        SupportProfileChangeNotificationResource: {
+            /** @enum {string} */
+            targetKind: "OLD" | "NEW" | "CURRENT";
+            /** @enum {string} */
+            channel: "PHONE" | "EMAIL";
+            /** @enum {string} */
+            state: "PENDING" | "PROCESSING" | "ACCEPTED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW";
+            /** Format: uuid */
+            deliveryId: string | null;
+            failureCode: string | null;
+            attempts: number;
+        };
+        /** @description Raw before/after values, verification proof, evidence and secrets are deliberately excluded. */
+        SupportProfileChangeResource: {
+            profileChangeId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            subjectType: "CUSTOMER" | "STORE" | "RIDER";
+            subjectId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            purpose: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_LEGAL_NAME_TYPO" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_CREDENTIAL_RESET" | "STORE_PUBLIC_PROFILE" | "STORE_OPERATIONS_CONTACT" | "STORE_REPRESENTATIVE" | "STORE_SETTLEMENT_ACCOUNT" | "STORE_ACCESS_REREGISTRATION" | "COURIER_DISPLAY_NAME" | "COURIER_RELAY_CONTACT" | "COURIER_PROVIDER_IDENTITY" | "COURIER_PAYOUT_REFERENCE" | "COURIER_PROVIDER_REREGISTRATION";
+            /** @enum {string} */
+            riskClass: "R1" | "R2" | "R3" | "R4";
+            requesterActorId: components["schemas"]["Identifier"];
+            executorActorId: components["schemas"]["Identifier"];
+            verificationSessionId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            expectedProfileVersion: number;
+            /** Format: int64 */
+            currentProfileVersion: number | null;
+            payloadDigest: string;
+            /** Format: uuid */
+            actionRequestId: string | null;
+            /** @enum {string} */
+            state: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "EXECUTED";
+            /** @enum {string} */
+            notificationState: "PENDING" | "ACCEPTED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW";
+            notificationFailureCode: string | null;
+            maskedBefore: string | null;
+            maskedAfter: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            notifications: components["schemas"]["SupportProfileChangeNotificationResource"][];
+        };
+        CustomerLegalNameProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            legalName: string;
+        };
+        CustomerPrimaryPhoneProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            primaryPhone: string;
+        };
+        CustomerCredentialResetProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+        };
+        StorePublicProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            displayName?: string | null;
+            publicPhone?: string | null;
+            description?: string | null;
+            pickupInstructions?: string | null;
+        };
+        StoreOperationsContactProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            phone?: string | null;
+            /** Format: email */
+            email?: string | null;
+        };
+        StoreRepresentativeProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            representativeName: string;
+        };
+        StoreSettlementAccountProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            accountReference: string;
+        };
+        StoreAccessReregistrationProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+        };
+        CourierDisplayNameProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            displayName: string;
+        };
+        CourierRelayContactProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            phone?: string | null;
+            /** Format: email */
+            email?: string | null;
+        };
+        CourierProviderIdentityProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            providerReference: string;
+        };
+        CourierPayoutReferenceProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+            payoutReference: string;
+        };
+        CourierProviderReregistrationProfileChangeRequest: {
+            binding: components["schemas"]["ProfileChangeBinding"];
+        };
+        ProfileChangeRevisionBinding: {
+            /** Format: int64 */
+            expectedProfileChangeVersion: number;
+            /** Format: int64 */
+            expectedActionRequestVersion: number;
+            /** Format: int64 */
+            expectedProfileVersion: number;
+            verificationSessionId: components["schemas"]["Identifier"];
+            reason: string;
+            evidenceDigest: string;
+        };
+        CustomerPrimaryPhoneProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            primaryPhone: string;
+        };
+        EmptyProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+        };
+        StoreRepresentativeProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            representativeName: string;
+        };
+        StoreSettlementAccountProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            accountReference: string;
+        };
+        CourierProviderIdentityProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            providerReference: string;
+        };
+        CourierPayoutReferenceProfileChangeRevisionRequest: {
+            binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            payoutReference: string;
+        };
+        ProfileChangeExecutionBinding: {
+            revisionNumber: number;
+            /** Format: int64 */
+            expectedActionRequestVersion: number;
+            /** Format: int64 */
+            expectedProfileChangeVersion: number;
+            /** Format: int64 */
+            expectedProfileVersion: number;
+        };
+        CustomerPrimaryPhoneProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            primaryPhone: string;
+        };
+        EmptyProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+        };
+        StoreRepresentativeProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            representativeName: string;
+        };
+        StoreSettlementAccountProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            accountReference: string;
+        };
+        CourierProviderIdentityProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            providerReference: string;
+        };
+        CourierPayoutReferenceProfileChangeExecutionRequest: {
+            binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            payoutReference: string;
+        };
+        RetrySupportProfileChangeNotificationsRequest: {
+            /** Format: int64 */
+            expectedProfileChangeVersion: number;
+        };
+        /** @enum {string} */
+        OperationsSupportInvestigationDecision: "APPROVE" | "DENY" | "RETURN_FOR_REVISION" | "ESCALATE";
+        DecideOperationsSupportInvestigationRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            decision: components["schemas"]["OperationsSupportInvestigationDecision"];
+            reason: string;
+            evidenceDigest: string;
+        };
+        /** @enum {string} */
+        OperationsSupportInvestigationState: "OPEN" | "APPROVED" | "DENIED" | "RETURNED" | "ESCALATED" | "EXPIRED" | "STALE";
+        OperationsSupportInvestigationDecisionResource: {
+            investigationId: components["schemas"]["Identifier"];
+            requestId: components["schemas"]["Identifier"];
+            revisionId: components["schemas"]["Identifier"];
+            revisionNumber: number;
+            state: components["schemas"]["OperationsSupportInvestigationState"];
+            supportRequestState: components["schemas"]["SupportActionRequestState"];
+            /** Format: int64 */
+            supportRequestVersion: number;
+            /** Format: uuid */
+            decidedByActorId: string | null;
+            /** Format: date-time */
+            decidedAt: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        /** @enum {string} */
+        VerificationPurpose: "CONTACT_CONFIRMATION" | "CASE_RESOLUTION" | "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT";
+        /** @enum {string} */
+        VerificationActionScope: "PERSONAL_DATA_REVEAL" | "SUPPORT_ACTION";
+        CreateVerificationSessionRequest: {
+            subjectLinkId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            requestedLevel: "BASIC" | "ENHANCED";
+            purpose: components["schemas"]["VerificationPurpose"];
+            /** @default PERSONAL_DATA_REVEAL */
+            actionScope: components["schemas"]["VerificationActionScope"];
+        };
+        /** @enum {string} */
+        VerificationSubjectType: "CUSTOMER" | "STORE" | "DELIVERY";
+        /** @enum {string} */
+        VerificationState: "PENDING" | "VERIFIED" | "LOCKED" | "EXPIRED" | "REVOKED";
+        /** @enum {string} */
+        VerificationChannel: "IN_APP" | "REGISTERED_PHONE" | "REGISTERED_EMAIL";
+        /** @enum {string} */
+        VerificationChallengeState: "PENDING_ISSUE" | "ISSUED" | "ISSUE_UNKNOWN" | "VERIFYING" | "VERIFIED" | "INVALID" | "VERIFICATION_UNKNOWN" | "EXPIRED" | "REVOKED";
+        VerificationChallengeResource: {
+            challengeId: components["schemas"]["Identifier"];
+            sessionId: components["schemas"]["Identifier"];
+            channel: components["schemas"]["VerificationChannel"];
+            state: components["schemas"]["VerificationChallengeState"];
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        VerificationSessionResource: {
+            sessionId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
+            subjectType: components["schemas"]["VerificationSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            purpose: components["schemas"]["VerificationPurpose"];
+            actionScope: components["schemas"]["VerificationActionScope"];
+            requestedLevel: components["schemas"]["VerificationLevel"];
+            achievedLevel: components["schemas"]["VerificationLevel"];
+            state: components["schemas"]["VerificationState"];
+            invalidAttempts: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: int64 */
+            version: number;
+            challenges: components["schemas"]["VerificationChallengeResource"][];
+        };
+        IssueVerificationChallengeRequest: {
+            channel: components["schemas"]["VerificationChannel"];
+        };
+        VerifyVerificationChallengeRequest: {
+            /** @description Transient one-time answer or proof; never persisted, logged, audited, or returned. */
+            proof: string;
+        };
+        VerificationResultResource: {
+            challenge: components["schemas"]["VerificationChallengeResource"];
+            sessionState: components["schemas"]["VerificationState"];
+            achievedLevel: components["schemas"]["VerificationLevel"];
+            invalidAttempts: number;
+            /** Format: date-time */
+            lockedUntil: string | null;
+        };
+        /** @enum {string} */
+        SupportPersonalDataField: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_PRIMARY_EMAIL" | "STORE_LEGAL_DISPLAY_NAME" | "STORE_SUPPORT_PHONE" | "STORE_SUPPORT_EMAIL" | "COURIER_DISPLAY_NAME" | "COURIER_PROVIDER_REFERENCE" | "COURIER_RELAY_PHONE" | "COURIER_RELAY_EMAIL";
+        /** @enum {string} */
+        DataAccessReasonCode: "CASE_HANDLING" | "CONTACT_CONFIRMATION" | "FRAUD_INVESTIGATION" | "SAFETY_RESPONSE" | "PRIVACY_INCIDENT";
+        RequestDataAccessGrantRequest: {
+            verificationSessionId: components["schemas"]["Identifier"];
+            purpose: components["schemas"]["VerificationPurpose"];
+            fields: components["schemas"]["SupportPersonalDataField"][];
+            reasonCode: components["schemas"]["DataAccessReasonCode"];
+        };
+        /** @enum {string} */
+        DataAccessRisk: "BASIC" | "SENSITIVE";
+        /** @enum {string} */
+        DataAccessGrantState: "REQUESTED" | "APPROVAL_PENDING" | "ACTIVE" | "DENIED" | "CONSUMED" | "EXPIRED" | "REVOKED";
+        DataAccessGrantResource: {
+            grantId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
+            subjectType: components["schemas"]["VerificationSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            purpose: components["schemas"]["VerificationPurpose"];
+            fields: components["schemas"]["SupportPersonalDataField"][];
+            risk: components["schemas"]["DataAccessRisk"];
+            state: components["schemas"]["DataAccessGrantState"];
+            maxReveals: number;
+            reservedReveals: number;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        DecideDataAccessGrantRequest: {
+            /** @enum {string} */
+            decision: "APPROVE" | "DENY";
+            /** Format: int64 */
+            expectedVersion: number;
+            reasonCode: components["schemas"]["DataAccessReasonCode"];
+        };
+        RevealGrantedPersonalDataRequest: {
+            fields: components["schemas"]["SupportPersonalDataField"][];
+        };
+        SupportPersonalDataValues: {
+            CUSTOMER_DISPLAY_NAME?: string;
+            CUSTOMER_PRIMARY_PHONE?: string;
+            CUSTOMER_PRIMARY_EMAIL?: string;
+            STORE_LEGAL_DISPLAY_NAME?: string;
+            STORE_SUPPORT_PHONE?: string;
+            STORE_SUPPORT_EMAIL?: string;
+            COURIER_DISPLAY_NAME?: string;
+            COURIER_PROVIDER_REFERENCE?: string;
+            COURIER_RELAY_PHONE?: string;
+            COURIER_RELAY_EMAIL?: string;
+        };
+        RevealedPersonalDataResource: {
+            revealAttemptId: components["schemas"]["Identifier"];
+            grantId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            subjectId: components["schemas"]["Identifier"];
+            values: components["schemas"]["SupportPersonalDataValues"];
+            /** Format: date-time */
+            revealedAt: string;
+        };
+        /** @enum {string} */
+        BreakGlassReasonCode: "IMMEDIATE_SAFETY" | "ACTIVE_FRAUD" | "PRIVACY_INCIDENT";
+        RequestBreakGlassRequest: {
+            subjectLinkId: components["schemas"]["Identifier"];
+            field: components["schemas"]["SupportPersonalDataField"];
+            /** @enum {string} */
+            purpose: "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT";
+            reasonCode: components["schemas"]["BreakGlassReasonCode"];
+        };
+        /** @enum {string} */
+        BreakGlassState: "APPROVAL_PENDING" | "ACTIVE" | "DENIED" | "REVIEW_PENDING" | "REVIEWED" | "EXPIRED" | "REVOKED";
+        BreakGlassResource: {
+            requestId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
+            subjectType: components["schemas"]["VerificationSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            field: components["schemas"]["SupportPersonalDataField"];
+            purpose: components["schemas"]["VerificationPurpose"];
+            reasonCode: components["schemas"]["BreakGlassReasonCode"];
+            state: components["schemas"]["BreakGlassState"];
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        DecideBreakGlassRequest: {
+            /** @enum {string} */
+            decision: "APPROVE" | "DENY";
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        RevealBreakGlassRequest: {
+            field: components["schemas"]["SupportPersonalDataField"];
+        };
+        BreakGlassRevealResource: {
+            revealAttemptId: components["schemas"]["Identifier"];
+            requestId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            subjectId: components["schemas"]["Identifier"];
+            field: components["schemas"]["SupportPersonalDataField"];
+            /** @description Ephemeral raw value for the exact approved field; never persisted by Support. */
+            value: string;
+            /** Format: date-time */
+            revealedAt: string;
+        };
+        ReviewBreakGlassRequest: {
+            /** @enum {string} */
+            decision: "CONFIRMED" | "ESCALATED";
+            /** Format: int64 */
+            expectedVersion: number;
+            reasonCode: string;
+        };
     };
     responses: {
+        /** @description A required dependency is unavailable; no fallback result was used */
+        DependencyUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Request syntax or field validation failed */
         BadRequest: {
             headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Role, ownership, store membership, actor-chain, or CSRF validation failed */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description State, capacity, duplicate resource, or idempotency payload conflict */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Credentials are invalid, the account is absent, locked, or expired; these cases are not distinguished. */
+        AuthenticationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The persistent per-IP authentication attempt budget is exhausted. */
+        AuthenticationRateLimited: {
+            headers: {
+                "Retry-After": number;
                 [name: string]: unknown;
             };
             content: {
@@ -1587,26 +4423,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description A required dependency is unavailable; no fallback result was used */
-        DependencyUnavailable: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
         /** @description Resource is not visible in the authenticated actor scope */
         NotFound: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description Role, ownership, or store membership check failed */
-        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1668,15 +4486,6 @@ export interface components {
                 "application/json": components["schemas"]["Error"] | components["schemas"]["ReorderItemsUnavailableError"];
             };
         };
-        /** @description State, capacity, duplicate resource, or idempotency payload conflict */
-        Conflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
         /** @description Provider explicitly declined a syntactically valid command */
         UnprocessableEntity: {
             headers: {
@@ -1686,8 +4495,52 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The persistent per-operator Support exact-search budget is exhausted */
+        SupportSearchRateLimited: {
+            headers: {
+                /** @description Whole seconds until the next five-minute UTC rate window. */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Purpose-specific workflow created or its exact idempotent result replayed */
+        SupportProfileChangeCreated: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SupportProfileChangeResource"];
+            };
+        };
+        /** @description Current masked workflow, exact approval binding and independent notification state */
+        SupportProfileChangeOk: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SupportProfileChangeResource"];
+            };
+        };
+        /** @description A persistent verification lockout is active for this Case and Subject binding */
+        TooManyRequests: {
+            headers: {
+                /** @description Whole seconds until the binding lockout expires. */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
+        /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+        CustomerCsrfToken: string;
         Latitude: number;
         Longitude: number;
         /** @description Search radius in meters. Maximum 10000. */
@@ -1700,37 +4553,237 @@ export interface components {
          *     characters.
          */
         Cursor: string;
-        /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
-        Limit: number;
+        DiscoveryLimit: number;
         StoreId: components["schemas"]["Identifier"];
         /** @description Unique within actor ID and API operation */
         IdempotencyKey: string;
         /** @description Terminal Order whose immutable menu and option selections are reused */
         SourceOrderId: components["schemas"]["Identifier"];
         OrderId: components["schemas"]["Identifier"];
+        /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+        OrderReference: string;
         PaymentId: components["schemas"]["Identifier"];
+        /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+        Limit: number;
         PaymentMethodId: components["schemas"]["Identifier"];
+        /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+        MerchantCsrfToken: string;
         /**
          * @description Purpose for an audited privileged policy read. The server trims the value,
          *     requires 1 to 200 characters after trimming, and rejects control characters.
          */
         AccessReason: string;
         PointAccountId: components["schemas"]["Identifier"];
-        /**
-         * @description Required when a PLATFORM_OPERATOR uses a point-account support read; not
-         *     required for the customer who owns the account. The server trims the value,
-         *     requires 1 to 200 characters after trimming, and rejects control characters.
-         */
-        OptionalAccessReason: string;
         SettlementBatchId: components["schemas"]["Identifier"];
         SettlementItemId: components["schemas"]["Identifier"];
+        SupportCaseId: components["schemas"]["Identifier"];
+        SupportSubjectLinkId: components["schemas"]["Identifier"];
+        /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+        SupportTimelineSources: components["schemas"]["SupportTimelineSource"][];
+        /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+        SupportTimelineTypes: components["schemas"]["SupportTimelineType"][];
+        /**
+         * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
+         *     canonical source/type filters. It expires after 15 minutes; malformed,
+         *     expired or scope-mismatched values return 400 INVALID_REQUEST.
+         */
+        SupportTimelineCursor: string;
+        /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+        SupportTimelineLimit: number;
+        /** @description SupportCase that currently has the target Order linked as RELATED_ORDER. */
+        SupportOrderTimelineCaseId: components["schemas"]["Identifier"];
+        SupportActionRequestId: components["schemas"]["Identifier"];
+        PostAcceptanceResolutionId: components["schemas"]["Identifier"];
+        SupportCompensationRequestId: components["schemas"]["Identifier"];
+        SupportProfileChangeId: components["schemas"]["Identifier"];
+        OperationsInvestigationId: components["schemas"]["Identifier"];
+        VerificationSessionId: components["schemas"]["Identifier"];
+        VerificationChallengeId: components["schemas"]["Identifier"];
+        DataAccessGrantId: components["schemas"]["Identifier"];
+        BreakGlassRequestId: components["schemas"]["Identifier"];
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Sensitive support representation must not be stored by shared or browser caches. */
+        NoStore: "no-store";
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    issueCustomerCsrfToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description BEANFLOW_CUSTOMER_XSRF cookie issued; the response has no body */
+            204: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    registerCustomerAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description CustomerAccount and PointAccount committed atomically */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerRegistrationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCustomerSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Customer session created */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerActor"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["AuthenticationFailed"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["AuthenticationRateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    deleteCurrentCustomerSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current customer session deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    issueMerchantCsrfToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description BEANFLOW_MERCHANT_XSRF cookie issued; the response has no body */
+            204: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentOperator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current operator actor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorActor"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current customer actor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerActor"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     searchNearbyStores: {
         parameters: {
             query: {
@@ -1738,6 +4791,7 @@ export interface operations {
                 longitude: components["parameters"]["Longitude"];
                 /** @description Search radius in meters. Maximum 10000. */
                 radiusMeters: components["parameters"]["RadiusMeters"];
+                pickupAvailable?: boolean;
                 /**
                  * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
                  *     bound to this endpoint, its filters and stable sort tuple, expires within
@@ -1746,8 +4800,7 @@ export interface operations {
                  *     characters.
                  */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
-                limit?: components["parameters"]["Limit"];
+                limit?: components["parameters"]["DiscoveryLimit"];
             };
             header?: never;
             path?: never;
@@ -1857,6 +4910,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 /** @description Terminal Order whose immutable menu and option selections are reused */
@@ -1960,6 +5015,79 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getCurrentCustomerOrderByReferenceRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current UUID-era customer projection without the internal order UUID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePublicCustomerOrder"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    cancelCurrentCustomerOrderByReferenceRuntime: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancellationRequest"];
+            };
+        };
+        responses: {
+            /** @description PENDING_PAYMENT cancellation committed synchronously */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerCancellationResult"];
+                };
+            };
+            /** @description PAID cancellation committed while recovery continues independently */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerCancellationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getPaymentClientConfiguration: {
         parameters: {
             query?: never;
@@ -1978,8 +5106,6 @@ export interface operations {
                     "application/json": components["schemas"]["PaymentClientConfiguration"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -1989,6 +5115,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 orderId: components["parameters"]["OrderId"];
@@ -2057,6 +5185,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 paymentId: components["parameters"]["PaymentId"];
@@ -2137,6 +5267,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path?: never;
             cookie?: never;
@@ -2191,6 +5323,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 paymentMethodId: components["parameters"]["PaymentMethodId"];
@@ -2229,6 +5363,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 paymentMethodId: components["parameters"]["PaymentMethodId"];
@@ -2260,6 +5396,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
                 paymentId: components["parameters"]["PaymentId"];
@@ -2295,6 +5433,51 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createOperationsPaymentRefund: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                paymentId: components["parameters"]["PaymentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRefundRequest"];
+            };
+        };
+        responses: {
+            /** @description Refund resource creation and the synchronous result are confirmed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Refund"];
+                };
+            };
+            /** @description Refund result is unknown or reconciliation is in progress */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Refund"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -2358,6 +5541,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuntimeStoreOrderTransitionResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreOrderByReferenceRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current store projection without the internal order UUID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    transitionStoreOrderByReferenceRuntime: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeStoreOrderTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Synchronous store transition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
+                };
+            };
+            /** @description REJECTED committed while compensation continues independently */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePublicStoreOrderResult"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -2609,14 +5867,7 @@ export interface operations {
     getPointAccount: {
         parameters: {
             query?: never;
-            header?: {
-                /**
-                 * @description Required when a PLATFORM_OPERATOR uses a point-account support read; not
-                 *     required for the customer who owns the account. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
-                "X-Access-Reason"?: components["parameters"]["OptionalAccessReason"];
-            };
+            header?: never;
             path: {
                 accountId: components["parameters"]["PointAccountId"];
             };
@@ -2654,14 +5905,7 @@ export interface operations {
                 /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
                 limit?: components["parameters"]["Limit"];
             };
-            header?: {
-                /**
-                 * @description Required when a PLATFORM_OPERATOR uses a point-account support read; not
-                 *     required for the customer who owns the account. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
-                "X-Access-Reason"?: components["parameters"]["OptionalAccessReason"];
-            };
+            header?: never;
             path: {
                 accountId: components["parameters"]["PointAccountId"];
             };
@@ -2670,6 +5914,83 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Point transactions in stable ledger order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointTransactionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOperationsPointAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Purpose for an audited privileged policy read. The server trims the value,
+                 *     requires 1 to 200 characters after trimming, and rejects control characters.
+                 */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                accountId: components["parameters"]["PointAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Point account visible to an authorized operator */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointAccount"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listOperationsPointTransactions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /**
+                 * @description Purpose for an audited privileged policy read. The server trims the value,
+                 *     requires 1 to 200 characters after trimming, and rejects control characters.
+                 */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                accountId: components["parameters"]["PointAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Point transactions visible to an authorized operator */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3025,6 +6346,8 @@ export interface operations {
             header: {
                 /** @description Unique within actor ID and API operation */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
                 itemId: components["parameters"]["SettlementItemId"];
@@ -3044,6 +6367,2322 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettlementDispute"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    searchSupportSubjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchSupportSubjectsRequest"];
+            };
+        };
+        responses: {
+            /** @description Masked exact-match candidates and bounded ambiguity metadata */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportSubjectSearchResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["SupportSearchRateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCases: {
+        parameters: {
+            query?: {
+                state?: components["schemas"]["SupportCaseState"];
+                assigneeId?: components["schemas"]["Identifier"];
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Case summary page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createSupportCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Case created, or the original response replayed for the same command */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Case representation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCase"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    assignSupportCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignSupportCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Assignment appended, or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseAssignment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    transitionSupportCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionSupportCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description State transition appended, or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseTransition"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    appendSupportInteraction: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendSupportInteractionRequest"];
+            };
+        };
+        responses: {
+            /** @description Interaction appended, or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportInteraction"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    appendSupportNote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendSupportNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Note appended without returning its content */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportNote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    linkSupportSubject: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkSupportSubjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Subject link appended, or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportSubjectLink"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    unlinkSupportSubject: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                linkId: components["parameters"]["SupportSubjectLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlinkSupportSubjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Link closed, or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportSubjectUnlink"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCaseTimeline: {
+        parameters: {
+            query?: {
+                /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+                sources?: components["parameters"]["SupportTimelineSources"];
+                /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+                types?: components["parameters"]["SupportTimelineTypes"];
+                /**
+                 * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
+                 *     canonical source/type filters. It expires after 15 minutes; malformed,
+                 *     expired or scope-mismatched values return 400 INVALID_REQUEST.
+                 */
+                cursor?: components["parameters"]["SupportTimelineCursor"];
+                /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["SupportTimelineLimit"];
+            };
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Globally ordered masked transaction facts */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTimelinePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportOrderTimeline: {
+        parameters: {
+            query: {
+                /** @description SupportCase that currently has the target Order linked as RELATED_ORDER. */
+                caseId: components["parameters"]["SupportOrderTimelineCaseId"];
+                /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+                sources?: components["parameters"]["SupportTimelineSources"];
+                /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+                types?: components["parameters"]["SupportTimelineTypes"];
+                /**
+                 * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
+                 *     canonical source/type filters. It expires after 15 minutes; malformed,
+                 *     expired or scope-mismatched values return 400 INVALID_REQUEST.
+                 */
+                cursor?: components["parameters"]["SupportTimelineCursor"];
+                /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["SupportTimelineLimit"];
+            };
+            header?: never;
+            path: {
+                orderId: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Globally ordered masked owner facts */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTimelinePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    evaluateSupportAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluateSupportActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Current advisory decision, including closed denial reasons */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionEvaluationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createSupportActionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Action request created or the first identical response replayed */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionRequestResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportActionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current request revision, approval lineage and execution readiness */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionRequestResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseSupportActionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviseSupportActionRequest"];
+            };
+        };
+        responses: {
+            /** @description New revision created or the first identical response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionRequestResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    decideSupportManagerApproval: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideSupportManagerApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Decision committed or the first identical response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionRequestResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reassignSupportActionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignSupportActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Case and request reassigned atomically, or the first response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportActionRequestResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeSupportOrderChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteSupportOrderChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable owner and Support outcome, or the first exact response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderChangeExecutionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createSupportOrderChangeAuthorization: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportOrderChangeAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Store authorization created or the first exact creation response replayed */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderChangeAuthorizationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createPostAcceptanceResolution: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orderId: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePostAcceptanceResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Immutable resolution plan created or the first exact response replayed */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAcceptanceResolutionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getPostAcceptanceResolution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resolutionId: components["parameters"]["PostAcceptanceResolutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current resolution plan and explicit partial, unknown or terminal owner states */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAcceptanceResolutionResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executePostAcceptanceResolution: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                resolutionId: components["parameters"]["PostAcceptanceResolutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutePostAcceptanceResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Latest durable partial, unknown, manual-review or resolved state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAcceptanceResolutionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reconcilePostAcceptanceResolution: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                resolutionId: components["parameters"]["PostAcceptanceResolutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconcilePostAcceptanceResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Latest durable reconciliation outcome */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAcceptanceResolutionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    evaluateSupportCompensation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluateSupportCompensationRequest"];
+            };
+        };
+        responses: {
+            /** @description Advisory evaluation with the exact immutable policy version */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationEvaluationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createSupportCompensation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportCompensationRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact request created or its first idempotent response replayed */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportCompensation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compensationRequestId: components["parameters"]["SupportCompensationRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current request, terminal benefit and notification state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeSupportCompensation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                compensationRequestId: components["parameters"]["SupportCompensationRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteSupportCompensationRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable terminal benefit and independent notification state, or exact replay */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    retrySupportCompensationNotification: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                compensationRequestId: components["parameters"]["SupportCompensationRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current durable request and notification owner state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCustomerDisplayNameCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerDisplayNameProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCustomerLegalNameCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerLegalNameProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCustomerPrimaryPhoneChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPrimaryPhoneProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCustomerCredentialReset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerCredentialResetProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createStorePublicProfileCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorePublicProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createStoreOperationsContactCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreOperationsContactProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createStoreRepresentativeChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreRepresentativeProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createStoreSettlementAccountChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreSettlementAccountProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createStoreAccessReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreAccessReregistrationProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCourierDisplayNameCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierDisplayNameProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCourierRelayContactCorrection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierRelayContactProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCourierProviderIdentityChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierProviderIdentityProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCourierPayoutReferenceChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierPayoutReferenceProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCourierProviderReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierProviderReregistrationProfileChangeRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SupportProfileChangeCreated"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportProfileChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseCustomerPrimaryPhoneChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPrimaryPhoneProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseCustomerCredentialReset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseStoreRepresentativeChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreRepresentativeProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseStoreSettlementAccountChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreSettlementAccountProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseStoreAccessReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseCourierProviderIdentityChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierProviderIdentityProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseCourierPayoutReferenceChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierPayoutReferenceProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviseCourierProviderReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeCustomerPrimaryPhoneChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPrimaryPhoneProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeCustomerCredentialReset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeStoreRepresentativeChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreRepresentativeProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeStoreSettlementAccountChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreSettlementAccountProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeStoreAccessReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeCourierProviderIdentityChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierProviderIdentityProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeCourierPayoutReferenceChange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierPayoutReferenceProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    executeCourierProviderReregistration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyProfileChangeExecutionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    retrySupportProfileChangeNotifications: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetrySupportProfileChangeNotificationsRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["SupportProfileChangeOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    decideOperationsSupportInvestigation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                investigationId: components["parameters"]["OperationsInvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideOperationsSupportInvestigationRequest"];
+            };
+        };
+        responses: {
+            /** @description Investigation decision and Support callback committed, or exact replay */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSupportInvestigationDecisionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createSupportVerificationSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVerificationSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Verification session started or the original response replayed */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationSessionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportVerificationSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["VerificationSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current session and opaque challenge metadata */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationSessionResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    issueSupportVerificationChallenge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                sessionId: components["parameters"]["VerificationSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueVerificationChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Opaque challenge metadata; never contains a secret or raw link */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationChallengeResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    verifySupportVerificationChallenge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                challengeId: components["parameters"]["VerificationChallengeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyVerificationChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Verification outcome without proof or provider reference */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationResultResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    revokeSupportVerificationSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                sessionId: components["parameters"]["VerificationSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked session or the original response replayed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationSessionResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    requestSupportDataAccessGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDataAccessGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Grant state after verification qualification */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAccessGrantResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    decideSupportDataAccessGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                grantId: components["parameters"]["DataAccessGrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideDataAccessGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved active or denied Grant */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAccessGrantResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    revealSupportPersonalData: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                grantId: components["parameters"]["DataAccessGrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealGrantedPersonalDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Ephemeral field-keyed values; clients must not cache or persist this response */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealedPersonalDataResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    requestSupportBreakGlass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestBreakGlassRequest"];
+            };
+        };
+        responses: {
+            /** @description Pending distinct pre-approval */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    decideSupportBreakGlass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["BreakGlassRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideBreakGlassRequest"];
+            };
+        };
+        responses: {
+            /** @description Current break-glass request state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    revealSupportBreakGlassData: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["BreakGlassRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealBreakGlassRequest"];
+            };
+        };
+        responses: {
+            /** @description One ephemeral pre-approved field value */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassRevealResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reviewSupportBreakGlass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["BreakGlassRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewBreakGlassRequest"];
+            };
+        };
+        responses: {
+            /** @description Reviewed or escalated break-glass request */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassResource"];
                 };
             };
             400: components["responses"]["BadRequest"];

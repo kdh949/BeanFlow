@@ -14,6 +14,7 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Identity
   - name: Discovery
   - name: Ordering
   - name: Payment
@@ -27,10 +28,18 @@ tags:
 paths:
   /auth/customer/csrf:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1csrf"
+  /auth/customer/registrations:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1registrations"
+  /auth/customer/sessions:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1sessions"
+  /auth/customer/sessions/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1sessions~1current"
   /auth/merchant/csrf:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1csrf"
   /operations/me:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
+  /me:
+    $ref: "./beanflow-v1.yaml#/paths/~1me"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /stores/{storeId}/menus:
@@ -828,6 +837,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    customerSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_CUSTOMER_SESSION
+    merchantSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_MERCHANT_SESSION
   schemas:
     RuntimeStoreOrderTransitionRequest:
       type: object

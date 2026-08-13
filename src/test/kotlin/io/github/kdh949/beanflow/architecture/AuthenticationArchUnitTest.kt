@@ -59,4 +59,23 @@ class AuthenticationArchUnitTest {
 
         assertThat(violations).isEmpty()
     }
+
+    @Test
+    fun `identity and loyalty collaborate only through the loyalty public interface`() {
+        noClasses()
+            .that()
+            .resideInAPackage("..identity..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("..loyalty.internal..")
+            .check(beanflowClasses)
+
+        noClasses()
+            .that()
+            .resideInAPackage("..loyalty..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("..identity.internal..")
+            .check(beanflowClasses)
+    }
 }

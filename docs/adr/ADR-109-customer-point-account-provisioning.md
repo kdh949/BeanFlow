@@ -88,6 +88,19 @@ provisioning이 가장 작은 명시적 경계다. 실제 0원 계정이 항상 
 - CustomerAccount/PointAccount coverage 불일치 수
 - provisioning transaction 지연 p50·p95
 
+## Implementation Outcome (2026-08-13)
+
+`productization-30`은 Loyalty public API에 `CustomerPointAccountProvisioningOperations`를 두고
+`MANDATORY` 구현이 available/reserved/recovery-pending 세 잔액이 0인 PointAccount를 생성하도록 했다.
+Identity 가입 transaction은 CustomerAccount flush, PointAccount flush와 과거 CUSTOMER LOGIN_ID attempt
+삭제를 한 번에 commit한다. 성공·canonical 동시 가입, Loyalty trigger 실패와 선행 PointAccount Unique
+충돌을 PostgreSQL에서 검증했으며 실패 시 두 row가 모두 0건이고 503이다. Identity와 Loyalty 내부
+Repository 또는 JPA association은 ArchUnit/Modulith 검증으로 금지한다.
+
+이 ADR의 actor-scoped `/me/points` 조회와 손상 fixture 503 projection은
+`productization-80-customer-web-p0-integration` 소유다. Plan 30은 그 후속 범위를 앞당겨 구현하거나
+완료했다고 주장하지 않는다.
+
 ## Revisit Conditions
 
 - Identity 또는 Loyalty가 별도 서비스·DB로 분리될 때

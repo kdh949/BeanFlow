@@ -180,6 +180,12 @@ Operations는 stateless이고, Customer/Merchant는 서로 다른 PostgreSQL Ses
 Operations 전용 PointAccount·refund URI로 분리했으며, 반대 actor credential은 403이다. 고객·점주
 계정 loader가 아직 없을 때 보호 경로를 401/503 외의 가짜 성공으로 바꾸지 않는다.
 
+`productization-30`은 고객 가입·로그인, `GET /me`, 현재 Session 로그아웃과 CustomerAccount loader를
+구현했다. 고객 로그인은 Argon2id 검증 뒤 account/attempt/Session row를 같은 transaction 경계에서
+잠그고 Session ID를 회전한다. 로컬 smoke도 합성 고객 계정으로 CSRF token을 받은 뒤 Session Cookie를
+발급받아 고객 API를 호출하며 고객 JWT를 생성하거나 붙여넣지 않는다. Merchant Session 로그인은
+`productization-40` 범위로 남아 있다.
+
 ## Revisit Conditions
 
 - 모바일 네이티브 앱 또는 제3자 클라이언트가 실제 요구가 될 때

@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class, TestBrowserActorLoaderConfiguration::class)
 @AutoConfigureMockMvc
-@SpringBootTest
+@SpringBootTest(properties = ["spring.main.allow-bean-definition-overriding=true"])
 class BrowserSessionPostgresIntegrationTest(
     @Autowired private val coordinator: LoginSessionCoordinator,
     @Autowired private val lifecycle: BrowserSessionLifecycle,

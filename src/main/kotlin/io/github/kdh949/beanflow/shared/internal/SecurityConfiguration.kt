@@ -95,7 +95,7 @@ internal class SecurityConfiguration {
             http = http,
             registry = registry,
             chain = AuthenticationChain.MERCHANT,
-            csrfEndpoint = "/api/v1/auth/merchant/csrf",
+            unauthenticatedEndpoints = setOf("/api/v1/auth/merchant/csrf"),
             csrfCookieName = "BEANFLOW_MERCHANT_XSRF",
             errorWriter = errorWriter,
             metrics = metrics,
@@ -117,7 +117,12 @@ internal class SecurityConfiguration {
             http = http,
             registry = registry,
             chain = AuthenticationChain.CUSTOMER,
-            csrfEndpoint = "/api/v1/auth/customer/csrf",
+            unauthenticatedEndpoints =
+                setOf(
+                    "/api/v1/auth/customer/csrf",
+                    "/api/v1/auth/customer/registrations",
+                    "/api/v1/auth/customer/sessions",
+                ),
             csrfCookieName = "BEANFLOW_CUSTOMER_XSRF",
             errorWriter = errorWriter,
             metrics = metrics,
@@ -129,7 +134,7 @@ internal class SecurityConfiguration {
         http: HttpSecurity,
         registry: AuthenticationPathRegistry,
         chain: AuthenticationChain,
-        csrfEndpoint: String,
+        unauthenticatedEndpoints: Set<String>,
         csrfCookieName: String,
         errorWriter: SecurityErrorResponseWriter,
         metrics: AuthenticationMetrics,
@@ -153,8 +158,13 @@ internal class SecurityConfiguration {
             }
         return http
             .securityMatcher(registry.requestMatcher(chain))
-            .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
-            .requestCache { it.disable() }
+            .sessionManagement {
+                it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                // LoginSessionCoordinator already performs the required transactional rotation.
+                // A second Spring Security fixation rotation on the first authenticated read would
+                // make the just-issued response cookie stale.
+                it.sessionFixation { fixation -> fixation.none() }
+            }.requestCache { it.disable() }
             .addFilterBefore(
                 ActorCredentialIsolationFilter(chain, errorWriter),
                 SecurityContextHolderFilter::class.java,
@@ -165,7 +175,7 @@ internal class SecurityConfiguration {
                 it.csrfTokenRepository(csrfRepository)
                 it.csrfTokenRequestHandler(csrfRequestHandler)
             }.authorizeHttpRequests {
-                it.requestMatchers(csrfEndpoint).permitAll()
+                it.requestMatchers(*unauthenticatedEndpoints.toTypedArray()).permitAll()
                 it.anyRequest().authenticated()
             }.exceptionHandling {
                 it.authenticationEntryPoint(handlers.authenticationEntryPoint)

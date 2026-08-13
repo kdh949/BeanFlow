@@ -132,15 +132,15 @@ internal class AuthenticationFoundationMigrationTest {
     }
 
     @Test
-    fun `V52 is the next migration and does not seed a merchant credential grant`() {
+    fun `V52 remains applied and does not seed a merchant credential grant`() {
         flyway().migrate()
 
         assertThat(
             jdbcTemplate.queryForObject(
-                "SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success",
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '52'",
                 Int::class.java,
             ),
-        ).isEqualTo(52)
+        ).isOne()
         assertThat(
             jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM operations_operator_permission_grant WHERE permission = 'MERCHANT_CREDENTIAL_MANAGE'",

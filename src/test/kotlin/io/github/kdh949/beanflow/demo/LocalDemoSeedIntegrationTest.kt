@@ -171,6 +171,7 @@ internal class LocalDemoSeedIntegrationTest
             val SEEDED_TABLES =
                 listOf(
                     "merchant_store_discovery_profile",
+                    "identity_customer_account",
                     "identity_store_membership",
                     "merchant_menu_configuration_requirement",
                     "merchant_menu_configuration",

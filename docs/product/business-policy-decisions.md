@@ -1618,6 +1618,11 @@
   - 허용 문자·길이·경계 문자와 공백 정규화 계약
   - 없는 사용자명·잘못된 비밀번호·잠금 상태의 동일 응답과 유사한 hash 검증 비용
   - 검증되지 않은 이메일·전화번호가 CustomerAccount와 Session에 저장되지 않는지 검증
+- **Implementation Evidence (2026-08-13):** `productization-30`은 고객 namespace의 canonical
+  사용자명 Unique Constraint, 고정 Argon2id dummy PHC 검증과 동일한 `401 AUTHENTICATION_FAILED`
+  응답을 구현했다. 대소문자·공백 canonical 동시 가입은 CustomerAccount와 PointAccount 각 한 건으로
+  수렴하고, 가입 중복만 `409 LOGIN_ID_UNAVAILABLE`을 반환한다. 점주 namespace 구현은
+  `productization-40` 소유다.
 - **ADR Required:** Yes — [ADR-092](../adr/ADR-092-hybrid-authentication.md)
 - **Revisit Conditions:** 검증된 이메일·휴대전화 로그인, 비밀번호 재설정 또는 계정 복구 요구가
   확정될 때
@@ -1664,6 +1669,12 @@
   - 임시 비밀번호 발급 후 24시간 -1ns/at/+1ns와 재발급 감사 원자성
   - Unicode·공백·15/128 code point·512 byte 경계와 비밀번호 비정규화
   - attempt 원문 비저장, HMAC key 누락 기동 실패와 24시간 보존 worker 재실행
+- **Implementation Evidence (2026-08-13):** 고객 계정은 Argon2id
+  `m=19456,t=2,p=1`, actor/scope별 HMAC attempt row, 5회 계정 잠금·30회 IP 차단, 정확한 15분 경계와
+  24시간 bounded retention을 사용한다. 동시 실패는 PostgreSQL row lock으로 count를 보존하고,
+  자격증명 snapshot이 검증 중 바뀌면 attempt와 Session 없이 401로 rollback한다. retention·Session
+  저장 실패는 예외를 다시 던지고 인증 fallback을 만들지 않는다. 점주 temporary-password lifecycle은
+  `productization-40` 소유다.
 - **ADR Required:** Yes — [ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md),
   [ADR-094](../adr/ADR-094-browser-session-security.md)
 - **Revisit Conditions:** MFA 또는 복구 채널 도입, credential-stuffing 관측치, hash 지연·메모리 측정,
@@ -1879,6 +1890,12 @@
   - Loyalty 저장·flush 장애가 CustomerAccount까지 rollback하고 503인지 검증
   - CustomerAccount만 있는 손상 fixture의 `/me/points`가 0/404/lazy-create가 아닌 503인지 검증
   - Application/Domain에 cross-Context JPA 연관관계가 없는지 ArchUnit·Modulith 검증
+- **Implementation Evidence (2026-08-13):** `productization-30`은 Identity transaction에서 Loyalty
+  `CustomerPointAccountProvisioningOperations`의 `MANDATORY` 구현을 호출하고 두 Aggregate를 ID로만
+  연결한다. 성공·동시 canonical 가입, Loyalty write/flush 실패와 선행 PointAccount Unique 충돌에서
+  각각 exactly-one 또는 전체 rollback·503을 PostgreSQL로 검증했다. actor-scoped `/me/points`와
+  손상 fixture의 `POINT_ACCOUNT_INTEGRITY_FAILURE` projection은
+  `productization-80-customer-web-p0-integration` 소유이며 이 구현 결과에 포함하지 않는다.
 - **ADR Required:** Yes — [ADR-109](../adr/ADR-109-customer-point-account-provisioning.md)
 - **Revisit Conditions:** 외부 Identity import, 고객 탈퇴·익명화, Loyalty 서비스 분리 또는 가입과 계정
   provisioning의 비동기화가 필요해질 때

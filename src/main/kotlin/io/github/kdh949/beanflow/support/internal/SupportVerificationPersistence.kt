@@ -52,7 +52,7 @@ internal class VerificationSessionEntity(
     @Column(nullable = false, length = 16)
     var state: VerificationState,
     @Column(name = "invalid_attempts", nullable = false)
-    var invalidAttempts: Int,
+    var invalidAttempts: Short,
     @Column(name = "started_at", nullable = false)
     val startedAt: Instant,
     @Column(name = "expires_at", nullable = false)

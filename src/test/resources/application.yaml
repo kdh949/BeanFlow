@@ -1,4 +1,7 @@
 beanflow:
+  authentication:
+    # Public deterministic test vector only; never a deployment key.
+    attempt-hmac-key-base64-url: dGVzdC1hdHRlbXB0LWhtYWMta2V5LTMyaGFyYWN0ZXJzISE
   support-verification-recovery:
     initial-delay-ms: 3600000
   support-profile-notification-recovery:

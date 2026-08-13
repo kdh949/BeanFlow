@@ -34,10 +34,10 @@ internal class AuditRetentionPolicyMigrationTest {
 
         assertThat(
             jdbc.queryForObject(
-                "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1",
-                String::class.java,
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '39'",
+                Long::class.java,
             ),
-        ).isEqualTo("52")
+        ).isOne()
         assertThat(count(jdbc, "operations_retention_policy_version")).isEqualTo(15)
         assertThat(count(jdbc, "operations_retention_policy_head")).isEqualTo(10)
         assertThat(
