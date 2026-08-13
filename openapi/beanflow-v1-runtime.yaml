@@ -36,10 +36,20 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1sessions~1current"
   /auth/merchant/csrf:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1csrf"
+  /auth/merchant/sessions:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1sessions"
+  /auth/merchant/password-changes:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1password-changes"
+  /auth/merchant/sessions/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1sessions~1current"
   /operations/me:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
   /me:
     $ref: "./beanflow-v1.yaml#/paths/~1me"
+  /merchant/me:
+    $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me"
+  /merchant/me/stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me~1stores"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /stores/{storeId}/menus:
@@ -427,6 +437,12 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/merchant-accounts:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts"
+  /operations/merchant-accounts/{merchantAccountId}/temporary-password-resets:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts~1{merchantAccountId}~1temporary-password-resets"
+  /operations/merchant-accounts/{merchantAccountId}/lock-releases:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts~1{merchantAccountId}~1lock-releases"
   /operations/orders/{orderId}/customer-cancellation-refund-reconciliations:
     post:
       tags: [Operations]

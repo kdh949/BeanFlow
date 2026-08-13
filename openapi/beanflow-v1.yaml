@@ -5764,6 +5764,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ErrorDetail"
+        targetReference:
+          type: string
+          description: Opaque convergence target present only when a safe retry contract explicitly requires it.
     ErrorDetail:
       type: object
       additionalProperties: false

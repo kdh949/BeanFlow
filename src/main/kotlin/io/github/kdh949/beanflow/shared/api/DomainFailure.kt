@@ -4,6 +4,8 @@ enum class FailureCode {
     INVALID_REQUEST,
     PASSWORD_POLICY_VIOLATION,
     LOGIN_ID_UNAVAILABLE,
+    MERCHANT_ACCOUNT_NOT_FOUND,
+    TEMPORARY_PASSWORD_NOT_REPLAYABLE,
     AUTHENTICATION_FAILED,
     AUTHENTICATION_RATE_LIMITED,
     INITIAL_PASSWORD_CHANGE_REQUIRED,
@@ -64,4 +66,5 @@ class DomainFailure(
     val code: FailureCode,
     override val message: String,
     val retryAfterSeconds: Long? = null,
+    val targetReference: String? = null,
 ) : RuntimeException(message)

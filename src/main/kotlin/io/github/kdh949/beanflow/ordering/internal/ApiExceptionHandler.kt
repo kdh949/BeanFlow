@@ -30,6 +30,7 @@ internal class ApiExceptionHandler(
                 code = failure.code.name,
                 message = failure.message,
                 correlationId = correlationIdSource.currentOrCreate(),
+                targetReference = failure.targetReference,
             ),
             headers,
             statusOf(failure.code),
@@ -126,7 +127,9 @@ internal class ApiExceptionHandler(
             FailureCode.INITIAL_PASSWORD_CHANGE_REQUIRED,
             -> HttpStatus.FORBIDDEN
 
-            FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
+            FailureCode.RESOURCE_NOT_FOUND,
+            FailureCode.MERCHANT_ACCOUNT_NOT_FOUND,
+            -> HttpStatus.NOT_FOUND
 
             FailureCode.VERIFICATION_REQUIRED,
             FailureCode.DATA_ACCESS_GRANT_REQUIRED,

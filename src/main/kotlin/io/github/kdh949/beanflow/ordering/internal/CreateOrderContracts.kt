@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import java.time.Instant
@@ -98,6 +99,8 @@ internal data class ErrorResponse(
     val message: String,
     val correlationId: String,
     val details: List<ErrorDetail> = emptyList(),
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
+    val targetReference: String? = null,
 )
 
 internal data class ErrorDetail(
