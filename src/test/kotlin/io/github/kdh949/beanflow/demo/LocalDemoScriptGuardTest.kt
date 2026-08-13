@@ -349,8 +349,6 @@ internal class LocalDemoScriptGuardTest {
         val runtimeDirectory = root.resolve(".demo-runtime").also { it.createDirectories() }
         runtimeDirectory.resolve("demo-identity.env").writeText(
             """
-            STORE_OWNER_TOKEN=stub-token
-            OTHER_STORE_OWNER_TOKEN=stub-token
             BEANFLOW_DEMO_JWKS_URI=http://127.0.0.1:1/jwks.json
             BEANFLOW_DEMO_CURSOR_SECRET=stub
             BEANFLOW_DEMO_ISSUER=http://127.0.0.1:18081

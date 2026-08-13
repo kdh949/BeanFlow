@@ -48,18 +48,18 @@ bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전
 5. Runtime OpenAPI client를 생성하고 React frontend 기동
 6. API health와 frontend 응답 확인
 
-`seed.sh`는 고정 UUID CustomerAccount와 0원 PointAccount를 포함한 fixture를 단일 transaction으로
+`seed.sh`는 고정 UUID CustomerAccount, 점주 MerchantAccount 두 개와 0원 PointAccount를 포함한 fixture를 단일 transaction으로
 쓴다. 재실행하면 삽입 0건이고 같은 fixture가 유지된다. `smoke.sh --customer-checkpoint`는
 `demo.customer` 계정으로 고객 CSRF token과 Session Cookie를 발급받은 뒤 runtime OpenAPI에 선언된
 고객 operation만 호출한다. 주문 준비·callback exact replay·위변조 거부와 승인 결제 상태 조회까지
 성공한 뒤 Merchant endpoint를 호출하지 않고 종료한다.
 
-인자 없는 `smoke.sh`는 같은 고객 checkpoint에 이어 매장 완료, 부분/전액 remaining 환불과 두 번째
+인자 없는 `smoke.sh`는 같은 고객 checkpoint에 이어 `demo.merchant`의 임시 비밀번호 로그인,
+`INITIAL_PASSWORD` gate, 비밀번호 변경과 Session 회전을 먼저 검증한 뒤 매장 완료, 부분/전액 remaining 환불과 두 번째
 결제의 `UNKNOWN → APPROVED` query 복구까지 확인하는 기본 전체 흐름이다. 첫 주문은 10,000 KRW이고
 완료 뒤 해당 order의 `ACCRUAL` 원장 source와 100 KRW balance delta를 deadline 안에 검증한다. 이 전체
-흐름은 productization-40에서 실제 Merchant 계정·초기 비밀번호 변경·Session seed가 연결된 뒤 필수
-검증으로 복원한다. Plan 30 branch에서 legacy 점주 JWT로 2xx를 만들거나 customer checkpoint를 전체
-smoke 성공으로 부르지 않는다.
+흐름은 실제 Merchant 계정과 Merchant Session만 사용한다. Plan 30 branch에서 legacy 점주 JWT로 2xx를
+만들거나 customer checkpoint를 전체 smoke 성공으로 부르지 않는다.
 
 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`다. API smoke의 고객
 흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web
@@ -79,7 +79,7 @@ bootstrap CLI가 `POLICY_ALREADY_INITIALIZED`라는 정확한 terminal result를
 | 파일 | 내용 |
 |---|---|
 | `jwks.json` | 공개 JWK set만. private key는 프로세스 메모리에만 있다 |
-| `demo-identity.env` | 점주·운영자 API JWT, cursor HMAC secret. 고객 JWT는 생성하지 않음 |
+| `demo-identity.env` | 운영자 API JWT와 cursor HMAC secret. 고객·점주 JWT는 생성하지 않음 |
 | `workload-token.txt`, `jwks.json` | bootstrap CLI가 검증하는 신원 파일. `0400`으로 기록된다 |
 
 `OidcWorkloadIdentityVerifier`는 **쓰기 권한이 있는 신원 파일을 거부한다.** 이 파일들이
@@ -93,7 +93,7 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 있는 것 | 없는 것 |
 |---|---|
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
-| 합성 고객 로그인 계정, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
+| 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
 | local-only scripted payment config와 paymentKey 상태 규칙 | 실제 개인정보, 실제 Toss credential |
 
 ## 6. 정지와 초기화
@@ -133,7 +133,7 @@ non-zero로 끝나며 key material을 보존한다.
 | `Timed out after Ns waiting for ...` | 해당 단계가 deadline 안에 준비되지 않았다 | `.demo-runtime/app.log`, `frontend.log` 또는 `identity.log`를 본다. deadline 초과는 실패이며 느린 성공이 아니다 |
 | `Seed failed. The transaction rolled back` | fixture 쓰기 중 오류 | `.demo-runtime/seed.log`를 본다. 부분 fixture는 남지 않으므로 원인 수정 후 그대로 재실행한다 |
 | `Customer Session login expected 200` | 고객 seed 누락, 비밀번호 정책·계정 상태 또는 Session 저장 실패 | `seed.log`의 `LOCAL_DEMO_SEED_CUSTOMER_LOGIN_ID`와 `app.log`의 correlation ID를 확인한다. 고객 JWT로 우회하지 않는다 |
-| 기본 smoke의 매장 전환이 `ACCESS_DENIED` 403 | Plan 40 이전이라 Merchant 계정·Session이 아직 없거나 점주 JWT를 Merchant Chain에 보냈다 | Plan 30 검증은 `--customer-checkpoint`를 사용한다. 전체 smoke는 Plan 40에서 Merchant Session을 연결한 뒤 실행하며 JWT/fake Session으로 우회하지 않는다 |
+| 기본 smoke의 점주 로그인·전환이 401/403 | seed 누락, 24시간 임시 비밀번호 만료, 초기 비밀번호가 이미 변경됐거나 다른 매장 membership | deterministic 전체 smoke는 `stop.sh --reset` 뒤 start·seed부터 다시 실행한다. JWT/fake Session으로 우회하지 않는다 |
 | `The GLOBAL ordinary point accrual policy is missing` | `start.sh`의 bootstrap 단계를 건너뛰었다 | `start.sh`를 실행한다. seed는 정책을 대신 만들지 않는다 |
 | `GLOBAL accrual policy is already initialized` | 이전 demo database가 남아 bootstrap result가 deterministic fixture와 다르다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다. 로그의 단어 `already`만으로 성공 처리하지 않는다 |
 | smoke `[fail] ... expected 200 got 500` | 해당 단계의 실제 응답이 계약과 다르다 | 출력된 `correlationId`로 `.demo-runtime/app.log`를 조회한다 |

@@ -137,6 +137,36 @@ internal class LocalDemoSeedIntegrationTest
             ).isZero()
         }
 
+        @Test
+        fun `the seed links merchant accounts to memberships with an expiring initial credential`() {
+            transactions.execute { seeder.seed() }
+
+            assertThat(
+                jdbcTemplate.queryForMap(
+                    "SELECT login_id, state, temporary_password_expires_at, password_changed_at " +
+                        "FROM identity_merchant_account WHERE id = ?",
+                    LocalDemoFixture.STORE_OWNER_ID,
+                ),
+            ).containsEntry("login_id", LocalDemoFixture.MERCHANT_LOGIN_ID)
+                .containsEntry("state", "INITIAL_PASSWORD")
+                .containsEntry("password_changed_at", null)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM identity_store_membership WHERE actor_id = ? AND store_id = ? AND status = 'ACTIVE'",
+                    Long::class.java,
+                    LocalDemoFixture.STORE_OWNER_ID,
+                    LocalDemoFixture.STORE_ID,
+                ),
+            ).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT state FROM identity_merchant_account WHERE id = ?",
+                    String::class.java,
+                    LocalDemoFixture.OTHER_STORE_OWNER_ID,
+                ),
+            ).isEqualTo("ACTIVE")
+        }
+
         private fun counts(): Map<String, Long> =
             SEEDED_TABLES
                 .associateWith { table ->
@@ -172,6 +202,7 @@ internal class LocalDemoSeedIntegrationTest
                 listOf(
                     "merchant_store_discovery_profile",
                     "identity_customer_account",
+                    "identity_merchant_account",
                     "identity_store_membership",
                     "merchant_menu_configuration_requirement",
                     "merchant_menu_configuration",

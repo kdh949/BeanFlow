@@ -49,8 +49,6 @@ internal object LocalDemoIdentity {
 
     val API_ACTORS: List<Triple<String, String, String>> =
         listOf(
-            Triple("STORE_OWNER_TOKEN", STORE_OWNER_ID, "STORE_OWNER"),
-            Triple("OTHER_STORE_OWNER_TOKEN", OTHER_STORE_OWNER_ID, "STORE_OWNER"),
             Triple("PLATFORM_OPERATOR_TOKEN", PLATFORM_OPERATOR_ID, "PLATFORM_OPERATOR"),
             Triple("SETTLEMENT_OPERATOR_TOKEN", SETTLEMENT_OPERATOR_ID, "SETTLEMENT_OPERATOR"),
         )

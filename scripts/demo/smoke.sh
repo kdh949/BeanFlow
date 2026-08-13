@@ -36,6 +36,17 @@ CUSTOMER_AUTH="customer-session"
 CUSTOMER_CSRF_AUTH="customer-csrf"
 CUSTOMER_XSRF=""
 CUSTOMER_SESSION=""
+MERCHANT_LOGIN_ID="demo.merchant"
+MERCHANT_INITIAL_PASSWORD="local demo merchant temporary password 123!"
+MERCHANT_PASSWORD="local demo merchant password changed 123!"
+OTHER_MERCHANT_LOGIN_ID="demo.othermerchant"
+OTHER_MERCHANT_PASSWORD="local demo other merchant password 123!"
+MERCHANT_AUTH="merchant-session"
+MERCHANT_CSRF_AUTH="merchant-csrf"
+OTHER_MERCHANT_AUTH="other-merchant-session"
+MERCHANT_XSRF=""
+MERCHANT_SESSION=""
+OTHER_MERCHANT_SESSION=""
 
 # call <name> <expected-status> <method> <path> <token> [json-body] [idempotency-key]
 call() {
@@ -52,6 +63,20 @@ call() {
     esac
   elif [ "$token" = "$CUSTOMER_CSRF_AUTH" ]; then
     args+=(-H "Cookie: BEANFLOW_CUSTOMER_XSRF=${CUSTOMER_XSRF}" -H "X-BEANFLOW-CSRF: ${CUSTOMER_XSRF}")
+  elif [ "$token" = "$MERCHANT_AUTH" ]; then
+    args+=(-H "Cookie: BEANFLOW_MERCHANT_SESSION=${MERCHANT_SESSION}; BEANFLOW_MERCHANT_XSRF=${MERCHANT_XSRF}")
+    case "$method" in
+      GET|HEAD|OPTIONS) ;;
+      *) args+=(-H "X-BEANFLOW-CSRF: ${MERCHANT_XSRF}") ;;
+    esac
+  elif [ "$token" = "$OTHER_MERCHANT_AUTH" ]; then
+    args+=(-H "Cookie: BEANFLOW_MERCHANT_SESSION=${OTHER_MERCHANT_SESSION}; BEANFLOW_MERCHANT_XSRF=${MERCHANT_XSRF}")
+    case "$method" in
+      GET|HEAD|OPTIONS) ;;
+      *) args+=(-H "X-BEANFLOW-CSRF: ${MERCHANT_XSRF}") ;;
+    esac
+  elif [ "$token" = "$MERCHANT_CSRF_AUTH" ]; then
+    args+=(-H "Cookie: BEANFLOW_MERCHANT_XSRF=${MERCHANT_XSRF}" -H "X-BEANFLOW-CSRF: ${MERCHANT_XSRF}")
   elif [ -n "$token" ]; then
     args+=(-H "Authorization: Bearer ${token}")
   fi
@@ -177,9 +202,26 @@ EOF
   exit 0
 fi
 
+log "merchant initial password change"
+call "merchant CSRF issue" 204 GET "/auth/merchant/csrf" ""
+MERCHANT_XSRF="$(cookie_from_headers BEANFLOW_MERCHANT_XSRF)"
+call "merchant initial Session login" 200 POST "/auth/merchant/sessions" "$MERCHANT_CSRF_AUTH" \
+  "{\"loginId\":\"${MERCHANT_LOGIN_ID}\",\"password\":\"${MERCHANT_INITIAL_PASSWORD}\"}"
+MERCHANT_SESSION="$(cookie_from_headers BEANFLOW_MERCHANT_SESSION)"
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['actorType']=='MERCHANT';assert d['accountState']=='INITIAL_PASSWORD'"
+call "initial password gate blocks store order" 403 GET "/store-orders/${ORDER_ID}" "$MERCHANT_AUTH"
+[ "$(json "d['code']")" = "INITIAL_PASSWORD_CHANGE_REQUIRED" ] || fail "Initial merchant gate returned the wrong error code."
+call "initial merchant me remains available" 200 GET "/merchant/me" "$MERCHANT_AUTH"
+call "merchant password change" 204 POST "/auth/merchant/password-changes" "$MERCHANT_AUTH" \
+  "{\"currentPassword\":\"${MERCHANT_INITIAL_PASSWORD}\",\"newPassword\":\"${MERCHANT_PASSWORD}\"}"
+MERCHANT_SESSION="$(cookie_from_headers BEANFLOW_MERCHANT_SESSION)"
+call "active merchant stores" 200 GET "/merchant/me/stores" "$MERCHANT_AUTH"
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert len(d)==1;assert d[0]['storeId']=='$STORE_ID';assert d[0]['membershipRole']=='OWNER'"
+ok "merchant Session activated without JWT"
+
 log "store fulfilment"
 for target in ACCEPTED PREPARING READY COMPLETED; do
-  call "store transition ${target}" 200 PATCH "/store-orders/${ORDER_ID}/status" "$STORE_OWNER_TOKEN" \
+  call "store transition ${target}" 200 PATCH "/store-orders/${ORDER_ID}/status" "$MERCHANT_AUTH" \
     "{\"targetState\":\"${target}\",\"reason\":null}" "demo-${target}-${RUN_ID}"
 done
 
@@ -215,13 +257,13 @@ python3 -c "import json;after=json.load(open('$BODY_FILE'))['availablePointsKrw'
 
 log "partial and full remaining refund"
 PARTIAL_REFUND_BODY="{\"lineItems\":[{\"orderLineId\":\"${ORDER_LINE_ID}\",\"quantity\":1}],\"reason\":\"local demo partial refund\"}"
-call "partial refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+call "partial refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
 [ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Partial refund cash state was not SUCCEEDED."
 [ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund amount was not one 5,000 KRW unit."
 
-call "partial refund replay" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+call "partial refund replay" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
 [ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund replay changed the amount."
-call "full remaining refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$STORE_OWNER_TOKEN" \
+call "full remaining refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" \
   "{\"reason\":\"local demo full remaining refund\"}" "demo-full-refund-${RUN_ID}"
 [ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Full remaining refund cash state was not SUCCEEDED."
 [ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Full remaining refund amount was not 5,000 KRW."
@@ -257,7 +299,10 @@ ok "unknown confirmation converged to APPROVED by Provider lookup"
 log "authorization failures"
 call "no token is 401"            401 GET "/stores/${STORE_ID}/menus" ""
 call "customer path rejects bearer" 403 GET "/stores/${STORE_ID}/menus" "not-a-real-jwt"
-call "other store owner denied"   403 GET "/store-orders/${ORDER_ID}" "$OTHER_STORE_OWNER_TOKEN"
+call "other merchant Session login" 200 POST "/auth/merchant/sessions" "$MERCHANT_CSRF_AUTH" \
+  "{\"loginId\":\"${OTHER_MERCHANT_LOGIN_ID}\",\"password\":\"${OTHER_MERCHANT_PASSWORD}\"}"
+OTHER_MERCHANT_SESSION="$(cookie_from_headers BEANFLOW_MERCHANT_SESSION)"
+call "other store owner denied"   403 GET "/store-orders/${ORDER_ID}" "$OTHER_MERCHANT_AUTH"
 
 rm -f "$BODY_FILE" "$HEADERS_FILE"
 echo

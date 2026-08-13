@@ -16,6 +16,13 @@ internal object LocalDemoFixture {
     const val CUSTOMER_DISPLAY_NAME = "BeanFlow Demo Customer"
     val STORE_OWNER_ID: UUID = UUID.fromString(LocalDemoIdentity.STORE_OWNER_ID)
     val OTHER_STORE_OWNER_ID: UUID = UUID.fromString(LocalDemoIdentity.OTHER_STORE_OWNER_ID)
+    const val MERCHANT_LOGIN_ID = "demo.merchant"
+    const val MERCHANT_INITIAL_PASSWORD = "local demo merchant temporary password 123!"
+    const val MERCHANT_PASSWORD = "local demo merchant password changed 123!"
+    const val MERCHANT_DISPLAY_NAME = "BeanFlow Demo Merchant"
+    const val OTHER_MERCHANT_LOGIN_ID = "demo.othermerchant"
+    const val OTHER_MERCHANT_PASSWORD = "local demo other merchant password 123!"
+    const val OTHER_MERCHANT_DISPLAY_NAME = "BeanFlow Demo Other Merchant"
 
     val STORE_ID: UUID = UUID.fromString("d1000000-0000-4000-8000-000000000001")
     val OTHER_STORE_ID: UUID = UUID.fromString("d1000000-0000-4000-8000-000000000002")
