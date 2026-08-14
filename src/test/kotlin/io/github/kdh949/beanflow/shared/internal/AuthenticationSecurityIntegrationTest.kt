@@ -6,8 +6,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationContext
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -18,9 +20,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, OperationsCsrfProbeConfiguration::class)
 @AutoConfigureMockMvc
 @SpringBootTest(properties = ["beanflow.toss.client-key=test_ck_auth_foundation"])
 class AuthenticationSecurityIntegrationTest(
@@ -92,6 +96,13 @@ class AuthenticationSecurityIntegrationTest(
     }
 
     @Test
+    fun `unsafe public request is rejected by default csrf protection`() {
+        mockMvc
+            .perform(post("/api/v1/payment-config"))
+            .andExpect(status().isForbidden)
+    }
+
+    @Test
     fun `operations jwt works without csrf and cross actor credentials are forbidden`() {
         val operatorId = UUID.randomUUID()
         mockMvc
@@ -120,6 +131,34 @@ class AuthenticationSecurityIntegrationTest(
             ).andExpect(status().isForbidden)
     }
 
+    @Test
+    fun `unsafe operations request accepts bearer without csrf and rejects browser session cookies`() {
+        val path = "/api/v1/operations/security-csrf-probe"
+        mockMvc
+            .perform(
+                post(path).with(
+                    jwt()
+                        .jwt {
+                            it.subject(UUID.randomUUID().toString())
+                            it.claim("roles", listOf("PLATFORM_OPERATOR"))
+                        }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR")),
+                ),
+            ).andExpect(status().isOk)
+
+        mockMvc
+            .perform(post(path))
+            .andExpect(status().isUnauthorized)
+
+        listOf(
+            Cookie("BEANFLOW_CUSTOMER_SESSION", "customer-session"),
+            Cookie("BEANFLOW_MERCHANT_SESSION", "merchant-session"),
+        ).forEach { cookie ->
+            mockMvc
+                .perform(post(path).cookie(cookie))
+                .andExpect(status().isForbidden)
+        }
+    }
+
     private fun issueCsrf(
         actor: String,
         cookieName: String,
@@ -138,4 +177,16 @@ class AuthenticationSecurityIntegrationTest(
         assertThat(cookie.path).isEqualTo("/")
         assertThat(cookie.getAttribute("SameSite")).isEqualTo("Lax")
     }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class OperationsCsrfProbeConfiguration {
+    @Bean
+    fun operationsCsrfProbeController() = OperationsCsrfProbeController()
+}
+
+@RestController
+internal class OperationsCsrfProbeController {
+    @PostMapping("/api/v1/operations/security-csrf-probe")
+    fun mutate() = Unit
 }
