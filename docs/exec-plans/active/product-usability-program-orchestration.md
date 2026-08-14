@@ -431,6 +431,16 @@ git diff --cached --check
   `feature/productization-plans` head PR과 combined release PR은 없었다. Stack A PR 중 merge된 것은 0개다.
   Support PR #54는 별도 범위에서 MERGED이고 `SUPPORT_INTEGRATION_PENDING=false`다. 이 최종 gate 뒤
   `STACK_A_MIGRATION_WRITER_LEASE`를 해제했다. 이 release-evidence 문서 commit은 migration을 쓰지 않는다.
+- 2026-08-14 Stack A merge-readiness repair: `origin/feature/productization-00-contract`가
+  `3c02752`에서 `7be2ab3`으로 force-update되어 PR #57이 14개 문서·OpenAPI 충돌로 `CONFLICTING`이 됐다.
+  Plan 10 tree가 V50/V51 계약과 완료 증거를 포함한 strict superset임을 대조해 그 내용을 보존하고,
+  자동 추가된 obsolete active Plan 10 파일만 제외한 history-preserving merge commit `61ed520`을 push했다.
+  이 부모를 Plan 20→60에 순차 merge했다. 새 PR #64 CI는
+  `session-and-authentication-runbook.md` EOF blank line으로 실패했으며, `d14e6dd`에서 해당 한 줄을
+  제거하고 Plan 30→60에 다시 순차 merge했다. 각 merge 뒤 `git diff --check`와 문서/OpenAPI 검증이
+  통과했고, 최종 `00→10→20→30→40→50→60` 조상 관계는 모두 true였다. GitHub 조회 시 PR
+  #55/#57/#64/#65/#66/#67/#68은 모두 OPEN/non-Draft이며 #57~#68은 `MERGEABLE`이다. 새 CI가 끝나기 전의
+  `BLOCKED` 상태는 성공으로 기록하지 않았다. rebase, force-push, PR merge와 ready-state 변경은 수행하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -482,6 +492,11 @@ git diff --cached --check
 - Plan 60 첫 full build는 이전 runtime OpenAPI inline-schema 기대와 Support timeline의 비결정적 timestamp
   fixture 때문에 2건 실패했다. 실제 `$ref` 계약과 DB 시간 check를 보존하는 방향으로 교정한 뒤 같은
   전체 build를 다시 통과시켰다.
+- Plan 00 remote branch가 Stack A 완료 뒤 force-update되어 PR #57의 14개 문서·OpenAPI 경로가 충돌했다.
+  Plan 10 쪽이 V50/V51 계약과 completion evidence의 strict superset이어서 이를 보존한 merge로 해결할 수
+  있었지만, 자동으로 들어온 obsolete active Plan 10 파일은 별도로 제거해야 했다.
+- PR #64의 새 CI `build`는 코드가 아니라 세션 운영 runbook의 EOF blank line 하나를 whitespace error로
+  판정했다. 한 줄 제거 뒤 문서 검증을 다시 통과시키고 자식 Plan 30~60에 순차 전파했다.
 
 ## Decision Log
 
@@ -515,6 +530,7 @@ git diff --cached --check
 | 2026-08-13 | Plan 40은 account 범위 `MERCHANT` Audit actor와 Operations-owned outbound port를 사용하고, clean 전체 smoke 통과 뒤에만 Plan 50을 실행 가능하게 함 | [Plan 40](../completed/productization-40-merchant-account-and-initial-password.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-14 | Plan 50 목록은 R1 read-only candidate → bounded atomic W1 expiry → R2 fixed-candidate projection이며 빈 ACTIVE page도 scan boundary cursor를 사용 | [Plan 50](../completed/productization-50-customer-order-read-model.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-14 | Plan 60 전이는 client가 본 `expectedStatus`를 command에 포함하고 stale state 409와 불가능한 조합 422를 분리하며, 디자인의 3열 중 제조 중 열은 `ACCEPTED`와 `PREPARING`을 함께 표시 | [Plan 60](../completed/productization-60-store-order-board.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
+| 2026-08-14 | 재작성된 Plan 00 base가 PR #57과 충돌하면 Plan 10의 V50/V51 계약을 보존한 history-preserving merge를 만들고, 수정된 부모 tip은 Plan 20~60에 순차 merge한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), 이 ExecPlan `Progress` |
 
 ## Outcomes & Retrospective
 
@@ -536,9 +552,11 @@ git diff --cached --check
 - M6 Plan 60이 완료되어 점주가 Session membership으로 매장을 선택하고 공개 주문번호 기반 3열 보드에서
   접수·제조·준비·픽업 완료를 처리한다. V56 query/write evidence, 동시 전이, ETag/304와 권한 상실의
   failure-visible UI가 전체 regression과 브라우저 검증을 통과했다.
-- Stack A는 Plan 00~60 구현, 필수 검증, 일곱 branch push와 정확한 seven-Draft-PR topology를 완료했고
-  migration-writer lease를 해제했다. combined release PR, merge, ready 전환, force-push와 Plan 70+ 구현은
-  수행하지 않았다. 프로그램 전체 M7~M10은 이 Goal 밖이며 시작하지 않는다.
+- Stack A는 Plan 00~60 구현과 필수 검증을 완료했고 migration-writer lease를 해제했다. 이후 Plan 00
+  remote base 재작성으로 생긴 PR #57 충돌과 PR #64 whitespace CI 실패를 history-preserving merge와 단일
+  문서 포맷 수정으로 해소해, 일곱 open/non-Draft PR의 `main → 00 → 10 → 20 → 30 → 40 → 50` 조상 관계를
+  복원했다. combined release PR, PR merge, rebase, force-push와 Plan 70+ 구현은 수행하지 않았다.
+  프로그램 전체 M7~M10은 이 Goal 밖이며 시작하지 않는다.
 
 ## Revision Notes
 
@@ -550,3 +568,5 @@ git diff --cached --check
 - 2026-08-14: Plan 50 completion evidence와 Plan 60/70 readiness, 남은 Stack A 범위를 반영.
 - 2026-08-14: Plan 60 implementation completion evidence, Plan 90 readiness와 남은 release topology gate를 반영.
 - 2026-08-14: Plan 60 Draft PR, final seven-PR topology와 Stack A migration-writer lease 해제를 기록.
+- 2026-08-14: Plan 00 base rewrite에 따른 PR #57 충돌 해소, PR #64 whitespace CI 수정과 Plan 20~60
+  순차 기준선 보정을 actual GitHub 상태와 함께 기록.
