@@ -622,6 +622,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - `./gradlew spotlessCheck`와 `scripts/verify-docs.sh` 통과.
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11에서 계약 갱신과 함께),
     시드 스크립트의 다운로드 경로, 검색 질의 성능 evidence(Milestone 12).
+- 2026-08-15: **Milestone 1-B 완료.** V57에 `ri` 열을 넣고 시드 생성 스크립트가 리 이름을 뽑도록
+  고친 뒤 V58을 재생성했다. 20,560행 중 **15,209행**이 리 값을 갖고 전체 행 수는 변하지 않았다.
+  `StoreSearchVocabularyMigrationTest` **13건 통과**(리 3건 추가).
+  - 감정리 `5111031024`의 `eupmyeondong`이 `동면`으로 남고 `ri`가 `감정리`인 것을 고정한다.
+    리 이름으로 덮어썼는지 여부를 이 단언 하나가 잡는다.
+  - `ri` 유무와 코드 뒤 2자리 `00` 여부가 20,560행 전체에서 일치하는 것을 단언한다.
+  - 전국 중복 이름(`상리` 23건)이 행을 잃지 않는 것을 확인한다.
+  - 재생성 결과가 이전과 byte 단위로 동일하다(두 번째 원본으로 diff).
 - 2026-08-15: 미착수 — Milestone 2~12.
 
 ## Surprises & Discoveries
