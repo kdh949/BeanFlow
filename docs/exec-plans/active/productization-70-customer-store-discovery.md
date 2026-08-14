@@ -329,7 +329,10 @@ history를 다시 쓰지 않는 additive commit으로 처리한다. 실제 DB는
 `scripts/generate-region-seed.py`가 원본을 결정적으로 변환하고 시드 SQL만 커밋한다. 시드는 정렬된
 `INSERT ... ON CONFLICT DO NOTHING`이라 재실행 가능하다.
 
-### 단계 2 — 검색 색인 테이블과 백필
+### 단계 2 — 검색 색인 테이블과 초기 적재
+
+**V59로 구현했다(2026-08-15).** 아래는 실제 적용된 DDL이며 초안에서 두 가지가 바뀌었다.
+`term_normalized`는 `varchar(120)` → `varchar(400)`이고, 백필은 이 migration에 없다.
 
 ```sql
 CREATE TABLE discovery_store_search_term (
@@ -340,7 +343,7 @@ CREATE TABLE discovery_store_search_term (
         'REGION_EUPMYEONDONG', 'REGION_RI', 'MENU_NAME'
     )),
     source_id uuid,
-    term_normalized varchar(120) NOT NULL CHECK (length(trim(term_normalized)) > 0),
+    term_normalized varchar(400) NOT NULL CHECK (length(trim(term_normalized)) > 0),
     display_text varchar(200) NOT NULL,
     weight numeric(3,2) NOT NULL CHECK (weight > 0 AND weight <= 1),
     CONSTRAINT ck_search_term_menu_source
@@ -361,8 +364,22 @@ CREATE INDEX ix_search_term_store_kind
     ON discovery_store_search_term (store_id, term_kind);
 ```
 
-같은 단계에서 기존 매장의 `STORE_NAME`과 `MENU_NAME` term을 백필한다. `BRAND_NAME`은 브랜드가
-아직 없어 비어 있고 `REGION_*`은 단계 3의 백필 이후 재색인으로 채운다.
+#### 길이 상한
+
+`display_text`는 원본 그대로라 가장 긴 원본인 매장명·메뉴명의 `varchar(200)`을 따른다. 초안의
+`varchar(120)`은 브랜드명·법정동명 상한이라 200자 매장명을 담지 못한다. `term_normalized`는 NFKC
+결과라 원본보다 길어질 수 있어(`U+FDFD` 한 글자가 18자가 된다) 원본 상한의 두 배를 준다. 상한을
+넘는 이름은 잘라 담지 않고 색인 쓰기를 명시적으로 실패시킨다. 잘라 담으면 뒷부분으로는 검색되지
+않는 매장이 조용히 생긴다.
+
+#### 초기 적재를 migration이 하지 않는 이유
+
+기존 매장의 `STORE_NAME`·`MENU_NAME` term은 **migration SQL이 아니라 애플리케이션 재색인**이
+채운다(MD-2026-018). 구현 불변식 13이 색인과 질의의 정규화를 한 함수로 못박았는데 SQL 백필은 그
+함수를 부를 수 없어 `normalize(NFKC) + lower()`로 다시 구현해야 하고, 실제로 비교해 보니 두 구현이
+갈렸다. 측정 결과는 Surprises에 있다.
+
+`BRAND_NAME`은 브랜드가 아직 없어 비어 있고 `REGION_*`은 단계 3의 백필 이후 재색인으로 채운다.
 
 `source_id`가 nullable이므로 PK에 넣을 수 없다. 대리 키 `id`와 `COALESCE` 식 unique 인덱스로
 정체성을 보장한다.
@@ -474,8 +491,9 @@ POST   /api/v1/operations/search-index/rebuild
    `eupmyeondong`이 `동면`으로 남아 있으며, 리가 없는 지역의 `ri`가 빈 문자열이다. 시드 행 수는
    `20560`으로 변하지 않는다.
 2. 단계 2 migration(색인 테이블)과 `shared/api` 색인 갱신 port, `discovery/internal` 구현,
-   기존 매장·메뉴 백필. 색인 term 종류에 `REGION_RI`를 포함한다.
-   **완료 조건:** 모든 매장이 `STORE_NAME` term 1행을 갖고 커버리지 gauge가 `1.0`을 보고한다.
+   기존 매장·메뉴 초기 적재. 색인 term 종류에 `REGION_RI`를 포함한다.
+   **완료 조건:** 재색인을 실행한 뒤 모든 매장이 `STORE_NAME` term 1행을 갖고 커버리지 gauge가
+   `1.0`을 보고한다. 실행 전에는 `0`을 보고해야 하며 그 상태가 관측 가능해야 한다.
 3. 운영자 브랜드 CRUD·매장 브랜드 지정과 `BRAND_NAME` term 동기 갱신, fan-out 상한, AuditRecord.
    **완료 조건:** 브랜드명 변경이 소속 매장 term을 같은 transaction에서 갱신하고, 색인 갱신을 강제
    실패시키면 브랜드 변경도 rollback된다.
@@ -529,7 +547,15 @@ POST   /api/v1/operations/search-index/rebuild
   비운영자 재색인 403, 미인증 검색 401.
 - `pg_trgm` 부재·색인 조회 실패의 503과 빈 목록 미대체.
 - 재색인 부분 실패가 성공으로 보고되지 않고 실패 매장 ID가 응답에 포함되는지.
+- 검색 profile이 없는 매장이 재색인에서 실패로 기록되고 나머지 매장 처리가 계속되는지.
 - 매장명을 직접 DML로 바꾼 뒤 재색인 전에는 결과가 따라오지 않고 재색인 후에는 따라오는지.
+- 재색인 재실행이 term 행을 늘리지 않는지(종류 단위 교체의 멱등성).
+- 색인 쓰기가 커맨드 transaction 밖에서 호출되면 새 transaction을 열지 않고 거부되는지.
+- 정규화 후 빈 문자열이 되는 term이 조용히 건너뛰어지지 않고 400으로 거부되는지.
+- 판매 중이 아닌 메뉴에 `MENU_NAME` term이 만들어지지 않는지.
+- SQL `lower()`로는 재현되지 않는 정규화 결과(`İ` → `i̇`, 어말 시그마 `Σ` → `ς`)가 색인에
+  그대로 저장되는지.
+- 커버리지 gauge가 재색인 전 `0`, 재색인 후 `1.0`, 색인되지 않은 매장 추가 시 그 사이 값인지.
 - Spring Modulith 구조 검증에서 `merchant ↔ discovery` 순환 의존 부재.
 - 좌표 쌍·radius 경계, 좌표 유무에 따른 distance 필드·정렬 계약.
 - 한 매장의 여러 메뉴 일치가 매장 한 건과 정확한 match reason으로 합쳐지는지 검증.
@@ -588,7 +614,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) — 완료
 - [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 정렬 tuple 등록 — 완료
 - [BR-47](../../product/business-policy-decisions.md), [BR-40](../../product/business-policy-decisions.md) — BR-47 완료
-- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016 — 완료
+- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018 — 완료
 - `docs/security/authorization-matrix.md` — 완료
 - `docs/api/api-conventions.md` — 검색 endpoint 규약
 - `docs/api/error-catalog.md` — `BRAND_NAME_CONFLICT`, `BRAND_FANOUT_LIMIT_EXCEEDED`
@@ -632,7 +658,23 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - 재생성 결과가 이전과 byte 단위로 동일하다(두 번째 원본으로 diff).
   - `./gradlew build` 전체 재통과: 240 클래스 **1,124건 중 실패 0, skip 1**.
     `spotlessCheck`와 `scripts/verify-docs.sh`도 통과.
-- 2026-08-15: 미착수 — Milestone 2~12.
+- 2026-08-15: **Milestone 2 완료.** V59(색인 테이블), `shared/api`의 `StoreSearchIndexOperations`,
+  `discovery/internal`의 색인 쓰기·재색인·커버리지 gauge, `merchant/api`의 색인 소스 port를 추가했다.
+  - `StoreSearchTermIndexMigrationTest` **6건 통과.** 세 인덱스 생성과 `gin_trgm_ops` 연산자
+    클래스, `COALESCE` 정체성 unique, 메뉴만 `source_id`를 갖는 CHECK, 가중치 범위, 알 수 없는
+    term 종류 거부, 매장 삭제 시 CASCADE, 그리고 **migration이 행을 넣지 않는다는 것**을 고정한다.
+  - `StoreSearchIndexRebuildIntegrationTest` **9건 통과.** 재색인 결과(색인 2·건너뜀 0·실패 0),
+    판매 중 메뉴만 색인, 가중치 `1.00`/`0.70`/`0.90`/`0.80`, 재실행 멱등성, 직접 DML 변경이
+    재색인 전에는 반영되지 않고 후에는 반영되는 것, profile 없는 매장의 실패 보고와 나머지 매장
+    계속 처리, 브랜드 fan-out 교체·해제, transaction 밖 색인 쓰기 거부, 공백 term 400 거부,
+    `REGION_*` 4행 → 3행 교체, 커버리지 gauge `0` → `1.0` → `2/3`을 확인한다.
+  - 색인 문자열이 Kotlin 정규화 결과인 것을 `İSTANBUL` → `i̇stanbul`, `ΟΔΟΣ` → `οδος`,
+    `  Ｓｔａｒ　버클  ` → `star 버클`로 고정한다. 앞의 두 개가 SQL 백필로는 낼 수 없던 값이다.
+  - `./gradlew test --tests "io.github.kdh949.beanflow.architecture.*"` 통과.
+    `merchant ↔ discovery` 순환 의존 없음.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, `spotlessCheck`(아래 항목에서
+    수행), 검색 질의 성능 evidence(Milestone 12).
+- 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
 
@@ -671,6 +713,19 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   목록이 규칙보다 넓게 잡혀 있던 것이다. 목록 고정은 유지한 채(새 컬럼은 여전히 실패해야 판단이
   강제된다) `brand_id`만 추가하고, 이름·좌표·`region_code` 부재 단언을 따로 넣어 ADR-020이 실제로
   막는 것을 직접 고정했다. 대상 테스트만 돌렸을 때는 잡히지 않고 전체 build에서 드러났다.
+- **(2026-08-15) SQL `lower()`는 Kotlin 정규화를 재현하지 못한다.** 색인 백필을 migration SQL로
+  쓰려면 `normalize(NFKC) + lower() + 공백 축약`으로 정규화를 두 번째로 구현해야 한다. 같은 입력을
+  두 경로에 넣어 비교하는 테스트를 먼저 만들어 확인한 결과 두 건이 갈렸다.
+  `İSTANBUL`은 SQL `istanbul` / Kotlin `i̇stanbul`(`U+0069 U+0307`)이고, `ΟΔΟΣ`는
+  SQL `οδοσ` / Kotlin `οδος`다. Java `String.lowercase()`는 Unicode SpecialCasing과 어말 시그마
+  조건을 적용하지만 PostgreSQL `lower()`는 적용하지 않는다. 이런 차이는 실패하지 않고 **색인만
+  조용히 어긋나** 해당 매장이 검색되지 않는다. 문자를 개별 치환해 맞추는 대신 두 번째 구현 자체를
+  없애고 초기 적재를 애플리케이션 재색인으로 옮겼다(MD-2026-018). 대가로 V59 적용 직후 커버리지가
+  `0`이며, 그 창은 gauge와 runbook으로 드러낸다.
+- **(2026-08-15) 색인 문자열 상한을 원본 상한과 같게 두면 안 된다.** NFKC는 문자열을 늘릴 수 있다
+  (`U+FDFD` 한 글자 → 18자). 원본이 `varchar(200)`이라고 `term_normalized`를 같은 200으로 잡으면
+  긴 이름에서 색인 쓰기가 DB 오류로 깨진다. 두 배인 `varchar(400)`으로 두고, 그래도 넘치면 잘라
+  담지 않고 명시적으로 거부한다.
 - **(2026-08-15) 이 환경에서는 스크립트의 다운로드 경로를 실행할 수 없다.** TLS 가로채기로 Python
   `urllib`의 CA 검증이 실패한다(`CERTIFICATE_VERIFY_FAILED`). `--source-zip`으로 미리 받아 둔
   원본을 넘겨 생성했고 checksum 검증 경로는 그대로 통과했다. **다운로드 경로 자체는 검증되지
@@ -700,6 +755,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | ~~리 이름으로는 검색되지 않는다~~ → **철회.** 리 열과 `REGION_RI` term 종류를 추가해 리도 검색 대상으로 만든다 | [ADR-112 리 Amendment](../../adr/ADR-112-store-brand-and-administrative-region.md), [ADR-103 A7](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 미병합·미적용 V57/V58은 새 migration을 덧붙이지 않고 그 자리에서 고친다 | 이 문서 Data and Migration, [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
 | 2026-08-15 | 원본 checksum은 ZIP이 아니라 내부 텍스트 내용으로 고정한다 | MD-2026-016, `scripts/generate-region-seed.py` |
+| 2026-08-15 | 색인 초기 적재는 migration SQL 백필이 아니라 애플리케이션 재색인이 수행한다 | MD-2026-018, 이 문서 Surprises |
+| 2026-08-15 | `term_normalized`는 `varchar(400)`. 상한 초과는 절단이 아니라 거부 | 이 문서 단계 2, `StoreSearchIndexService.kt` |
+| 2026-08-15 | 색인 쓰기 port는 `Propagation.MANDATORY`로 커맨드 transaction을 강제한다 | 구현 불변식 11, `StoreSearchIndexService.kt` |
+| 2026-08-15 | 재색인은 `STORE_NAME`·`MENU_NAME`만 교체한다. 브랜드·지역 term은 소유 커맨드가 채운다 | `StoreSearchIndexRebuildService.kt` |
 
 ## Outcomes & Retrospective
 
@@ -715,6 +774,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-15: Milestone 1 구현 중 법정동 자료의 74%가 리 단위임을 확인하고, 리를 검색 불가 한계로
   남기는 대신 ADR-112 리 Amendment와 ADR-103 A7으로 `ri` 열과 `REGION_RI` term 종류를 추가했다.
   term 종류가 여섯에서 일곱으로 늘고 지역 어휘가 4계층이 된다. 정렬 튜플과 cursor 계약은 그대로다.
+- 2026-08-15: Milestone 2 구현 중 SQL `lower()`가 Kotlin 정규화를 재현하지 못하는 것을 측정으로
+  확인하고, 단계 2의 "migration 백필"을 애플리케이션 재색인으로 옮겼다(MD-2026-018).
+  `term_normalized` 상한도 `varchar(120)`에서 `varchar(400)`으로 고쳤다. 완료 조건은 "재색인 실행
+  뒤 커버리지 `1.0`"으로 구체화했다.
 - 2026-08-15: 매장을 가로지르는 메뉴 검색의 조회 순서를 명시하고, 설정 주소지를 client storage
   경계로 확정했다. 서버 스키마와 공개 API 계약은 변경되지 않는다. 메뉴 단위 결과 목록을
   Non-goals에 추가했다.
