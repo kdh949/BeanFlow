@@ -110,4 +110,3 @@ Customer는 idle 7일·absolute 30일·최대 5개, Merchant는 idle 30분·abso
   동등한 중앙 저장소, 회전·만료·상한·장애 의미와 migration 증거가 필요하다.
 - 운영 중 강제 전체 logout이 필요하면 후속 account plan의 credential version 증가 명령을 사용한다.
   SQL로 Session attribute를 수정하지 않는다.
-
