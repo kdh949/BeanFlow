@@ -113,3 +113,4 @@
 | [ADR-109](ADR-109-customer-point-account-provisioning.md) | Accepted | 고객 가입과 PointAccount 원자 provisioning |
 | [ADR-110](ADR-110-federated-operations-failure-queues.md) | Accepted | 소유 Context 기반 운영 실패 큐 연합 조회 |
 | [ADR-111](ADR-111-productization-stack-a-draft-release.md) | Accepted | 제품화 Plan 00~60의 검증형 Draft PR 체인과 combined release gate |
+| [ADR-112](ADR-112-store-brand-and-administrative-region.md) | Accepted | 매장 브랜드 Aggregate와 행정구역 어휘 |

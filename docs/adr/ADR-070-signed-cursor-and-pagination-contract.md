@@ -111,6 +111,10 @@ beanflow:
 | `GET /support/cases` | `(openedAt DESC, caseId DESC)` | endpoint, optional state와 optional assignee ID |
 | `GET /support/cases/{caseId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, sorted distinct source/type filters |
 | `GET /support/orders/{orderId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, Order ID, sorted distinct source/type filters |
+| `GET /stores/search` (`sort=relevance`) | `(relevanceRank ASC, distanceMicrometers ASC, storeId ASC)` | endpoint, 정규화 토큰 배열, `sort`, `pickupAvailable`, `openOnly`, canonical latitude/longitude/radius |
+| `GET /stores/search` (`sort=distance`) | `(distanceMicrometers ASC, storeId ASC)` | 위와 동일 |
+| `GET /operations/brands` | `(normalizedName ASC, brandId ASC)` | endpoint |
+| `GET /regions` | `(fullName ASC, code ASC)` | endpoint와 정규화 질의어 |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
@@ -143,6 +147,27 @@ Order endpoint에만 lowercase Order ID, alphabetical order의 중복 없는 sou
 배열은 all-source/all-type을 뜻하고 생략과 같은 canonical value를 사용한다. page limit은 common default 20,
 maximum 100이다. Source rank는 공개 contract의 closed vocabulary에 고정되며 새 source가 추가돼도 기존 rank를
 재배치하지 않는다. 매 page에서 Case scope, active Order link, persistent permission을 다시 확인한다.
+
+2026-08-15 Plan 70 amendment: 매장 통합 검색 cursor는
+[ADR-103](ADR-103-store-search-strategy.md)의 2026-08-15 Amendment를 따른다. endpoint identifier는
+`sort` 값에 따라 `stores-search-relevance`와 `stores-search-distance`로 분리하고, `sort` 자체도
+filter hash에 포함한다. 같은 검색어라도 정렬을 바꾸면 이전 cursor가 400이 되어야 하기 때문이다.
+
+`relevanceRank`는 `1_000_000 - floor(relevance * 1_000_000)`로 계산한 `0..1_000_000` 정수이며
+zero-padded 없는 decimal string으로 인코딩한다. 관련도를 부동소수 그대로 인코딩하면 page 경계에서
+동점 판정이 흔들려 누락·중복이 생기므로, nearby의 `distanceMicrometers`와 같은 정수 양자화를
+사용하고 전체 tuple을 all-ASC로 맞춘다. 좌표가 없는 `relevance` 검색의 `distanceMicrometers`
+항은 상수 `0`이다.
+
+filter hash canonical form은 property 순서가 고정된 JSON으로 endpoint, alphabetical 정렬 없이
+**입력 순서를 유지한** 정규화 토큰 배열, `sort`, `pickupAvailable`, `openOnly`,
+좌표가 있을 때만 canonical latitude/longitude/radiusMeters를 포함한다. 토큰 순서를 유지하는 이유는
+동일 토큰 집합의 다른 순서가 같은 결과 집합을 만들더라도 순서를 정규화하는 추가 규칙이 필요 없기
+때문이다. raw 검색어 원문과 raw 좌표 text는 payload에 넣지 않는다. expiry는 24시간, page limit은
+common default 20에 Discovery maximum 50이다.
+
+`GET /operations/brands`는 endpoint identifier `operations-brands`, `GET /regions`는 `regions`를
+사용하고 expiry는 모두 24시간이다.
 
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고

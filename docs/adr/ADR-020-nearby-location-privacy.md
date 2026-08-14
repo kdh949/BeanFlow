@@ -48,9 +48,24 @@
 - Discovery 조회는 Merchant public Query API에 의존하지만 Merchant JPA Entity나 Repository를
   직접 사용하지 않는다.
 
+### Saved address evaluation (2026-08-15) — 승격하지 않음
+
+`productization-70` 통합 검색 설계 중 "설정 주소지 인근 검색" 요구가 제기됐다. BR-28의 Revisit
+Condition("위치 기반 개인화에 대한 명시적 동의와 보존 정책이 도입될 때")에 해당하는지 검토했고
+**이 결정을 개정하지 않기로 했다.**
+
+저장된 주소지는 브라우저 client storage에만 두고 매 요청 좌표를 전송한다. 서버는 좌표를 계속
+요청 범위에서만 사용하며 `identity_customer_account`에 주소·좌표 컬럼을 추가하지 않는다. 공개 API
+계약은 변경되지 않는다. 검토한 대안과 기각 사유는 [MD-2026-017](../decisions/minor-decisions.md)에
+있다.
+
+이 평가는 요구 자체를 기각한 것이 아니라 **서버 보존 없이 충족 가능하다**는 판단이다. 기기 간
+동기화나 계정 귀속 주소가 실제 요구가 되면 그때 동의·보존·삭제 정책과 함께 이 결정을 다시 연다.
+
 ## Verification
 
 - DB schema, log와 trace에 원본 사용자 좌표 부재
+- 저장된 주소지가 server persistence, log, metric tag에 나타나지 않음
 - 잘못된 좌표·반경의 명시적 오류
 - PostGIS 장애 시 503, 빈 성공 응답 없음
 - empty/verified/unresolved Store profile inventory와 startup gate
