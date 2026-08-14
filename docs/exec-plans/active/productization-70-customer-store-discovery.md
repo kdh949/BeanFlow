@@ -672,8 +672,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `  Ｓｔａｒ　버클  ` → `star 버클`로 고정한다. 앞의 두 개가 SQL 백필로는 낼 수 없던 값이다.
   - `./gradlew test --tests "io.github.kdh949.beanflow.architecture.*"` 통과.
     `merchant ↔ discovery` 순환 의존 없음.
-  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, `spotlessCheck`(아래 항목에서
-    수행), 검색 질의 성능 evidence(Milestone 12).
+  - `./gradlew build` 전체 통과: 242 클래스 **1,139건 중 실패 0, skip 1**(19분 42초).
+    Milestone 1-B의 1,124건에서 15건 늘었고 skip은 기존 `NearbyStoreDiscoveryBenchmark`다.
+    `spotlessCheck`와 `scripts/verify-docs.sh`도 통과.
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11),
+    검색 질의 성능 evidence(Milestone 12).
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
