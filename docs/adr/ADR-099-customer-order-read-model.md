@@ -68,6 +68,11 @@ itemSummary         "아이스 아메리카노 외 1건"
 allowedActions      서버가 계산한 수행 가능 행동
 ```
 
+- `totalAmountKrw`는 line subtotal이 아니라 `Order.payableKrw`, 즉 쿠폰 할인과 포인트 사용 뒤 고객이
+  실제 결제해야 하는 최종 금액이다. 상품 line의 `lineTotalKrw`는 혜택 전 line gross를 계속 표현한다.
+  혜택별 금액을 화면에 노출해야 하면 subtotal·coupon·point·payable을 별도 명시 필드로 추가하는
+  후속 계약을 먼저 결정한다.
+
 - `allowedActions`는 주문 상태, 취소 가능 시각, 결제 상태를 근거로 **서버가 계산**한다.
   프론트엔드가 상태 머신을 다시 구현하지 않는다. 값은 닫힌 집합이며 OpenAPI에 enum으로 고정한다.
 - 목록 응답은 개인정보와 결제 식별자를 포함하지 않는다. 카드 정보, provider reference, 내부
@@ -128,6 +133,8 @@ allowedActions      서버가 계산한 수행 가능 행동
 - 다른 고객의 주문이 목록에 나타나지 않는지, cursor를 조작해도 scope를 벗어나지 못하는지 검증한다.
 - `allowedActions`가 각 주문 상태에서 실제 명령 성공 여부와 일치하는지 검증한다.
 - 목록 응답에 결제 식별자·개인정보가 포함되지 않는지 계약 테스트로 검증한다.
+- 쿠폰만, 포인트만, 쿠폰+포인트, 0원 payable 주문에서 목록·상세 `totalAmountKrw`가 각각
+  `payableKrw`와 같은지 PostgreSQL 통합 테스트로 검증한다.
 - candidate window의 만료를 반환 전에 물질화하고, 네 자원 중 하나의 해제 실패가 전체 rollback과
   `503`을 만드는지 PostgreSQL 통합 테스트로 검증한다.
 - 활성 필터에서 빈 페이지와 `nextCursor`가 함께 반환되어도 다음 호출에 누락·중복이 없는지 검증한다.
@@ -149,6 +156,9 @@ allowedActions      서버가 계산한 수행 가능 행동
 - 상태별 `allowedActions`, 30일 기본·무상한 명시 기간, 서명 cursor의 customer/status/date binding,
   변조·만료·형식 오류, immutable display snapshot, 축약 환불 recovery와 내부 식별자 비노출을
   단위·HTTP·PostgreSQL 계약 테스트로 검증했다.
+- 2026-08-14 보정으로 목록·상세 `totalAmountKrw`는 `subtotalKrw`가 아니라 혜택 적용 뒤의
+  `payableKrw`를 반환한다. coupon-only, points-only, coupon+points, benefit-only 0원 주문을 실제
+  생성해 목록과 상세 계약을 검증했다.
 
 ## Metrics
 

@@ -159,7 +159,7 @@ internal class CustomerOrderReadTransaction(
             orderedAt = createdAt,
             pickupWindowStart = pickupWindowStart,
             pickupWindowEnd = pickupWindowEnd,
-            totalAmountKrw = subtotalKrw,
+            totalAmountKrw = payableKrw,
             currency = currency,
             itemSummary = CustomerOrderPresentationPolicy.itemSummary(lines.sortedBy { it.lineSequence }.map { it.menuName }),
             allowedActions = CustomerOrderPresentationPolicy.allowedActions(actionFacts(), now),
@@ -224,7 +224,7 @@ internal class CustomerOrderReadTransaction(
             orderedAt = createdAt,
             pickupWindowStart = pickupWindowStart,
             pickupWindowEnd = pickupWindowEnd,
-            totalAmountKrw = subtotalKrw,
+            totalAmountKrw = payableKrw,
             currency = currency,
             lines = lines,
             allowedActions = CustomerOrderPresentationPolicy.allowedActions(actionFacts(), now),
@@ -242,7 +242,8 @@ internal class CustomerOrderReadTransaction(
 
     private fun CustomerOrderHeaderProjection.validateHeader() {
         if (
-            pickupSequence <= 0 || storeName.isBlank() || subtotalKrw < 0 || currency != "KRW" ||
+            pickupSequence <= 0 || storeName.isBlank() || subtotalKrw < 0 || payableKrw < 0 || payableKrw > subtotalKrw ||
+            currency != "KRW" ||
             !pickupWindowEnd.isAfter(pickupWindowStart)
         ) {
             dependency("Customer order projection is invalid")
