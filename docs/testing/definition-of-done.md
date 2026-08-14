@@ -43,6 +43,16 @@ Feature는 다음 조건을 충족해야 완료다.
 - [ ] 실행하지 않은 검증은 `Not run`으로 보고됐다.
 - [ ] 성능 주장이 있으면 동일 조건 측정이 있다.
 
+## Frontend and Storybook
+
+- [ ] 모든 변경 route/page와 중요한 loading·empty·error·permission·transaction 상태를 canonical Storybook에서 직접 열 수 있다.
+- [ ] 제품 route와 Storybook이 같은 typed design-system component 또는 pattern source를 소비한다.
+- [ ] `npm run check:design`, `npm run test:unit`, `npm run build-storybook`, `npm run test:storybook:docs`가 통과했다.
+- [ ] 여러 MSW 상태를 가진 Autodocs는 story iframe으로 격리되며 각 Docs Canvas가 자기 상태를 실제 browser에서 표시한다.
+- [ ] Storybook MCP `get-changed-stories`, `preview-stories`, `run-story-tests(a11y=true)`를 실제 실행했다.
+- [ ] a11y는 `error` gate이며 좁은 예외는 linked decision 없이는 추가하지 않았다.
+- [ ] visual regression이 없다면 `Not configured`로 보고했고 coverage를 주장하지 않았다.
+
 ## Decisions and documentation
 
 - [ ] 질문으로 바뀐 중요한 동작이 Business Policy 또는 ADR에 기록됐다.
