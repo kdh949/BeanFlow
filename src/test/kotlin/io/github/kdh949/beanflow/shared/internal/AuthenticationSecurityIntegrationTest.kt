@@ -9,7 +9,6 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationContext
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -181,12 +180,9 @@ class AuthenticationSecurityIntegrationTest(
 
 @TestConfiguration(proxyBeanMethods = false)
 internal class OperationsCsrfProbeConfiguration {
-    @Bean
-    fun operationsCsrfProbeController() = OperationsCsrfProbeController()
-}
-
-@RestController
-internal class OperationsCsrfProbeController {
-    @PostMapping("/api/v1/operations/security-csrf-probe")
-    fun mutate() = Unit
+    @RestController
+    internal class OperationsCsrfProbeController {
+        @PostMapping("/api/v1/operations/security-csrf-probe")
+        fun mutate() = Unit
+    }
 }
