@@ -188,6 +188,27 @@ V33 → V34의 `merchant_store_discovery_profile` 커버리지 gate 선례를 �
 - Spring Modulith 구조 검증에서 `merchant ↔ discovery` 순환 의존이 없는지 확인한다.
 - 법정동 시드가 재실행 가능하고 두 번 실행해도 행 수가 같은지 검증한다.
 
+## Implementation evidence (2026-08-15)
+
+Milestone 1이 이 결정의 스키마와 지역 어휘 부분을 실현했다. 브랜드·지역 **명령**과 색인 갱신은
+아직 구현하지 않았으므로 위 Verification 중 명령·권한·fan-out·순환 의존 항목은 `Not run`이다.
+
+- V57이 `merchant_region`, `merchant_brand`와 활성 브랜드 부분 unique index를 만들고
+  `merchant_store.brand_id`, `merchant_store_discovery_profile.region_code`를 nullable로 추가한다.
+  `StoreSearchVocabularyMigrationTest`가 두 컬럼이 nullable인 것을 고정한다. 지금 NOT NULL로 만들면
+  기존 매장이 있는 환경에서 값을 채울 창이 없어 배포가 불가능하기 때문이다.
+- V58이 폐지되지 않은 법정동 **20,560행**을 시드한다. 역삼동 `1168010100`이
+  `서울특별시`/`강남구`/`역삼동`으로, 세종특별자치시 `3611010100`이 빈 `sigungu`로 저장되는 것을
+  통합 테스트가 확인한다. 시드를 다시 실행해도 행 수가 같다.
+- **보강:** 시도 행을 `<시도>00000000`으로 가정할 수 없다. 세종특별자치시에는 그 코드가 없고
+  `3611000000`이 최상위라 151행이 통째로 누락된다. 2자리 접두사별 최소 코드를 시도로 삼는다.
+  또 `"경기도 부천시 원미구"`처럼 시군구가 두 단어인 행이 있어 계층 분해는 공백이 아니라 법정동
+  코드 자릿수로 해야 한다.
+- **한계:** 시드 20,560행 중 15,209행이 리 단위다. 스키마에 리 열이 없고 term 종류도 셋뿐이라
+  리 행은 상위 읍면동 이름을 `eupmyeondong`에 담고 리 이름은 `full_name`에만 남는다. 리는 선택
+  가능한 코드로 존재하지만 리 이름으로는 검색되지 않는다. Revisit Conditions의 더 세밀한 상권
+  단위와 같은 성격의 한계이며 결함으로 감추지 않는다.
+
 ## Metrics
 
 - 브랜드 지정 매장 비율

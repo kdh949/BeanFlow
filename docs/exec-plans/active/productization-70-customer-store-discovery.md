@@ -275,8 +275,10 @@ CREATE INDEX ix_discovery_favorite_customer_created
     ON discovery_customer_favorite_store (customer_id, created_at DESC, store_id);
 ```
 
-마지막 Flyway 번호는 `V56`이다. ADR-072 lease 획득 뒤 최신 `main`에서 번호를 다시 읽어 확정한다.
-아래는 lease 시점 기준 예상 순서이며 세 단계로 나눈다.
+마지막 Flyway 번호는 `V56`이었다. 2026-08-15 ADR-072 lease를 획득하고 최신 `main`에서 다시 읽어
+확정했다. 다른 `Writes-Migration=true` plan은 `productization-100`(`Implementation-Ready=false`)과
+`analytics-refund-and-late-event-projection`(schema milestone 미착수)뿐이고 미병합 schema branch가
+없어 lease가 비어 있었다. 단계 1은 **V57**(스키마)과 **V58**(법정동 시드)을 쓴다.
 
 ### 단계 1 — 어휘·브랜드 스키마와 시드
 
@@ -477,7 +479,7 @@ POST   /api/v1/operations/search-index/rebuild
 ## Required Tests
 
 - query 길이·whitespace·literal wildcard와 case-insensitive 매장/메뉴 일치.
-- 토큰 6개 초과 400, 정규화 함수의 NFKC 합성/분해·전각/반각·연속 공백·양끝 공백.
+- 토큰 5개 초과 400, 정규화 함수의 NFKC 합성/분해·전각/반각·연속 공백·양끝 공백.
 - 매장명·브랜드명·지역명·메뉴명 각각의 단일 토큰 검색과 매장 단위 dedupe.
 - `"강남 스타벅스"` 다중 토큰 AND: 지역과 브랜드가 서로 다른 term에 걸린 매장만 반환하고 한
   토큰만 맞는 매장은 제외된다.
@@ -582,6 +584,17 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-12: 최초 작성. 아직 구현을 시작하지 않았다.
 - 2026-08-15: 브랜드·지역 검색으로 범위를 확장했다. 사용자 결정 12건을 ADR-103 Amendment,
   ADR-112, ADR-070, BR-47, MD-2026-015/016, authorization matrix에 반영했다. 코드 변경은 없다.
+- 2026-08-15: **Milestone 1 완료.** `feature/productization-70-store-keyword-search`에서 ADR-072
+  lease를 획득하고 V57(스키마)·V58(법정동 시드 20,560행)과 `SearchTextNormalizer`,
+  `scripts/generate-region-seed.py`를 추가했다. 완료 조건을 실제로 확인했다.
+  - `SearchTextNormalizerTest` 9건 통과. NFKC 합성/분해, 전각/반각, `U+3000`·`U+00A0`,
+    연속·양끝 공백, tr locale 소문자, 멱등성, 토큰 순서 보존을 고정한다.
+  - `StoreSearchVocabularyMigrationTest` 10건 통과. 시드 행 수 `20560`과 대표 코드
+    역삼동 `1168010100`(`서울특별시`/`강남구`/`역삼동`)을 조회하고, 세종특별자치시의 빈
+    `sigungu`, 두 단어 시군구(`부천시 원미구`), 시드 재실행 후 동일 행 수, 활성 브랜드
+    정규화 이름 유일성, 브랜드·지역 FK를 함께 확인한다.
+  - 시드 스크립트는 같은 원본에서 byte 단위로 같은 SQL을 만든다(두 번 내려받아 diff 확인).
+- 2026-08-15: 미착수 — Milestone 2~12.
 
 ## Surprises & Discoveries
 
@@ -598,6 +611,25 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - **(2026-08-15) 오타 허용과 keyset cursor의 충돌.** 유사도는 실수라 그대로 cursor에 넣으면 page
   경계에서 동점 판정이 흔들려 누락·중복이 생긴다. nearby의 `distanceMicrometers`와 같은 정수
   양자화(`relevanceRank`)로 해결하고 전체 tuple을 all-ASC로 맞췄다.
+- **(2026-08-15) 법정동명을 공백으로 자르면 시군구가 깨진다.** `"경기도 부천시 원미구 원미동"`처럼
+  시군구가 두 단어인 행이 있어 단어 수로는 계층을 나눌 수 없다. 법정동 코드
+  `2(시도)+3(시군구)+3(읍면동)+2(리)` 구조로 상위 행을 찾아 그 이름을 접두사로 잘라 내야 정확하다.
+  단어 수 분포는 1~5단어로 흩어져 있어 이 방식만 전체 20,560행에서 실패 0건이었다.
+- **(2026-08-15) 세종특별자치시에는 시도 자리 행이 없다.** `3600000000`이 존재하지 않고
+  `3611000000`이 최상위다. `<시도>00000000`을 상위로 가정하면 세종 151행이 전부 누락된다.
+  2자리 접두사별 **최소 코드**를 시도 행으로 삼으면 세종의 `sigungu`가 자연히 빈 문자열이 되어
+  ADR-112가 예상한 모양과 일치한다.
+- **(2026-08-15) 원본에 이름 끝 공백이 있다.** `"경기도 부천시 원미구 "` 등 4행이다. 그대로 두면
+  하위 행의 접두사 제거가 어긋나 24행이 실패한다. 읽는 즉시 `strip`한다.
+- **(2026-08-15) 리 단위 행이 시드의 74%다.** 폐지되지 않은 20,560행 중 15,209행이 리다.
+  스키마에는 리 열이 없고 검색 term도 시도/시군구/읍면동 세 종류뿐이므로(ADR-112) 리 행은
+  상위 읍면동 이름을 `eupmyeondong`에 담고 리 이름은 `full_name`에만 남는다. 즉 리는 매장주가
+  고를 수 있는 코드로는 존재하지만 리 이름으로 검색되지는 않는다. ADR-112가 `홍대`·`가로수길`
+  같은 더 세밀한 단위를 Revisit Condition으로 둔 것과 같은 성격의 한계다.
+- **(2026-08-15) 이 환경에서는 스크립트의 다운로드 경로를 실행할 수 없다.** TLS 가로채기로 Python
+  `urllib`의 CA 검증이 실패한다(`CERTIFICATE_VERIFY_FAILED`). `--source-zip`으로 미리 받아 둔
+  원본을 넘겨 생성했고 checksum 검증 경로는 그대로 통과했다. **다운로드 경로 자체는 검증되지
+  않았다(`Not run`).**
 
 ## Decision Log
 
@@ -619,6 +651,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 브랜드 fan-out 상한 1000, term 가중치, 법정동 시드 생성 방식 | MD-2026-015, MD-2026-016 |
 | 2026-08-15 | 설정 주소지는 client storage에만 두고 서버는 좌표를 저장하지 않는다. BR-28 Revisit Condition을 승격하지 않는다 | MD-2026-017, [ADR-020](../../adr/ADR-020-nearby-location-privacy.md) 2026-08-15 평가 |
 | 2026-08-15 | 메뉴 검색은 반경 내 전 매장을 대상으로 하되 결과 단위는 매장 카드로 유지한다 | [BR-47](../../product/business-policy-decisions.md) |
+| 2026-08-15 | 시도/시군구/읍면동은 공백이 아니라 법정동 코드 계층으로 분해한다 | 이 문서 Surprises, `scripts/generate-region-seed.py` |
+| 2026-08-15 | 리 단위 행도 시드하되 리 이름으로는 검색되지 않는다. 스키마에 리 열을 추가하지 않는다 | 이 문서 Surprises, [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) |
+| 2026-08-15 | 원본 checksum은 ZIP이 아니라 내부 텍스트 내용으로 고정한다 | MD-2026-016, `scripts/generate-region-seed.py` |
 
 ## Outcomes & Retrospective
 
