@@ -630,6 +630,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - `ri` 유무와 코드 뒤 2자리 `00` 여부가 20,560행 전체에서 일치하는 것을 단언한다.
   - 전국 중복 이름(`상리` 23건)이 행을 잃지 않는 것을 확인한다.
   - 재생성 결과가 이전과 byte 단위로 동일하다(두 번째 원본으로 diff).
+  - `./gradlew build` 전체 재통과: 240 클래스 **1,124건 중 실패 0, skip 1**.
+    `spotlessCheck`와 `scripts/verify-docs.sh`도 통과.
 - 2026-08-15: 미착수 — Milestone 2~12.
 
 ## Surprises & Discoveries
