@@ -385,6 +385,8 @@ POST /operations/merchant-accounts/{merchantAccountId}/lock-releases
 - 계정 발급 시 고객과 같은 로그인 ID 길이·허용 문자·첫끝 문자·ASCII 대소문자 canonicalization을
   적용하고, 고객의 같은 ID와 무관하게 점주 namespace 중복만 거부하는지 검증한다.
 - 비밀번호 변경 후 이전 Session ID가 401인지 검증한다.
+- `INITIAL_PASSWORD`와 `ACTIVE`에서 현재와 같은 새 비밀번호가 400으로 거부되고, state,
+  credentialVersion, 기존 Session, AuditRecord와 새 Session이 모두 그대로인지 검증한다.
 - 이전 Session 행 정리 실패를 주입해도 `credentialVersion` 불일치로 401인지 검증한다.
 - 계정 생성·초기화·잠금 해제가 `AuditRecord`를 남기고 비밀번호가 저장되지 않는지 검증한다.
 - 없는 점주 ID에 5회 실패한 뒤 같은 ID로 계정을 발급해도 이전 LOGIN_ID attempt를 상속하지 않는지,
@@ -485,6 +487,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   전체 build 1,058 tests(0 failures, 0 errors, 1 skipped) 11분 17초, clean demo 47-step smoke와
   문서/OpenAPI 46 policies·111 ADRs·275 Markdown·57 ExecPlans로 모두 통과했다. generated frontend
   OpenAPI type도 현재 runtime 계약과 동기화했다.
+- 2026-08-14: PR #66 재검토에서 current/new password가 같아도 Argon2 salt 차이로 새 Hash를 만들고
+  `INITIAL_PASSWORD → ACTIVE`로 전환할 수 있음을 확인했다. current password 검증 뒤 exact equality를
+  policy violation으로 거부하고, INITIAL_PASSWORD/ACTIVE 모두 state, credentialVersion, 기존 Session,
+  AuditRecord와 새 Session 무변경을 PostgreSQL HTTP 통합 테스트로 검증했다.
 
 ## Surprises & Discoveries
 
@@ -527,6 +533,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   매번 record를 거부했다. nonce를 Vite `--mode beanflow-local-demo-<nonce>` 인자로도 남기면 PID·PGID·
   cwd와 함께 재검증할 수 있다. 회귀 테스트의 첫 실행은 macOS `/var`와 `/private/var` alias 때문에
   cwd 비교가 실패했고, 임시 root를 `toRealPath()`로 정규화한 뒤 통과했다.
+- Argon2id는 같은 입력에도 매번 다른 salt Hash를 만들므로 Hash 비교나 새 Hash 생성 여부로는 최초
+  비밀번호가 실제로 교체됐는지 판단할 수 없다. 현재 password 검증을 통과한 뒤 raw input equality를
+  먼저 거부해야 lifecycle·Audit·Session side effect 없이 임시 비밀 소유권 전환을 보장한다.
 
 ## Decision Log
 
@@ -544,6 +553,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | Operations의 점주 자격증명 유스케이스는 호출자 소유 outbound port를 Identity adapter가 구현해 모듈 순환을 막음 | [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 | 2026-08-13 | V54의 immutable SHA-256 payload column은 `char(64)`를 유지하고 JPA field를 `SqlTypes.CHAR`로 명시해 schema validation을 통과 | 이 plan |
 | 2026-08-13 | demo 프런트 소유권 nonce는 환경변수와 Vite `--mode` 명령행에 함께 남기고 stop은 PID·PGID·cwd·nonce를 모두 검증한 뒤에만 signal | 이 plan |
+| 2026-08-14 | self-change는 현재와 다른 비밀이어야 하며 same value는 state/version/Session/Audit 새 side effect 없이 정책 위반으로 거부 | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
 
 ## Outcomes & Retrospective
 
@@ -567,3 +577,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-13: Plan 30 완료와 customer/full smoke 소유권 분리를 반영해 readiness를 true로 전환.
 - 2026-08-13: Merchant account/Session/Operations credential 구현, 실패·복구와 required validation 결과를
   기록하고 completed로 이동.
+- 2026-08-14: 동일 비밀번호 self-change 거부와 lifecycle/Session/Audit 무변경 회귀를 기록.

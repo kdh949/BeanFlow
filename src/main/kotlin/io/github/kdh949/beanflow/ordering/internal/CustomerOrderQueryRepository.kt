@@ -26,6 +26,7 @@ internal data class CustomerOrderHeaderProjection(
     val pickupWindowStart: Instant,
     val pickupWindowEnd: Instant,
     val subtotalKrw: Long,
+    val payableKrw: Long,
     val currency: String,
     val reservationExpiresAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
@@ -177,6 +178,7 @@ internal class CustomerOrderQueryRepository(
         pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
         pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
         subtotalKrw = resultSet.getLong("subtotal_krw"),
+        payableKrw = resultSet.getLong("payable_krw"),
         currency = resultSet.getString("currency"),
         reservationExpiresAt = resultSet.getTimestamp("reservation_expires_at")?.toInstant(),
         acceptanceDeadlineAt = resultSet.getTimestamp("acceptance_deadline_at")?.toInstant(),
@@ -203,7 +205,7 @@ internal class CustomerOrderQueryRepository(
         val HEADER_SELECT =
             """
             SELECT id, public_reference, pickup_sequence, store_name_snapshot, state, created_at,
-                   pickup_window_start_snapshot, pickup_window_end_snapshot, subtotal_krw, currency,
+                   pickup_window_start_snapshot, pickup_window_end_snapshot, subtotal_krw, payable_krw, currency,
                    reservation_expires_at, acceptance_deadline_at, cancellation_cause, paid_at, version
               FROM ordering_order
             """.trimIndent()

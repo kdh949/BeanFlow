@@ -110,6 +110,44 @@ internal class CustomerOrderQueryIntegrationTest
         }
 
         @Test
+        fun `list and detail display the final payable amount after coupon and point benefits`() {
+            val couponOnly = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, couponOnly, priceKrw = 10_000)
+            val couponOnlyReference =
+                create(
+                    couponOnly,
+                    "customer-query-coupon-only",
+                    couponIssuanceId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, couponOnly, 2_000),
+                )
+
+            val pointsOnly = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, pointsOnly, priceKrw = 10_000)
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, pointsOnly.customerId, 3_000)
+            val pointsOnlyReference = create(pointsOnly, "customer-query-points-only", pointsToUseKrw = 3_000)
+
+            val couponAndPoints = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, couponAndPoints, priceKrw = 10_000)
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, couponAndPoints.customerId, 3_000)
+            val couponAndPointsReference =
+                create(
+                    couponAndPoints,
+                    "customer-query-coupon-and-points",
+                    pointsToUseKrw = 3_000,
+                    couponIssuanceId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, couponAndPoints, 2_000),
+                )
+
+            val benefitOnly = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, benefitOnly, priceKrw = 10_000)
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, benefitOnly.customerId, 10_000)
+            val benefitOnlyReference = create(benefitOnly, "customer-query-benefit-only", pointsToUseKrw = 10_000)
+
+            assertDisplayedTotal(couponOnly.customerId, couponOnlyReference, 8_000)
+            assertDisplayedTotal(pointsOnly.customerId, pointsOnlyReference, 7_000)
+            assertDisplayedTotal(couponAndPoints.customerId, couponAndPointsReference, 5_000)
+            assertDisplayedTotal(benefitOnly.customerId, benefitOnlyReference, 0)
+        }
+
+        @Test
         fun `list uses a fixed three SQL statements for one and more than one hundred orders`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 120, stockAvailable = 120)
@@ -338,10 +376,29 @@ internal class CustomerOrderQueryIntegrationTest
         private fun create(
             fixture: OrderCreationFixture,
             key: String,
+            pointsToUseKrw: Long = 0,
+            couponIssuanceId: UUID? = null,
         ): String {
-            val response = createOrders.create(key, fixture.command())
+            val response = createOrders.create(key, fixture.command(pointsToUseKrw, couponIssuanceId))
             assertThat(response.status).isEqualTo(201)
             return json(response.body)["order"]["publicReference"].asText()
+        }
+
+        private fun assertDisplayedTotal(
+            customerId: UUID,
+            reference: String,
+            expectedPayableKrw: Long,
+        ) {
+            mockMvc
+                .perform(get("/api/v1/me/orders").with(customerJwt(customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].orderReference").value(reference))
+                .andExpect(jsonPath("$.items[0].totalAmountKrw").value(expectedPayableKrw))
+            mockMvc
+                .perform(get("/api/v1/me/orders/{orderReference}", reference).with(customerJwt(customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.totalAmountKrw").value(expectedPayableKrw))
         }
 
         private fun customerJwt(customerId: UUID) =

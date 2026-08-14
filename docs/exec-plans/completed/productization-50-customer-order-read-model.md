@@ -272,6 +272,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-14: completion 이동 직후 첫 문서 검증은 ADR-099와 docs index의 active Plan 50 링크 두 개를
   broken link로 보고해 실패했다. 두 링크를 completed 경로로 교정한 뒤 동일 검증이 46 policies,
   111 ADRs, 276 Markdown, 57 ExecPlans와 target/runtime OpenAPI 계약으로 통과했다.
+- 2026-08-14: PR #67 재검토에서 `totalAmountKrw`가 할인 전 `subtotalKrw`로 projection되어 화면의
+  결제 금액 의미와 어긋나는 것을 확인했다. header query에 `payableKrw`를 포함하고 목록·상세를
+  final payable로 매핑했다. 실제 coupon-only, points-only, coupon+points, benefit-only 0원 주문의
+  목록·상세 PostgreSQL HTTP regression을 추가했다.
 
 ## Surprises & Discoveries
 
@@ -303,6 +307,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 브라우저 로컬 날짜로 기본 30일을 계산하면 한국 밖 timezone과 UTC 자정 경계에서 API의
   `Asia/Seoul` 날짜 계약과 하루가 어긋난다. `Intl.DateTimeFormat`의 서울 timezone으로 고정하고 경계
   테스트를 추가했다.
+- `totalAmountKrw`라는 generic field 이름은 line subtotal과 혼동되기 쉽지만 고객 화면의 라벨은
+  결제 금액이다. coupon·point 적용 뒤의 `payableKrw`만 그 의미를 만족하며, line gross는 상품 금액
+  표시로 계속 별도 유지해야 한다.
 
 ## Decision Log
 
@@ -319,6 +326,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-14 | Plan 50 UI는 `allowedActions.CANCEL` 안내만 표시하고 CSRF mutation·실제 취소 버튼은 Plan 80까지 만들지 않음 | [productization-80](../active/productization-80-customer-web-p0-integration.md) |
 | 2026-08-14 | 통합 테스트의 background scheduler는 test profile에서 1시간 뒤로 미루고 worker 검증은 명시적 `runOnce()`로 유지 | 이 plan |
 | 2026-08-14 | 고객 주문 기본 날짜는 browser timezone이 아니라 `Asia/Seoul`로 계산 | [BR-01](../../product/business-policy-decisions.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
+| 2026-08-14 | 고객 주문 목록·상세 `totalAmountKrw`는 subtotal이 아니라 coupon·point 적용 뒤 `payableKrw`를 반환 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 
 ## Outcomes & Retrospective
 
@@ -335,9 +343,12 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   숨기지 않고 각각 proxy 경계 분리, version-local assertion, mock 보강과 test-only scheduler 격리로
   해소했다. Plan 60은 이 completed head의 공개 주문번호와 Merchant Session을 사용해 매장 주문보드를
   구현할 수 있다.
+- `totalAmountKrw`의 할인 전 mapping은 coupon·point 고객에게 잘못된 결제 금액을 보일 수 있어
+  payable projection과 네 가지 혜택 조합 목록·상세 regression으로 보정했다.
 
 ## Revision Notes
 
 - 2026-08-11: 최초 작성.
 - 2026-08-13: Plan 40 completion dependency와 Stack A readiness를 반영.
 - 2026-08-14: 고객 주문 read model·화면·V55와 실제 검증, 실패·복구 및 후속 범위를 기록.
+- 2026-08-14: 고객 표시 금액을 final payable로 보정하고 혜택 조합 회귀를 기록.

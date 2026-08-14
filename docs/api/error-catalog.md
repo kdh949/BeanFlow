@@ -6,7 +6,7 @@
 | AUTHENTICATION_FAILED | 401 | Yes, after correcting credentials or lock expiry | 고객·점주 로그인에서 계정 없음, 비밀번호 불일치, 계정 잠금 또는 임시 비밀번호 만료를 구분하지 않는 동일 응답 |
 | AUTHENTICATION_RATE_LIMITED | 429 + Retry-After | Yes, after IP block expiry | actor 종류별 source IP 로그인 실패 30회로 15분 차단됨. 계정 존재 여부를 노출하지 않음 |
 | LOGIN_ID_UNAVAILABLE | 409 | No, choose another ID | actor namespace 안에서 canonical 로그인 ID가 이미 사용 중 |
-| PASSWORD_POLICY_VIOLATION | 400 | No, correct password | BR-35의 길이·UTF-8 byte·사용자명 동일·common-password 정책 위반 |
+| PASSWORD_POLICY_VIOLATION | 400 | No, correct password | BR-35의 길이·UTF-8 byte·사용자명 동일·common-password·현재와 동일한 self-change 비밀번호 정책 위반 |
 | POINT_ACCOUNT_INTEGRITY_FAILURE | 503 | Operator investigation | CustomerAccount에 대응하는 실제 PointAccount가 없어 actor-scoped 포인트 조회를 안전하게 제공할 수 없음. 0원 DTO, lazy-create 또는 404로 대체하지 않음 |
 | ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속, actor별 CSRF·Chain 검증 또는 active explicit operator grant 불충족 |
 | INITIAL_PASSWORD_CHANGE_REQUIRED | 403 | Yes, after password change | `INITIAL_PASSWORD` 점주 Session이 비밀번호 변경과 `/merchant/me` 외 매장 API를 호출함 |

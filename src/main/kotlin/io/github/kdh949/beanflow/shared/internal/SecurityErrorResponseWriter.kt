@@ -77,8 +77,8 @@ internal class ActorCredentialIsolationFilter(
         return when (chain) {
             AuthenticationChain.PUBLIC -> false
             AuthenticationChain.OPERATIONS -> hasCustomerSession || hasMerchantSession
-            AuthenticationChain.CUSTOMER -> hasBearer || hasMerchantSession
-            AuthenticationChain.MERCHANT -> hasBearer || hasCustomerSession
+            AuthenticationChain.CUSTOMER -> hasBearer || (hasMerchantSession && !hasCustomerSession)
+            AuthenticationChain.MERCHANT -> hasBearer || (hasCustomerSession && !hasMerchantSession)
         }
     }
 }

@@ -5169,7 +5169,10 @@ components:
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
-        totalAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        totalAmountKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: Coupon discount and point use after the final amount payable by the customer.
         currency: { $ref: "#/components/schemas/Currency" }
         itemSummary: { type: string, minLength: 1, maxLength: 300 }
         allowedActions:
@@ -5209,7 +5212,10 @@ components:
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
-        totalAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        totalAmountKrw:
+          allOf:
+            - $ref: "#/components/schemas/MoneyKrw"
+          description: Coupon discount and point use after the final amount payable by the customer.
         currency: { $ref: "#/components/schemas/Currency" }
         lines:
           type: array

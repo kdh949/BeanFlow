@@ -309,6 +309,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   305 schemas, 46 business policies, 111 ADRs, 274 Markdown files, 57 ExecPlans를 통과했다. Session/auth
   runbook, API conventions, authorization matrix, README와 ADR-069/092/094/095를 actual outcome으로
   갱신했다.
+- 2026-08-14: PR #64 재검토에서 같은 브라우저가 유효한 Customer/Merchant Session Cookie를 함께
+  보낼 때 actor mismatch filter가 양쪽 endpoint를 모두 403으로 막는 것을 확인했다. URI Chain의
+  자기 Cookie가 있으면 다른 actor Cookie를 무시하도록 고치고, 실제 PostgreSQL Session 두 개와 typed
+  actor probe로 Customer/Merchant endpoint가 각각 200인 회귀를 추가했다.
 
 ## Surprises & Discoveries
 
@@ -333,6 +337,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - synthetic MockMvc JWT는 실제 browser chain의 허용 credential이 아니지만 기존 대규모 Controller
   회귀 fixture가 사용한다. resolver adapter는 validated token의 roles claim과 ROLE authority를 테스트
   호환 입력으로만 해석하며 실제 Customer/Merchant FilterChain은 Bearer header 자체를 403으로 거부한다.
+- actor-exclusive credential 검사가 다른 actor Cookie의 이름만 보고 차단하면, `Path=/` Cookie와
+  서로 다른 actor Cookie 이름으로 같은 브라우저 두 콘솔을 허용한 ADR-094 목적을 뒤집는다. URI Chain이
+  선택한 Cookie가 있을 때는 foreign Cookie를 무시하고, foreign Cookie만 있는 요청만 403으로 유지했다.
 
 ## Decision Log
 
@@ -350,6 +357,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | 혼합 actor API는 기존 Customer/Merchant URI를 유지하고 운영자 branch를 `/operations/**` URI로 분리 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [ADR-069](../../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md), [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md) |
 | 2026-08-13 | Spring Session JDBC 작업은 이름 지정 `TransactionOperations`의 `REQUIRED` 전파로 login owner transaction에 참여 | [ADR-094](../../adr/ADR-094-browser-session-security.md) |
 | 2026-08-13 | Merchant actor의 role claim은 권한 source가 아니며 기존 active DB membership 재조회가 owner/staff 권한을 결정 | [ADR-095](../../adr/ADR-095-unified-current-actor.md), [ADR-027](../../adr/ADR-027-store-membership-authorization.md) |
+| 2026-08-14 | 같은 브라우저의 Customer/Merchant Cookie 공존은 credential 혼합이 아니다. URI Chain Cookie가 있으면 해당 Session만 해석하고 foreign-only Cookie는 403으로 거부 | [ADR-094](../../adr/ADR-094-browser-session-security.md) |
 
 ## Outcomes & Retrospective
 
@@ -370,3 +378,4 @@ Customer/Merchant 계정·login endpoint와 account-backed `BrowserActorLoader`�
 - 2026-08-12: Support 우선 migration lane 결정으로 `Implementation-Ready=false` 전환.
 - 2026-08-13: Support V43~V49 통합과 Plan 10 V50/V51 재검증 완료로 `Implementation-Ready=true` 복원.
 - 2026-08-13: V52, 4-Chain/Session/CSRF/CurrentActor 구현과 전체 검증을 actual outcome으로 기록하고 완료.
+- 2026-08-14: 같은 브라우저의 actor별 Session Cookie 공존 회귀와 ADR-092/094 clarification을 기록.
