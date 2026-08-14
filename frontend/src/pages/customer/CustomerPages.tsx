@@ -19,7 +19,7 @@ import type { components } from "../../api/schema";
 import { api, ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge, SuccessMark } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
-import { compactId, shortDateTime, won } from "../../lib/format";
+import { compactId, shortDateTime, shortTime, won } from "../../lib/format";
 import { requestTossStandardPayment } from "../../payment/toss";
 import { Button, ButtonLink } from "../../design-system";
 
@@ -255,7 +255,7 @@ export function StoreCatalogPage() {
                 if (selectedSlot !== slot.pickupSlotId) orderSubmission.current.rotate();
                 setSelectedSlot(slot.pickupSlotId);
               }}>
-                <strong>{new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</strong>
+                <strong>{shortTime.format(new Date(slot.startsAt))}</strong>
                 <small>{slot.remainingCapacity}잔 가능</small>
               </button>
             ))}

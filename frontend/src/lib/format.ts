@@ -5,8 +5,15 @@ export const won = new Intl.NumberFormat("ko-KR", {
 });
 
 export const shortDateTime = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   month: "numeric",
   day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export const shortTime = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   hour: "2-digit",
   minute: "2-digit",
 });

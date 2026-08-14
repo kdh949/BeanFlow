@@ -5,7 +5,7 @@ import type { components } from "../../api/schema";
 import { api, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
-import { shortDateTime, won } from "../../lib/format";
+import { shortDateTime, shortTime, won } from "../../lib/format";
 import { Button, ButtonLink } from "../../design-system";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];
@@ -161,7 +161,7 @@ export function CustomerOrderDetailPage() {
         <p>픽업대에서 번호를 확인해 주세요.</p>
         <OrderTimeline state={order.status} />
         <dl className="pickup-window">
-          <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{new Date(order.pickupWindowEnd).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</dd></div>
+          <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{shortTime.format(new Date(order.pickupWindowEnd))}</dd></div>
           <div><dt>주문 번호</dt><dd>{order.orderReference}</dd></div>
         </dl>
       </section>
