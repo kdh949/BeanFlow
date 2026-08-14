@@ -4,7 +4,8 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountEntity
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountJpaRepository
 import io.github.kdh949.beanflow.identity.internal.CustomerPasswordSecurity
-import io.github.kdh949.beanflow.shared.api.BrowserActorLoader
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountEntity
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountJpaRepository
 import io.github.kdh949.beanflow.shared.api.BrowserActorType
 import io.github.kdh949.beanflow.shared.api.CreateLoginSession
 import io.github.kdh949.beanflow.shared.api.CustomerActor
@@ -19,7 +20,6 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationContext
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -51,6 +51,7 @@ internal class AuthenticationSecurityIntegrationTest(
     @Autowired private val applicationContext: ApplicationContext,
     @Autowired private val sessionCoordinator: LoginSessionCoordinator,
     @Autowired private val customerAccounts: CustomerAccountJpaRepository,
+    @Autowired private val merchantAccounts: MerchantAccountJpaRepository,
     @Autowired private val passwords: CustomerPasswordSecurity,
     @Autowired transactionManager: PlatformTransactionManager,
     @Autowired private val clock: Clock,
@@ -232,7 +233,10 @@ internal class AuthenticationSecurityIntegrationTest(
         actorType: BrowserActorType,
         actorId: UUID,
     ): Cookie {
-        if (actorType == BrowserActorType.CUSTOMER) createActiveCustomerAccount(actorId)
+        when (actorType) {
+            BrowserActorType.CUSTOMER -> createActiveCustomerAccount(actorId)
+            BrowserActorType.MERCHANT -> createActiveMerchantAccount(actorId)
+        }
         val session =
             requireNotNull(
                 transactions.execute {
@@ -250,7 +254,7 @@ internal class AuthenticationSecurityIntegrationTest(
             customerAccounts.saveAndFlush(
                 CustomerAccountEntity(
                     id = actorId,
-                    loginId = testLoginId(actorId),
+                    loginId = testLoginId("customer", actorId),
                     passwordHash = passwords.dummyHash,
                     credentialVersion = 1,
                     displayName = "Security probe customer",
@@ -261,7 +265,30 @@ internal class AuthenticationSecurityIntegrationTest(
         }
     }
 
-    private fun testLoginId(actorId: UUID): String = "customer-${actorId.toString().replace("-", "").take(20)}"
+    private fun createActiveMerchantAccount(actorId: UUID) {
+        val now = clock.instant()
+        transactions.executeWithoutResult {
+            merchantAccounts.saveAndFlush(
+                MerchantAccountEntity(
+                    id = actorId,
+                    loginId = testLoginId("merchant", actorId),
+                    passwordHash = passwords.dummyHash,
+                    credentialVersion = 1,
+                    displayName = "Security probe merchant",
+                    state = MerchantAccountState.ACTIVE,
+                    temporaryPasswordExpiresAt = null,
+                    passwordChangedAt = now,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+        }
+    }
+
+    private fun testLoginId(
+        prefix: String,
+        actorId: UUID,
+    ): String = "$prefix-${actorId.toString().replace("-", "").take(20)}"
 }
 
 @TestConfiguration(proxyBeanMethods = false)
@@ -275,17 +302,6 @@ internal class OperationsCsrfProbeConfiguration {
 
 @TestConfiguration(proxyBeanMethods = false)
 internal class BrowserSessionProbeConfiguration {
-    @Bean
-    fun merchantBrowserActorLoader(): BrowserActorLoader =
-        object : BrowserActorLoader {
-            override val actorType = BrowserActorType.MERCHANT
-
-            override fun load(
-                actorId: UUID,
-                credentialVersion: Long,
-            ) = MerchantActor(actorId, MerchantAccountState.ACTIVE)
-        }
-
     @RestController
     internal class BrowserSessionProbeController {
         @GetMapping("/api/v1/me/security-session-probe")
