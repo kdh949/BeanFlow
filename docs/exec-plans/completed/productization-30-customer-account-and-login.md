@@ -425,6 +425,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   chain을 right-to-left로 검사해 trusted hop을 제거하고 첫 untrusted literal을 선택하도록 교정했다.
   attacker prefix, multiple trusted hop, IPv4/IPv6 mixed, malformed chain과 untrusted direct peer
   regression이 통과했다.
+- 2026-08-14: Stack merge CI가 Plan 20의 `BrowserSessionProbeConfiguration` test loader와 이 Plan의
+  account-backed `CustomerBrowserActorLoader`를 같은 bean 이름으로 등록해 `AuthenticationSecurityIntegrationTest`
+  context를 시작하지 못한 것을 확인했다. Customer probe가 임시 loader를 덮어쓰지 않고 유효한 ACTIVE account와
+  matching credentialVersion Session을 만든 뒤 production loader를 통과하도록 바꿨다. Merchant probe는 아직
+  Plan 40의 account-backed loader가 없으므로 유지한다. focused security integration test가 통과했다. 첫
+  `--rerun-tasks` 전체 실행은 먼저 시작한 build를 종료하면서 동일 `build/test-results`의 in-progress file이
+  사라져 `NoSuchFileException`으로 실패했으므로 통과로 취급하지 않았다. 모든 Gradle process가 끝난 뒤 단일
+  `clean build --stacktrace`를 재실행해 1,032 tests, 0 failures, 0 errors, 1 skipped로 12분 54초에 통과했다.
 
 ## Surprises & Discoveries
 
@@ -477,6 +485,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - configured trusted direct peer만으로 forwarding header 전체가 안전해지지는 않는다. trusted proxy가
   append한 observed source는 chain의 오른쪽에 있으므로 leftmost 값은 client-controlled prefix일 수 있다.
   모든 chain literal을 parse한 뒤 right-to-left로 trusted hop을 제거해야 rate-limit source가 보존된다.
+- Plan 20의 same-browser probe는 Customer/Merchant actor loader가 아직 없는 상태에서는 임시 loader로
+  충분했지만, Plan 30이 production Customer loader를 추가하자 Spring의 bean override 금지와 충돌했다.
+  Customer는 test-only override를 허용하는 대신 실제 account state를 우회하지 않고, 시험 계정과 Session의
+  `credentialVersion`을 같은 값으로 저장해 production loader를 검증 경로에 유지했다. Merchant probe는
+  account-backed loader가 도입되는 Plan 40에서 같은 방식으로 전환해야 한다.
+- 같은 worktree에서 full build를 두 번 겹쳐 실행하면 먼저 종료된 Gradle이 test result binary를 정리해
+  다른 실행이 `NoSuchFileException`으로 끝날 수 있다. 이 실행 실패는 product test failure가 아니지만
+  전체 검증 근거가 될 수 없으므로, process가 하나도 없는 것을 확인한 뒤 clean build를 단일 실행했다.
 
 ## Decision Log
 
@@ -495,6 +511,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | 기존 customer/merchant URI는 각 Session에 유지하고 운영자 point/refund branch는 `/operations/**`로 분리하며 상대 actor credential fallback을 두지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [authorization matrix](../../security/authorization-matrix.md) |
 | 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](../active/productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-14 | trusted proxy forwarding chain은 right-to-left로 trusted hop을 제거하고 첫 untrusted literal을 IP limit source로 사용. malformed trusted chain은 400, untrusted direct peer header는 무시 | [BR-35](../../product/business-policy-decisions.md) |
+| 2026-08-14 | Customer same-browser isolation은 test-only loader override가 아니라 ACTIVE account와 matching credentialVersion을 만든 production BrowserActorLoader 경로로 검증하고, Merchant probe 전환은 Plan 40이 소유 | 이 plan, `AuthenticationSecurityIntegrationTest` |
 
 ## Outcomes & Retrospective
 
@@ -512,6 +529,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   완료를 frontend 통합 완료로 확대 해석하지 않는다.
 - Plan 30 smoke는 승인 결제 조회에서 끝난다. account-backed Merchant Session, 초기 비밀번호 변경,
   매장 전환·포인트 적립·부분/전액 환불의 인자 없는 기본 전체 smoke는 Plan 40 완료 gate로 넘겼다.
+- Stack merge CI가 발견한 Customer test bean collision은 actual account-backed loader regression으로 바꿔
+  focused security integration test와 단일 clean full build(1,032 tests, 0 failures, 0 errors, 1 skipped)를
+  통과시켰다. Merchant probe 전환은 Plan 40에서 이어진다. 앞선 overlapping Gradle rerun의 test-result
+  `NoSuchFileException`은 code pass로 처리하지 않고 단일 clean build로 대체 검증했다.
 
 ## Revision Notes
 
@@ -519,3 +540,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-13: Plan 20 completion path와 actual validation evidence를 반영해 readiness를 true로 전환.
 - 2026-08-13: 고객 계정·로그인과 customer demo checkpoint 검증을 완료하고 completed로 이동.
 - 2026-08-14: trusted proxy X-Forwarded-For source IP 경계를 actual review finding과 regression으로 보정.
+- 2026-08-14: Stack merge CI의 browser actor loader test bean collision을 production loader regression으로 보정.
