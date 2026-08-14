@@ -239,12 +239,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 아직 시작하지 않았다. 모든 선행 backend plan의 runtime OpenAPI가 완료된 뒤 준비 상태를 전환한다.
 
+- 2026-08-15: runtime OpenAPI가 `CustomerPages`의 payment-attempt·payment-confirmation POST에
+  `X-BEANFLOW-CSRF`를 요구함을 frontend typecheck/build에서 확인했다. 사용자 선택 A에 따라 이
+  consumer 보정은 완료된 Plan 60에 선반영하지 않고, 이 plan의 Customer Session/CSRF client milestone에서
+  공통 client와 두 call site를 함께 전환한다. Plan 70 dependency가 아직 active이므로 구현은 시작하지 않았고,
+  그때까지 frontend 전체 typecheck/build는 이 두 건과 Plan 90 소유 한 건으로 실패한다.
+
 ## Surprises & Discoveries
 
 - 기존 프론트 API client는 한 Middleware에서 모든 actor Bearer token을 주입하므로 Session 전환 시 client
   분리가 보안 경계의 일부다.
 - 신규 고객 PointAccount가 자동 존재하지 않아 BR-42와 ADR-109에서 가입 원자 provisioning을
   선행 결정했다.
+- runtime OpenAPI가 unsafe header를 required로 생성한 뒤 기존 manual `Idempotency-Key` call site가
+  typecheck/build를 막았다. 두 customer call을 각자 보정하면 actor token fetch·refresh와 실패 의미론이
+  분산되므로, 이 plan의 공통 Customer client에서 함께 전환한다. 그 대가로 이 plan 시작 전 frontend 전체
+  build는 red이며, Plan 60의 backend·board 검증 성공으로 이를 build 완료로 해석하지 않는다.
 
 ## Decision Log
 
@@ -254,6 +264,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | cart는 한 매장 client state이며 server가 checkout에서 재검증 | [Capability Map](../../product/design-to-capability-map.md) |
 | 2026-08-12 | PointAccount는 가입과 원자 생성하고 actor-scoped 경로로 조회 | [ADR-109](../../adr/ADR-109-customer-point-account-provisioning.md) |
 | 2026-08-12 | payment network ambiguity에서는 confirm이 아니라 기존 status를 조회 | [ADR-007](../../adr/ADR-007-payment-idempotency-reconciliation.md) |
+| 2026-08-15 | Customer `payment-attempt`·`payment-confirmation`의 CSRF consumer 보정은 이 plan의 Customer Session/CSRF client milestone이 소유하며, Plan 60에는 선반영하지 않는다 | [MD-2026-014](../../decisions/minor-decisions.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
 
 ## Outcomes & Retrospective
 
@@ -262,3 +273,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Revision Notes
 
 - 2026-08-12: 최초 작성.
+- 2026-08-15: 사용자 선택 A에 따라 Customer CSRF consumer 보정의 소유 범위와 frontend 전체 build의 알려진 실패를 기록. 구현은 시작하지 않음.

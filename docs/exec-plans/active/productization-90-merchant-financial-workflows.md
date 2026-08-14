@@ -219,10 +219,21 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 `Implementation-Ready=true`를 갱신했다. 구현은 시작하지 않았고 기존 dispute index 실행계획 확인은
 이 plan의 첫 milestone로 남는다. 이 plan 자체는 migration writer lease를 요구하지 않는다.
 
+- 2026-08-15: runtime OpenAPI는 Merchant Chain의 legacy `POST /payments/{paymentId}/refunds`에
+  `X-BEANFLOW-CSRF`를 요구하지만, `ConsolePages`의 UUID refund form은 `Idempotency-Key`만 보내
+  frontend typecheck/build를 실패시킨다. 사용자 선택 A에 따라 이 보정은 완료된 Plan 60에 one-off header로
+  넣지 않고, 이 plan의 Merchant financial Session/CSRF client 및 UUID form 교체 milestone에서 함께 처리한다.
+  구현은 여전히 시작하지 않았다.
+
 ## Surprises & Discoveries
 
 - OrderLine에는 이미 order-scoped immutable `lineSequence`가 있어 새 공개 line ID migration이 필요 없다.
 - 이의제기는 접수·worker 판정은 있지만 점주가 새로고침 뒤 상태를 볼 store-scoped Query가 없다.
+- `ConsolePages`의 이름 `OpsRefundPage`와 달리 중앙 path registry는 `/payments/{paymentId}/refunds`를
+  Merchant Chain으로 배정한다. 이를 Operations bearer 요청으로 취급하거나 CSRF를 끄면 ADR-094를 위반한다.
+  one-off header는 단기적으로 build를 통과시키지만 기존 UUID form과 token 흐름을 중복시키므로, Merchant
+  financial client와 form 교체를 함께 하는 이 plan으로 보정을 남긴다. 그때까지 frontend 전체
+  typecheck/build는 이 call과 Plan 80 소유 두 customer call로 실패한다.
 
 ## Decision Log
 
@@ -231,6 +242,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 부분 환불은 OWNER·STAFF 모두 실행 | [BR-38](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 공개 품목 식별자는 orderReference 범위의 lineSequence | [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md) |
 | 2026-08-12 | 정산·이의제기는 기존 ACTIVE OWNER 정책 유지 | [Authorization Matrix](../../security/authorization-matrix.md) |
+| 2026-08-15 | legacy `/payments/{paymentId}/refunds`의 CSRF consumer와 UUID form 제거는 이 plan의 Merchant financial Session/CSRF client milestone에서 함께 전환하며, Plan 60에는 one-off header를 선반영하지 않는다 | [MD-2026-014](../../decisions/minor-decisions.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
 
 ## Outcomes & Retrospective
 
@@ -240,3 +252,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 - 2026-08-12: 최초 작성.
 - 2026-08-14: Plan 60 완료에 따라 dependency path와 readiness를 갱신. 구현은 시작하지 않음.
+- 2026-08-15: 사용자 선택 A에 따라 Merchant CSRF consumer 보정의 소유 범위, trade-off와 frontend 전체 build의 알려진 실패를 기록. 구현은 시작하지 않음.

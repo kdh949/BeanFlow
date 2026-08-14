@@ -401,6 +401,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-14 | Plan 40의 실제 top-level 매장 배열을 canonical `MerchantStoreList` 계약으로 유지한다 | target/runtime OpenAPI, `StoreOrderBoardOpenApiContractTest` |
 | 2026-08-14 | 기본 3초 snapshot은 lane별 50건으로 제한하고, 초과 실행 주문은 exact count와 signed on-demand queue로 누락 없이 노출한다 | [BR-06](../../product/business-policy-decisions.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), 사용자 선택 A |
 | 2026-08-14 | cursor issuance/expiry를 제외한 weak ETag를 사용하고, cursor 400 뒤 main board snapshot을 unconditional로 정확히 한 번 다시 읽는다. 304는 cursor TTL 갱신이 아니다 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), [ADR-102](../../adr/ADR-102-polling-before-sse.md), OpenAPI, 사용자 선택 |
+| 2026-08-15 | 범위 밖 기존 CSRF consumer 세 곳은 이 완료 plan에 one-off header를 넣지 않고 Plan 80·90의 actor별 Session/CSRF client milestone에서 전환한다 | [MD-2026-014](../../decisions/minor-decisions.md), [ADR-094](../../adr/ADR-094-browser-session-security.md), 사용자 선택 A |
 
 ## Outcomes & Retrospective
 
@@ -427,5 +428,6 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-14: Draft PR #68, final Stack A topology 검증과 migration-writer lease 해제를 기록.
 - 2026-08-14: PR #68 performance review remediation의 lane-bound/overflow queue 계약을 기록.
 - 2026-08-14: weak ETag와 cursor 400 단발 snapshot recovery의 이유·trade-off·검증 계약을 기록.
+- 2026-08-15: 사용자 선택 A에 따라 범위 밖 Customer·Merchant CSRF consumer를 successor plan에 남기는 이유와 trade-off를 MD-2026-014 및 successor Decision Log에 기록.
 - 2026-08-14: Plan 30/40 session-probe 보정을 Plan 50 parent merge로 반영하고 final clean full build,
   frontend test, 문서/OpenAPI 결과를 기록.
