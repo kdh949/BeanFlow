@@ -25,6 +25,9 @@ internal class StoreSearchVocabularyMigrationTest {
 
         /** `scripts/generate-region-seed.py`가 2026-07-08 배포본에서 만든 행 수. */
         private const val SEEDED_REGION_COUNT = 20560L
+
+        /** 그중 리 단위 행. 전체의 74%라 리를 빠뜨리면 지역 검색의 대부분이 비게 된다. */
+        private const val SEEDED_RI_COUNT = 15209L
     }
 
     private val jdbc by lazy { JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)) }
@@ -71,7 +74,7 @@ internal class StoreSearchVocabularyMigrationTest {
             .isEqualTo(SEEDED_REGION_COUNT)
         assertThat(
             jdbc.queryForList(
-                "SELECT sido, sigungu, eupmyeondong, full_name FROM merchant_region WHERE code = ?",
+                "SELECT sido, sigungu, eupmyeondong, ri, full_name FROM merchant_region WHERE code = ?",
                 "1168010100",
             ),
         ).singleElement()
@@ -80,6 +83,7 @@ internal class StoreSearchVocabularyMigrationTest {
                     "sido" to "서울특별시",
                     "sigungu" to "강남구",
                     "eupmyeondong" to "역삼동",
+                    "ri" to "",
                     "full_name" to "서울특별시 강남구 역삼동",
                 ),
             )
@@ -92,6 +96,48 @@ internal class StoreSearchVocabularyMigrationTest {
         assertThat(sejong["sigungu"]).isEqualTo("")
         assertThat(sejong["eupmyeondong"]).isEqualTo("반곡동")
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_region WHERE sigungu IS NULL", Long::class.java)).isZero()
+    }
+
+    @Test
+    fun `ri level regions keep both the parent eupmyeondong and their own ri name`() {
+        // 리 이름을 eupmyeondong에 덮어썼다면 이 매장은 "동면"으로 검색되지 않는다.
+        // 두 열이 모두 채워져야 읍·면 이름과 리 이름 양쪽으로 찾힌다(ADR-112 리 Amendment).
+        val gamjeong =
+            jdbc.queryForMap(
+                "SELECT sido, sigungu, eupmyeondong, ri, full_name FROM merchant_region WHERE code = ?",
+                "5111031024",
+            )
+        assertThat(gamjeong["sido"]).isEqualTo("강원특별자치도")
+        assertThat(gamjeong["sigungu"]).isEqualTo("춘천시")
+        assertThat(gamjeong["eupmyeondong"]).isEqualTo("동면")
+        assertThat(gamjeong["ri"]).isEqualTo("감정리")
+        assertThat(gamjeong["full_name"]).isEqualTo("강원특별자치도 춘천시 동면 감정리")
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_region WHERE ri <> ''", Long::class.java))
+            .isEqualTo(SEEDED_RI_COUNT)
+    }
+
+    @Test
+    fun `regions without a ri level store an empty string rather than null`() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_region WHERE ri IS NULL", Long::class.java)).isZero()
+        assertThat(
+            jdbc.queryForObject("SELECT ri FROM merchant_region WHERE code = ?", String::class.java, "1168010100"),
+        ).isEmpty()
+        // 리가 없는 행은 코드 뒤 2자리가 00이고, 그 역도 성립해야 계층 판별이 어긋나지 않는다.
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM merchant_region WHERE (ri <> '') <> (right(code, 2) <> '00')",
+                Long::class.java,
+            ),
+        ).isZero()
+    }
+
+    @Test
+    fun `duplicated ri names across the country stay distinct rows`() {
+        // "상리"는 전국에 여러 개다. 반경 필터가 거르므로 별도 식별자를 두지 않는다(ADR-112 R3).
+        // 여기서는 어휘가 이름 중복을 이유로 행을 잃지 않는 것만 확인한다.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_region WHERE ri = ?", Long::class.java, "상리"))
+            .isGreaterThan(1)
     }
 
     @Test

@@ -6,12 +6,14 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- 법정동 코드 기반 폐쇄 어휘. 시드는 다음 migration이 넣는다.
 -- 세종특별자치시처럼 시군구 계층이 없는 경우가 있어 sigungu는 NULL이 아니라 빈 문자열이다.
--- 리 단위 행은 상위 읍면동 이름을 eupmyeondong에 담고 full_name에만 리 이름이 남는다.
+-- 리 행의 eupmyeondong은 상위 읍·면 이름을 그대로 유지한다. 리 이름으로 덮어쓰면 리에 있는
+-- 매장이 읍·면 이름으로 검색되지 않아 검색 범위가 넓어지지 않고 이동만 한다.
 CREATE TABLE merchant_region (
     code varchar(10) PRIMARY KEY,
     sido varchar(40) NOT NULL CHECK (length(trim(sido)) > 0),
     sigungu varchar(40) NOT NULL DEFAULT '',
     eupmyeondong varchar(40) NOT NULL DEFAULT '',
+    ri varchar(40) NOT NULL DEFAULT '',
     full_name varchar(120) NOT NULL CHECK (length(trim(full_name)) > 0)
 );
 
