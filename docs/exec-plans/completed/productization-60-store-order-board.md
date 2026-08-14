@@ -337,6 +337,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   matching credentialVersion의 ACTIVE Customer/Merchant account를 seed하는 parent Plan 30/40 보정을
   만들었다. 이 Plan에는 같은 final fixture를 반영했으며, 갱신된 Plan 50 parent merge 뒤 clean full build를
   최종 gate로 다시 실행한다.
+- 2026-08-14: 갱신된 Plan 50 parent merge와 session-probe conflict 해소 뒤 final stack head에서 clean
+  full build 1,102 tests(0 failures, 0 errors, 1 skipped)가 17분 19초에 통과했다. board focused suite,
+  frontend Vitest 37 tests, 문서/OpenAPI 46 policies·111 ADRs·277 Markdown·57 ExecPlans도 통과했다.
+  frontend typecheck/build의 Plan 80/90 CSRF header 세 오류는 그대로 남아 있으며 이 revision의 성공으로
+  해석하지 않는다.
+- 2026-08-14: final 기록 직전 repo root에서 `npm test`를 실행해 root `package.json` 부재로 ENOENT가
+  났다. 제품 검증 실패가 아니라 잘못된 working directory였으며, 즉시 `frontend/`에서 같은 command를
+  재실행해 6 files/37 tests 통과를 확인했다.
 
 ## Surprises & Discoveries
 
@@ -405,9 +413,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   SSE 전환 여부는 ADR-102 재검토 조건 전에는 열지 않는다.
 - V56 read index 효과와 write amplification을 같은 PostgreSQL fixture에서 함께 기록했다. native mixed-load
   p95/p99는 측정하지 않았으며 production 성능으로 일반화하지 않는다.
-- 원래 Plan 60 검증은 통과했지만, PR #68 review remediation의 focused/full 재검증은 이 문서의 현재
-  revision에서 진행 중이다. 추가 frontend 전체 build의 기존 Plan 80/90 CSRF 세 오류는 미해결로
-  명시하며, 이 완료가 해당 후속 화면의 build 완료를 뜻하지 않는다.
+- PR #68 review remediation의 board focused suite와 최신 Plan 50 parent를 포함한 clean full build가
+  1,102 tests(0 failures, 0 errors, 1 skipped)로 통과했다. 추가 frontend 전체 typecheck/build의 기존
+  Plan 80/90 CSRF 세 오류는 미해결로 명시하며, 이 완료가 해당 후속 화면의 build 완료를 뜻하지 않는다.
 - Plan 60 Draft PR과 Stack A의 정확한 seven-PR topology까지 검증했다. Stack A 내부 PR은 모두 open
   Draft로 유지하며 이 결과는 merge 또는 deployment 완료를 뜻하지 않는다.
 
@@ -419,3 +427,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-14: Draft PR #68, final Stack A topology 검증과 migration-writer lease 해제를 기록.
 - 2026-08-14: PR #68 performance review remediation의 lane-bound/overflow queue 계약을 기록.
 - 2026-08-14: weak ETag와 cursor 400 단발 snapshot recovery의 이유·trade-off·검증 계약을 기록.
+- 2026-08-14: Plan 30/40 session-probe 보정을 Plan 50 parent merge로 반영하고 final clean full build,
+  frontend test, 문서/OpenAPI 결과를 기록.
