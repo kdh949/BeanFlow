@@ -47,6 +47,9 @@
   외에는 모두 403**이다. 이 판정은 Controller 조건문이 아니라 Merchant Chain의 인가 규칙과
   Application Service 양쪽에서 수행한다.
 - 비밀번호는 Hash만 저장한다. 임시 비밀번호도 평문으로 저장하거나 로그에 남기지 않는다.
+- 최초 비밀번호 변경은 운영자가 발급한 임시 비밀을 점주만 아는 **다른** 비밀로 교체해야 한다. 현재와
+  같은 byte sequence는 `INITIAL_PASSWORD`와 `ACTIVE` 모두에서 정책 위반으로 거부하며 lifecycle,
+  `credentialVersion`, Session, Audit에 부수효과를 만들지 않는다.
 - 점주 계정 발급과 초기화는 [BR-46](../product/business-policy-decisions.md)의 Operations Web 명령이
   소유한다. 서버가 생성한 임시 비밀번호는 최초 성공 응답에서 한 번만 표시하고 이후 조회할 수 없다.
   발급은 MerchantAccount, 최초 ACTIVE StoreMembership, attempt 정리와 AuditRecord를 한 transaction에
@@ -125,6 +128,8 @@
 - 잠금 만료 뒤 `INITIAL_PASSWORD`와 `ACTIVE`가 각각 원래 lifecycle로 로그인하고, 잠금 전에 발급한
   Session은 `credentialVersion` 불일치로 계속 401인지 검증한다.
 - 비밀번호 변경 후 이전 Session이 무효화되는지 검증한다.
+- `INITIAL_PASSWORD`와 `ACTIVE`에서 현재와 같은 새 비밀번호가 거부되고 account state,
+  `credentialVersion`, 기존 Session, AuditRecord와 새 Session이 모두 그대로인지 검증한다.
 - 이전 Session 행 삭제 실패를 주입해도 `credentialVersion` 불일치로 재사용이 401인지 검증한다.
 - 계정 생성·초기화·잠금 해제가 `AuditRecord`를 남기고 비밀번호를 저장하지 않는지 검증한다.
 - 점주 비밀번호 변경 Audit가 `MERCHANT` actor로 원자 저장되고 Audit 실패 시 자격증명이 바뀌지 않는지
@@ -153,6 +158,10 @@ Operations는 exact 조회, 계정+최초 membership 발급, 초기화와 잠금
 secret을 재생하지 않고 target reference가 있는 409로 수렴하며 terminal row에는 평문·Hash·응답 body가
 없다. 로컬 전체 smoke도 legacy 점주 JWT 대신 초기 비밀번호 변경 뒤 실제 Merchant Session으로 매장
 전환과 부분/전액 환불을 수행한다.
+
+2026-08-14 보정으로 self-change에서 현재와 동일한 비밀번호는 hash salt 차이만으로 lifecycle을
+전환할 수 없도록 `PASSWORD_POLICY_VIOLATION`으로 거부한다. INITIAL_PASSWORD/ACTIVE 모두 account state,
+credentialVersion, 기존 Session, AuditRecord와 새 Session 무변경을 PostgreSQL HTTP 통합 테스트로 검증했다.
 
 ## Revisit Conditions
 

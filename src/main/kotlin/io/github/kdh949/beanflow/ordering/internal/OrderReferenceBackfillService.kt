@@ -87,6 +87,8 @@ internal class OrderReferenceBackfillService(
     }
 
     private fun preflight() {
+        preflightMigrationWindow()
+
         val partialRows =
             scalarLong(
                 """
@@ -123,6 +125,26 @@ internal class OrderReferenceBackfillService(
         if (missingOwners != 0L) {
             throw dependencyFailure(
                 "Order reference backfill requires a verified slot and non-empty store profile for $missingOwners orders",
+            )
+        }
+    }
+
+    private fun preflightMigrationWindow() {
+        val versions =
+            jdbcTemplate
+                .query(
+                    """
+                    SELECT version, success
+                      FROM flyway_schema_history
+                     WHERE version IN ('43', '44', '45', '46', '47', '48', '49', '50', '51')
+                    """.trimIndent(),
+                ) { resultSet, _ ->
+                    resultSet.getString("version") to resultSet.getBoolean("success")
+                }.toMap()
+        val missingBaseline = BACKFILL_BASELINE.filter { versions[it] != true }
+        if (missingBaseline.isNotEmpty() || versions.containsKey(CONTRACT_MIGRATION)) {
+            throw dependencyFailure(
+                "Order reference backfill requires successful Flyway V43 through V50 and an unapplied V51 contract migration",
             )
         }
     }
@@ -277,5 +299,7 @@ internal class OrderReferenceBackfillService(
 
     private companion object {
         const val MAX_BATCH_SIZE = 1_000
+        val BACKFILL_BASELINE = (43..50).map(Int::toString)
+        const val CONTRACT_MIGRATION = "51"
     }
 }

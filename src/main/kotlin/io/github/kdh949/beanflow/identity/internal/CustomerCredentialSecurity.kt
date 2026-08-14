@@ -182,10 +182,14 @@ internal class CustomerSourceIpResolver(
     ): String {
         val remote = parseLiteral(remoteAddress)
         if (trustedProxies.none { it.contains(remote) }) return remote.hostAddress
-        val forwarded =
-            forwardedFor?.substringBefore(',')?.trim()?.takeIf(String::isNotEmpty)
-                ?: return remote.hostAddress
-        return parseLiteral(forwarded).hostAddress
+        val forwarded = forwardedFor ?: return remote.hostAddress
+        return forwarded
+            .split(',')
+            .map { value -> parseLiteral(value.trim()) }
+            .asReversed()
+            .firstOrNull { candidate -> trustedProxies.none { proxy -> proxy.contains(candidate) } }
+            ?.hostAddress
+            ?: remote.hostAddress
     }
 
     private fun parseLiteral(value: String): InetAddress {

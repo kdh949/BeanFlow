@@ -10,6 +10,8 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.FlywayException
 import org.junit.jupiter.api.Test
+import org.springframework.boot.WebApplicationType
+import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
@@ -131,6 +133,52 @@ internal class OrderReferenceMigrationTest {
         assertThat(value<UUID>(jdbc, "SELECT id FROM ordering_order WHERE public_reference = ?", requireNotNull(earlierReference)))
             .isEqualTo(earlier.orderId)
         assertThatCode { flyway(dataSource).load().migrate() }.doesNotThrowAnyException()
+    }
+
+    @Test
+    fun `backfill application context runs only in the V50 migration window`() {
+        val dataSource = database("order_reference_backfill_context")
+        flyway(dataSource).target("49").load().migrate()
+        flyway(dataSource).target("50").load().migrate()
+        val jdbc = JdbcTemplate(dataSource)
+
+        backfillContext(dataSource).use { context ->
+            assertThat(context.getBean(OrderReferenceBackfillService::class.java).runAll(10).processedCount).isZero()
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version = '51'", Long::class.java)).isZero()
+        }
+    }
+
+    @Test
+    fun `backfill rejects a missing V43 through V50 baseline or an applied V51 before writes`() {
+        val missingBaselineDataSource = database("order_reference_backfill_missing_baseline")
+        flyway(missingBaselineDataSource).target("49").load().migrate()
+        val missingBaselineJdbc = JdbcTemplate(missingBaselineDataSource)
+        val missingBaselineFixture = insertLegacyOrder(missingBaselineJdbc)
+        flyway(missingBaselineDataSource).target("50").load().migrate()
+        missingBaselineJdbc.update("DELETE FROM flyway_schema_history WHERE version = '49'")
+
+        assertThatThrownBy { backfill(missingBaselineDataSource).runAll(10) }
+            .isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+            }
+        assertThat(
+            value<String>(missingBaselineJdbc, "SELECT public_reference FROM ordering_order WHERE id = ?", missingBaselineFixture.orderId),
+        ).isNull()
+
+        val contractDataSource = database("order_reference_backfill_contract")
+        flyway(contractDataSource).target("49").load().migrate()
+        val contractJdbc = JdbcTemplate(contractDataSource)
+        val contractFixture = insertLegacyOrder(contractJdbc)
+        flyway(contractDataSource).target("50").load().migrate()
+        backfill(contractDataSource).runAll(10)
+        flyway(contractDataSource).load().migrate()
+
+        assertThatThrownBy { backfill(contractDataSource).runAll(10) }
+            .isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+            }
+        assertThat(value<String>(contractJdbc, "SELECT public_reference FROM ordering_order WHERE id = ?", contractFixture.orderId))
+            .isNotNull()
     }
 
     @Test
@@ -294,6 +342,27 @@ internal class OrderReferenceMigrationTest {
             .configure()
             .dataSource(dataSource)
             .locations("classpath:db/migration")
+
+    private fun backfill(dataSource: DataSource): OrderReferenceBackfillService =
+        OrderReferenceBackfillService(
+            JdbcTemplate(dataSource),
+            PublicOrderReferenceCandidateGenerator { PublicOrderReference.parse("BF-2345-6789") },
+            SimpleMeterRegistry(),
+            DataSourceTransactionManager(dataSource),
+        )
+
+    private fun backfillContext(dataSource: DataSource) =
+        SpringApplicationBuilder(OrderReferenceBackfillApplication::class.java)
+            .profiles("order-reference-backfill")
+            .web(WebApplicationType.NONE)
+            .properties(
+                mapOf(
+                    "spring.datasource.url" to requireNotNull((dataSource as DriverManagerDataSource).url),
+                    "spring.datasource.username" to requireNotNull(dataSource.username),
+                    "spring.datasource.password" to requireNotNull(dataSource.password),
+                    "spring.main.banner-mode" to "off",
+                ),
+            ).run()
 
     private data class LegacyFixture(
         val orderId: UUID,

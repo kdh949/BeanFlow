@@ -1,6 +1,13 @@
 package io.github.kdh949.beanflow.shared.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.shared.api.BrowserActorLoader
+import io.github.kdh949.beanflow.shared.api.BrowserActorType
+import io.github.kdh949.beanflow.shared.api.CreateLoginSession
+import io.github.kdh949.beanflow.shared.api.CustomerActor
+import io.github.kdh949.beanflow.shared.api.LoginSessionCoordinator
+import io.github.kdh949.beanflow.shared.api.MerchantAccountState
+import io.github.kdh949.beanflow.shared.api.MerchantActor
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -9,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationContext
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -19,17 +27,31 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RestController
+import java.time.Clock
+import java.util.Base64
 import java.util.UUID
 
-@Import(TestcontainersConfiguration::class, OperationsCsrfProbeConfiguration::class)
+@Import(
+    TestcontainersConfiguration::class,
+    OperationsCsrfProbeConfiguration::class,
+    BrowserSessionProbeConfiguration::class,
+)
 @AutoConfigureMockMvc
 @SpringBootTest(properties = ["beanflow.toss.client-key=test_ck_auth_foundation"])
 class AuthenticationSecurityIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val applicationContext: ApplicationContext,
+    @Autowired private val sessionCoordinator: LoginSessionCoordinator,
+    @Autowired transactionManager: PlatformTransactionManager,
+    @Autowired private val clock: Clock,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
+
     @Test
     fun `exactly four security filter chains are registered`() {
         assertThat(applicationContext.getBeansOfType(SecurityFilterChain::class.java).keys)
@@ -158,6 +180,29 @@ class AuthenticationSecurityIntegrationTest(
         }
     }
 
+    @Test
+    fun `same browser uses its matching actor session when both session cookie names are present`() {
+        val customerId = UUID.randomUUID()
+        val merchantId = UUID.randomUUID()
+        val cookies =
+            arrayOf(
+                sessionCookie("BEANFLOW_CUSTOMER_SESSION", BrowserActorType.CUSTOMER, customerId),
+                sessionCookie("BEANFLOW_MERCHANT_SESSION", BrowserActorType.MERCHANT, merchantId),
+            )
+
+        mockMvc
+            .perform(get("/api/v1/me/security-session-probe").cookie(*cookies))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.actorType").value("CUSTOMER"))
+            .andExpect(jsonPath("$.actorId").value(customerId.toString()))
+
+        mockMvc
+            .perform(get("/api/v1/merchant/security-session-probe").cookie(*cookies))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.actorType").value("MERCHANT"))
+            .andExpect(jsonPath("$.actorId").value(merchantId.toString()))
+    }
+
     private fun issueCsrf(
         actor: String,
         cookieName: String,
@@ -176,6 +221,22 @@ class AuthenticationSecurityIntegrationTest(
         assertThat(cookie.path).isEqualTo("/")
         assertThat(cookie.getAttribute("SameSite")).isEqualTo("Lax")
     }
+
+    private fun sessionCookie(
+        name: String,
+        actorType: BrowserActorType,
+        actorId: UUID,
+    ): Cookie {
+        val session =
+            requireNotNull(
+                transactions.execute {
+                    sessionCoordinator.create(
+                        CreateLoginSession(actorType, actorId, clock.millis(), 1),
+                    )
+                },
+            )
+        return Cookie(name, Base64.getEncoder().encodeToString(session.sessionId.toByteArray(Charsets.UTF_8)))
+    }
 }
 
 @TestConfiguration(proxyBeanMethods = false)
@@ -184,5 +245,39 @@ internal class OperationsCsrfProbeConfiguration {
     internal class OperationsCsrfProbeController {
         @PostMapping("/api/v1/operations/security-csrf-probe")
         fun mutate() = Unit
+    }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class BrowserSessionProbeConfiguration {
+    @Bean
+    fun customerBrowserActorLoader(): BrowserActorLoader =
+        object : BrowserActorLoader {
+            override val actorType = BrowserActorType.CUSTOMER
+
+            override fun load(
+                actorId: UUID,
+                credentialVersion: Long,
+            ) = CustomerActor(actorId)
+        }
+
+    @Bean
+    fun merchantBrowserActorLoader(): BrowserActorLoader =
+        object : BrowserActorLoader {
+            override val actorType = BrowserActorType.MERCHANT
+
+            override fun load(
+                actorId: UUID,
+                credentialVersion: Long,
+            ) = MerchantActor(actorId, MerchantAccountState.ACTIVE)
+        }
+
+    @RestController
+    internal class BrowserSessionProbeController {
+        @GetMapping("/api/v1/me/security-session-probe")
+        fun customer(actor: CustomerActor) = mapOf("actorType" to "CUSTOMER", "actorId" to actor.actorId)
+
+        @GetMapping("/api/v1/merchant/security-session-probe")
+        fun merchant(actor: MerchantActor) = mapOf("actorType" to "MERCHANT", "actorId" to actor.actorId)
     }
 }
