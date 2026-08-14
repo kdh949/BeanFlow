@@ -11,6 +11,7 @@ import io.github.kdh949.beanflow.merchant.internal.domain.MenuQuoteCalculator
 import io.github.kdh949.beanflow.merchant.internal.domain.StoreDefinition
 import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
+import io.github.kdh949.beanflow.ordering.internal.domain.OrderDisplayIdentitySnapshot
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderPricingCalculator
 import io.github.kdh949.beanflow.ordering.internal.domain.PricingLine
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -19,6 +20,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 class OrderTest {
@@ -47,6 +49,7 @@ class OrderTest {
                 customerId = UUID.randomUUID(),
                 storeId = fixture.store.id,
                 pickupSlotId = UUID.randomUUID(),
+                displayIdentity = displayIdentity(createdAt),
                 lineIds = listOf(UUID.randomUUID()),
                 quotes = listOf(quote),
                 pricing = pricing,
@@ -92,6 +95,7 @@ class OrderTest {
                 customerId = UUID.randomUUID(),
                 storeId = fixture.store.id,
                 pickupSlotId = UUID.randomUUID(),
+                displayIdentity = displayIdentity(createdAt),
                 lineIds = listOf(UUID.randomUUID()),
                 quotes = listOf(quote),
                 pricing = pricing,
@@ -147,6 +151,16 @@ class OrderTest {
                 ),
         )
     }
+
+    private fun displayIdentity(createdAt: Instant) =
+        OrderDisplayIdentitySnapshot(
+            publicReference = "BF-2345-6789",
+            pickupBusinessDate = LocalDate.parse("2026-07-28"),
+            pickupSequence = 1,
+            storeName = "Test Store",
+            pickupWindowStart = createdAt.plusSeconds(600),
+            pickupWindowEnd = createdAt.plusSeconds(1_200),
+        )
 
     private data class MenuFixture(
         val store: StoreDefinition,

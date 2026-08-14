@@ -17,6 +17,12 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
 - 애플리케이션 API로 수정·삭제하지 않는다.
 - 외부 호출 결과는 별도 owner 트랜잭션에서 상태와 AuditRecord를 함께 확정한다.
 - summary에는 secret, 원본 결제정보, 정밀 사용자 위치와 불필요한 개인정보를 넣지 않는다.
+- **2026-08-13 Merchant credential amendment:** 점주가 자기 자격증명을 변경하는 계정 범위 행위는
+  store membership 역할과 분리된 `MERCHANT` actor type으로 기록한다. `STORE_OWNER`와
+  `STORE_STAFF`는 특정 매장 객체에 대한 authoritative membership 검증을 마친 행위에만 사용한다.
+  점주 비밀번호 변경은 `MerchantAccount` target에 `MERCHANT` actor를 기록하고 비밀번호 값·Hash는
+  before/after summary, reason과 source reference 어디에도 포함하지 않는다. DB의 closed actor
+  vocabulary와 애플리케이션 enum은 같은 forward migration에서 함께 확장한다.
 
 주문 생성과 예약 lease Feature는 다음 granularity를 사용한다.
 
@@ -51,6 +57,13 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
 - cleanup은 중단·재실행 가능해야 하며 실패 count, oldest due age와 삭제 count를
   metric/log로 남긴다. 실패를 성공 cleanup으로 기록하거나 due 이전 record를
   삭제하지 않는다.
+- **2026-08-12 운영자 조회 amendment:** BR-44에 따라 AuditRecord 목록은 기본 30일, 요청당 최대
+  90일의 `from`·`to` window와 `(occurredAt DESC, id DESC)` signed keyset cursor를 사용한다. 5년
+  보존 기간 안의 과거 시작일에는 별도 상한을 두지 않는다. active `AUDIT_RECORD_READ`,
+  `PLATFORM_OPERATOR`, 유효한 `X-Access-Reason`과 조회 접근 Audit를 모두 요구하며 permission lock,
+  결과 Projection, 접근 Audit append를 같은 local transaction에 둔다. 접근 Audit 저장 실패는
+  조회 body를 반환하지 않는다. cursor는 확정된 기간과 모든 filter를 서명하고 기간 역전·90일 초과·
+  filter 변경을 400으로 거부한다.
 
 이 clarification은 2026-07-28 주문 생성과 예약 lease Feature의 결정 게이트에서
 확정했다.
@@ -77,6 +90,7 @@ ADR-054는 같은 target별 granularity를 고객 취소 Tx C0/C1과 후속 owne
   index가 필요하다.
 - append-only는 보존 기간 중 update 금지를 뜻하며 due 이후 통제된 retention purge는
   예외다.
+- 운영자 조회는 긴 조사 기간을 여러 90일 window로 나눠야 하며 각 조회가 별도 접근 Audit를 남긴다.
 
 ## Verification
 
@@ -88,6 +102,10 @@ ADR-054는 같은 target별 granularity를 고객 취소 Tx C0/C1과 후속 owne
 - 서울 달력 5주년과 윤년 cleanup 경계
 - chunk cleanup 중단·재실행
 - 민감정보 masking/absence
+- 점주 비밀번호 변경 Audit가 `MERCHANT` actor를 사용하고 store membership 역할을 추론하지 않음
+- Audit actor closed vocabulary가 `MERCHANT`를 허용하되 미등록 값을 계속 거부함
+- 기본 30일·최대 90일 window, 과거 window와 signed cursor filter binding
+- `AUDIT_RECORD_READ` grant/reason/query/access-Audit 원자성 및 Audit 장애 fail-closed
 
 **Point adjustment implementation evidence (2026-08-04):**
 `POINT_ADJUSTMENT_APPLIED`는 Platform Operator, 자유 입력 reason, evidence reference,
@@ -108,5 +126,6 @@ append한다. raw key는 저장하지 않으며 Audit insert failure가 Account/
 ## Related Decisions
 
 - BR-30
+- BR-44
 - [ADR-009](ADR-009-explicit-failure-semantics.md)
 - [ADR-012](ADR-012-decision-capture-protocol.md)

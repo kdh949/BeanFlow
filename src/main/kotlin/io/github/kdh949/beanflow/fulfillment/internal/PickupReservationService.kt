@@ -48,7 +48,7 @@ internal class PickupReservationService(
             if (it.orderId == command.orderId && it.slotId == command.pickupSlotId &&
                 it.state == PickupReservationState.RESERVED
             ) {
-                return PickupReservationGrant(it.id, it.expiresAt)
+                return grant(it.id, it.expiresAt, it.slotStartsAtSnapshot, it.slotEndsAtSnapshot)
             }
             fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup source reference is already terminal or reused")
         }
@@ -84,12 +84,26 @@ internal class PickupReservationService(
                 slotId = command.pickupSlotId,
                 state = PickupReservationState.RESERVED,
                 expiresAt = expiresAt,
+                slotStartsAtSnapshot = slot.startsAt,
+                slotEndsAtSnapshot = slot.endsAt,
                 sourceReference = command.sourceReference,
                 createdAt = now,
                 updatedAt = now,
             )
         reservationRepository.save(reservation)
-        return PickupReservationGrant(reservation.id, reservation.expiresAt)
+        return grant(reservation.id, reservation.expiresAt, slot.startsAt, slot.endsAt)
+    }
+
+    private fun grant(
+        reservationId: UUID,
+        expiresAt: Instant,
+        startsAt: Instant,
+        endsAt: Instant,
+    ): PickupReservationGrant {
+        if (!endsAt.isAfter(startsAt)) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Pickup slot window is invalid")
+        }
+        return PickupReservationGrant(reservationId, expiresAt, startsAt, endsAt)
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

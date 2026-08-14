@@ -6,6 +6,8 @@ import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.MerchantActor
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
 import io.github.kdh949.beanflow.support.internal.domain.SupportOrderChangeAuthorizationType
 import io.github.kdh949.beanflow.support.internal.domain.SupportOrderChangeCostResponsibility
@@ -19,8 +21,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -89,9 +89,9 @@ internal class SupportOrderChangeAuthorizationController(
     private val service: SupportOrderChangeAuthorizationApplicationService,
 ) {
     @PostMapping
-    @PreAuthorize("hasAnyRole('STORE_OWNER', 'STORE_STAFF')")
+    @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: MerchantActor,
         @PathVariable storeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateSupportOrderChangeAuthorizationRequest,
@@ -102,8 +102,8 @@ internal class SupportOrderChangeAuthorizationController(
             .body(
                 service.create(
                     CreateSupportOrderChangeAuthorizationCommand(
-                        jwt.actorId(),
-                        jwt.storeRoles(),
+                        actor.actorId,
+                        setOf(StoreActorRole.OWNER, StoreActorRole.STAFF),
                         storeId,
                         request.authorizationType ?: invalid(),
                         request.action ?: invalid(),
@@ -127,7 +127,7 @@ internal class SupportOrderChangeExecutionController(
     @PostMapping
     @PreAuthorize("isAuthenticated()")
     fun execute(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable requestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ExecuteSupportOrderChangeRequest,
@@ -135,7 +135,7 @@ internal class SupportOrderChangeExecutionController(
         ResponseEntity
             .ok()
             .cacheControl(CacheControl.noStore())
-            .body(service.execute(request.command(jwt.actorId(), requestId, idempotencyKey)))
+            .body(service.execute(request.command(actor.actorId, requestId, idempotencyKey)))
 }
 
 private fun ExecuteSupportOrderChangeRequest.command(
@@ -174,19 +174,5 @@ private fun ExecuteSupportOrderChangeRequest.command(
             )
         }
     }
-
-private fun Jwt.actorId(): UUID =
-    try {
-        UUID.fromString(subject)
-    } catch (_: IllegalArgumentException) {
-        invalid()
-    }
-
-private fun Jwt.storeRoles(): Set<StoreActorRole> =
-    buildSet {
-        val claims = getClaimAsStringList("roles").orEmpty()
-        if ("STORE_OWNER" in claims) add(StoreActorRole.OWNER)
-        if ("STORE_STAFF" in claims) add(StoreActorRole.STAFF)
-    }.ifEmpty { throw DomainFailure(FailureCode.ACCESS_DENIED, "Store role is required") }
 
 private fun invalid(): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, "Support order change request is invalid")

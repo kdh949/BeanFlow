@@ -3,6 +3,7 @@
 package io.github.kdh949.beanflow.settlement.internal
 
 import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
@@ -99,21 +100,30 @@ internal class SettlementFoundationMigrationTest {
         assertThatThrownBy { insertLegacyCancelledOrder(storeId) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
         assertThatThrownBy {
+            val orderId = UUID.randomUUID()
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             jdbcTemplate.update(
                 """
                 INSERT INTO ordering_order (
-                    id, customer_id, store_id, pickup_slot_id, state,
+                    id, customer_id, store_id, pickup_slot_id,
+                    public_reference, pickup_business_date, pickup_sequence,
+                    store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                    state,
                     subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                     currency, reservation_expires_at, cancelled_at, cancellation_cause,
                     created_at, updated_at, version
-                ) VALUES (?, ?, ?, ?, 'PENDING_PAYMENT', 1000, 0, 0, 1000,
+                ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                          'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                          'PENDING_PAYMENT', 1000, 0, 0, 1000,
                           'KRW', now() + interval '5 minutes', now(), 'CUSTOMER_REQUEST',
                           now(), now(), 0)
                 """.trimIndent(),
-                UUID.randomUUID(),
+                orderId,
                 UUID.randomUUID(),
                 storeId,
                 UUID.randomUUID(),
+                publicReference,
+                OrderCreationDatabaseFixture.pickupSequence(orderId),
             )
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
@@ -244,17 +254,23 @@ internal class SettlementFoundationMigrationTest {
 
     private fun insertSyntheticCompletedOrder(storeId: UUID): UUID =
         UUID.randomUUID().also { orderId ->
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state,
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, accepted_at, preparing_at, ready_at, completed_at,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, 'COMPLETED', 1000, 100, 100, 800,
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                              'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                              'COMPLETED', 1000, 100, 100, 800,
                               'KRW', NULL,
                               '2026-08-03T00:10:00Z', '2026-08-03T00:12:00Z',
                               '2026-08-03T00:13:00Z', '2026-08-03T00:11:00Z',
@@ -266,6 +282,8 @@ internal class SettlementFoundationMigrationTest {
                     UUID.randomUUID(),
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(orderId),
                 )
             } finally {
                 jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
@@ -276,20 +294,46 @@ internal class SettlementFoundationMigrationTest {
         UUID.randomUUID().also { orderId ->
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
-                jdbcTemplate.update(
-                    """
-                    INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
-                        subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
-                        currency, reservation_expires_at, created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
-                              'KRW', NULL, now(), now(), 0)
-                    """.trimIndent(),
-                    orderId,
-                    UUID.randomUUID(),
-                    storeId,
-                    UUID.randomUUID(),
-                )
+                if (columnCount("ordering_order", "public_reference") == 0L) {
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO ordering_order (
+                            id, customer_id, store_id, pickup_slot_id, state,
+                            subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                            currency, reservation_expires_at, created_at, updated_at, version
+                        ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
+                                  'KRW', NULL, now(), now(), 0)
+                        """.trimIndent(),
+                        orderId,
+                        UUID.randomUUID(),
+                        storeId,
+                        UUID.randomUUID(),
+                    )
+                } else {
+                    val publicReference =
+                        OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO ordering_order (
+                            id, customer_id, store_id, pickup_slot_id,
+                            public_reference, pickup_business_date, pickup_sequence,
+                            store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                            state,
+                            subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                            currency, reservation_expires_at, created_at, updated_at, version
+                        ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                                  'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                                  'CANCELLED', 1000, 0, 0, 1000,
+                                  'KRW', NULL, now(), now(), 0)
+                        """.trimIndent(),
+                        orderId,
+                        UUID.randomUUID(),
+                        storeId,
+                        UUID.randomUUID(),
+                        publicReference,
+                        OrderCreationDatabaseFixture.pickupSequence(orderId),
+                    )
+                }
             } finally {
                 jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
             }

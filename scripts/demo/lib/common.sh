@@ -117,7 +117,8 @@ owned_process_record_is_live() {
   [ "$OWNED_PROCESS_PGID" = "$OWNED_PROCESS_PID" ] || return 1
   command="$(ps eww -o command= -p "$OWNED_PROCESS_PID" 2>/dev/null)"
   if [[ "$command" != *"beanflowLocalDemoNonce=${OWNED_PROCESS_NONCE}"* ]] &&
-    [[ "$command" != *"DEMO_PROCESS_NONCE=${OWNED_PROCESS_NONCE}"* ]]; then
+    [[ "$command" != *"DEMO_PROCESS_NONCE=${OWNED_PROCESS_NONCE}"* ]] &&
+    [[ "$command" != *"beanflow-local-demo-${OWNED_PROCESS_NONCE}"* ]]; then
     return 1
   fi
   cwd="$(lsof -a -p "$OWNED_PROCESS_PID" -d cwd -Fn 2>/dev/null | awk '/^n/{sub(/^n/, ""); print; exit}')"
@@ -177,7 +178,8 @@ start_owned_frontend() {
     python3 -c \
       'import os, sys; nonce, ready, command = sys.argv[1:4]; os.environ["DEMO_PROCESS_NONCE"] = nonce; os.setsid(); open(ready, "w", encoding="ascii").write(str(os.getpid())); os.execvp(command, [command, *sys.argv[4:]])' \
       "$nonce" "$ready_file" npm --prefix "${DEMO_ROOT}/frontend" run dev -- \
-      --host 127.0.0.1 --port "$DEMO_FRONTEND_PORT" --strictPort >"$log_file" 2>&1 &
+      --host 127.0.0.1 --port "$DEMO_FRONTEND_PORT" --strictPort \
+      --mode "beanflow-local-demo-${nonce}" >"$log_file" 2>&1 &
   launcher_pid=$!
 
   local attempts=0

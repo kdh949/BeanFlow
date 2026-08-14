@@ -12,6 +12,8 @@ required=(
   "docs/product/product-overview.md"
   "docs/product/actors-and-goals.md"
   "docs/product/business-policy-decisions.md"
+  "docs/product/design-to-capability-map.md"
+  "docs/product/design-contract-conflicts.md"
   "docs/product/end-to-end-flow.md"
   "docs/product/non-goals.md"
   "docs/architecture/architecture-overview.md"
@@ -89,11 +91,53 @@ policy = (root / 'docs/product/business-policy-decisions.md').read_text(encoding
 api_conventions = (root / 'docs/api/api-conventions.md').read_text(encoding='utf-8')
 normalized_api_conventions = re.sub(r'\s+', ' ', api_conventions)
 ids = re.findall(r'^## (BR-\d{2}) ', policy, flags=re.MULTILINE)
-expected = [f'BR-{i:02d}' for i in range(1, 34)]
+expected = [f'BR-{i:02d}' for i in range(1, 47)]
 
 if set(ids) != set(expected) or any(count != 1 for count in Counter(ids).values()):
     print('Business policy IDs are missing, duplicated, or out of range.', file=sys.stderr)
     print('Found:', ids, file=sys.stderr)
+    sys.exit(1)
+
+capability_map = (root / 'docs/product/design-to-capability-map.md').read_text(encoding='utf-8')
+design_conflicts = (root / 'docs/product/design-contract-conflicts.md').read_text(encoding='utf-8')
+if '> **결정 상태:** `Accepted` (2026-08-12).' not in capability_map:
+    print('Design capability map is not Accepted.', file=sys.stderr)
+    sys.exit(1)
+if '> **결정 상태:** `Accepted` (2026-08-12).' not in design_conflicts:
+    print('Design conflict register is not Accepted.', file=sys.stderr)
+    sys.exit(1)
+
+def section(text: str, start: str, end: str) -> str:
+    return text[text.index(start):text.index(end, text.index(start))]
+
+screen_contract_counts = {
+    '# A. 고객 앱': 22,
+    '# B. 점주 콘솔': 13,
+    '# C. 운영자 콘솔': 14,
+}
+for heading, expected_count in screen_contract_counts.items():
+    contract = section(capability_map, heading, '## ' + heading.split('. ', 1)[0][2:] + '-2 상태 계약')
+    rows = re.findall(r'^\| `[^`]+` \|', contract, flags=re.MULTILINE)
+    if len(rows) != expected_count:
+        print(f'{heading} contract must contain {expected_count} unique screen rows; found {len(rows)}.', file=sys.stderr)
+        sys.exit(1)
+
+conflict_ids = re.findall(r'^## C-(\d+) ', design_conflicts, flags=re.MULTILINE)
+if conflict_ids != [str(i) for i in range(1, 19)]:
+    print('Design conflict IDs must be exactly C-1 through C-18.', file=sys.stderr)
+    print('Found:', conflict_ids, file=sys.stderr)
+    sys.exit(1)
+
+owner_coverage = section(capability_map, '## P0 구현 소유권', '## 확정된 후속 결정')
+owner_rows = re.findall(
+    r'^\| (고객|점주|운영) \| [^|]+ \| [^|]+ \| (Plan (?:40|60|80|90|100)) \|$',
+    owner_coverage,
+    flags=re.MULTILINE,
+)
+expected_final_owners = Counter({'Plan 80': 13, 'Plan 60': 2, 'Plan 90': 3, 'Plan 100': 6})
+if len(owner_rows) != 24 or Counter(owner for _, owner in owner_rows) != expected_final_owners:
+    print('P0 screen coverage must contain 24 rows with exactly one final validation owner.', file=sys.stderr)
+    print('Found owners:', Counter(owner for _, owner in owner_rows), file=sys.stderr)
     sys.exit(1)
 
 plan_files = sorted((root / 'docs/exec-plans').glob('*/*.md'))
@@ -754,6 +798,201 @@ else:
         print('Unexpected:', sorted(runtime_operations - target_operations), file=sys.stderr)
         sys.exit(1)
 
+    required_p0_target_operations = {
+        ('/auth/customer/csrf', 'get'),
+        ('/auth/customer/registrations', 'post'),
+        ('/auth/customer/sessions', 'post'),
+        ('/auth/customer/sessions/current', 'delete'),
+        ('/auth/merchant/csrf', 'get'),
+        ('/auth/merchant/password-changes', 'post'),
+        ('/auth/merchant/sessions', 'post'),
+        ('/auth/merchant/sessions/current', 'delete'),
+        ('/auth/operations/config', 'get'),
+        ('/me', 'get'),
+        ('/me/favorite-stores', 'get'),
+        ('/me/favorite-stores/{storeId}', 'delete'),
+        ('/me/favorite-stores/{storeId}', 'put'),
+        ('/me/orders', 'get'),
+        ('/me/orders/{orderReference}', 'get'),
+        ('/me/orders/{orderReference}/cancellations', 'post'),
+        ('/me/orders/{orderReference}/reorders', 'post'),
+        ('/me/point-transactions', 'get'),
+        ('/me/points', 'get'),
+        ('/me/recent-stores', 'get'),
+        ('/me/store-recommendations', 'get'),
+        ('/merchant/me', 'get'),
+        ('/merchant/me/stores', 'get'),
+        ('/operations/audit-records', 'get'),
+        ('/operations/audit-records/{auditRecordId}', 'get'),
+        ('/operations/failure-queues/summary', 'get'),
+        ('/operations/failure-queues/{queueType}', 'get'),
+        ('/operations/failure-queues/{queueType}/{workReference}', 'get'),
+        ('/operations/failure-search', 'get'),
+        ('/operations/me', 'get'),
+        ('/operations/merchant-accounts', 'get'),
+        ('/operations/merchant-accounts', 'post'),
+        ('/operations/merchant-accounts/{merchantAccountId}/lock-releases', 'post'),
+        ('/operations/merchant-accounts/{merchantAccountId}/temporary-password-resets', 'post'),
+        ('/operations/settlement-batches', 'get'),
+        ('/operations/settlement-batches/{settlementBatchId}', 'get'),
+        ('/operations/settlement-batches/{settlementBatchId}/items', 'get'),
+        ('/operations/settlement-batches/{settlementBatchId}/reconciliation', 'get'),
+        ('/stores/search', 'get'),
+        ('/stores/{storeId}/disputes', 'get'),
+        ('/stores/{storeId}/orders', 'get'),
+        ('/stores/{storeId}/orders/{orderReference}', 'get'),
+        ('/stores/{storeId}/orders/{orderReference}/refund-previews', 'post'),
+        ('/stores/{storeId}/orders/{orderReference}/refunds', 'post'),
+        ('/stores/{storeId}/orders/{orderReference}/transitions', 'post'),
+    }
+    missing_p0_target_operations = required_p0_target_operations - target_operations
+    if missing_p0_target_operations:
+        print('P0 design capability target operations are incomplete.', file=sys.stderr)
+        print('Missing:', sorted(missing_p0_target_operations), file=sys.stderr)
+        sys.exit(1)
+    for path, method in required_p0_target_operations:
+        operation = spec['paths'][path][method]
+        if operation.get('x-beanflow-contract-status') != 'TARGET':
+            print(f'{method.upper()} {path} must declare TARGET contract status.', file=sys.stderr)
+            sys.exit(1)
+        if 'security' not in operation:
+            print(f'{method.upper()} {path} must declare its authentication chain explicitly.', file=sys.stderr)
+            sys.exit(1)
+
+    expected_operation_security = {
+        ('/payment-config', 'get'): [],
+        ('/stores/nearby', 'get'): [{'customerSession': []}],
+        ('/stores/{storeId}/menus', 'get'): [{'customerSession': []}],
+        ('/stores/{storeId}/pickup-slots', 'get'): [{'customerSession': []}],
+        ('/orders', 'post'): [{'customerSession': []}],
+        ('/orders/{sourceOrderId}/reorders', 'post'): [{'customerSession': []}],
+        ('/orders/{orderId}', 'get'): [{'customerSession': []}],
+        ('/orders/{orderId}/cancellations', 'post'): [{'customerSession': []}],
+        ('/orders/{orderId}/payment-attempts', 'post'): [{'customerSession': []}],
+        ('/payments/{paymentId}', 'get'): [{'customerSession': []}],
+        ('/payments/{paymentId}/confirmations', 'post'): [{'customerSession': []}],
+        ('/payment-methods', 'get'): [{'customerSession': []}],
+        ('/payment-methods', 'post'): [{'customerSession': []}],
+        ('/payment-methods/{paymentMethodId}', 'delete'): [{'customerSession': []}],
+        ('/payment-methods/{paymentMethodId}/default', 'put'): [{'customerSession': []}],
+    }
+    for (path, method), expected_security in expected_operation_security.items():
+        operation = spec['paths'][path][method]
+        if operation.get('security') != expected_security:
+            print(f'{method.upper()} {path} does not match the accepted single authentication Chain.', file=sys.stderr)
+            sys.exit(1)
+    if set(spec['paths']['/payment-config']['get'].get('responses', {})) != {'200', '503'}:
+        print('Public GET /payment-config must not expose authentication failures.', file=sys.stderr)
+        sys.exit(1)
+
+    public_order_reference_pattern = '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+    public_order_reference_input_pattern = '^[Bb][Ff]-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{4}$'
+    order_reference_parameter = spec['components']['parameters']['OrderReference']['schema']
+    if order_reference_parameter.get('pattern') != public_order_reference_input_pattern:
+        print('Public order reference path pattern does not match ADR-096.', file=sys.stderr)
+        sys.exit(1)
+    for schema_name in (
+        'CustomerOrderSummary',
+        'CustomerOrderDetail',
+        'CustomerCancellationResult',
+        'StoreOrderBoardItem',
+        'MerchantRefundPreview',
+        'MerchantRefundResult',
+    ):
+        pattern = spec['components']['schemas'][schema_name]['properties']['orderReference'].get('pattern')
+        if pattern != public_order_reference_pattern:
+            print(f'{schema_name}.orderReference does not match ADR-096.', file=sys.stderr)
+            sys.exit(1)
+
+    password_schema = spec['components']['schemas']['Password']
+    if (
+        password_schema.get('minLength') != 15
+        or password_schema.get('maxLength') != 128
+        or 'at most 512 UTF-8 bytes' not in password_schema.get('description', '')
+    ):
+        print('Password schema does not match the BR-35 code-point and UTF-8 byte limits.', file=sys.stderr)
+        sys.exit(1)
+
+    store_search = spec['paths']['/stores/search']['get']
+    store_search_parameters = {
+        parameter.get('name'): parameter
+        for parameter in store_search.get('parameters', [])
+        if isinstance(parameter, dict) and '$ref' not in parameter
+    }
+    search_query_schema = store_search_parameters['query']['schema']
+    store_search_page = spec['components']['schemas']['StoreSearchPage']
+    store_search_item = spec['components']['schemas']['StoreSearchItem']
+    if (
+        search_query_schema.get('minLength') != 2
+        or search_query_schema.get('maxLength') != 50
+        or not {'latitude', 'longitude', 'radiusMeters', 'pickupAvailable'} <= set(store_search_parameters)
+        or 'must be supplied together' not in store_search.get('description', '')
+        or 'distanceAvailable' not in store_search_page.get('required', [])
+        or set(store_search_item['properties']['matchReason'].get('enum', [])) != {'STORE_NAME', 'MENU_NAME', 'BOTH'}
+    ):
+        print('Store search target contract does not match ADR-103.', file=sys.stderr)
+        sys.exit(1)
+
+    csrf_protected_target_operations = {
+        ('/auth/customer/registrations', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/auth/customer/sessions', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/auth/customer/sessions/current', 'delete'): '#/components/parameters/CustomerCsrfToken',
+        ('/me/favorite-stores/{storeId}', 'put'): '#/components/parameters/CustomerCsrfToken',
+        ('/me/favorite-stores/{storeId}', 'delete'): '#/components/parameters/CustomerCsrfToken',
+        ('/me/orders/{orderReference}/cancellations', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/me/orders/{orderReference}/reorders', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/orders', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/orders/{sourceOrderId}/reorders', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/orders/{orderId}/cancellations', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/orders/{orderId}/payment-attempts', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/payments/{paymentId}/confirmations', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/payment-methods', 'post'): '#/components/parameters/CustomerCsrfToken',
+        ('/payment-methods/{paymentMethodId}', 'delete'): '#/components/parameters/CustomerCsrfToken',
+        ('/payment-methods/{paymentMethodId}/default', 'put'): '#/components/parameters/CustomerCsrfToken',
+        ('/auth/merchant/sessions', 'post'): '#/components/parameters/MerchantCsrfToken',
+        ('/auth/merchant/password-changes', 'post'): '#/components/parameters/MerchantCsrfToken',
+        ('/auth/merchant/sessions/current', 'delete'): '#/components/parameters/MerchantCsrfToken',
+        ('/stores/{storeId}/orders/{orderReference}/transitions', 'post'): '#/components/parameters/MerchantCsrfToken',
+        ('/stores/{storeId}/orders/{orderReference}/refund-previews', 'post'): '#/components/parameters/MerchantCsrfToken',
+        ('/stores/{storeId}/orders/{orderReference}/refunds', 'post'): '#/components/parameters/MerchantCsrfToken',
+    }
+    for (path, method), csrf_ref in csrf_protected_target_operations.items():
+        operation = spec['paths'][path][method]
+        parameter_refs = {
+            parameter.get('$ref')
+            for parameter in operation.get('parameters', [])
+            if isinstance(parameter, dict)
+        }
+        if csrf_ref not in parameter_refs or '403' not in operation.get('responses', {}):
+            print(f'{method.upper()} {path} must expose its actor CSRF header and 403 failure.', file=sys.stderr)
+            sys.exit(1)
+
+    failure_work_item = spec['components']['schemas']['FailureWorkItem']
+    if (
+        'attemptCount' in failure_work_item.get('required', [])
+        or 'attemptCountAvailable' not in failure_work_item.get('required', [])
+        or 'absence is not projected as zero' not in failure_work_item['properties']['attemptCount'].get('description', '')
+    ):
+        print('Failure work attempt availability must not be projected as a synthetic zero.', file=sys.stderr)
+        sys.exit(1)
+
+    store_order_board = spec['components']['schemas']['StoreOrderBoard']
+    store_order_board_overflow = spec['components']['schemas']['StoreOrderBoardOverflow']
+    store_order_board_overflow_page = spec['components']['schemas']['StoreOrderBoardOverflowPage']
+    board_group = spec['components']['schemas']['StoreOrderBoardDateGroup']
+    if (
+        store_order_board.get('required') != ['groups', 'overflow']
+        or store_order_board['properties']['groups']['items'].get('$ref') != '#/components/schemas/StoreOrderBoardDateGroup'
+        or store_order_board['properties']['overflow']['items'].get('$ref') != '#/components/schemas/StoreOrderBoardOverflow'
+        or store_order_board_overflow.get('required') != ['lane', 'overflowCount', 'nextCursor']
+        or store_order_board_overflow_page.get('required') != ['lane', 'items', 'nextCursor']
+        or store_order_board_overflow_page['properties']['items'].get('maxItems') != 50
+        or set(board_group.get('required', [])) != {'pickupBusinessDate', 'items'}
+        or 'same pickupBusinessDate' not in board_group['properties']['items'].get('description', '')
+    ):
+        print('Store order board must preserve ADR-100 grouping and bounded overflow queue contracts.', file=sys.stderr)
+        sys.exit(1)
+
     runtime_schemas = runtime_spec.get('components', {}).get('schemas', {})
     runtime_transition = runtime_schemas.get('RuntimeStoreOrderTransitionResult', {})
     if set(runtime_transition.get('required', [])) != {'order'}:
@@ -836,11 +1075,14 @@ else:
         '/payment-methods/{paymentMethodId}',
         '/payment-methods/{paymentMethodId}/default',
         '/payments/{paymentId}/refunds',
+        '/operations/payments/{paymentId}/refunds',
         '/payments/{paymentId}',
         '/payments/{paymentId}/confirmations',
         '/store-orders/{orderId}/status',
         '/point-accounts/{accountId}',
         '/point-accounts/{accountId}/transactions',
+        '/operations/point-accounts/{accountId}',
+        '/operations/point-accounts/{accountId}/transactions',
         '/operations/point-accounts/{accountId}/adjustments',
         '/operations/orders/{orderId}/customer-cancellation-refund-reconciliations',
         '/operations/reprocessing-cases/{caseId}/repair-proposals',
@@ -894,6 +1136,7 @@ else:
         ('/payment-methods/{paymentMethodId}', 'delete'),
         ('/payment-methods/{paymentMethodId}/default', 'put'),
         ('/payments/{paymentId}/refunds', 'post'),
+        ('/operations/payments/{paymentId}/refunds', 'post'),
         ('/store-orders/{orderId}/status', 'patch'),
         ('/settlement-items/{itemId}/disputes', 'post'),
         ('/operations/point-accounts/{accountId}/adjustments', 'post'),
@@ -1295,16 +1538,25 @@ else:
     if 'canonical micrometer distance tuple' not in nearby_description or 'display value, not the cursor tuple' not in nearby_distance_description:
         print('Nearby distance display/cursor tuple contract is incomplete.', file=sys.stderr)
         sys.exit(1)
-    expected_cursor_operations = {
-        'GET /stores/nearby',
-        'GET /point-accounts/{accountId}/transactions',
-        'GET /payment-methods',
-        'GET /stores/{storeId}/settlements',
-        'GET /stores/{storeId}/settlements/{settlementBatchId}/items',
-        'GET /operations/policies/ordinary-point-accrual/global/versions',
-        'GET /operations/policies/ordinary-point-accrual/stores',
-        'GET /operations/policies/ordinary-point-accrual/stores/{storeId}/versions',
-        'GET /support/cases',
+    expected_cursor_limits = {
+        'GET /stores/nearby': '#/components/parameters/DiscoveryLimit',
+        'GET /stores/search': '#/components/parameters/DiscoveryLimit',
+        'GET /me/orders': '#/components/parameters/Limit',
+        'GET /me/point-transactions': '#/components/parameters/Limit',
+        'GET /point-accounts/{accountId}/transactions': '#/components/parameters/Limit',
+        'GET /operations/point-accounts/{accountId}/transactions': '#/components/parameters/Limit',
+        'GET /payment-methods': '#/components/parameters/Limit',
+        'GET /stores/{storeId}/disputes': '#/components/parameters/Limit',
+        'GET /stores/{storeId}/settlements': '#/components/parameters/Limit',
+        'GET /stores/{storeId}/settlements/{settlementBatchId}/items': '#/components/parameters/Limit',
+        'GET /operations/failure-queues/{queueType}': '#/components/parameters/Limit',
+        'GET /operations/settlement-batches': '#/components/parameters/Limit',
+        'GET /operations/settlement-batches/{settlementBatchId}/items': '#/components/parameters/Limit',
+        'GET /operations/audit-records': '#/components/parameters/Limit',
+        'GET /operations/policies/ordinary-point-accrual/global/versions': '#/components/parameters/Limit',
+        'GET /operations/policies/ordinary-point-accrual/stores': '#/components/parameters/Limit',
+        'GET /operations/policies/ordinary-point-accrual/stores/{storeId}/versions': '#/components/parameters/Limit',
+        'GET /support/cases': '#/components/parameters/Limit',
     }
     cursor_operations = set()
     for path, path_item in spec['paths'].items():
@@ -1321,13 +1573,14 @@ else:
                 continue
             operation_name = f'{method.upper()} {path}'
             cursor_operations.add(operation_name)
-            if '#/components/parameters/Limit' not in parameter_refs:
-                print(f'{operation_name} cursor pagination must also use Limit.', file=sys.stderr)
+            expected_limit_ref = expected_cursor_limits.get(operation_name)
+            if expected_limit_ref is None or expected_limit_ref not in parameter_refs:
+                print(f'{operation_name} cursor pagination uses an unexpected limit contract.', file=sys.stderr)
                 sys.exit(1)
             if '400' not in operation.get('responses', {}):
                 print(f'{operation_name} must expose 400 for invalid cursor scope or syntax.', file=sys.stderr)
                 sys.exit(1)
-    if cursor_operations != expected_cursor_operations:
+    if cursor_operations != set(expected_cursor_limits):
         print('Cursor operation inventory is stale; update the shared pagination contract.', file=sys.stderr)
         sys.exit(1)
     payment_method_operations = {
@@ -1409,9 +1662,8 @@ else:
     }
     if point_account_parameter_refs != {
         '#/components/parameters/PointAccountId',
-        '#/components/parameters/OptionalAccessReason',
     } or set(point_account_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
-        print('Point-account summary owner/operator read contract is incomplete.', file=sys.stderr)
+        print('Customer point-account summary contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     point_transaction_get = spec['paths']['/point-accounts/{accountId}/transactions']['get']
     point_transaction_parameter_refs = {
@@ -1421,20 +1673,64 @@ else:
     }
     if point_transaction_parameter_refs != {
         '#/components/parameters/PointAccountId',
-        '#/components/parameters/OptionalAccessReason',
         '#/components/parameters/Cursor',
         '#/components/parameters/Limit',
     } or set(point_transaction_get.get('responses', {})) != {'200', '400', '401', '403', '404', '503'}:
-        print('Point-transaction owner/operator cursor contract is incomplete.', file=sys.stderr)
+        print('Customer point-transaction cursor contract is incomplete.', file=sys.stderr)
         sys.exit(1)
-    optional_access_reason = parameters['OptionalAccessReason']
+    operations_point_get = spec['paths']['/operations/point-accounts/{accountId}']['get']
+    operations_point_transaction_get = spec['paths']['/operations/point-accounts/{accountId}/transactions']['get']
+    expected_operations_point_parameters = {
+        '#/components/parameters/PointAccountId',
+        '#/components/parameters/AccessReason',
+    }
+    operations_point_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in operations_point_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    operations_point_transaction_parameter_refs = {
+        parameter.get('$ref')
+        for parameter in operations_point_transaction_get.get('parameters', [])
+        if isinstance(parameter, dict)
+    }
+    if operations_point_parameter_refs != expected_operations_point_parameters:
+        print('Operations point-account summary parameter contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    if operations_point_transaction_parameter_refs != expected_operations_point_parameters | {
+        '#/components/parameters/Cursor',
+        '#/components/parameters/Limit',
+    }:
+        print('Operations point-transaction cursor contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    expected_point_responses = {'200', '400', '401', '403', '404', '503'}
     if (
-        optional_access_reason.get('in') != 'header'
-        or optional_access_reason.get('name') != 'X-Access-Reason'
-        or optional_access_reason.get('required') is not False
-        or 'PLATFORM_OPERATOR' not in optional_access_reason.get('description', '')
+        set(operations_point_get.get('responses', {})) != expected_point_responses
+        or set(operations_point_transaction_get.get('responses', {})) != expected_point_responses
+        or point_account_get.get('security') != [{'customerSession': []}]
+        or point_transaction_get.get('security') != [{'customerSession': []}]
+        or operations_point_get.get('security') != [{'bearerAuth': []}]
+        or operations_point_transaction_get.get('security') != [{'bearerAuth': []}]
     ):
-        print('Point-account support-read optional access-reason contract is incomplete.', file=sys.stderr)
+        print('Actor-exclusive point-account authentication contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    merchant_refund_post = spec['paths']['/payments/{paymentId}/refunds']['post']
+    operations_refund_post = spec['paths']['/operations/payments/{paymentId}/refunds']['post']
+    if (
+        merchant_refund_post.get('security') != [{'merchantSession': []}]
+        or operations_refund_post.get('security') != [{'bearerAuth': []}]
+        or '#/components/parameters/MerchantCsrfToken' not in {
+            parameter.get('$ref')
+            for parameter in merchant_refund_post.get('parameters', [])
+            if isinstance(parameter, dict)
+        }
+        or '#/components/parameters/MerchantCsrfToken' in {
+            parameter.get('$ref')
+            for parameter in operations_refund_post.get('parameters', [])
+            if isinstance(parameter, dict)
+        }
+    ):
+        print('Actor-exclusive legacy refund authentication contract is incomplete.', file=sys.stderr)
         sys.exit(1)
     policy_get = spec['paths']['/operations/policies/expired-benefit-restoration']['get']
     policy_get_parameter_refs = {

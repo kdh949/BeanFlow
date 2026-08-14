@@ -12,6 +12,7 @@ import java.util.UUID
 @Service
 internal class StoreAccessService(
     private val repository: StoreMembershipJpaRepository,
+    private val merchantAccounts: MerchantAccountAccessPolicy,
 ) : StoreAccessOperations {
     @Transactional(readOnly = true)
     override fun requireStoreAccess(
@@ -19,6 +20,7 @@ internal class StoreAccessService(
         storeId: UUID,
         actorRoles: Set<StoreActorRole>,
     ): StoreActor {
+        merchantAccounts.requireActive(actorId)
         val membership =
             repository.findByActorIdAndStoreId(actorId, storeId)
                 ?: denied("Active store membership is required")
@@ -26,7 +28,7 @@ internal class StoreAccessService(
             denied("Store membership is revoked")
         }
         if (membership.membershipRole !in actorRoles) {
-            denied("JWT role and store membership role do not match")
+            denied("The store membership role does not allow this operation")
         }
         return StoreActor(actorId, storeId, membership.membershipRole)
     }

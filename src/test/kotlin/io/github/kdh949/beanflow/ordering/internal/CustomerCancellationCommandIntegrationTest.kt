@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
@@ -75,6 +76,80 @@ internal class CustomerCancellationCommandIntegrationTest
         @AfterEach
         fun waitForOwnerListeners() {
             awaitPublicationsSettled()
+        }
+
+        @Test
+        fun `public reference customer routes canonicalize authorize and omit the internal order id`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val orderId = createOrder(fixture, "public-customer-order")
+            val reference = value("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            jdbcTemplate.update(
+                "UPDATE merchant_store_discovery_profile SET name = 'Renamed Store' WHERE store_id = ?",
+                fixture.storeId,
+            )
+            jdbcTemplate.update(
+                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
+                Timestamp.from(Instant.parse("2030-01-02T00:10:00Z")),
+                Timestamp.from(Instant.parse("2030-01-02T00:20:00Z")),
+                fixture.pickupSlotId,
+            )
+
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", reference.lowercase())
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.orderReference").value(reference))
+                .andExpect(jsonPath("$.pickupNumber").value("A-1"))
+                .andExpect(jsonPath("$.storeName").value("BeanFlow Test Store"))
+                .andExpect(jsonPath("$.pickupWindowStart").value("2030-01-01T00:10:00Z"))
+                .andExpect(jsonPath("$.pickupWindowEnd").value("2030-01-01T00:20:00Z"))
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", reference)
+                        .with(customerJwt(UUID.randomUUID())),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", "BF-2222-2222")
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", "BF-I234-5678")
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/orders/{orderReference}/cancellations", reference.lowercase())
+                        .with(customerJwt(fixture.customerId))
+                        .header("Idempotency-Key", "public-cancel-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reasonCode":"ORDER_MISTAKE"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.publicReference").value(reference))
+                .andExpect(jsonPath("$.orderState").value("CANCELLED"))
+
+            mockMvc
+                .perform(
+                    get("/api/v1/me/orders/{orderReference}", reference)
+                        .with(customerJwt(fixture.customerId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(2))
+                .andExpect(jsonPath("$.allowedActions[0]").value("REORDER"))
+                .andExpect(jsonPath("$.allowedActions[1]").value("VIEW_REFUND"))
+                .andExpect(jsonPath("$.paymentRecovery.state").value("NOT_REQUIRED"))
+                .andExpect(jsonPath("$.paymentId").doesNotExist())
+                .andExpect(jsonPath("$.providerReference").doesNotExist())
+                .andExpect(jsonPath("$.cancellationDetail").doesNotExist())
         }
 
         @Test
@@ -901,6 +976,7 @@ internal class CustomerCancellationCommandIntegrationTest
             actorId: UUID,
             storeId: UUID,
         ) {
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
             val now = Timestamp.from(Instant.now())
             jdbcTemplate.update(
                 """

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.settlement.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -47,6 +48,7 @@ internal class SettlementBatchQueryIntegrationTest
                 """
                 TRUNCATE TABLE
                     identity_store_membership,
+                    identity_merchant_account,
                     settlement_dispute,
                     settlement_adjustment,
                     settlement_item,
@@ -158,6 +160,7 @@ internal class SettlementBatchQueryIntegrationTest
             status: String,
         ): UUID =
             UUID.randomUUID().also { actorId ->
+                MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
                 jdbcTemplate.update(
                     """
                     INSERT INTO identity_store_membership (
@@ -236,5 +239,5 @@ internal class SettlementBatchQueryIntegrationTest
                 it
                     .subject(actorId.toString())
                     .claim("roles", listOf(role))
-            }.authorities(SimpleGrantedAuthority("ROLE_$role"))
+            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
     }

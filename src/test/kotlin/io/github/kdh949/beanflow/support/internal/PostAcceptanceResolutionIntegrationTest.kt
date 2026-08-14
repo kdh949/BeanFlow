@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.payment.internal.GatewayRefundResult
 import io.github.kdh949.beanflow.payment.internal.PaymentEntity
 import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
@@ -368,6 +369,7 @@ internal class PostAcceptanceResolutionIntegrationTest
                 "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
                 storeId,
             )
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbc, orderId, now)
             val readyAt = now.plusSeconds(40).takeIf { state != PostAcceptanceState.PREPARING }
             val completedAt = now.plusSeconds(50).takeIf { state == PostAcceptanceState.COMPLETED }
             jdbc.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
@@ -375,16 +377,25 @@ internal class PostAcceptanceResolutionIntegrationTest
                 jdbc.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state, subtotal_krw,
                         coupon_discount_krw, points_applied_krw, payable_krw, currency,
                         reservation_expires_at, paid_at, accepted_at, preparing_at, ready_at, completed_at,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, ?, 7000, 0, 0, 7000, 'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-13', ?,
+                              'Test Store', ?, ?,
+                              ?, 7000, 0, 0, 7000, 'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent(),
                     orderId,
                     customerId,
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(orderId),
+                    Timestamp.from(now),
+                    Timestamp.from(now.plusSeconds(600)),
                     state.name,
                     Timestamp.from(now.plusSeconds(10)),
                     Timestamp.from(now.plusSeconds(20)),

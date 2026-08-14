@@ -20,16 +20,44 @@ import java.time.Clock
 import java.util.UUID
 import kotlin.system.exitProcess
 
+internal const val ORDINARY_POINT_ACCRUAL_POLICY_BOOTSTRAP_AUTO_CONFIGURATION_EXCLUSIONS =
+    "org.springframework.modulith.actuator.autoconfigure.ApplicationModulesEndpointConfiguration," +
+        "org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration," +
+        "org.springframework.modulith.observability.autoconfigure.SpringDataRestModuleObservabilityAutoConfiguration," +
+        "org.springframework.modulith.core.config.ApplicationModuleInitializerRuntimeVerification," +
+        "org.springframework.modulith.runtime.autoconfigure.SpringModulithRuntimeAutoConfiguration," +
+        "org.springframework.modulith.events.config.EventPublicationAutoConfiguration," +
+        "org.springframework.modulith.events.config.EventExternalizationAutoConfiguration," +
+        "org.springframework.modulith.events.jpa.JpaEventPublicationAutoConfiguration," +
+        "org.springframework.modulith.events.jpa.archiving.ArchivingAutoConfiguration," +
+        "org.springframework.modulith.moments.autoconfigure.MomentsAutoConfiguration," +
+        "org.springframework.modulith.moments.autoconfigure.MomentsJacksonAutoConfiguration," +
+        "org.springframework.modulith.events.jackson.JacksonEventSerializationConfiguration," +
+        "org.springframework.modulith.events.jackson2.Jackson2EventSerializationConfiguration"
+
 @Configuration(proxyBeanMethods = false)
 @Profile("ordinary-point-accrual-policy-bootstrap")
 @EnableAutoConfiguration
-@EntityScan(basePackageClasses = [AuditRecordEntity::class, OrdinaryPointAccrualPolicyVersionEntity::class])
+@EntityScan(
+    basePackageClasses = [
+        AuditRecordEntity::class,
+        OrdinaryPointAccrualPolicyVersionEntity::class,
+        RetentionPolicyVersionEntity::class,
+        RetentionPolicyHeadEntity::class,
+    ],
+)
 @EnableJpaRepositories(
-    basePackageClasses = [AuditRecordJpaRepository::class, OrdinaryPointAccrualPolicyVersionJpaRepository::class],
+    basePackageClasses = [
+        AuditRecordJpaRepository::class,
+        OrdinaryPointAccrualPolicyVersionJpaRepository::class,
+        RetentionPolicyVersionJpaRepository::class,
+        RetentionPolicyHeadJpaRepository::class,
+    ],
 )
 @Import(
     AuditRecordService::class,
     DatabaseAdvisoryLock::class,
+    RetentionPolicyService::class,
     OrdinaryPointAccrualPolicyBootstrapTransaction::class,
     OrdinaryPointAccrualPolicyBootstrapLifecycle::class,
 )
@@ -238,7 +266,8 @@ internal object OrdinaryPointAccrualPolicyBootstrapCli {
                         "spring.main.banner-mode" to "off",
                         "spring.task.scheduling.enabled" to "false",
                         "logging.level.root" to "OFF",
-                        "spring.autoconfigure.exclude" to MODULITH_AUTO_CONFIGURATION_EXCLUSIONS,
+                        "spring.autoconfigure.exclude" to
+                            ORDINARY_POINT_ACCRUAL_POLICY_BOOTSTRAP_AUTO_CONFIGURATION_EXCLUSIONS,
                     ) + springProperties,
                 ).build()
         val context = application.run()
@@ -255,19 +284,4 @@ internal object OrdinaryPointAccrualPolicyBootstrapCli {
     ) {
         output.println("operation=INITIALIZE principal=verified-release-principal result=${result.name}")
     }
-
-    private const val MODULITH_AUTO_CONFIGURATION_EXCLUSIONS =
-        "org.springframework.modulith.actuator.autoconfigure.ApplicationModulesEndpointConfiguration," +
-            "org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration," +
-            "org.springframework.modulith.observability.autoconfigure.SpringDataRestModuleObservabilityAutoConfiguration," +
-            "org.springframework.modulith.core.config.ApplicationModuleInitializerRuntimeVerification," +
-            "org.springframework.modulith.runtime.autoconfigure.SpringModulithRuntimeAutoConfiguration," +
-            "org.springframework.modulith.events.config.EventPublicationAutoConfiguration," +
-            "org.springframework.modulith.events.config.EventExternalizationAutoConfiguration," +
-            "org.springframework.modulith.events.jpa.JpaEventPublicationAutoConfiguration," +
-            "org.springframework.modulith.events.jpa.archiving.ArchivingAutoConfiguration," +
-            "org.springframework.modulith.moments.autoconfigure.MomentsAutoConfiguration," +
-            "org.springframework.modulith.moments.autoconfigure.MomentsJacksonAutoConfiguration," +
-            "org.springframework.modulith.events.jackson.JacksonEventSerializationConfiguration," +
-            "org.springframework.modulith.events.jackson2.Jackson2EventSerializationConfiguration"
 }

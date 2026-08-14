@@ -27,10 +27,12 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
@@ -93,12 +95,65 @@ internal class StoreOrderLifecycleIntegrationTest
                     operations_order_compensation_step,
                     operations_order_compensation_case,
                     identity_store_membership,
+                    identity_merchant_account,
                     event_publication
                 CASCADE
                 """.trimIndent(),
             )
             paymentGateway.reset()
             notificationProvider.reset()
+        }
+
+        @Test
+        fun `public reference store routes authorize the store and omit the internal order id`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "public-store-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/{storeId}/orders/{orderReference}", fixture.storeId, reference.lowercase())
+                        .with(storeJwt(actorId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.orderReference").value(reference))
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/{storeId}/orders/{orderReference}", UUID.randomUUID(), reference)
+                        .with(storeJwt(actorId)),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        fixture.storeId,
+                        reference.lowercase(),
+                    ).with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "public-store-accept")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"action":"ACCEPT","expectedStatus":"PAID","reason":null}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+                .andExpect(jsonPath("$.orderReference").value(reference))
+                .andExpect(jsonPath("$.status").value("ACCEPTED"))
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        UUID.randomUUID(),
+                        reference,
+                    ).with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "wrong-store-transition")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"action":"START_PREPARING","expectedStatus":"ACCEPTED","reason":null}"""),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
         }
 
         @Test
@@ -110,6 +165,7 @@ internal class StoreOrderLifecycleIntegrationTest
             val revokedActor = UUID.randomUUID()
             val activeActor = UUID.randomUUID()
             val activeOwner = UUID.randomUUID()
+            insertActiveMerchantAccount(noMembershipActor)
             insertMembership(otherStoreActor, UUID.randomUUID(), "STAFF", "ACTIVE")
             insertMembership(revokedActor, fixture.storeId, "STAFF", "REVOKED")
             insertMembership(activeActor, fixture.storeId, "STAFF", "ACTIVE")
@@ -503,6 +559,67 @@ internal class StoreOrderLifecycleIntegrationTest
         }
 
         @Test
+        fun `board rejection returns a terminal card while notification failure remains retryable without rollback`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "board-rejection-notification-failure")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/stores/{storeId}/orders/{orderReference}/transitions",
+                        fixture.storeId,
+                        reference,
+                    ).with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "board-rejection-failure-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            {
+                              "action": "REJECT",
+                              "expectedStatus": "PAID",
+                              "reason": "OUT_OF_STOCK"
+                            }
+                            """.trimIndent(),
+                        ),
+                ).andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.lane").doesNotExist())
+                .andExpect(jsonPath("$.acceptancePhase").doesNotExist())
+                .andExpect(jsonPath("$.allowedActions.length()").value(0))
+                .andExpect(jsonPath("$.compensationRecovery.state").value("PROCESSING"))
+                .andExpect(jsonPath("$.compensationRecovery.steps").doesNotExist())
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+
+            await("rejection notification work") {
+                count(
+                    "SELECT count(*) FROM notification_delivery WHERE order_id = ? AND template = 'ORDER_REJECTED'",
+                    orderId,
+                ) == 1L
+            }
+            notificationProvider.enqueue(NotificationProviderResult.Failed("TEST_REJECTION_DELIVERY_FAILURE"))
+            assertThat(notificationWorker.runOnce()).isEqualTo(1)
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("REJECTED")
+            assertThat(
+                value<String>(
+                    "SELECT state FROM notification_delivery WHERE order_id = ? AND template = 'ORDER_REJECTED'",
+                    orderId,
+                ),
+            ).isEqualTo("RETRY_SCHEDULED")
+            assertThat(
+                value<String>(
+                    "SELECT state FROM operations_order_compensation_case WHERE order_id = ?",
+                    orderId,
+                ),
+            ).isEqualTo("RETRY_SCHEDULED")
+            awaitNoOutstandingPublications()
+        }
+
+        @Test
         fun `acceptance and timeout race produces exactly one guarded transition`() {
             val fixture = OrderCreationFixture()
             val orderId = paidOrder(fixture, "store-accept-timeout-order")
@@ -691,6 +808,7 @@ internal class StoreOrderLifecycleIntegrationTest
             role: String,
             membershipStatus: String,
         ) {
+            insertActiveMerchantAccount(actorId)
             val now = Timestamp.from(Instant.now())
             jdbcTemplate.update(
                 """
@@ -709,6 +827,26 @@ internal class StoreOrderLifecycleIntegrationTest
             )
         }
 
+        private fun insertActiveMerchantAccount(actorId: UUID) {
+            val now = Timestamp.from(Instant.now())
+            jdbcTemplate.update(
+                """
+                INSERT INTO identity_merchant_account (
+                    id, login_id, password_hash, credential_version, display_name, state,
+                    temporary_password_expires_at, password_changed_at, locked_until,
+                    created_at, updated_at, version
+                ) VALUES (?, ?, 'test-only-password-hash', 0, 'Store lifecycle actor', 'ACTIVE',
+                          null, ?, null, ?, ?, 0)
+                ON CONFLICT (id) DO NOTHING
+                """.trimIndent(),
+                actorId,
+                "test.${actorId.toString().take(8)}",
+                now,
+                now,
+                now,
+            )
+        }
+
         private fun patchStatus(
             actorId: UUID,
             orderId: UUID,
@@ -718,6 +856,7 @@ internal class StoreOrderLifecycleIntegrationTest
         ) = mockMvc.perform(
             patch("/api/v1/store-orders/{orderId}/status", orderId)
                 .with(storeJwt(actorId))
+                .with(csrf())
                 .header("Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
@@ -770,7 +909,7 @@ internal class StoreOrderLifecycleIntegrationTest
                 it
                     .subject(actorId.toString())
                     .claim("roles", listOf(role))
-            }.authorities(SimpleGrantedAuthority("ROLE_$role"))
+            }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun awaitNoOutstandingPublications() {
             await("event publications to complete") {

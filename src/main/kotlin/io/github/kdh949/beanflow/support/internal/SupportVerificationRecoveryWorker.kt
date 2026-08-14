@@ -125,7 +125,7 @@ internal class SupportVerificationRecoveryTransactions(
                     challengeResource,
                     session.state,
                     if (session.state == VerificationState.VERIFIED) session.requestedLevel else VerificationLevel.UNVERIFIED,
-                    session.invalidAttempts,
+                    session.invalidAttempts.toInt(),
                     null,
                 )
         } else {

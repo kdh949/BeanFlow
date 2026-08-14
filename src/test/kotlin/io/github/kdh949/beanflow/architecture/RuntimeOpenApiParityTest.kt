@@ -3,21 +3,28 @@ package io.github.kdh949.beanflow.architecture
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
+import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
+import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationService
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
+import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.CustomerCancellationService
+import io.github.kdh949.beanflow.ordering.internal.CustomerOrderQueryService
 import io.github.kdh949.beanflow.ordering.internal.GetOrderService
 import io.github.kdh949.beanflow.ordering.internal.OneTimeCheckoutService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
+import io.github.kdh949.beanflow.ordering.internal.PublicOrderReferenceService
+import io.github.kdh949.beanflow.ordering.internal.StoreOrderBoardQueryService
 import io.github.kdh949.beanflow.ordering.internal.StoreOrderTransitionService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodApplicationService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodQueryService
@@ -43,6 +50,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.security.oauth2.jwt.JwtDecoder
+import org.springframework.session.web.http.HttpSessionIdResolver
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.web.bind.annotation.RequestMethod
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
@@ -77,10 +85,19 @@ internal class RuntimeOpenApiParityTest(
     private lateinit var customerCancellationService: CustomerCancellationService
 
     @MockitoBean
+    private lateinit var customerOrderQueryService: CustomerOrderQueryService
+
+    @MockitoBean
     private lateinit var partialRefundService: PartialRefundService
 
     @MockitoBean
     private lateinit var storeOrderTransitionService: StoreOrderTransitionService
+
+    @MockitoBean
+    private lateinit var storeOrderBoardQueryService: StoreOrderBoardQueryService
+
+    @MockitoBean
+    private lateinit var publicOrderReferenceService: PublicOrderReferenceService
 
     @MockitoBean
     private lateinit var paymentSetupRepairService: PaymentSetupRepairService
@@ -174,6 +191,21 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var jwtDecoder: JwtDecoder
+
+    @MockitoBean
+    private lateinit var customerAccountApplicationService: CustomerAccountApplicationService
+
+    @MockitoBean
+    private lateinit var customerSourceIpResolver: CustomerSourceIpResolver
+
+    @MockitoBean
+    private lateinit var merchantAccountApplicationService: MerchantAccountApplicationService
+
+    @MockitoBean
+    private lateinit var merchantCredentialAdministrationApplicationService: MerchantCredentialAdministrationApplicationService
+
+    @MockitoBean
+    private lateinit var httpSessionIdResolver: HttpSessionIdResolver
 
     @Test
     fun `runtime OpenAPI operations exactly match public Spring MVC mappings`() {

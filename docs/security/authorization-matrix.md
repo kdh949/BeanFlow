@@ -2,6 +2,16 @@
 
 | Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
 |---|---:|---:|---:|---:|---:|
+| 고객 가입·로그인 | Self | No | No | No | No |
+| 점주 로그인·비밀번호 변경 | No | Self | Self | No | No |
+| 점주 계정 발급·exact 조회·초기화·잠금 해제 | No | No | No | Active `MERCHANT_CREDENTIAL_MANAGE` grant + reason + idempotency + Audit | No |
+| 고객 현재 Session 조회·로그아웃 (`/me`, `/auth/customer/sessions/current`) | Own | No | No | No | No |
+| 점주 현재 Session 조회·로그아웃 (`/merchant/me`, `/auth/merchant/sessions/current`) | No | Own | Own | No | No |
+| 운영자 현재 actor 조회 (`/operations/me`) | No | No | No | Own JWT | Own JWT |
+| 접근 가능 매장 목록 (`/merchant/me/stores`) | No | ACTIVE membership만 | ACTIVE membership만 | No | No |
+| 내 주문 목록·상세 (`/me/orders`, 주문번호) | Customer Session의 own 주문만 | No | No | 별도 Support 경로만 | No |
+| 매장 주문보드 목록·상세 (`/stores/{storeId}/orders`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
+| 매장 주문 상태 전이 (`/stores/{storeId}/orders/{orderReference}/transitions`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 빠른 재주문 | Own terminal source only | No | No | No direct reorder | No |
 | 내 결제수단 등록·목록 | Own only | No | No | No public support endpoint | No |
@@ -11,17 +21,20 @@
 | 취소 결과와 환불 진행 요약 조회 | Own | No | No | Read for support | No |
 | 주문 보상 case step 상세 조회 | No | No | No | Explicit permission | No |
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
-| 가까운 매장 검색 | Yes | Yes | Yes | Yes | Yes |
-| 매장 메뉴 조회 | Yes | Yes | Yes | Yes | Yes |
-| 매장 픽업 슬롯 조회 | Yes | Yes | Yes | Yes | Yes |
+| 가까운 매장 검색 (`/stores/nearby`) | Customer Session | No | No | No | No |
+| 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
+| 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Active explicit `POINT_ACCOUNT_READ` grant + reason | No |
 | 감사형 포인트 조정 | No | No | No | Active explicit `POINT_ADJUSTMENT` grant + reason + evidence | No |
-| 부분 환불 | No | Owned store with policy | Permission required | Approved operation | Read only |
+| 부분 환불 preview·실행 | No | ACTIVE owned-store membership + reason + idempotency | ACTIVE assigned-store membership + reason + idempotency | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
 | 이의제기 생성 | No | Owned store | No | No | No |
 | 이의제기 판정 | No | No | No | No public endpoint | No public endpoint |
+| 운영 실패 작업 목록·상세 | No | No | No | Active `REPROCESSING_CASE_READ` grant | No |
+| 운영 정산 대사 목록·상세 | No | No | No | Active `SETTLEMENT_RECONCILIATION_READ` grant | No |
+| 감사 로그 목록·상세 | No | No | No | Active `AUDIT_RECORD_READ` grant + access reason + audited read | No |
 | 재처리 | No | No | No | Explicit permission + reason | Settlement scope only |
 | 누락 Refund 복구 제안 | No | No | No | Explicit permission + reason | No |
 | 누락 Refund 복구 승인·거절 | No | No | No | 제안자와 다른 활성 operator + reason | No |
@@ -30,9 +43,68 @@
 | 만료 혜택 복원 정책 조회·변경 | No | No | No | Active `EXPIRED_BENEFIT_POLICY_READ`/`WRITE` grant + reason | No |
 | 일반 포인트 적립 정책 조회·변경 | No | No | No | Active `POINT_ACCRUAL_POLICY_READ`/`WRITE` grant + reason | No |
 
+## Authentication chains
+
+인증 방식은 사용자 유형별로 다르다([ADR-092](../adr/ADR-092-hybrid-authentication.md)).
+
+| Chain | 경로 | 인증 | CSRF |
+|---|---|---|---|
+| Public | `/actuator/health`, `/api/v1/payment-config`, `/api/v1/auth/operations/config` | 없음 | 해당 없음 |
+| Operations | `/api/v1/operations/**`, `/api/v1/support/**` | Keycloak Bearer JWT | 적용하지 않음 |
+| Merchant | `/api/v1/auth/merchant/**`, `/api/v1/merchant/**`, 매장 범위 경로 | Session Cookie | 적용 |
+| Customer | `/api/v1/auth/customer/**`, `/api/v1/me/**`, `/api/v1/orders/**`, `/api/v1/payment-methods/**`, 고객 결제·포인트·매장 탐색 경로 | Session Cookie | 적용 |
+
+- 요청은 정확히 하나의 Chain에 속한다. 경로가 겹치거나 미배정이면 기동을 실패시킨다.
+- Chain을 명시하지 않은 새 endpoint는 구조 검증을 실패시킨다. Customer Chain을 암묵적
+  기본값으로 사용하지 않는다.
+- Cookie는 `HttpOnly`, `Secure`, `SameSite=Lax`이며 고객은 `BEANFLOW_CUSTOMER_SESSION`, 점주는
+  `BEANFLOW_MERCHANT_SESSION`으로 이름을 분리한다([MD-2026-013](../decisions/minor-decisions.md)).
+- CSRF token은 고객 `BEANFLOW_CUSTOMER_XSRF`, 점주 `BEANFLOW_MERCHANT_XSRF` Cookie로 분리하고
+  `X-BEANFLOW-CSRF` header에 복사한다. actor별 token 발급 endpoint와 다른 Chain의 token은 수용하지 않는다.
+  token 발급 GET은 body 없는 204이며 해당 actor의 XSRF Cookie만 발급한다.
+- 고객 가입과 로그인은 Customer Chain 안의 anonymous entry point지만 CSRF 검증은 유지한다. 로그인
+  성공 뒤에만 `BEANFLOW_CUSTOMER_SESSION`을 발급하며, Bearer JWT를 고객 credential로 병행 수용하지 않는다.
+- 현재 actor 조회와 logout도 Chain별 경로로 분리한다. 하나의 `/me`에서 여러 Cookie와 JWT를
+  동시에 해석하지 않는다.
+- 로그인 시 Session ID를 회전한다. 비밀번호 변경·로그아웃 시 해당 계정 Session을 폐기한다.
+- Session에는 actor 식별자, 인증 시각과 로그인 시점 `credentialVersion`만 둔다. 계정 상태와 현재
+  version, 권한과 매장 membership은 캐시하지 않고 매 요청 다시 조회한다([ADR-094](../adr/ADR-094-browser-session-security.md),
+  [ADR-095](../adr/ADR-095-unified-current-actor.md)).
+- Session 저장소 조회 실패는 익명 요청으로 강등하지 않고 `503`이다.
+
+## Merchant account state gate
+
+점주 계정이 `INITIAL_PASSWORD`이면 비밀번호 변경과 `/merchant/me` 외 모든 매장 API가 `403`이다
+([ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md)). 이 판정은 Merchant Chain 인가 규칙과
+Application Service 양쪽에서 수행한다. 한 곳만 두면 새 endpoint 추가 시 누락된다.
+
+계정 상태가 `ACTIVE`라고 매장 접근 권한이 생기지 않는다. 매장 접근은 계속
+`StoreMembership`이 소유한다([ADR-027](../adr/ADR-027-store-membership-authorization.md)).
+
+## Public order reference is not an authorization token
+
+공개 주문번호(`BF-XXXX-XXXX`)와 픽업번호는 표시·조회 편의를 위한 식별자이며 권한 증명이 아니다
+([ADR-096](../adr/ADR-096-public-order-reference.md)).
+
+- 고객 경로는 주문번호와 함께 Session actor의 소유권을 검증한다. 소유자가 아니면 `403`,
+  존재하지 않으면 `404`다.
+- 목록은 request parameter나 cursor에서 customer ID를 받지 않고 현재 `CustomerActor`를 owner
+  predicate와 signed cursor scope에 함께 묶는다. 다른 고객·상태·기간의 cursor는 `400`이며 빈 목록으로
+  대체하지 않는다.
+- 매장 경로는 주문번호와 함께 `StoreMembership`과 주문의 `storeId` 일치를 검증한다.
+- 공개번호 고객 취소와 매장 전이도 같은 predicate로 내부 UUID를 해석한 뒤 기존 Aggregate 명령을
+  실행한다. 신규 응답과 멱등 replay 변환 결과에는 내부 `orderId`를 포함하지 않는다.
+- 형식 검증은 대문자 canonicalization 뒤 수행한다. 존재 확인은 403/404 구분에만 사용하며 공개번호
+  단독 조회 결과를 반환하지 않는다.
+- 픽업번호는 매장·영업일 안에서만 유일하므로 조회 키로 사용하지 않는다.
+
 ## Enforcement layers
 
-- Security FilterChain: 인증 객체 구성
+- Security FilterChain: Public/Operations/Merchant/Customer 경로를 중앙 registry로 단일 배정하고,
+  Operations는 Bearer JWT, Customer/Merchant는 서로 다른 PostgreSQL Session·CSRF Cookie만 수용한다.
+- CurrentActor resolver: Controller에 `CustomerActor`, `MerchantActor`, `OperatorActor`만 전달하고
+  actor 유형 불일치를 403으로 거부한다. Controller가 `Jwt`, `Authentication`, `HttpSession`을 직접
+  받는 것은 구조 테스트가 차단한다.
 - Method Security: 역할 기반 진입점
 - Application Service: 객체 소유권·매장 membership·Operations explicit permission grant
 - Aggregate: 상태와 비즈니스 권한에 독립적인 불변식
@@ -48,10 +120,16 @@
 `PLATFORM_OPERATOR` role과 active grant를 같은 local transaction에서 확인한다. revoked/missing
 grant는 403, grant/Audit persistence failure는 503이다.
 
-S10은 기존 9개와 Support/Operations/Privacy 33개를 합친 42개 closed permission 값을 enum과 DB 제약에
-등록했고 V42는 `PRIVACY_BREAK_GLASS_REVIEW`를 추가했다. 새 값은 persistent grant/revoke/regrant와 동일한
-lock/Audit 경계를 사용하지만, role bundle이나
-default grant로 배포되지 않는다. S20은 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`, `SUPPORT_CASE_ASSIGN`를
+P0 운영 조회는 BR-39에 따라 `REPROCESSING_CASE_READ`, `SETTLEMENT_RECONCILIATION_READ`,
+`AUDIT_RECORD_READ`를 각각 사용한다. 세 grant는 서로 대체하지 않으며 조회 grant는 재처리·조정 같은
+명령 권한을 포함하지 않는다. 감사 로그 조회만 `X-Access-Reason`과 같은 transaction의 접근 Audit을
+추가로 요구한다. 다른 두 조회도 grant 장애를 빈 목록이나 role-only 허용으로 바꾸지 않는다.
+
+S10은 기존 9개와 Support/Operations/Privacy permission을 closed vocabulary로 등록했고 V42까지 현재
+43개 값이다. productization-20은 `MERCHANT_CREDENTIAL_MANAGE`를 추가하고 productization-100은
+`REPROCESSING_CASE_READ`, `SETTLEMENT_RECONCILIATION_READ`, `AUDIT_RECORD_READ`를 추가해 P0 목표를
+47개로 만든다. 새 값은 persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만,
+role bundle이나 default grant로 배포되지 않는다. S20은 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`, `SUPPORT_CASE_ASSIGN`를
 active grant와 Case assignment/version 조건으로 사용한다. S30은 `SUPPORT_SUBJECT_SEARCH`를 Tx1/rate guard와
 Vault 호출 뒤 Tx2에서 모두 확인한다. S40은 verification, reveal request/approval, BASIC/SENSITIVE reveal,
 break-glass request와 distinct privacy review permission을 owning transaction에서 확인한다. Action, Delivery와
@@ -82,8 +160,9 @@ Application Service는 완전한 고객 취소 원천을 다시 검증한 뒤 �
 한 번만 예약한다. 다른 repair/read grant나 `PLATFORM_OPERATOR` role만으로 통과하지 않으며,
 금액·Provider 결과·금융 식별자를 입력하거나 새 REQUEST를 보내는 권한은 부여하지 않는다.
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
-`POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target access Audit을 요구한다. customer request에서
-header는 optional이고 operator branch에서만 required다. operator branch는 grant 확인, projection과
+별도 `/operations/point-accounts/**` URI에서 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target
+access Audit을 요구한다. Customer URI에는 reason header를 선언하지 않고 운영자 URI에서는 required다.
+operator branch는 grant 확인, projection과
 `POINT_ACCOUNT_READ` Audit을 하나의 local transaction에서 commit해야만 200을 반환한다. missing/revoked
 grant는 403이고 grant/Audit persistence failure는 503이며 role 또는 다른 permission으로 대체하지 않는다.
 
@@ -99,11 +178,24 @@ Audit를 한 transaction으로 저장한다. 자유 입력 reason은 command val
 terminal exit contract는 [operator permission bootstrap runbook](../operations/operator-permission-bootstrap-runbook.md)을
 따른다.
 
-매장 주문 명령은 JWT 역할과 Identity의 현재 `ACTIVE` membership을 모두 요구한다.
-role과 membership role이 일치하지 않거나 membership이 `REVOKED`이면 `403`이다.
+매장 주문 명령은 Merchant Session의 `MerchantActor` 유형과 Identity의 현재 `ACTIVE` membership을
+요구한다. Session에는 role을 캐시하지 않으며 요청 시점의 membership role이 세부 권한 source다.
+membership이 `REVOKED`이거나 operation이 허용하지 않는 role이면 `403`이다.
+주문보드 목록은 `store_id`를 SQL predicate에 포함하고, 상세·전이는 요청 매장 membership을
+reference 존재 확인보다 먼저 검사한다. 전이는 Order row lock을 얻은 뒤 실제 Order의 store에 대해
+membership을 다시 확인한다. 따라서 membership이 없거나 revoke된 actor에게 reference 존재 여부를
+404로 먼저 노출하지 않으며, 조회 뒤 필터링이나 Session-cached 매장 목록으로 대체하지 않는다.
 
-정산 Batch/Item 조회와 이의제기 접수도 JWT `STORE_OWNER`와 Identity의 현재 `ACTIVE OWNER`
-membership을 함께 요구한다. `STORE_STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
+부분 환불 preview와 실행도 같은 객체 수준 인가를 적용한다(BR-38). `OWNER`와 `STAFF` 모두 자신이
+`ACTIVE` membership을 가진 매장의 주문에 실행할 수 있지만, 다른 매장이나 허용되지 않은 membership role은
+`403`이다. 실행은 사유와 `Idempotency-Key`가 필수이며 `paymentId`·`orderLineId` UUID를 사용자 입력으로
+받지 않는다. P0에서는 STAFF 금액 상한이나 점주 사전 승인을 암묵적으로 추가하지 않는다.
+기존 UUID 기반 `POST /payments/{paymentId}/refunds`는 Merchant Session 전용이고, 기존 Platform
+Operator branch는 `POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 경로는 같은
+idempotency·Refund·Provider 불변식을 공유하며 상대 actor 인증을 fallback으로 받아들이지 않는다.
+
+정산 Batch/Item 조회와 이의제기 접수는 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
+membership을 요구한다. `STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
 없다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
 JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전용 permission, actor Audit와
 결정 사유 계약을 먼저 확정한다.

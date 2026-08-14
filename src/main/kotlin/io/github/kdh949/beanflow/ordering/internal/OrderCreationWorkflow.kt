@@ -10,12 +10,14 @@ import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
+import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
 import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
 import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
+import io.github.kdh949.beanflow.ordering.internal.domain.OrderDisplayIdentitySnapshot
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderPricingCalculator
 import io.github.kdh949.beanflow.ordering.internal.domain.PricingLine
 import io.github.kdh949.beanflow.payment.api.ApproveBenefitOnlyPaymentCommand
@@ -46,6 +48,7 @@ internal data class OrderCreationOutcome(
 internal class OrderCreationWorkflow(
     private val menuQuoteUseCase: MenuQuoteUseCase,
     private val storeSettlementTermsOperations: StoreSettlementTermsOperations,
+    private val storeDisplaySnapshotOperations: StoreDisplaySnapshotOperations,
     private val pickupOperations: PickupReservationOperations,
     private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
@@ -57,6 +60,7 @@ internal class OrderCreationWorkflow(
     private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyOperations,
     private val pointAccrualSnapshotService: OrderPointAccrualSnapshotService,
     private val settlementInputSnapshotService: OrderSettlementInputSnapshotService,
+    private val displayIdentityAllocator: OrderDisplayIdentityAllocator,
     private val identifierSource: IdentifierSource,
     private val correlationIdSource: CorrelationIdSource,
     private val clock: Clock,
@@ -75,6 +79,7 @@ internal class OrderCreationWorkflow(
         validate(command)
         val createdAt = clock.instant()
         val requestedExpiresAt = createdAt.plus(RESERVATION_LEASE)
+        val storeDisplaySnapshot = storeDisplaySnapshotOperations.require(command.storeId)
         val settlementTerms = storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
         val quotes = prevalidatedQuotes?.also { validatePrevalidatedQuotes(command, it) } ?: quote(command)
         val stockRequirements = aggregateStockRequirements(quotes)
@@ -154,6 +159,16 @@ internal class OrderCreationWorkflow(
             }
 
         val lineIds = quotes.map { identifierSource.next() }
+        val allocatedDisplayIdentity = displayIdentityAllocator.allocate(command.storeId, pickupReservation.startsAt)
+        val displayIdentity =
+            OrderDisplayIdentitySnapshot(
+                publicReference = allocatedDisplayIdentity.publicReference.value,
+                pickupBusinessDate = allocatedDisplayIdentity.pickupBusinessDate,
+                pickupSequence = allocatedDisplayIdentity.pickupSequence,
+                storeName = storeDisplaySnapshot.name,
+                pickupWindowStart = pickupReservation.startsAt,
+                pickupWindowEnd = pickupReservation.endsAt,
+            )
         val correlationId = correlationIdSource.currentOrCreate()
         val benefitConfirmation =
             if (pricing.payable == Krw.ZERO) {
@@ -207,6 +222,7 @@ internal class OrderCreationWorkflow(
                     customerId = command.customerId,
                     storeId = command.storeId,
                     pickupSlotId = command.pickupSlotId,
+                    displayIdentity = displayIdentity,
                     lineIds = lineIds,
                     quotes = quotes,
                     pricing = pricing,
@@ -219,6 +235,7 @@ internal class OrderCreationWorkflow(
                     customerId = command.customerId,
                     storeId = command.storeId,
                     pickupSlotId = command.pickupSlotId,
+                    displayIdentity = displayIdentity,
                     lineIds = lineIds,
                     quotes = quotes,
                     pricing = pricing,

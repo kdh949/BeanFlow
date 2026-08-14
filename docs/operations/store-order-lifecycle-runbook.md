@@ -40,6 +40,65 @@ WHERE order_id = :order_id
 ORDER BY created_at, id;
 ```
 
+## Store order board and conditional polling
+
+점주 콘솔의 실행 보드는 다음 API를 사용한다.
+
+```text
+GET  /api/v1/stores/{storeId}/orders
+GET  /api/v1/stores/{storeId}/orders/overflow?lane={lane}&cursor={cursor}
+GET  /api/v1/stores/{storeId}/orders/{orderReference}
+POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions
+```
+
+목록은 픽업 날짜와 무관하게 `PAID`, `ACCEPTED`, `PREPARING`, `READY`만 반환한다. 화면의 세 열은
+`PENDING_ACCEPTANCE(PAID)`, `ACCEPTED+PREPARING`, `READY`이고, 날짜별 grouping key와 item의
+`pickupBusinessDate`는 같아야 한다. `PENDING_PAYMENT`와 종료 주문이 보이면 빈 보드로 숨기지 말고
+Projection query와 runtime 계약을 조사한다.
+
+기본 snapshot은 lane마다 가장 이른 50건만 반환한다. 51번째가 있으면 response의 `overflow[]`에 lane,
+정확한 `overflowCount`, 첫 overflow page용 signed cursor가 있다. `overflow=[]`만 모든 실행 주문이 기본
+snapshot에 있다는 뜻이다. 오래된 작업은 사용자가 명시적으로 queue를 열 때만 최대 50건씩 조회하며, 3초
+polling은 queue를 재조회하지 않는다. 실제 lane-bounded `UNION ALL`, overflow count, keyset page SQL은
+[`store-order-board-performance-evidence.md`](../quality/store-order-board-performance-evidence.md)의
+`StoreOrderBoardQuerySql` 기준으로 검증한다. 이 문서에 과거의 무제한 보드 SQL을 복사해 운영 기준으로
+사용하지 않는다.
+
+클라이언트는 3초마다 `If-None-Match`를 보내고 탭이 숨겨지면 중단하며 복귀 즉시 조회한다. 응답 ETag는
+cursor 발급·만료 값을 제외한 canonical 의미 Projection의 SHA-256 weak validator다. 304도 DB Projection을
+실행하며, 보드 내용이 같다는 뜻일 뿐 cursor TTL이나 유효성을 연장하지 않는다. 따라서 304 비율 상승을
+DB 부하 감소로 해석하지 않는다. `PAID`는 DB row 변경 없이도 2분 warning과 3분 timeout 경계에서 phase와
+ETag가 바뀐다.
+
+overflow 요청이 만료·변조·scope 불일치 cursor 때문에 `400 INVALID_REQUEST`이면 client는 local queue와
+ETag를 버리고 unconditional board snapshot을 **한 번만** 새로 읽는다. 새 cursor로 queue를 자동 재시도하지
+않고, 사용자가 새 snapshot의 overflow 진입을 다시 선택한다. 이 단발 recovery가 실패하면 빈 queue나
+stale board로 성공을 가장하지 않고 원래 failure를 표시한다.
+
+V56의 `ix_ordering_order_store_board`와 PAID partial
+`ix_ordering_order_store_acceptance_board`가 없거나 planner가 선택하지 않으면
+[`store-order-board-performance-evidence.md`](../quality/store-order-board-performance-evidence.md)의 고정
+fixture를 같은 조건으로 재실행한다. 운영 분포 없이 index를 강제하거나 polling 주기를 줄이지 않는다.
+
+전이는 서버가 카드에 준 `allowedActions`와 카드의 `status`를 `expectedStatus`로 함께 보낸다. 조합이
+불가능한 422는 client/contract 오류이고, `409 ORDER_STATE_CONFLICT`는 다른 작업자가 먼저 처리한 정상
+경쟁 신호라 목록을 새 ETag 없이 즉시 다시 조회한다. `REJECT`의 202 응답은 축약 보상 상태만 나타내며
+완료가 아니다. 새 endpoint의 idempotency operation은 `STORE_ORDER_BOARD_ACTION_V1`이고 기존
+`STORE_ORDER_TRANSITION_V2`와 key scope를 공유하지 않는다.
+
+관측 지표:
+
+- `beanflow.store.order.board.query.duration{operation=list|overflow|detail}`
+- `beanflow.store.order.board.query.sql{operation=list|overflow|detail}`
+- `beanflow.store.order.board.response{outcome=ok|not_modified}`
+- `beanflow.store.order.board.response.canonical.bytes`
+- `beanflow.store.order.board.etag.duration`
+- HTTP `ORDER_STATE_CONFLICT`, `ORDER_ACTION_NOT_ALLOWED`, `ACCESS_DENIED`,
+  `DEPENDENCY_UNAVAILABLE` 비율
+
+Projection·hash·DB 장애에서 503이 나면 이전 브라우저 보드나 빈 목록을 정상값으로 사용하지 않는다.
+membership 403이면 현재 보드를 지우고 `GET /merchant/me/stores`의 ACTIVE 목록을 다시 읽는다.
+
 고객 취소와 매장 전이 멱등 레코드는 하나의 Ordering retention worker가 기본
 1시간마다 table별 독립 transaction으로 최대 100건씩 정리한다. 두 table 모두
 `retention_expires_at = created_at + 90일`과

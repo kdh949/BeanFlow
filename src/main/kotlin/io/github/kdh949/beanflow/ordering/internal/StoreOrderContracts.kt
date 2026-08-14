@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.operations.api.OrderCompensationState
 import jakarta.validation.constraints.Size
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 internal enum class StoreOrderTargetState {
@@ -27,6 +28,12 @@ internal data class StoreOrderResult(
 internal data class StoreOrderResponse(
     val orderId: UUID,
     val storeId: UUID,
+    val publicReference: String,
+    val pickupNumber: String,
+    val pickupBusinessDate: LocalDate,
+    val storeName: String,
+    val pickupWindowStart: Instant,
+    val pickupWindowEnd: Instant,
     val state: String,
     val reservationExpiresAt: Instant?,
     val paidAt: Instant?,

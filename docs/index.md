@@ -7,6 +7,8 @@
 - [Business Policy Decisions](product/business-policy-decisions.md)
 - [End-to-End Flow](product/end-to-end-flow.md)
 - [Non-goals](product/non-goals.md)
+- [Design to Capability Map](product/design-to-capability-map.md)
+- [Design Contract Conflicts](product/design-contract-conflicts.md)
 - [Customer Support Overview](product/support-overview.md)
 - [Support Product Policies](product/support-case-policy.md)
 
@@ -72,6 +74,18 @@
 
 ## Execution Plans
 
+- [Product Usability Program](exec-plans/active/product-usability-program-orchestration.md)
+- [Productization 00 Design and Capability Contract](exec-plans/completed/productization-00-design-capability-contract.md)
+- [Productization 10 Public Order Reference](exec-plans/completed/productization-10-public-order-reference.md)
+- [Productization 20 Authentication Foundation](exec-plans/completed/productization-20-authentication-foundation.md)
+- [Productization 30 Customer Account and Login](exec-plans/completed/productization-30-customer-account-and-login.md)
+- [Productization 40 Merchant Account and Initial Password](exec-plans/completed/productization-40-merchant-account-and-initial-password.md)
+- [Productization 50 Customer Order Read Model](exec-plans/completed/productization-50-customer-order-read-model.md)
+- [Productization 60 Store Order Board](exec-plans/completed/productization-60-store-order-board.md)
+- [Productization 70 Customer Store Discovery](exec-plans/active/productization-70-customer-store-discovery.md)
+- [Productization 80 Customer Web P0 Integration](exec-plans/active/productization-80-customer-web-p0-integration.md)
+- [Productization 90 Merchant Financial Workflows](exec-plans/active/productization-90-merchant-financial-workflows.md)
+- [Productization 100 Operations Work Queues](exec-plans/active/productization-100-operations-work-queues.md)
 - [Completed Fast Reorder Vertical Slice](exec-plans/completed/fast-reorder-vertical-slice.md)
 - [Completed Customer Order Cancellation Master](exec-plans/completed/customer-order-cancellation-and-recovery.md)
 - [Completed Repository Truth Audit](exec-plans/completed/repository-truth-audit-and-runtime-contract-alignment.md)

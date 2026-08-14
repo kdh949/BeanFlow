@@ -34,6 +34,7 @@ internal class LocalDemoScriptGuardTest {
 
     @BeforeEach
     fun copyScriptsAndStubs() {
+        root = root.toRealPath()
         scripts = root.resolve("scripts/demo")
         scripts.resolve("lib").createDirectories()
         val source = Path.of("scripts/demo")
@@ -151,6 +152,55 @@ internal class LocalDemoScriptGuardTest {
     }
 
     @Test
+    fun `frontend launcher leaves a verifiable command marker that stop can own`() {
+        stubDocker(reportedDatabase = "beanflow_demo")
+        writeExecutable(
+            stubBin.resolve("npm"),
+            """
+            #!/usr/bin/env bash
+            trap 'exit 0' TERM INT
+            while true; do sleep 1; done
+            """.trimIndent() + "\n",
+        )
+        val launcher = root.resolve("launch-frontend.sh")
+        writeExecutable(
+            launcher,
+            """
+            #!/usr/bin/env bash
+            set -euo pipefail
+            . "${scripts.resolve("lib/common.sh").toAbsolutePath()}"
+            mkdir -p "${'$'}DEMO_RUNTIME_DIR"
+            start_owned_frontend "${'$'}DEMO_FRONTEND_PID_FILE" frontend "${'$'}DEMO_FRONTEND_LOG"
+            """.trimIndent() + "\n",
+        )
+
+        val launched = runPath(launcher)
+        assertThat(launched.exitCode).isZero()
+        val record = root.resolve(".demo-runtime/frontend.pid")
+        val pid =
+            record
+                .readText()
+                .lineSequence()
+                .single { it.startsWith("pid=") }
+                .substringAfter('=')
+                .toLong()
+        val handle = ProcessHandle.of(pid).orElseThrow()
+        try {
+            assertThat(handle.isAlive).isTrue()
+
+            val stopped = run("stop.sh")
+
+            assertThat(stopped.exitCode).isZero()
+            assertThat(stopped.output).contains("stopped owned frontend process group")
+            assertThat(handle.isAlive).isFalse()
+        } finally {
+            val descendants = handle.descendants().toList()
+            handle.destroyForcibly()
+            descendants.forEach(ProcessHandle::destroyForcibly)
+        }
+    }
+
+    @Test
     fun `bootstrap failure containing already is not mistaken for an initialized policy`() {
         stubDocker(reportedDatabase = "beanflow_demo")
         writeIdentityEnv()
@@ -187,21 +237,35 @@ internal class LocalDemoScriptGuardTest {
     @Test
     fun `smoke exits non-zero on the first unexpected status instead of reporting a pass`() {
         writeIdentityEnv()
-        // Health answers UP so the script gets past its precondition; the first API call then
-        // answers 500 where 200 is required.
+        // Health, CSRF issue, and customer Session login succeed so the script reaches the first
+        // product call. Nearby discovery then answers 500 where 200 is required.
         writeExecutable(
             stubBin.resolve("curl"),
             """
             #!/usr/bin/env bash
             out=""
+            headers=""
             prev=""
             for argument in "${'$'}@"; do
               if [ "${'$'}prev" = "-o" ]; then out="${'$'}argument"; fi
+              if [ "${'$'}prev" = "-D" ]; then headers="${'$'}argument"; fi
               prev="${'$'}argument"
             done
             url="${'$'}{@: -1}"
             case "${'$'}url" in
               */actuator/health) printf '{"status":"UP"}'; exit 0 ;;
+              */auth/customer/csrf)
+                printf 'Set-Cookie: BEANFLOW_CUSTOMER_XSRF=stub-xsrf; Path=/; Secure\r\n' > "${'$'}headers"
+                [ -n "${'$'}out" ] && : > "${'$'}out"
+                printf '204'
+                exit 0
+                ;;
+              */auth/customer/sessions)
+                printf 'Set-Cookie: BEANFLOW_CUSTOMER_SESSION=stub-session; Path=/; Secure; HttpOnly\r\n' > "${'$'}headers"
+                printf '{"actorType":"CUSTOMER","displayName":"BeanFlow Demo Customer"}' > "${'$'}out"
+                printf '200'
+                exit 0
+                ;;
             esac
             [ -n "${'$'}out" ] && printf '{"stub":true}' > "${'$'}out"
             printf '500'
@@ -213,19 +277,128 @@ internal class LocalDemoScriptGuardTest {
 
         assertThat(result.exitCode).isNotZero()
         assertThat(result.output).contains("[fail]")
-        assertThat(result.output).contains("expected 200 got 500")
+        assertThat(result.output).contains("nearby stores", "expected 200 got 500")
+        assertThat(result.output).contains("customer Session established without JWT paste")
         // It stopped at the first failure rather than walking the rest of the flow.
         assertThat(result.output).doesNotContain("core smoke flow completed")
         assertThat(result.output).doesNotContain("create order")
+    }
+
+    @Test
+    fun `smoke rejects an unknown checkpoint instead of silently running another contract`() {
+        writeIdentityEnv()
+
+        val result = run("smoke.sh", "--unknown-checkpoint")
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("Unknown argument")
+    }
+
+    @Test
+    fun `customer checkpoint verifies approved payment and stops before merchant operations`() {
+        writeIdentityEnv()
+        val curlLog = root.resolve("smoke-curl.log")
+        writeExecutable(
+            stubBin.resolve("curl"),
+            """
+            #!/usr/bin/env bash
+            out=""
+            headers=""
+            method="GET"
+            body=""
+            previous=""
+            for argument in "${'$'}@"; do
+              case "${'$'}previous" in
+                -o) out="${'$'}argument" ;;
+                -D) headers="${'$'}argument" ;;
+                -X) method="${'$'}argument" ;;
+                -d) body="${'$'}argument" ;;
+              esac
+              previous="${'$'}argument"
+            done
+            url="${'$'}{@: -1}"
+            printf '%s %s\n' "${'$'}method" "${'$'}url" >> "${curlLog.toAbsolutePath()}"
+
+            if [[ "${'$'}url" == */actuator/health ]]; then
+              printf '{"status":"UP"}'
+              exit 0
+            fi
+
+            respond() {
+              [ -z "${'$'}out" ] || printf '%s' "${'$'}2" > "${'$'}out"
+              printf '%s' "${'$'}1"
+            }
+
+            case "${'$'}url" in
+              */auth/customer/csrf)
+                printf 'Set-Cookie: BEANFLOW_CUSTOMER_XSRF=stub-xsrf; Path=/; Secure\r\n' > "${'$'}headers"
+                respond 204 ''
+                ;;
+              */auth/customer/sessions)
+                printf 'Set-Cookie: BEANFLOW_CUSTOMER_SESSION=stub-session; Path=/; Secure; HttpOnly\r\n' > "${'$'}headers"
+                respond 200 '{"actorType":"CUSTOMER","displayName":"BeanFlow Demo Customer"}'
+                ;;
+              */stores/nearby*)
+                respond 200 '{"items":[{"storeId":"d1000000-0000-4000-8000-000000000001","distanceMeters":1}]}'
+                ;;
+              */stores/d1000000-0000-4000-8000-000000000001/menus)
+                respond 200 '{"items":[{"menuId":"d2000000-0000-4000-8000-000000000001","available":true},{"menuId":"d2000000-0000-4000-8000-000000000002","available":false}]}'
+                ;;
+              */stores/d1000000-0000-4000-8000-000000000001/pickup-slots)
+                respond 200 '{"items":[{"pickupSlotId":"d6000000-0000-4000-8000-000000000001"}]}'
+                ;;
+              */point-accounts/d7000000-0000-4000-8000-000000000001/transactions*)
+                respond 200 '{"items":[]}'
+                ;;
+              */point-accounts/d7000000-0000-4000-8000-000000000001)
+                respond 200 '{"availablePointsKrw":0}'
+                ;;
+              */orders/*/payment-attempts)
+                respond 200 '{"paymentId":"payment-1","providerOrderId":"provider-order-1","amount":{"value":10000},"state":"READY","method":"CARD","successUrl":"http://127.0.0.1:4173/app/payments/payment-1/success","failUrl":"http://127.0.0.1:4173/app/payments/payment-1/fail"}'
+                ;;
+              */orders)
+                if [[ "${'$'}body" == *'"optionIds":[]'* ]]; then
+                  respond 409 '{"code":"IDEMPOTENCY_KEY_REUSED"}'
+                else
+                  respond 201 '{"order":{"orderId":"order-1","lines":[{"orderLineId":"line-1"}]}}'
+                fi
+                ;;
+              */payment-config)
+                respond 200 '{"provider":"TOSS_PAYMENTS","sdkVersion":"V2_STANDARD","clientKey":"test_ck_local_scripted"}'
+                ;;
+              */payments/payment-1/confirmations)
+                if [[ "${'$'}body" == *'"amount":10001'* ]]; then
+                  respond 409 '{"code":"IDEMPOTENCY_KEY_REUSED"}'
+                else
+                  respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED"}'
+                fi
+                ;;
+              */payments/payment-1)
+                respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED"}'
+                ;;
+              */store-orders/*)
+                respond 599 '{"code":"MERCHANT_OPERATION_MUST_NOT_RUN"}'
+                ;;
+              *)
+                respond 598 '{"code":"UNEXPECTED_STUB_PATH"}'
+                ;;
+            esac
+            """.trimIndent() + "\n",
+        )
+
+        val result = run("smoke.sh", "--customer-checkpoint")
+
+        assertThat(result.exitCode).isZero()
+        assertThat(result.output).contains("approved payment query", "customer checkpoint completed")
+        assertThat(result.output).doesNotContain("store fulfilment", "core smoke flow completed")
+        assertThat(curlLog.readText()).contains("GET http://127.0.0.1:18080/api/v1/payments/payment-1")
+        assertThat(curlLog.readText()).doesNotContain("/store-orders/")
     }
 
     private fun writeIdentityEnv() {
         val runtimeDirectory = root.resolve(".demo-runtime").also { it.createDirectories() }
         runtimeDirectory.resolve("demo-identity.env").writeText(
             """
-            CUSTOMER_TOKEN=stub-token
-            STORE_OWNER_TOKEN=stub-token
-            OTHER_STORE_OWNER_TOKEN=stub-token
             BEANFLOW_DEMO_JWKS_URI=http://127.0.0.1:1/jwks.json
             BEANFLOW_DEMO_CURSOR_SECRET=stub
             BEANFLOW_DEMO_ISSUER=http://127.0.0.1:18081
@@ -294,9 +467,14 @@ internal class LocalDemoScriptGuardTest {
     private fun run(
         script: String,
         vararg arguments: String,
+    ): ScriptResult = runPath(scripts.resolve(script), *arguments)
+
+    private fun runPath(
+        script: Path,
+        vararg arguments: String,
     ): ScriptResult {
         val process =
-            ProcessBuilder(listOf("bash", scripts.resolve(script).toString()) + arguments)
+            ProcessBuilder(listOf("bash", script.toString()) + arguments)
                 .directory(root.toFile())
                 .redirectErrorStream(true)
                 .also { it.environment()["PATH"] = "${stubBin.toAbsolutePath()}:${System.getenv("PATH")}" }

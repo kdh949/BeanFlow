@@ -53,9 +53,9 @@ internal class DataAccessGrantEntity(
     @Column(nullable = false, length = 24)
     var state: DataAccessGrantState,
     @Column(name = "max_reveals", nullable = false)
-    val maxReveals: Int,
+    val maxReveals: Short,
     @Column(name = "reserved_reveals", nullable = false)
-    var reservedReveals: Int,
+    var reservedReveals: Short,
     @Column(name = "requested_at", nullable = false)
     val requestedAt: Instant,
     @Column(name = "expires_at")

@@ -167,7 +167,8 @@ internal class PaymentMethodControllerIntegrationTest(
             .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
         mockMvc
             .perform(get("/api/v1/payment-methods").with(customerJwt("not-a-uuid")))
-            .andExpect(status().isBadRequest)
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
     }
 
     @Test

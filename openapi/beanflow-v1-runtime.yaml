@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-13
+  x-beanflow-contract-date: 2026-08-14
   description: |
     Current public controller contract represented by this repository source.
     It contains only implemented mappings backed by source contract tests. It is
@@ -14,6 +14,7 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Identity
   - name: Discovery
   - name: Ordering
   - name: Payment
@@ -25,6 +26,30 @@ tags:
   - name: Dispute
   - name: Support
 paths:
+  /auth/customer/csrf:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1csrf"
+  /auth/customer/registrations:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1registrations"
+  /auth/customer/sessions:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1sessions"
+  /auth/customer/sessions/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1sessions~1current"
+  /auth/merchant/csrf:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1csrf"
+  /auth/merchant/sessions:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1sessions"
+  /auth/merchant/password-changes:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1password-changes"
+  /auth/merchant/sessions/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1sessions~1current"
+  /operations/me:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
+  /me:
+    $ref: "./beanflow-v1.yaml#/paths/~1me"
+  /merchant/me:
+    $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me"
+  /merchant/me/stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me~1stores"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /stores/{storeId}/menus:
@@ -129,6 +154,49 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /me/orders:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders"
+  /me/orders/{orderReference}:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
+  /me/orders/{orderReference}/cancellations:
+    post:
+      tags: [Ordering]
+      operationId: cancelCurrentCustomerOrderByReferenceRuntime
+      summary: Cancel an owned order through its canonical public reference
+      parameters:
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderReference"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./beanflow-v1.yaml#/components/schemas/CancellationRequest"
+      responses:
+        "200":
+          description: PENDING_PAYMENT cancellation committed synchronously
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult"
+        "202":
+          description: PAID cancellation committed while recovery continues independently
+          content:
+            application/json:
+              schema:
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult"
+        "400":
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
+        "503":
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /payment-config:
     $ref: "./beanflow-v1.yaml#/paths/~1payment-config"
   /orders/{orderId}/payment-attempts:
@@ -147,15 +215,17 @@ paths:
     post:
       tags: [Payment]
       operationId: createPaymentRefund
-      summary: Create a store or platform full/item partial refund
+      summary: Create a merchant full/item partial refund
+      security: [{ merchantSession: [] }]
       description: |
-        STORE_OWNER and STORE_STAFF require active membership in the Order store;
-        PLATFORM_OPERATOR is platform-scoped. Omitted lineItems consumes every
-        remaining unit. Explicit quantities consume the lowest unrefunded conceptual
-        unit positions. Coupon values are attribution only and are never restored.
+        STORE_OWNER and STORE_STAFF require a Merchant Session and active membership
+        in the Order store. Omitted lineItems consumes every remaining unit. Explicit
+        quantities consume the lowest unrefunded conceptual unit positions. Coupon
+        values are attribution only and are never restored.
       parameters:
         - $ref: "./beanflow-v1.yaml#/components/parameters/PaymentId"
         - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/MerchantCsrfToken"
       requestBody:
         required: true
         content:
@@ -187,6 +257,8 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/payments/{paymentId}/refunds:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1payments~1{paymentId}~1refunds"
   /store-orders/{orderId}:
     get:
       tags: [Store Orders]
@@ -252,6 +324,14 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/orders:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders"
+  /stores/{storeId}/orders/overflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1overflow"
+  /stores/{storeId}/orders/{orderReference}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}"
+  /stores/{storeId}/orders/{orderReference}/transitions:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1transitions"
   /operations/orders/{orderId}/compensation:
     get:
       tags: [Operations]
@@ -280,6 +360,12 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         "503":
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/merchant-accounts:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts"
+  /operations/merchant-accounts/{merchantAccountId}/temporary-password-resets:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts~1{merchantAccountId}~1temporary-password-resets"
+  /operations/merchant-accounts/{merchantAccountId}/lock-releases:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts~1{merchantAccountId}~1lock-releases"
   /operations/orders/{orderId}/customer-cancellation-refund-reconciliations:
     post:
       tags: [Operations]
@@ -518,6 +604,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}"
   /point-accounts/{accountId}/transactions:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}~1transactions"
+  /operations/point-accounts/{accountId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-accounts~1{accountId}"
+  /operations/point-accounts/{accountId}/transactions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-accounts~1{accountId}~1transactions"
   /operations/policies/ordinary-point-accrual/global:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1global"
   /operations/policies/ordinary-point-accrual/global/versions:
@@ -686,6 +776,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    customerSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_CUSTOMER_SESSION
+    merchantSession:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_MERCHANT_SESSION
   schemas:
     RuntimeStoreOrderTransitionRequest:
       type: object

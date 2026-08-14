@@ -1,4 +1,7 @@
 beanflow:
+  authentication:
+    # Local/demo-only deterministic key. Production must supply its own deployment secret.
+    attempt-hmac-key-base64-url: bG9jYWwtZGVtby1hdHRlbXB0LWhtYWMta2V5LTMyLWJ5dGVzISE
   checkout:
     frontend-base-url: http://localhost:5173
   toss:

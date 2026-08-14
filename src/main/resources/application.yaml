@@ -22,11 +22,22 @@ spring:
     password: ${BEANFLOW_DB_PASSWORD}
   flyway:
     enabled: true
+  session:
+    jdbc:
+      # Flyway V52 owns the official PostgreSQL Spring Session schema.
+      initialize-schema: never
+      # BeanFlow wraps cleanup to expose explicit success/failure metrics.
+      cleanup-cron: "-"
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
 beanflow:
+  authentication:
+    attempt-hmac-key-base64-url: ${BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL}
+    trusted-proxy-cidrs: ${BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS:}
+  session:
+    cleanup-cron: "0 * * * * *"
   idempotency:
     retry-after-seconds: 2
     stuck-threshold: PT5M

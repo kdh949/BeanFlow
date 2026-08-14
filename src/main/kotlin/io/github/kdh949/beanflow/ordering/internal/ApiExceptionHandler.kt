@@ -30,6 +30,7 @@ internal class ApiExceptionHandler(
                 code = failure.code.name,
                 message = failure.message,
                 correlationId = correlationIdSource.currentOrCreate(),
+                targetReference = failure.targetReference,
             ),
             headers,
             statusOf(failure.code),
@@ -111,15 +112,24 @@ internal class ApiExceptionHandler(
 
     private fun statusOf(code: FailureCode): HttpStatus =
         when (code) {
-            FailureCode.INVALID_REQUEST -> HttpStatus.BAD_REQUEST
+            FailureCode.INVALID_REQUEST,
+            FailureCode.PASSWORD_POLICY_VIOLATION,
+            -> HttpStatus.BAD_REQUEST
 
-            FailureCode.ACCESS_DENIED -> HttpStatus.FORBIDDEN
+            FailureCode.AUTHENTICATION_FAILED -> HttpStatus.UNAUTHORIZED
 
-            FailureCode.RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND
-
+            FailureCode.AUTHENTICATION_RATE_LIMITED,
             FailureCode.SUPPORT_SEARCH_RATE_LIMITED,
             FailureCode.VERIFICATION_LOCKED,
             -> HttpStatus.TOO_MANY_REQUESTS
+
+            FailureCode.ACCESS_DENIED,
+            FailureCode.INITIAL_PASSWORD_CHANGE_REQUIRED,
+            -> HttpStatus.FORBIDDEN
+
+            FailureCode.RESOURCE_NOT_FOUND,
+            FailureCode.MERCHANT_ACCOUNT_NOT_FOUND,
+            -> HttpStatus.NOT_FOUND
 
             FailureCode.VERIFICATION_REQUIRED,
             FailureCode.DATA_ACCESS_GRANT_REQUIRED,
@@ -130,11 +140,14 @@ internal class ApiExceptionHandler(
 
             FailureCode.PAYMENT_DECLINED,
             FailureCode.PAYMENT_METHOD_REGISTRATION_REJECTED,
+            FailureCode.ORDER_ACTION_NOT_ALLOWED,
             -> HttpStatus.UNPROCESSABLE_ENTITY
 
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
             FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,
+            FailureCode.ORDER_REFERENCE_EXHAUSTED,
+            FailureCode.POINT_ACCOUNT_INTEGRITY_FAILURE,
             -> HttpStatus.SERVICE_UNAVAILABLE
 
             else -> HttpStatus.CONFLICT

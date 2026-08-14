@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PartialRefundPointOperations
@@ -10,6 +11,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.RestorePartialRefundPointsCommand
 import io.github.kdh949.beanflow.loyalty.api.RestorePointsAfterTerminationCommand
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualCalculator
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualLineInput
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSnapshotService
@@ -42,6 +44,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -123,6 +126,7 @@ internal class PartialRefundAllocationRepositoryTest
                     ordering_order_line,
                     ordering_order,
                     identity_store_membership,
+                    identity_merchant_account,
                     operations_audit_record
                 CASCADE
                 """.trimIndent(),
@@ -346,8 +350,9 @@ internal class PartialRefundAllocationRepositoryTest
                         .with(
                             jwt()
                                 .jwt { it.subject(fixture.actorId.toString()).claim("roles", listOf("STORE_OWNER")) }
-                                .authorities(SimpleGrantedAuthority("ROLE_STORE_OWNER")),
-                        ).header("Idempotency-Key", "refund-http-0001")
+                                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT")),
+                        ).with(csrf())
+                        .header("Idempotency-Key", "refund-http-0001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                             """
@@ -939,6 +944,7 @@ internal class PartialRefundAllocationRepositoryTest
             val campaignId = UUID.randomUUID()
             val issuanceId = UUID.randomUUID()
             val couponReservationId = UUID.randomUUID()
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, fixture.actorId)
             jdbcTemplate.update(
                 "insert into identity_store_membership values (?, ?, ?, 'OWNER', 'ACTIVE', ?, ?, 0)",
                 UUID.randomUUID(),
@@ -947,22 +953,31 @@ internal class PartialRefundAllocationRepositoryTest
                 Timestamp.from(NOW),
                 Timestamp.from(NOW),
             )
+            val publicReference =
+                OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, fixture.orderId)
             transactions.executeWithoutResult {
                 val settlementCreatedAt = NOW.minusSeconds(60)
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state, subtotal_krw,
                         coupon_discount_krw, points_applied_krw, payable_krw, currency,
                         reservation_expires_at, created_at, updated_at, paid_at,
                         acceptance_warning_at, acceptance_deadline_at, version
-                    ) VALUES (?, ?, ?, ?, 'PAID', 10000, 2000, 3000, 5000, 'KRW',
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                              'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                              'PAID', 10000, 2000, 3000, 5000, 'KRW',
                               NULL, ?, ?, ?, ?, ?, 0)
                     """.trimIndent(),
                     fixture.orderId,
                     fixture.customerId,
                     fixture.storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(fixture.orderId),
                     Timestamp.from(NOW.minusSeconds(60)),
                     Timestamp.from(NOW),
                     Timestamp.from(NOW),
@@ -1242,22 +1257,30 @@ internal class PartialRefundAllocationRepositoryTest
             val reservationId = UUID.randomUUID()
             val lineIds = (1..3).map { UUID.randomUUID() }.sorted()
             val lotIds = (1..3).map { UUID.randomUUID() }.sorted()
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             return requireNotNull(
                 transactions.execute {
                     val settlementCreatedAt = NOW.minusSeconds(60)
                     jdbcTemplate.update(
                         """
                         INSERT INTO ordering_order (
-                            id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                            id, customer_id, store_id, pickup_slot_id,
+                            public_reference, pickup_business_date, pickup_sequence,
+                            store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                            state, subtotal_krw,
                             coupon_discount_krw, points_applied_krw, payable_krw, currency,
                             reservation_expires_at, created_at, updated_at, paid_at,
                             acceptance_warning_at, acceptance_deadline_at, version
-                        ) VALUES (?, ?, ?, ?, 'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
+                        ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                                  'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                                  'PAID', 3, 0, 3, 0, 'KRW', NULL, ?, ?, ?, ?, ?, 0)
                         """.trimIndent(),
                         orderId,
                         customerId,
                         storeId,
                         UUID.randomUUID(),
+                        publicReference,
+                        OrderCreationDatabaseFixture.pickupSequence(orderId),
                         Timestamp.from(NOW.minusSeconds(60)),
                         Timestamp.from(NOW),
                         Timestamp.from(NOW),

@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
@@ -16,8 +17,6 @@ import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -76,14 +75,14 @@ internal class PointAdjustmentController(
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun adjust(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable accountId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: PointAdjustmentRequest,
     ): PointAdjustmentResult =
         operations.adjust(
             ApplyPointAdjustmentCommand(
-                actorId = actorId(jwt),
+                actorId = actorId(actor),
                 pointAccountId = accountId,
                 idempotencyKey = idempotencyKey,
                 amountKrw = request.amountKrw,
@@ -99,9 +98,9 @@ internal class PointAdjustmentController(
             ),
         )
 
-    private fun actorId(jwt: Jwt): UUID =
+    private fun actorId(actor: OperatorActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }

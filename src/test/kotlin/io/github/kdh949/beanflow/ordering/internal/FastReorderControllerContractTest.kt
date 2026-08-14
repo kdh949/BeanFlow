@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -78,6 +79,7 @@ internal class FastReorderControllerContractTest
             mockMvc
                 .perform(
                     post("/api/v1/orders/{sourceOrderId}/reorders", source.orderId)
+                        .with(csrf())
                         .header("Idempotency-Key", "reorder-auth-0001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(source.fixture.pickupSlotId)),
@@ -137,6 +139,16 @@ internal class FastReorderControllerContractTest
                         "reorder-extra-001",
                         requestBody =
                             """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0,"pastPrice":1000}""",
+                    ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    request(
+                        source,
+                        "reorder-actor-id",
+                        requestBody =
+                            """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0,"customerId":"${UUID.randomUUID()}"}""",
                     ),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -231,6 +243,7 @@ internal class FastReorderControllerContractTest
             pointsToUseKrw: Long = 0,
             requestBody: String = body(source.fixture.pickupSlotId, pointsToUseKrw),
         ) = post("/api/v1/orders/{sourceOrderId}/reorders", source.orderId)
+            .with(csrf())
             .with(customer(customerId, role))
             .header("Idempotency-Key", key)
             .contentType(MediaType.APPLICATION_JSON)

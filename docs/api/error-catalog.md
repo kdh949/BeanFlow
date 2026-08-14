@@ -3,9 +3,18 @@
 | Code | HTTP | Retryable | Meaning |
 |---|---:|---:|---|
 | INVALID_REQUEST | 400 | No | 요청 형식 또는 필드 검증 실패. malformed/expired/scope-mismatched cursor와 audited policy read의 invalid access reason을 포함. framework validation detail은 선택적 field와 `INVALID_VALUE`, `MISSING_VALUE`, `INVALID_FORMAT`, `MALFORMED_REQUEST` 중 하나만 반환하며 rejected value와 exception message를 반환하지 않음 |
-| ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속 또는 active explicit operator grant 불충족 |
+| AUTHENTICATION_FAILED | 401 | Yes, after correcting credentials or lock expiry | 고객·점주 로그인에서 계정 없음, 비밀번호 불일치, 계정 잠금 또는 임시 비밀번호 만료를 구분하지 않는 동일 응답 |
+| AUTHENTICATION_RATE_LIMITED | 429 + Retry-After | Yes, after IP block expiry | actor 종류별 source IP 로그인 실패 30회로 15분 차단됨. 계정 존재 여부를 노출하지 않음 |
+| LOGIN_ID_UNAVAILABLE | 409 | No, choose another ID | actor namespace 안에서 canonical 로그인 ID가 이미 사용 중 |
+| PASSWORD_POLICY_VIOLATION | 400 | No, correct password | BR-35의 길이·UTF-8 byte·사용자명 동일·common-password·현재와 동일한 self-change 비밀번호 정책 위반 |
+| POINT_ACCOUNT_INTEGRITY_FAILURE | 503 | Operator investigation | CustomerAccount에 대응하는 실제 PointAccount가 없어 actor-scoped 포인트 조회를 안전하게 제공할 수 없음. 0원 DTO, lazy-create 또는 404로 대체하지 않음 |
+| ACCESS_DENIED | 403 | No | 역할·소유권·매장 소속, actor별 CSRF·Chain 검증 또는 active explicit operator grant 불충족 |
+| INITIAL_PASSWORD_CHANGE_REQUIRED | 403 | Yes, after password change | `INITIAL_PASSWORD` 점주 Session이 비밀번호 변경과 `/merchant/me` 외 매장 API를 호출함 |
 | RESOURCE_NOT_FOUND | 404 | No | 접근 가능한 리소스 없음 |
+| ORDER_REFERENCE_NOT_FOUND | 404 | No | 접근 가능한 범위에서 공개 주문번호에 해당하는 주문이 없음. 다른 고객·매장 주문은 403 정책을 유지 |
+| MERCHANT_ACCOUNT_NOT_FOUND | 404 | No | exact canonical login ID 또는 opaque account reference에 해당하는 관리 가능 점주 계정이 없음 |
 | ORDER_STATE_CONFLICT | 409 | No | 현재 상태에서 명령 불가 |
+| ORDER_ACTION_NOT_ALLOWED | 422 | No, correct action and expectedStatus | 점주 주문보드 action과 client가 본 expectedStatus 조합 자체가 허용되지 않음. 실제 Order 상태가 expectedStatus와 다르면 이 코드가 아니라 ORDER_STATE_CONFLICT |
 | REORDER_SOURCE_STATE_INVALID | 409 | No | source Order가 `COMPLETED`, `CANCELLED`, `REJECTED`, `EXPIRED`가 아니어서 빠른 재주문 불가 |
 | REORDER_ITEMS_UNAVAILABLE | 409 | Maybe, after source/current catalogue changes | source line 하나 이상을 검증된 option snapshot과 현재 Merchant 구성으로 전부 재구성할 수 없음. item별 stable reason을 반환하고 부분 Order는 만들지 않음 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |
@@ -30,7 +39,9 @@
 | PAYMENT_REFUND_UNKNOWN | 202 representation | Poll | 환불 결과 불명, reconciliation 중이며 성공 환불액에 아직 포함하지 않음 |
 | PAYMENT_REFUND_EXCEEDED | 409 | No | 누적 환불이 승인액 초과 |
 | PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
-| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | immutable source/금액 guard 불충족 또는 S80에서 Payment lookup 외 owner step의 수동 재실행 요청 |
+| REFUND_PREVIEW_STALE | 409 | Yes, fetch a new preview | preview 이후 Order·Payment·Refund watermark·잔여 unit·복원 policy version 중 하나가 바뀌어 실행 입력을 재검증할 수 없음 |
+| REFUND_OUTCOME_UNRESOLVED | 409 | Yes, after reconciliation | 미확정 Refund 때문에 새 점주 preview 또는 실행의 남은 승인액을 확정할 수 없음. 새 Provider 요청을 만들지 않음 |
+| REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 또는 S80에서 Payment lookup 외 owner step의 수동 재실행 요청 |
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
 | REPROCESSING_PROPOSAL_STALE | 409 | Yes, after reviewing current state | 제안 뒤 case·snapshot·Refund 상태가 바뀌어 fingerprint 재검증 실패 |
@@ -41,6 +52,7 @@
 | DISPUTE_WINDOW_CLOSED | 409 | No | 이의제기 기간 종료 |
 | DISPUTE_ALREADY_ACTIVE | 409 | No | 같은 SettlementItem에 `FILED` 또는 `UNDER_REVIEW` 이의제기가 이미 존재 |
 | DISPUTE_REFILE_NOT_ALLOWED | 409 | No | immediate previous terminal ID, 새 evidence reference 또는 1회 제한을 충족하지 못한 재이의 |
+| TEMPORARY_PASSWORD_NOT_REPLAYABLE | 409 | No automatic retry; exact lookup then new reset | 점주 발급·초기화의 같은 key terminal replay에서 1회 secret을 재현할 수 없음. 대상 account reference만 반환 |
 | SUPPORT_SEARCH_RATE_LIMITED | 429 + Retry-After | Yes, after the current window | actor별 영속 5분/30회 exact-search budget 소진. 요청은 Vault/owner query 전에 중단되고 응답·Audit에 검색값을 넣지 않음 |
 | VERIFICATION_REQUIRED | 403 | Yes, after matching verification | Case·Subject·Purpose·actor에 묶인 충분한 BASIC/ENHANCED verification이 없음 |
 | VERIFICATION_LOCKED | 429 + Retry-After | Yes, after lock expiry | invalid proof 5회로 같은 Case+Subject binding이 30분 잠김 |

@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.payment.api.PostAcceptanceResolutionOrderState
 import io.github.kdh949.beanflow.payment.api.PostAcceptanceResolutionPaymentOperations
 import io.github.kdh949.beanflow.payment.api.PostAcceptanceResolutionRefundState
@@ -163,21 +164,31 @@ internal class PostAcceptanceResolutionPaymentIntegrationTest
                 "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
                 storeId,
             )
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbc, orderId, NOW)
             jdbc.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 jdbc.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state, subtotal_krw,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state, subtotal_krw,
                         coupon_discount_krw, points_applied_krw, payable_krw, currency,
                         reservation_expires_at, paid_at, accepted_at, preparing_at,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, 'PREPARING', 7000, 0, 0, 7000, 'KRW', NULL, ?, ?, ?, ?, ?, 4)
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-12', ?,
+                              'Test Store', ?, ?,
+                              'PREPARING', 7000, 0, 0, 7000, 'KRW', NULL, ?, ?, ?, ?, ?, 4)
                     """.trimIndent(),
                     orderId,
                     customerId,
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(orderId),
+                    Timestamp.from(NOW.minusSeconds(180)),
+                    Timestamp.from(NOW.minusSeconds(120)),
                     Timestamp.from(NOW.minusSeconds(120)),
                     Timestamp.from(NOW.minusSeconds(90)),
                     Timestamp.from(NOW.minusSeconds(60)),

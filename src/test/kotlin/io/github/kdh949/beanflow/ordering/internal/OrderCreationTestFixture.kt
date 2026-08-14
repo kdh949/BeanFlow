@@ -30,6 +30,39 @@ internal data class OrderCreationFixture(
 }
 
 internal object OrderCreationDatabaseFixture {
+    fun registerPublicReference(
+        jdbcTemplate: JdbcTemplate,
+        orderId: UUID,
+        allocatedAt: Instant = Instant.parse("2026-08-12T00:00:00Z"),
+    ): String {
+        val reference = registeredReference(orderId)
+        jdbcTemplate.update(
+            "INSERT INTO ordering_public_reference_registry (public_reference, allocated_at) VALUES (?, ?)",
+            reference,
+            Timestamp.from(allocatedAt),
+        )
+        return reference
+    }
+
+    fun registeredReference(orderId: UUID): String {
+        val body =
+            orderId
+                .toString()
+                .replace("-", "")
+                .take(8)
+                .uppercase()
+                .map { character ->
+                    when (character) {
+                        '0' -> '2'
+                        '1' -> '3'
+                        else -> character
+                    }
+                }.joinToString("")
+        return "BF-${body.take(4)}-${body.takeLast(4)}"
+    }
+
+    fun pickupSequence(orderId: UUID): Long = (orderId.hashCode().toLong() and Int.MAX_VALUE.toLong()) + 1
+
     fun clean(jdbcTemplate: JdbcTemplate) {
         jdbcTemplate.execute(
             """
@@ -58,7 +91,10 @@ internal object OrderCreationDatabaseFixture {
                 ordering_order_settlement_input_snapshot,
                 ordering_order_line,
                 ordering_order,
+                ordering_pickup_counter,
+                ordering_public_reference_registry,
                 identity_store_membership,
+                identity_merchant_account,
                 loyalty_point_accrual_result,
                 loyalty_point_recovery_result,
                 loyalty_point_recovery_pending,
@@ -80,6 +116,7 @@ internal object OrderCreationDatabaseFixture {
                 merchant_menu_option,
                 merchant_menu,
                 merchant_store_settlement_terms,
+                merchant_store_discovery_profile,
                 merchant_store
             CASCADE
             """.trimIndent(),
@@ -162,6 +199,7 @@ internal object OrderCreationDatabaseFixture {
         stockAvailable: Long = 10,
         priceKrw: Long = 1_000,
         includeSettlementTerms: Boolean = true,
+        includeDisplayProfile: Boolean = true,
         settlementFeeRateBps: Int = 500,
         settlementTermsEffectiveTo: Instant? = null,
     ) {
@@ -169,6 +207,15 @@ internal object OrderCreationDatabaseFixture {
             "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
             fixture.storeId,
         )
+        if (includeDisplayProfile) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_discovery_profile (store_id, name, location)
+                VALUES (?, 'BeanFlow Test Store', ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)
+                """.trimIndent(),
+                fixture.storeId,
+            )
+        }
         if (includeSettlementTerms) {
             jdbcTemplate.update(
                 """

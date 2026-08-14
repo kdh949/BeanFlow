@@ -630,7 +630,7 @@ private fun VerificationSessionEntity.toVerificationAggregate(channels: Set<Veri
         startedAt,
         expiresAt,
         state,
-        invalidAttempts,
+        invalidAttempts.toInt(),
         channels,
     )
 
@@ -647,8 +647,8 @@ private fun DataAccessGrant.toEntity(sessionId: UUID): DataAccessGrantEntity =
         reasonCode,
         risk,
         state,
-        maxReveals,
-        reservedReveals,
+        maxReveals.toShort(),
+        reservedReveals.toShort(),
         requestedAt,
         expiresAt,
         approverId,
@@ -671,7 +671,7 @@ private fun DataAccessGrantEntity.toAggregate(fields: Set<SupportPersonalDataFie
         requestedAt,
         state,
         expiresAt,
-        reservedReveals,
+        reservedReveals.toInt(),
         approverId,
     )
 
@@ -682,7 +682,7 @@ private fun DataAccessGrantEntity.apply(
     val previousState = state
     val previousReserved = reservedReveals
     state = aggregate.state
-    reservedReveals = aggregate.reservedReveals
+    reservedReveals = aggregate.reservedReveals.toShort()
     expiresAt = aggregate.expiresAt
     approverId = aggregate.approverId
     if (aggregate.approverId != null && decidedAt == null) decidedAt = now
@@ -701,8 +701,8 @@ private fun DataAccessGrantEntity.toResource(fields: Set<SupportPersonalDataFiel
         fields,
         risk,
         state,
-        maxReveals,
-        reservedReveals,
+        maxReveals.toInt(),
+        reservedReveals.toInt(),
         requestedAt,
         expiresAt,
         version,

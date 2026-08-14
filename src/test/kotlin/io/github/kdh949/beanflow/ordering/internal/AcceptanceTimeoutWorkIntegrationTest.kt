@@ -214,6 +214,7 @@ internal class AcceptanceTimeoutWorkIntegrationTest
             deadline: Instant,
         ): UUID {
             val orderId = UUID.randomUUID()
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 val paidAt = deadline.minusSeconds(3 * 60)
@@ -222,17 +223,27 @@ internal class AcceptanceTimeoutWorkIntegrationTest
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state,
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, accepted_at, rejected_at, rejection_reason,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, ?, 1000, 0, 0, 1000, 'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, DATE '2030-01-01', 1,
+                        'BeanFlow Test Store', ?, ?,
+                        ?, 1000, 0, 0, 1000, 'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?, 0
+                    )
                     """.trimIndent(),
                     orderId,
                     fixture.customerId,
                     fixture.storeId,
                     fixture.pickupSlotId,
+                    publicReference,
+                    Timestamp.from(Instant.parse("2030-01-01T00:10:00Z")),
+                    Timestamp.from(Instant.parse("2030-01-01T00:20:00Z")),
                     state,
                     Timestamp.from(paidAt),
                     Timestamp.from(paidAt.plusSeconds(2 * 60)),

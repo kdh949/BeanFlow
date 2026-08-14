@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionOutcome
 import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionResponsibility
 import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionStepType
@@ -16,8 +17,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -77,7 +76,7 @@ internal class PostAcceptanceResolutionController(
     @PostMapping("/orders/{orderId}/post-acceptance-resolutions")
     @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable orderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreatePostAcceptanceResolutionRequest,
@@ -88,7 +87,7 @@ internal class PostAcceptanceResolutionController(
             .body(
                 service.create(
                     CreatePostAcceptanceResolutionCommand(
-                        jwt.resolutionActorId(),
+                        actor.resolutionActorId(),
                         orderId,
                         request.requestId ?: invalidResolutionRequest(),
                         request.revisionNumber,
@@ -109,18 +108,18 @@ internal class PostAcceptanceResolutionController(
     @GetMapping("/post-acceptance-resolutions/{resolutionId}")
     @PreAuthorize("isAuthenticated()")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable resolutionId: UUID,
     ): ResponseEntity<PostAcceptanceResolutionResource> =
         ResponseEntity
             .ok()
             .cacheControl(CacheControl.noStore())
-            .body(service.get(jwt.resolutionActorId(), resolutionId))
+            .body(service.get(actor.resolutionActorId(), resolutionId))
 
     @PostMapping("/post-acceptance-resolutions/{resolutionId}/executions")
     @PreAuthorize("isAuthenticated()")
     fun execute(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable resolutionId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ExecutePostAcceptanceResolutionRequest,
@@ -131,7 +130,7 @@ internal class PostAcceptanceResolutionController(
             .body(
                 service.execute(
                     ExecutePostAcceptanceResolutionCommand(
-                        jwt.resolutionActorId(),
+                        actor.resolutionActorId(),
                         resolutionId,
                         request.expectedResolutionVersion,
                         request.expectedRequestVersion,
@@ -144,7 +143,7 @@ internal class PostAcceptanceResolutionController(
     @PostMapping("/post-acceptance-resolutions/{resolutionId}/reconciliations")
     @PreAuthorize("isAuthenticated()")
     fun reconcile(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable resolutionId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ReconcilePostAcceptanceResolutionRequest,
@@ -155,7 +154,7 @@ internal class PostAcceptanceResolutionController(
             .body(
                 service.reconcile(
                     ReconcilePostAcceptanceResolutionCommand(
-                        jwt.resolutionActorId(),
+                        actor.resolutionActorId(),
                         resolutionId,
                         request.stepType ?: invalidResolutionRequest(),
                         request.expectedResolutionVersion,
@@ -166,9 +165,9 @@ internal class PostAcceptanceResolutionController(
             )
 }
 
-private fun Jwt.resolutionActorId(): UUID =
+private fun OperatorActor.resolutionActorId(): UUID =
     try {
-        UUID.fromString(subject)
+        actorId
     } catch (_: IllegalArgumentException) {
         invalidResolutionRequest()
     }

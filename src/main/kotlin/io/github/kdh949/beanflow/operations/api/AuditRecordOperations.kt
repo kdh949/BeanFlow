@@ -5,6 +5,7 @@ import java.util.UUID
 
 enum class AuditActorType {
     CUSTOMER,
+    MERCHANT,
     STORE_OWNER,
     STORE_STAFF,
     PLATFORM_OPERATOR,

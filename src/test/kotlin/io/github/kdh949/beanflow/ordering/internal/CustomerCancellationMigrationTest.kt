@@ -243,18 +243,33 @@ internal class CustomerCancellationMigrationTest {
         detail: String?,
     ): UUID =
         UUID.randomUUID().also { orderId ->
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
+            val pickupSequence =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT count(*) + 1 FROM ordering_order WHERE store_id = ?",
+                        Long::class.java,
+                        storeId,
+                    ),
+                )
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state,
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, cancelled_at, cancellation_cause,
                         cancellation_reason_code, cancellation_detail,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, ?, 1000, 0, 0, 1000, 'KRW', NULL,
+                    ) VALUES (
+                              ?, ?, ?, ?, ?, CURRENT_DATE, ?,
+                              'Migration Store', now() + interval '10 minutes', now() + interval '20 minutes',
+                              ?, 1000, 0, 0, 1000, 'KRW', NULL,
                               CASE WHEN ? = 'PAID' THEN now() ELSE NULL END,
                               CASE WHEN ? = 'PAID' THEN now() + interval '2 minutes' ELSE NULL END,
                               CASE WHEN ? = 'PAID' THEN now() + interval '3 minutes' ELSE NULL END,
@@ -265,6 +280,8 @@ internal class CustomerCancellationMigrationTest {
                     UUID.randomUUID(),
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    pickupSequence,
                     state,
                     state,
                     state,

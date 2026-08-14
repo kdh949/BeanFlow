@@ -1,8 +1,10 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 internal data class PendingPaymentOrderCreationResponse(
@@ -17,6 +19,12 @@ internal data class BenefitOnlyOrderCreationResponse(
 internal data class BenefitOnlyOrderResponse(
     val orderId: UUID,
     val storeId: UUID,
+    val publicReference: String,
+    val pickupNumber: String,
+    val pickupBusinessDate: LocalDate,
+    val storeName: String,
+    val pickupWindowStart: Instant,
+    val pickupWindowEnd: Instant,
     val state: String,
     val lines: List<OrderLineResponse>,
     val subtotalKrw: Long,
@@ -42,6 +50,12 @@ internal data class BenefitOnlyPaymentResponse(
 internal data class OrderResponse(
     val orderId: UUID,
     val storeId: UUID,
+    val publicReference: String,
+    val pickupNumber: String,
+    val pickupBusinessDate: LocalDate,
+    val storeName: String,
+    val pickupWindowStart: Instant,
+    val pickupWindowEnd: Instant,
     val state: String,
     val reservationExpiresAt: Instant?,
     val paymentRecovery: CancellationRefundRecoverySummary?,
@@ -85,6 +99,8 @@ internal data class ErrorResponse(
     val message: String,
     val correlationId: String,
     val details: List<ErrorDetail> = emptyList(),
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
+    val targetReference: String? = null,
 )
 
 internal data class ErrorDetail(

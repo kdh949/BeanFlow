@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBenefitType
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationEvidenceBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationResponsibility
@@ -18,8 +19,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -98,7 +97,7 @@ internal class SupportCompensationController(
     @PostMapping("/cases/{caseId}/compensation-evaluations")
     @PreAuthorize("isAuthenticated()")
     fun evaluate(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @Valid @RequestBody request: EvaluateSupportCompensationRequest,
     ): ResponseEntity<SupportCompensationEvaluationResource> =
@@ -108,7 +107,7 @@ internal class SupportCompensationController(
             .body(
                 service.evaluate(
                     EvaluateSupportCompensationCommand(
-                        jwt.compensationActorId(),
+                        actor.compensationActorId(),
                         caseId,
                         request.incidentId ?: invalidCompensationRequest(),
                         request.orderId,
@@ -129,7 +128,7 @@ internal class SupportCompensationController(
     @PostMapping("/cases/{caseId}/compensations")
     @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateSupportCompensationRequest,
@@ -140,7 +139,7 @@ internal class SupportCompensationController(
             .body(
                 service.create(
                     CreateSupportCompensationCommand(
-                        jwt.compensationActorId(),
+                        actor.compensationActorId(),
                         caseId,
                         request.incidentId ?: invalidCompensationRequest(),
                         request.orderId,
@@ -163,18 +162,18 @@ internal class SupportCompensationController(
     @GetMapping("/compensations/{compensationRequestId}")
     @PreAuthorize("isAuthenticated()")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable compensationRequestId: UUID,
     ): ResponseEntity<SupportCompensationResource> =
         ResponseEntity
             .ok()
             .cacheControl(CacheControl.noStore())
-            .body(service.get(jwt.compensationActorId(), compensationRequestId))
+            .body(service.get(actor.compensationActorId(), compensationRequestId))
 
     @PostMapping("/compensations/{compensationRequestId}/executions")
     @PreAuthorize("isAuthenticated()")
     fun execute(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable compensationRequestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ExecuteSupportCompensationRequest,
@@ -185,7 +184,7 @@ internal class SupportCompensationController(
             .body(
                 service.execute(
                     ExecuteSupportCompensationCommand(
-                        jwt.compensationActorId(),
+                        actor.compensationActorId(),
                         compensationRequestId,
                         request.expectedRequestVersion,
                         request.expectedTargetVersion,
@@ -198,7 +197,7 @@ internal class SupportCompensationController(
     @PostMapping("/compensations/{compensationRequestId}/notification-retries")
     @PreAuthorize("isAuthenticated()")
     fun retryNotification(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable compensationRequestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
     ): ResponseEntity<SupportCompensationResource> =
@@ -208,7 +207,7 @@ internal class SupportCompensationController(
             .body(
                 service.retryNotification(
                     RetrySupportCompensationNotificationCommand(
-                        jwt.compensationActorId(),
+                        actor.compensationActorId(),
                         compensationRequestId,
                         idempotencyKey,
                     ),
@@ -216,9 +215,9 @@ internal class SupportCompensationController(
             )
 }
 
-private fun Jwt.compensationActorId(): UUID =
+private fun OperatorActor.compensationActorId(): UUID =
     try {
-        UUID.fromString(subject)
+        actorId
     } catch (_: IllegalArgumentException) {
         invalidCompensationRequest()
     }

@@ -103,9 +103,11 @@ beanflow:
 |---|---|---|
 | `GET /stores/nearby` | `(distanceMicrometers ASC, storeId ASC)` | canonical latitude/longitude/radius와 endpoint |
 | `GET /point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 endpoint |
+| `GET /operations/point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 Operations endpoint |
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
 | `GET /stores/{storeId}/settlements/{settlementBatchId}/items` | `(completedAt ASC, settlementItemId ASC)` | store ID, Batch ID와 endpoint |
 | `GET /payment-methods` | `(isDefault DESC, createdAt DESC, paymentMethodId DESC)` | authenticated customer ID와 endpoint |
+| `GET /me/orders` | `(createdAt DESC, orderId DESC)` | endpoint, authenticated customer ID, `ALL\|ACTIVE\|PAST`, 서울 날짜 `from`/`to` |
 | `GET /support/cases` | `(openedAt DESC, caseId DESC)` | endpoint, optional state와 optional assignee ID |
 | `GET /support/cases/{caseId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, sorted distinct source/type filters |
 | `GET /support/orders/{orderId}/timeline` | `(occurredAt DESC, sourceRank ASC, itemId DESC)` | endpoint, Case ID, Order ID, sorted distinct source/type filters |
@@ -113,6 +115,13 @@ beanflow:
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
 base64 parsing을 만들지 않는다.
+
+2026-08-13 Plan 50 amendment: 고객 주문 목록의 endpoint identifier는 `customer-orders`, expiry는
+24시간이다. typed sort는 `createdAt` UTC ISO-8601 Instant와 lowercase canonical UUID `orderId`를
+순서대로 사용한다. filter hash canonical form은 property 순서를 `endpoint`, `customerId`, `status`,
+`from`, `to`로 고정한 JSON이다. `status` 생략은 `ALL`, 지정 값은 `ACTIVE|PAST`이고 `from`/`to`는
+기본값을 적용한 `Asia/Seoul` ISO 날짜다. 따라서 기본 기간과 명시적으로 같은 기간은 같은 scope이고,
+고객·상태·기간을 바꾼 cursor는 400이다. limit은 cursor에 넣지 않는 공통 규칙을 유지한다.
 
 2026-08-09 PaymentMethod amendment: PaymentMethod typed cursor는 `isDefault`를 `1|0`,
 `createdAt`을 UTC ISO-8601 Instant, ID를 lowercase canonical UUID로 고정해 세 값을 string array로

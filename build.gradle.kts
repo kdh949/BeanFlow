@@ -30,10 +30,12 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+	implementation("org.springframework.boot:spring-boot-starter-session-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
+	implementation("org.bouncycastle:bcprov-jdk18on:1.84")
 	implementation("org.springframework.modulith:spring-modulith-observability-api")
 	implementation("org.springframework.modulith:spring-modulith-starter-core")
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
@@ -131,4 +133,11 @@ tasks.register<JavaExec>("ordinary-accrual-policy-bootstrap") {
 	description = "Create the audited initial GLOBAL ordinary point accrual policy using OIDC workload identity"
 	classpath = sourceSets["main"].runtimeClasspath
 	mainClass.set("io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyBootstrapCli")
+}
+
+tasks.register<JavaExec>("order-reference-backfill") {
+	group = "application"
+	description = "Backfill public order references and immutable display identity snapshots after Flyway V50"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.kdh949.beanflow.ordering.internal.OrderReferenceBackfillCli")
 }

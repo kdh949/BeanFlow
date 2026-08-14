@@ -17,9 +17,32 @@ spec에 반영한다. Controller를 추가·제거하거나 shape를 바꾸는 �
 component는 문서 검증이 참조 존재를 확인한다. Runtime operation inventory는 별도 수동 목록이
 아니라 `RuntimeOpenApiParityTest`가 Spring `RequestMappingHandlerMapping`과 양방향 비교한다.
 
+## Authentication chains and CSRF
+
+모든 `/api/v1` mapping은 중앙 registry에서 정확히 하나의 Chain에 명시적으로 배정한다. 새 mapping이
+미배정이거나 두 Chain에 겹치면 애플리케이션 기동과 구조 테스트가 실패한다. 나머지를 Customer로
+간주하는 default 분류는 없다.
+
+| Chain | 인증 | 경로 |
+|---|---|---|
+| Public | 없음 | health, payment config, Operations OIDC config 예약 경로 |
+| Operations | Bearer JWT | `/operations/**`, `/support/**` |
+| Merchant | PostgreSQL Session | `/auth/merchant/**`, `/merchant/**`, 매장 주문·정산 경로 |
+| Customer | PostgreSQL Session | 명시적으로 등록된 나머지 고객 `/api/v1` 경로 |
+
+Customer와 Merchant Session Cookie는 각각 `BEANFLOW_CUSTOMER_SESSION`,
+`BEANFLOW_MERCHANT_SESSION`이며 `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`다. unsafe 요청은
+`GET /auth/customer/csrf` 또는 `GET /auth/merchant/csrf`가 발급한 actor별 XSRF Cookie 값을
+`X-BEANFLOW-CSRF` header로 보내야 한다. 다른 actor의 Cookie·CSRF token이나 Operations Bearer를
+브라우저 Session Chain에 보내면 fallback하지 않고 403이다. 인증 부재·무효 Session은 401, Session
+저장소나 현재 계정 조회 장애는 503이다.
+
 `POST /settlement-items/{itemId}/disputes`는 Settlement Item 경로를 사용하지만 Dispute Context가
 소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
 public view를 통해 검증하며, accepted decision은 Settlement public Adjustment command로 넘긴다.
+
+`GET /merchant/me/stores`는 현재 `ACTIVE` membership을 top-level 배열로 반환한다. 빈 배열은
+정상적인 “접근 가능한 매장 없음”이고, Identity 조회 실패는 빈 배열로 대체하지 않고 503이다.
 
 ## Status codes
 
@@ -50,6 +73,35 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 - `503 Service Unavailable`: 필수 의존성 일시 장애
 - 외부 결과 불명은 API 계약에 명시된 pending/unknown 표현 사용
 
+## Store order board conditional reads and actions
+
+`GET /api/v1/stores/{storeId}/orders`는 해당 매장의 모든 실행 상태
+`PAID`, `ACCEPTED`, `PREPARING`, `READY`를 픽업 영업일별로 그룹화한다. `PAID`는 API lane
+`PENDING_ACCEPTANCE`로 표현하며 새 Domain 상태가 아니다. 고객 개인정보, 내부 Order UUID와 결제
+식별자는 응답하지 않는다.
+
+- 200 응답은 정렬된 bounded `StoreOrderBoard`의 canonical **의미 Projection** SHA-256에서 만든 weak
+  `ETag` (`W/"{sha256}"`)를 포함한다. 의미 Projection에는 groups, card fields, phase와 overflow의
+  lane·count를 넣고 issuance·expiry를 가진 opaque overflow `nextCursor`는 넣지 않는다.
+- `If-None-Match`는 쉼표로 구분한 tag, weak tag와 `*`를 처리한다. 현재 tag와 약하게 일치하면 304와 빈
+  body를 반환한다. 304도 membership 확인과 Projection 조회·hash 계산을 수행하지만, 보드의 의미상 내용이
+  같다는 뜻일 뿐 `nextCursor`의 TTL·유효성·response byte 동등성을 보장하거나 연장하지 않는다.
+- `GET /api/v1/stores/{storeId}/orders/overflow`의 cursor가 만료·변조·scope 불일치로
+  `400 INVALID_REQUEST`이면 client는 local queue와 board ETag를 버리고 unconditional main board snapshot을
+  정확히 한 번 조회한다. 새 cursor로 queue를 자동 재시도하거나 overflow를 3초 polling에 넣지 않고,
+  사용자의 다음 queue 열기 동작을 기다린다.
+- `PAID`의 `OPEN`, `WARNING`, `TIMEOUT_PENDING` phase가 canonical Projection에 포함되므로 DB 변경이
+  없어도 2분·3분 경계에서 tag가 바뀐다. hash 또는 Projection 실패를 full 200이나 빈 보드로
+  대체하지 않고 503으로 반환한다.
+- 상세와 전이는 UUID가 아닌 canonical `orderReference`를 사용한다. 다른 매장 reference는 403,
+  접근 가능한 범위에 없는 reference는 404다.
+- 전이 body는 `{action, expectedStatus, reason?}`다. action과 예상 출발 상태 조합 자체가 불가능하면
+  `422 ORDER_ACTION_NOT_ALLOWED`, row lock 뒤 실제 상태가 달라졌으면
+  `409 ORDER_STATE_CONFLICT`다. 같은 idempotency key의 exact replay는 이 비교보다 먼저 최초 응답을
+  재생한다.
+- 일반 전이는 200, `REJECT`는 Order 거절 commit 뒤 보상 진행을 분리해 202일 수 있다. 202는 환불·
+  자원·혜택·알림 보상 완료가 아니다.
+
 ## PaymentMethod lifecycle
 
 - `GET /api/v1/payment-methods`는 `CUSTOMER` 자신의 `ACTIVE`와 deactivation pending method만
@@ -79,6 +131,10 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 
 - Plan 13 V17/owner transaction이 `recoveryPendingKrw`, `ACCRUAL`과 `RECOVERY` storage contract를
   구현했다. Plan 14 read API는 이 값을 그대로 projection하며 0이나 ledger 합으로 대체하지 않는다.
+- Customer Session은 `GET /point-accounts/{accountId}`와 `/transactions`에서 자기 소유권만 사용한다.
+  운영자 조회는 `GET /operations/point-accounts/{accountId}`와 `/transactions`로 분리하고 Bearer JWT,
+  active `POINT_ACCOUNT_READ`, required `X-Access-Reason`과 접근 Audit을 요구한다. 한 URI에서 두 인증
+  방식을 판별하지 않는다.
 - `GET /point-accounts/{accountId}`의 `recoveryPendingKrw`는 음수 잔액이 아니라
   Loyalty `PointRecoveryPending(PENDING)` remaining 합계다.
 - `GET /point-accounts/{accountId}/transactions`의 `amountKrw`는 DB에 저장한 양수
@@ -141,6 +197,31 @@ reason과 evidence를
   차이는 가격 변경에 포함하지 않는다.
 - 동일 key/payload replay는 최초 201 또는 확정 실패 status/body를 그대로 반환하며
   `replayed` 표시를 추가하지 않는다.
+
+## Human-facing order identifiers
+
+Order UUIDs remain internal aggregate/FK/event identifiers. Human-facing customer and merchant routes use the
+canonical public reference `BF-XXXX-XXXX`, whose alphabet is
+`23456789ABCDEFGHJKMNPQRSTUVWXYZ`. Input is uppercased before strict format validation; whitespace and ambiguous
+characters are rejected rather than guessed.
+
+- Customer read/cancel: `GET /api/v1/me/orders/{orderReference}` and
+  `POST /api/v1/me/orders/{orderReference}/cancellations`.
+- Store read/transition: `GET /api/v1/stores/{storeId}/orders/{orderReference}` and
+  `POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions`.
+- A public reference is not authorization. Customer lookup includes `customerId`; store lookup includes `storeId`
+  and requires current active membership. An existing reference outside that scope returns 403 and a missing
+  reference returns 404.
+- New public-reference responses omit internal `orderId`. Existing UUID routes remain during compatibility migration
+  and keep their existing UUID response fields.
+- `pickupNumber` is `A-` plus the unpadded positive per-store/per-Seoul-business-date sequence. It is display-only and
+  never a lookup key.
+- Store name and pickup window fields are immutable order snapshots. Reads do not replace them with current Merchant
+  or Fulfillment values.
+
+The Plan 10 runtime customer/store detail representations intentionally retain the existing rich Order fields minus
+`orderId`. Plans 50 and 60 replace those transitional shapes with the dedicated customer read model and store board
+contracts; Plan 10 does not implement those later projections.
 
 ## Customer order cancellation
 

@@ -1,0 +1,92 @@
+package io.github.kdh949.beanflow.ordering.internal
+
+import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
+import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import java.time.Instant
+import java.time.LocalDate
+import java.util.UUID
+
+internal data class PublicCustomerCancellationResponse(
+    val publicReference: String,
+    val orderState: String,
+    val reasonCode: CustomerCancellationReasonCode,
+    val paymentRecovery: CancellationRefundRecoverySummary,
+    val cancelledAt: Instant,
+    val correlationId: String,
+)
+
+internal data class PublicStoreOrderResult(
+    val order: PublicStoreOrderResponse,
+    val compensationRecovery: StoreCompensationSummary?,
+)
+
+internal data class PublicStoreOrderResponse(
+    val storeId: UUID,
+    val publicReference: String,
+    val pickupNumber: String,
+    val pickupBusinessDate: LocalDate,
+    val storeName: String,
+    val pickupWindowStart: Instant,
+    val pickupWindowEnd: Instant,
+    val state: String,
+    val reservationExpiresAt: Instant?,
+    val paidAt: Instant?,
+    val acceptanceWarningAt: Instant?,
+    val acceptanceWarningRequestedAt: Instant?,
+    val acceptanceDeadlineAt: Instant?,
+    val acceptedAt: Instant?,
+    val rejectedAt: Instant?,
+    val preparingAt: Instant?,
+    val readyAt: Instant?,
+    val completedAt: Instant?,
+    val cancelledAt: Instant?,
+    val cancellationCause: OrderCancellationCause?,
+    val rejectionReason: String?,
+    val lines: List<OrderLineResponse>,
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+    val currency: String,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
+internal fun StoreOrderResult.toPublicResponse() =
+    PublicStoreOrderResult(
+        order = order.toPublicResponse(),
+        compensationRecovery = compensationRecovery,
+    )
+
+private fun StoreOrderResponse.toPublicResponse() =
+    PublicStoreOrderResponse(
+        storeId = storeId,
+        publicReference = publicReference,
+        pickupNumber = pickupNumber,
+        pickupBusinessDate = pickupBusinessDate,
+        storeName = storeName,
+        pickupWindowStart = pickupWindowStart,
+        pickupWindowEnd = pickupWindowEnd,
+        state = state,
+        reservationExpiresAt = reservationExpiresAt,
+        paidAt = paidAt,
+        acceptanceWarningAt = acceptanceWarningAt,
+        acceptanceWarningRequestedAt = acceptanceWarningRequestedAt,
+        acceptanceDeadlineAt = acceptanceDeadlineAt,
+        acceptedAt = acceptedAt,
+        rejectedAt = rejectedAt,
+        preparingAt = preparingAt,
+        readyAt = readyAt,
+        completedAt = completedAt,
+        cancelledAt = cancelledAt,
+        cancellationCause = cancellationCause,
+        rejectionReason = rejectionReason,
+        lines = lines,
+        subtotalKrw = subtotalKrw,
+        couponDiscountKrw = couponDiscountKrw,
+        pointsAppliedKrw = pointsAppliedKrw,
+        payableKrw = payableKrw,
+        currency = currency,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )

@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.identity.api.SensitiveVerificationProof
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
 import io.github.kdh949.beanflow.support.internal.domain.VerificationChannel
 import io.github.kdh949.beanflow.support.internal.domain.VerificationLevel
@@ -16,8 +17,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -61,7 +60,7 @@ internal class SupportVerificationController(
     @PostMapping("/cases/{caseId}/verification-sessions")
     @PreAuthorize("isAuthenticated()")
     fun create(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: CreateVerificationSessionRequest,
@@ -70,7 +69,7 @@ internal class SupportVerificationController(
             HttpStatus.CREATED,
             service.create(
                 CreateVerificationSessionCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     caseId,
                     request.subjectLinkId ?: invalid(),
                     request.requestedLevel?.takeUnless { it == VerificationLevel.UNVERIFIED } ?: invalid(),
@@ -85,14 +84,14 @@ internal class SupportVerificationController(
     @GetMapping("/verification-sessions/{sessionId}")
     @PreAuthorize("isAuthenticated()")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable sessionId: UUID,
-    ): ResponseEntity<VerificationSessionResource> = noStore(HttpStatus.OK, service.get(jwt.actorId(), sessionId))
+    ): ResponseEntity<VerificationSessionResource> = noStore(HttpStatus.OK, service.get(actor.actorId(), sessionId))
 
     @PostMapping("/verification-sessions/{sessionId}/challenges")
     @PreAuthorize("isAuthenticated()")
     fun issue(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable sessionId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: IssueVerificationChallengeRequest,
@@ -101,7 +100,7 @@ internal class SupportVerificationController(
             HttpStatus.CREATED,
             service.issue(
                 IssueVerificationChallengeRequestCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     sessionId,
                     request.channel ?: invalid(),
                     idempotencyKey,
@@ -113,7 +112,7 @@ internal class SupportVerificationController(
     @PostMapping("/verification-challenges/{challengeId}/verifications")
     @PreAuthorize("isAuthenticated()")
     fun verify(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable challengeId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: VerifyVerificationChallengeRequest,
@@ -124,7 +123,7 @@ internal class SupportVerificationController(
                 HttpStatus.OK,
                 service.verify(
                     VerifySupportChallengeCommand(
-                        jwt.actorId(),
+                        actor.actorId(),
                         challengeId,
                         SensitiveVerificationProof.copyOf(transientChars),
                         idempotencyKey,
@@ -140,7 +139,7 @@ internal class SupportVerificationController(
     @PostMapping("/verification-sessions/{sessionId}/revocations")
     @PreAuthorize("isAuthenticated()")
     fun revoke(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable sessionId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
     ): ResponseEntity<VerificationSessionResource> =
@@ -148,7 +147,7 @@ internal class SupportVerificationController(
             HttpStatus.OK,
             service.revoke(
                 RevokeVerificationSessionCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     sessionId,
                     idempotencyKey,
                     correlationIds.currentOrCreate(),
@@ -156,9 +155,9 @@ internal class SupportVerificationController(
             ),
         )
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             invalid()
         }

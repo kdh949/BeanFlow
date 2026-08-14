@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.OperatorActor
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassReasonCode
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassReviewDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportPersonalDataField
@@ -16,8 +17,6 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -69,7 +68,7 @@ internal class BreakGlassController(
     @PostMapping("/cases/{caseId}/break-glass-requests")
     @PreAuthorize("isAuthenticated()")
     fun request(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable caseId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: RequestBreakGlassRequest,
@@ -78,7 +77,7 @@ internal class BreakGlassController(
             HttpStatus.CREATED,
             service.request(
                 RequestBreakGlassCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     caseId,
                     request.subjectLinkId ?: invalid(),
                     request.field ?: invalid(),
@@ -93,7 +92,7 @@ internal class BreakGlassController(
     @PostMapping("/break-glass-requests/{requestId}/approvals")
     @PreAuthorize("isAuthenticated()")
     fun decide(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable requestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: DecideBreakGlassRequest,
@@ -102,7 +101,7 @@ internal class BreakGlassController(
             HttpStatus.OK,
             service.decide(
                 DecideBreakGlassCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     requestId,
                     request.decision ?: invalid(),
                     request.expectedVersion,
@@ -115,7 +114,7 @@ internal class BreakGlassController(
     @PostMapping("/break-glass-requests/{requestId}/reveals")
     @PreAuthorize("isAuthenticated()")
     fun reveal(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable requestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: RevealBreakGlassRequest,
@@ -124,7 +123,7 @@ internal class BreakGlassController(
             HttpStatus.OK,
             service.reveal(
                 RevealBreakGlassCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     requestId,
                     request.field ?: invalid(),
                     idempotencyKey,
@@ -136,7 +135,7 @@ internal class BreakGlassController(
     @PostMapping("/break-glass-requests/{requestId}/reviews")
     @PreAuthorize("isAuthenticated()")
     fun review(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: OperatorActor,
         @PathVariable requestId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ReviewBreakGlassRequest,
@@ -145,7 +144,7 @@ internal class BreakGlassController(
             HttpStatus.OK,
             service.review(
                 ReviewBreakGlassCommand(
-                    jwt.actorId(),
+                    actor.actorId(),
                     requestId,
                     request.decision ?: invalid(),
                     request.expectedVersion,
@@ -156,9 +155,9 @@ internal class BreakGlassController(
             ),
         )
 
-    private fun Jwt.actorId(): UUID =
+    private fun OperatorActor.actorId(): UUID =
         try {
-            UUID.fromString(subject)
+            actorId
         } catch (_: IllegalArgumentException) {
             invalid()
         }

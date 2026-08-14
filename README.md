@@ -47,6 +47,7 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 - 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
 - 인근 매장 검색과 매장 메뉴·픽업 슬롯 조회
 - PointAccount summary·transaction 조회
+- Public/Operations/Merchant/Customer 4개 인증 Chain, PostgreSQL browser Session과 actor별 CSRF
 - SupportCase 접수·담당·상태 전이, 제한형 메모·접촉 기록과 ID-only 대상 연결
 - React/TypeScript 고객·매장·운영 콘솔과 Runtime OpenAPI 생성 client
 - 로컬 데모 환경과 고객→결제→매장→포인트→부분/전액 환불 smoke flow
@@ -74,10 +75,13 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 Gradle은 별도 설치하지 않고 저장소의 Wrapper(`./gradlew`)를 사용한다. 첫 실행에는
 Gradle 의존성과 Testcontainers 이미지 다운로드를 위한 네트워크 연결이 필요할 수 있다.
 
-### 로컬 데모 환경 (가장 빠른 확인 방법)
+### 로컬 데모 환경
 
-수동 설정 없이 전체 흐름을 보려면 데모 script를 쓴다. PostGIS, ephemeral JWK set endpoint,
-필수 정책 bootstrap, Spring API, React frontend, 결정적 fixture와 실제 HTTP smoke까지 한 번에 실행한다.
+데모 script는 PostGIS, ephemeral JWK set endpoint, 필수 정책 bootstrap, Spring API와 React frontend를
+기동한다. 다만 인증 전환 중간 상태인 현재 branch에서는 고객·점주 보호 경로가 Session-only이고 계정·
+로그인 endpoint는 후속 Plan 30/40 소유이므로 고객→매장 전체 smoke는 의도적으로 401에서 중단된다.
+기존 고객·점주 JWT나 fake Session으로 이를 우회하지 않는다. Operations JWT 경로와 공개 경로는 계속
+검증할 수 있다.
 
 ```bash
 bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
@@ -87,7 +91,8 @@ bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smo
 완화하지 않으며, 실행 시 생성한 키 자료는 gitignore된 `.demo-runtime/`에만 존재한다.
 절차와 진단은 [Local Demo Runbook](docs/operations/local-demo-runbook.md)에 있다.
 기동 뒤 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`에서
-확인한다. 화면의 로컬 인증 연결 폼에는 `.demo-runtime/demo-identity.env`의 역할별 JWT를 입력한다.
+확인한다. 현재 고객·점주 화면의 legacy Token Editor는 Session 로그인을 제공하지 않으며, 제거와
+실제 로그인 연결은 후속 account/web Plan이 소유한다.
 
 아래 수동 절차는 데모 script 없이 직접 구성할 때 쓴다.
 
@@ -129,8 +134,12 @@ export SPRING_PROFILES_ACTIVE='local'
 curl http://localhost:8080/actuator/health
 ```
 
-`/actuator/health`를 제외한 endpoint는 Bearer JWT가 필요하다. 주문 API용 JWT의
-`sub`는 UUID 형식의 고객 ID여야 하고, `roles` claim에 `CUSTOMER`가 포함되어야 한다.
+공개 endpoint를 제외한 Operations/Support 경로는 Bearer JWT가 필요하다. Customer/Merchant 경로는
+각 actor 전용 PostgreSQL Session Cookie를 사용하고 unsafe method에는 actor별 CSRF header가 필요하다.
+현재 source에는 Customer/Merchant 로그인 endpoint가 없으므로 해당 보호 경로는 후속 Plan 30/40 전까지
+401이다. JWK 설정은 Operations/Support Chain 때문에 계속 필수이며, Session 저장소는 Flyway V52가
+생성한 PostgreSQL `spring_session` 두 table을 사용한다. DB 조회 실패를 익명 요청으로 바꾸지 않고
+503으로 반환한다.
 
 `local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
 `PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 실제 Toss 테스트 환경은
@@ -174,9 +183,9 @@ Controller mapping과 이 계약의 operation 집합을 양방향으로 비교�
 
 ### 계약 inventory
 
-현재 target과 runtime의 public operation inventory는 일치하며 42 paths/46 operations다.
-이는 operation 개수이며 처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 장애 주입,
-실제 배포 smoke test와 SLA는 `Not measured`다.
+정확한 target/runtime path·operation 수는 `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가
+계산하고 검증한다. 두 inventory는 선행 target Plan 때문에 같지 않을 수 있다. 이는 계약 항목 수이며
+처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 실제 배포 smoke test와 SLA는 `Not measured`다.
 
 로컬 PostgreSQL을 위의 일회성 컨테이너로 실행했다면 다음 명령으로 종료한다.
 

@@ -105,6 +105,20 @@ rebase/lease 복구를 요구하면 automation은 멈추고, deployment되지 �
 combined migration inventory를 다시 검증한 뒤에만 재개한다. applied migration을 checksum repair하거나
 published schema를 재번호화하지 않는다.
 
+[ADR-111](ADR-111-productization-stack-a-draft-release.md)의 2026-08-12 예외에서는 Plan 10 Draft push 뒤
+Support PR #56/#58이 V43/V44 writer로 나타났다. 사용자가 대안 B를 명시적으로 선택했고 Plan 10 branch가
+open Draft·미병합이며 GitHub deployment/environment 0건인 것을 확인했으므로, push history를 재작성하지
+않는 additive commit에서 아직 미적용인 Plan 10 migration을 당시 combined inventory 다음 V45/V46으로
+옮기기로 했다. 그 직후 Support S70~S100을 우선해 Productization lane을 동결했으므로 이 번호는 release하지
+않았다.
+
+2026-08-13 Support S50~S100과 review remediation이 `origin/main`에 V43~V49로 통합되고 lease가 해제된 것을
+확인했다. 사용자 지시에 따라 Plan 10 branch가 `origin/main`을 history-preserving merge로 받아들이며,
+미적용 Plan 10 expand/contract migration은 새 combined inventory 다음 V50/V51을 사용한다. SQL과
+expand → bounded backfill → contract 순서는 유지하고 Plan 10 전체 validation을 다시 통과해야 한다. 이는
+applied migration의 rename/checksum repair를 허용하는 일반 규칙이 아니며, 새 writer가 V50/V51을 점유하면
+다시 중단한다.
+
 ### Completion path update
 
 plan completion commit은 반드시 다음을 같은 atomic documentation change에 포함한다.

@@ -9,7 +9,6 @@ import {
   Minus,
   Plus,
   RefreshCw,
-  Search,
   ShieldCheck,
   Timer,
   XCircle,
@@ -29,7 +28,6 @@ type PickupSlot = components["schemas"]["PickupSlot"];
 type Order = components["schemas"]["Order"];
 type Payment = components["schemas"]["PaymentConfirmation"];
 type Attempt = components["schemas"]["OneTimePaymentAttempt"];
-type OrderState = components["schemas"]["OrderState"];
 
 const attemptStorage = {
   save(attempt: Attempt) {
@@ -199,7 +197,7 @@ export function StoreCatalogPage() {
       const created = unwrap(result);
       const order = created.order as Order;
       orderSubmission.current.complete();
-      navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.orderId}`);
+      navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.publicReference}`);
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
         orderSubmission.current.rotate();
@@ -323,7 +321,7 @@ export function CheckoutPage() {
   if (!order) return null;
   return (
     <div className="customer-page checkout-page">
-      <Link className="back-link" to={`/app/orders/${orderId}`}><ArrowLeft size={17} /> 주문 보기</Link>
+      <Link className="back-link" to={`/app/orders/${order.publicReference}`}><ArrowLeft size={17} /> 주문 보기</Link>
       <PageTitle eyebrow="CHECKOUT" title="주문을 확인해 주세요" description="금액과 픽업 주문을 확인한 뒤 Toss 결제창에서 카드 또는 간편결제를 선택합니다." />
       <section className="checkout-card surface-card">
         <div className="card-kicker"><Coffee size={18} /> 주문 메뉴</div>
@@ -433,7 +431,7 @@ export function PaymentSuccessPage() {
         {payment.recovery ? <div><span>복구 상태</span><StatusBadge state={payment.recovery.state} /></div> : null}
       </div>
       {error ? <ErrorState error={error} retry={() => void refresh()} /> : null}
-      <Link className="button button-primary button-block button-xl" to={`/app/orders/${payment.orderId}`}>주문 상태 보기</Link>
+      <Link className="button button-primary button-block button-xl" to="/app/orders">주문 상태 보기</Link>
     </div>
   );
 }
@@ -481,7 +479,7 @@ export function PaymentFailPage() {
         <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
         <StatusBadge state={payment.approvalState} />
         {error ? <ErrorState error={error} retry={() => void load()} /> : null}
-        <Link className="button button-secondary button-block" to={`/app/orders/${payment.orderId}`}>주문 상태 보기</Link>
+        <Link className="button button-secondary button-block" to="/app/orders">주문 상태 보기</Link>
       </div>
     );
   }
@@ -493,7 +491,7 @@ export function PaymentFailPage() {
       <h1>결제를 완료하지 못했어요</h1>
       <p>{message}</p>
       <code className="failure-code">{code}</code>
-      <Link className="button button-primary button-block button-xl" to={retryable ? `/app/checkout/${payment.orderId}` : `/app/orders/${payment.orderId}`}>
+      <Link className="button button-primary button-block button-xl" to={retryable ? `/app/checkout/${payment.orderId}` : "/app/orders"}>
         {retryable ? "주문서로 돌아가기" : "주문 상태 보기"}
       </Link>
       <Link className="text-link" to="/app/help">도움이 필요해요</Link>
@@ -514,94 +512,6 @@ export function publicFailureCode(code: string) {
   return ["PAY_PROCESS_CANCELED", "PAY_PROCESS_ABORTED", "REJECT_CARD_COMPANY"].includes(code)
     ? code
     : "PAYMENT_AUTH_FAILED";
-}
-
-export function OrderLookupPage() {
-  const navigate = useNavigate();
-  const [orderId, setOrderId] = useState("");
-  return (
-    <div className="customer-page lookup-page">
-      <PageTitle eyebrow="MY ORDER" title="주문 찾기" description="주문 번호로 결제와 픽업 진행 상태를 확인하세요." />
-      <form className="lookup-form surface-card" onSubmit={(event) => { event.preventDefault(); if (orderId.trim()) navigate(`/app/orders/${orderId.trim()}`); }}>
-        <label htmlFor="customer-order-id">주문 번호</label>
-        <div><Search size={18} /><input id="customer-order-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="UUID 주문 번호" /></div>
-        <button className="button button-primary button-block" type="submit" disabled={!orderId.trim()}>조회하기</button>
-      </form>
-    </div>
-  );
-}
-
-export function OrderTrackingPage() {
-  const { orderId = "" } = useParams();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      const result = await api.GET("/orders/{orderId}", { params: { path: { orderId } } });
-      setOrder(unwrap(result));
-    } catch (failure) { setError(failure); }
-  }, [orderId]);
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    if (!order || ["COMPLETED", "CANCELLED", "REJECTED", "EXPIRED"].includes(order.state)) return;
-    const timer = window.setTimeout(() => void load(), 5_000);
-    return () => window.clearTimeout(timer);
-  }, [load, order]);
-  if (!order && !error) return <LoadingState label="주문 상태를 확인하는 중" />;
-  if (error && !order) return <ErrorState error={error} retry={() => void load()} />;
-  if (!order) return null;
-  return (
-    <div className="customer-page tracking-page">
-      <PageTitle eyebrow="ORDER TRACKING" title="주문 상태" action={<StatusBadge state={order.state} />} />
-      <div className="order-id-line"><span>주문 번호</span><code>{compactId(order.orderId)}</code></div>
-      <OrderTimeline state={order.state} />
-      <section className="surface-card order-summary">
-        {order.lines.map((line) => <div key={line.orderLineId}><span>{line.menuName} · {line.quantity}잔</span><strong>{won.format(line.cashPaidKrw)}</strong></div>)}
-        <div className="summary-total"><span>결제 금액</span><strong>{won.format(order.payableKrw)}</strong></div>
-      </section>
-      {order.paymentRecovery ? <section className="recovery-note"><RefreshCw size={17} /><div><strong>환불 처리 상태</strong><span>{order.paymentRecovery.noticeCode ? "확인이 지연되고 있어요. 같은 요청을 반복하지 않아도 됩니다." : `현재 ${order.paymentRecovery.state} 상태입니다.`}</span></div></section> : null}
-      {error ? <ErrorState error={error} retry={() => void load()} /> : null}
-      {order.state === "PENDING_PAYMENT" ? <Link className="button button-primary button-block button-xl" to={`/app/checkout/${order.orderId}`}>결제 계속하기</Link> : null}
-      <button className="button button-secondary button-block" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</button>
-    </div>
-  );
-}
-
-export type OrderTimelineModel = {
-  kind: "pending" | "progress" | "terminal";
-  activeIndex: number | null;
-  terminalLabel?: string;
-};
-
-export function orderTimelineModel(state: OrderState): OrderTimelineModel {
-  switch (state) {
-    case "PENDING_PAYMENT": return { kind: "pending", activeIndex: null };
-    case "PAID": return { kind: "progress", activeIndex: 0 };
-    case "ACCEPTED": return { kind: "progress", activeIndex: 1 };
-    case "PREPARING": return { kind: "progress", activeIndex: 2 };
-    case "READY": return { kind: "progress", activeIndex: 3 };
-    case "COMPLETED": return { kind: "progress", activeIndex: 4 };
-    case "CANCELLED": return { kind: "terminal", activeIndex: null, terminalLabel: "취소된 주문입니다" };
-    case "REJECTED": return { kind: "terminal", activeIndex: null, terminalLabel: "매장에서 거절한 주문입니다" };
-    case "EXPIRED": return { kind: "terminal", activeIndex: null, terminalLabel: "결제 시간이 만료된 주문입니다" };
-    default: {
-      const unreachable: never = state;
-      return unreachable;
-    }
-  }
-}
-
-function OrderTimeline({ state }: { state: OrderState }) {
-  const model = orderTimelineModel(state);
-  if (model.kind === "terminal") {
-    return <div className="terminal-order-state" role="status"><XCircle size={21} /><strong>{model.terminalLabel}</strong></div>;
-  }
-  return <ol className="order-timeline">
-    {["결제 완료", "주문 접수", "제조 중", "픽업 준비", "픽업 완료"].map((label, index) => (
-      <li key={label} className={model.activeIndex !== null && index <= model.activeIndex ? "is-active" : ""}><span>{model.activeIndex !== null && index < model.activeIndex ? <Check size={15} /> : index + 1}</span><strong>{label}</strong></li>
-    ))}
-  </ol>;
 }
 
 export function CustomerHelpPage() {

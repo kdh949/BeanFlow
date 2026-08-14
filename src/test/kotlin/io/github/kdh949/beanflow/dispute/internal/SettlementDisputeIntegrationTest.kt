@@ -1,8 +1,10 @@
 package io.github.kdh949.beanflow.dispute.internal
 
+import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.ordering.internal.EventPublicationRecoveryWorker
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.settlement.internal.SettlementBatchLifecycleService
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -20,6 +22,7 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
@@ -76,6 +79,7 @@ internal class SettlementDisputeIntegrationTest
                     settlement_item,
                     settlement_batch,
                     identity_store_membership,
+                    identity_merchant_account,
                     operations_audit_record,
                     operations_reprocessing_case,
                     event_publication,
@@ -346,6 +350,7 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(ownerJwt(fixture.actorId))
+                        .with(csrf())
                         .header("Idempotency-Key", "http-dispute-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
@@ -358,6 +363,7 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(staffJwt(UUID.randomUUID()))
+                        .with(csrf())
                         .header("Idempotency-Key", "staff-http-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
@@ -444,6 +450,7 @@ internal class SettlementDisputeIntegrationTest
             actorId: UUID,
             storeId: UUID,
         ) {
+            MerchantAccountDatabaseFixture.insertActive(jdbcTemplate, actorId)
             jdbcTemplate.update(
                 """
                 INSERT INTO identity_store_membership (
@@ -460,23 +467,31 @@ internal class SettlementDisputeIntegrationTest
 
         private fun insertCompletedOrder(storeId: UUID): UUID =
             UUID.randomUUID().also { orderId ->
+                val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
                 jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
                 try {
                     jdbcTemplate.update(
                         """
                         INSERT INTO ordering_order (
-                            id, customer_id, store_id, pickup_slot_id, state,
+                            id, customer_id, store_id, pickup_slot_id,
+                            public_reference, pickup_business_date, pickup_sequence,
+                            store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                            state,
                             subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                             currency, reservation_expires_at, paid_at, acceptance_warning_at,
                             acceptance_deadline_at, accepted_at, preparing_at, ready_at, completed_at,
                             created_at, updated_at, version
-                        ) VALUES (?, ?, ?, ?, 'COMPLETED', 1000, 0, 0, 1000,
+                        ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                                  'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                                  'COMPLETED', 1000, 0, 0, 1000,
                                   'KRW', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 7)
                         """.trimIndent(),
                         orderId,
                         UUID.randomUUID(),
                         storeId,
                         UUID.randomUUID(),
+                        publicReference,
+                        OrderCreationDatabaseFixture.pickupSequence(orderId),
                         Timestamp.from(COMPLETED_AT.minusSeconds(180)),
                         Timestamp.from(COMPLETED_AT.minusSeconds(120)),
                         Timestamp.from(COMPLETED_AT.minusSeconds(60)),
@@ -495,12 +510,12 @@ internal class SettlementDisputeIntegrationTest
         private fun ownerJwt(actorId: UUID) =
             jwt()
                 .jwt { it.subject(actorId.toString()).claim("roles", listOf("STORE_OWNER")) }
-                .authorities(SimpleGrantedAuthority("ROLE_STORE_OWNER"))
+                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun staffJwt(actorId: UUID) =
             jwt()
                 .jwt { it.subject(actorId.toString()).claim("roles", listOf("STORE_STAFF")) }
-                .authorities(SimpleGrantedAuthority("ROLE_STORE_STAFF"))
+                .authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
 
         private fun assertWindowClosed(block: () -> Unit) {
             assertThatThrownBy(block)

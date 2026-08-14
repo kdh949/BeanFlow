@@ -58,7 +58,6 @@ type ConsoleShellProps = {
 export function ConsoleShell({ kind }: ConsoleShellProps) {
   const storeItems = [
     { to: "/store", label: "주문 보드", icon: PackageCheck, end: true },
-    { to: "/store/lookup", label: "주문 조회", icon: Search },
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },

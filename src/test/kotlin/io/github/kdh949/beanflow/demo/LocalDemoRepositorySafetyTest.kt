@@ -68,6 +68,15 @@ internal class LocalDemoRepositorySafetyTest {
         assertThat(curlLines.single()).contains("local status")
     }
 
+    @Test
+    fun `full smoke authenticates merchant operations with a browser session instead of a legacy JWT`() {
+        val text = Path.of("scripts/demo/smoke.sh").readText()
+
+        assertThat(text)
+            .contains("/auth/merchant/sessions", "BEANFLOW_MERCHANT_SESSION", "/auth/merchant/password-changes")
+            .doesNotContain("STORE_OWNER_TOKEN", "OTHER_STORE_OWNER_TOKEN")
+    }
+
     /** `call <name> <status> <METHOD> "<path>" ...` lines in the smoke script. */
     private fun smokeCalls(): List<SmokeCall> {
         val text = Path.of("scripts/demo/smoke.sh").readText()

@@ -117,27 +117,65 @@ internal class SettlementInputMigrationTest {
         val orderId = UUID.randomUUID()
         jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
         try {
-            jdbcTemplate.update(
-                """
-                INSERT INTO ordering_order (
-                    id, customer_id, store_id, pickup_slot_id, state,
-                    subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
-                    currency, reservation_expires_at, created_at, updated_at
-                ) VALUES (
-                    ?, ?, ?, ?, 'PENDING_PAYMENT', 1000, 0, 0, 1000,
-                    'KRW', now() + interval '5 minutes', now(), now()
+            if (hasColumn("ordering_order", "public_reference")) {
+                val reference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state, subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                        currency, reservation_expires_at, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, CURRENT_DATE, 1,
+                        'Settlement Test Store', now() + interval '10 minutes', now() + interval '20 minutes',
+                        'PENDING_PAYMENT', 1000, 0, 0, 1000,
+                        'KRW', now() + interval '5 minutes', now(), now()
+                    )
+                    """.trimIndent(),
+                    orderId,
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    reference,
                 )
-                """.trimIndent(),
-                orderId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-            )
+            } else {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO ordering_order (
+                        id, customer_id, store_id, pickup_slot_id, state,
+                        subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
+                        currency, reservation_expires_at, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, ?, ?, 'PENDING_PAYMENT', 1000, 0, 0, 1000,
+                        'KRW', now() + interval '5 minutes', now(), now()
+                    )
+                    """.trimIndent(),
+                    orderId,
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                )
+            }
         } finally {
             jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
         }
         return orderId
     }
+
+    private fun hasColumn(
+        table: String,
+        column: String,
+    ): Boolean =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+                Long::class.java,
+                table,
+                column,
+            ),
+        ) == 1L
 
     private fun insertSyntheticSnapshot(
         orderId: UUID,

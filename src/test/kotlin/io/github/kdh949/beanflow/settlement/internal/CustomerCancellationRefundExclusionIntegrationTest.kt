@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.PaymentRefundedV1
 import io.github.kdh949.beanflow.eventing.api.RefundCompletionDisposition
+import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.payment.internal.PaymentEntity
 import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodEntity
@@ -282,24 +283,32 @@ internal class CustomerCancellationRefundExclusionIntegrationTest
             val orderId = UUID.randomUUID()
             val orderVersion = 7L
             val source = "order:$orderId:customer-cancellation:$orderVersion:payment"
+            val publicReference = OrderCreationDatabaseFixture.registerPublicReference(jdbcTemplate, orderId)
             jdbcTemplate.execute("ALTER TABLE ordering_order DISABLE TRIGGER USER")
             try {
                 jdbcTemplate.update(
                     """
                     INSERT INTO ordering_order (
-                        id, customer_id, store_id, pickup_slot_id, state,
+                        id, customer_id, store_id, pickup_slot_id,
+                        public_reference, pickup_business_date, pickup_sequence,
+                        store_name_snapshot, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                        state,
                         subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw,
                         currency, reservation_expires_at, paid_at, acceptance_warning_at,
                         acceptance_deadline_at, cancelled_at, cancellation_cause,
                         cancellation_reason_code,
                         created_at, updated_at, version
-                    ) VALUES (?, ?, ?, ?, 'CANCELLED', 1000, 0, 0, 1000,
+                    ) VALUES (?, ?, ?, ?, ?, DATE '2026-08-03', ?,
+                              'Test Store', '2026-08-03T00:00:00Z', '2026-08-03T00:10:00Z',
+                              'CANCELLED', 1000, 0, 0, 1000,
                               'KRW', NULL, ?, ?, ?, ?, 'CUSTOMER_REQUEST', 'OTHER', ?, ?, ?)
                     """.trimIndent(),
                     orderId,
                     customerId,
                     storeId,
                     UUID.randomUUID(),
+                    publicReference,
+                    OrderCreationDatabaseFixture.pickupSequence(orderId),
                     Timestamp.from(PAID_AT),
                     Timestamp.from(PAID_AT.plusSeconds(120)),
                     Timestamp.from(PAID_AT.plusSeconds(180)),

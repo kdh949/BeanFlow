@@ -260,12 +260,12 @@ internal class PointAccountQueryIntegrationTest
             val accountId = insertAccount(customerId, available = 50)
 
             mockMvc
-                .perform(get(accountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
+                .perform(get(operatorAccountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
                 .andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
             grant(operatorId, "POINT_ADJUSTMENT")
             mockMvc
-                .perform(get(accountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
+                .perform(get(operatorAccountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
                 .andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
             grant(operatorId)
@@ -276,7 +276,7 @@ internal class PointAccountQueryIntegrationTest
                 operatorId,
             )
             mockMvc
-                .perform(get(accountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
+                .perform(get(operatorAccountPath(accountId)).header("X-Access-Reason", "Support request").with(operatorJwt(operatorId)))
                 .andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
             jdbcTemplate.update(
@@ -285,7 +285,7 @@ internal class PointAccountQueryIntegrationTest
                 operatorId,
             )
             listOf(null, "   ").forEach { reason ->
-                val request = get(accountPath(accountId)).with(operatorJwt(operatorId))
+                val request = get(operatorAccountPath(accountId)).with(operatorJwt(operatorId))
                 if (reason != null) request.header("X-Access-Reason", reason)
                 mockMvc
                     .perform(request)
@@ -294,8 +294,11 @@ internal class PointAccountQueryIntegrationTest
                 assertThat(count("operations_audit_record")).isZero()
             }
             mockMvc
-                .perform(get(accountPath(accountId)).header("X-Access-Reason", "Customer balance support").with(operatorJwt(operatorId)))
-                .andExpect(status().isOk)
+                .perform(
+                    get(operatorAccountPath(accountId))
+                        .header("X-Access-Reason", "Customer balance support")
+                        .with(operatorJwt(operatorId)),
+                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountId").value(accountId.toString()))
             assertThat(count("operations_audit_record")).isOne()
             val audit = jdbcTemplate.queryForMap("SELECT * FROM operations_audit_record")
@@ -318,7 +321,7 @@ internal class PointAccountQueryIntegrationTest
             )
             mockMvc
                 .perform(
-                    get(transactionPath(accountId))
+                    get(operatorTransactionPath(accountId))
                         .header("X-Access-Reason", "Ledger support")
                         .with(operatorJwt(operatorId)),
                 ).andExpect(status().isServiceUnavailable)
@@ -341,7 +344,7 @@ internal class PointAccountQueryIntegrationTest
 
             mockMvc
                 .perform(
-                    get(accountPath(accountId))
+                    get(operatorAccountPath(accountId))
                         .header("X-Access-Reason", "Deferred audit commit failure")
                         .with(operatorJwt(operatorId)),
                 ).andExpect(status().isServiceUnavailable)
@@ -474,6 +477,10 @@ internal class PointAccountQueryIntegrationTest
         private fun accountPath(accountId: UUID): String = "/api/v1/point-accounts/$accountId"
 
         private fun transactionPath(accountId: UUID): String = "${accountPath(accountId)}/transactions"
+
+        private fun operatorAccountPath(accountId: UUID): String = "/api/v1/operations/point-accounts/$accountId"
+
+        private fun operatorTransactionPath(accountId: UUID): String = "${operatorAccountPath(accountId)}/transactions"
 
         private fun nextCursor(body: String): String =
             Regex("\\\"nextCursor\\\":\\\"([^\\\"]+)\\\"")

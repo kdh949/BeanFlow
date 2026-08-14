@@ -40,6 +40,21 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
   active grant, 1..200자의 control-character 없는 `X-Access-Reason`, target Case access
   Audit를 같은 local transaction에서 요구한다. 기존 policy·point permission이나 role은
   fallback이 아니다.
+- **2026-08-12 productization P0 read amendment:** 운영 실패 case, 정산 대사와 감사 로그 조회에만
+  사용하는 `REPROCESSING_CASE_READ`, `SETTLEMENT_RECONCILIATION_READ`, `AUDIT_RECORD_READ`를
+  closed vocabulary에 forward migration으로 추가한다. 세 permission은 서로 대체하지 않고 어떤
+  role bundle이나 default grant에도 포함하지 않는다. 기존 offline bootstrap은 enum과 DB vocabulary가
+  적용된 뒤 각각의 grant/revoke/regrant에 그대로 사용한다.
+- **2026-08-12 merchant credential amendment:** 점주 계정 발급·exact 관리 조회·임시 비밀번호 초기화·
+  잠금 조기 해제에만 쓰는 `MERCHANT_CREDENTIAL_MANAGE`를 closed vocabulary에 forward migration으로
+  추가한다. `PLATFORM_OPERATOR` role이나 Support·read grant는 이 permission을 대체하지 않는다.
+  명령은 reason·idempotency·Audit와 [BR-46](../product/business-policy-decisions.md)의 임시 비밀번호
+  1회 표시 경계를 적용한다. 어떤 role bundle이나 default grant에도 포함하지 않고 기존 offline
+  bootstrap으로만 grant/revoke/regrant한다.
+- **2026-08-13 merchant credential implementation evidence:** V52가
+  `MERCHANT_CREDENTIAL_MANAGE`를 enum과 `operator_permission_grant` closed CHECK vocabulary에
+  추가했다. migration 뒤 active grant는 0건이며 기존 offline bootstrap만 grant/revoke/regrant를
+  수행한다. role·JWT claim fallback과 default seed는 추가하지 않았다.
 - **2026-08-01 migration ownership amendment:** Plan 11이
   `operator_permission_grant` schema와 위 네 값을 허용하는 closed DB vocabulary를 한
   migration에서 단독 생성한다. Plan 14와 point adjustment plan은 새 permission 값이나
@@ -128,13 +143,15 @@ explicit operator permission의 source of truth는 Operations가 소유하는 DB
 
 ### Point account read contract
 
-- customer는 자신의 PointAccount와 ledger만 reason 없이 읽을 수 있다. 다른 customer ownership은
-  403이고 Store/Settlement role은 조회할 수 없다.
+- customer는 `GET /point-accounts/{accountId}`와 하위 ledger URI에서 자신의 PointAccount와 ledger만
+  reason 없이 읽을 수 있다. 다른 customer ownership은 403이고 Store/Settlement role은 조회할 수 없다.
+- **2026-08-13 actor-exclusive URI amendment:** Platform Operator support read는
+  `GET /operations/point-accounts/{accountId}`와 하위 ledger URI로 분리한다. Customer URI에서 JWT를
+  병행 허용하지 않고 Operations URI에서 Customer Session을 해석하지 않는다.
 - Platform Operator support read는 `POINT_ACCOUNT_READ` active grant와 `X-Access-Reason`을
   요구한다. header는 policy GET과 같은 trim 1..200/control-character rule을 쓰며, account/ledger
   projection과 `POINT_ACCOUNT_READ` AuditRecord가 같은 local transaction에 저장된 경우에만 200이다.
-  header is optional at the OpenAPI parameter level only because customer reads do not send it; operator
-  branch에는 required다.
+  Operations OpenAPI parameter에서 header는 required이고 Customer URI에는 선언하지 않는다.
 - ledger order는 `(occurredAt DESC, transactionId DESC)`이고, cursor filter hash는 endpoint와
   account ID를 bind한다. this read does not expose issuer reference, raw evidence, idempotency key,
   internal recovery case or grant state.
@@ -152,6 +169,22 @@ policy PATCH enforcement, offline bootstrap command를 구현한다. Plan 14는 
 read vertical slice를 구현한다. Point adjustment plan은 Plan 10 issuer, Plan 11 grant와 Plan 13 ledger outcome을 소비하고
 `POINT_ADJUSTMENT` enforcement을 구현한다. Plan 11만 네 값의 closed permission vocabulary와 grant
 migration을 만들고, 두 후속 계획은 같은 grant/vocabulary migration을 만들지 않는다.
+
+### Productization P0 operations read contract
+
+- `GET /operations/failure-queues/summary`, 유형별 목록·상세와 exact correlation 검색은 active
+  `REPROCESSING_CASE_READ`만 요구한다. source-owned 연합 조회와 cursor 계약은 ADR-110을 따른다.
+- `GET /operations/settlement-batches`와 상세 Projection은 active
+  `SETTLEMENT_RECONCILIATION_READ`만 요구한다.
+- `GET /operations/audit-records`와 상세는 active `AUDIT_RECORD_READ`와 trim 뒤 1..200자이고 control
+  character가 없는 `X-Access-Reason`을 요구한다. permission lock, 결과 Projection과 한 건의
+  `AUDIT_RECORD_READ` 접근 Audit를 같은 local transaction에 묶는다. Audit 저장 실패 시 body를
+  반환하지 않는다. 기간과 cursor는 BR-44와 ADR-022를 따른다.
+- 세 permission은 조회 전용이며 기존 repair, reconciliation command, SettlementAdjustment,
+  Refund, grant lifecycle 권한을 만들지 않는다. command endpoint는 자신의 별도 grant와 사유·멱등성
+  계약을 계속 검증한다.
+- 실패 case와 정산 대사 조회는 P0에서 per-request access Audit을 추가하지 않는다. 대신 허용·거부·
+  dependency failure metric을 bounded tag로 기록한다. 어떤 조회도 grant 장애를 빈 page로 바꾸지 않는다.
 
 ## Alternatives Considered
 
@@ -210,6 +243,8 @@ role-only controller가 보안 source of truth를 우회하지 못한다. 조회
   Audit save failure가 bootstrap command에서 exact terminal result와 no partial state를 남긴다.
 - customer own/other account, operator `POINT_ACCOUNT_READ` with/without reason, cursor account scope
   mismatch와 point-read Audit failure가 ownership/403/400/503 contract를 각각 지킨다.
+- Customer Session과 운영자 JWT가 각각 상대 actor의 PointAccount URI에서 403이고, 두 URI가 같은
+  projection·cursor·Audit 불변식을 지키는지 검증한다.
 - PointAccount 응답이 Plan 13 summary를 그대로 사용하고 `updatedAt` 또는 임의 0 fallback을
   포함하지 않는지 검증한다.
 - **Point adjustment enforcement evidence (2026-08-04):** endpoint method security는

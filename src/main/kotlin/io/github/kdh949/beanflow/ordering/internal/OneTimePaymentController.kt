@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import com.fasterxml.jackson.annotation.JsonAnySetter
+import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
@@ -11,8 +12,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -55,7 +54,6 @@ internal class OneTimePaymentController(
     private val tossClientKey: String,
 ) {
     @GetMapping("/payment-config")
-    @PreAuthorize("hasRole('CUSTOMER')")
     fun configuration(): PaymentClientConfigurationResponse {
         if (tossClientKey.isBlank()) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Toss payment client key is not configured")
@@ -70,14 +68,14 @@ internal class OneTimePaymentController(
     @PostMapping("/payments/{paymentId}/confirmations")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun confirm(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable paymentId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
         @Valid @RequestBody request: ConfirmOneTimePaymentRequest,
     ): ResponseEntity<String> {
         val result =
             checkout.confirm(
-                customerId = customerId(jwt),
+                customerId = customerId(actor),
                 paymentId = paymentId,
                 idempotencyKey = idempotencyKey,
                 request = OneTimePaymentConfirmationRequest(request.paymentKey, request.orderId, request.amount),
@@ -91,19 +89,19 @@ internal class OneTimePaymentController(
     @GetMapping("/payments/{paymentId}")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun get(
-        @AuthenticationPrincipal jwt: Jwt,
+        actor: CustomerActor,
         @PathVariable paymentId: UUID,
     ): ResponseEntity<String> {
-        val result = checkout.current(customerId(jwt), paymentId)
+        val result = checkout.current(customerId(actor), paymentId)
         return ResponseEntity
             .status(result.status)
             .contentType(MediaType.APPLICATION_JSON)
             .body(result.body)
     }
 
-    private fun customerId(jwt: Jwt): UUID =
+    private fun customerId(actor: CustomerActor): UUID =
         try {
-            UUID.fromString(jwt.subject)
+            actor.actorId
         } catch (_: IllegalArgumentException) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid customer ID")
         }
