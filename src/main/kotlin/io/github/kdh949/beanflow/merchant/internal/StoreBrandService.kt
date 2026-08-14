@@ -306,7 +306,7 @@ internal class StoreBrandService(
         /** ADR-112 6절. 이름 변경 fan-out을 한 transaction 안에 담을 수 있는 상한이다. */
         const val MAX_BRAND_FANOUT = 1_000
         const val MAX_NAME_LENGTH = 120
-        const val MAX_PAGE_SIZE = 50
+        const val MAX_PAGE_SIZE = 100
 
         fun sha256(text: String): String =
             HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(StandardCharsets.UTF_8)))

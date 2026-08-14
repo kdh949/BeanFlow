@@ -1553,6 +1553,7 @@ else:
         'GET /operations/settlement-batches': '#/components/parameters/Limit',
         'GET /operations/settlement-batches/{settlementBatchId}/items': '#/components/parameters/Limit',
         'GET /operations/audit-records': '#/components/parameters/Limit',
+        'GET /operations/brands': '#/components/parameters/Limit',
         'GET /operations/policies/ordinary-point-accrual/global/versions': '#/components/parameters/Limit',
         'GET /operations/policies/ordinary-point-accrual/stores': '#/components/parameters/Limit',
         'GET /operations/policies/ordinary-point-accrual/stores/{storeId}/versions': '#/components/parameters/Limit',

@@ -260,7 +260,7 @@ internal class OperatorBrandService(
         const val MAX_REASON_LENGTH = 200
         const val CURSOR_ENDPOINT = "operations-brands"
         const val DEFAULT_PAGE_SIZE = 20
-        const val MAX_PAGE_SIZE = 50
+        const val MAX_PAGE_SIZE = 100
         val CURSOR_TTL: Duration = Duration.ofMinutes(30)
     }
 }

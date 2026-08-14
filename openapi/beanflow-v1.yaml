@@ -1783,7 +1783,7 @@ paths:
       description: Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
       parameters:
         - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/DiscoveryLimit"
+        - $ref: "#/components/parameters/Limit"
       responses:
         "200":
           description: Brand page

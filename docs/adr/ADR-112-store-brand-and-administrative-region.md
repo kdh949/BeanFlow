@@ -280,6 +280,35 @@ Milestone 1이 이 결정의 스키마와 지역 어휘 부분을 실현했다. 
   상태였다. 이 한계를 남기지 않기로 하고 위 「리 단위 지역 어휘 Amendment」로 `ri` 열과
   `REGION_RI` term 종류를 추가했다. 아래 Verification의 리 항목은 그 개정에 대한 것이다.
 
+### Milestone 3 evidence (2026-08-15) — 브랜드 명령
+
+브랜드 명령과 그 동기 색인 갱신을 구현했다. 지역 명령과 커버리지 gate는 아직 Milestone 4다.
+
+- `merchant/api`의 `StoreBrandOperations`가 브랜드 생성·수정·보관과 매장 브랜드 지정·해제를
+  선언하고 `merchant/internal`의 `StoreBrandService`가 구현한다. 네 메서드 모두
+  `Propagation.MANDATORY`다. 호출자가 transaction을 열지 않으면 `IllegalTransactionStateException`이
+  나고 색인 없이 데이터만 바뀌는 경로가 구조적으로 존재하지 않는다.
+- `operations/internal`의 `OperatorBrandService`가 transaction을 열고 `STORE_BRAND_MANAGE` grant를
+  확인한 뒤 AuditRecord를 남긴다. `merchant`는 `operations`를 참조하지 않으므로 5절의 순환 의존
+  회피가 브랜드 쪽에서도 유지된다.
+- **색인 갱신 실패 시 rollback을 실제로 측정했다.** `StoreSearchIndexOperations`를 실패하도록
+  바꾼 상태에서 이름 변경을 시도하면 브랜드 행이 옛 이름 그대로 남고 재실행 원장도 함께
+  rollback된다. 단언은 "오류가 났다"가 아니라 "옛 이름이 남았다"이다.
+- **6절의 상한을 매장 배정에도 적용했다.** 상한을 넘긴 브랜드는 이름을 영영 바꿀 수 없게 되므로
+  나중에 막히는 것보다 배정 시점에 거절하는 편이 낫다. 매장 쓰기 API가 없어 직접 DML로 상한을
+  넘긴 상태는 여전히 도달 가능하므로 이름 변경 쪽 검사도 남겼다(MD-2026-020).
+- **원 Decision이 정하지 않은 보관 조건을 확정했다.** 소속 매장이 남은 브랜드의 보관은 거절한다.
+  보관은 활성 부분 unique index에서 빠지는 것이라 정규화 이름을 즉시 해방하고, 매장을 남긴 채
+  보관하면 새 브랜드가 같은 이름을 차지해 색인에 서로 다른 브랜드의 같은 `BRAND_NAME` term이
+  공존한다(MD-2026-020).
+- 브랜드 명령의 멱등성은 전용 원장 `merchant_brand_command`(V60)가 담당한다. 저장소의 다른
+  `Idempotency-Key` 명령과 같은 방식이며 AuditRecord는 `source_reference`가 전역 유일하지 않아
+  원장을 겸할 수 없었다(MD-2026-019). 이 때문에 Consequences의 "마이그레이션 3개"는 4개가 됐다.
+- 재실행된 명령은 AuditRecord를 다시 남기지 않는다. 아무것도 바꾸지 않은 요청이 변경 기록을
+  남기면 없던 변경을 주장하게 된다.
+- 위 Verification 중 `403`·`409`·fan-out·rollback·순환 의존 항목이 이 Milestone에서 통과했다.
+  지역 명령, `region_code` 커버리지 gate, 리 검색과 동명 리 반경 필터 항목은 여전히 `Not run`이다.
+
 ## Metrics
 
 - 브랜드 지정 매장 비율

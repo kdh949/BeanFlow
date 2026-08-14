@@ -304,7 +304,7 @@ internal class OperatorBrandControllerTest
                 .perform(get("$BASE/brands").with(operatorJwt()).param("cursor", "not-a-signed-cursor"))
                 .andExpect(status().isBadRequest)
             mockMvc
-                .perform(get("$BASE/brands").with(operatorJwt()).param("limit", "51"))
+                .perform(get("$BASE/brands").with(operatorJwt()).param("limit", "101"))
                 .andExpect(status().isBadRequest)
         }
 

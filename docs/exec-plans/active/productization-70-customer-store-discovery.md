@@ -388,7 +388,35 @@ ADR-103 원 Decision의 `ix_merchant_store_profile_name_trgm`,
 `ix_merchant_menu_available_name_trgm`는 만들지 않는다. 2026-08-15 Amendment로 trigram 인덱스가
 색인 테이블로 이동했다.
 
+### 단계 2-B — 브랜드 명령 재실행 원장 (2026-08-15 추가)
+
+Milestone 3 구현 중 **V60**이 추가됐다. 계획 원안은 migration 세 개였다. 저장소의 모든
+`Idempotency-Key` 명령이 전용 원장 테이블을 쓰는데(V16, V23, V26, V31, V54) 브랜드만 다른
+방식을 쓸 이유가 없었고, AuditRecord는 `source_reference`가 전역 유일하지 않아 원장을 겸할 수
+없었다. 근거는 MD-2026-019다.
+
+```sql
+CREATE TABLE merchant_brand_command (
+    id uuid PRIMARY KEY,
+    actor_id uuid NOT NULL,
+    command_type varchar(24) NOT NULL,
+    idempotency_key varchar(128) NOT NULL,
+    payload_hash varchar(64) NOT NULL,
+    response_json text NOT NULL,
+    created_at timestamptz NOT NULL,
+    retention_expires_at timestamptz NOT NULL,
+    UNIQUE (actor_id, idempotency_key)
+);
+```
+
+같은 migration이 `STORE_BRAND_MANAGE` 권한 어휘와 브랜드 감사 action 넷
+(`BRAND_CREATED`, `BRAND_UPDATED`, `STORE_BRAND_ASSIGNED`, `STORE_BRAND_CLEARED`)도 등록한다.
+`operations_audit_record`의 `action`은 `fk_audit_action_category`로 묶인 폐쇄 어휘라 등록하지
+않으면 감사 append가 거절된다.
+
 ### 단계 3 — 지역 커버리지 gate
+
+번호는 **V61**이다. V60이 앞에 들어가 원안의 V60에서 하나 밀렸다.
 
 V33 → V34 선례를 따른다. 컬럼 생성(단계 1) → 운영자 값 입력 → fail-closed 검증 순이다.
 
@@ -405,7 +433,7 @@ ALTER TABLE merchant_store_discovery_profile
 ### 공통
 
 - 실제 table/column 이름은 migration writer lease 획득 후 최신 schema와 대조한다.
-- 세 단계는 하나의 lease를 공유한다. 단계 사이에 다른 schema writer를 시작하지 않는다.
+- 네 단계는 하나의 lease를 공유한다. 단계 사이에 다른 schema writer를 시작하지 않는다.
 - 다른 Context Aggregate와 JPA cascade를 만들지 않는다. Store·Customer 삭제 정책은 별도 lifecycle이
   생길 때 결정하며, P0에서는 목록 hydrate가 비노출 row를 안전하게 제외한다.
 - extension 생성 권한이 없으면 migration을 실패시키고 순차 검색으로 fallback하지 않는다.
@@ -531,6 +559,16 @@ POST   /api/v1/operations/search-index/rebuild
 - `matchedMenus` 최대 3개, 동점 4개 이상일 때 정렬 결정성, 매칭 없는 매장의 빈 배열.
 - 결과 0건이 200 빈 배열이고 503과 구분되는지.
 - 브랜드 정규화 이름 동시 등록의 단일 성공과 409.
+- 소속 매장이 남은 브랜드의 보관 409와, 매장을 해제한 뒤의 보관 성공.
+- 보관된 브랜드의 이름을 새 브랜드가 다시 쓸 수 있는지.
+- 상한을 넘기는 매장 배정 409와 그때 `brand_id`가 바뀌지 않는지.
+- 같은 `Idempotency-Key`+같은 payload 재요청이 같은 결과를 돌려주고 브랜드를 하나만 만드는지,
+  같은 키+다른 payload와 같은 키+다른 명령 종류가 409 `IDEMPOTENCY_KEY_REUSED`인지.
+- 재실행된 명령이 AuditRecord를 두 번 남기지 않는지.
+- `expectedVersion` 불일치가 조용한 덮어쓰기가 아니라 409인지.
+- 브랜드 목록 cursor가 쪽을 넘겨도 누락·중복이 없고 한 번에 읽은 순서와 같은지,
+  서명되지 않은 cursor와 상한 초과 `limit`이 400인지.
+- 브랜드 명령의 `Idempotency-Key` 누락·빈 reason이 400이고 브랜드가 만들어지지 않는지.
 - 브랜드명 변경의 색인 fan-out 원자성, 1000개 초과 409, 부분 갱신 부재.
 - 브랜드명 변경과 같은 브랜드 매장의 브랜드 해제 동시 실행에서 term 중복·유실 부재.
 - 색인 갱신 강제 실패 시 브랜드·지역 변경 rollback.
@@ -614,10 +652,12 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) — 완료
 - [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 정렬 tuple 등록 — 완료
 - [BR-47](../../product/business-policy-decisions.md), [BR-40](../../product/business-policy-decisions.md) — BR-47 완료
-- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018 — 완료
+- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018, MD-2026-019, MD-2026-020 — 완료
 - `docs/security/authorization-matrix.md` — 완료
 - `docs/api/api-conventions.md` — 검색 endpoint 규약
-- `docs/api/error-catalog.md` — `BRAND_NAME_CONFLICT`, `BRAND_FANOUT_LIMIT_EXCEEDED`
+- `docs/api/error-catalog.md` — `BRAND_NAME_ALREADY_IN_USE`, `BRAND_FANOUT_LIMIT_EXCEEDED`,
+  `BRAND_STATE_CONFLICT` — 완료. 계획 원안의 `BRAND_NAME_CONFLICT`는 구현에서 의미가 더 분명한
+  `BRAND_NAME_ALREADY_IN_USE`로 확정했다
 - `docs/architecture/ubiquitous-language.md` — Brand, Region, 검색 term, 관련도
 - `docs/architecture/capability-map.md`, `docs/architecture/context-map.md`
 - `docs/operations/store-keyword-search-runbook.md` — 신규. 재색인 절차, 커버리지 점검 쿼리,
@@ -625,7 +665,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - `docs/testing/test-strategy.md` — 검색 테스트 범주
 - `README.md` — 현재 상태 목록
 - `scripts/verify-docs.sh` — 새 필수 문서 등록
-- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml`
+- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint 완료
 - 신규 검색 실행계획 evidence 문서
 
 ## Progress
@@ -677,7 +717,24 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `spotlessCheck`와 `scripts/verify-docs.sh`도 통과.
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11),
     검색 질의 성능 evidence(Milestone 12).
-- 2026-08-15: 미착수 — Milestone 3~12.
+- 2026-08-15: **Milestone 3 완료.** `feature/productization-70-operator-brand-commands`(PR #71의
+  `feature/productization-70-store-keyword-search` 위에 쌓은 stack)에서 V60(브랜드 명령 재실행
+  원장·`STORE_BRAND_MANAGE`·감사 action), `merchant/api`의 `StoreBrandOperations`·
+  `StoreBrandQueryOperations`, `merchant/internal`의 `StoreBrandService`, `operations/internal`의
+  `OperatorBrandService`·`OperatorBrandController`를 구현했다.
+  - **완료 조건 충족:** 브랜드명 변경이 소속 매장 `BRAND_NAME` term을 같은 transaction에서
+    교체하고, 색인 갱신을 강제 실패시키면 브랜드 변경도 원장까지 함께 rollback된다.
+    `StoreBrandServiceIntegrationTest`가 "오류가 났다"가 아니라 "옛 이름이 그대로 남았다"를
+    단언한다.
+  - ADR-112가 정하지 않은 두 규칙을 MD-2026-020으로 확정했다. 소속 매장이 남은 브랜드의 보관
+    거절과, fan-out 상한의 매장 배정 시점 적용이다.
+  - 계획에 없던 네 번째 migration V60을 추가했다(MD-2026-019). 단계 3 커버리지 gate는 V61이 된다.
+  - 여섯 endpoint를 target·runtime OpenAPI에 함께 넣었다. `RuntimeOpenApiParityTest`가 controller와
+    runtime spec을 양방향으로 검증하므로 계약 갱신을 Milestone 11까지 미룰 수 없다.
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11),
+    검색 질의 성능 evidence(Milestone 12), 브랜드명 변경과 브랜드 해제의 동시 실행 검증
+    (Milestone 5에서 검색 질의와 함께 다룬다).
+- 2026-08-15: 미착수 — Milestone 4~12.
 
 ## Surprises & Discoveries
 
@@ -733,6 +790,27 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   `urllib`의 CA 검증이 실패한다(`CERTIFICATE_VERIFY_FAILED`). `--source-zip`으로 미리 받아 둔
   원본을 넘겨 생성했고 checksum 검증 경로는 그대로 통과했다. **다운로드 경로 자체는 검증되지
   않았다(`Not run`).**
+- **(2026-08-15) 감사 기록의 `action`이 폐쇄 어휘였다.** `operations_audit_record.action`은
+  `fk_audit_action_category`로 `operations_audit_action_category`를 참조한다. 새 action 넷을
+  등록하지 않으면 감사 append가 FK 위반으로 거절되고, 명령 전체가 `503`이 된다. 컨트롤러 테스트를
+  돌리기 전에는 드러나지 않았다. V60에 등록 INSERT를 함께 넣었다.
+- **(2026-08-15) 권한 확인이 read-only transaction에서 실행되지 않는다.**
+  `OperatorPermissionAuthorization.requireActive`는 grant 행을 `SELECT ... FOR UPDATE`로 잠근다.
+  브랜드 조회를 `@Transactional(readOnly = true)`로 두자 PostgreSQL이
+  `cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction`으로 거절했다. 권한 확인이
+  조회의 일부인 이상 읽기 경로도 쓰기 가능한 transaction에서 돌아야 한다.
+- **(2026-08-15) 계약 갱신을 Milestone 11까지 미룰 수 없다.** `RuntimeOpenApiParityTest`가
+  `RequestMappingHandlerMapping`과 runtime OpenAPI를 **양방향**으로 비교하므로, 컨트롤러가 생기는
+  순간 spec에 없으면 실패한다. runtime spec은 target spec의 path를 `$ref`로 참조하는 구조라 결국
+  두 파일을 함께 고쳐야 했다. Milestone 11은 프론트엔드 타입 생성과 Error Catalog 정합화가 남는다.
+- **(2026-08-15) 한글 정렬 순서를 테스트로 고정할 수 없다.** 브랜드 목록의 첫 쪽을
+  `블루보틀, 스타벅스`로 단언했더니 `이디야, 블루보틀`이 나왔다. 순서는 DB collation이 정하고
+  환경마다 다를 수 있다. keyset 비교와 `ORDER BY`가 같은 collation을 쓰는 것이 실제로 지켜야 할
+  성질이므로, 단언을 "쪽을 넘겨도 누락·중복이 없고 한 번에 읽은 순서와 같다"로 바꿨다.
+- **(2026-08-15) `? + interval '90 days'`는 PostgreSQL이 거절한다.** parameter의 타입을 추론할 수
+  없어 `bad SQL grammar`가 된다. `CAST(? AS timestamptz) + interval '90 days'`로 명시했다.
+  보존 만료를 Kotlin에서 `plus(90, DAYS)`로 계산하지 않은 것은 CHECK 제약이 SQL의
+  `created_at + interval '90 days'`와 정확히 같기를 요구하기 때문이다.
 
 ## Decision Log
 
@@ -743,6 +821,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 좌표 없는 추천도 favorite → recent 순서를 유지 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 검색 대상에 브랜드명·지역명 추가, 결과는 매장 단위 + 매칭 메뉴 최대 3개 | [ADR-103 A1/A5](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 매칭은 substring 우선 + 유사도 `0.3` 보완 하이브리드. 오타 교정 non-goal 철회 | [ADR-103 A2](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-15 | 브랜드 명령 재실행 원장을 위해 계획에 없던 네 번째 migration V60 추가. 단계 3 gate는 V61 | [MD-2026-019](../../decisions/minor-decisions.md) |
+| 2026-08-15 | 소속 매장이 남은 브랜드의 보관 거절, fan-out 상한을 매장 배정에도 적용 | [MD-2026-020](../../decisions/minor-decisions.md) |
+| 2026-08-15 | 브랜드 명령은 `operations`가 transaction·권한·감사를, `merchant`가 데이터·색인·멱등성을 소유 | [ADR-112 4·5절](../../adr/ADR-112-store-brand-and-administrative-region.md), 이 ExecPlan |
+| 2026-08-15 | 재실행된 브랜드 명령은 AuditRecord를 다시 남기지 않는다 | 이 ExecPlan |
 | 2026-08-15 | 다중 토큰은 AND. 지역 인식 파서를 두지 않는다 | [ADR-103 A3](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-15 | `sort=relevance\|distance`를 클라이언트가 선택. 관련도는 정수 양자화 | [ADR-103 A4](../../adr/ADR-103-store-search-strategy.md), [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 2026-08-15 | `openOnly`를 `pickupAvailable`과 독립 필터로 추가. 기본은 닫힌 매장 포함 | [ADR-103 A6](../../adr/ADR-103-store-search-strategy.md) |
@@ -784,3 +866,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-15: 매장을 가로지르는 메뉴 검색의 조회 순서를 명시하고, 설정 주소지를 client storage
   경계로 확정했다. 서버 스키마와 공개 API 계약은 변경되지 않는다. 메뉴 단위 결과 목록을
   Non-goals에 추가했다.
+- 2026-08-15: Milestone 3 구현 중 migration이 세 개에서 네 개가 됐다. 브랜드 명령의 재실행 원장
+  `merchant_brand_command`를 V60으로 추가하고 단계 3 커버리지 gate를 V61로 밀었다(MD-2026-019).
+  ADR-112가 정하지 않았던 브랜드 보관 조건과 fan-out 상한의 배정 시점 적용도 MD-2026-020으로
+  확정했다. 계약 갱신 시점도 바뀌었다. `RuntimeOpenApiParityTest`가 양방향 검증이라 브랜드 여섯
+  endpoint의 target·runtime OpenAPI 반영을 Milestone 11까지 미룰 수 없었고, Milestone 11에는
+  프론트엔드 타입 생성과 Error Catalog 정합화가 남는다.
