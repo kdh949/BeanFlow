@@ -441,6 +441,16 @@ git diff --cached --check
   통과했고, 최종 `00→10→20→30→40→50→60` 조상 관계는 모두 true였다. GitHub 조회 시 PR
   #55/#57/#64/#65/#66/#67/#68은 모두 OPEN/non-Draft이며 #57~#68은 `MERGEABLE`이다. 새 CI가 끝나기 전의
   `BLOCKED` 상태는 성공으로 기록하지 않았다. rebase, force-push, PR merge와 ready-state 변경은 수행하지 않았다.
+- 2026-08-14 CodeQL CSRF closure: PR #64가 Public과 Operations의 `csrf.disable()`에 대해 high
+  `java/spring-disabled-csrf-protection` 경고 두 건으로 실패했다. 사용자 결정에 따라 Public Chain의
+  disable을 제거해 기본 CSRF를 복원하고, unsafe Public route 추가 시 별도 계약을 요구하도록 ADR-094를
+  보강했다. Operations는 Cookie·Session을 받지 않는 stateless Bearer Resource Server라는 ADR-092/094
+  계약을 유지해 alert #3만 `false positive`로 dismiss했다. 감사 comment에는 Cookie/Session 또는 자동
+  첨부 credential 도입 시 재검토 조건을 남겼다. final tip의 7개 인증 통합 테스트는 Public POST 403,
+  Operations Bearer POST의 무-CSRF 200, 무자격 401과 Customer/Merchant Session Cookie 403을 검증했다.
+  첫 probe의 204 기대(실제 200)와 import ordering Spotless 실패는 각각 기대 상태·정렬 보정 뒤 재실행해
+  통과했다. 보안 commit `6af1eee`은 Plan 30→60에 순차 merge했으며, `spotlessCheck`, 문서/OpenAPI
+  검증도 통과했다. 새 GitHub CI가 끝나기 전에는 성공으로 기록하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -497,6 +507,10 @@ git diff --cached --check
   있었지만, 자동으로 들어온 obsolete active Plan 10 파일은 별도로 제거해야 했다.
 - PR #64의 새 CI `build`는 코드가 아니라 세션 운영 runbook의 EOF blank line 하나를 whitespace error로
   판정했다. 한 줄 제거 뒤 문서 검증을 다시 통과시키고 자식 Plan 30~60에 순차 전파했다.
+- CodeQL은 Public과 Operations의 `csrf.disable()`을 모두 동일한 high 위험으로 표시했다. Public은
+  기본 CSRF를 복원해 코드로 해소했지만, Operations는 Bearer header만 받고 Cookie·Session을 인증하지
+  않는다는 Accepted 계약상 false positive다. 이 예외는 GitHub audit comment와 ADR-094 재검토 조건으로
+  제한했으며, 다른 CSRF 예외로 일반화하지 않는다.
 
 ## Decision Log
 
@@ -531,6 +545,7 @@ git diff --cached --check
 | 2026-08-14 | Plan 50 목록은 R1 read-only candidate → bounded atomic W1 expiry → R2 fixed-candidate projection이며 빈 ACTIVE page도 scan boundary cursor를 사용 | [Plan 50](../completed/productization-50-customer-order-read-model.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-14 | Plan 60 전이는 client가 본 `expectedStatus`를 command에 포함하고 stale state 409와 불가능한 조합 422를 분리하며, 디자인의 3열 중 제조 중 열은 `ACCEPTED`와 `PREPARING`을 함께 표시 | [Plan 60](../completed/productization-60-store-order-board.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md) |
 | 2026-08-14 | 재작성된 Plan 00 base가 PR #57과 충돌하면 Plan 10의 V50/V51 계약을 보존한 history-preserving merge를 만들고, 수정된 부모 tip은 Plan 20~60에 순차 merge한다 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), 이 ExecPlan `Progress` |
+| 2026-08-14 | Public Chain은 기본 CSRF를 유지하고, Cookie·Session을 인증하지 않는 stateless Operations Bearer Resource Server의 CodeQL 예외만 감사 가능한 false positive dismiss로 제한한다 | [ADR-094](../../adr/ADR-094-browser-session-security.md), [ADR-092](../../adr/ADR-092-hybrid-authentication.md) |
 
 ## Outcomes & Retrospective
 
@@ -570,3 +585,5 @@ git diff --cached --check
 - 2026-08-14: Plan 60 Draft PR, final seven-PR topology와 Stack A migration-writer lease 해제를 기록.
 - 2026-08-14: Plan 00 base rewrite에 따른 PR #57 충돌 해소, PR #64 whitespace CI 수정과 Plan 20~60
   순차 기준선 보정을 actual GitHub 상태와 함께 기록.
+- 2026-08-14: Public CSRF 기본 보호 복원, Operations bearer-only CodeQL false-positive dismissal과
+  Plan 20~60 보안 기준선 전파의 실제 검증 결과를 기록.
