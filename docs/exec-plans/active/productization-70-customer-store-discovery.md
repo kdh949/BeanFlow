@@ -594,6 +594,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `sigungu`, 두 단어 시군구(`부천시 원미구`), 시드 재실행 후 동일 행 수, 활성 브랜드
     정규화 이름 유일성, 브랜드·지역 FK를 함께 확인한다.
   - 시드 스크립트는 같은 원본에서 byte 단위로 같은 SQL을 만든다(두 번 내려받아 diff 확인).
+  - `./gradlew build` 전체 통과: 240 클래스 **1,121건 중 실패 0, skip 1**. skip은 기존
+    `NearbyStoreDiscoveryBenchmark`로 이번 변경과 무관하다.
+  - `./gradlew spotlessCheck`와 `scripts/verify-docs.sh` 통과.
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11에서 계약 갱신과 함께),
+    시드 스크립트의 다운로드 경로, 검색 질의 성능 evidence(Milestone 12).
 - 2026-08-15: 미착수 — Milestone 2~12.
 
 ## Surprises & Discoveries
@@ -626,6 +631,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   상위 읍면동 이름을 `eupmyeondong`에 담고 리 이름은 `full_name`에만 남는다. 즉 리는 매장주가
   고를 수 있는 코드로는 존재하지만 리 이름으로 검색되지는 않는다. ADR-112가 `홍대`·`가로수길`
   같은 더 세밀한 단위를 Revisit Condition으로 둔 것과 같은 성격의 한계다.
+- **(2026-08-15) `merchant_store` 컬럼 집합을 통째로 고정한 기존 테스트가 `brand_id`로 깨졌다.**
+  `StoreDiscoveryProfileMigrationTest`가 ADR-020의 "검색용 이름·geometry·spatial index를 추가하지
+  않는다"를 지키려고 컬럼 목록 전체를 `containsExactlyInAnyOrder`로 고정하고 있었다. `brand_id`는
+  검색 편의 필드가 아니라 ADR-112가 DDL까지 명시한 Aggregate 참조라 규칙 위반이 아니고, 고정
+  목록이 규칙보다 넓게 잡혀 있던 것이다. 목록 고정은 유지한 채(새 컬럼은 여전히 실패해야 판단이
+  강제된다) `brand_id`만 추가하고, 이름·좌표·`region_code` 부재 단언을 따로 넣어 ADR-020이 실제로
+  막는 것을 직접 고정했다. 대상 테스트만 돌렸을 때는 잡히지 않고 전체 build에서 드러났다.
 - **(2026-08-15) 이 환경에서는 스크립트의 다운로드 경로를 실행할 수 없다.** TLS 가로채기로 Python
   `urllib`의 CA 검증이 실패한다(`CERTIFICATE_VERIFY_FAILED`). `--source-zip`으로 미리 받아 둔
   원본을 넘겨 생성했고 checksum 검증 경로는 그대로 통과했다. **다운로드 경로 자체는 검증되지
