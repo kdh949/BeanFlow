@@ -811,6 +811,12 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   없어 `bad SQL grammar`가 된다. `CAST(? AS timestamptz) + interval '90 days'`로 명시했다.
   보존 만료를 Kotlin에서 `plus(90, DAYS)`로 계산하지 않은 것은 CHECK 제약이 SQL의
   `created_at + interval '90 days'`와 정확히 같기를 요구하기 때문이다.
+- **(2026-08-15) 저장소가 추적 텍스트 파일의 NUL 바이트를 거절한다.**
+  `merchant_brand_command`의 `idempotency_key !~ '[[:cntrl:]]'` 제약을 검증하려고 테스트 문자열에
+  제어 문자를 그대로 넣었더니 `LocalDemoRepositorySafetyTest`가 실패했다. 이 테스트는 비밀 스캔
+  전에 모든 추적 텍스트 파일이 실제로 텍스트인지 확인한다. Kotlin `\uXXXX` escape로 쓰면 source는
+  평문이고 값은 그대로 제어 문자다. Milestone 2에서 전각 공백을 escape로 바꾼 것과 같은 이유이며,
+  대상 테스트만 돌렸을 때는 잡히지 않고 전체 build에서 드러났다.
 
 ## Decision Log
 
