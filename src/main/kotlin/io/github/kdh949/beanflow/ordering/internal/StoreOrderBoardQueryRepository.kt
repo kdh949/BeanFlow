@@ -32,6 +32,22 @@ internal data class StoreOrderBoardRows(
     val linesByOrderId: Map<UUID, List<StoreOrderBoardLineProjection>>,
 )
 
+internal data class StoreOrderBoardOverflowBoundary(
+    val lane: StoreOrderBoardLane,
+    val overflowCount: Long,
+    val boundary: StoreOrderBoardOrderProjection,
+)
+
+internal data class StoreOrderBoardSnapshotRows(
+    val rows: StoreOrderBoardRows,
+    val overflow: List<StoreOrderBoardOverflowBoundary>,
+)
+
+internal data class StoreOrderBoardOverflowPageRows(
+    val rows: StoreOrderBoardRows,
+    val nextBoundary: StoreOrderBoardOrderProjection?,
+)
+
 @Repository
 internal class StoreOrderBoardQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
@@ -40,18 +56,68 @@ internal class StoreOrderBoardQueryRepository(
     fun findExecutableBoard(
         storeId: UUID,
         lane: StoreOrderBoardLane?,
-    ): StoreOrderBoardRows {
-        val states = lane?.let { listOf(it.toState()) } ?: EXECUTABLE_STATES
-        val statePlaceholders = List(states.size) { "?" }.joinToString(", ")
-        val arguments = mutableListOf<Any>(storeId).apply { addAll(states) }
+    ): StoreOrderBoardSnapshotRows {
         recordSql(LIST)
-        val orders =
+        val lanes = lane?.let(::listOf) ?: StoreOrderBoardLane.entries
+        val candidates =
             jdbcTemplate.query(
-                "$ORDER_SELECT WHERE store_id = ? AND state IN ($statePlaceholders) $BOARD_ORDER",
+                StoreOrderBoardQuerySql.primaryBoard(lanes),
                 ::order,
-                *arguments.toTypedArray(),
+                *List(lanes.size) { storeId }.toTypedArray(),
             )
-        return StoreOrderBoardRows(orders, findLines(orders.map { it.orderId }, LIST))
+        val visibleByLane =
+            lanes.associateWith { selectedLane ->
+                candidates
+                    .asSequence()
+                    .filter { it.state == StoreOrderBoardQuerySql.state(selectedLane) }
+                    .sortedWith(boardOrder(selectedLane))
+                    .take(StoreOrderBoardPaging.PAGE_SIZE)
+                    .toList()
+            }
+        val overflowLanes =
+            lanes.filter { selectedLane ->
+                candidates.count { it.state == StoreOrderBoardQuerySql.state(selectedLane) } > StoreOrderBoardPaging.PAGE_SIZE
+            }
+        val totalCounts = if (overflowLanes.isEmpty()) emptyMap() else countByLane(storeId, overflowLanes)
+        val overflow =
+            overflowLanes.map { selectedLane ->
+                val total = totalCounts[selectedLane] ?: dependency("Store order board overflow count is missing")
+                if (total <= StoreOrderBoardPaging.PAGE_SIZE) dependency("Store order board overflow count is inconsistent")
+                StoreOrderBoardOverflowBoundary(
+                    lane = selectedLane,
+                    overflowCount = total - StoreOrderBoardPaging.PAGE_SIZE,
+                    boundary =
+                        visibleByLane.getValue(selectedLane).lastOrNull()
+                            ?: dependency("Store order board overflow boundary is missing"),
+                )
+            }
+        val orders = lanes.flatMap { visibleByLane.getValue(it) }
+        return StoreOrderBoardSnapshotRows(
+            rows = StoreOrderBoardRows(orders, findLines(orders.map { it.orderId }, LIST)),
+            overflow = overflow,
+        )
+    }
+
+    fun findOverflowPage(
+        storeId: UUID,
+        lane: StoreOrderBoardLane,
+        after: StoreOrderBoardSort,
+    ): StoreOrderBoardOverflowPageRows {
+        recordSql(OVERFLOW)
+        val fetched =
+            jdbcTemplate.query(
+                StoreOrderBoardQuerySql.overflowPage(lane),
+                ::order,
+                storeId,
+                StoreOrderBoardQuerySql.state(lane),
+                java.sql.Timestamp.from(after.sortAt),
+                after.orderId,
+            )
+        val orders = fetched.take(StoreOrderBoardPaging.PAGE_SIZE)
+        return StoreOrderBoardOverflowPageRows(
+            rows = StoreOrderBoardRows(orders, findLines(orders.map { it.orderId }, OVERFLOW)),
+            nextBoundary = if (fetched.size > StoreOrderBoardPaging.PAGE_SIZE) orders.lastOrNull() else null,
+        )
     }
 
     fun findByReferenceAndStoreId(
@@ -62,7 +128,7 @@ internal class StoreOrderBoardQueryRepository(
         val order =
             jdbcTemplate
                 .query(
-                    "$ORDER_SELECT WHERE public_reference = ? AND store_id = ?",
+                    "${StoreOrderBoardQuerySql.orderSelect()} WHERE public_reference = ? AND store_id = ?",
                     ::order,
                     publicReference,
                     storeId,
@@ -123,36 +189,84 @@ internal class StoreOrderBoardQueryRepository(
         quantity = resultSet.getLong("quantity"),
     )
 
-    private fun StoreOrderBoardLane.toState(): String =
-        when (this) {
-            StoreOrderBoardLane.PENDING_ACCEPTANCE -> "PAID"
-            StoreOrderBoardLane.ACCEPTED -> "ACCEPTED"
-            StoreOrderBoardLane.PREPARING -> "PREPARING"
-            StoreOrderBoardLane.READY -> "READY"
+    private fun countByLane(
+        storeId: UUID,
+        lanes: List<StoreOrderBoardLane>,
+    ): Map<StoreOrderBoardLane, Long> {
+        val statePlaceholders = List(lanes.size) { "?" }.joinToString(", ")
+        val arguments = mutableListOf<Any>(storeId).apply { addAll(lanes.map(StoreOrderBoardQuerySql::state)) }
+        recordSql(LIST)
+        return jdbcTemplate
+            .query(
+                StoreOrderBoardQuerySql.overflowCount(statePlaceholders),
+                { resultSet, _ -> laneForState(resultSet.getString("state")) to resultSet.getLong("total_count") },
+                *arguments.toTypedArray(),
+            ).toMap()
+    }
+
+    private fun boardSortAt(
+        lane: StoreOrderBoardLane,
+        order: StoreOrderBoardOrderProjection,
+    ): Instant =
+        when (lane) {
+            StoreOrderBoardLane.PENDING_ACCEPTANCE -> {
+                order.acceptanceDeadlineAt ?: dependency("Paid store order has no acceptance deadline")
+            }
+
+            StoreOrderBoardLane.ACCEPTED,
+            StoreOrderBoardLane.PREPARING,
+            StoreOrderBoardLane.READY,
+            -> {
+                order.pickupWindowStart
+            }
         }
+
+    private fun boardOrder(lane: StoreOrderBoardLane): Comparator<StoreOrderBoardOrderProjection> =
+        Comparator { left, right ->
+            val sortAtComparison = boardSortAt(lane, left).compareTo(boardSortAt(lane, right))
+            if (sortAtComparison != 0) {
+                sortAtComparison
+            } else {
+                postgresUuidComparison(left.orderId, right.orderId)
+            }
+        }
+
+    /**
+     * PostgreSQL orders `uuid` bytes as unsigned values, while [UUID.compareTo] treats both longs as signed.
+     * The in-memory boundary must use the same ordering as the keyset query or a visible order can reappear
+     * in the older-work queue.
+     */
+    private fun postgresUuidComparison(
+        left: UUID,
+        right: UUID,
+    ): Int {
+        val high = java.lang.Long.compareUnsigned(left.mostSignificantBits, right.mostSignificantBits)
+        return if (high != 0) high else java.lang.Long.compareUnsigned(left.leastSignificantBits, right.leastSignificantBits)
+    }
+
+    private fun laneForState(state: String): StoreOrderBoardLane =
+        when (state) {
+            "PAID" -> StoreOrderBoardLane.PENDING_ACCEPTANCE
+            "ACCEPTED" -> StoreOrderBoardLane.ACCEPTED
+            "PREPARING" -> StoreOrderBoardLane.PREPARING
+            "READY" -> StoreOrderBoardLane.READY
+            else -> dependency("Store order board state is unsupported")
+        }
+
+    private fun dependency(message: String): Nothing =
+        throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+            io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE,
+            message,
+        )
 
     private companion object {
         const val LIST = "list"
+        const val OVERFLOW = "overflow"
         const val DETAIL = "detail"
-        val EXECUTABLE_STATES = listOf("PAID", "ACCEPTED", "PREPARING", "READY")
-        val ORDER_SELECT =
-            """
-            SELECT id, public_reference, pickup_sequence, pickup_business_date, state,
-                   pickup_window_start_snapshot, pickup_window_end_snapshot,
-                   acceptance_warning_at, acceptance_deadline_at
-              FROM ordering_order
-            """.trimIndent()
         val LINE_SELECT =
             """
             SELECT order_id, line_sequence, menu_name, quantity
               FROM ordering_order_line
-            """.trimIndent()
-        val BOARD_ORDER =
-            """
-            ORDER BY pickup_business_date,
-                     CASE state WHEN 'PAID' THEN 0 WHEN 'ACCEPTED' THEN 1 WHEN 'PREPARING' THEN 2 ELSE 3 END,
-                     CASE WHEN state = 'PAID' THEN acceptance_deadline_at ELSE pickup_window_start_snapshot END,
-                     id
             """.trimIndent()
     }
 }

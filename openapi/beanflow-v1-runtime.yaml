@@ -326,6 +326,8 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /stores/{storeId}/orders:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders"
+  /stores/{storeId}/orders/overflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1overflow"
   /stores/{storeId}/orders/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}"
   /stores/{storeId}/orders/{orderReference}/transitions:

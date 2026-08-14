@@ -46,6 +46,7 @@ ORDER BY created_at, id;
 
 ```text
 GET  /api/v1/stores/{storeId}/orders
+GET  /api/v1/stores/{storeId}/orders/overflow?lane={lane}&cursor={cursor}
 GET  /api/v1/stores/{storeId}/orders/{orderReference}
 POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions
 ```
@@ -55,21 +56,24 @@ POST /api/v1/stores/{storeId}/orders/{orderReference}/transitions
 `pickupBusinessDate`는 같아야 한다. `PENDING_PAYMENT`와 종료 주문이 보이면 빈 보드로 숨기지 말고
 Projection query와 runtime 계약을 조사한다.
 
-클라이언트는 3초마다 `If-None-Match`를 보내고 탭이 숨겨지면 중단하며 복귀 즉시 조회한다. 304도 DB
-Projection을 실행한다. 304 비율 상승을 DB 부하 감소로 해석하지 않는다. `PAID`는 DB row 변경 없이도
-2분 warning과 3분 timeout 경계에서 phase와 ETag가 바뀐다.
+기본 snapshot은 lane마다 가장 이른 50건만 반환한다. 51번째가 있으면 response의 `overflow[]`에 lane,
+정확한 `overflowCount`, 첫 overflow page용 signed cursor가 있다. `overflow=[]`만 모든 실행 주문이 기본
+snapshot에 있다는 뜻이다. 오래된 작업은 사용자가 명시적으로 queue를 열 때만 최대 50건씩 조회하며, 3초
+polling은 queue를 재조회하지 않는다. 실제 lane-bounded `UNION ALL`, overflow count, keyset page SQL은
+[`store-order-board-performance-evidence.md`](../quality/store-order-board-performance-evidence.md)의
+`StoreOrderBoardQuerySql` 기준으로 검증한다. 이 문서에 과거의 무제한 보드 SQL을 복사해 운영 기준으로
+사용하지 않는다.
 
-```sql
-SELECT id, public_reference, pickup_business_date, state,
-       pickup_window_start_snapshot, acceptance_warning_at, acceptance_deadline_at
-FROM ordering_order
-WHERE store_id = :store_id
-  AND state IN ('PAID', 'ACCEPTED', 'PREPARING', 'READY')
-ORDER BY pickup_business_date,
-         CASE state WHEN 'PAID' THEN 0 WHEN 'ACCEPTED' THEN 1 WHEN 'PREPARING' THEN 2 ELSE 3 END,
-         CASE WHEN state = 'PAID' THEN acceptance_deadline_at ELSE pickup_window_start_snapshot END,
-         id;
-```
+클라이언트는 3초마다 `If-None-Match`를 보내고 탭이 숨겨지면 중단하며 복귀 즉시 조회한다. 응답 ETag는
+cursor 발급·만료 값을 제외한 canonical 의미 Projection의 SHA-256 weak validator다. 304도 DB Projection을
+실행하며, 보드 내용이 같다는 뜻일 뿐 cursor TTL이나 유효성을 연장하지 않는다. 따라서 304 비율 상승을
+DB 부하 감소로 해석하지 않는다. `PAID`는 DB row 변경 없이도 2분 warning과 3분 timeout 경계에서 phase와
+ETag가 바뀐다.
+
+overflow 요청이 만료·변조·scope 불일치 cursor 때문에 `400 INVALID_REQUEST`이면 client는 local queue와
+ETag를 버리고 unconditional board snapshot을 **한 번만** 새로 읽는다. 새 cursor로 queue를 자동 재시도하지
+않고, 사용자가 새 snapshot의 overflow 진입을 다시 선택한다. 이 단발 recovery가 실패하면 빈 queue나
+stale board로 성공을 가장하지 않고 원래 failure를 표시한다.
 
 V56의 `ix_ordering_order_store_board`와 PAID partial
 `ix_ordering_order_store_acceptance_board`가 없거나 planner가 선택하지 않으면
@@ -84,9 +88,11 @@ fixture를 같은 조건으로 재실행한다. 운영 분포 없이 index를 �
 
 관측 지표:
 
-- `beanflow.store.order.board.query.duration{operation=list|detail}`
-- `beanflow.store.order.board.query.sql{operation=list|detail}`
+- `beanflow.store.order.board.query.duration{operation=list|overflow|detail}`
+- `beanflow.store.order.board.query.sql{operation=list|overflow|detail}`
 - `beanflow.store.order.board.response{outcome=ok|not_modified}`
+- `beanflow.store.order.board.response.canonical.bytes`
+- `beanflow.store.order.board.etag.duration`
 - HTTP `ORDER_STATE_CONFLICT`, `ORDER_ACTION_NOT_ALLOWED`, `ACCESS_DENIED`,
   `DEPENDENCY_UNAVAILABLE` 비율
 

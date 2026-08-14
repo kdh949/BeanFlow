@@ -11,18 +11,23 @@ internal class StoreOrderBoardProjector {
     fun board(
         rows: StoreOrderBoardRows,
         now: Instant,
+        overflow: List<StoreOrderBoardOverflowResponse>,
     ): StoreOrderBoardResponse {
-        val items =
-            rows.orders.map { order ->
-                item(order, rows.linesByOrderId[order.orderId].orEmpty(), null, now)
-            }
+        val items = items(rows, now)
         return StoreOrderBoardResponse(
-            items
-                .groupBy { it.pickupBusinessDate }
-                .toSortedMap()
-                .map { (date, grouped) -> StoreOrderBoardDateGroupResponse(date, grouped) },
+            groups =
+                items
+                    .groupBy { it.pickupBusinessDate }
+                    .toSortedMap()
+                    .map { (date, grouped) -> StoreOrderBoardDateGroupResponse(date, grouped) },
+            overflow = overflow,
         )
     }
+
+    fun overflowPage(
+        rows: StoreOrderBoardRows,
+        now: Instant,
+    ): List<StoreOrderBoardItemResponse> = items(rows, now)
 
     fun detail(
         rows: StoreOrderBoardRows,
@@ -95,6 +100,14 @@ internal class StoreOrderBoardProjector {
             compensationRecovery = compensationRecovery,
         )
     }
+
+    private fun items(
+        rows: StoreOrderBoardRows,
+        now: Instant,
+    ): List<StoreOrderBoardItemResponse> =
+        rows.orders.map { order ->
+            item(order, rows.linesByOrderId[order.orderId].orEmpty(), null, now)
+        }
 
     private fun itemSummary(lines: List<DisplayLine>): String {
         if (lines.isEmpty() || lines.any { it.menuName.isBlank() || it.quantity <= 0 }) {

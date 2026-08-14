@@ -14,6 +14,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -25,6 +26,7 @@ internal class StoreOrderBoardMigrationTest {
 
         const val PLAN_SCHEMA = "store_order_board_plan"
         const val FIXTURE_ORDER_COUNT = 20_000
+        const val ACTIVE_ROWS_PER_LANE = 200
         const val WRITE_SAMPLE_SIZE = 1_000
         val TARGET_STORE_ID: UUID = UUID.fromString("10000000-0000-4000-8000-000000000060")
         val OTHER_STORE_ID: UUID = UUID.fromString("20000000-0000-4000-8000-000000000060")
@@ -58,35 +60,44 @@ internal class StoreOrderBoardMigrationTest {
     }
 
     @Test
-    fun `fixed board fixture records query plans and write cost before and after both indexes`() {
+    fun `fixed mixed-lane production query records plans and write cost before and after both indexes`() {
         createPlanTable()
         insertPlanOrders(FIXTURE_ORDER_COUNT)
         jdbcTemplate.execute("ANALYZE $PLAN_SCHEMA.ordering_order")
 
-        val activeWithoutIndex = explainActiveBoard()
-        val paidWithoutIndex = explainAcceptanceBoard()
+        val primaryWithoutIndex = explainPrimaryBoard()
+        val overflowCountWithoutIndex = explainOverflowCount()
+        val overflowPageWithoutIndex = explainOverflowPage()
         val writeWithoutIndex = measureWrites("write_without_index")
 
         createIndexes("ordering_order", "fixture")
         jdbcTemplate.execute("ANALYZE $PLAN_SCHEMA.ordering_order")
-        val activeWithIndex = explainActiveBoard()
-        val paidWithIndex = explainAcceptanceBoard()
+        val primaryWithIndex = explainPrimaryBoard()
+        val overflowCountWithIndex = explainOverflowCount()
+        val overflowPageWithIndex = explainOverflowPage()
         val writeWithIndex = measureWrites("write_with_index", indexed = true)
 
-        assertThat(activeWithoutIndex).contains("Seq Scan")
-        assertThat(paidWithoutIndex).contains("Seq Scan")
-        assertThat(activeWithIndex).contains("ix_board_fixture")
-        assertThat(paidWithIndex).contains("ix_acceptance_fixture")
+        assertThat(primaryWithoutIndex).contains("Seq Scan")
+        assertThat(primaryWithIndex).contains("ix_board_fixture", "ix_acceptance_fixture")
+        assertThat(overflowPageWithoutIndex).contains("Seq Scan")
+        assertThat(overflowPageWithIndex).contains("ix_acceptance_fixture")
+        assertThat(overflowCountWithoutIndex).isNotBlank()
+        assertThat(overflowCountWithIndex).isNotBlank()
         assertThat(writeWithoutIndex.insertNanos).isPositive()
         assertThat(writeWithoutIndex.transitionNanos).isPositive()
         assertThat(writeWithIndex.insertNanos).isPositive()
         assertThat(writeWithIndex.transitionNanos).isPositive()
 
-        println("STORE_ORDER_BOARD_EXPLAIN_FIXTURE rows=$FIXTURE_ORDER_COUNT limit=50")
-        println("STORE_ORDER_BOARD_ACTIVE_WITHOUT_INDEX\n$activeWithoutIndex")
-        println("STORE_ORDER_BOARD_ACTIVE_WITH_INDEX\n$activeWithIndex")
-        println("STORE_ORDER_BOARD_ACCEPTANCE_WITHOUT_INDEX\n$paidWithoutIndex")
-        println("STORE_ORDER_BOARD_ACCEPTANCE_WITH_INDEX\n$paidWithIndex")
+        println(
+            "STORE_ORDER_BOARD_EXPLAIN_FIXTURE rows=$FIXTURE_ORDER_COUNT " +
+                "active_per_lane=$ACTIVE_ROWS_PER_LANE primary_lane_limit=${StoreOrderBoardPaging.FETCH_LIMIT}",
+        )
+        println("STORE_ORDER_BOARD_PRIMARY_MIXED_WITHOUT_INDEX\n$primaryWithoutIndex")
+        println("STORE_ORDER_BOARD_PRIMARY_MIXED_WITH_INDEX\n$primaryWithIndex")
+        println("STORE_ORDER_BOARD_OVERFLOW_COUNT_WITHOUT_INDEX\n$overflowCountWithoutIndex")
+        println("STORE_ORDER_BOARD_OVERFLOW_COUNT_WITH_INDEX\n$overflowCountWithIndex")
+        println("STORE_ORDER_BOARD_OVERFLOW_PAGE_WITHOUT_INDEX\n$overflowPageWithoutIndex")
+        println("STORE_ORDER_BOARD_OVERFLOW_PAGE_WITH_INDEX\n$overflowPageWithIndex")
         println(
             "STORE_ORDER_BOARD_WRITE_SAMPLE rows=$WRITE_SAMPLE_SIZE " +
                 "without_insert_ns=${writeWithoutIndex.insertNanos} " +
@@ -104,8 +115,13 @@ internal class StoreOrderBoardMigrationTest {
             CREATE TABLE $PLAN_SCHEMA.ordering_order (
                 id uuid PRIMARY KEY,
                 store_id uuid NOT NULL,
+                public_reference varchar(32) NOT NULL,
+                pickup_sequence bigint NOT NULL,
+                pickup_business_date date NOT NULL,
                 state varchar(32) NOT NULL,
                 pickup_window_start_snapshot timestamptz NOT NULL,
+                pickup_window_end_snapshot timestamptz NOT NULL,
+                acceptance_warning_at timestamptz,
                 acceptance_deadline_at timestamptz
             )
             """.trimIndent(),
@@ -115,20 +131,37 @@ internal class StoreOrderBoardMigrationTest {
     private fun insertPlanOrders(count: Int) {
         val rows =
             (0 until count).map { sequence ->
-                val target = sequence % 100 == 0
-                val state = if (target) listOf("PAID", "ACCEPTED", "PREPARING", "READY")[(sequence / 100) % 4] else "COMPLETED"
-                val pickup = START.plusSeconds(sequence.toLong())
+                val target = sequence < ACTIVE_ROWS_PER_LANE * StoreOrderBoardLane.entries.size
+                val state =
+                    if (target) {
+                        StoreOrderBoardQuerySql.state(
+                            StoreOrderBoardLane.entries[
+                                sequence %
+                                    StoreOrderBoardLane.entries.size,
+                            ],
+                        )
+                    } else {
+                        "COMPLETED"
+                    }
+                val pickup = START.plusSeconds((sequence / StoreOrderBoardLane.entries.size).toLong())
                 arrayOf<Any>(
                     UUID.nameUUIDFromBytes("store-board-plan:$sequence".toByteArray()),
                     if (target) TARGET_STORE_ID else OTHER_STORE_ID,
+                    "BF-PLAN-${sequence.toString().padStart(8, '0')}",
+                    sequence.toLong() + 1,
+                    LocalDate.of(2030, 1, 1),
                     state,
                     Timestamp.from(pickup),
+                    Timestamp.from(pickup.plusSeconds(600)),
+                    Timestamp.from(pickup.plusSeconds(120)),
                     Timestamp.from(pickup.plusSeconds(180)),
                 )
             }
         jdbcTemplate.batchUpdate(
             "INSERT INTO $PLAN_SCHEMA.ordering_order " +
-                "(id, store_id, state, pickup_window_start_snapshot, acceptance_deadline_at) VALUES (?, ?, ?, ?, ?)",
+                "(id, store_id, public_reference, pickup_sequence, pickup_business_date, state, " +
+                "pickup_window_start_snapshot, pickup_window_end_snapshot, acceptance_warning_at, acceptance_deadline_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
     }
@@ -147,35 +180,38 @@ internal class StoreOrderBoardMigrationTest {
         )
     }
 
-    private fun explainActiveBoard(): String =
-        jdbcTemplate
-            .queryForList(
-                """
-                EXPLAIN (ANALYZE, BUFFERS)
-                SELECT id, state, pickup_window_start_snapshot
-                  FROM $PLAN_SCHEMA.ordering_order
-                 WHERE store_id = ? AND state = 'READY'
-                 ORDER BY pickup_window_start_snapshot, id
-                 LIMIT 50
-                """.trimIndent(),
-                String::class.java,
-                TARGET_STORE_ID,
-            ).joinToString("\n")
+    private fun explainPrimaryBoard(): String =
+        explain(
+            StoreOrderBoardQuerySql.primaryBoard(StoreOrderBoardLane.entries, "$PLAN_SCHEMA.ordering_order"),
+            *List(StoreOrderBoardLane.entries.size) { TARGET_STORE_ID }.toTypedArray(),
+        )
 
-    private fun explainAcceptanceBoard(): String =
+    private fun explainOverflowCount(): String =
+        explain(
+            StoreOrderBoardQuerySql.overflowCount(
+                statePlaceholders = List(StoreOrderBoardLane.entries.size) { "?" }.joinToString(", "),
+                table = "$PLAN_SCHEMA.ordering_order",
+            ),
+            TARGET_STORE_ID,
+            *StoreOrderBoardLane.entries.map(StoreOrderBoardQuerySql::state).toTypedArray(),
+        )
+
+    private fun explainOverflowPage(): String =
+        explain(
+            StoreOrderBoardQuerySql.overflowPage(StoreOrderBoardLane.PENDING_ACCEPTANCE, "$PLAN_SCHEMA.ordering_order"),
+            TARGET_STORE_ID,
+            StoreOrderBoardQuerySql.state(StoreOrderBoardLane.PENDING_ACCEPTANCE),
+            Timestamp.from(START),
+            UUID(0, 0),
+        )
+
+    private fun explain(
+        sql: String,
+        vararg arguments: Any,
+    ): String =
         jdbcTemplate
-            .queryForList(
-                """
-                EXPLAIN (ANALYZE, BUFFERS)
-                SELECT id, state, acceptance_deadline_at
-                  FROM $PLAN_SCHEMA.ordering_order
-                 WHERE store_id = ? AND state = 'PAID'
-                 ORDER BY acceptance_deadline_at, id
-                 LIMIT 50
-                """.trimIndent(),
-                String::class.java,
-                TARGET_STORE_ID,
-            ).joinToString("\n")
+            .queryForList("EXPLAIN (ANALYZE, BUFFERS) $sql", String::class.java, *arguments)
+            .joinToString("\n")
 
     private fun measureWrites(
         table: String,
@@ -190,15 +226,22 @@ internal class StoreOrderBoardMigrationTest {
                 arrayOf<Any>(
                     UUID.nameUUIDFromBytes("$table:$sequence".toByteArray()),
                     TARGET_STORE_ID,
+                    "BF-WRITE-${sequence.toString().padStart(8, '0')}",
+                    sequence.toLong() + 1,
+                    LocalDate.of(2030, 1, 1),
                     "PAID",
                     Timestamp.from(START.plusSeconds(sequence.toLong())),
+                    Timestamp.from(START.plusSeconds(sequence + 600L)),
+                    Timestamp.from(START.plusSeconds(sequence + 120L)),
                     Timestamp.from(START.plusSeconds(sequence + 180L)),
                 )
             }
         val insertStart = System.nanoTime()
         jdbcTemplate.batchUpdate(
             "INSERT INTO $PLAN_SCHEMA.$table " +
-                "(id, store_id, state, pickup_window_start_snapshot, acceptance_deadline_at) VALUES (?, ?, ?, ?, ?)",
+                "(id, store_id, public_reference, pickup_sequence, pickup_business_date, state, " +
+                "pickup_window_start_snapshot, pickup_window_end_snapshot, acceptance_warning_at, acceptance_deadline_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
         val insertNanos = System.nanoTime() - insertStart

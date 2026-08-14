@@ -169,6 +169,114 @@ internal class StoreOrderBoardIntegrationTest
         }
 
         @Test
+        fun `board bounds every lane and exposes exact older work through a signed queue`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 240, stockAvailable = 240)
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "ACTIVE")
+            val referencesByState = linkedMapOf<String, MutableSet<String>>()
+            listOf("PAID", "ACCEPTED", "PREPARING", "READY").forEach { state ->
+                referencesByState[state] = linkedSetOf()
+                repeat(51) { index ->
+                    val created = create(fixture, "board-bound-${state.lowercase()}-${index.toString().padStart(2, '0')}")
+                    activate(created.orderId, state, now.plusSeconds(120), now.plusSeconds(180))
+                    referencesByState.getValue(state) += created.reference
+                }
+            }
+
+            val beforeList = listSqlCount()
+            val beforeEtagCount = etagTimerCount()
+            val beforeEtagNanos = etagTimerNanos()
+            val snapshot =
+                mockMvc
+                    .perform(get(boardPath(fixture.storeId)).with(merchantJwt(actorId)))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.overflow.length()").value(4))
+                    .andReturn()
+            assertThat(listSqlCount() - beforeList).isEqualTo(3.0)
+
+            val body = json(snapshot.response.contentAsString)
+            val etag = requireNotNull(snapshot.response.getHeader(HttpHeaders.ETAG))
+            val responseBytes = snapshot.response.contentAsByteArray.size
+            assertThat(responseBytes).isPositive()
+            assertThat(etagTimerCount() - beforeEtagCount).isEqualTo(1)
+            println(
+                "STORE_ORDER_BOARD_BOUNDED_RESPONSE cards=${boardItems(body).size} bytes=$responseBytes " +
+                    "etag_nanos=${etagTimerNanos() - beforeEtagNanos}",
+            )
+            val visibleByLane = boardItems(body).groupBy { it["lane"].asText() }
+            assertThat(visibleByLane.values.map(List<JsonNode>::size)).containsOnly(50)
+            val overflowByLane = body["overflow"].associateBy { it["lane"].asText() }
+            assertThat(overflowByLane.keys).containsExactlyInAnyOrder("PENDING_ACCEPTANCE", "ACCEPTED", "PREPARING", "READY")
+            assertThat(overflowByLane.values.map { it["overflowCount"].asLong() }).containsOnly(1L)
+
+            clock.set(now.plusSeconds(1))
+            mockMvc
+                .perform(get(boardPath(fixture.storeId)).with(merchantJwt(actorId)).header(HttpHeaders.IF_NONE_MATCH, etag))
+                .andExpect(status().isNotModified)
+                .andExpect(header().string(HttpHeaders.ETAG, etag))
+
+            val queuedReferencesByLane = linkedMapOf<String, Set<String>>()
+            val beforeQueue = querySqlCount("overflow")
+            overflowByLane.forEach { (lane, overflow) ->
+                val page =
+                    mockMvc
+                        .perform(
+                            get("${boardPath(fixture.storeId)}/overflow")
+                                .with(merchantJwt(actorId))
+                                .param("lane", lane)
+                                .param("cursor", overflow["nextCursor"].asText()),
+                        ).andExpect(status().isOk)
+                        .andExpect(jsonPath("$.lane").value(lane))
+                        .andExpect(jsonPath("$.items.length()").value(1))
+                        .andExpect(jsonPath("$.nextCursor").isEmpty)
+                        .andReturn()
+                queuedReferencesByLane[lane] =
+                    json(page.response.contentAsString)["items"].toList().map { it["orderReference"].asText() }.toSet()
+            }
+            assertThat(querySqlCount("overflow") - beforeQueue).isEqualTo(8.0)
+
+            val stateByLane =
+                mapOf("PENDING_ACCEPTANCE" to "PAID", "ACCEPTED" to "ACCEPTED", "PREPARING" to "PREPARING", "READY" to "READY")
+            stateByLane.forEach { (lane, state) ->
+                val visible = visibleByLane.getValue(lane).map { it["orderReference"].asText() }.toSet()
+                assertThat(visible + queuedReferencesByLane.getValue(lane)).isEqualTo(referencesByState.getValue(state))
+            }
+
+            val cursor = overflowByLane.getValue("PENDING_ACCEPTANCE")["nextCursor"].asText()
+            val beforeRejected = querySqlCount("overflow")
+            mockMvc
+                .perform(
+                    get("${boardPath(fixture.storeId)}/overflow")
+                        .with(merchantJwt(actorId))
+                        .param("lane", "READY")
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            val otherStore = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, otherStore)
+            insertStoreMembership(actorId, otherStore.storeId, "ACTIVE")
+            mockMvc
+                .perform(
+                    get("${boardPath(otherStore.storeId)}/overflow")
+                        .with(merchantJwt(actorId))
+                        .param("lane", "PENDING_ACCEPTANCE")
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            clock.set(now.plusSeconds(15 * 60 + 1))
+            mockMvc
+                .perform(
+                    get("${boardPath(fixture.storeId)}/overflow")
+                        .with(merchantJwt(actorId))
+                        .param("lane", "PENDING_ACCEPTANCE")
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            assertThat(querySqlCount("overflow") - beforeRejected).isZero()
+        }
+
+        @Test
         fun `conditional polling changes ETag at time boundaries and fails closed on hash failure`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -184,11 +292,12 @@ internal class StoreOrderBoardIntegrationTest
                     .andExpect(jsonPath("$.groups[0].items[0].acceptancePhase").value("OPEN"))
                     .andReturn()
             val openEtag = requireNotNull(first.response.getHeader(HttpHeaders.ETAG))
+            assertThat(openEtag).startsWith("W/")
             mockMvc
                 .perform(
                     get(boardPath(fixture.storeId))
                         .with(merchantJwt(actorId))
-                        .header(HttpHeaders.IF_NONE_MATCH, "W/$openEtag, \"another\""),
+                        .header(HttpHeaders.IF_NONE_MATCH, "${openEtag.removePrefix("W/")}, \"another\""),
                 ).andExpect(status().isNotModified)
                 .andExpect(header().string(HttpHeaders.ETAG, openEtag))
                 .andExpect { assertThat(it.response.contentAsByteArray).isEmpty() }
@@ -483,6 +592,15 @@ internal class StoreOrderBoardIntegrationTest
                 timestamp,
                 timestamp,
             )
+            insertStoreMembership(actorId, storeId, membershipStatus)
+        }
+
+        private fun insertStoreMembership(
+            actorId: UUID,
+            storeId: UUID,
+            membershipStatus: String,
+        ) {
+            val timestamp = Timestamp.from(now)
             jdbcTemplate.update(
                 """
                 INSERT INTO identity_store_membership (
@@ -534,7 +652,19 @@ internal class StoreOrderBoardIntegrationTest
 
         private fun boardItems(body: JsonNode): List<JsonNode> = body["groups"].flatMap { group -> group["items"].toList() }
 
-        private fun listSqlCount(): Double = meterRegistry.counter("beanflow.store.order.board.query.sql", "operation", "list").count()
+        private fun listSqlCount(): Double = querySqlCount("list")
+
+        private fun querySqlCount(operation: String): Double =
+            meterRegistry.counter("beanflow.store.order.board.query.sql", "operation", operation).count()
+
+        private fun etagTimerCount(): Long = meterRegistry.find("beanflow.store.order.board.etag.duration").timer()?.count() ?: 0L
+
+        private fun etagTimerNanos(): Long =
+            meterRegistry
+                .find("beanflow.store.order.board.etag.duration")
+                .timer()
+                ?.totalTime(TimeUnit.NANOSECONDS)
+                ?.toLong() ?: 0L
 
         private fun outstandingPublicationCount(): Long =
             value(
@@ -583,8 +713,10 @@ internal class StoreOrderBoardTestConfiguration {
 
     @Bean
     @Primary
-    fun controllableStoreOrderBoardEtagGenerator(objectMapper: ObjectMapper): ControllableStoreOrderBoardEtagGenerator =
-        ControllableStoreOrderBoardEtagGenerator(objectMapper)
+    fun controllableStoreOrderBoardEtagGenerator(
+        objectMapper: ObjectMapper,
+        meterRegistry: MeterRegistry,
+    ): ControllableStoreOrderBoardEtagGenerator = ControllableStoreOrderBoardEtagGenerator(objectMapper, meterRegistry)
 }
 
 internal class StoreOrderBoardMutableClock(
@@ -603,8 +735,9 @@ internal class StoreOrderBoardMutableClock(
 
 internal class ControllableStoreOrderBoardEtagGenerator(
     objectMapper: ObjectMapper,
+    meterRegistry: MeterRegistry,
 ) : StoreOrderBoardEtagGenerator {
-    private val delegate = Sha256StoreOrderBoardEtagGenerator(objectMapper)
+    private val delegate = Sha256StoreOrderBoardEtagGenerator(objectMapper, meterRegistry)
     var fail: Boolean = false
 
     override fun generate(board: StoreOrderBoardResponse): String {

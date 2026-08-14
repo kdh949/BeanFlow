@@ -61,6 +61,19 @@ internal data class StoreOrderBoardDateGroupResponse(
 
 internal data class StoreOrderBoardResponse(
     val groups: List<StoreOrderBoardDateGroupResponse>,
+    val overflow: List<StoreOrderBoardOverflowResponse> = emptyList(),
+)
+
+internal data class StoreOrderBoardOverflowResponse(
+    val lane: StoreOrderBoardLane,
+    val overflowCount: Long,
+    val nextCursor: String,
+)
+
+internal data class StoreOrderBoardOverflowPageResponse(
+    val lane: StoreOrderBoardLane,
+    val items: List<StoreOrderBoardItemResponse>,
+    val nextCursor: String?,
 )
 
 internal data class StoreOrderBoardSnapshot(

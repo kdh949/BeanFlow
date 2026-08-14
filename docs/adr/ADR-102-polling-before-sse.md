@@ -20,11 +20,20 @@
 
 - 점주 주문보드는 초기값 **3초** 주기로 실행 주문을 조회한다. 주기는 클라이언트 상수로 고정하고,
   변경 시 측정 결과를 근거로 남긴다.
-- 목록 API는 `ETag`를 반환하고 `If-None-Match`를 처리한다. 변경이 없으면 `304`를 반환하고 본문을
-  전송하지 않는다.
-- `ETag`는 정렬까지 완료한 canonical Projection의 SHA-256에서 파생한다. `serverTime`이나 매초 바뀌는
-  countdown은 응답에 넣지 않고, `PAID`의 시간 상태는 `OPEN | WARNING | TIMEOUT_PENDING` phase로
-  계산해 canonical 값에 포함한다. 그래서 DB row가 바뀌지 않아도 2분·3분 경계에서 ETag가 바뀐다.
+- 목록 API는 weak `ETag`를 반환하고 `If-None-Match`를 처리한다. 보드의 의미상 내용이 같으면 `304`를
+  반환하고 본문을 전송하지 않는다.
+- `ETag`는 정렬까지 완료한 canonical **의미 Projection**의 SHA-256에서 파생한
+  `W/"{sha256}"`다. `groups`, item, `PAID`의 `OPEN | WARNING | TIMEOUT_PENDING` phase와
+  overflow의 lane·count는 포함한다. `serverTime`, 매초 바뀌는 countdown, 그리고 issuance/expiry를 가진
+  opaque overflow `nextCursor`는 제외한다. 따라서 DB row가 바뀌지 않아도 2분·3분 경계에서 tag가
+  바뀌지만, 같은 보드를 새로 읽어 cursor만 재발급해도 tag는 바뀌지 않는다.
+- `304`는 보드의 의미상 내용이 같다는 뜻일 뿐 cursor 유효성이나 만료 시각을 연장했다는 뜻이 아니다.
+  클라이언트는 `304`를 받은 뒤 보관한 cursor의 TTL을 갱신하거나 cursor가 아직 유효하다고 가정하지
+  않는다.
+- overflow queue 요청이 만료·변조·scope 불일치 cursor의 `400 INVALID_REQUEST`를 받으면, 클라이언트는
+  local queue page와 board ETag를 버리고 **unconditional 새 board snapshot을 정확히 한 번** 조회한다.
+  새 cursor로 overflow를 자동 재시도하거나 3초 polling에 queue를 포함하지 않는다. 사용자가 새 snapshot의
+  overflow 진입을 다시 선택해야 한다.
 - 첫 버전의 조건부 요청도 Projection 조회는 수행한다. ETag가 일치하면 serialization된 본문 전송만
   생략한다. `MAX(updated_at)+COUNT`만으로 304를 결정해 시간 경계나 같은 건수의 교체를 놓치지 않는다.
 - 탭이 비활성이면 Polling을 중단한다. 복귀 시 즉시 1회 조회한다.
@@ -76,9 +85,19 @@ Polling의 최대 갱신 지연은 주기와 같다. 3분 수락 정책을 근�
 그대로 남으므로 단점의 실제 크기를 작다고 단정하지 않고 SQL·serialization·network 비용을 따로
 측정한다.
 
+overflow cursor에는 15분 TTL과 서명된 issuance 시각이 있으므로, 매 snapshot에 그 opaque 값을 포함한
+strong validator를 만들면 보드가 같은 경우에도 매 3초 cache miss가 난다. weak validator는 cursor를
+제외한 보드 의미만 비교해 이 문제를 피한다. 그 대가는 tag가 response bytes의 동등성이나 cursor lease를
+증명하지 않는다는 점이다. cursor의 무결성·scope·TTL은 여전히 서버가 HMAC과 membership 재검증으로
+실패-폐쇄 처리하고, 클라이언트는 304로 이를 연장하지 않는다.
+
 ## Consequences
 
 - 목록 API에 `ETag` 계산과 `If-None-Match` 처리가 추가된다.
+- 주문보드 `ETag`는 response byte 동등성을 의미하지 않는 weak validator다. cursor 발급·만료 상태는
+  별도 보안 계약이며 304로 갱신되지 않는다.
+- 만료된 overflow cursor는 사용자에게 일반 오류로 끝내지 않고 새 snapshot 한 번으로 복구한다. 이
+  recovery도 실패하면 성공·빈 queue로 대체하지 않고 원래 failure를 표시한다.
 - 정확한 ETag를 위해 304 응답에서도 Projection 조회 비용은 발생한다. 별도 변경 counter는 측정으로
   정당화되기 전에는 도입하지 않는다.
 - 매장 수 × 주기만큼 요청이 발생한다. 이 수치를 지표로 관찰해야 한다.
@@ -89,6 +108,8 @@ Polling의 최대 갱신 지연은 주기와 같다. 3분 수락 정책을 근�
 ## Verification
 
 - 변경이 없을 때 Projection 조회 후 `304`가 반환되고 response body가 없는지 검증한다.
+- cursor 재발급만으로 weak tag가 바뀌지 않고, `304`가 cursor TTL을 연장하지 않으며 cursor `400` 뒤
+  client가 unconditional board snapshot을 정확히 한 번만 다시 읽는지 검증한다.
 - 주문 상태가 바뀌면 다음 주기 안에 `200`과 새 `ETag`가 반환되는지 검증한다.
 - DB 변경 없이 2분 warning과 3분 timeout 경계를 지날 때 새 `ETag`와 phase가 반환되는지 검증한다.
 - Projection 조회·canonical hash 계산 실패가 full response fallback이 아니라 503인지 검증한다.
@@ -105,15 +126,20 @@ Polling의 최대 갱신 지연은 주기와 같다. 3분 수락 정책을 근�
 
 ## Implementation Results
 
-2026-08-14 Plan 60에서 점주 보드에 3초 conditional polling을 구현했다. canonical
-`StoreOrderBoard` JSON의 SHA-256 strong ETag를 반환하며, weak/comma-separated `If-None-Match`와 `*`도
-처리한다. 동일 Projection은 304와 빈 body를 반환하고, hash 실패는 full response fallback 없이 503이다.
-고정 Clock 통합 테스트에서 DB 변경 없이 warning·timeout 경계마다 phase와 ETag가 바뀌는 것을 확인했다.
+2026-08-14 Plan 60에서 점주 보드에 3초 conditional polling을 구현했다. cursor 발급값을 제외한 canonical
+의미 `StoreOrderBoard` Projection의 SHA-256 weak ETag를 반환하며, comma-separated `If-None-Match`와 `*`도
+처리한다. 동일 의미 Projection은 304와 빈 body를 반환하고, hash 실패는 full response fallback 없이
+503이다. `StoreOrderBoardEtagTest`는 cursor 재발급에 같은 weak tag가 유지되고 strong/weak client tag가
+약하게 비교되는 것을 고정했다. 고정 Clock 통합 테스트는 DB 변경 없이 warning·timeout 경계마다 phase와
+ETag가 바뀌는 것을 확인했다.
 
 브라우저 상태 테스트는 탭 hidden 동안 요청 0건, visible 복귀 즉시 현재 ETag를 포함한 1회 요청을
 확인한다. 전이 성공은 command response item으로 열을 갱신해 추가 GET을 만들지 않고, 409만 현재 보드를
-지운 뒤 unconditional 재조회한다. membership 403은 이전 보드와 선택을 지우고 ACTIVE 매장 목록을
-다시 읽는다. SSE 재검토 조건을 충족하는 운영 부하 측정은 아직 없으므로 transport 결정은 유지한다.
+지운 뒤 unconditional 재조회한다. overflow cursor `400 INVALID_REQUEST`도 queue와 tag를 지운 뒤 새 board
+snapshot을 한 번 읽고 사용자의 다음 선택을 기다린다. `StoreOrderBoard.test.tsx`는 그 snapshot이
+unconditional이고 overflow request가 자동 재시도되지 않는 것을 확인한다. membership 403은 이전 보드와
+선택을 지우고 ACTIVE 매장 목록을 다시 읽는다. SSE 재검토 조건을 충족하는 운영 부하 측정은 아직 없으므로
+transport 결정은 유지한다.
 
 ## Revisit Conditions
 

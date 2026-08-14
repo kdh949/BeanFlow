@@ -12,13 +12,27 @@ internal class StoreOrderBoardOpenApiContractTest {
         val runtime = Path.of("openapi/beanflow-v1-runtime.yaml").readText()
 
         assertThat(pathItem(target, "/stores/{storeId}/orders"))
-            .contains("StoreOrderBoard", "If-None-Match", "ETag", "PENDING_ACCEPTANCE", "\"304\"", "\"503\"")
+            .contains(
+                "StoreOrderBoard",
+                "If-None-Match",
+                "ETag",
+                "Weak validator",
+                "does not renew an overflow cursor",
+                "PENDING_ACCEPTANCE",
+                "overflow",
+                "\"304\"",
+                "\"503\"",
+            )
+        assertThat(pathItem(target, "/stores/{storeId}/orders/overflow"))
+            .contains("StoreOrderBoardOverflowPage", "lane", "cursor", "\"400\"", "\"403\"", "\"503\"")
         assertThat(pathItem(target, "/stores/{storeId}/orders/{orderReference}"))
             .contains("StoreOrderBoardItem", "\"403\"", "\"404\"", "\"503\"")
         assertThat(pathItem(target, "/stores/{storeId}/orders/{orderReference}/transitions"))
             .contains("StoreOrderActionRequest", "StoreOrderBoardItem", "\"202\"", "\"409\"", "\"422\"")
         assertThat(pathItem(runtime, "/stores/{storeId}/orders"))
             .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders")
+        assertThat(pathItem(runtime, "/stores/{storeId}/orders/overflow"))
+            .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1overflow")
         assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}"))
             .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}")
         assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}/transitions"))
@@ -52,6 +66,12 @@ internal class StoreOrderBoardOpenApiContractTest {
                 "attemptCount:",
                 "lastErrorCode:",
             )
+        assertThat(schema(target, "StoreOrderBoard"))
+            .contains("required: [groups, overflow]", "StoreOrderBoardOverflow")
+        assertThat(schema(target, "StoreOrderBoardOverflow"))
+            .contains("lane", "overflowCount", "nextCursor", "minimum: 1")
+        assertThat(schema(target, "StoreOrderBoardOverflowPage"))
+            .contains("lane", "items", "maxItems: 50", "nextCursor")
     }
 
     private fun pathItem(

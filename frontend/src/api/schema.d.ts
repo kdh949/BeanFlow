@@ -694,8 +694,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all actionable store orders, including future paid orders awaiting acceptance */
+        /** List the bounded actionable board snapshot, including future paid orders awaiting acceptance */
         get: operations["listStoreOrderBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/orders/overflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the next bounded page of older actionable orders for one board lane
+         * @description The signed cursor is issued only by the bounded board snapshot or a preceding overflow page.
+         *     It is bound to this store and lane, expires after 15 minutes, and does not authorize access by itself.
+         *     This queue is user-requested work, not part of the three-second conditional polling loop.
+         *     On 400 INVALID_REQUEST for this cursor, clients discard the local queue and obtain one unconditional
+         *     board snapshot; they do not treat 304 as a cursor renewal or automatically retry this queue request.
+         */
+        get: operations["listStoreOrderOverflowQueue"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3057,6 +3081,7 @@ export interface components {
             orderedAt: components["schemas"]["DateTime"];
             pickupWindowStart: components["schemas"]["DateTime"];
             pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description Coupon discount and point use after the final amount payable by the customer. */
             totalAmountKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
             itemSummary: string;
@@ -3101,6 +3126,7 @@ export interface components {
             orderedAt: components["schemas"]["DateTime"];
             pickupWindowStart: components["schemas"]["DateTime"];
             pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description Coupon discount and point use after the final amount payable by the customer. */
             totalAmountKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
             lines: components["schemas"]["CustomerOrderLine"][];
@@ -3305,8 +3331,28 @@ export interface components {
             /** @description Every item has the same pickupBusinessDate as this group. */
             items: components["schemas"]["StoreOrderBoardItem"][];
         };
+        StoreOrderBoardOverflow: {
+            /** @enum {string} */
+            lane: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+            /**
+             * Format: int64
+             * @description Exact number of actionable orders after the 50 visible cards in this lane.
+             */
+            overflowCount: number;
+            /** @description Opaque signed keyset cursor for the first overflow queue page of this store and lane. Its 15-minute TTL is not extended by a board 304 response. */
+            nextCursor: string;
+        };
         StoreOrderBoard: {
             groups: components["schemas"]["StoreOrderBoardDateGroup"][];
+            /** @description One entry for each lane whose oldest actionable orders are outside the bounded polling snapshot. */
+            overflow: components["schemas"]["StoreOrderBoardOverflow"][];
+        };
+        StoreOrderBoardOverflowPage: {
+            /** @enum {string} */
+            lane: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+            items: components["schemas"]["StoreOrderBoardItem"][];
+            /** @description Cursor for the following overflow page, or null when this queue has no older item. Its 15-minute TTL is not extended by a board 304 response. */
+            nextCursor: string | null;
         };
         StoreOrderActionRequest: {
             action: components["schemas"]["StoreOrderAction"];
@@ -6052,9 +6098,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Complete board snapshot with ETag */
+            /** @description Per-lane bounded board snapshot with a weak semantic ETag and explicit overflow queue cursors */
             200: {
                 headers: {
+                    /** @description Weak validator for board content only; 304 does not extend an overflow cursor TTL. */
                     ETag?: string;
                     [name: string]: unknown;
                 };
@@ -6062,7 +6109,7 @@ export interface operations {
                     "application/json": components["schemas"]["StoreOrderBoard"];
                 };
             };
-            /** @description Board has not changed for the supplied If-None-Match value */
+            /** @description Board content has not changed for the supplied If-None-Match value; it does not renew an overflow cursor */
             304: {
                 headers: {
                     [name: string]: unknown;
@@ -6072,6 +6119,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreOrderOverflowQueue: {
+        parameters: {
+            query: {
+                lane: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+                cursor: string;
+            };
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Next bounded overflow queue page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreOrderBoardOverflowPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

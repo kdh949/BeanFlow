@@ -21,8 +21,20 @@ const paidOrder = {
   allowedActions: ["ACCEPT" as const, "REJECT" as const],
 };
 
+const readyOrder = {
+  ...paidOrder,
+  orderReference: "BF-4D8N-7R2K",
+  pickupNumber: "A-143",
+  lane: "READY" as const,
+  status: "READY" as const,
+  acceptanceDeadlineAt: null,
+  acceptancePhase: null,
+  allowedActions: ["COMPLETE" as const],
+};
+
 const board = {
   groups: [{ pickupBusinessDate: "2026-08-14", items: [paidOrder] }],
+  overflow: [],
 };
 
 function response<T>(data: T, etag = '"board-v1"') {
@@ -67,6 +79,74 @@ describe("store order board", () => {
     });
   });
 
+  it("makes bounded older work visible and retrieves it only after the merchant requests it", async () => {
+    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+      if (path === "/merchant/me/stores") return response([gangnam]) as never;
+      if (path === "/stores/{storeId}/orders") {
+        return response({
+          ...board,
+          overflow: [{ lane: "READY", overflowCount: 2, nextCursor: "ready-overflow-cursor" }],
+        }) as never;
+      }
+      if (path === "/stores/{storeId}/orders/overflow") {
+        expect(options).toEqual({
+          params: {
+            path: { storeId: gangnam.storeId },
+            query: { lane: "READY", cursor: "ready-overflow-cursor" },
+          },
+        });
+        return response({ lane: "READY", items: [readyOrder], nextCursor: null }) as never;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const user = userEvent.setup();
+
+    render(<StoreOrderBoardPage />);
+
+    const button = await screen.findByRole("button", { name: "오래된 준비 완료 작업 2건 보기" });
+    expect(screen.queryByRole("article", { name: "주문 A-143" })).not.toBeInTheDocument();
+    await user.click(button);
+
+    expect(await screen.findByRole("article", { name: "주문 A-143" })).toBeInTheDocument();
+    const calls = get.mock.calls as unknown as Array<[string, unknown?]>;
+    expect(calls.filter(([path]) => path === "/stores/{storeId}/orders/overflow")).toHaveLength(1);
+  });
+
+  it("recovers one fresh board snapshot after an expired overflow cursor without retrying the queue", async () => {
+    let boardReads = 0;
+    const boardOptions: unknown[] = [];
+    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+      if (path === "/merchant/me/stores") return response([gangnam]) as never;
+      if (path === "/stores/{storeId}/orders") {
+        boardReads += 1;
+        boardOptions.push(options);
+        return response({
+          ...board,
+          overflow: [{ lane: "READY", overflowCount: 2, nextCursor: `ready-overflow-cursor-${boardReads}` }],
+        }, `W/"board-v${boardReads}"`) as never;
+      }
+      if (path === "/stores/{storeId}/orders/overflow") {
+        throw new ApiRequestError(400, "INVALID_REQUEST", "Overflow cursor expired");
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const user = userEvent.setup();
+
+    render(<StoreOrderBoardPage />);
+
+    await user.click(await screen.findByRole("button", { name: "오래된 준비 완료 작업 2건 보기" }));
+
+    await waitFor(() => expect(boardReads).toBe(2));
+    expect(boardOptions).toEqual([
+      { params: { path: { storeId: gangnam.storeId }, header: undefined } },
+      { params: { path: { storeId: gangnam.storeId }, header: undefined } },
+    ]);
+    expect(await screen.findByRole("status", { name: "주문 상태 갱신 안내" })).toHaveTextContent("이전 작업 목록이 갱신되었습니다");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    const calls = get.mock.calls as unknown as Array<[string, unknown?]>;
+    expect(calls.filter(([path]) => path === "/stores/{storeId}/orders/overflow")).toHaveLength(1);
+  });
+
   it("keeps a membership dependency failure explicit and retries the membership query", async () => {
     let storeReads = 0;
     vi.spyOn(api, "GET").mockImplementation(async (path) => {
@@ -97,7 +177,7 @@ describe("store order board", () => {
       if (path === "/auth/merchant/csrf") return noContent() as never;
       if (path === "/stores/{storeId}/orders") {
         const storeId = (options as { params: { path: { storeId: string } } }).params.path.storeId;
-        return response(storeId === yeouido.storeId ? board : { groups: [] }) as never;
+        return response(storeId === yeouido.storeId ? board : { groups: [], overflow: [] }) as never;
       }
       throw new Error(`unexpected GET ${path}`);
     });
@@ -189,7 +269,7 @@ describe("store order board", () => {
       if (path === "/auth/merchant/csrf") return noContent() as never;
       if (path === "/stores/{storeId}/orders") {
         boardReads += 1;
-        return response(boardReads === 1 ? board : { groups: [] }, `"board-v${boardReads}"`) as never;
+        return response(boardReads === 1 ? board : { groups: [], overflow: [] }, `"board-v${boardReads}"`) as never;
       }
       throw new Error(`unexpected GET ${path}`);
     });

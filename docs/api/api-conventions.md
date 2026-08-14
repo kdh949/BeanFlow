@@ -80,10 +80,16 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 `PENDING_ACCEPTANCE`로 표현하며 새 Domain 상태가 아니다. 고객 개인정보, 내부 Order UUID와 결제
 식별자는 응답하지 않는다.
 
-- 200 응답은 정렬된 전체 `StoreOrderBoard` Projection을 canonical JSON으로 직렬화한 SHA-256 strong
-  `ETag`를 포함한다.
-- `If-None-Match`는 쉼표로 구분한 tag, weak tag와 `*`를 처리한다. 현재 tag와 일치하면 304와 빈 body를
-  반환한다. 304도 membership 확인과 Projection 조회·hash 계산을 수행한다.
+- 200 응답은 정렬된 bounded `StoreOrderBoard`의 canonical **의미 Projection** SHA-256에서 만든 weak
+  `ETag` (`W/"{sha256}"`)를 포함한다. 의미 Projection에는 groups, card fields, phase와 overflow의
+  lane·count를 넣고 issuance·expiry를 가진 opaque overflow `nextCursor`는 넣지 않는다.
+- `If-None-Match`는 쉼표로 구분한 tag, weak tag와 `*`를 처리한다. 현재 tag와 약하게 일치하면 304와 빈
+  body를 반환한다. 304도 membership 확인과 Projection 조회·hash 계산을 수행하지만, 보드의 의미상 내용이
+  같다는 뜻일 뿐 `nextCursor`의 TTL·유효성·response byte 동등성을 보장하거나 연장하지 않는다.
+- `GET /api/v1/stores/{storeId}/orders/overflow`의 cursor가 만료·변조·scope 불일치로
+  `400 INVALID_REQUEST`이면 client는 local queue와 board ETag를 버리고 unconditional main board snapshot을
+  정확히 한 번 조회한다. 새 cursor로 queue를 자동 재시도하거나 overflow를 3초 polling에 넣지 않고,
+  사용자의 다음 queue 열기 동작을 기다린다.
 - `PAID`의 `OPEN`, `WARNING`, `TIMEOUT_PENDING` phase가 canonical Projection에 포함되므로 DB 변경이
   없어도 2분·3분 경계에서 tag가 바뀐다. hash 또는 Projection 실패를 full 200이나 빈 보드로
   대체하지 않고 503으로 반환한다.

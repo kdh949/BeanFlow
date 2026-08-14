@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import jakarta.persistence.PersistenceException
@@ -21,6 +22,7 @@ import java.util.UUID
 internal class StoreOrderBoardQueryService(
     private val repository: StoreOrderBoardQueryRepository,
     private val projector: StoreOrderBoardProjector,
+    private val paging: StoreOrderBoardPaging,
     private val etags: StoreOrderBoardEtagGenerator,
     private val storeAccess: StoreAccessOperations,
     private val compensations: OrderCompensationOperations,
@@ -36,7 +38,19 @@ internal class StoreOrderBoardQueryService(
     ): ResponseEntity<StoreOrderBoardResponse> =
         observed(LIST) {
             requireAccess(actorId, storeId)
-            val body = projector.board(repository.findExecutableBoard(storeId, lane), clock.instant())
+            val now = clock.instant()
+            val snapshot = repository.findExecutableBoard(storeId, lane)
+            val overflow =
+                snapshot.overflow.map { boundary ->
+                    StoreOrderBoardOverflowResponse(
+                        lane = boundary.lane,
+                        overflowCount = boundary.overflowCount,
+                        nextCursor = paging.issueCursor(storeId, boundary.lane, paging.sortFor(boundary.lane, boundary.boundary), now),
+                    )
+                }
+            val body = projector.board(snapshot.rows, now, overflow)
+            recordRows(LIST, snapshot.rows.orders.size)
+            overflow.forEach { entry -> recordOverflow(entry) }
             val etag = etags.generate(body)
             if (StoreOrderBoardConditionalRequest.matches(ifNoneMatch, etag)) {
                 meterRegistry.counter("beanflow.store.order.board.response", "outcome", "not_modified").increment()
@@ -45,6 +59,30 @@ internal class StoreOrderBoardQueryService(
                 meterRegistry.counter("beanflow.store.order.board.response", "outcome", "ok").increment()
                 ResponseEntity.ok().header(HttpHeaders.ETAG, etag).body(body)
             }
+        }
+
+    @Transactional(readOnly = true)
+    fun overflow(
+        actorId: UUID,
+        storeId: UUID,
+        lane: StoreOrderBoardLane,
+        cursor: String,
+    ): StoreOrderBoardOverflowPageResponse =
+        observed(OVERFLOW) {
+            requireAccess(actorId, storeId)
+            val now = clock.instant()
+            val prepared = paging.prepareOverflowPage(storeId, lane, cursor)
+            val page = repository.findOverflowPage(storeId, prepared.lane, prepared.after)
+            val items = projector.overflowPage(page.rows, now)
+            recordRows(OVERFLOW, items.size)
+            StoreOrderBoardOverflowPageResponse(
+                lane = prepared.lane,
+                items = items,
+                nextCursor =
+                    page.nextBoundary?.let { boundary ->
+                        paging.issueCursor(storeId, prepared.lane, paging.sortFor(prepared.lane, boundary), now)
+                    },
+            )
         }
 
     @Transactional(readOnly = true)
@@ -104,8 +142,28 @@ internal class StoreOrderBoardQueryService(
 
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
 
+    private fun recordRows(
+        operation: String,
+        count: Int,
+    ) {
+        DistributionSummary
+            .builder("beanflow.store.order.board.rows")
+            .tag("operation", operation)
+            .register(meterRegistry)
+            .record(count.toDouble())
+    }
+
+    private fun recordOverflow(entry: StoreOrderBoardOverflowResponse) {
+        DistributionSummary
+            .builder("beanflow.store.order.board.overflow.count")
+            .tag("lane", entry.lane.name)
+            .register(meterRegistry)
+            .record(entry.overflowCount.toDouble())
+    }
+
     private companion object {
         const val LIST = "list"
+        const val OVERFLOW = "overflow"
         const val DETAIL = "detail"
         val ROLES = setOf(StoreActorRole.OWNER, StoreActorRole.STAFF)
     }

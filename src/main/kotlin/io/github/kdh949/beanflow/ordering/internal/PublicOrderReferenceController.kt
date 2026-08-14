@@ -77,6 +77,15 @@ internal class PublicStoreOrderController(
         @RequestHeader("If-None-Match", required = false) ifNoneMatch: String?,
     ): ResponseEntity<StoreOrderBoardResponse> = board.list(actor.actorId, storeId, lane, ifNoneMatch)
 
+    @GetMapping("/overflow")
+    @PreAuthorize("hasRole('MERCHANT')")
+    fun overflow(
+        actor: MerchantActor,
+        @PathVariable storeId: UUID,
+        @RequestParam lane: StoreOrderBoardLane,
+        @RequestParam @Size(min = 1, max = 2048) cursor: String,
+    ): StoreOrderBoardOverflowPageResponse = board.overflow(actor.actorId, storeId, lane, cursor)
+
     @GetMapping("/{orderReference}")
     @PreAuthorize("hasRole('MERCHANT')")
     fun get(

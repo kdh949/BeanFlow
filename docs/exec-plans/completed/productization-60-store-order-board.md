@@ -48,6 +48,7 @@ UUID 입력 조회를 상태별 실행 주문 보드로 바꾼다. 점주는 매
 - `GET /merchant/me/stores`를 사용하는 단일/다점포 매장 선택·전환 UI
 - `allowedActions` 계산
 - `ETag` / `If-None-Match` 조건부 응답
+- lane별 bounded board snapshot과 on-demand overflow queue
 - `(store_id, state, pickup_window_start_snapshot, id)` 인덱스와 실행계획 검증
 - 동시 전이 충돌 처리(조건부 UPDATE 또는 낙관적 잠금)
 - 프론트엔드 점주 콘솔의 UUID 입력 제거와 Polling 생명주기
@@ -65,8 +66,9 @@ UUID 입력 조회를 상태별 실행 주문 보드로 바꾼다. 점주는 매
 1. 매 요청 `StoreMembership`을 확인한다. 역할만으로 통과하지 않는다.
 2. 매장 범위를 SQL predicate에 포함한다. 조회 후 필터링하지 않는다.
 3. `REVOKED` membership은 즉시 차단된다.
-4. 보드는 픽업 날짜와 무관하게 모든 실행 상태 주문을 반환한다. `PENDING_PAYMENT`와 종료 주문은
-   별도 경로다.
+4. 보드는 픽업 날짜와 무관하게 모든 실행 상태 주문을 접근 가능하게 한다. 기본 polling snapshot은
+   lane마다 앞선 50건으로 제한하고, 초과 주문은 exact count와 signed cursor가 있는 overflow queue에서
+   최대 50건씩 조회한다. `PENDING_PAYMENT`와 종료 주문은 별도 경로다.
 5. `PENDING_ACCEPTANCE`는 수락 deadline, 나머지 lane은 픽업 예정 시각 오름차순이다. 픽업 영업일과
    표시 시각은 스냅샷을 사용한다.
 6. 동시 전이에서 하나만 성공한다. 마지막 쓰기가 이기게 두지 않는다.
@@ -82,11 +84,21 @@ GET /stores/{storeId}/orders
   ArgumentResolver → MerchantActor
   StoreAccessOperations.requireStoreAccess(actorId, storeId, roles)
   @Transactional(readOnly = true)
-    StoreOrderBoardQueryRepository.findExecutableBoard(storeId)
+    StoreOrderBoardQueryRepository.findExecutableBoard(storeId) // lane별 limit + 1
+    overflow lane만 indexed count, line batch는 최대 200 주문
     PAID phase 계산: OPEN | WARNING | TIMEOUT_PENDING
-    정렬된 canonical Projection의 SHA-256 ETag 계산
-    If-None-Match 일치 → 304, response body 없음
+    cursor 발급값을 제외한 canonical 의미 Projection의 SHA-256 weak ETag 계산
+    If-None-Match 약한 일치 → 304, response body 없음 (cursor TTL은 갱신하지 않음)
     불일치 → 200 + Projection
+
+GET /stores/{storeId}/orders/overflow
+  ArgumentResolver → MerchantActor
+  StoreAccessOperations.requireStoreAccess(actorId, storeId, roles)
+  signed cursor(storeId + lane + sort) 검증
+  @Transactional(readOnly = true)
+    StoreOrderBoardQueryRepository.findOverflowPage(storeId, lane, after) // 최대 50 + 1
+    line batch 최대 50 주문
+    다음 signed cursor 또는 null 반환
 
 POST /stores/{storeId}/orders/{orderReference}/transitions
   StoreAccessOperations.requireOrderManagementAccess(...)
@@ -98,8 +110,14 @@ POST /stores/{storeId}/orders/{orderReference}/transitions
 
 - Query Repository는 Domain `PAID`를 API `PENDING_ACCEPTANCE` lane으로 번역한다. 미래 픽업도
   반환하며 response를 `pickupBusinessDate`로 그룹화한다.
-- ETag는 `MAX(updated_at)+COUNT`가 아니라 canonical Projection에서 계산한다. 첫 버전은 304에서도
-  Projection 쿼리를 실행하며 네트워크 본문만 줄인다. 별도 변경 counter는 측정 전 도입하지 않는다.
+- ETag는 `MAX(updated_at)+COUNT`가 아니라 cursor 발급·만료 값을 제외한 canonical 의미 Projection에서
+  계산한 weak validator다. 첫 버전은 304에서도 Projection 쿼리를 실행하며 네트워크 본문만 줄인다.
+  304는 보드 내용이 같다는 뜻일 뿐 cursor TTL을 갱신하지 않는다. 별도 변경 counter는 측정 전 도입하지
+  않는다.
+- overflow queue는 3초 polling 대상이 아니다. cursor는 15분 후 만료하며 store·lane을 벗어나거나
+  만료·변조되면 400으로 실패한다. client는 local queue·ETag를 버리고 unconditional board snapshot을
+  정확히 한 번 새로 읽으며, 새 cursor로 queue를 자동 재시도하지 않는다. 빈 queue·stale board로
+  대체하지 않는다.
 - 상태 전이는 기존 서비스와 트랜잭션 경계를 재사용한다. 새 전이 로직을 만들지 않는다.
 - 외부 호출(알림)은 기존 경로대로 트랜잭션 밖 또는 이벤트로 처리한다.
 
@@ -122,6 +140,9 @@ POST /stores/{storeId}/orders/{orderReference}/transitions
 - 허용되지 않는 상태 전이: 409 또는 422로 구분한다. 두 경우를 같은 코드로 합치지 않는다.
 - 조회 실패: 503. 빈 보드나 stale 데이터로 대체하지 않는다.
 - Projection 조회·canonical hash 계산 실패: 503. 조건부 처리를 건너뛰어 full response를 반환하지 않는다.
+- overflow cursor `400 INVALID_REQUEST`: server는 cursor 검증 실패를 성공·빈 queue로 대체하지 않는다.
+  client는 보드 snapshot 단발 재조회로 새 cursor를 얻고 사용자의 재선택을 기다린다. 이 재조회 실패도
+  성공으로 위장하지 않는다.
 - 전이 후 알림 발송 실패는 전이 성공을 되돌리지 않는다. 알림 상태는 독립적으로 유지한다
   ([ADR-019](../../adr/ADR-019-notification-retry-and-manual-recovery.md)).
 
@@ -173,6 +194,11 @@ POST .../transitions
 ```
 
 - 응답 헤더에 `ETag`를 포함한다. 요청의 `If-None-Match`가 일치하면 `304`다.
+- 보드 `ETag`는 `W/"{sha256}"` weak validator다. cursor issuance/expiry는 hash에서 제외하므로
+  `304`가 cursor TTL·유효성 또는 response byte 동등성을 보장하지 않는다.
+- `StoreOrderBoard.overflow[]`는 lane·exact `overflowCount`·first queue cursor를 가진다. queue cursor
+  `400 INVALID_REQUEST` 뒤 browser는 main board를 unconditional로 한 번만 읽고, overflow request를
+  자동 재시도하지 않는다.
 - 기존 `PATCH /store-orders/{orderId}/status`는 전환 기간 동안 유지하고, 프론트엔드 전환 후 제거한다.
 - 이벤트 계약 변경 없음. 기존 전이 이벤트를 그대로 사용한다.
 
@@ -188,6 +214,7 @@ POST .../transitions
 8. 프론트엔드 점주 콘솔 전환(UUID 입력 제거, Polling 생명주기).
 9. 단일 매장은 바로 보드를 열고 다점포 계정은 접근 가능한 매장만 전환하는 상태 검증.
 10. runtime OpenAPI, 계약 테스트, runbook 갱신.
+11. review remediation: lane별 50건 snapshot, overflowCount/signed queue, 실제 production SQL 성능 증거.
 
 ## Required Tests
 
@@ -201,12 +228,17 @@ POST .../transitions
 - 두 요청이 동시에 같은 주문을 전이시킬 때 하나만 성공하고 다른 하나가 409인지
   PostgreSQL Testcontainers로 검증한다.
 - 허용되지 않는 전이가 409/422로 구분되는지 검증한다.
-- 활성 주문 50건 기준으로 보드 조회 SQL 수가 고정인지 검증한다.
+- 50/51/대규모 mixed backlog에서 기본 snapshot이 lane당 50건, line batch가 최대 200 주문으로 묶이는지
+  PostgreSQL Testcontainers로 검증한다.
+- overflowCount가 정확하고 signed store/lane cursor가 누락·중복 없이 다음 page를 반환하며, 변조·만료·다른
+  store/lane cursor는 400 및 repository query 미호출인지 검증한다.
 - 오늘 이후 픽업 `PAID`가 `PENDING_ACCEPTANCE` lane에 즉시 나타나고 deadline 순인지 검증한다.
 - 목록이 `pickupBusinessDate`별 `groups[]`로 반환되고 각 item의 날짜가 group key와 일치하는지 검증한다.
 - `PENDING_PAYMENT`와 종료 상태가 보드에서 제외되고, 나머지 lane이 픽업 시작 순인지 검증한다.
 - `EXPLAIN ANALYZE`로 인덱스 사용을 확인하고 추가 전후를 같은 조건에서 비교한다.
 - 변경이 없을 때 Projection 조회 후 `304`와 빈 response body가 반환되는지 검증한다.
+- cursor 재발급만으로 weak ETag가 바뀌지 않고, 304가 cursor TTL을 연장하지 않으며, cursor 400 뒤
+  browser가 새 snapshot을 정확히 한 번 읽고 queue를 자동 재시도하지 않는지 검증한다.
 - 주문 상태가 바뀌면 새 `ETag`와 `200`이 반환되는지 검증한다.
 - DB 변경 없이 2분·3분 경계를 넘을 때 `acceptancePhase`와 `ETag`가 바뀌는지 검증한다.
 - Projection 또는 hash 실패가 full response fallback이 아니라 503인지 검증한다.
@@ -234,6 +266,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 매장 권한 거부 수
 - DB CPU와 HikariCP active·pending
 - `ETag` 계산 실패 수
+- lane별 overflowCount distribution, queue page 수, snapshot/queue rows, response byte size와 ETag hash 시간
 
 ## Documentation Updates
 
@@ -275,6 +308,35 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   [Draft PR #68](https://github.com/kdh949/BeanFlow/pull/68)을 exact Plan 50 base로 생성했다. 생성 직후
   local/remote/PR head가 일치했고, Stack A #55/#57/#64/#65/#66/#67/#68의 정확한 open Draft topology와
   금지 branch/PR 부재를 검증한 뒤 shared migration-writer lease를 해제했다. merge·ready 전환은 하지 않았다.
+- 2026-08-14: PR #68 review가 기본 3초 polling query가 모든 실행 주문·line·ETag를 무제한 처리하고,
+  기존 performance fixture가 production mixed-state SQL을 대표하지 않는 점을 확인했다. 사용자 선택 A에
+  따라 BR-06·ADR-100·OpenAPI에 lane별 50건, exact overflowCount, signed on-demand queue 계약을 먼저
+  기록했다. 구현·검증·PR thread 해결은 이 revision의 남은 작업이다.
+- 2026-08-14: lane별 50건 `UNION ALL` snapshot, overflow-only exact count, 50건 keyset queue와 shared
+  production SQL builder를 구현했다. 첫 PostgreSQL integration run은 UUID Java natural ordering이
+  PostgreSQL `uuid` byte ordering과 달라 visible card가 queue에 다시 나타나는 문제를 드러냈고, unsigned
+  high/low-bit 비교로 PostgreSQL ordering을 맞춘 뒤 focused queue test를 통과시켰다. 전체 revision
+  검증은 아직 진행 중이다.
+- 2026-08-14: cursor가 snapshot마다 issuance/expiry 값을 바꾸므로 cursor를 포함한 strong ETag가 3초
+  polling을 매번 cache miss로 만드는 계약 충돌을 확인했다. 사용자 선택에 따라 cursor를 제외한 weak
+  semantic ETag와 cursor `400` 뒤 unconditional snapshot 단발 재조회 계약을 ADR·OpenAPI·runbook에
+  기록하고 server/frontend 회귀 테스트를 추가 중이다.
+- 2026-08-14: weak ETag focused Gradle rerun은 새 integration test의 Kotlin string-template escape 문법
+  오류로 `compileTestKotlin`에서 실패했다. production code가 실행되기 전의 test compile failure였고,
+  interpolation 안의 escape를 제거해 고쳤다. 그 뒤 `StoreOrderBoardEtagTest`와 bounded queue PostgreSQL
+  integration test, `npm test -- StoreOrderBoard`(8 tests)가 통과했다. final integration run은 200 visible
+  cards, 76,889 response bytes, 103,913,041 ns ETag timer를 기록했고, 직전 run의 76,890 bytes/
+  22,268,250 ns와 함께 variability를 성능 증거에 남겼다. 전체 revision 검증은 아직 진행 중이다.
+- 2026-08-14: `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`, `git diff --check`,
+  `./gradlew --no-daemon spotlessCheck`, `npm test`(6 files/37 tests)는 통과했다. frontend typecheck/build는
+  처음에는 새 Vitest mock-call assertion 두 곳의 `never` destructuring 오류도 보고했지만 이를 고쳤고,
+  재실행에서는 Plan 80/90 소유의 기존 CSRF header 누락 세 곳만 남았다. backend full build는 다음 검증이다.
+- 2026-08-14: weak ETag revision의 첫 backend full build는 1,102 tests 중 8건이 실패했다. Plan 20의
+  test-only Customer/Merchant browser loader가 Plan 30/40 production loader와 같은 bean name을 사용해
+  `BeanDefinitionOverrideException`을 낸 inherited stack integration failure였다. test double을 없애고
+  matching credentialVersion의 ACTIVE Customer/Merchant account를 seed하는 parent Plan 30/40 보정을
+  만들었다. 이 Plan에는 같은 final fixture를 반영했으며, 갱신된 Plan 50 parent merge 뒤 clean full build를
+  최종 gate로 다시 실행한다.
 
 ## Surprises & Discoveries
 
@@ -295,9 +357,28 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 첫 전체 build에서 Support timeline의 `unlinked_at=now()`가 매우 드물게 `linked_at`보다 1.382ms 빨라
   DB check를 위반했다. 정책이나 constraint를 낮추지 않고 `linked_at + interval '1 microsecond'`로
   시간 순서를 결정적으로 만들었다.
-- 20,000-row 단일 측정에서 두 read plan은 Seq Scan+sort에서 Index Only Scan으로 바뀌었지만, 1,000-row
-  insert와 `PAID→ACCEPTED` update sample은 각각 약 31.0%, 31.3% 느려졌다. 이 결과는 emulated local
-  sample이며 성능 향상·SLA 주장이 아니다.
+- 최초 20,000-row 단일-lane evidence의 Index Only Scan·약 31% write 비용은 actual board SQL 증거가
+  아니므로 superseded한다. shared production SQL의 final 20,000-row run은 four-lane primary 17.451 ms →
+  9.148 ms, PAID overflow page 6.637 ms → 2.391 ms를 기록했다. overflow count는 15.006 ms →
+  14.751 ms였지만 직전 emulated run은 7.758 ms → 18.139 ms였고, 1,000-row insert/transition final sample은
+  +225.1%/+245.3%(직전 +90.4%/+82.1%)였다. 모두 emulated local sample이며 성능 향상·SLA 주장이 아니다.
+- 최초 20,000-row evidence는 실제 mixed-state board SQL과 unbounded card/line/ETag 비용을 측정하지
+  않았다. review remediation에서 lane-bounded query와 overflow count/keyset page를 같은 fixture로 측정해
+  기존 결과와 구분한다.
+- signed overflow cursor에는 issuance·expiry가 포함된다. 이를 response byte 기준 strong ETag에 넣으면
+  내용이 같은 snapshot도 매 poll마다 새 tag가 된다. 사용자 선택 weak ETag는 이 값을 제외하지만, 304가
+  cursor lease를 연장하지 않는다는 browser recovery 계약이 함께 필요하다.
+- Plan 60 범위의 executable k6 scenario와 authenticated multi-Store target은 저장소/현재 workspace에
+  없다. concurrent 3-second polling, DB CPU, HikariCP, p95/p99는 이번 revision에서 **Not run**으로
+  performance evidence에 기록한다. 이 부재를 performance pass로 해석하지 않는다.
+- frontend typecheck의 새 overflow UI test assertion은 overloaded OpenAPI client mock의 calls 타입을
+  `never`로 추론해 compile을 막았다. assertion을 `Array<[string, unknown?]>`로 명시해 Plan 60 regression을
+  제거했다. 이후 남은 세 CSRF 오류는 `ConsolePages.tsx:59`, `CustomerPages.tsx:297,388`이며 Plan 80/90
+  범위라 이 revision에서 수정하지 않는다.
+- weak ETag revision의 첫 full build failure는 주문보드 코드가 아니라 parent stack의 outdated
+  browser-loader test double이었다. Customer와 Merchant 모두 production loader가 존재하는 final stack에서는
+  fake bean을 유지할 이유가 없으며, 실제 ACTIVE account와 matching credentialVersion을 seed해야 same-browser
+  cookie isolation이 구현 경로를 우회하지 않는다.
 
 ## Decision Log
 
@@ -310,6 +391,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-14 | action에 client가 본 `expectedStatus`를 묶고, stale/경쟁 상태는 409, 불가능한 action/status 조합은 422로 구분 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), [Error Catalog](../../api/error-catalog.md) |
 | 2026-08-14 | 디자인의 세 열을 유지하면서 Domain `ACCEPTED`와 `PREPARING`을 화면의 제조 중 열로 합친다 | 첨부 ZIP `kit/PosScreen.jsx`, 이 plan |
 | 2026-08-14 | Plan 40의 실제 top-level 매장 배열을 canonical `MerchantStoreList` 계약으로 유지한다 | target/runtime OpenAPI, `StoreOrderBoardOpenApiContractTest` |
+| 2026-08-14 | 기본 3초 snapshot은 lane별 50건으로 제한하고, 초과 실행 주문은 exact count와 signed on-demand queue로 누락 없이 노출한다 | [BR-06](../../product/business-policy-decisions.md), [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), 사용자 선택 A |
+| 2026-08-14 | cursor issuance/expiry를 제외한 weak ETag를 사용하고, cursor 400 뒤 main board snapshot을 unconditional로 정확히 한 번 다시 읽는다. 304는 cursor TTL 갱신이 아니다 | [ADR-100](../../adr/ADR-100-store-order-board-read-model.md), [ADR-102](../../adr/ADR-102-polling-before-sse.md), OpenAPI, 사용자 선택 |
 
 ## Outcomes & Retrospective
 
@@ -317,12 +400,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   접수 대기/제조 중/준비 완료 열에서 확인해 공개 주문번호로 전이할 수 있다.
 - 보드는 고객·결제 식별자를 노출하지 않고 매 요청 store scope를 확인한다. 조회·hash 장애는 빈 보드나
   stale 응답이 아닌 503이며, 권한 상실은 기존 보드를 즉시 제거한다.
-- canonical projection ETag, hidden-tab polling 정지, 304 재사용과 상태 충돌 후 새로고침으로 polling의
-  첫 운영 계약을 닫았다. SSE 전환 여부는 ADR-102 재검토 조건 전에는 열지 않는다.
+- weak semantic ETag, hidden-tab polling 정지, 304 재사용과 상태 충돌 후 새로고침으로 polling의 첫
+  운영 계약을 닫는다. cursor TTL은 304로 연장되지 않으며 cursor 400은 새 snapshot 한 번으로 복구한다.
+  SSE 전환 여부는 ADR-102 재검토 조건 전에는 열지 않는다.
 - V56 read index 효과와 write amplification을 같은 PostgreSQL fixture에서 함께 기록했다. native mixed-load
   p95/p99는 측정하지 않았으며 production 성능으로 일반화하지 않는다.
-- Plan 60 필수 검증은 모두 통과했다. 추가 frontend 전체 build의 기존 Plan 80/90 CSRF 세 오류는
-  미해결로 명시하며, 이 완료가 해당 후속 화면의 build 완료를 뜻하지 않는다.
+- 원래 Plan 60 검증은 통과했지만, PR #68 review remediation의 focused/full 재검증은 이 문서의 현재
+  revision에서 진행 중이다. 추가 frontend 전체 build의 기존 Plan 80/90 CSRF 세 오류는 미해결로
+  명시하며, 이 완료가 해당 후속 화면의 build 완료를 뜻하지 않는다.
 - Plan 60 Draft PR과 Stack A의 정확한 seven-PR topology까지 검증했다. Stack A 내부 PR은 모두 open
   Draft로 유지하며 이 결과는 merge 또는 deployment 완료를 뜻하지 않는다.
 
@@ -332,3 +417,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-14: 구현 시작과 상태 전이 precondition·종료 응답 계약을 반영.
 - 2026-08-14: 구현·성능·브라우저·전체 회귀 결과와 실패 이력을 기록하고 완료 처리.
 - 2026-08-14: Draft PR #68, final Stack A topology 검증과 migration-writer lease 해제를 기록.
+- 2026-08-14: PR #68 performance review remediation의 lane-bound/overflow queue 계약을 기록.
+- 2026-08-14: weak ETag와 cursor 400 단발 snapshot recovery의 이유·trade-off·검증 계약을 기록.

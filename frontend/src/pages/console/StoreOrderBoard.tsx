@@ -9,8 +9,12 @@ import { shortDateTime } from "../../lib/format";
 type MerchantStore = components["schemas"]["MerchantStore"];
 type Board = components["schemas"]["StoreOrderBoard"];
 type BoardItem = components["schemas"]["StoreOrderBoardItem"];
+type BoardOverflow = components["schemas"]["StoreOrderBoardOverflow"];
+type BoardOverflowPage = components["schemas"]["StoreOrderBoardOverflowPage"];
 type BoardAction = components["schemas"]["StoreOrderAction"];
 type ExpectedStatus = components["schemas"]["StoreOrderActionRequest"]["expectedStatus"];
+type BoardLane = BoardOverflow["lane"];
+type OverflowPageState = Pick<BoardOverflowPage, "items" | "nextCursor">;
 
 const POLL_INTERVAL_MS = 3_000;
 const columns = [
@@ -25,6 +29,13 @@ const actionLabels: Record<BoardAction, string> = {
   START_PREPARING: "제조 시작",
   MARK_READY: "준비 완료",
   COMPLETE: "픽업 완료",
+};
+
+const laneLabels: Record<BoardLane, string> = {
+  PENDING_ACCEPTANCE: "접수 대기",
+  ACCEPTED: "접수 완료",
+  PREPARING: "제조 중",
+  READY: "준비 완료",
 };
 
 async function requestStores(): Promise<MerchantStore[]> {
@@ -48,7 +59,13 @@ async function requestBoard(storeId: string, etag: string | null) {
   } as const;
 }
 
-function sortedBoard(groups: Board["groups"]): Board {
+async function requestOverflow(storeId: string, lane: BoardLane, cursor: string): Promise<BoardOverflowPage> {
+  return unwrap(await api.GET("/stores/{storeId}/orders/overflow", {
+    params: { path: { storeId }, query: { lane, cursor } },
+  }));
+}
+
+function sortedBoard(groups: Board["groups"], overflow: Board["overflow"]): Board {
   return {
     groups: [...groups]
       .map((group) => ({
@@ -58,6 +75,7 @@ function sortedBoard(groups: Board["groups"]): Board {
       }))
       .filter((group) => group.items.length > 0)
       .sort((left, right) => left.pickupBusinessDate.localeCompare(right.pickupBusinessDate)),
+    overflow,
   };
 }
 
@@ -71,7 +89,7 @@ export function reconcileBoardItem(board: Board, changed: BoardItem): Board {
     if (existing) existing.items.push(changed);
     else groups.push({ pickupBusinessDate: changed.pickupBusinessDate, items: [changed] });
   }
-  return sortedBoard(groups);
+  return sortedBoard(groups, board.overflow);
 }
 
 export function StoreOrderBoardPage() {
@@ -88,6 +106,8 @@ export function StoreOrderBoardPage() {
   const [busyReference, setBusyReference] = useState<string | null>(null);
   const [rejectingReference, setRejectingReference] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [overflowPages, setOverflowPages] = useState<Partial<Record<BoardLane, OverflowPageState>>>({});
+  const [overflowLoadingLane, setOverflowLoadingLane] = useState<BoardLane | null>(null);
   const etagRef = useRef<string | null>(null);
   const transitionIntent = useRef(new SubmissionIntent());
 
@@ -137,6 +157,7 @@ export function StoreOrderBoardPage() {
         if (disposed) return;
         if (!snapshot.unchanged) {
           setBoard(snapshot.board);
+          setOverflowPages({});
           etagRef.current = snapshot.etag;
         }
         setError(null);
@@ -193,6 +214,7 @@ export function StoreOrderBoardPage() {
     setForbiddenStoreName(null);
     setRejectingReference(null);
     setRejectionReason("");
+    setOverflowPages({});
   }
 
   async function transition(item: BoardItem, action: BoardAction, reason?: string) {
@@ -216,6 +238,7 @@ export function StoreOrderBoardPage() {
       const changed = unwrap(result);
       transitionIntent.current.complete();
       setBoard((current) => current ? reconcileBoardItem(current, changed) : current);
+      setOverflowPages({});
       etagRef.current = null;
       setRejectingReference(null);
       setRejectionReason("");
@@ -238,6 +261,37 @@ export function StoreOrderBoardPage() {
       }
     } finally {
       setBusyReference(null);
+    }
+  }
+
+  async function loadOverflow(overflow: BoardOverflow, cursor: string, append: boolean) {
+    if (!selectedStoreId || overflowLoadingLane) return;
+    setOverflowLoadingLane(overflow.lane);
+    setError(null);
+    setNotice(null);
+    try {
+      const page = await requestOverflow(selectedStoreId, overflow.lane, cursor);
+      setOverflowPages((current) => {
+        const existingItems = append ? current[overflow.lane]?.items ?? [] : [];
+        return {
+          ...current,
+          [overflow.lane]: {
+            items: [...existingItems, ...page.items],
+            nextCursor: page.nextCursor,
+          },
+        };
+      });
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.status === 400 && failure.code === "INVALID_REQUEST") {
+        setOverflowPages({});
+        etagRef.current = null;
+        setNotice("이전 작업 목록이 갱신되었습니다. 다시 열어 주세요.");
+        setRefreshNonce((value) => value + 1);
+      } else {
+        setError(failure);
+      }
+    } finally {
+      setOverflowLoadingLane(null);
     }
   }
 
@@ -290,6 +344,7 @@ export function StoreOrderBoardPage() {
         <section className="order-board" aria-label={`${selectedStore?.storeName ?? "선택한 매장"} 실행 주문`}>
           {columns.map((column) => {
             const items = allItems.filter((item) => item.lane && (column.lanes as readonly string[]).includes(item.lane));
+            const overflow = board.overflow.filter((entry) => (column.lanes as readonly string[]).includes(entry.lane));
             return (
               <section className="order-board-column" key={column.key} aria-labelledby={`board-column-${column.key}`}>
                 <header>
@@ -311,6 +366,55 @@ export function StoreOrderBoardPage() {
                       onAction={(action, reason) => void transition(item, action, reason)}
                     />
                   ))}
+                  {overflow.map((entry) => {
+                    const page = overflowPages[entry.lane];
+                    const loading = overflowLoadingLane === entry.lane;
+                    const laneLabel = laneLabels[entry.lane];
+                    return (
+                      <section className="order-board-overflow" key={entry.lane} aria-label={`${laneLabel} 이전 작업`}>
+                        <div className="order-board-overflow-summary">
+                          <p>{laneLabel} 이전 작업 <strong>{entry.overflowCount}건</strong></p>
+                          {!page ? (
+                            <button
+                              className="button button-ghost"
+                              type="button"
+                              disabled={Boolean(overflowLoadingLane)}
+                              onClick={() => void loadOverflow(entry, entry.nextCursor, false)}
+                            >
+                              {loading ? "불러오는 중" : `오래된 ${laneLabel} 작업 ${entry.overflowCount}건 보기`}
+                            </button>
+                          ) : null}
+                        </div>
+                        {page ? (
+                          <div className="order-board-overflow-cards">
+                            {page.items.map((item) => (
+                              <OrderCard
+                                key={item.orderReference}
+                                item={item}
+                                busy={busyReference === item.orderReference}
+                                rejecting={rejectingReference === item.orderReference}
+                                rejectionReason={rejectionReason}
+                                onRejectStart={() => { setRejectingReference(item.orderReference); setRejectionReason(""); }}
+                                onRejectCancel={() => { setRejectingReference(null); setRejectionReason(""); }}
+                                onReasonChange={setRejectionReason}
+                                onAction={(action, reason) => void transition(item, action, reason)}
+                              />
+                            ))}
+                            {page.nextCursor ? (
+                              <button
+                                className="button button-ghost"
+                                type="button"
+                                disabled={Boolean(overflowLoadingLane)}
+                                onClick={() => void loadOverflow(entry, page.nextCursor as string, true)}
+                              >
+                                {loading ? "불러오는 중" : "이전 작업 더 보기"}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </section>
+                    );
+                  })}
                 </div>
               </section>
             );

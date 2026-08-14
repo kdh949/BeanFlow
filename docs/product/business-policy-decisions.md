@@ -203,11 +203,18 @@
 - **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 재고·슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
 - **Store Board Visibility Amendment (2026-08-12):** 수락 제한시간은 픽업 영업일과 무관하므로 점주
   실행 주문보드는 오늘 주문만으로 제한하지 않는다. 해당 매장의 모든 `PAID`, `ACCEPTED`,
-  `PREPARING`, `READY`를 픽업 영업일별로 반환한다. `PENDING_PAYMENT`와 종료 상태는 포함하지 않는다.
-  API lane `PENDING_ACCEPTANCE`는 Domain의 `PAID`를 표시하는 이름일 뿐 새 Order 상태가 아니다.
-  `PENDING_ACCEPTANCE` lane은 `(acceptanceDeadlineAt, id)` 오름차순, 나머지 lane은
-  `(pickupWindowStartSnapshot, id)` 오름차순이다. 날짜 탐색 UI가 있어도 처리할 `PAID` 주문을
-  숨기지 않는다.
+  `PREPARING`, `READY`는 보드 또는 오래된 작업 큐에서 접근 가능해야 한다. `PENDING_PAYMENT`와 종료 상태는
+  포함하지 않는다. API lane `PENDING_ACCEPTANCE`는 Domain의 `PAID`를 표시하는 이름일 뿐 새 Order 상태가
+  아니다. `PENDING_ACCEPTANCE` lane은 `(acceptanceDeadlineAt, id)` 오름차순, 나머지 lane은
+  `(pickupWindowStartSnapshot, id)` 오름차순이다. 날짜 탐색 UI가 있어도 처리할 `PAID` 주문을 숨기지
+  않는다.
+- **Bounded Board and Overflow Queue Amendment (2026-08-14):** 3초 conditional polling의 기본 보드는
+  lane마다 앞선 50건만 반환한다. 51건 이상인 lane은 정확한 `overflowCount`와 해당 매장·lane에 서명된
+  cursor를 함께 반환한다. UI는 이 상태를 빈 lane이나 완료로 표현하지 않고, 사용자가 요청할 때만
+  `GET /stores/{storeId}/orders/overflow`의 같은 lane keyset page(최대 50건)를 표시한다. 따라서
+  오래된 실행 주문은 polling payload에서만 분리될 뿐, 삭제·종료·권한 상실로 해석되지 않는다. cursor가
+  만료·변조되면 400으로 거부하고 새 보드 snapshot을 받아야 하며, overflow queue는 3초 polling 대상이
+  아니다.
 - **Expired Benefit Restoration Amendment (2026-07-30):** 매장 거절 시 원 쿠폰 또는
   PointLot이 아직 유효하면 원 혜택으로 복원한다. 이미 만료됐으면 기본적으로 같은
   가치와 원 발급 reference를 보존한 새 CouponIssuance 또는 PointLot을 거절 시각부터

@@ -977,14 +977,20 @@ else:
         sys.exit(1)
 
     store_order_board = spec['components']['schemas']['StoreOrderBoard']
+    store_order_board_overflow = spec['components']['schemas']['StoreOrderBoardOverflow']
+    store_order_board_overflow_page = spec['components']['schemas']['StoreOrderBoardOverflowPage']
     board_group = spec['components']['schemas']['StoreOrderBoardDateGroup']
     if (
-        store_order_board.get('required') != ['groups']
+        store_order_board.get('required') != ['groups', 'overflow']
         or store_order_board['properties']['groups']['items'].get('$ref') != '#/components/schemas/StoreOrderBoardDateGroup'
+        or store_order_board['properties']['overflow']['items'].get('$ref') != '#/components/schemas/StoreOrderBoardOverflow'
+        or store_order_board_overflow.get('required') != ['lane', 'overflowCount', 'nextCursor']
+        or store_order_board_overflow_page.get('required') != ['lane', 'items', 'nextCursor']
+        or store_order_board_overflow_page['properties']['items'].get('maxItems') != 50
         or set(board_group.get('required', [])) != {'pickupBusinessDate', 'items'}
         or 'same pickupBusinessDate' not in board_group['properties']['items'].get('description', '')
     ):
-        print('Store order board must preserve the ADR-100 pickup-business-date grouping contract.', file=sys.stderr)
+        print('Store order board must preserve ADR-100 grouping and bounded overflow queue contracts.', file=sys.stderr)
         sys.exit(1)
 
     runtime_schemas = runtime_spec.get('components', {}).get('schemas', {})
