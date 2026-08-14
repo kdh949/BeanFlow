@@ -33,6 +33,7 @@ export default defineConfig({
     projects: [{
       extends: true,
       test: {
+        name: "unit",
         environment: "jsdom",
         setupFiles: ["./src/test/setup.ts"],
         include: ["src/**/*.test.{ts,tsx}"]
@@ -52,7 +53,7 @@ export default defineConfig({
           headless: true,
           api: {
             host: "127.0.0.1",
-            port: 63316,
+            port: Number(process.env.STORYBOOK_TEST_PORT ?? 63320),
             strictPort: true
           },
           provider: playwright({}),

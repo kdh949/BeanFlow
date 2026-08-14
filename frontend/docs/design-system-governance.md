@@ -1,7 +1,7 @@
 # BeanFlow Design System & Storybook Governance
 
 > Intended repository path: `frontend/docs/design-system-governance.md`
-> Status: Proposed
+> Status: Accepted (2026-08-15)
 > Scope: every change under `frontend/src/**` that affects rendered UI
 
 ## 1. Purpose

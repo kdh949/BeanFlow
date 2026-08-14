@@ -27,6 +27,10 @@ For every UI plan, implementation, review, or visual change, use the `beanflow_s
 5. Never infer undocumented props or variants.
 6. After changes, use `preview-stories`, `get-changed-stories` when available, and `run-story-tests`.
 
+The repository transport is HTTP MCP at `http://localhost:6006/mcp`, declared in `frontend/.mcp.json`.
+Start Storybook from `frontend/` with `npm run storybook`; do not point MCP at static `storybook-static/` output.
+See `docs/storybook-runbook.md` for startup, recovery, and validation order.
+
 If Storybook or the MCP server is unavailable, do not silently continue by guessing. Restore it or report the blocker. Diagnosis may continue, but UI implementation must wait.
 
 ## Before writing UI code
@@ -78,11 +82,12 @@ After selection, promote only the chosen design to `Patterns/` or `Pages/`, impl
 Run and report exact results for all relevant commands:
 
 - `npm run typecheck`
-- `npm run test`
+- `npm run test:unit`
+- `npm run check:type-baseline` while MD-2026-014 remains active
+- `npm run check:design`
 - `npm run build-storybook`
 - `npm run build`
 - `npm run test:sites`
-- the repository's design-adherence check
 - Storybook MCP `run-story-tests`
 
 Do not claim a check passed unless it ran successfully. Report pre-existing and environment-specific failures separately.

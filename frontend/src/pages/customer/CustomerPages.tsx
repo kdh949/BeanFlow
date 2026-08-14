@@ -21,6 +21,7 @@ import { EmptyState, ErrorState, LoadingState, StatusBadge, SuccessMark } from "
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { requestTossStandardPayment } from "../../payment/toss";
+import { Button, ButtonLink } from "../../design-system";
 
 type NearbyStore = components["schemas"]["NearbyStore"];
 type Menu = components["schemas"]["Menu"];
@@ -260,9 +261,9 @@ export function StoreCatalogPage() {
             ))}
           </div></div>
           {error ? <ErrorState error={error} /> : null}
-          <button className="button button-primary button-block button-xl" type="button" disabled={!selectedSlot || submitting} onClick={() => void createOrder()}>
+          <Button block size="xl" type="button" disabled={!selectedSlot} loading={submitting} onClick={() => void createOrder()}>
             {submitting ? "주문을 만드는 중" : `${won.format(selectedMenu.basePriceKrw * quantity)} 주문하기`}
-          </button>
+          </Button>
         </section>
       ) : null}
     </div>
@@ -345,9 +346,9 @@ export function CheckoutPage() {
       </section>
       {order.reservationExpiresAt ? <div className="lease-note"><Timer size={16} /> {shortDateTime.format(new Date(order.reservationExpiresAt))}까지 결제를 완료해 주세요.</div> : null}
       {error ? <ErrorState error={error} /> : null}
-      <button className="button button-primary button-block button-xl" type="button" disabled={paying || order.state !== "PENDING_PAYMENT"} onClick={() => void pay()}>
+      <Button block size="xl" type="button" disabled={order.state !== "PENDING_PAYMENT"} loading={paying} onClick={() => void pay()}>
         {paying ? "Toss 결제창을 여는 중" : `${won.format(order.payableKrw)} 결제하기`}
-      </button>
+      </Button>
       <p className="checkout-legal">결제 버튼을 누르면 주문 내용과 결제 진행에 동의합니다.</p>
     </div>
   );
@@ -431,7 +432,7 @@ export function PaymentSuccessPage() {
         {payment.recovery ? <div><span>복구 상태</span><StatusBadge state={payment.recovery.state} /></div> : null}
       </div>
       {error ? <ErrorState error={error} retry={() => void refresh()} /> : null}
-      <Link className="button button-primary button-block button-xl" to="/app/orders">주문 상태 보기</Link>
+      <ButtonLink block size="xl" to="/app/orders">주문 상태 보기</ButtonLink>
     </div>
   );
 }
@@ -479,7 +480,7 @@ export function PaymentFailPage() {
         <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
         <StatusBadge state={payment.approvalState} />
         {error ? <ErrorState error={error} retry={() => void load()} /> : null}
-        <Link className="button button-secondary button-block" to="/app/orders">주문 상태 보기</Link>
+        <ButtonLink block variant="secondary" to="/app/orders">주문 상태 보기</ButtonLink>
       </div>
     );
   }
@@ -491,9 +492,9 @@ export function PaymentFailPage() {
       <h1>결제를 완료하지 못했어요</h1>
       <p>{message}</p>
       <code className="failure-code">{code}</code>
-      <Link className="button button-primary button-block button-xl" to={retryable ? `/app/checkout/${payment.orderId}` : "/app/orders"}>
+      <ButtonLink block size="xl" to={retryable ? `/app/checkout/${payment.orderId}` : "/app/orders"}>
         {retryable ? "주문서로 돌아가기" : "주문 상태 보기"}
-      </Link>
+      </ButtonLink>
       <Link className="text-link" to="/app/help">도움이 필요해요</Link>
     </div>
   );

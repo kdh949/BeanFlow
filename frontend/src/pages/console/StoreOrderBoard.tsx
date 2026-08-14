@@ -5,6 +5,7 @@ import { api, ApiRequestError, merchantCsrfToken, SubmissionIntent, unwrap } fro
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime } from "../../lib/format";
+import { Button, FeedbackState } from "../../design-system";
 
 type MerchantStore = components["schemas"]["MerchantStore"];
 type Board = components["schemas"]["StoreOrderBoard"];
@@ -321,11 +322,11 @@ export function StoreOrderBoardPage() {
       ) : null}
 
       {forbiddenStoreName ? (
-        <section className="state-card state-error" role="alert">
-          <AlertTriangle size={25} />
-          <strong>매장 접근 권한이 변경되었습니다</strong>
-          <span>{forbiddenStoreName} 주문 보드를 더 이상 표시할 수 없습니다. 접근 가능한 매장을 다시 선택해 주세요.</span>
-        </section>
+        <FeedbackState
+          kind="error"
+          title="매장 접근 권한이 변경되었습니다"
+          description={`${forbiddenStoreName} 주문 보드를 더 이상 표시할 수 없습니다. 접근 가능한 매장을 다시 선택해 주세요.`}
+        />
       ) : null}
       {notice ? <div className="board-notice" role="status" aria-label="주문 상태 갱신 안내"><RefreshCw size={17} />{notice}</div> : null}
       {boardLoading && !board && !forbiddenStoreName ? <LoadingState label="실행 주문을 불러오는 중" /> : null}
@@ -375,14 +376,14 @@ export function StoreOrderBoardPage() {
                         <div className="order-board-overflow-summary">
                           <p>{laneLabel} 이전 작업 <strong>{entry.overflowCount}건</strong></p>
                           {!page ? (
-                            <button
-                              className="button button-ghost"
+                            <Button
+                              variant="ghost"
                               type="button"
                               disabled={Boolean(overflowLoadingLane)}
                               onClick={() => void loadOverflow(entry, entry.nextCursor, false)}
                             >
                               {loading ? "불러오는 중" : `오래된 ${laneLabel} 작업 ${entry.overflowCount}건 보기`}
-                            </button>
+                            </Button>
                           ) : null}
                         </div>
                         {page ? (
@@ -401,14 +402,14 @@ export function StoreOrderBoardPage() {
                               />
                             ))}
                             {page.nextCursor ? (
-                              <button
-                                className="button button-ghost"
+                              <Button
+                                variant="ghost"
                                 type="button"
                                 disabled={Boolean(overflowLoadingLane)}
                                 onClick={() => void loadOverflow(entry, page.nextCursor as string, true)}
                               >
                                 {loading ? "불러오는 중" : "이전 작업 더 보기"}
-                              </button>
+                              </Button>
                             ) : null}
                           </div>
                         ) : null}
@@ -450,16 +451,16 @@ function OrderCard({ item, busy, rejecting, rejectionReason, onRejectStart, onRe
       {item.acceptancePhase === "TIMEOUT_PENDING" ? <p className="acceptance-warning"><AlertTriangle size={15} /> 자동 거절 처리를 확인 중입니다.</p> : null}
       <div className="order-card-actions">
         {item.allowedActions.map((action) => action === "REJECT" ? (
-          <button key={action} className="button button-ghost button-danger" type="button" disabled={busy} onClick={onRejectStart}>{actionLabels[action]}</button>
+          <Button key={action} variant="danger" type="button" disabled={busy} onClick={onRejectStart}>{actionLabels[action]}</Button>
         ) : (
-          <button key={action} className="button button-primary" type="button" disabled={busy} onClick={() => onAction(action)}>{busy ? "처리 중" : actionLabels[action]}</button>
+          <Button key={action} type="button" loading={busy} onClick={() => onAction(action)}>{busy ? "처리 중" : actionLabels[action]}</Button>
         ))}
       </div>
       {rejecting ? (
         <form className="order-reject-form" onSubmit={(event) => { event.preventDefault(); onAction("REJECT", rejectionReason.trim()); }}>
           <label htmlFor={`reject-${item.orderReference}`}>거절 사유</label>
           <textarea id={`reject-${item.orderReference}`} value={rejectionReason} onChange={(event) => onReasonChange(event.target.value)} required maxLength={500} />
-          <div><button className="button button-ghost" type="button" onClick={onRejectCancel}>취소</button><button className="button button-secondary" type="submit" disabled={busy || !rejectionReason.trim()}>거절 확정</button></div>
+          <div><Button variant="ghost" type="button" onClick={onRejectCancel}>취소</Button><Button variant="secondary" type="submit" disabled={busy || !rejectionReason.trim()}>거절 확정</Button></div>
         </form>
       ) : null}
     </article>

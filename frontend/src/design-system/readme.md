@@ -1,205 +1,85 @@
 # BeanFlow Design System
 
-BeanFlow는 **다점포 카페의 선주문·결제·정산·리워드 플랫폼**입니다. 점심시간 주문 폭주, 중복 결제, 한정 쿠폰 동시 발급, 부분 환불, 정산 조정, 이의제기까지 실제로 처리하는 "운영 가능한 거래 시스템"이며, 고객용 모바일 웹과 점주용 PC 웹 두 개의 표면을 가집니다.
-
-이 디자인 시스템은 두 표면이 같은 언어로 말하게 만드는 토큰·컴포넌트·UI 킷 모음입니다.
-
-## 제품 표면
-
-| 표면 | 사용자 | 핵심 과업 |
-| --- | --- | --- |
-| **고객 앱** (모바일 웹, 420px) | 직장인·인근 고객 | 가까운 매장 찾기, 선주문, 픽업 슬롯 선택, 결제·결제수단 관리, 포인트 적립/사용/유효기간, 프로모션·쿠폰, 준비 완료 알림, 빠른 재주문, 충전식 카드·선불 지갑 |
-| **점주 콘솔** (PC 웹, 1280px+) | 다점포 점주·매니저 | POS 주문보드, 기초 재고 관리, 정산 조정·이의제기, 기초 매출 분석, 점주 AI 인사이트 |
-
-## 도메인 사실 — 문구가 어겨선 안 되는 규칙
-
-카피 예시를 쓸 때 이 사실을 바꾸지 마세요. 실제 정책 문서(`business-policy-decisions.md`)에서 온 값입니다.
-
-| 주제 | 사실 |
-| --- | --- |
-| 고객 취소 | 매장이 수락하기 전까지만, 주문 **전체**만, 주문한 고객 본인이 직접. 승인 절차 없이 바로 확정 |
-| 취소 창 | 결제 전은 예약 5분, 결제 후는 매장 수락 기한까지 최대 3분 |
-| 부분 환불 | 품목 단위 환불은 매장·운영자만 실행. 고객은 부분 취소를 요청할 수 없음 |
-| 환불 금액 | 주문할 때 정해진 품목별 배분을 그대로 따름. 쿠폰 할인액은 현금으로 돌려주지 않음 |
-| 취소 상세 사유 | 고객이 적은 자유 서술은 매장·운영자 어느 쪽에도 보여주지 않음 |
-| 정산 | 픽업 완료일 기준 일별 명세. 확정된 회차는 고치지 않고 다음 회차 조정으로 반영 |
-| 이의제기 | 정산 확정 다음 날부터 14일. 접수돼도 분쟁 금액만 빠지고 나머지는 정상 확정 |
-
----
-
-## 소스 자료 (Sources)
-
-이 시스템은 **업로드된 로고 1점 + 서면 제품 설명**만을 근거로 만들었습니다. 코드베이스, Figma 파일, 기존 화면, 슬라이드 덱은 제공되지 않았습니다.
-
-- `uploads/BeanFlow_logo.png` — 원본 로고 (1536×1024, 투명 배경). 여기서 `assets/logo-full.png`, `logo-mark.png`, `logo-wordmark.png`를 잘라냈고, 브랜드 컬러(에스프레소 `#47211A`, 카라멜 스트릭 `#F5A85A`)를 픽셀에서 직접 샘플링했습니다.
-- 제품 설명(기능 목록)은 본 문서 상단 표로 정리.
-
-> **주의:** 실제 제품 화면이나 기존 컴포넌트 라이브러리를 참고하지 못했으므로, 컴포넌트 인벤토리와 UI 킷은 "기능 목록에서 도출한 합리적 구성"입니다. 실제 화면/코드/Figma가 있다면 붙여 주세요 — 그 쪽이 항상 정답입니다.
-
----
-
-## CONTENT FUNDAMENTALS — 카피 원칙
-
-**언어**: 한국어가 기본. 숫자·금액·시간은 아라비아 숫자 + 한국식 표기(`12,800원`, `12:20`, `7 / 10잔`). 영어는 브랜드명(BeanFlow)과 POS 같은 고유 약어에만.
-
-**어조**: 정중한 해요체. 격식(합니다체)은 정산·법적 고지 등 사무적 맥락에만 제한적으로 씁니다. 명령형 대신 안내형.
-
-- ✅ `줄 서지 않는 점심, 11분 뒤에 준비돼요`
-- ✅ `매장이 수락하기 전까지 무료로 취소할 수 있어요`
-- ⛔ `주문을 취소하십시오` / `Order Cancelled`
-
-**사용자가 모르는 내부 사정을 설명하지 않습니다.** 스냅샷·원장·감사 기록·멱등성 같은 구현 어휘는 물론, “이 화면에서 할 수 없는 일”처럼 정책을 나열하는 카드도 넣지 않습니다. 화면은 지금 할 수 있는 일만 말합니다.
-
-- ✅ `오트 라떼 1잔은 07-30에 이미 환불돼 선택할 수 없어요`
-- ⛔ `금액은 새로 계산하지 않고 주문 확정 시 저장한 배분 스냅샷을 따릅니다`
-- ⛔ `사유 없는 수동 환불은 실행되지 않아요. 실행자·시각·전후 금액이 감사 기록으로 남습니다`
-
-**시스템 시점이 아닌 사람 시점으로 씁니다.** 진입·노출·갱신·비활성화 같은 말은 누가 무엇을 보게 되는지로 바꿉니다.
-
-- ✅ `고객이 다시 볼 때 새 가격으로 바뀌어요` / `고객 메뉴에서 자동으로 안 보이게 됐어요`
-- ⛔ `다음 진입에서 새 가격으로 갱신됩니다` / `재고를 채우면 다시 노출됩니다`
-
-**인칭**: 사용자를 "고객님"이라고 부르지 않고 생략하거나 문맥 주어로 처리합니다. 시스템은 1인칭을 쓰지 않습니다("저희가 처리해드릴게요" ⛔ → "확인 후 자동 환불돼요" ✅).
-
-**사실 먼저, 감정은 덤**: 거래 시스템이므로 금액·시간·수량을 문장 앞에 놓습니다.
-
-- ✅ `동일 금액 결제 2건이 확인됐습니다. 확인 후 자동 환불돼요.`
-- ⛔ `문제가 발생했습니다. 잠시 후 다시 시도해주세요.`
-
-**에러/경고는 원인 + 다음 행동**: `크루아상이 품절 처리되어 고객 메뉴에서 자동으로 비활성화됐어요.` → 옆에 `발주서 만들기` 버튼.
-
-**버튼 라벨은 동사 + 대상, 금액이 있으면 금액 포함**: `12,800원 결제하기`, `준비 완료`, `이의제기 접수하기`. `확인`/`OK` 같은 무의미 라벨 금지.
-
-**대소문자·케이싱**: 한국어라 케이싱 이슈는 거의 없지만, 라틴 문자는 문장식(Sentence case). 전체 대문자는 11px eyebrow(`--ls-caps` 0.08em)에서만.
-
-**숫자 서식**: 금액은 항상 천 단위 구분 + `원`. 음수는 `−12,400원`(U+2212 마이너스, 하이픈 아님)이며 berry 색. 포인트는 `11,240P`. 픽업 번호는 모노 `A-142`.
-
-**이모지**: 사용하지 않습니다. 상태·의미는 Lucide 아이콘과 색으로 표현합니다.
-
-**금지 표현**: 과장된 마케팅("최고의", "혁신적인"), 사과 남발("죄송합니다만"), 기술 용어 노출("API 오류", "500").
-
----
-
-## VISUAL FOUNDATIONS — 시각 기반
-
-### 색
-
-로고에서 뽑은 두 축 — **에스프레소(브랜드 잉크·주요 액션)** 와 **카라멜(리워드·강조·포커스)** — 에, 따뜻한 중립 **크레마** 계열을 더했습니다.
-
-- **에스프레소** `#FAF5F2 → #24100B` (700 `#47211A` = 워드마크 색, 기본 CTA)
-- **카라멜** `#FEF7EC → #9E5212` (400 `#F5A65A` = 로고 스트릭, 500 `#E8862B` = 강조 액션)
-- **크레마** `#FFFFFF → #211D1A` — 모든 배경/텍스트가 여기서 나옵니다. 순수 회색이 아니라 **따뜻한 회색**입니다.
-- **의미색** 민트(성공/준비 완료), 앰버(주의/제조 중), 베리(위험/환불), 스카이(정보/접수)
-
-핵심 규칙: **화면 전체는 밝습니다.** 앱 배경은 `--crema-100 #FBF6EF`, 카드는 흰색. 어두운 면은 딱 두 군데 — 점주 콘솔 사이드바(`--espresso-800`)와 포인트 카드 그라디언트. 어두운 UI를 확장하지 마세요.
-
-### 타이포그래피
-
-**Pretendard Variable** 한 벌로 한글·라틴을 모두 처리하고, 코드/픽업번호에만 **IBM Plex Mono**를 씁니다.
-
-- Display 44 / 34, Title 27 / 22 / 18, Body 16 / 15 / 14, Caption 13, Micro 11
-- 굵기: 400 본문 · 500 메타 · 600 UI 라벨 · 700 제목 · 800 히어로 숫자
-- 트래킹은 항상 음수: 제목 −1.8%, 디스플레이 −2.5%, 본문 −0.8%. 한글에서 자간이 벌어지면 싸구려로 보입니다.
-- **금액·수량·시간은 반드시 tabular numerals**(`.bf-num`). 목록에서 자릿수가 흔들리면 안 됩니다.
-
-### 여백·레이아웃
-
-2 / 4 / 6 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 / 80. 실무의 90%는 8·12·16·24로 해결됩니다. 모바일 좌우 거터 16px, 데스크톱 28px. 콘솔은 236px 고정 사이드바 + 유동 본문, 상단 60px 바가 고정(sticky)입니다. 모바일은 상단 TopBar 고정 + 하단 CTA가 sticky, 그 위에 배경으로 페이드되는 보호 그라디언트가 깔립니다.
-
-### 배경
-
-이미지 배경은 쓰지 않습니다. 배경은 **평평한 따뜻한 색면**이고, 예외는 딱 두 개의 승인된 그라디언트입니다.
-
-1. 포인트 카드 — `linear-gradient(135deg, espresso-700, espresso-800 62%, espresso-600)` + 우상단 카라멜 radial glow
-2. 선불 지갑 카드 — `linear-gradient(135deg, caramel-500, caramel-600 70%, espresso-600)`
-
-그 외 그라디언트, 특히 **보라-파랑 계열은 절대 금지**입니다. 패턴·텍스처·손그림 일러스트도 쓰지 않습니다.
-
-### 카드·보더·그림자
-
-카드 = 흰 배경 + `1px solid --crema-300` 헤어라인 + `--r-card 16px` + `--sh-1`. 그림자는 **검정이 아니라 갈색조**(`rgba(52,23,16,…)`)입니다. 4단계: sh-1 기본, sh-2 호버, sh-3 부상/모달 아닌 강조, sh-4 다이얼로그. 인셋 그림자는 쓰지 않습니다(단, 토글 노브 정도).
-
-반경: 6 / 8 / **10 컨트롤** / **16 카드** / 20 / **24 시트** / pill(칩·뱃지·검색). 반경을 섞지 마세요 — 컨트롤은 10, 카드는 16입니다.
-
-### 상태
-
-- **호버**: 배경 한 단계 진하게(또는 ghost는 `--espresso-50` 채우기), 카드는 `translateY(-2px)` + sh-3. 투명도로 호버를 만들지 않습니다.
-- **프레스**: `scale(0.975)` + 배경 한 단계 더 진하게. 80ms.
-- **포커스**: 카라멜 3px 링 `0 0 0 3px rgba(232,134,43,.32)`. 브라우저 기본 파란 아웃라인은 항상 대체합니다.
-- **비활성**: `--crema-200` 배경 + `--crema-500` 텍스트, 그림자 제거, 커서 not-allowed.
-- **품절/사용 완료**: 숨기지 않고 opacity 0.5(+쿠폰은 grayscale)로 남깁니다. 이력은 감사 가능해야 합니다.
-
-### 모션
-
-140ms 마이크로 인터랙션 · 220ms 기본 전환 · 420ms 바텀시트. 기본 이징 `cubic-bezier(.2,.7,.3,1)`, 등장은 `cubic-bezier(.16,1,.3,1)`. 스프링(`.34,1.42,.5,1`)은 스위치 노브와 라디오 점에만. 반복 애니메이션은 "제조 중" 상태 점의 1.4s 펄스 하나뿐입니다. `prefers-reduced-motion`에서 모든 duration이 0이 됩니다.
-
-### 투명도·블러
-
-두 곳에서만: 하단 탭바(`--surface-glass` + `blur(12px)`)와 다이얼로그 스크림(`rgba(36,16,11,.44)` + `blur(2px)`). 카드나 패널에 유리 효과를 넣지 마세요.
-
-### 이미지 톤
-
-사진을 쓴다면 따뜻한 톤(원목·크래프트·라떼)의 자연광, 그레인 없음, 채도 보통. 현재 시스템에는 제품 사진 자산이 없어 `MenuItem`/`StoreCard`의 썸네일은 `--crema-200` 플레이스홀더로 렌더됩니다. 실제 사진이 준비되면 그 자리에 넣으면 됩니다.
-
----
-
-## ICONOGRAPHY
-
-**Lucide** (CDN, `lucide-static@0.544.0`)를 씁니다. 브랜드 자체 아이콘 세트나 아이콘 폰트는 제공되지 않았으므로 **가장 가까운 오픈 세트로 대체했습니다 — 실제 아이콘 자산이 있으면 알려주세요.** Lucide를 고른 이유: 2px 스트로크·라운드 캡·24px 그리드로, Pretendard의 부드러운 기하학과 로고의 둥근 원두 형태에 맞습니다.
-
-- 사용법은 항상 `<Icon name="map-pin" />` 컴포넌트를 통해서. CSS `mask`로 렌더되므로 **`currentColor`를 상속**합니다.
-- 크기: 14(캡션 인라인) · 16(버튼) · 18(리스트/사이드바) · 20(기본) · 22–24(탭바, 빈 상태)
-- 채워진(filled) 아이콘은 쓰지 않습니다. 전부 아웃라인 스트로크.
-- **직접 SVG를 그리지 마세요.** 필요한 글리프가 없다면 Lucide에서 가장 가까운 이름을 찾습니다.
-- 이모지는 UI·마케팅 어디에도 쓰지 않습니다. 유니코드 기호는 마이너스(−, U+2212)와 가운뎃점(·) 정도만.
-- 도메인별 관용 글리프: 매장 `store` / 위치 `map-pin` / 픽업 시간 `clock` / 결제 `credit-card` / 지갑 `wallet` / 포인트·선물 `gift` / 쿠폰 `ticket` / 재고 `package` / 정산 `landmark` / 이의제기 `gavel` / AI 인사이트 `sparkles` / 알림 `bell`·`bell-ring` / 주문 `receipt` / POS `monitor`
-
-## 로고 사용
-
-`assets/`에 3종이 있습니다.
-
-- `logo-full.png` — 기본 락업(원두 마크 + 워드마크). 밝은 배경 전용.
-- `logo-mark.png` — 120px 미만 폭, 앱 헤더, 파비콘 자리.
-- `logo-wordmark.png` — 사이드바 등 좁은 가로 공간. 어두운 면에서는 `filter: brightness(0) invert(1)`로 흰색 녹아웃.
-
-클리어스페이스는 원두 높이의 1/2. 원두를 다른 색으로 칠하거나, 스트릭을 지우거나, 락업 비율을 바꾸지 마세요.
-
----
-
-## 파일 안내 (Index)
-
-| 경로 | 내용 |
-| --- | --- |
-| `styles.css` | 전역 진입점. `@import`만 있습니다. 소비 프로젝트는 이 파일 하나만 링크하세요. |
-| `tokens/` | `fonts` · `colors` · `typography` · `spacing` · `radius` · `elevation` · `motion` · `semantic` · `base` |
-| `components/core/` | Button, IconButton, Icon, Badge, Card, SectionHeader |
-| `components/forms/` | Input, SearchField, Select, Checkbox, Radio, Switch, QuantityStepper |
-| `components/feedback/` | Alert, Toast, Dialog, EmptyState, ProgressBar |
-| `components/navigation/` | Tabs, TabBar, TopBar, SideNav, ListRow |
-| `components/commerce/` | StoreCard, MenuItem, PickupSlots, OrderStatus, BalanceCard, CouponCard, StatTile, DataTable, OrderTicket |
-| `guidelines/*.card.html` | Design System 탭에 뜨는 파운데이션 스펙 카드(색·타입·여백·이펙트·브랜드) |
-| `ui_kits/customer_app/` | 고객 모바일 웹 5화면 (README 참조) |
-| `ui_kits/merchant_console/` | 점주 PC 콘솔 4화면 (README 참조) |
-| `assets/` | 로고 3종 |
-| `SKILL.md` | Claude Code 등에서 스킬로 쓰기 위한 진입 파일 |
-
-### 컴포넌트 32종
-
-**Core** — `Button` `IconButton` `Icon` `Badge` `Card` `SectionHeader`
-**Forms** — `Input` `SearchField` `Select` `Checkbox` `Radio` `Switch` `QuantityStepper`
-**Feedback** — `Alert` `Toast` `Dialog` `EmptyState` `ProgressBar`
-**Navigation** — `Tabs` `TabBar` `TopBar` `SideNav` `ListRow`
-**Commerce** — `StoreCard` `MenuItem` `PickupSlots` `OrderStatus` `BalanceCard` `CouponCard` `StatTile` `DataTable` `OrderTicket`
-
-각 컴포넌트 폴더에 `<Name>.jsx`, 프롭 계약 `<Name>.d.ts`, 사용법 `<Name>.prompt.md`가 함께 있습니다. 스타일은 CSS 커스텀 프로퍼티 기반 클래스(`.bf-*`)로, 각 그룹 폴더의 `.css` 파일에 있고 `styles.css`에서 import됩니다.
-
-### 의도적 추가 (Intentional additions)
-
-소스가 컴포넌트 인벤토리를 정의하지 않아 표준 세트를 저술했습니다. 그중 도메인 특화 9종(`components/commerce/`)은 기능 목록에서 직접 도출한 것입니다 — 픽업 슬롯, 포인트/지갑 잔액, 쿠폰, 정산 테이블, POS 티켓은 범용 프리미티브로는 표현되지 않기 때문입니다. `Icon`은 Lucide 글리프 래퍼로, 손그림 SVG를 막기 위해 추가했습니다.
-
-### 아직 없는 것 / 확인 필요
-
-- **폰트 파일**: Pretendard·IBM Plex Mono를 CDN에서 불러옵니다. 실제 브랜드 폰트 파일이 있으면 주세요.
-- **아이콘 세트**: Lucide로 대체했습니다(위 ICONOGRAPHY 참조).
-- **사진 자산**: 메뉴·매장 사진이 없어 플레이스홀더로 처리했습니다.
-- **슬라이드 템플릿**: 덱이 제공되지 않아 만들지 않았습니다.
+BeanFlow는 고객 app, 매장 console, 운영 console에서 하나의 거래 언어를 사용한다. 이 디렉터리는
+그 언어의 canonical token과 편집 가능한 React component source를 소유한다.
+
+## Source precedence
+
+1. Accepted product/design decision과 accessibility requirement
+2. `tokens/*.css`
+3. `components/**/*.tsx`와 component CSS
+4. canonical Storybook stories/docs
+5. product pages
+6. generated bundle, manifest, screenshot, archived exploration
+
+`_ds_bundle.js`와 `_ds_manifest.json`은 2026-08-15 이전 생성 snapshot이다. 존재하지 않는 32개 JSX
+source와 잘못 분류된 token metadata를 포함하므로 migration 참고용으로만 보존한다. Product code에서
+import하거나 public component API로 취급하지 않는다.
+
+## Current editable components
+
+| Layer | Source | Responsibility |
+|---|---|---|
+| Core | `components/core/Button.tsx` | form action과 router navigation을 위한 typed Button/ButtonLink |
+| Feedback | `components/feedback/FeedbackState.tsx` | loading, empty, recoverable error와 assistive announcement |
+| Commerce | `components/commerce/StatusBadge.tsx` | server transaction state label과 success/progress/uncertain/failure tone |
+
+새 component는 실제 product reuse 지점이 있을 때 `REUSE → COMPOSE → EXTEND → NEW` 순서로 판단한다.
+Generated manifest의 32개 항목을 맞추기 위해 사용되지 않는 API를 복원하지 않는다.
+전체 token, manifest 32종 분류, route/state coverage와 debt는
+`../../docs/design-system-inventory.md`에서 현재 source 기준으로 관리한다.
+
+## Tokens
+
+`styles.css`가 token과 component CSS의 global entry다. 현재 canonical token은 201개다.
+
+- palette: espresso, caramel, crema, mint, amber, berry, sky
+- semantic: surface, text, border, action, status, domain
+- typography: family, size, line height, weight, letter spacing, numeral
+- layout: spacing, radius, control/layout dimensions
+- effects: elevation, focus ring, motion duration/easing
+
+중요 token과 사용 규칙은 Storybook `Foundations/Overview`에서 실제 rendering으로 확인한다. 새 raw
+color/font/shadow, undefined token, generated import, route story 누락은 `npm run check:design`이 막는다.
+반복 raw pixel은 intrinsic geometry와 legacy layout debt baseline보다 늘어날 수 없다.
+
+## Storybook taxonomy
+
+```text
+Foundations/*
+Components/Core|Forms|Feedback|Navigation|Commerce/*
+Patterns/Customer|Store|Operations/*
+Pages/Customer|Store|Operations|Shared/*
+Explorations/*
+```
+
+Canonical component는 typed props, JSDoc, Autodocs, explicit story description과 a11y `error` gate를
+갖는다. 현재 route/page와 중요한 loading, empty, error, permission, pending, unknown, reconciling,
+manual-review state는 62개 `Pages/*`·component story에서 직접 열 수 있다. Live component CSS는
+editable owner가 있는 `bf-btn`, `bf-status`, `bf-feedback` family만 제공한다.
+
+## Product copy invariants
+
+- 한국어 해요체를 기본으로 하고 내부 구현 용어를 사용자에게 노출하지 않는다.
+- 금액·시간·수량을 먼저 말하고 버튼은 행동과 대상을 함께 쓴다.
+- `UNKNOWN`, `RECONCILING`, `MANUAL_REVIEW`는 성공이나 확정 실패로 바꾸지 않는다.
+- 고객은 매장 수락 전 전체 취소만 할 수 있고, 부분 환불은 매장·운영자 흐름이다.
+- 정산은 픽업 완료일 기준이며 확정 회차를 고치지 않고 다음 회차 조정으로 반영한다.
+- 이모지, 임의 SVG, 새 브랜드 palette나 typography system을 추가하지 않는다.
+
+## Workflow and validation
+
+UI 작업 전 `frontend/AGENTS.md`와 `frontend/docs/design-system-governance.md`를 읽고 Storybook MCP로
+inventory와 candidate docs를 확인한다. 실행·복구 절차는 `frontend/docs/storybook-runbook.md`를 따른다.
+
+```bash
+npm run check:design
+npm run test:unit
+npm run check:type-baseline
+npm run build-storybook
+npm run test:storybook:docs
+```
+
+UI 변경 뒤 package command와 별개로 MCP `get-changed-stories`, `preview-stories`,
+`run-story-tests(a11y=true)`를 실행한다. Visual regression은 clean baseline 승인 전까지
+`Not configured`이며 coverage를 주장하지 않는다.
