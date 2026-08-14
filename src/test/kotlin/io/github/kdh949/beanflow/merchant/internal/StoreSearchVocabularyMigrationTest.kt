@@ -105,9 +105,10 @@ internal class StoreSearchVocabularyMigrationTest {
 
     @Test
     fun `re-running the region seed keeps the row count identical`() {
-        val seed = checkNotNull(javaClass.getResourceAsStream("/db/migration/V58__seed_merchant_region.sql")) {
-            "region seed migration is missing from the classpath"
-        }.reader(Charsets.UTF_8).readText()
+        val seed =
+            checkNotNull(javaClass.getResourceAsStream("/db/migration/V58__seed_merchant_region.sql")) {
+                "region seed migration is missing from the classpath"
+            }.reader(Charsets.UTF_8).readText()
 
         jdbc.execute(seed)
 
