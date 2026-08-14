@@ -1,18 +1,20 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import org.springframework.boot.WebApplicationType
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration
+import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.builder.SpringApplicationBuilder
+import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Profile
 import java.time.Clock
 import kotlin.system.exitProcess
 
-@Configuration(proxyBeanMethods = false)
 @Profile("order-reference-backfill")
-@EnableAutoConfiguration
+@SpringBootApplication(
+    scanBasePackages = ["io.github.kdh949.beanflow.ordering.internal.backfill.cli"],
+    exclude = [FlywayAutoConfiguration::class],
+)
 @Import(
     OrderReferenceBackfillService::class,
     PublicOrderReferenceGenerator::class,
@@ -61,7 +63,6 @@ internal object OrderReferenceBackfillCli {
                 .web(WebApplicationType.NONE)
                 .properties(
                     mapOf(
-                        "spring.flyway.target" to "43",
                         "spring.main.banner-mode" to "off",
                     ),
                 ).build()

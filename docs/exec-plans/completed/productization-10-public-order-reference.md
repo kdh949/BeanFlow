@@ -309,6 +309,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   local·remote·PR #57 head가 모두 그 SHA이고 PR #57은 open Draft, base는
   `feature/productization-00-contract`임을 확인했다. 잘못 바뀌어 있던 ready 상태를 Draft로 복원하고
   본문을 V50/V51 및 실제 재검증 결과로 갱신했다.
+- 2026-08-14: PR #57 재검토에서 CLI가 `spring.flyway.target=43`을 강제해 V50 schema가 필요한
+  backfill의 실행 전제와 충돌하는 것을 확인했다. CLI의 Flyway 자동 실행을 제거하고 성공한 V43~V50,
+  미적용 V51 history만 허용하는 fail-fast preflight를 추가했다. PostgreSQL에서 V49 → V50 → 실제 CLI
+  ApplicationContext → backfill → V51 경로와 누락 baseline·적용 V51 거부를 검증했다.
 
 ## Surprises & Discoveries
 
@@ -341,6 +345,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   별도 Support migration test의 latest V49 assertion도 combined inventory V51로 갱신했다.
 - 첫 집중 Gradle 검증은 사용자 Gradle cache lock에 대한 sandbox 권한 거부로 테스트 시작 전에 실패했다.
   동일 명령을 승인된 캐시 접근 권한으로 다시 실행해 실제 테스트 결과를 얻었다.
+- backfill CLI를 `@EnableAutoConfiguration`만으로 기동하면 Spring Modulith Runtime이
+  `@SpringBootApplication`을 찾지 못해 context 기동을 거부했다. 좁은 CLI 전용 component scan과 명시적
+  import를 둔 application configuration으로 바꾸고 Flyway auto-configuration만 제외해, schema를
+  변경하지 않는 실제 CLI context를 검증했다.
 
 ## Decision Log
 
@@ -358,6 +366,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | OpenAPI 입력은 대소문자를 허용하고 응답·저장값은 대문자 canonical 형식만 허용 | [ADR-096](../../adr/ADR-096-public-order-reference.md) |
 | 2026-08-12 | Plan 10 뒤 writer lease를 Support S70~S100에 양보하고 V43/V44는 resume 시 재번호화 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md) |
 | 2026-08-13 | Support V43~V49를 포함한 `origin/main`을 merge하고 미적용 Plan 10을 V50/V51로 재번호화하며 rebase·force-push 없이 전체 검증을 다시 실행 | [ADR-111](../../adr/ADR-111-productization-stack-a-draft-release.md), [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
+| 2026-08-14 | backfill CLI는 Flyway를 실행하지 않고, 성공한 V43~V50과 미적용 V51을 `flyway_schema_history`에서 먼저 확인한 뒤에만 데이터를 쓴다 | [backfill runbook](../../operations/order-reference-backfill-runbook.md) |
 
 ## Outcomes & Retrospective
 

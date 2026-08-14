@@ -66,8 +66,10 @@ SELECT count(*) AS remaining
 
 ## Run the bounded backfill
 
-Use the same artifact and datasource configuration as the V50 application. Batch size must be between 1 and 1,000;
-100 is the default.
+Use the same artifact and datasource configuration as the V50 application. The backfill CLI never runs Flyway itself:
+before it writes a row, it requires successful V43 through V50 history entries and rejects an already-applied or failed
+V51 entry. Keep the application deployment explicitly capped at `SPRING_FLYWAY_TARGET=50` while this command runs.
+Batch size must be between 1 and 1,000; 100 is the default.
 
 ```bash
 ./gradlew order-reference-backfill --args='--batch-size=100'
