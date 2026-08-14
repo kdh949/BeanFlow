@@ -1649,6 +1649,12 @@
 - **IP Limit:** actor 종류별 source IP에서 15분 안에 실패 30건이면 그 IP의 해당 로그인 endpoint를
   15분 차단하고 `429 AUTHENTICATION_RATE_LIMITED`와 `Retry-After`를 반환한다. 성공 로그인 하나로 IP
   실패 창을 초기화하지 않는다. 신뢰 proxy 목록 밖의 forwarding header는 IP 판정에 사용하지 않는다.
+  direct peer가 configured trusted proxy CIDR 안에 있고 forwarding header가 있으면 전체
+  `X-Forwarded-For` chain을 오른쪽부터 검사해 trusted proxy hop을 모두 제거하고, 처음 만나는 untrusted
+  literal address를 source IP로 사용한다. header가 없으면 direct peer를 사용한다. trusted peer가 보낸
+  비어 있거나 malformed chain은 `400 INVALID_REQUEST`로 거부하며, 모든 hop이 trusted이면 direct peer로
+  보수적으로 귀결한다. trusted proxy deployment는 관측한 peer를 chain 끝에 append하거나 header 전체를
+  overwrite해야 하며, application은 leftmost 값을 단독으로 신뢰하지 않는다.
 - **Merchant Temporary Password:** 점주 임시 비밀번호는 발급 시각부터 24시간 유효하다. 운영자는
   만료 전후 재발급할 수 있으며 재발급 transaction은 새 Hash·만료 시각·`credentialVersion`과
   `AuditRecord`를 함께 커밋한다.
@@ -1665,6 +1671,8 @@
   - 계정 잠금 뒤 기존 Session의 `credentialVersion` 불일치 401
   - `INITIAL_PASSWORD`와 `ACTIVE` 점주가 잠금 만료 뒤 각각 원래 lifecycle로 로그인
   - IP 29회/30회 경계, actor 종류 분리, 신뢰하지 않는 forwarding header 거부
+  - attacker-supplied prefix가 있는 forwarding chain, 다중 trusted proxy hop, IPv4/IPv6 혼합,
+    trusted peer의 malformed chain과 untrusted direct peer의 spoofed forwarding header
   - 성공 로그인 후 계정 창 초기화와 IP 창 비초기화
   - 임시 비밀번호 발급 후 24시간 -1ns/at/+1ns와 재발급 감사 원자성
   - Unicode·공백·15/128 code point·512 byte 경계와 비밀번호 비정규화
@@ -1675,6 +1683,9 @@
   자격증명 snapshot이 검증 중 바뀌면 attempt와 Session 없이 401로 rollback한다. retention·Session
   저장 실패는 예외를 다시 던지고 인증 fallback을 만들지 않는다. 점주 temporary-password lifecycle은
   `productization-40` 소유다.
+- **Implementation Evidence (2026-08-14):** trusted peer의 complete `X-Forwarded-For` chain은
+  right-to-left로 parse한다. attacker prefix, multiple trusted hops, IPv4/IPv6 mixed chain,
+  malformed chain과 untrusted direct peer의 spoofed header를 unit regression으로 검증했다.
 - **ADR Required:** Yes — [ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md),
   [ADR-094](../adr/ADR-094-browser-session-security.md)
 - **Revisit Conditions:** MFA 또는 복구 채널 도입, credential-stuffing 관측치, hash 지연·메모리 측정,

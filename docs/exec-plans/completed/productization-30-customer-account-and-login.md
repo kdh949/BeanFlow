@@ -420,6 +420,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   deterministic했다. 이어 실행한 frontend build는 기존 화면 세 호출이 필수 `X-BEANFLOW-CSRF` 타입을
   아직 전달하지 않아 TypeScript에서 실패했다. 고객 Cookie/CSRF client와 화면 전환은 명시적인 Plan 80
   범위이므로 이 Plan에서 placeholder header, JWT fallback 또는 OpenAPI optional 완화로 숨기지 않았다.
+- 2026-08-14: PR #65 재검토에서 trusted proxy가 기존 `X-Forwarded-For` 앞부분을 보존·append할 때
+  leftmost 값을 source IP로 쓰면 attacker가 로그인 IP limit key를 분산시킬 수 있음을 확인했다. complete
+  chain을 right-to-left로 검사해 trusted hop을 제거하고 첫 untrusted literal을 선택하도록 교정했다.
+  attacker prefix, multiple trusted hop, IPv4/IPv6 mixed, malformed chain과 untrusted direct peer
+  regression이 통과했다.
 
 ## Surprises & Discoveries
 
@@ -469,6 +474,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   드러냈고, 수동 Bearer token을 쓰는 기존 화면 세 곳의 compile failure를 노출했다. 이는 API 실패를
   성공으로 대체한 것이 아니라 Plan 20이 허용한 브라우저 중간 단절이며, Plan 80 전에는 frontend 전체
   build 통과를 주장하지 않는다.
+- configured trusted direct peer만으로 forwarding header 전체가 안전해지지는 않는다. trusted proxy가
+  append한 observed source는 chain의 오른쪽에 있으므로 leftmost 값은 client-controlled prefix일 수 있다.
+  모든 chain literal을 parse한 뒤 right-to-left로 trusted hop을 제거해야 rate-limit source가 보존된다.
 
 ## Decision Log
 
@@ -486,6 +494,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | local demo 고객 호출은 seeded ID/PW와 Customer Session을 사용하고 고객 JWT를 만들지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [local demo runbook](../../operations/local-demo-runbook.md) |
 | 2026-08-13 | 기존 customer/merchant URI는 각 Session에 유지하고 운영자 point/refund branch는 `/operations/**`로 분리하며 상대 actor credential fallback을 두지 않음 | [ADR-092](../../adr/ADR-092-hybrid-authentication.md), [authorization matrix](../../security/authorization-matrix.md) |
 | 2026-08-13 | Plan 30 demo gate는 승인 결제 조회까지의 Customer Session checkpoint, Merchant 전환·환불 기본 전체 smoke는 Plan 40 gate로 분리 | 이 plan, [productization-40](../active/productization-40-merchant-account-and-initial-password.md), [local demo runbook](../../operations/local-demo-runbook.md) |
+| 2026-08-14 | trusted proxy forwarding chain은 right-to-left로 trusted hop을 제거하고 첫 untrusted literal을 IP limit source로 사용. malformed trusted chain은 400, untrusted direct peer header는 무시 | [BR-35](../../product/business-policy-decisions.md) |
 
 ## Outcomes & Retrospective
 
@@ -509,3 +518,4 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-11: 최초 작성.
 - 2026-08-13: Plan 20 completion path와 actual validation evidence를 반영해 readiness를 true로 전환.
 - 2026-08-13: 고객 계정·로그인과 customer demo checkpoint 검증을 완료하고 completed로 이동.
+- 2026-08-14: trusted proxy X-Forwarded-For source IP 경계를 actual review finding과 regression으로 보정.

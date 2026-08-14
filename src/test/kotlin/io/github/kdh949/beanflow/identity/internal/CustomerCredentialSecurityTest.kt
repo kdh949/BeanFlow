@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.identity.internal
 
 import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import java.net.InetAddress
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -69,10 +71,26 @@ internal class CustomerCredentialSecurityTest {
     }
 
     @Test
-    fun `source IP trusts forwarding only from configured proxy networks`() {
+    fun `source IP strips trusted forwarding hops from the right`() {
         val resolver = CustomerSourceIpResolver(listOf("10.0.0.0/8", "2001:db8::/32"))
         assertThat(resolver.resolve("203.0.113.5", "198.51.100.2")).isEqualTo("203.0.113.5")
         assertThat(resolver.resolve("10.0.0.8", "198.51.100.2, 10.0.0.8")).isEqualTo("198.51.100.2")
+        assertThat(resolver.resolve("10.0.0.8", "198.51.100.77, 203.0.113.25, 10.0.0.8")).isEqualTo("203.0.113.25")
+        assertThat(resolver.resolve("10.0.0.8", "203.0.113.25, 10.0.0.7, 10.0.0.8")).isEqualTo("203.0.113.25")
+        assertThat(resolver.resolve("2001:db8::8", "203.0.113.25, 2001:db8::7"))
+            .isEqualTo(InetAddress.getByName("203.0.113.25").hostAddress)
+        assertThat(resolver.resolve("10.0.0.8", "10.0.0.7, 10.0.0.8")).isEqualTo("10.0.0.8")
+    }
+
+    @Test
+    fun `trusted proxy rejects malformed forwarding chains while untrusted peers ignore them`() {
+        val resolver = CustomerSourceIpResolver(listOf("10.0.0.0/8", "2001:db8::/32"))
+
+        assertThatThrownBy { resolver.resolve("10.0.0.8", "198.51.100.2, ") }
+            .isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+            }
+        assertThat(resolver.resolve("203.0.113.5", "not-an-ip, 10.0.0.8")).isEqualTo("203.0.113.5")
     }
 
     @Test
