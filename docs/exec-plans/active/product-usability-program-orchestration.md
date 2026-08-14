@@ -445,8 +445,10 @@ git diff --cached --check
   `java/spring-disabled-csrf-protection` 경고 두 건으로 실패했다. 사용자 결정에 따라 Public Chain의
   disable을 제거해 기본 CSRF를 복원하고, unsafe Public route 추가 시 별도 계약을 요구하도록 ADR-094를
   보강했다. Operations는 Cookie·Session을 받지 않는 stateless Bearer Resource Server라는 ADR-092/094
-  계약을 유지해 alert #3만 `false positive`로 dismiss했다. 감사 comment에는 Cookie/Session 또는 자동
-  첨부 credential 도입 시 재검토 조건을 남겼다. final tip의 7개 인증 통합 테스트는 Public POST 403,
+  계약을 유지해 initial alert #3을 `false positive`로 dismiss했다. 새 분석에서 CodeQL fingerprint가
+  남은 Operations result를 기존 alert #2에 재연결해, 실제 67행 결과인 #2에도 같은 감사 comment와
+  dismissal을 남겼다. Public code result는 남지 않았고, 두 closed alert record는 모두 Cookie/Session 또는 자동
+  첨부 credential 도입 시 재검토 조건을 가진다. final tip의 7개 인증 통합 테스트는 Public POST 403,
   Operations Bearer POST의 무-CSRF 200, 무자격 401과 Customer/Merchant Session Cookie 403을 검증했다.
   첫 probe의 204 기대(실제 200)와 import ordering Spotless 실패는 각각 기대 상태·정렬 보정 뒤 재실행해
   통과했다. 보안 commit `6af1eee`은 Plan 30→60에 순차 merge했으며, `spotlessCheck`, 문서/OpenAPI
@@ -510,7 +512,8 @@ git diff --cached --check
 - CodeQL은 Public과 Operations의 `csrf.disable()`을 모두 동일한 high 위험으로 표시했다. Public은
   기본 CSRF를 복원해 코드로 해소했지만, Operations는 Bearer header만 받고 Cookie·Session을 인증하지
   않는다는 Accepted 계약상 false positive다. 이 예외는 GitHub audit comment와 ADR-094 재검토 조건으로
-  제한했으며, 다른 CSRF 예외로 일반화하지 않는다.
+  제한했으며, 다른 CSRF 예외로 일반화하지 않는다. 두 호출이 같은 configurer method에 있어 Public 제거 뒤
+  GitHub가 남은 Operations result를 alert #2로 재연결했으므로, #3과 #2 모두 같은 audit comment로 닫혔다.
 
 ## Decision Log
 
