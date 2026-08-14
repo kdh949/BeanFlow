@@ -41,7 +41,6 @@ internal class SecurityConfiguration {
     ): SecurityFilterChain =
         http
             .securityMatcher(registry.requestMatcher(AuthenticationChain.PUBLIC))
-            .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { it.anyRequest().permitAll() }
             .build()

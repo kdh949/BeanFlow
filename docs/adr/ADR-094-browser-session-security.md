@@ -37,7 +37,12 @@ Session을 쓰면 다음 위험이 새로 생긴다.
   점주는 `GET /api/v1/auth/merchant/csrf`, `BEANFLOW_MERCHANT_XSRF` Cookie와 같은 header를 사용한다.
 - 두 CSRF Cookie는 인증정보를 담지 않고 JS가 header로 복사할 token만 담는다. 고객 token을 Merchant
   Chain에서, 점주 token을 Customer Chain에서 받아들이지 않는다.
-- 운영자 Chain은 Bearer JWT이고 Cookie를 쓰지 않으므로 CSRF를 적용하지 않는다.
+- Public Chain은 현재 GET 전용이며 인증 Cookie도 받지 않지만 Spring 기본 CSRF 보호를 유지한다. 이후
+  unsafe Public endpoint를 추가하려면 공개 쓰기 계약과 CSRF 처리 방식을 별도로 결정한다.
+- Operations Chain은 `Authorization: Bearer`만 받는 stateless Resource Server이고 Cookie·Session을
+  인증하지 않으므로 CSRF를 적용하지 않는다. CodeQL의 `java/spring-disabled-csrf-protection` 경고는 이
+  전제에서 false positive로 dismiss할 수 있으며, `/operations/**` 또는 `/support/**`에 Cookie/Session
+  인증이나 브라우저가 자동 첨부하는 자격증명을 도입하면 dismissal을 재검토하고 CSRF를 활성화한다.
 - 로그인 endpoint 자체도 CSRF 대상이다. 로그인 폼 진입 시 토큰을 발급한다.
 
 ### Session lifecycle
