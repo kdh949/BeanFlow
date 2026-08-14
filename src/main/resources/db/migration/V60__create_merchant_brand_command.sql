@@ -50,3 +50,11 @@ CREATE TABLE merchant_brand_command (
 
 CREATE INDEX ix_merchant_brand_command_retention
     ON merchant_brand_command (retention_expires_at, id);
+
+-- 감사 기록의 action은 폐쇄 어휘다. 새 명령 넷을 등록하지 않으면 fk_audit_action_category가
+-- 거절한다. 브랜드는 여러 매장이 공유하는 자원의 운영 결정이므로 OPERATIONS_POLICY다.
+INSERT INTO operations_audit_action_category (action, audit_category) VALUES
+    ('BRAND_CREATED', 'OPERATIONS_POLICY'),
+    ('BRAND_UPDATED', 'OPERATIONS_POLICY'),
+    ('STORE_BRAND_ASSIGNED', 'OPERATIONS_POLICY'),
+    ('STORE_BRAND_CLEARED', 'OPERATIONS_POLICY');

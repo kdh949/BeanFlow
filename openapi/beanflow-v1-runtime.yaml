@@ -618,6 +618,12 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1stores~1{storeId}"
   /operations/policies/ordinary-point-accrual/stores/{storeId}/versions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1policies~1ordinary-point-accrual~1stores~1{storeId}~1versions"
+  /operations/brands:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands"
+  /operations/brands/{brandId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands~1{brandId}"
+  /operations/stores/{storeId}/brand:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1brand"
   /stores/{storeId}/settlements:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements"
   /stores/{storeId}/settlements/{settlementBatchId}/items:

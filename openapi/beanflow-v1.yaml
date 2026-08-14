@@ -1743,6 +1743,193 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/brands:
+    post:
+      tags: [Operations]
+      operationId: createBrand
+      summary: Create a brand
+      description: |
+        Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. Same-key replay returns the first
+        result. 활성 브랜드의 정규화 이름은 유일하며 중복 등록은 409 BRAND_NAME_ALREADY_IN_USE다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBrandRequest"
+      responses:
+        "201":
+          description: Created brand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    get:
+      tags: [Operations]
+      operationId: listBrands
+      summary: List brands ordered by normalized name then brand ID
+      description: Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/DiscoveryLimit"
+      responses:
+        "200":
+          description: Brand page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/brands/{brandId}:
+    get:
+      tags: [Operations]
+      operationId: getBrand
+      summary: Get one brand
+      description: Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+      parameters:
+        - $ref: "#/components/parameters/BrandId"
+      responses:
+        "200":
+          description: Brand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    patch:
+      tags: [Operations]
+      operationId: updateBrand
+      summary: Rename or archive a brand
+      description: |
+        Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 이름 변경은 소속 매장의 검색
+        BRAND_NAME term을 같은 transaction에서 교체하며, 소속 매장이 ADR-112 6절의 1000개
+        상한을 넘으면 409 BRAND_FANOUT_LIMIT_EXCEEDED다. 소속 매장이 남은 브랜드의 보관과
+        expectedVersion 불일치는 409 BRAND_STATE_CONFLICT다.
+      parameters:
+        - $ref: "#/components/parameters/BrandId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBrandRequest"
+      responses:
+        "200":
+          description: Updated brand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/stores/{storeId}/brand:
+    put:
+      tags: [Operations]
+      operationId: assignStoreBrand
+      summary: Assign a store to a brand
+      description: |
+        Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 매장주는 이 명령을 수행할 수 없다.
+        지정은 그 매장의 BRAND_NAME term을 같은 transaction에서 갱신한다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignStoreBrandRequest"
+      responses:
+        "200":
+          description: Store brand assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreBrand"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    delete:
+      tags: [Operations]
+      operationId: clearStoreBrand
+      summary: Remove a store from its brand
+      description: |
+        Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 브랜드가 없던 매장에도 실행할 수
+        있으며 그 매장의 BRAND_NAME term을 지운다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClearStoreBrandRequest"
+      responses:
+        "200":
+          description: Store brand assignment after removal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreBrand"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
     get:
       tags: [Loyalty]
@@ -4651,6 +4838,12 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/Identifier"
+    BrandId:
+      in: path
+      name: brandId
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
     OrderReference:
       in: path
       name: orderReference
@@ -5097,6 +5290,119 @@ components:
         type: string
         const: no-store
   schemas:
+    BrandStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+      description: ARCHIVED frees the normalized name for another brand.
+    Brand:
+      type: object
+      required: [brandId, name, status, assignedStoreCount, version]
+      properties:
+        brandId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        status:
+          $ref: "#/components/schemas/BrandStatus"
+        assignedStoreCount:
+          type: integer
+          minimum: 0
+          description: |
+            소속 매장 수. 이름 변경의 색인 fan-out 비용이며 ADR-112 6절의 1000개 상한에
+            얼마나 가까운지를 운영자가 알 수 있는 유일한 값이다.
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Pass back as expectedVersion to detect a concurrent change.
+      additionalProperties: false
+    BrandPage:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Brand"
+        page:
+          $ref: "#/components/schemas/BrandPageInfo"
+      additionalProperties: false
+    BrandPageInfo:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: [string, "null"]
+          maxLength: 2048
+      additionalProperties: false
+    StoreBrand:
+      type: object
+      required: [storeId, brandId, brandName]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        brandId:
+          oneOf:
+            - $ref: "#/components/schemas/Identifier"
+            - type: "null"
+        brandName:
+          type: [string, "null"]
+          maxLength: 120
+      additionalProperties: false
+    CreateBrandRequest:
+      type: object
+      required: [name, reason]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        reason:
+          $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    UpdateBrandRequest:
+      type: object
+      required: [reason]
+      description: name과 status 중 적어도 하나가 있어야 한다. 둘 다 없으면 400이다.
+      properties:
+        name:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 120
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/BrandStatus"
+            - type: "null"
+        expectedVersion:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        reason:
+          $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    AssignStoreBrandRequest:
+      type: object
+      required: [brandId, reason]
+      properties:
+        brandId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    ClearStoreBrandRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    OperationReason:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: Recorded on the AuditRecord this command appends.
     LoginId:
       type: string
       minLength: 5

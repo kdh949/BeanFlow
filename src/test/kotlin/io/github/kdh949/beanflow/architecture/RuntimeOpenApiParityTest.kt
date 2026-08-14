@@ -14,6 +14,7 @@ import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryO
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
 import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
+import io.github.kdh949.beanflow.operations.internal.OperatorBrandService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -113,6 +114,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var ordinaryPointAccrualPolicyService: OrdinaryPointAccrualPolicyService
+
+    @MockitoBean
+    private lateinit var operatorBrandService: OperatorBrandService
 
     @MockitoBean
     private lateinit var operatorCompensationQueryOperations: OperatorCompensationQueryOperations
