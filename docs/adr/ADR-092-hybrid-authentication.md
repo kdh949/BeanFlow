@@ -177,8 +177,9 @@ CSRF 대응이라는 비용이 추가되지만, 이는 표준 대응책이 명�
 `productization-20`은 중앙 경로 registry와 정확히 네 `SecurityFilterChain`을 구현했다. Public과
 Operations는 stateless이고, Customer/Merchant는 서로 다른 PostgreSQL Session·CSRF Cookie만 수용한다.
 미배정 또는 중복 mapping은 startup 검증 실패다. 기존 혼합 actor API는 소비자 URI를 유지하면서
-Operations 전용 PointAccount·refund URI로 분리했으며, 반대 actor credential은 403이다. 고객·점주
-계정 loader가 아직 없을 때 보호 경로를 401/503 외의 가짜 성공으로 바꾸지 않는다.
+Operations 전용 PointAccount·refund URI로 분리했다. 반대 actor credential만 보낸 요청은 403이지만,
+같은 브라우저가 Customer/Merchant Session Cookie를 함께 보내면 각 Chain은 자기 Cookie만 해석한다.
+고객·점주 계정 loader가 아직 없을 때 보호 경로를 401/503 외의 가짜 성공으로 바꾸지 않는다.
 
 `productization-30`은 고객 가입·로그인, `GET /me`, 현재 Session 로그아웃과 CustomerAccount loader를
 구현했다. 고객 로그인은 Argon2id 검증 뒤 account/attempt/Session row를 같은 transaction 경계에서
