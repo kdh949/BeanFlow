@@ -29,6 +29,11 @@ Session을 쓰면 다음 위험이 새로 생긴다.
 | `Path` | `/` | 콘솔별 경로 분리는 Cookie가 아니라 Chain이 담당 |
 | 이름 | 고객·점주 별도 | 같은 브라우저에서 두 콘솔을 동시에 열 때 Session이 섞이지 않는다 |
 
+- Customer/Merchant Chain은 자기 actor Cookie만 Session ID로 해석한다. 같은 브라우저 요청에 두 Cookie가
+  함께 있으면 현재 Chain의 Cookie를 사용하고 다른 actor Cookie는 무시한다. 반대 actor Cookie만 있으면
+  actor mismatch로 403이다. 즉 Cookie의 단순 동시 존재를 bearer credential 주입과 동등하게 취급하지
+  않으며, Session 선택은 URI Chain과 Cookie 이름으로 결정한다.
+
 ### CSRF
 
 - 상태를 바꾸는 모든 요청(`POST`, `PUT`, `PATCH`, `DELETE`)에 CSRF 토큰을 요구한다.
@@ -121,6 +126,8 @@ Session 저장소를 PostgreSQL에 두면 트랜잭션·백업·관측이 이미
 - 고객 token의 점주 Chain 재사용과 점주 token의 고객 Chain 재사용이 403인지 검증한다.
 - 운영자 Chain은 CSRF 토큰 없이도 정상 동작하는지 검증한다.
 - 고객 Cookie로 점주 경로를 호출하면 403인지 검증한다.
+- 유효한 고객·점주 Session Cookie를 함께 보낸 같은 브라우저 요청에서 Customer와 Merchant endpoint가
+  각각 자기 actor로 성공하는지 검증한다.
 - Session 저장소 장애를 주입해 익명 통과가 아니라 503이 되는지 검증한다.
 - 동시 Session 상한 초과 시 오래된 Session이 폐기되는지 검증한다.
 - 유휴·절대 만료 경계를 고정 `Clock`으로 검증한다.
