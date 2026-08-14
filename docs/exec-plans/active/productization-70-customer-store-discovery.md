@@ -59,14 +59,14 @@
 - **검색 term:** `discovery_store_search_term`의 한 행. "이 매장은 이 문자열로 찾을 수 있다"를
   뜻하며 term 종류와 정규화 문자열, 가중치를 가진다.
 - **term 종류:** `STORE_NAME`, `BRAND_NAME`, `REGION_SIDO`, `REGION_SIGUNGU`,
-  `REGION_EUPMYEONDONG`, `MENU_NAME` 여섯 개의 폐쇄 어휘다.
+  `REGION_EUPMYEONDONG`, `REGION_RI`, `MENU_NAME` 일곱 개의 폐쇄 어휘다.
 - **관련도:** 토큰별 최고 가중 유사도의 평균. substring 매칭은 유사도 `1.0`으로 취급한다.
 - **관련도 rank:** `1_000_000 - floor(relevance × 1_000_000)`. 내림차순 관련도를 오름차순 정렬
   하나로 표현해 nearby와 같은 all-ASC keyset 규칙을 쓰기 위한 canonical cursor 값이다.
 - **Brand:** 여러 매장이 공유하는 상호 정체성. `merchant`가 소유하는 Aggregate Root이며 운영자만
   생성·수정한다. 매장은 브랜드를 ID로 참조한다.
 - **Region:** 행정안전부 법정동 코드 10자리로 식별하는 폐쇄 어휘 항목. 매장주는 신규 생성 없이
-  기존 코드를 선택만 한다.
+  기존 코드를 선택만 한다. 시도·시군구·읍면동·리 4계층이며 리 행도 상위 읍·면 이름을 함께 갖는다.
 - **동기 색인 갱신:** 브랜드·지역 커맨드가 자신의 transaction 안에서 검색 term을 함께 갱신하는 것.
   큐·배치·지연 갱신이 아니다.
 - **재색인:** API 밖에서 바뀐 매장·메뉴 데이터를 색인에 반영하는 명시적 운영자 커맨드다.
@@ -121,13 +121,16 @@
 4. 토큰별로 substring을 먼저 적용하고 걸리지 않은 토큰에만 유사도 `0.3` 이상 매칭을 추가한다.
    **모든** 토큰이 해당 매장의 term 중 적어도 하나에 매칭돼야 결과에 포함된다(AND).
 5. term 가중치는 `STORE_NAME 1.00`, `BRAND_NAME 0.90`, `REGION_* 0.80`, `MENU_NAME 0.70`이고
-   substring 매칭은 유사도 `1.0`이다. 관련도 점수를 응답에 노출하지 않는다.
+   substring 매칭은 유사도 `1.0`이다. `REGION_RI`도 다른 `REGION_*`과 같은 `0.80`이다.
+   관련도 점수를 응답에 노출하지 않는다.
 6. `pickupAvailable=true`는 ADR-103의 실제 슬롯 존재 판정을 사용한다. 검색과 nearby가 다른 의미를
    쓰지 않는다. `openOnly=true`는 `acceptingOrders && pickupEnabled`만 요구하고 둘은 독립이다.
    둘 다 미지정이 기본이며 그때 닫힌 매장도 결과에 포함하고 상태를 플래그로 표시한다.
 7. `matchedMenus`는 매장당 최대 3개이고 `(가중 유사도 DESC, 메뉴명 ASC, 메뉴ID ASC)` 순이다.
    매칭 메뉴가 없으면 빈 배열이며 매장이 결과에서 빠지지 않는다.
 8. 모든 매장 프로필은 유효한 `region_code`를 가진다(DB `NOT NULL`). `brand_id`는 nullable이다.
+   리 행에 지정된 매장은 `REGION_*` term을 4행(시도·시군구·읍면동·리), 리가 없으면 3행 갖는다.
+   빈 문자열 계층으로는 term을 만들지 않는다.
 9. 활성 브랜드의 정규화 이름은 유일하다. 중복 등록은 409다.
 10. 브랜드 생성·수정과 매장 브랜드 지정은 `PLATFORM_OPERATOR`만, 매장 지역 지정은 해당 매장의
     `STORE_OWNER`만 수행한다. `STORE_STAFF`는 지역을 바꿀 수 없다. 모두 AuditRecord를 남긴다.
@@ -288,6 +291,7 @@ CREATE TABLE merchant_region (
     sido varchar(40) NOT NULL CHECK (length(trim(sido)) > 0),
     sigungu varchar(40) NOT NULL DEFAULT '',
     eupmyeondong varchar(40) NOT NULL DEFAULT '',
+    ri varchar(40) NOT NULL DEFAULT '',
     full_name varchar(120) NOT NULL CHECK (length(trim(full_name)) > 0)
 );
 
@@ -312,6 +316,15 @@ ALTER TABLE merchant_store_discovery_profile
     ADD COLUMN region_code varchar(10) REFERENCES merchant_region(code);
 ```
 
+#### V57·V58 개정 (2026-08-15)
+
+리 단위 검색을 위해 `merchant_region`에 `ri` 열이 추가된다(ADR-112 리 Amendment). V57·V58은
+**이미 이 branch에 있지만 merge되지 않았고 어떤 환경에도 적용되지 않았으므로** 새 migration을
+덧붙이지 않고 두 파일을 그 자리에서 고친다. ADR-072가 금지하는 것은 **적용·배포된** migration의
+재번호화와 checksum 수선이며, 미병합 Draft stack의 미적용 migration 정리는 2026-08-12 선례대로
+history를 다시 쓰지 않는 additive commit으로 처리한다. 실제 DB는 테스트 컨테이너뿐이라 매번
+`clean` 후 재적용된다.
+
 `merchant_region` 시드는 폐지되지 않은 법정동 약 2만 행이다. MD-2026-016대로
 `scripts/generate-region-seed.py`가 원본을 결정적으로 변환하고 시드 SQL만 커밋한다. 시드는 정렬된
 `INSERT ... ON CONFLICT DO NOTHING`이라 재실행 가능하다.
@@ -324,7 +337,7 @@ CREATE TABLE discovery_store_search_term (
     store_id uuid NOT NULL REFERENCES merchant_store(id) ON DELETE CASCADE,
     term_kind varchar(24) NOT NULL CHECK (term_kind IN (
         'STORE_NAME', 'BRAND_NAME', 'REGION_SIDO', 'REGION_SIGUNGU',
-        'REGION_EUPMYEONDONG', 'MENU_NAME'
+        'REGION_EUPMYEONDONG', 'REGION_RI', 'MENU_NAME'
     )),
     source_id uuid,
     term_normalized varchar(120) NOT NULL CHECK (length(trim(term_normalized)) > 0),
@@ -455,8 +468,13 @@ POST   /api/v1/operations/search-index/rebuild
    스크립트 작성, 단계 1 migration(`pg_trgm`·region·brand·favorite) 작성.
    **완료 조건:** Testcontainers에서 시드 행 수와 대표 코드(역삼동 `1168010100`)가 조회되고,
    정규화 함수의 NFKC·대소문자·공백 단위 테스트가 통과한다.
+1-B. **리 단위 지역 어휘 (2026-08-15 추가).** ADR-112 리 Amendment에 맞춰 V57에 `ri` 열을 넣고
+   시드 생성 스크립트가 리 이름을 뽑도록 고친 뒤 V58을 재생성한다.
+   **완료 조건:** 리 행(`강원특별자치도 춘천시 동면 감정리`)의 `ri`가 `감정리`이고 같은 행의
+   `eupmyeondong`이 `동면`으로 남아 있으며, 리가 없는 지역의 `ri`가 빈 문자열이다. 시드 행 수는
+   `20560`으로 변하지 않는다.
 2. 단계 2 migration(색인 테이블)과 `shared/api` 색인 갱신 port, `discovery/internal` 구현,
-   기존 매장·메뉴 백필.
+   기존 매장·메뉴 백필. 색인 term 종류에 `REGION_RI`를 포함한다.
    **완료 조건:** 모든 매장이 `STORE_NAME` term 1행을 갖고 커버리지 gauge가 `1.0`을 보고한다.
 3. 운영자 브랜드 CRUD·매장 브랜드 지정과 `BRAND_NAME` term 동기 갱신, fan-out 상한, AuditRecord.
    **완료 조건:** 브랜드명 변경이 소속 매장 term을 같은 transaction에서 갱신하고, 색인 갱신을 강제
@@ -501,6 +519,11 @@ POST   /api/v1/operations/search-index/rebuild
 - 같은 매장에 대한 동시 지역 변경의 최종 상태와 term 일치.
 - 지역 미입력 매장이 남아 있을 때 커버리지 migration 실패.
 - `sigungu`가 빈 문자열인 행정구역(세종시)의 정상 저장·검색.
+- 리 행의 `ri`가 리 이름이고 `eupmyeondong`이 상위 읍·면 이름을 유지하는지.
+- 리에 지정된 매장이 읍·면 이름과 리 이름 **양쪽**으로 검색되고 `matchReason`이 각각
+  `REGION_EUPMYEONDONG`, `REGION_RI`인지.
+- 리가 없는 지역에 `REGION_RI` term이 만들어지지 않고 `REGION_*` term이 3행인지.
+- 전국에 중복되는 리 이름(`상리`)이 반경 밖에서는 결과에 섞이지 않는지.
 - 법정동 시드 재실행 시 행 수 동일.
 - `STORE_STAFF`·타 매장 소유자의 지역 변경 403, `STORE_OWNER`의 브랜드 생성 403,
   비운영자 재색인 403, 미인증 검색 401.
@@ -627,10 +650,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - **(2026-08-15) 원본에 이름 끝 공백이 있다.** `"경기도 부천시 원미구 "` 등 4행이다. 그대로 두면
   하위 행의 접두사 제거가 어긋나 24행이 실패한다. 읽는 즉시 `strip`한다.
 - **(2026-08-15) 리 단위 행이 시드의 74%다.** 폐지되지 않은 20,560행 중 15,209행이 리다.
-  스키마에는 리 열이 없고 검색 term도 시도/시군구/읍면동 세 종류뿐이므로(ADR-112) 리 행은
-  상위 읍면동 이름을 `eupmyeondong`에 담고 리 이름은 `full_name`에만 남는다. 즉 리는 매장주가
-  고를 수 있는 코드로는 존재하지만 리 이름으로 검색되지는 않는다. ADR-112가 `홍대`·`가로수길`
-  같은 더 세밀한 단위를 Revisit Condition으로 둔 것과 같은 성격의 한계다.
+  설계 당시 3계층 어휘는 이 비중을 모르고 정한 것이었고, 그대로 두면 리에 있는 매장이 리 이름으로
+  검색되지 않는다. **한계로 남기지 않고 ADR-112 리 Amendment로 `ri` 열과 `REGION_RI` term 종류를
+  추가하기로 했다.** 리 행의 `eupmyeondong`은 상위 읍·면 이름을 그대로 두므로 검색 범위가 이동하지
+  않고 넓어진다. 법정동 코드 뒤 2자리가 리 코드라 새 자료 없이 판별된다.
 - **(2026-08-15) `merchant_store` 컬럼 집합을 통째로 고정한 기존 테스트가 `brand_id`로 깨졌다.**
   `StoreDiscoveryProfileMigrationTest`가 ADR-020의 "검색용 이름·geometry·spatial index를 추가하지
   않는다"를 지키려고 컬럼 목록 전체를 `containsExactlyInAnyOrder`로 고정하고 있었다. `brand_id`는
@@ -664,7 +687,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 설정 주소지는 client storage에만 두고 서버는 좌표를 저장하지 않는다. BR-28 Revisit Condition을 승격하지 않는다 | MD-2026-017, [ADR-020](../../adr/ADR-020-nearby-location-privacy.md) 2026-08-15 평가 |
 | 2026-08-15 | 메뉴 검색은 반경 내 전 매장을 대상으로 하되 결과 단위는 매장 카드로 유지한다 | [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 시도/시군구/읍면동은 공백이 아니라 법정동 코드 계층으로 분해한다 | 이 문서 Surprises, `scripts/generate-region-seed.py` |
-| 2026-08-15 | 리 단위 행도 시드하되 리 이름으로는 검색되지 않는다. 스키마에 리 열을 추가하지 않는다 | 이 문서 Surprises, [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) |
+| 2026-08-15 | ~~리 이름으로는 검색되지 않는다~~ → **철회.** 리 열과 `REGION_RI` term 종류를 추가해 리도 검색 대상으로 만든다 | [ADR-112 리 Amendment](../../adr/ADR-112-store-brand-and-administrative-region.md), [ADR-103 A7](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
+| 2026-08-15 | 미병합·미적용 V57/V58은 새 migration을 덧붙이지 않고 그 자리에서 고친다 | 이 문서 Data and Migration, [ADR-072](../../adr/ADR-072-execplan-unattended-execution-and-migration-lane.md) |
 | 2026-08-15 | 원본 checksum은 ZIP이 아니라 내부 텍스트 내용으로 고정한다 | MD-2026-016, `scripts/generate-region-seed.py` |
 
 ## Outcomes & Retrospective
@@ -678,6 +702,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   Brand Aggregate, 법정동 어휘, 동기 색인 테이블, 운영자·매장주 쓰기 경로와 재색인 커맨드를
   In Scope에 추가했다. 별도 초안이던 `store-brand-region-keyword-search.md`는 이 문서로 흡수하고
   삭제했다.
+- 2026-08-15: Milestone 1 구현 중 법정동 자료의 74%가 리 단위임을 확인하고, 리를 검색 불가 한계로
+  남기는 대신 ADR-112 리 Amendment와 ADR-103 A7으로 `ri` 열과 `REGION_RI` term 종류를 추가했다.
+  term 종류가 여섯에서 일곱으로 늘고 지역 어휘가 4계층이 된다. 정렬 튜플과 cursor 계약은 그대로다.
 - 2026-08-15: 매장을 가로지르는 메뉴 검색의 조회 순서를 명시하고, 설정 주소지를 client storage
   경계로 확정했다. 서버 스키마와 공개 API 계약은 변경되지 않는다. 메뉴 단위 결과 목록을
   Non-goals에 추가했다.

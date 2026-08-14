@@ -113,6 +113,7 @@ batch 판정, 추천 baseline, Elasticsearch 미도입)은 원 Decision 그대�
 검색 term은 `STORE_NAME`, `BRAND_NAME`, `REGION_SIDO`, `REGION_SIGUNGU`, `REGION_EUPMYEONDONG`,
 `MENU_NAME` 여섯 종류의 폐쇄 어휘다. 브랜드와 지역 데이터 모델은
 [ADR-112](ADR-112-store-brand-and-administrative-region.md)가 소유한다.
+(아래 A7이 `REGION_RI`를 더해 일곱 종류로 넓힌다.)
 
 검색 대상이 네 곳으로 늘면서 매 요청 4-way 조인 위에 유사도를 계산하는 것이 불가능해졌다.
 매장당 검색 가능 문자열을 한 행씩 모은 **동기 갱신 색인 테이블**
@@ -162,7 +163,7 @@ substring으로 걸리지 않을 때만 같은 토큰에 `pg_trgm` 유사도 매
 #### A5. 응답에 매칭된 메뉴 목록을 포함한다
 
 원 Decision의 `matchReason`(`STORE_NAME | MENU_NAME | BOTH`)은 브랜드·지역이 추가되면서
-표현력이 부족하다. `matchReason`을 여섯 term 종류의 집합으로 확장하고, 추가로 검색어에 걸린
+표현력이 부족하다. `matchReason`을 term 종류의 집합(A7 반영 후 일곱 종류)으로 확장하고, 추가로 검색어에 걸린
 메뉴를 매장당 최대 3개까지 `matchedMenus`로 내려준다. 정렬은
 `(가중 유사도 DESC, 메뉴명 ASC, 메뉴ID ASC)`이며 매칭 메뉴가 없으면 빈 배열이다. 매장이 결과에서
 빠지지는 않는다.
@@ -178,6 +179,16 @@ substring으로 걸리지 않을 때만 같은 토큰에 `pg_trgm` 유사도 매
 
 닫힌 매장을 결과에서 지우지 않는 것이 기본값인 이유는, 이름을 알고 검색한 사용자에게 0건을
 돌려주는 것이 고장으로 읽히기 때문이다. 상태는 `open`, `pickupAvailable` 플래그로 표시한다.
+
+#### A7. 리 단위 지역명도 검색 대상이다 (2026-08-15 추가)
+
+A1의 term 종류에 `REGION_RI`를 더해 **일곱 종류**가 된다. 가중치는 다른 `REGION_*`과 같은 `0.80`이며
+`matchReason` 집합도 일곱 종류로 넓어진다.
+
+법정동 자료의 74%가 리 단위인데 A1 시점의 3계층 어휘로는 리 이름이 검색되지 않았다.
+데이터 모델과 근거는 [ADR-112 리 단위 지역 어휘 Amendment](ADR-112-store-brand-and-administrative-region.md)가
+소유한다. 매칭·정렬·cursor 규칙은 A2~A6 그대로이며 정렬 튜플이 바뀌지 않으므로
+[ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) 등록 내용도 그대로다.
 
 #### 유지하는 상한
 
