@@ -491,6 +491,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   `INITIAL_PASSWORD → ACTIVE`로 전환할 수 있음을 확인했다. current password 검증 뒤 exact equality를
   policy violation으로 거부하고, INITIAL_PASSWORD/ACTIVE 모두 state, credentialVersion, 기존 Session,
   AuditRecord와 새 Session 무변경을 PostgreSQL HTTP 통합 테스트로 검증했다.
+- 2026-08-14: Plan 30의 customer session probe 보정이 merge된 뒤, Plan 20 test configuration이 남긴
+  fake Merchant browser actor loader가 Plan 40의 production loader와 같은 bean name으로 충돌함을
+  확인했다. fake loader를 제거하고 matching `credentialVersion=1`의 ACTIVE MerchantAccount를 실제로
+  seed하도록 바꿨다. 따라서 같은 browser의 Customer/Merchant cookie 격리 회귀는 두 actor 모두
+  production loader 경로로 검증한다. `AuthenticationSecurityIntegrationTest` 8건과 clean full build
+  1,065 tests(0 failures, 0 errors, 1 skipped), 문서/OpenAPI 46 policies·111 ADRs·274 Markdown·57
+  ExecPlans 검증이 이 변경 뒤 통과했다.
 
 ## Surprises & Discoveries
 
@@ -536,6 +543,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - Argon2id는 같은 입력에도 매번 다른 salt Hash를 만들므로 Hash 비교나 새 Hash 생성 여부로는 최초
   비밀번호가 실제로 교체됐는지 판단할 수 없다. 현재 password 검증을 통과한 뒤 raw input equality를
   먼저 거부해야 lifecycle·Audit·Session side effect 없이 임시 비밀 소유권 전환을 보장한다.
+- Plan 20의 isolation test는 당시 아직 존재하지 않던 Customer/Merchant account-backed loader를
+  test bean으로 대체했다. Plan 30에는 Customer loader가, Plan 40에는 Merchant loader가 production에
+  추가되므로, completed child stack에서는 같은 bean name의 test double이 ApplicationContext를 막는다.
+  production loader가 존재하는 단계에서는 실제 ACTIVE account를 seed하고 double을 제거해야 actor
+  isolation 검증이 구현 경로를 우회하지 않는다.
 
 ## Decision Log
 
@@ -554,6 +566,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | V54의 immutable SHA-256 payload column은 `char(64)`를 유지하고 JPA field를 `SqlTypes.CHAR`로 명시해 schema validation을 통과 | 이 plan |
 | 2026-08-13 | demo 프런트 소유권 nonce는 환경변수와 Vite `--mode` 명령행에 함께 남기고 stop은 PID·PGID·cwd·nonce를 모두 검증한 뒤에만 signal | 이 plan |
 | 2026-08-14 | self-change는 현재와 다른 비밀이어야 하며 same value는 state/version/Session/Audit 새 side effect 없이 정책 위반으로 거부 | [BR-35](../../product/business-policy-decisions.md), [ADR-093](../../adr/ADR-093-merchant-credential-lifecycle.md) |
+| 2026-08-14 | Plan 40 이후 actor-isolation test는 Customer/Merchant production browser loader를 모두 사용하고, 각 actor의 ACTIVE account와 matching credentialVersion을 seed | 이 plan |
 
 ## Outcomes & Retrospective
 
@@ -570,6 +583,12 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 구현 중 드러난 membership-only fixture, Modulith cycle, Kotlin compiler/daemon race, V54 JPA type drift와
   demo 프런트 정리 결함을 숨기지 않고 각각 fixture 정합화, outbound port 역전, clean 재검증,
   `SqlTypes.CHAR`, 명령행 nonce로 해소했다. Plan 50은 이 completed head에서만 시작한다.
+- 후속 stack의 실제 loader 도입으로 드러난 session-probe fixture bean 충돌도 test double 제거와
+  ACTIVE Customer/Merchant account seed로 해소했다. 이 회귀는 actor별 cookie를 함께 가진 정상 browser가
+  각 API에서 자기 actor로 계속 인증되는지를 production loader까지 포함해 보호한다.
+- 이번 fixture 정합화 뒤 `AuthenticationSecurityIntegrationTest` 8건, clean full build 1,065 tests
+  (0 failures, 0 errors, 1 skipped), 문서/OpenAPI 46 policies·111 ADRs·274 Markdown·57 ExecPlans가
+  통과했다. full build는 12분 32초가 걸렸으며, deprecated Gradle feature 경고만 남았다.
 
 ## Revision Notes
 
@@ -578,3 +597,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-13: Merchant account/Session/Operations credential 구현, 실패·복구와 required validation 결과를
   기록하고 completed로 이동.
 - 2026-08-14: 동일 비밀번호 self-change 거부와 lifecycle/Session/Audit 무변경 회귀를 기록.
+- 2026-08-14: parent Plan 30 반영 뒤 session-probe가 Customer/Merchant production loader를 직접
+  검증하도록 fixture를 정합화.
