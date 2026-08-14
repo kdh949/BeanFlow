@@ -451,8 +451,12 @@ git diff --cached --check
   첨부 credential 도입 시 재검토 조건을 가진다. final tip의 7개 인증 통합 테스트는 Public POST 403,
   Operations Bearer POST의 무-CSRF 200, 무자격 401과 Customer/Merchant Session Cookie 403을 검증했다.
   첫 probe의 204 기대(실제 200)와 import ordering Spotless 실패는 각각 기대 상태·정렬 보정 뒤 재실행해
-  통과했다. 보안 commit `6af1eee`은 Plan 30→60에 순차 merge했으며, `spotlessCheck`, 문서/OpenAPI
-  검증도 통과했다. 새 GitHub CI가 끝나기 전에는 성공으로 기록하지 않는다.
+  통과했다. 첫 full CI는 top-level test `@RestController`가 component scan에 포함되어 Runtime OpenAPI
+  parity 997 tests 중 1건을 실패시켰다. controller를 nested test configuration으로 옮긴 첫 시도는 duplicate
+  handler mapping으로 인증 테스트 7건을 실패시켰고, bean factory를 제거해 test context에만 한 번 등록하도록
+  고친 뒤 인증 7건과 RuntimeOpenApiParityTest 1건을 모두 통과했다. 보안 commit `6af1eee`과 test fix
+  `a824e4a`는 Plan 30→60에 순차 merge했으며, `spotlessCheck`, 문서/OpenAPI 검증도 통과했다. 새 GitHub
+  CI가 끝나기 전에는 성공으로 기록하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -514,6 +518,10 @@ git diff --cached --check
   않는다는 Accepted 계약상 false positive다. 이 예외는 GitHub audit comment와 ADR-094 재검토 조건으로
   제한했으며, 다른 CSRF 예외로 일반화하지 않는다. 두 호출이 같은 configurer method에 있어 Public 제거 뒤
   GitHub가 남은 Operations result를 alert #2로 재연결했으므로, #3과 #2 모두 같은 audit comment로 닫혔다.
+- CSRF regression을 실경로로 검증하려고 만든 top-level test controller가 global component scan에 들어가
+  Runtime OpenAPI parity를 깨뜨렸다. nested test configuration으로 옮길 때 bean factory까지 남기면 duplicate
+  handler가 되어 인증 context 자체가 실패했다. 최종적으로 nested controller를 configuration 안에서 한 번만
+  등록해 test context에만 보이도록 제한했다.
 
 ## Decision Log
 
