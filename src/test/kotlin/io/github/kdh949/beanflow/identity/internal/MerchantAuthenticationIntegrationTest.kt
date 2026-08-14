@@ -165,6 +165,18 @@ internal class MerchantAuthenticationIntegrationTest(
     }
 
     @Test
+    fun `same password is rejected without credential side effects for initial and active accounts`() {
+        val initialAccountId = seedInitialAccount("same.initial", CURRENT_PASSWORD, DEFAULT_NOW.plus(24, ChronoUnit.HOURS))
+        val activeAccountId = seedActiveAccount("same.active", CURRENT_PASSWORD)
+        val csrf = issueCsrf()
+        val initialSession = requireNotNull(login(csrf, "same.initial", CURRENT_PASSWORD).andReturn().response.getCookie(SESSION_COOKIE))
+        val activeSession = requireNotNull(login(csrf, "same.active", CURRENT_PASSWORD).andReturn().response.getCookie(SESSION_COOKIE))
+
+        assertSamePasswordRejectedWithoutSideEffects(initialAccountId, csrf, initialSession, "INITIAL_PASSWORD")
+        assertSamePasswordRejectedWithoutSideEffects(activeAccountId, csrf, activeSession, "ACTIVE")
+    }
+
+    @Test
     fun `temporary password expiry is enforced at the exact boundary for login and existing session`() {
         val expiresAt = DEFAULT_NOW.plusSeconds(60)
         seedInitialAccount("expiry.user", CURRENT_PASSWORD, expiresAt)
@@ -423,6 +435,39 @@ internal class MerchantAuthenticationIntegrationTest(
             Timestamp.from(DEFAULT_NOW),
         )
         return id
+    }
+
+    private fun assertSamePasswordRejectedWithoutSideEffects(
+        accountId: UUID,
+        csrf: Cookie,
+        session: Cookie,
+        expectedState: String,
+    ) {
+        val sessionsBefore = jdbc.queryForObject("SELECT count(*) FROM spring_session", Long::class.java)
+        mockMvc
+            .perform(
+                post("/api/v1/auth/merchant/password-changes")
+                    .cookie(session, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"currentPassword":"$CURRENT_PASSWORD","newPassword":"$CURRENT_PASSWORD"}"""),
+            ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"))
+            .andExpect { result -> assertThat(result.response.getCookie(SESSION_COOKIE)).isNull() }
+
+        assertThat(jdbc.queryForMap("SELECT state, credential_version FROM identity_merchant_account WHERE id = ?", accountId))
+            .containsEntry("state", expectedState)
+            .containsEntry("credential_version", 0L)
+        assertThat(passwords.matches(CURRENT_PASSWORD, accountHash(accountId))).isTrue()
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND action = 'MERCHANT_PASSWORD_CHANGED'",
+                Long::class.java,
+                accountId,
+            ),
+        ).isZero()
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM spring_session", Long::class.java)).isEqualTo(sessionsBefore)
+        mockMvc.perform(get("/api/v1/merchant/me").cookie(session)).andExpect(status().isOk)
     }
 
     private fun seedStore(name: String): UUID {

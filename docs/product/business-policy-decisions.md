@@ -1634,6 +1634,8 @@
   공백과 Unicode를 허용하고 대소문자·숫자·특수문자 조합 규칙을 요구하지 않는다. 앞뒤 공백 제거,
   Unicode 정규화 또는 조용한 자르기를 하지 않고 사용자가 입력한 byte sequence를 그대로 검증한다.
   사용자명과 동일한 비밀번호 및 versioned local common-password blocklist의 exact match는 거부한다.
+  인증된 self-service 비밀번호 변경은 새 값이 현재 값과 같은 byte sequence이면 거부한다. 이 거부는
+  account state, credentialVersion, Session과 AuditRecord를 바꾸거나 새 Session을 발급하지 않는다.
 - **Password Storage:** Argon2id PHC 문자열로만 저장한다. 초기 파라미터는 memory 19 MiB,
   iterations 2, parallelism 1이며 각 hash는 고유 salt를 사용한다. 구현 환경에서 같은 조건으로 검증
   지연을 측정하고 1초 이상이면 파라미터를 조용히 낮추지 않고 문서·정책을 재검토한다. 지원되지 않는
@@ -1676,6 +1678,8 @@
   - 성공 로그인 후 계정 창 초기화와 IP 창 비초기화
   - 임시 비밀번호 발급 후 24시간 -1ns/at/+1ns와 재발급 감사 원자성
   - Unicode·공백·15/128 code point·512 byte 경계와 비밀번호 비정규화
+  - `INITIAL_PASSWORD`와 `ACTIVE`에서 현재·새 비밀번호가 같은 경우의 정책 거부와 account state,
+    credentialVersion, 기존 Session, AuditRecord, 새 Session 무변경
   - attempt 원문 비저장, HMAC key 누락 기동 실패와 24시간 보존 worker 재실행
 - **Implementation Evidence (2026-08-13):** 고객 계정은 Argon2id
   `m=19456,t=2,p=1`, actor/scope별 HMAC attempt row, 5회 계정 잠금·30회 IP 차단, 정확한 15분 경계와
@@ -1686,6 +1690,9 @@
 - **Implementation Evidence (2026-08-14):** trusted peer의 complete `X-Forwarded-For` chain은
   right-to-left로 parse한다. attacker prefix, multiple trusted hops, IPv4/IPv6 mixed chain,
   malformed chain과 untrusted direct peer의 spoofed header를 unit regression으로 검증했다.
+- **Implementation Evidence (2026-08-14):** Merchant self-change에서 같은 current/new password는
+  `PASSWORD_POLICY_VIOLATION`으로 거부한다. INITIAL_PASSWORD와 ACTIVE 모두 state, credentialVersion,
+  기존 Session, AuditRecord와 새 Session이 바뀌지 않음을 PostgreSQL HTTP 통합 테스트로 검증했다.
 - **ADR Required:** Yes — [ADR-093](../adr/ADR-093-merchant-credential-lifecycle.md),
   [ADR-094](../adr/ADR-094-browser-session-security.md)
 - **Revisit Conditions:** MFA 또는 복구 채널 도입, credential-stuffing 관측치, hash 지연·메모리 측정,

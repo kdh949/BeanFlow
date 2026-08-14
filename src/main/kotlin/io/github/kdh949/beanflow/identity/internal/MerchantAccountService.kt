@@ -150,6 +150,9 @@ internal class MerchantAccountApplicationService(
         if (!passwordSecurity.matches(currentPassword, snapshot.passwordHash)) {
             throw DomainFailure(FailureCode.AUTHENTICATION_FAILED, "Authentication failed")
         }
+        if (currentPassword == newPassword) {
+            throw DomainFailure(FailureCode.PASSWORD_POLICY_VIOLATION, "New password must differ from current password")
+        }
         passwordSecurity.validateRegistrationPassword(snapshot.loginId, newPassword)
         val newHash = passwordSecurity.encode(newPassword)
         val changed = transactions.changePassword(snapshot, newHash, clock.instant())
