@@ -533,6 +533,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CustomerStoreList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /me/store-recommendations:

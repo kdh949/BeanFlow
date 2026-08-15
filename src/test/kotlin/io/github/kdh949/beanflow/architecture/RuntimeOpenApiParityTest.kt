@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.architecture
 
 import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
+import io.github.kdh949.beanflow.discovery.api.RecentStoreOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
@@ -142,6 +143,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var favoriteStoreOperations: FavoriteStoreOperations
+
+    @MockitoBean
+    private lateinit var recentStoreOperations: RecentStoreOperations
 
     @MockitoBean
     private lateinit var storeSearchQueryOperations: StoreSearchQueryOperations

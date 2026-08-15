@@ -87,6 +87,9 @@ internal class AuthenticationSecurityIntegrationTest(
         mockMvc
             .perform(get("/api/v1/me/favorite-stores"))
             .andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(get("/api/v1/me/recent-stores"))
+            .andExpect(status().isUnauthorized)
         // 검색은 공개 카탈로그처럼 보이지만 고객 chain이다. 인증 없이 열리면 색인 전체가
         // 익명 열람 대상이 된다(BR-47 Required Tests).
         mockMvc

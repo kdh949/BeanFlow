@@ -871,7 +871,48 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `scripts/verify-docs.sh`도 통과했다(runtime 138 paths/146 operations).
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
     `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12).
-- 2026-08-15: 미착수 — Milestone 7~12.
+- 2026-08-16: **Milestone 7 완료.** `discovery/api`의 `FavoriteStoreOperations`와
+  `discovery/internal`의 customer-scoped favorite command/query, 그리고
+  `GET/PUT/DELETE /api/v1/me/favorite-stores`를 추가했다. migration은 없다(V57의 favorite
+  table과 `(customer_id, created_at DESC, store_id)` index를 사용한다).
+  - Merchant의 `StoreDiscoveryQueryOperations.findVisibleStores` bulk port로 현재 공개 display와
+    owner-side pickup capability를 hydrate하고, Fulfillment의 기존 batch port와 AND하여
+    `pickupAvailable`을 nearby/search와 동일한 실제 슬롯 의미로 유지한다. 공개 프로필을 잃은
+    favorite는 source row를 지우지 않고 목록에서만 제외한다.
+  - target의 공개 탐색 가능 여부는 PUT transaction 안에서 확인해 404로 답하고, 같은 customer의
+    반복 PUT은 `ON CONFLICT DO NOTHING`, 존재하지 않는 row DELETE는 exact customer/store predicate의
+    204로 수렴한다. CustomerActor만 ID 원천으로 쓰며 browser command는 customer session +
+    `X-BEANFLOW-CSRF`를 요구한다.
+  - `FavoriteStoreEndpointIntegrationTest` 5건이 newest-first + store-ID tie-break, 다른 customer
+    격리, stale-profile 제외, 실시간 pickup availability, CSRF 403, 반복/동시 PUT, no-op DELETE,
+    non-public target 404, injected persistence failure 503을 PostgreSQL Testcontainers에서 확인했다.
+  - `AuthenticationSecurityIntegrationTest` 8건, `AuthenticationPathRegistryTest` 3건,
+    `RuntimeOpenApiParityTest` 1건이 통과했고 `./gradlew spotlessCheck`도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
+    M12 실행계획 evidence.
+- 2026-08-16: **Milestone 8 완료.** V63의 `ordering_order(customer_id, state, created_at DESC,
+  store_id)` index, Ordering 공개 port `CustomerRecentStoreQuery`, Discovery의 current-display
+  hydrate와 `GET /api/v1/me/recent-stores?limit=`를 추가했다.
+  - Ordering은 customer predicate와 BR-40의 다섯 eligible state predicate를 한 SQL에 넣고,
+    매장별 `max(created_at)`만 `CustomerRecentStoreProjection(storeId, lastOrderedAt)`으로 반환한다.
+    Order Aggregate·Order snapshot·Discovery 복제 테이블은 읽거나 만들지 않는다. 결과는
+    `(lastOrderedAt DESC, storeId ASC)`이며 bounded compact limit(기본 10, 최대 20)만 받는다.
+  - favorites와 recent가 Merchant public display + Fulfillment batch availability를 서로 다르게
+    해석하지 않도록 `CustomerStoreHydrator`로 통합했다. 현재 public profile이 없는 historical
+    store는 응답에서만 빠지고 favorite row와 Order snapshot은 그대로 남는다. Ordering, Merchant 또는
+    Fulfillment 의존 조회는 빈 목록·nearby 결과로 fallback하지 않고 503을 유지한다.
+  - target/runtime OpenAPI에 recent path를 실제 controller와 함께 반영했고 compact limit의 400 응답도
+    계약에 추가했다. route는 customer chain이며 actor ID는 `CustomerActor`만 사용한다.
+  - `RecentStoreEndpointIntegrationTest` **3건**이 current 상태 다섯 개 포함, PENDING/REJECTED/
+    EXPIRED/CANCELLED 제외, 매장별 dedupe, 동률 UUID tie-break, 고객 격리, stale profile 제외,
+    current pickup availability와 invalid limit 400을 PostgreSQL Testcontainers에서 확인했다.
+  - `CustomerRecentStoreQueryMigrationTest` **2건**이 V63 정의와 동일 20,000-row fixture의
+    `EXPLAIN (ANALYZE, BUFFERS)` 전후 plan(전 Seq Scan, 후 V63 index 사용)을 확인했다.
+    `RuntimeOpenApiParityTest`, `AuthenticationPathRegistryTest`,
+    `AuthenticationSecurityIntegrationTest`, `./gradlew spotlessCheck`도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
+    M12의 문서화된 실행계획 evidence.
+- 2026-08-16: 미착수 — Milestone 9~12.
 
 ## Surprises & Discoveries
 
