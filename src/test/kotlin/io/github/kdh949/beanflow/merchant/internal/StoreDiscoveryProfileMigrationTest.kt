@@ -34,6 +34,9 @@ internal class StoreDiscoveryProfileMigrationTest {
         const val RADIUS_METERS = 1_000
         const val LIMIT = 101
         const val QUERY_POINT = "ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography"
+
+        /** 서울특별시 강남구 역삼동. V62 커버리지 gate가 요구하는 값이다. */
+        const val REGION_CODE = "1168010100"
     }
 
     @Test
@@ -133,10 +136,22 @@ internal class StoreDiscoveryProfileMigrationTest {
 
         // This is the deployment procedure: schema first, then the owner-verified load, then the gate.
         flyway(dataSource).target("33").load().migrate()
-        storeIds.forEachIndexed { index, storeId -> insertProfile(jdbcTemplate, storeId, "Verified store $index") }
+        storeIds.forEachIndexed { index, storeId ->
+            insertProfile(jdbcTemplate, storeId, "Verified store $index", regionCode = null)
+        }
+        // 같은 모양의 두 번째 창이 V57 이후에 있다. region_code 열이 V57에 생기고 V62가 커버리지를
+        // 단언하므로, V61까지 올린 뒤 지역을 채우고 나머지를 돌린다.
+        flyway(dataSource).target("61").load().migrate()
+        storeIds.forEach { storeId ->
+            jdbcTemplate.update(
+                "UPDATE merchant_store_discovery_profile SET region_code = ? WHERE store_id = ?",
+                REGION_CODE,
+                storeId,
+            )
+        }
         assertThatCode { flyway(dataSource).load().migrate() }.doesNotThrowAnyException()
 
-        assertThat(appliedVersions(jdbcTemplate)).contains("33", "34")
+        assertThat(appliedVersions(jdbcTemplate)).contains("33", "34", "62")
         val registry = SimpleMeterRegistry()
         assertThatCode { precheck(jdbcTemplate, registry).run(DefaultApplicationArguments()) }.doesNotThrowAnyException()
         assertThat(precheckCount(registry, "VERIFIED")).isOne()
@@ -168,10 +183,11 @@ internal class StoreDiscoveryProfileMigrationTest {
         storeId: UUID,
     ) = jdbcTemplate.update(
         """
-        INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-        VALUES (?, 'Empty point store', ST_GeomFromText('POINT EMPTY', 4326)::geography)
+        INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+        VALUES (?, 'Empty point store', ST_GeomFromText('POINT EMPTY', 4326)::geography, ?)
         """.trimIndent(),
         storeId,
+        REGION_CODE,
     )
 
     private fun appliedVersions(jdbcTemplate: JdbcTemplate): List<String?> =
@@ -239,11 +255,12 @@ internal class StoreDiscoveryProfileMigrationTest {
         insertStore(geometry, lineStoreId)
         geometry.update(
             """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-            VALUES (?, ?, ST_SetSRID(ST_MakeLine(ST_MakePoint(127.0, 37.5), ST_MakePoint(127.1, 37.6)), 4326)::geography)
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakeLine(ST_MakePoint(127.0, 37.5), ST_MakePoint(127.1, 37.6)), 4326)::geography, ?)
             """.trimIndent(),
             lineStoreId,
             "Line store",
+            REGION_CODE,
         )
 
         assertThatThrownBy { precheck(geometry, SimpleMeterRegistry()).run(DefaultApplicationArguments()) }
@@ -291,15 +308,15 @@ internal class StoreDiscoveryProfileMigrationTest {
         )
         jdbcTemplate.batchUpdate(
             """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography)
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)
             """.trimIndent(),
             stores.mapIndexed { index, storeId ->
                 // The first stores form a tight cluster inside the radius; the rest use a
                 // one-degree grid that stays far outside it.
                 val longitude = if (index < IN_RADIUS_STORE_COUNT) 127.0 + index * 0.0001 else -180.0 + (index % 360)
                 val latitude = if (index < IN_RADIUS_STORE_COUNT) 37.5 else -80.0 + (index / 360)
-                arrayOf<Any>(storeId, "Fixture store $index", longitude, latitude)
+                arrayOf<Any>(storeId, "Fixture store $index", longitude, latitude, REGION_CODE)
             },
         )
     }
@@ -362,18 +379,37 @@ internal class StoreDiscoveryProfileMigrationTest {
         storeId,
     )
 
+    /**
+     * Inserts a profile, with a region unless the schema predates the column.
+     *
+     * `region_code` arrives in V57 and V62 makes it `NOT NULL`, so a fixture that loads profiles in
+     * the V33 window has to pass `regionCode = null` and fill the region in a later window.
+     */
     private fun insertProfile(
         jdbcTemplate: JdbcTemplate,
         storeId: UUID,
         name: String,
-    ) = jdbcTemplate.update(
-        """
-        INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-        VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)
-        """.trimIndent(),
-        storeId,
-        name,
-    )
+        regionCode: String? = REGION_CODE,
+    ) = if (regionCode == null) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)
+            """.trimIndent(),
+            storeId,
+            name,
+        )
+    } else {
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, ?)
+            """.trimIndent(),
+            storeId,
+            name,
+            regionCode,
+        )
+    }
 
     private fun count(
         jdbcTemplate: JdbcTemplate,
