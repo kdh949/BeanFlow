@@ -23,10 +23,11 @@
 | 매장 주문 보상 진행 축약 조회 | No | Owned store | Assigned store | Read for support | No |
 | 가까운 매장 검색 (`/stores/nearby`) | Customer Session | No | No | No | No |
 | 매장 통합 검색 (`/stores/search`) | Customer Session | No | No | No | No |
-| 법정동 목록 조회 (`/regions`) | No | Customer/Merchant Session | Merchant Session | Yes | No |
-| 브랜드 등록·수정·보관 (`/operations/brands`) | No | No | No | Yes + reason + Audit | No |
-| 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Yes + reason + Audit | No |
-| 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store + Audit | No | No | No |
+| 법정동 목록 조회 (`/regions`) | No | Merchant Session | Merchant Session | No | No |
+| 브랜드 등록·수정·보관 (`/operations/brands`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
+| 브랜드 조회 (`/operations/brands`, `/operations/brands/{brandId}`) | No | No | No | Active `STORE_BRAND_MANAGE` grant | No |
+| 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
+| 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
 | 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Yes + reason + Audit | No |
 | 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
 | 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |

@@ -47,6 +47,7 @@ enum class OperatorPermission {
     PRIVACY_AUDIT_READ,
     PRIVACY_BREAK_GLASS_REVIEW,
     MERCHANT_CREDENTIAL_MANAGE,
+    STORE_BRAND_MANAGE,
 }
 
 interface OperatorPermissionAuthorization {

@@ -91,7 +91,7 @@ internal class OrderReferenceMigrationTest {
             fixture.orderId,
         )
 
-        assertThatCode { flyway(dataSource).load().migrate() }.doesNotThrowAnyException()
+        assertThatCode { migrateThroughRegionCoverage(dataSource, jdbc) }.doesNotThrowAnyException()
         assertThat(nullableColumnCount(jdbc)).isZero()
         assertThatThrownBy {
             jdbc.update("UPDATE ordering_order SET store_name_snapshot = 'Changed' WHERE id = ?", fixture.orderId)
@@ -132,7 +132,7 @@ internal class OrderReferenceMigrationTest {
         val earlierReference = value<String>(jdbc, "SELECT public_reference FROM ordering_order WHERE id = ?", earlier.orderId)
         assertThat(value<UUID>(jdbc, "SELECT id FROM ordering_order WHERE public_reference = ?", requireNotNull(earlierReference)))
             .isEqualTo(earlier.orderId)
-        assertThatCode { flyway(dataSource).load().migrate() }.doesNotThrowAnyException()
+        assertThatCode { migrateThroughRegionCoverage(dataSource, jdbc) }.doesNotThrowAnyException()
     }
 
     @Test
@@ -171,7 +171,7 @@ internal class OrderReferenceMigrationTest {
         val contractFixture = insertLegacyOrder(contractJdbc)
         flyway(contractDataSource).target("50").load().migrate()
         backfill(contractDataSource).runAll(10)
-        flyway(contractDataSource).load().migrate()
+        migrateThroughRegionCoverage(contractDataSource, contractJdbc)
 
         assertThatThrownBy { backfill(contractDataSource).runAll(10) }
             .isInstanceOfSatisfying(DomainFailure::class.java) {
@@ -240,6 +240,22 @@ internal class OrderReferenceMigrationTest {
         assertThatThrownBy { flyway(dataSource).load().migrate() }
             .isInstanceOf(FlywayException::class.java)
             .hasMessageContaining("pickup reservation grant snapshot backfill")
+    }
+
+    /**
+     * Runs the remaining migrations the way a deployment with existing stores has to.
+     *
+     * V62 refuses to run while any store profile has no region, and `region_code` only exists from
+     * V57, so the region is filled in the window between the two. Calling `migrate()` straight to
+     * the latest version from V50 would stop at the region coverage gate.
+     */
+    private fun migrateThroughRegionCoverage(
+        dataSource: DataSource,
+        jdbc: JdbcTemplate,
+    ) {
+        flyway(dataSource).target("61").load().migrate()
+        jdbc.update("UPDATE merchant_store_discovery_profile SET region_code = ? WHERE region_code IS NULL", REGION_CODE)
+        flyway(dataSource).load().migrate()
     }
 
     private fun insertLegacyOrder(
@@ -377,5 +393,8 @@ internal class OrderReferenceMigrationTest {
         val FIXED_NOW: Instant = Instant.parse("2026-08-12T00:00:00Z")
         val SLOT_START: Instant = Instant.parse("2030-01-01T00:10:00Z")
         val SLOT_END: Instant = Instant.parse("2030-01-01T00:20:00Z")
+
+        /** 서울특별시 강남구 역삼동. V62 커버리지 gate를 통과하기 위한 값이다. */
+        const val REGION_CODE = "1168010100"
     }
 }

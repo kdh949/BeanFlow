@@ -10,6 +10,16 @@
 - `openapi/beanflow-v1.yaml`: Accepted ADR과 Active ExecPlan이 지향하는 pre-release target
   계약이다. 이 파일의 operation 존재만으로 현재 배포됐다고 판단하지 않는다.
 
+두 파일은 `/docs`에서 Scalar로 렌더링된다. `processResources`가 `openapi/`를
+`classpath:/openapi/`로 복사한다. `beanflow-v1-runtime.yaml`의 `./beanflow-v1.yaml#/...`
+상대 참조는 브라우저에서 별도 HTTP 리소스 두 개를 오가며 resolve해야 해서 Scalar의 클라이언트
+측 bundler가 안정적으로 처리하지 못하므로, `BundledOpenApiSpecProvider`가 앱 기동 시 두 파일을
+SnakeYAML로 읽어 `components`를 병합하고 cross-file `$ref`를 local `#/...` 참조로 재작성한
+단일 문서를 만들고, `DocumentationSpecController`가 이를 `GET /docs/spec/openapi.yaml`로
+서빙한다. 이 복사본/병합본은 문서 표시 전용이며 계약 테스트는 여전히 저장소 루트의 `openapi/`
+경로를 원본으로 읽는다. 문서 페이지는 매 요청마다 그 시점에 기동 중인 애플리케이션이 만든
+최신 병합 스펙을 fetch하므로 별도 문서 빌드 없이 배포와 함께 최신화된다.
+
 target operation은 Controller mapping과 계약·보안·실패 테스트가 함께 존재할 때 runtime
 spec에 반영한다. Controller를 추가·제거하거나 shape를 바꾸는 변경은 runtime spec과 계약
 테스트를 같은 변경에서 갱신한다. 두 spec 모두 `x-beanflow-contract-status`와
@@ -25,7 +35,7 @@ component는 문서 검증이 참조 존재를 확인한다. Runtime operation i
 
 | Chain | 인증 | 경로 |
 |---|---|---|
-| Public | 없음 | health, payment config, Operations OIDC config 예약 경로 |
+| Public | 없음 | health, payment config, Operations OIDC config 예약 경로, `/docs/**`(Scalar API 문서) |
 | Operations | Bearer JWT | `/operations/**`, `/support/**` |
 | Merchant | PostgreSQL Session | `/auth/merchant/**`, `/merchant/**`, 매장 주문·정산 경로 |
 | Customer | PostgreSQL Session | 명시적으로 등록된 나머지 고객 `/api/v1` 경로 |

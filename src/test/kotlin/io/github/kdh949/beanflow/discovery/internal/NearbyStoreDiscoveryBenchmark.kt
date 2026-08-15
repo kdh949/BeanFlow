@@ -121,7 +121,7 @@ internal class NearbyStoreDiscoveryBenchmark {
         )
         jdbcTemplate.update(
             """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
             SELECT md5('nearby-benchmark:' || sequence)::uuid,
                    'Benchmark store ' || sequence,
                    ST_SetSRID(
@@ -130,7 +130,8 @@ internal class NearbyStoreDiscoveryBenchmark {
                            37.35 + ((sequence * 6421) % 100000)::double precision / 100000.0 * 0.30
                        ),
                        4326
-                   )::geography
+                   )::geography,
+                   '1168010100'
               FROM generate_series(?, ?) AS sequence
             """.trimIndent(),
             from,

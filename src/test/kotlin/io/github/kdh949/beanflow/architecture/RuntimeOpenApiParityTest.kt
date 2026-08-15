@@ -6,14 +6,17 @@ import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
 import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationService
+import io.github.kdh949.beanflow.identity.internal.StoreRegionCommandService
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
+import io.github.kdh949.beanflow.merchant.internal.RegionCatalogService
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQueryOperations
 import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundReconciliationService
 import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
+import io.github.kdh949.beanflow.operations.internal.OperatorBrandService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -113,6 +116,15 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var ordinaryPointAccrualPolicyService: OrdinaryPointAccrualPolicyService
+
+    @MockitoBean
+    private lateinit var operatorBrandService: OperatorBrandService
+
+    @MockitoBean
+    private lateinit var regionCatalogService: RegionCatalogService
+
+    @MockitoBean
+    private lateinit var storeRegionCommandService: StoreRegionCommandService
 
     @MockitoBean
     private lateinit var operatorCompensationQueryOperations: OperatorCompensationQueryOperations

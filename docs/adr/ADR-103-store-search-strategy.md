@@ -319,6 +319,39 @@ scheduled method가 같은 객체의 transactional method를 직접 호출해 pr
 - 좌표가 없을 때도 즐겨찾기가 사라지지 않고, 제외 상태 주문의 매장이 recent로 노출되지 않는지
   검증한다.
 
+### Milestone 5 implementation evidence (2026-08-15) — 후보 질의와 두 cursor scope
+
+`StoreSearchCandidateRepositoryIntegrationTest`(18건)와 `StoreSearchQueryIntegrationTest`(11건)이
+PostgreSQL 17 + `pg_trgm` 위에서 A2~A7을 측정했다.
+
+- **A3 다중 토큰 AND.** `"강남 스타벅스"`가 지역과 브랜드에 각각 걸린 매장만 반환하고 한 토큰만
+  맞은 매장 둘은 제외됐다. 관련도는 `avg(0.80, 0.90) = 0.85`로 rank `150000`이었다.
+- **A2 substring 우선.** 토큰이 메뉴명에 substring으로 걸리고 같은 매장의 매장명과는 유사도
+  `0.75`(가중 후 `0.75`)로 더 가까운 상황에서, 점수는 메뉴명 가중치 `0.70`이 됐고 `matchReason`도
+  `MENU_NAME` 하나였다. 유사도 경로가 "구제"에 한정된다는 것이 결과 값으로 확인된다.
+- **A2 임계값의 세션 독립성.** 세션 `pg_trgm.similarity_threshold`를 `0.05`와 `0.9`로 바꿔도
+  같은 결과가 나왔다. 질의 안의 명시 비교만으로는 더 엄격한 세션을 막지 못해 transaction 지역
+  설정을 함께 쓴다(MD-2026-024).
+- **A4 가중치 순서.** 같은 토큰이 매장명·브랜드명·지역명·메뉴명에 각각 걸린 네 매장의 rank가
+  `0`, `100000`, `200000`, `300000`으로 나왔다.
+- **A4 관련도 동점의 page 순회.** 관련도가 완전히 동점인 다섯 매장을 2건씩 넘겼을 때 누락도
+  중복도 없었다. 관련도를 numeric으로만 계산해 양자화하므로 page 경계에서 동점 판정이 흔들리지
+  않는다.
+- **A5 `matchedMenus`.** 매장당 최대 3개로 잘리고 동점 4개는 메뉴명 오름차순으로 결정됐다.
+  매장명으로만 걸린 매장은 빈 배열을 갖고 결과에서 빠지지 않았다.
+- **A6 `openOnly`.** 미지정일 때 닫힌 매장이 결과에 남고 `open`·`pickupAvailable` 플래그로
+  구분됐다. `openOnly=true`는 그 둘을 제외했다.
+- **A7 `REGION_RI`.** 리에 지정된 매장이 읍·면 이름과 리 이름 양쪽으로 검색되고 `matchReason`이
+  각각 `REGION_EUPMYEONDONG`, `REGION_RI`였다. 전국에 중복되는 리 이름(`상리`)은 반경 필터가
+  갈랐다.
+- **cursor.** 정렬·필터·검색어·좌표가 달라진 cursor와 다른 endpoint의 cursor, 만료된 cursor가
+  모두 400이다.
+- **개인정보.** 검색이 AuditRecord와 도메인 이벤트를 만들지 않는 것을 실제 행 수로 확인했고,
+  어떤 metric 태그에도 검색어가 남지 않는 것을 태그 값 전수 검사로 확인했다.
+
+`Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12), 픽업 가용성 필터와 그
+scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone은 컨트롤러를 붙이지 않았다.
+
 ## Metrics
 
 - 매장 검색 p50·p95·p99

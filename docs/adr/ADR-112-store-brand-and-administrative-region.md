@@ -280,6 +280,63 @@ Milestone 1이 이 결정의 스키마와 지역 어휘 부분을 실현했다. 
   상태였다. 이 한계를 남기지 않기로 하고 위 「리 단위 지역 어휘 Amendment」로 `ri` 열과
   `REGION_RI` term 종류를 추가했다. 아래 Verification의 리 항목은 그 개정에 대한 것이다.
 
+### Milestone 3 evidence (2026-08-15) — 브랜드 명령
+
+브랜드 명령과 그 동기 색인 갱신을 구현했다. 지역 명령과 커버리지 gate는 Milestone 4다(아래).
+
+- `merchant/api`의 `StoreBrandOperations`가 브랜드 생성·수정·보관과 매장 브랜드 지정·해제를
+  선언하고 `merchant/internal`의 `StoreBrandService`가 구현한다. 네 메서드 모두
+  `Propagation.MANDATORY`다. 호출자가 transaction을 열지 않으면 `IllegalTransactionStateException`이
+  나고 색인 없이 데이터만 바뀌는 경로가 구조적으로 존재하지 않는다.
+- `operations/internal`의 `OperatorBrandService`가 transaction을 열고 `STORE_BRAND_MANAGE` grant를
+  확인한 뒤 AuditRecord를 남긴다. `merchant`는 `operations`를 참조하지 않으므로 5절의 순환 의존
+  회피가 브랜드 쪽에서도 유지된다.
+- **색인 갱신 실패 시 rollback을 실제로 측정했다.** `StoreSearchIndexOperations`를 실패하도록
+  바꾼 상태에서 이름 변경을 시도하면 브랜드 행이 옛 이름 그대로 남고 재실행 원장도 함께
+  rollback된다. 단언은 "오류가 났다"가 아니라 "옛 이름이 남았다"이다.
+- **6절의 상한을 매장 배정에도 적용했다.** 상한을 넘긴 브랜드는 이름을 영영 바꿀 수 없게 되므로
+  나중에 막히는 것보다 배정 시점에 거절하는 편이 낫다. 매장 쓰기 API가 없어 직접 DML로 상한을
+  넘긴 상태는 여전히 도달 가능하므로 이름 변경 쪽 검사도 남겼다(MD-2026-020).
+- **원 Decision이 정하지 않은 보관 조건을 확정했다.** 소속 매장이 남은 브랜드의 보관은 거절한다.
+  보관은 활성 부분 unique index에서 빠지는 것이라 정규화 이름을 즉시 해방하고, 매장을 남긴 채
+  보관하면 새 브랜드가 같은 이름을 차지해 색인에 서로 다른 브랜드의 같은 `BRAND_NAME` term이
+  공존한다(MD-2026-020).
+- 브랜드 명령의 멱등성은 전용 원장 `merchant_brand_command`(V60)가 담당한다. 저장소의 다른
+  `Idempotency-Key` 명령과 같은 방식이며 AuditRecord는 `source_reference`가 전역 유일하지 않아
+  원장을 겸할 수 없었다(MD-2026-019). 이 때문에 Consequences의 "마이그레이션 3개"는 4개가 됐다.
+- 재실행된 명령은 AuditRecord를 다시 남기지 않는다. 아무것도 바꾸지 않은 요청이 변경 기록을
+  남기면 없던 변경을 주장하게 된다.
+- 위 Verification 중 `403`·`409`·fan-out·rollback·순환 의존 항목이 이 Milestone에서 통과했다.
+  지역 명령, `region_code` 커버리지 gate, 리 검색과 동명 리 반경 필터 항목은 여전히 `Not run`이다.
+
+### Milestone 4 evidence (2026-08-15) — 지역 명령과 커버리지 gate
+
+지역 명령과 그 동기 색인 갱신, 커버리지 gate를 구현했다.
+
+- `merchant/api`의 `StoreRegionOperations`가 매장 지역 지정을 선언하고 `merchant/internal`의
+  `StoreRegionService`가 구현한다. 브랜드와 같이 `Propagation.MANDATORY`라 호출자 transaction 없이는
+  실행되지 않는다. `region_code`, `REGION_*` term, 재실행 원장이 한 commit에 들어간다.
+- **명령의 소유 모듈은 `identity`다.** 4절이 요구하는 권한 주체가 「그 매장의 `STORE_OWNER`」이고
+  매장 소속은 `identity`가 소유한다. `identity`는 이미 `merchant`(데이터)와 `operations`(감사)에
+  의존하므로 새 간선이 생기지 않는다. 브랜드처럼 `operations`에 두면 `operations`가 `identity`에
+  의존해야 하는데 `identity`가 이미 `operations`에 의존하므로 Spring Modulith가 순환으로 거절한다.
+  5절의 순환 의존 회피가 지역 쪽에서도 유지된다.
+- **`STORE_STAFF`와 타 매장 소유자의 지역 변경이 `403`인 것을 실제로 측정했다.** 해지된 소속도
+  같다. 세 경우 모두 지역 행을 읽기 전에 막히고 감사 기록도 남지 않는다.
+- **색인 갱신 실패 시 rollback을 실제로 측정했다.** 색인을 실패하도록 바꾼 상태에서 지역을 옮기면
+  `region_code`가 **옛 지역 그대로** 남는다. 단언은 "오류가 났다"가 아니라 "옛 지역이 남았다"이다.
+- **지정마다 `REGION_*` 네 종류를 모두 교체한다.** 리에서 동으로 옮긴 매장의 낡은 `REGION_RI` 행이
+  남으면 그 매장은 떠나온 리 이름으로 계속 검색된다. 리 지역은 term 4행, 동 지역은 3행, 시도 행은
+  1행이고 리 행의 `eupmyeondong`이 상위 읍·면 이름을 유지하는 것을 통합 테스트가 확인한다.
+- **커버리지 gate는 V62다.** 원장(V61)과 나눈 이유는 배포 순서다. 한 migration에 담으면 명령이
+  생기는 순간과 커버리지를 단언하는 순간이 같아져 값을 넣을 틈이 없다. V33 → V34와 같은 두 단계
+  배포다(MD-2026-021). gate는 지역이 빈 매장이 남아 있으면 실제로 배포를 멈추고 컬럼도 바꾸지
+  않는다는 것을 migration 테스트가 확인한다. 이 때문에 Consequences의 "마이그레이션 3개"는 5개가 됐다.
+- **감사 요약은 법정동 코드를 코드 자체의 계층으로 끊어 담는다.** 원시 PII 판정기가 10자리 코드를
+  한국 휴대전화 번호로 인식해 append를 거절했다. 판정기를 완화하지 않고 payload를 바꿨다(MD-2026-022).
+- 위 Verification 중 지역 `403`, 커버리지 gate, 리 term 3행/4행 항목이 이 Milestone에서 통과했다.
+  리 이름 **검색**과 동명 리의 반경 필터 항목은 검색 endpoint가 아직 없어 `Not run`이다.
+
 ## Metrics
 
 - 브랜드 지정 매장 비율

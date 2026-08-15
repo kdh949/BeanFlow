@@ -35,6 +35,15 @@ internal object LocalDemoFixture {
     const val STORE_NAME = "BeanFlow Demo Roastery"
     const val OTHER_STORE_NAME = "BeanFlow Demo Annex"
 
+    /**
+     * 법정동 codes for the demo stores (ADR-112 3절).
+     *
+     * `region_code` is `NOT NULL`, so a seeded store without one would fail on insert rather than
+     * quietly disappear from region search. The two differ so the demo shows more than one region.
+     */
+    const val STORE_REGION_CODE = "1168010100"
+    const val OTHER_STORE_REGION_CODE = "1168010500"
+
     val AMERICANO_MENU_ID: UUID = UUID.fromString("d2000000-0000-4000-8000-000000000001")
     val SOLD_OUT_MENU_ID: UUID = UUID.fromString("d2000000-0000-4000-8000-000000000002")
     val EXTRA_SHOT_OPTION_ID: UUID = UUID.fromString("d3000000-0000-4000-8000-000000000001")
