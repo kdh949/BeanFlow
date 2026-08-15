@@ -174,6 +174,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/favorite-stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current customer's favorite stores */
+        get: operations["listCurrentCustomerFavoriteStores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/favorite-stores/{storeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Add a store to current customer favorites idempotently */
+        put: operations["addCurrentCustomerFavoriteStore"];
+        post?: never;
+        /** Remove a store from current customer favorites idempotently */
+        delete: operations["deleteCurrentCustomerFavoriteStore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/recent-stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List distinct stores from the customer's recent eligible orders */
+        get: operations["listCurrentCustomerRecentStores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/store-recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recommend stores from favorite, recent, and nearby baseline signals
+         * @description latitude and longitude must be supplied together or both omitted. When the pair is
+         *     supplied and radiusMeters is omitted, nearby uses a 3000 meter radius. Coordinates are
+         *     request-only and are not persisted or written to logs.
+         */
+        get: operations["listCurrentCustomerStoreRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/merchant/me": {
         parameters: {
             query?: never;
@@ -221,8 +295,48 @@ export interface paths {
          *     persisted or written to application logs or traces. radiusMeters is 1..10000.
          *     Results use a canonical micrometer distance tuple and return its floored
          *     integer-meter display value.
+         *
+         *     The endpoint returns stores that accept orders with pickup enabled.
+         *     pickupAvailable narrows that to stores with a reservable slot inside the
+         *     seven-day window and carries the same meaning as on GET /stores/search; it is
+         *     a point-in-time projection and does not reserve a slot. The filter is applied
+         *     after the spatial query, so a page may be shorter than limit and still return
+         *     a nextCursor anchored to the last examined candidate.
          */
         get: operations["searchNearbyStores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search stores by store, brand, region or available menu name
+         * @description The query is trimmed, NFKC-normalized, lowercased and split on whitespace into
+         *     at most five tokens before validation and cursor binding. Every token must match
+         *     at least one searchable attribute of the store; a token is matched by substring
+         *     first and only falls back to trigram similarity when no substring matched it.
+         *     `%`, `_` and `\` are literal characters, not wildcards.
+         *
+         *     Latitude and longitude must be supplied together or both omitted; radiusMeters
+         *     without both coordinates returns 400, and sort=distance without coordinates
+         *     returns 400. Coordinates are request-only and never persisted or written to logs.
+         *     openOnly requires only that the store accepts orders with pickup enabled;
+         *     pickupAvailable additionally requires a reservable slot and is a point-in-time
+         *     projection that does not reserve one. Both default to unset, and a closed store
+         *     is then still returned with its status in the flags. The relevance score itself
+         *     is not part of the response.
+         */
+        get: operations["searchStores"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1147,6 +1261,158 @@ export interface paths {
         /** List one STORE policy history */
         get: operations["listStoreOrdinaryPointAccrualPolicyVersions"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List brands ordered by normalized name then brand ID
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+         */
+        get: operations["listBrands"];
+        put?: never;
+        /**
+         * Create a brand
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. Same-key replay returns the first
+         *     result. 활성 브랜드의 정규화 이름은 유일하며 중복 등록은 409 BRAND_NAME_ALREADY_IN_USE다.
+         */
+        post: operations["createBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/brands/{brandId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one brand
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+         */
+        get: operations["getBrand"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename or archive a brand
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 이름 변경은 소속 매장의 검색
+         *     BRAND_NAME term을 같은 transaction에서 교체하며, 소속 매장이 ADR-112 6절의 1000개
+         *     상한을 넘으면 409 BRAND_FANOUT_LIMIT_EXCEEDED다. 소속 매장이 남은 브랜드의 보관과
+         *     expectedVersion 불일치는 409 BRAND_STATE_CONFLICT다.
+         */
+        patch: operations["updateBrand"];
+        trace?: never;
+    };
+    "/operations/search-index/rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebuild the store keyword search index from current source data
+         * @description Requires PLATFORM_OPERATOR and an active STORE_BRAND_MANAGE grant. Idempotency is
+         *     scoped to the actor, this operation, Idempotency-Key, and normalized reason. The same
+         *     request replays the stored completed result for 90 days without another rebuild or audit;
+         *     a different reason with the same key returns IDEMPOTENCY_KEY_REUSED. A RUNNING command
+         *     returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After, which is a retry pace rather
+         *     than a completion estimate.
+         *
+         *     Stores are rebuilt in separate transactions. A 200 response with complete=false is a
+         *     persisted partial result, not a complete refresh. If source access or result persistence
+         *     cannot be confirmed, the endpoint returns 503 and callers must not infer that no store
+         *     transaction committed; follow the Store Keyword Search Runbook before retrying.
+         */
+        post: operations["rebuildStoreSearchIndex"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign a store to a brand
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 매장주는 이 명령을 수행할 수 없다.
+         *     지정은 그 매장의 BRAND_NAME term을 같은 transaction에서 갱신한다.
+         */
+        put: operations["assignStoreBrand"];
+        post?: never;
+        /**
+         * Remove a store from its brand
+         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 브랜드가 없던 매장에도 실행할 수
+         *     있으며 그 매장의 BRAND_NAME term을 지운다.
+         */
+        delete: operations["clearStoreBrand"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List 법정동 regions a store owner can assign
+         * @description 폐지되지 않은 법정동 폐쇄 어휘를 (fullName ASC, code ASC)로 페이징한다. query의 각 낱말은
+         *     모두 fullName에 들어 있어야 하며 와일드카드로 해석되지 않는다. 어휘는 공개 참조 데이터라
+         *     매장·좌표·검색어는 이 응답으로 드러나지 않는다.
+         */
+        get: operations["listRegions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/region": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign the store's 법정동 region
+         * @description 해당 매장의 STORE_OWNER만 수행한다. STORE_STAFF와 타 매장 소유자는 403이다.
+         *     지정은 그 매장의 REGION_* term을 같은 transaction에서 교체하고 AuditRecord를 남긴다.
+         *     리가 있는 지역은 term이 4행, 없으면 3행이다. 지역을 비우는 명령은 없다.
+         */
+        put: operations["assignStoreRegion"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2732,6 +2998,23 @@ export interface components {
             operatorId: components["schemas"]["Identifier"];
             roles: string[];
         };
+        CustomerStore: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+            pickupAvailable: boolean;
+            distanceMeters?: number;
+        };
+        CustomerStoreList: {
+            items: components["schemas"]["CustomerStore"][];
+        };
+        StoreRecommendation: {
+            store: components["schemas"]["CustomerStore"];
+            /** @enum {string} */
+            reason: "FAVORITE" | "RECENT" | "NEARBY";
+        };
+        StoreRecommendationList: {
+            items: components["schemas"]["StoreRecommendation"][];
+        };
         MerchantStore: {
             storeId: components["schemas"]["Identifier"];
             storeName: string;
@@ -2753,6 +3036,30 @@ export interface components {
         NearbyStorePage: {
             items: components["schemas"]["NearbyStore"][];
             page: components["schemas"]["PageInfo"];
+        };
+        StoreSearchMenu: {
+            menuId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        StoreSearchItem: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+            brandName?: string | null;
+            /** @description The administrative region levels of the store joined from 시도 down to 리. */
+            regionName?: string | null;
+            /** @description The distinct kinds of searchable attribute that matched, never the score. */
+            matchReason: ("STORE_NAME" | "BRAND_NAME" | "REGION_SIDO" | "REGION_SIGUNGU" | "REGION_EUPMYEONDONG" | "REGION_RI" | "MENU_NAME")[];
+            distanceMeters?: number;
+            open: boolean;
+            pickupAvailable: boolean;
+            /** @description Menus of this store that the query matched, most relevant first. Empty when none matched. */
+            matchedMenus: components["schemas"]["StoreSearchMenu"][];
+        };
+        StoreSearchPage: {
+            items: components["schemas"]["StoreSearchItem"][];
+            page: components["schemas"]["PageInfo"];
+            /** @description True only when a valid latitude/longitude pair was supplied and distance ordering participated. */
+            distanceAvailable: boolean;
         };
         /**
          * Format: int64
@@ -3641,6 +3948,106 @@ export interface components {
              */
             state: "ChangeStoreOrdinaryPointAccrualInheritanceRequest";
             reason: string;
+        };
+        /**
+         * @description ARCHIVED frees the normalized name for another brand.
+         * @enum {string}
+         */
+        BrandStatus: "ACTIVE" | "ARCHIVED";
+        Brand: {
+            brandId: components["schemas"]["Identifier"];
+            name: string;
+            status: components["schemas"]["BrandStatus"];
+            /**
+             * @description 소속 매장 수. 이름 변경의 색인 fan-out 비용이며 ADR-112 6절의 1000개 상한에
+             *     얼마나 가까운지를 운영자가 알 수 있는 유일한 값이다.
+             */
+            assignedStoreCount: number;
+            /**
+             * Format: int64
+             * @description Pass back as expectedVersion to detect a concurrent change.
+             */
+            version: number;
+        };
+        BrandPageInfo: {
+            nextCursor: string | null;
+        };
+        BrandPage: {
+            items: components["schemas"]["Brand"][];
+            page: components["schemas"]["BrandPageInfo"];
+        };
+        /** @description Recorded on the AuditRecord this command appends. */
+        OperationReason: string;
+        CreateBrandRequest: {
+            name: string;
+            reason: components["schemas"]["OperationReason"];
+        };
+        /** @description name과 status 중 적어도 하나가 있어야 한다. 둘 다 없으면 400이다. */
+        UpdateBrandRequest: {
+            name?: string | null;
+            status?: components["schemas"]["BrandStatus"] | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+            reason: components["schemas"]["OperationReason"];
+        };
+        SearchIndexRebuildRequest: {
+            /** @description Trimmed before idempotency hashing; control characters and all-whitespace values are rejected. */
+            reason: components["schemas"]["OperationReason"];
+        };
+        SearchIndexRebuildResponse: {
+            /** @description Stores whose STORE_NAME and available MENU_NAME terms were replaced. */
+            indexedStoreCount: number;
+            /** @description Stores deleted before their per-store rebuild transaction started. */
+            skippedStoreCount: number;
+            /** @description Stores whose rebuild transaction failed; a non-empty list makes complete false. */
+            failedStoreIds: components["schemas"]["Identifier"][];
+            /** @description True only when failedStoreIds is empty. False is a persisted partial result, not a successful full refresh. */
+            complete: boolean;
+        };
+        AssignStoreBrandRequest: {
+            brandId: components["schemas"]["Identifier"];
+            reason: components["schemas"]["OperationReason"];
+        };
+        StoreBrand: {
+            storeId: components["schemas"]["Identifier"];
+            brandId: components["schemas"]["Identifier"] | null;
+            brandName: string | null;
+        };
+        ClearStoreBrandRequest: {
+            reason: components["schemas"]["OperationReason"];
+        };
+        Region: {
+            /** @description 법정동 코드. 폐쇄 어휘의 기본 키다. */
+            code: string;
+            sido: string;
+            /**
+             * @description 계층이 없는 지역은 빈 문자열이다. 세종특별자치시에는 시군구 계층이 아예 없으므로
+             *     없는 계층과 값이 빠진 것을 구분하기 위해 null을 쓰지 않는다.
+             */
+            sigungu: string;
+            /**
+             * @description 리 행에서도 상위 읍·면 이름을 그대로 유지한다. 리에 있는 매장이 읍·면 이름과 리
+             *     이름 양쪽으로 검색되게 하기 위함이다.
+             */
+            eupmyeondong: string;
+            ri: string;
+            fullName: string;
+        };
+        RegionPageInfo: {
+            nextCursor: string | null;
+        };
+        RegionPage: {
+            items: components["schemas"]["Region"][];
+            page: components["schemas"]["RegionPageInfo"];
+        };
+        AssignStoreRegionRequest: {
+            regionCode: string;
+            reason: components["schemas"]["OperationReason"];
+        };
+        StoreRegion: {
+            storeId: components["schemas"]["Identifier"];
+            regionCode: string;
+            regionFullName: string;
         };
         SettlementBatch: {
             settlementBatchId: components["schemas"]["Identifier"];
@@ -4856,6 +5263,21 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The Idempotency-Key was already bound to another normalized reason, or the same rebuild
+         *     command is still RUNNING. IDEMPOTENCY_REQUEST_IN_PROGRESS includes Retry-After;
+         *     IDEMPOTENCY_KEY_REUSED does not.
+         */
+        SearchIndexRebuildConflict: {
+            headers: {
+                /** @description Present only for IDEMPOTENCY_REQUEST_IN_PROGRESS; it is a retry pace, not a completion estimate. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The persistent per-operator Support exact-search budget is exhausted */
         SupportSearchRateLimited: {
             headers: {
@@ -4904,6 +5326,8 @@ export interface components {
         CustomerCsrfToken: string;
         /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
         MerchantCsrfToken: string;
+        StoreId: components["schemas"]["Identifier"];
+        CompactLimit: number;
         Latitude: number;
         Longitude: number;
         /** @description Search radius in meters. Maximum 10000. */
@@ -4917,7 +5341,6 @@ export interface components {
          */
         Cursor: string;
         DiscoveryLimit: number;
-        StoreId: components["schemas"]["Identifier"];
         /** @description Unique within actor ID and API operation */
         IdempotencyKey: string;
         /** @description Terminal Order whose immutable menu and option selections are reused */
@@ -4936,6 +5359,7 @@ export interface components {
         AccessReason: string;
         MerchantAccountId: components["schemas"]["Identifier"];
         PointAccountId: components["schemas"]["Identifier"];
+        BrandId: components["schemas"]["Identifier"];
         SettlementBatchId: components["schemas"]["Identifier"];
         SettlementItemId: components["schemas"]["Identifier"];
         SupportCaseId: components["schemas"]["Identifier"];
@@ -5233,6 +5657,134 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listCurrentCustomerFavoriteStores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete favorite-store list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerStoreList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    addCurrentCustomerFavoriteStore: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Store is a favorite */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    deleteCurrentCustomerFavoriteStore: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Store is not a favorite */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerRecentStores: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["CompactLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent stores ordered by latest qualifying order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerStoreList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerStoreRecommendations: {
+        parameters: {
+            query?: {
+                latitude?: number;
+                longitude?: number;
+                radiusMeters?: number;
+                limit?: components["parameters"]["CompactLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deterministic baseline recommendations without personalization claims */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreRecommendationList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getCurrentMerchant: {
         parameters: {
             query?: never;
@@ -5309,6 +5861,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NearbyStorePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    searchStores: {
+        parameters: {
+            query: {
+                query: string;
+                sort?: "relevance" | "distance";
+                latitude?: number;
+                longitude?: number;
+                radiusMeters?: number;
+                openOnly?: boolean;
+                pickupAvailable?: boolean;
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["DiscoveryLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed-cursor page bound to the normalized query and optional location filters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreSearchPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -7000,6 +7592,309 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listBrands: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brand page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description Created brand */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brandId: components["parameters"]["BrandId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    updateBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                brandId: components["parameters"]["BrandId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    rebuildStoreSearchIndex: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchIndexRebuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored complete or partial rebuild result, including exact idempotent replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchIndexRebuildResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["SearchIndexRebuildConflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    assignStoreBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignStoreBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description Store brand assignment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreBrand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    clearStoreBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearStoreBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description Store brand assignment after removal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreBrand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listRegions: {
+        parameters: {
+            query?: {
+                query?: string;
+                /**
+                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
+                 *     bound to this endpoint, its filters and stable sort tuple, expires within
+                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
+                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
+                 *     characters.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed-cursor region page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    assignStoreRegion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique within actor ID and API operation */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignStoreRegionRequest"];
+            };
+        };
+        responses: {
+            /** @description Store region after assignment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreRegion"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

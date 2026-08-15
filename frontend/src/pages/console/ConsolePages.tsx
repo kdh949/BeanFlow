@@ -8,7 +8,7 @@ import {
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
-import { api, ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
+import { api, ApiRequestError, merchantCsrfToken, SubmissionIntent, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
@@ -55,8 +55,12 @@ export function OpsRefundPage() {
     const fingerprint = JSON.stringify({ paymentId: normalizedPaymentId, ...body });
     setLoading(true); setError(null); setResult(null);
     try {
+      const csrf = await merchantCsrfToken();
       const response = await api.POST("/payments/{paymentId}/refunds", {
-        params: { path: { paymentId: normalizedPaymentId }, header: { "Idempotency-Key": refundSubmission.current.keyFor(fingerprint) } },
+        params: {
+          path: { paymentId: normalizedPaymentId },
+          header: { "Idempotency-Key": refundSubmission.current.keyFor(fingerprint), "X-BEANFLOW-CSRF": csrf },
+        },
         body,
       });
       setResult(unwrap(response));

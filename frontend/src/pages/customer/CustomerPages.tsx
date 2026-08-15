@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
-import { api, ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
+import { api, ApiRequestError, customerCsrfToken, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge, SuccessMark } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
@@ -291,10 +291,11 @@ export function CheckoutPage() {
     setPaying(true);
     setError(null);
     try {
+      const csrf = await customerCsrfToken();
       const attemptResult = await api.POST("/orders/{orderId}/payment-attempts", {
         params: {
           path: { orderId },
-          header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderId}`) },
+          header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderId}`), "X-BEANFLOW-CSRF": csrf },
         },
       });
       const attempt = unwrap(attemptResult);
@@ -382,10 +383,11 @@ export function PaymentSuccessPage() {
       if (!paymentKey || !providerOrderId || !Number.isSafeInteger(amount) || amount <= 0) {
         throw new ApiRequestError(400, "INVALID_PAYMENT_CALLBACK", "결제 결과 정보가 올바르지 않습니다.");
       }
+      const csrf = await customerCsrfToken();
       const result = await api.POST("/payments/{paymentId}/confirmations", {
         params: {
           path: { paymentId },
-          header: { "Idempotency-Key": idempotencyKey(`payment-confirm.${paymentId}`) },
+          header: { "Idempotency-Key": idempotencyKey(`payment-confirm.${paymentId}`), "X-BEANFLOW-CSRF": csrf },
         },
         body: { paymentKey, orderId: providerOrderId, amount },
       });
