@@ -185,10 +185,10 @@ interface StoreSearchIndexOperations {
 ```text
 GET /stores/search or /stores/nearby
   SearchController
-    MerchantStoreSearchQuery.findCandidates(filters, signedCursor, limit + 1)
+    StoreSearchCandidateRepository.findCandidates(filters, signedCursor, limit + 1)
     FulfillmentPickupAvailabilityQuery.existsByStoreIds(candidateStoreIds, now)
     ordered candidates + availability → page + scan-boundary nextCursor
-    DiscoveryMatchedMenuQuery.topByStoreIds(pageStoreIds, tokens, 3)
+    StoreSearchCandidateRepository.findMatchedMenus(pageStoreIds, tokens, 3)
 
 GET /me/store-recommendations
   CustomerActor
@@ -202,6 +202,11 @@ PUT/DELETE /me/favorite-stores/{storeId}
   Tx1: visible Store 존재 확인
   Tx1: customer/store PK insert-on-conflict 또는 delete
 ```
+
+**(2026-08-15 정정)** 후보 질의의 이름은 계획 원안의 `MerchantStoreSearchQuery`가 아니고 소유
+모듈도 `merchant`가 아니다. 질의가 색인 테이블과 매장 프로필을 한 문장에서 함께 읽어야 하는데,
+ADR-112 5절이 검색을 `discovery`의 것으로 두고 `merchant`가 `discovery`를 모르게 못박았다.
+근거는 MD-2026-023이다.
 
 - 검색은 Merchant table과 Fulfillment table을 하나의 Repository SQL로 직접 조인하지 않는다.
   Fulfillment batch port는 candidate store 집합을 한 statement로 판정한다.
@@ -793,7 +798,32 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의 성능
     evidence(Milestone 12), 리 이름 **검색**과 동명 리 반경 필터(검색 endpoint가 없는 Milestone 5),
     브랜드명 변경과 브랜드 해제의 동시 실행 검증(Milestone 5).
-- 2026-08-15: 미착수 — Milestone 5~12.
+- 2026-08-15: **Milestone 5 완료.** 같은 branch에서 검색 후보 질의(`discovery/internal`),
+  공개 Query port(`discovery/api`), 정렬별 signed cursor 두 scope와 `matchedMenus` 2차 조회를
+  추가했다. migration은 없다. 완료 조건 셋을 모두 실제로 측정했다.
+  - **다중 토큰 AND.** `"강남 스타벅스"`가 지역과 브랜드에 각각 걸린 매장만 반환하고, 한 토큰만
+    맞은 매장 둘은 제외됐다. 관련도는 `avg(0.80, 0.90) = 0.85`로 rank `150000`이었다.
+  - **substring 우선 + 유사도 보완.** 토큰이 메뉴명에 substring으로 걸리고 같은 매장의 매장명과는
+    유사도 `0.75`로 더 가까운 상황에서 점수가 메뉴명 가중치 `0.70`이 됐다. 유사도 경로가 구제에만
+    쓰인다는 것이 결과 값으로 확인된다. 반대로 substring이 0건인 오타 토큰은 실제로 구제됐다.
+  - **관련도 동점 page 순회.** 관련도가 완전히 동점인 다섯 매장을 2건씩 넘겨도 누락·중복이 없다.
+  - `StoreSearchCandidateRepositoryIntegrationTest` 18건, `StoreSearchQueryIntegrationTest` 11건,
+    합계 29건이 PostgreSQL 17 + `pg_trgm` 위에서 통과했다.
+  - **컨트롤러를 붙이지 않았다.** `/stores/search`의 공개 계약에 있는 `pickupAvailable`은
+    Fulfillment batch 판정이 오는 Milestone 6의 것이다. 지금 endpoint를 열면 동작하지 않는
+    파라미터가 runtime spec에 실린다. runtime OpenAPI와 `AuthenticationPathRegistry`는 그래서
+    이 Milestone에서 건드리지 않았다.
+  - target OpenAPI의 `/stores/search`는 ADR-103 원 Decision 시절 형태(`matchReason` 세 값,
+    `representativeMenus` 문자열 배열)로 남아 있어 2026-08-15 Amendment에 맞게 개정했다.
+    `scripts/verify-docs.sh`가 옛 어휘를 단언하고 있어 함께 고쳤다.
+  - Milestone 3에서 미룬 **브랜드명 변경과 브랜드 해제의 동시 실행**도 여기서 검증했다. 두
+    명령을 barrier로 맞부딪힌 뒤, 브랜드를 가진 매장은 현재 이름의 `BRAND_NAME` term을 정확히
+    하나 갖고 브랜드를 잃은 매장에는 낡은 term이 남지 않는 것을 확인했다. 어느 쪽이 이기는지는
+    고정하지 않는다. 그것은 시점 문제이고, 지켜야 할 성질은 색인이 브랜드 열과 일치하는 것이다.
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
+    `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12), 픽업 가용성 필터와 그 scan-boundary
+    cursor(Milestone 6).
+- 2026-08-15: 미착수 — Milestone 6~12.
 
 ## Surprises & Discoveries
 
@@ -891,6 +921,35 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   전에 모든 추적 텍스트 파일이 실제로 텍스트인지 확인한다. Kotlin `\uXXXX` escape로 쓰면 source는
   평문이고 값은 그대로 제어 문자다. Milestone 2에서 전각 공백을 escape로 바꾼 것과 같은 이유이며,
   대상 테스트만 돌렸을 때는 잡히지 않고 전체 build에서 드러났다.
+- **(2026-08-15) 모듈 배치를 계획의 이름이 아니라 의존 방향이 정했다 — 두 번째.** 계획의 조회
+  흐름은 후보 질의를 `MerchantStoreSearchQuery`로 적었지만, 같은 계획의 소유권 표가
+  `discovery_store_search_term`을 `discovery`에 두고 ADR-112 5절이 「`merchant`는 `discovery`를
+  모른다」를 못박았다. 질의는 색인 테이블과 매장 프로필을 한 문장에서 읽어야 하고 토큰 매칭 결과가
+  무한정 커질 수 있어 중간 집합을 port로 실어 나를 수 없다. 저장소를 실제로 훑어 보니 cross-module
+  SQL은 이미 존재하며(`ordering` → `merchant`·`fulfillment`, `operations` → `ordering`·`payment`)
+  **전부 기존 모듈 의존 방향을 따르고 역방향은 하나도 없었다.** 그래서 질의를 `discovery`에 뒀다
+  (MD-2026-023). Milestone 4의 교훈이 이름 쪽에서 한 번 더 반복됐다.
+- **(2026-08-15) 질의 안의 임계값 비교만으로는 세션 독립성이 성립하지 않는다.** 계획은 「세션
+  설정에 의존하지 않도록 쿼리에서 임계값을 명시 비교」라고 적었는데, 그것은 한쪽 방향만 막는다.
+  GIN 인덱스를 타는 유일한 연산자 `%`가 세션 GUC로 판정하므로, 세션 임계값이 `0.3`보다 **낮으면**
+  `%`가 상위 집합을 내고 명시 비교가 걸러 주지만 **높으면** `%`가 이미 부분 집합을 내버려 명시
+  비교가 손쓸 수 없다. `set_config(..., true)`로 transaction에 고정하고 명시 비교를 함께 둔다
+  (MD-2026-024). 세션 임계값을 `0.05`와 `0.9`로 흔들어 두 방향을 실제로 측정했다.
+- **(2026-08-15) 한글 짧은 이름에는 오타 구제가 성립하지 않는다.** `스타벅스 강남점`과 오타
+  `스타박스`의 trigram 유사도가 `0.3`에 크게 못 미친다. 한글은 한 글자가 한 문자라 4~8자 이름의
+  trigram 집합이 작고, 한 글자만 달라도 겹치는 trigram이 급감한다. 임계값을 낮추는 것은 무관한
+  매장을 대량으로 끌어오므로 하지 않았고, 대신 구제가 실제로 일어나는 경우(라틴 표기 상호)로
+  테스트를 고정했다. **한글 상호의 오타 교정은 사실상 동작하지 않는다는 것이 이 구현의 알려진
+  한계이며 숨기지 않는다.** 해소하려면 자모 분해 색인 같은 별도 결정이 필요하다.
+- **(2026-08-15) `matchReason`은 매칭 경로 선택의 결과여야 한다.** 처음에는 매칭된 모든 term
+  종류를 이유로 모았는데, 그러면 substring으로 이미 걸린 토큰에 대해 채택되지도 않은 유사도
+  매칭이 이유로 보고된다. 점수를 고르는 필터와 이유를 모으는 필터를 같은 `selected` CTE로 묶어
+  둘이 갈라질 수 없게 했다.
+- **(2026-08-15) 후보 질의의 관련도를 float로 계산하면 안 된다.** `similarity()`는 `real`을
+  반환하므로 `numeric` 가중치와 곱하면 결과가 `double precision`이 된다. cursor는 양자화한 정수를
+  담지만 그 정수를 만드는 `floor(관련도 * 1000000)`이 부동소수 경계에 걸리면 page마다 rank가
+  1씩 흔들려 동점 매장이 누락되거나 중복될 수 있다. `similarity(...)::numeric`으로 캐스트해 전
+  계산을 exact decimal로 유지했다.
 
 ## Decision Log
 
@@ -929,6 +988,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | `term_normalized`는 `varchar(400)`. 상한 초과는 절단이 아니라 거부 | 이 문서 단계 2, `StoreSearchIndexService.kt` |
 | 2026-08-15 | 색인 쓰기 port는 `Propagation.MANDATORY`로 커맨드 transaction을 강제한다 | 구현 불변식 11, `StoreSearchIndexService.kt` |
 | 2026-08-15 | 재색인은 `STORE_NAME`·`MENU_NAME`만 교체한다. 브랜드·지역 term은 소유 커맨드가 채운다 | `StoreSearchIndexRebuildService.kt` |
+| 2026-08-15 | 검색 후보 질의는 `merchant`가 아니라 `discovery`가 소유하고 매장 프로필을 직접 조인한다 | [MD-2026-023](../../decisions/minor-decisions.md), [ADR-112 5절](../../adr/ADR-112-store-brand-and-administrative-region.md) |
+| 2026-08-15 | trigram 임계값은 transaction 지역 설정과 질의 안 명시 비교를 **함께** 쓴다 | [MD-2026-024](../../decisions/minor-decisions.md) |
+| 2026-08-15 | 관련도는 전 계산을 `numeric`으로 유지한다. `similarity()`의 `real`을 캐스트한다 | 이 문서 Surprises, `StoreSearchCandidateRepository.kt` |
+| 2026-08-15 | `matchReason`은 점수를 고른 경로의 term 종류만 담는다 | [ADR-103 A5](../../adr/ADR-103-store-search-strategy.md), `StoreSearchCandidateRepository.kt` |
+| 2026-08-15 | 브랜드·지역 표시 이름은 원 테이블이 아니라 색인 term의 `display_text`에서 읽는다 | `StoreSearchCandidateRepository.kt` |
+| 2026-08-15 | Milestone 5는 컨트롤러를 붙이지 않는다. `pickupAvailable`이 동작하는 Milestone 6에서 endpoint를 연다 | 이 ExecPlan Progress |
+| 2026-08-15 | target OpenAPI의 `/stores/search`를 ADR-103 2026-08-15 Amendment에 맞게 개정한다 | [ADR-103 A4/A5/A6/A7](../../adr/ADR-103-store-search-strategy.md), `scripts/verify-docs.sh` |
 
 ## Outcomes & Retrospective
 
@@ -961,3 +1027,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   확정했다. 계약 갱신 시점도 바뀌었다. `RuntimeOpenApiParityTest`가 양방향 검증이라 브랜드 여섯
   endpoint의 target·runtime OpenAPI 반영을 Milestone 11까지 미룰 수 없었고, Milestone 11에는
   프론트엔드 타입 생성과 Error Catalog 정합화가 남는다.
+- 2026-08-15: Milestone 5 구현 중 후보 질의의 소유 모듈을 계획의 `MerchantStoreSearchQuery`에서
+  `discovery`로 정정했다(MD-2026-023). 조회 흐름 도식과 그 아래 설명을 실제 구현에 맞췄다.
+  trigram 임계값 고정 방식도 계획의 "질의 안 명시 비교"만으로는 부족해 transaction 지역 설정을
+  함께 쓰도록 확정했다(MD-2026-024). target OpenAPI의 `/stores/search`가 ADR-103 원 Decision
+  시절 형태로 남아 있어 2026-08-15 Amendment에 맞게 개정하고 `scripts/verify-docs.sh`의 옛 어휘
+  단언도 함께 고쳤다. 컨트롤러는 `pickupAvailable`이 동작하는 Milestone 6으로 미뤘다.

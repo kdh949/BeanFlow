@@ -415,13 +415,22 @@ paths:
     get:
       tags: [Discovery]
       operationId: searchStores
-      summary: Search stores by name or representative menu text
+      summary: Search stores by store, brand, region or available menu name
       description: |
-        The query is trimmed and internal whitespace is collapsed before validation
-        and cursor binding. Latitude and longitude must be supplied together or both
-        omitted; radiusMeters without both coordinates returns 400. Coordinates are
-        request-only and never persisted or written to logs. pickupAvailable is a
-        point-in-time projection and does not reserve a slot.
+        The query is trimmed, NFKC-normalized, lowercased and split on whitespace into
+        at most five tokens before validation and cursor binding. Every token must match
+        at least one searchable attribute of the store; a token is matched by substring
+        first and only falls back to trigram similarity when no substring matched it.
+        `%`, `_` and `\` are literal characters, not wildcards.
+
+        Latitude and longitude must be supplied together or both omitted; radiusMeters
+        without both coordinates returns 400, and sort=distance without coordinates
+        returns 400. Coordinates are request-only and never persisted or written to logs.
+        openOnly requires only that the store accepts orders with pickup enabled;
+        pickupAvailable additionally requires a reservable slot and is a point-in-time
+        projection that does not reserve one. Both default to unset, and a closed store
+        is then still returned with its status in the flags. The relevance score itself
+        is not part of the response.
       x-beanflow-contract-status: TARGET
       security: [{ customerSession: [] }]
       parameters:
@@ -429,6 +438,10 @@ paths:
           name: query
           required: true
           schema: { type: string, minLength: 2, maxLength: 50 }
+        - in: query
+          name: sort
+          required: false
+          schema: { type: string, enum: [relevance, distance], default: relevance }
         - in: query
           name: latitude
           required: false
@@ -441,6 +454,10 @@ paths:
           name: radiusMeters
           required: false
           schema: { type: integer, minimum: 1, maximum: 10000 }
+        - in: query
+          name: openOnly
+          required: false
+          schema: { type: boolean }
         - in: query
           name: pickupAvailable
           required: false
@@ -5794,17 +5811,50 @@ components:
     StoreSearchItem:
       type: object
       additionalProperties: false
-      required: [storeId, name, matchReason, pickupAvailable, representativeMenus]
+      required: [storeId, name, matchReason, open, pickupAvailable, matchedMenus]
       properties:
         storeId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
-        matchReason: { type: string, enum: [STORE_NAME, MENU_NAME, BOTH] }
+        brandName:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 120
+        regionName:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 200
+          description: The administrative region levels of the store joined from 시도 down to 리.
+        matchReason:
+          type: array
+          minItems: 1
+          description: The distinct kinds of searchable attribute that matched, never the score.
+          items:
+            type: string
+            enum:
+              [
+                STORE_NAME,
+                BRAND_NAME,
+                REGION_SIDO,
+                REGION_SIGUNGU,
+                REGION_EUPMYEONDONG,
+                REGION_RI,
+                MENU_NAME,
+              ]
         distanceMeters: { type: integer, minimum: 0 }
+        open: { type: boolean }
         pickupAvailable: { type: boolean }
-        representativeMenus:
+        matchedMenus:
           type: array
           maxItems: 3
-          items: { type: string, minLength: 1, maxLength: 200 }
+          description: Menus of this store that the query matched, most relevant first. Empty when none matched.
+          items: { $ref: "#/components/schemas/StoreSearchMenu" }
+    StoreSearchMenu:
+      type: object
+      additionalProperties: false
+      required: [menuId, name]
+      properties:
+        menuId: { $ref: "#/components/schemas/Identifier" }
+        name: { type: string, minLength: 1, maxLength: 200 }
     CustomerStore:
       type: object
       additionalProperties: false

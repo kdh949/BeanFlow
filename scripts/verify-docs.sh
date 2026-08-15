@@ -922,13 +922,30 @@ else:
     search_query_schema = store_search_parameters['query']['schema']
     store_search_page = spec['components']['schemas']['StoreSearchPage']
     store_search_item = spec['components']['schemas']['StoreSearchItem']
+    # ADR-103의 2026-08-15 Amendment가 원 Decision의 세 값짜리 matchReason과 대표 메뉴 문자열
+    # 배열을 대체했다. 검색 대상이 일곱 종류로 늘고 정렬을 클라이언트가 고른다.
+    search_match_reason = store_search_item['properties']['matchReason']
     if (
         search_query_schema.get('minLength') != 2
         or search_query_schema.get('maxLength') != 50
-        or not {'latitude', 'longitude', 'radiusMeters', 'pickupAvailable'} <= set(store_search_parameters)
+        or not {'sort', 'latitude', 'longitude', 'radiusMeters', 'openOnly', 'pickupAvailable'}
+        <= set(store_search_parameters)
+        or store_search_parameters['sort']['schema'].get('default') != 'relevance'
+        or set(store_search_parameters['sort']['schema'].get('enum', [])) != {'relevance', 'distance'}
         or 'must be supplied together' not in store_search.get('description', '')
         or 'distanceAvailable' not in store_search_page.get('required', [])
-        or set(store_search_item['properties']['matchReason'].get('enum', [])) != {'STORE_NAME', 'MENU_NAME', 'BOTH'}
+        or search_match_reason.get('type') != 'array'
+        or set(search_match_reason.get('items', {}).get('enum', []))
+        != {
+            'STORE_NAME',
+            'BRAND_NAME',
+            'REGION_SIDO',
+            'REGION_SIGUNGU',
+            'REGION_EUPMYEONDONG',
+            'REGION_RI',
+            'MENU_NAME',
+        }
+        or store_search_item['properties']['matchedMenus'].get('maxItems') != 3
     ):
         print('Store search target contract does not match ADR-103.', file=sys.stderr)
         sys.exit(1)
