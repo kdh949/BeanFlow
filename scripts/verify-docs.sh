@@ -41,6 +41,7 @@ required=(
   "docs/quality/quality-evidence-map.md"
   "docs/quality/nearby-store-discovery-performance-evidence.md"
   "docs/operations/nearby-store-discovery-runbook.md"
+  "docs/operations/store-keyword-search-runbook.md"
   "docs/operations/local-demo-runbook.md"
   "docs/quality/customer-order-cancellation-readiness.md"
   "docs/quality/customer-order-cancellation-release-evidence.md"

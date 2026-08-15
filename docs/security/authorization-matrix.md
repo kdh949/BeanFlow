@@ -28,7 +28,7 @@
 | 브랜드 조회 (`/operations/brands`, `/operations/brands/{brandId}`) | No | No | No | Active `STORE_BRAND_MANAGE` grant | No |
 | 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
-| 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Yes + reason + Audit | No |
+| 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
 | 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |

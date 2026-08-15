@@ -713,8 +713,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) — 완료
 - [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 정렬 tuple 등록 — 완료
 - [BR-47](../../product/business-policy-decisions.md), [BR-40](../../product/business-policy-decisions.md) — BR-47 완료
-- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018, MD-2026-019, MD-2026-020 — 완료
-- `docs/security/authorization-matrix.md` — 완료
+- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018, MD-2026-019, MD-2026-020, MD-2026-028 — 완료
+- `docs/security/authorization-matrix.md` — 재색인 grant·reason·idempotency·Audit 갱신 완료
 - `docs/api/api-conventions.md` — 검색 endpoint 규약
 - `docs/api/error-catalog.md` — `BRAND_NAME_ALREADY_IN_USE`, `BRAND_FANOUT_LIMIT_EXCEEDED`,
   `BRAND_STATE_CONFLICT` — 완료. 계획 원안의 `BRAND_NAME_CONFLICT`는 구현에서 의미가 더 분명한
@@ -722,10 +722,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - `docs/architecture/ubiquitous-language.md` — Brand, Region, 검색 term, 관련도
 - `docs/architecture/capability-map.md`, `docs/architecture/context-map.md`
 - `docs/operations/store-keyword-search-runbook.md` — 신규. 재색인 절차, 커버리지 점검 쿼리,
-  색인 신선도 한계
+  색인 신선도 한계, partial·RUNNING unknown 처리 — 완료
 - `docs/testing/test-strategy.md` — 검색 테스트 범주
 - `README.md` — 현재 상태 목록
-- `scripts/verify-docs.sh` — 새 필수 문서 등록
+- `scripts/verify-docs.sh` — 새 필수 문서 등록 완료
 - `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint 완료
 - 신규 검색 실행계획 evidence 문서
 
@@ -929,7 +929,27 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     추가했다.
   - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
     M12의 문서화된 실행계획 evidence.
-- 2026-08-16: 미착수 — Milestone 10~12.
+- 2026-08-16: **Milestone 10 완료.** V64의 재색인 command ledger와 audit action,
+  `shared/api`의 `StoreSearchIndexRebuildOperations`, Operations의 권한·audit·replay controller를
+  추가했다. Discovery는 매장별 transaction으로 기존 색인 교체를 소유하며 Operations는 전체 재색인
+  동안 DB transaction을 열지 않는다.
+  - `PLATFORM_OPERATOR`와 활성 `STORE_BRAND_MANAGE` grant, 1..200자 reason, 8..128자
+    `Idempotency-Key`를 함께 강제한다. 같은 actor/key/정규화 reason은 완료 response를 90일간
+    재생하고, 다른 reason은 409, 실행 중 command는 `Retry-After: 2`를 포함한 409이다.
+    partial 결과는 200이어도 `complete=false`와 실패 Store ID로 명시한다.
+  - `OperatorSearchIndexRebuildControllerTest` **3건**이 완료 결과 replay·audit 단일 기록,
+    profile 누락 partial과 나머지 Store 계속 처리, role/grant/request shape/RUNNING command와
+    `Retry-After`를 Testcontainers에서 확인했다. 기존
+    `StoreSearchIndexRebuildIntegrationTest` **9건**과 `ModularityTests` **1건**도 통과했다.
+  - M8의 direct `discovery → ordering/api`와 M10의 `operations → discovery/api`가 Modulith
+    순환을 만들었음을 확인해 compact contract만 `shared/api`로 옮겼다(MD-2026-028). 구현·데이터
+    소유는 Ordering/Discovery에 남는다.
+  - `Store Keyword Search Runbook`에 coverage query, 재실행/partial 규칙과 process loss의
+    `RUNNING` unknown을 기록했다. `./gradlew spotlessCheck`가 통과했다.
+  - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가 통과했다.
+  - **`Not run`:** M11 target/runtime OpenAPI·Error Catalog·frontend type generation, 전체
+    `./gradlew build`, M12의 문서화된 실행계획 evidence.
+- 2026-08-16: 미착수 — Milestone 11~12.
 
 ## Surprises & Discoveries
 
