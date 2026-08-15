@@ -11,9 +11,9 @@
   [MD-2026-015/016/017](../decisions/minor-decisions.md)
 - 구현 계획: [productization-70](../exec-plans/active/productization-70-customer-store-discovery.md)
 
-> **현재 상태 (2026-08-15): 결정 완료, 구현 전.** 아래의 성능·품질 서술은 모두 설계 근거이며
-> 측정 결과가 아니다. 측정값은 구현 후 ExecPlan의 `Outcomes & Retrospective`와 실행계획 evidence
-> 문서에 기록하고, 그때 이 문서의 6장을 실제 수치로 갱신한다.
+> **현재 상태 (2026-08-16): Milestone 1·1-B·2 구현 완료, 검색·즐겨찾기 API는 후속 단계다.**
+> 색인 스키마·쓰기·재색인·관측의 계약 테스트는 존재하지만, 검색 query의 성능·품질 서술은 여전히
+> 설계 근거다. 실제 측정값은 ExecPlan의 `Outcomes & Retrospective`와 evidence 문서에 기록한다.
 
 ## 1. 무엇을 만드는가
 
@@ -357,7 +357,8 @@ cursor endpoint 4개(`stores-search-relevance`, `stores-search-distance`, `opera
 
 1. **색인 신선도의 구멍.** 매장·메뉴 쓰기 API가 없으므로 시드나 직접 DML로 매장명·메뉴가 바뀌면
    색인이 자동으로 따라가지 않는다. 브랜드·지역만 동기 갱신되고 나머지는 운영자 재색인 커맨드가
-   필요하다. 이 구멍을 숨기지 않기 위해 커버리지 gauge와 runbook 점검 쿼리를 둔다. 정식 해소책은
+   필요하다. 이 구멍을 숨기지 않기 위해 row-presence coverage와 source/index freshness mismatch
+   gauge, runbook 점검 쿼리를 둔다. 정식 해소책은
    매장·메뉴 쓰기 API가 생길 때 그 커맨드가 색인 갱신을 흡수하는 것이다. **색인 테이블 migration
    직후에도 색인은 비어 있다**(2.5의 정규화 문제). 운영자가 재색인을 실행하기 전까지 커버리지
    gauge는 `0`이고, 그 창이 관측 가능한 것이 이 설계가 제공하는 보장이다.
@@ -382,7 +383,8 @@ cursor endpoint 4개(`stores-search-relevance`, `stores-search-distance`, `opera
 |---|---|---|
 | 색인·질의 정규화 일치 | 같은 입력을 두 경로에 넣어 비교 | **불일치 발견**(2.5 표). SQL 백필을 제거하고 단일 Kotlin 함수로 통일 |
 | 색인 쓰기 원자성 경계 | 커맨드 transaction 밖 호출 | 새 transaction을 열지 않고 거부. `StoreSearchIndexRebuildIntegrationTest` 통과 |
-| 커버리지 gauge | 재색인 전후와 미색인 매장 추가 | `0` → `1.0` → `2/3`으로 관측됨 |
+| row-presence gauge | 재색인 전후와 미색인 매장 추가 | `0` → `1.0` → `2/3`으로 관측됨. 내용 최신성은 주장하지 않음 |
+| freshness mismatch gauge | 직접 DML 매장명·메뉴 추가·이름 변경·판매 중지 | 0에서 양수로 변하고 재색인 뒤 0으로 복구되는 계약 테스트 통과 |
 | 재색인 부분 실패 | profile 없는 매장을 섞어 실행 | 실패 매장 ID 보고, 나머지 매장 계속 처리 |
 | GIN trigram 인덱스 사용 | 동일 fixture에서 `EXPLAIN (ANALYZE, BUFFERS)` 인덱스 전후 비교 | Not run |
 | 검색 지연 p50/p95/p99 | nearby 기준선과 같은 조건 | Not run |

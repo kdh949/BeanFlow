@@ -492,8 +492,9 @@ POST   /api/v1/operations/search-index/rebuild
    `20560`으로 변하지 않는다.
 2. 단계 2 migration(색인 테이블)과 `shared/api` 색인 갱신 port, `discovery/internal` 구현,
    기존 매장·메뉴 초기 적재. 색인 term 종류에 `REGION_RI`를 포함한다.
-   **완료 조건:** 재색인을 실행한 뒤 모든 매장이 `STORE_NAME` term 1행을 갖고 커버리지 gauge가
-   `1.0`을 보고한다. 실행 전에는 `0`을 보고해야 하며 그 상태가 관측 가능해야 한다.
+   **완료 조건:** 재색인을 실행한 뒤 모든 매장이 `STORE_NAME` term 1행을 갖고
+   `store-row-presence.coverage`가 `1.0`, `freshness.mismatches`가 `0`을 보고한다. 실행 전에는
+   row-presence가 `0`을 보고해야 하며 두 상태가 관측 가능해야 한다.
 3. 운영자 브랜드 CRUD·매장 브랜드 지정과 `BRAND_NAME` term 동기 갱신, fan-out 상한, AuditRecord.
    **완료 조건:** 브랜드명 변경이 소속 매장 term을 같은 transaction에서 갱신하고, 색인 갱신을 강제
    실패시키면 브랜드 변경도 rollback된다.
@@ -547,6 +548,8 @@ POST   /api/v1/operations/search-index/rebuild
   비운영자 재색인 403, 미인증 검색 401.
 - `pg_trgm` 부재·색인 조회 실패의 503과 빈 목록 미대체.
 - 재색인 부분 실패가 성공으로 보고되지 않고 실패 매장 ID가 응답에 포함되는지.
+- 재색인 target snapshot을 잡은 뒤 더 작은 UUID 매장이 생겨도 live keyset 누락을 `complete`로
+  오인하지 않고, 결과가 snapshot 범위와 target 수를 명시하는지.
 - 검색 profile이 없는 매장이 재색인에서 실패로 기록되고 나머지 매장 처리가 계속되는지.
 - 매장명을 직접 DML로 바꾼 뒤 재색인 전에는 결과가 따라오지 않고 재색인 후에는 따라오는지.
 - 재색인 재실행이 term 행을 늘리지 않는지(종류 단위 교체의 멱등성).
@@ -555,7 +558,11 @@ POST   /api/v1/operations/search-index/rebuild
 - 판매 중이 아닌 메뉴에 `MENU_NAME` term이 만들어지지 않는지.
 - SQL `lower()`로는 재현되지 않는 정규화 결과(`İ` → `i̇`, 어말 시그마 `Σ` → `ς`)가 색인에
   그대로 저장되는지.
-- 커버리지 gauge가 재색인 전 `0`, 재색인 후 `1.0`, 색인되지 않은 매장 추가 시 그 사이 값인지.
+- row-presence gauge가 재색인 전 `0`, 재색인 후 `1.0`, 색인되지 않은 매장 추가 시 그 사이 값인지.
+- row-presence가 `1.0`인 채로 직접 DML 매장명·메뉴 추가·이름 변경·판매 중지가 freshness mismatch
+  gauge에 드러나고, 재색인 뒤 `0`으로 돌아오는지.
+- `MENU_NAME` source가 실존·동일 매장 메뉴만 가리키고 메뉴 삭제 시 term이 cascade되는지.
+- favorite가 unknown customer/store를 거부하고 customer/store 삭제 시 cascade되는지.
 - Spring Modulith 구조 검증에서 `merchant ↔ discovery` 순환 의존 부재.
 - 좌표 쌍·radius 경계, 좌표 유무에 따른 distance 필드·정렬 계약.
 - 한 매장의 여러 메뉴 일치가 매장 한 건과 정확한 match reason으로 합쳐지는지 검증.
@@ -592,7 +599,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | `beanflow.discovery.search.page.size` | summary | — |
 | `beanflow.discovery.search.tokens` | summary | — (토큰 **개수**만, 값 아님) |
 | `beanflow.discovery.search.empty` | counter | `sort` |
-| `beanflow.discovery.search.index.coverage` | gauge | — (색인된 매장 수 / 전체 매장 수) |
+| `beanflow.discovery.search.index.store-row-presence.coverage` | gauge | — (STORE_NAME 행을 하나 이상 가진 매장 수 / 전체 매장 수) |
+| `beanflow.discovery.search.index.freshness.mismatches` | gauge | — (매장명·판매 중 메뉴 source/index 양방향 불일치 row 수) |
 | `beanflow.discovery.search.index.update` | counter | `outcome`, `trigger` = `BRAND\|REGION\|REBUILD` |
 
 `empty` counter는 "검색은 되는데 결과가 늘 0건"인 상태(색인 누락, 정규화 불일치)를 장애와 구분해
@@ -677,6 +685,20 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `spotlessCheck`와 `scripts/verify-docs.sh`도 통과.
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11),
     검색 질의 성능 evidence(Milestone 12).
+- 2026-08-16: **Milestone 2 리뷰 보강.** 미병합·미적용 V57/V59를 제자리에서 고쳐 DB 최종
+  방어선을 추가했다.
+  - V57 favorite는 `identity_customer_account`·`merchant_store` FK와 양쪽 `ON DELETE CASCADE`를
+    가진다. V59 MENU_NAME은 `(source_id, store_id) → merchant_menu(id, store_id)` FK라 unknown 또는
+    다른 매장 메뉴를 저장할 수 없고 메뉴 삭제 시 term도 삭제된다.
+  - 재색인은 UUID live keyset 대신 시작 target ID snapshot을 chunk 처리한다. 결과는
+    `targetStoreCount`와 `completeSnapshot`으로 범위를 드러내며 chunk-size는 `1..1000` 시작 검증이다.
+  - gauge를 row-presence와 source/index freshness mismatch로 분리하고, 별도
+    `REPEATABLE_READ` bean에서 한 DB snapshot으로 계산한다.
+  - `StoreSearchIndexRebuildServiceTest` 2건, `StoreSearchTermIndexMigrationTest` 7건,
+    `StoreSearchVocabularyMigrationTest` 15건, `StoreSearchIndexRebuildIntegrationTest` 10건을
+    실행했다. 두 migration class의 Testcontainers 실행은 `26s`였으며 schema migrate는 class당 한 번,
+    fixture cleanup은 테스트마다 수행한다. 이 시간은 warm Gradle의 제한된 class 실행 결과로 전체 CI와
+    직접 비교하지 않는다.
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
@@ -762,6 +784,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | `term_normalized`는 `varchar(400)`. 상한 초과는 절단이 아니라 거부 | 이 문서 단계 2, `StoreSearchIndexService.kt` |
 | 2026-08-15 | 색인 쓰기 port는 `Propagation.MANDATORY`로 커맨드 transaction을 강제한다 | 구현 불변식 11, `StoreSearchIndexService.kt` |
 | 2026-08-15 | 재색인은 `STORE_NAME`·`MENU_NAME`만 교체한다. 브랜드·지역 term은 소유 커맨드가 채운다 | `StoreSearchIndexRebuildService.kt` |
+| 2026-08-16 | 재색인 대상은 UUID keyset이 아니라 시작 ID snapshot. 완료는 snapshot 범위에 한정 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 
 ## Outcomes & Retrospective
 
@@ -784,3 +809,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - 2026-08-15: 매장을 가로지르는 메뉴 검색의 조회 순서를 명시하고, 설정 주소지를 client storage
   경계로 확정했다. 서버 스키마와 공개 API 계약은 변경되지 않는다. 메뉴 단위 결과 목록을
   Non-goals에 추가했다.
+- 2026-08-16: 리뷰 보강으로 V57/V59 참조 무결성, 재색인 target snapshot, freshness 관측과
+  migration-test fixture lifecycle을 갱신했다. 공개 HTTP API는 바뀌지 않는다.

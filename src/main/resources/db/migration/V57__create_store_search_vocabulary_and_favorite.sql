@@ -43,8 +43,8 @@ ALTER TABLE merchant_store_discovery_profile
     ADD COLUMN region_code varchar(10) REFERENCES merchant_region(code);
 
 CREATE TABLE discovery_customer_favorite_store (
-    customer_id uuid NOT NULL,
-    store_id uuid NOT NULL,
+    customer_id uuid NOT NULL REFERENCES identity_customer_account(id) ON DELETE CASCADE,
+    store_id uuid NOT NULL REFERENCES merchant_store(id) ON DELETE CASCADE,
     created_at timestamptz NOT NULL,
     PRIMARY KEY (customer_id, store_id)
 );
