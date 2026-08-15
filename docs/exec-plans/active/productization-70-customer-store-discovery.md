@@ -197,7 +197,7 @@ GET /stores/search or /stores/nearby
 GET /me/store-recommendations
   CustomerActor
     FavoriteStoreQuery.top(customerId)
-    CustomerRecentStoreQuery.top(customerId)       // Ordering public query port
+    CustomerRecentStoreQuery.top(customerId)       // shared/api contract, Ordering implementation
     NearbyStoreQuery.top(optional coordinates)
     MerchantStoreDisplayQuery.hydrate(storeIds)
     stable de-duplication → reason 포함 response
@@ -896,8 +896,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
     M12 실행계획 evidence.
 - 2026-08-16: **Milestone 8 완료.** V63의 `ordering_order(customer_id, state, created_at DESC,
-  store_id)` index, Ordering 공개 port `CustomerRecentStoreQuery`, Discovery의 current-display
-  hydrate와 `GET /api/v1/me/recent-stores?limit=`를 추가했다.
+  store_id)` index, `shared/api` cross-context contract `CustomerRecentStoreQuery`의 Ordering 구현,
+  Discovery의 current-display hydrate와 `GET /api/v1/me/recent-stores?limit=`를 추가했다.
   - Ordering은 customer predicate와 BR-40의 다섯 eligible state predicate를 한 SQL에 넣고,
     매장별 `max(created_at)`만 `CustomerRecentStoreProjection(storeId, lastOrderedAt)`으로 반환한다.
     Order Aggregate·Order snapshot·Discovery 복제 테이블은 읽거나 만들지 않는다. 결과는
@@ -978,6 +978,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - **(2026-08-15) `merchant ↔ discovery` 순환 의존 위험.** 색인 갱신(merchant → discovery)과 매장
   상태 조회(discovery → merchant)가 동시에 필요해 Spring Modulith 검증이 깨질 수 있다. 색인 갱신
   port를 `shared/api`에 두어 회피하며 ADR-112에 기록했다.
+- **(2026-08-16) 공개 API package가 곧 허용된 의존 방향을 뜻하지는 않는다.** M10의 운영자 재색인
+  서비스가 `operations → discovery/api`를, 이미 완료로 기록한 M8의 최근 주문 서비스가
+  `discovery → ordering/api`를 직접 참조하자 `ModularityTests`가 둘 다 거절했다. 전자는
+  `discovery → fulfillment → operations → discovery` 순환까지 만들었다. 데이터·구현 소유권은
+  그대로 Ordering/Discovery에 두고, caller가 필요한 작은 contract와 DTO만 `shared/api`로 옮긴다.
+  `shared`가 데이터를 소유하거나 범용 service locator가 되는 것이 아니며, 큰 후보 집합을 넘기는
+  search query에는 적용하지 않는다(MD-2026-028).
 - **(2026-08-15) 오타 허용과 keyset cursor의 충돌.** 유사도는 실수라 그대로 cursor에 넣으면 page
   경계에서 동점 판정이 흔들려 누락·중복이 생긴다. nearby의 `distanceMicrometers`와 같은 정수
   양자화(`relevanceRank`)로 해결하고 전체 tuple을 all-ASC로 맞췄다.
@@ -1085,6 +1092,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | recent는 결제 승인 이후 현재 실행·완료 상태만 포함 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-16 | recommendation 좌표 쌍의 nearby 기본 반경을 3,000m로 고정 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-16 | 재색인은 `STORE_BRAND_MANAGE` grant와 90일 결과 재생 원장을 사용 | [BR-47](../../product/business-policy-decisions.md) |
+| 2026-08-16 | M8 recent와 M10 재색인의 작은 cross-context contract는 `shared/api`에 두고 구현·데이터 소유는 Ordering/Discovery에 유지 | [MD-2026-028](../../decisions/minor-decisions.md) |
 | 2026-08-12 | 좌표 없는 추천도 favorite → recent 순서를 유지 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 검색 대상에 브랜드명·지역명 추가, 결과는 매장 단위 + 매칭 메뉴 최대 3개 | [ADR-103 A1/A5](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 매칭은 substring 우선 + 유사도 `0.3` 보완 하이브리드. 오타 교정 non-goal 철회 | [ADR-103 A2](../../adr/ADR-103-store-search-strategy.md) |
