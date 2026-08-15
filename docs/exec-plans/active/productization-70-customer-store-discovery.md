@@ -714,6 +714,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     20분 한도에서 취소됐다(이전 run의 `:test` 취소 전 `15분 45초` 대비 1분 13초 단축). frontend
     preflight가 약 2분 49초, Gradle compile/test가 약 17분 24초여서 같은 job에는 함께 들어갈 수 없다.
     검증을 생략하거나 timeout을 올리지 않고 preflight와 backend `build`를 별도 20분 job으로 분리한다.
+  - 분리 후 첫 run `31898567839`은 preflight를 통과했지만 backend checkout의 기본 shallow history에는
+    Spotless ratchet이 요구하는 `origin/main`이 없어 build 시작 전에 실패했다. backend checkout도 기존과
+    같이 `fetch-depth: 0`으로 설정했다. 이 실패에서는 test가 실행되지 않았다.
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
