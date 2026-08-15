@@ -717,6 +717,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - 분리 후 첫 run `31898567839`은 preflight를 통과했지만 backend checkout의 기본 shallow history에는
     Spotless ratchet이 요구하는 `origin/main`이 없어 build 시작 전에 실패했다. backend checkout도 기존과
     같이 `fetch-depth: 0`으로 설정했다. 이 실패에서는 test가 실행되지 않았다.
+  - 최종 remote run `31898765228`은 preflight **2분 17초**, backend build **14분 34초**로 모두
+    성공했다. backend의 `Build and test` 단계는 **14분 22초**였고, CodeQL 세 분석 job도 성공했다.
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
