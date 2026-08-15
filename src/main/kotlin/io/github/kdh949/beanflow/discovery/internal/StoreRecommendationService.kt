@@ -72,6 +72,7 @@ internal class StoreRecommendationService(
             if (command.radiusMeters != null) invalid("Radius requires latitude and longitude")
             return null
         }
+        val radiusMeters = command.radiusMeters ?: DEFAULT_NEARBY_RADIUS_METERS
 
         // Reuse the nearby validator so coordinate grammar, range and radius semantics cannot
         // drift between the two customer endpoints. This is a read-only, no-DB validation call.
@@ -79,7 +80,7 @@ internal class StoreRecommendationService(
             SearchNearbyStoresCommand(
                 latitude = command.latitude,
                 longitude = command.longitude,
-                radiusMeters = command.radiusMeters,
+                radiusMeters = radiusMeters,
                 pickupAvailable = null,
                 cursor = null,
                 limit = NEARBY_LIMIT.toString(),
@@ -89,7 +90,7 @@ internal class StoreRecommendationService(
         return SearchNearbyStoresCommand(
             latitude = command.latitude,
             longitude = command.longitude,
-            radiusMeters = command.radiusMeters,
+            radiusMeters = radiusMeters,
             pickupAvailable = null,
             cursor = null,
             limit = maxOf(limit, NEARBY_LIMIT).toString(),
@@ -116,5 +117,6 @@ internal class StoreRecommendationService(
         // Nearby allows a larger page so favorites/recent can be de-duplicated without starving
         // the final compact recommendation list. The endpoint's own output remains at most 20.
         const val NEARBY_LIMIT = 100
+        const val DEFAULT_NEARBY_RADIUS_METERS = "3000"
     }
 }

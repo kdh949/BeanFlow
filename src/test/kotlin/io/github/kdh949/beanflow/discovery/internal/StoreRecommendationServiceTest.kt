@@ -96,6 +96,28 @@ class StoreRecommendationServiceTest {
     }
 
     @Test
+    fun `coordinate pair uses a 3km nearby radius when radius is omitted`() {
+        var receivedRadiusMeters: String? = null
+        val service =
+            StoreRecommendationService(
+                favorites = favoriteSource(),
+                recentStores = recentSource(),
+                nearbyStores =
+                    object : NearbyStoreQueryOperations {
+                        override fun search(command: io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand): NearbyStorePage {
+                            receivedRadiusMeters = command.radiusMeters
+                            return NearbyStorePage(emptyList(), null)
+                        }
+                    },
+                nearbyValidation = NearbyStoreQueryValidation(noOpCursorCodec()),
+            )
+
+        service.list(customerId, StoreRecommendationCommand("37.5", "127.0", null, null, now))
+
+        assertThat(receivedRadiusMeters).isEqualTo("3000")
+    }
+
+    @Test
     fun `partial coordinates or radius without coordinates are rejected before source reads`() {
         val service =
             StoreRecommendationService(

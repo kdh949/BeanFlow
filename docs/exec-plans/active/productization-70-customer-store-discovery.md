@@ -919,8 +919,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   병합한다. 중복 매장은 최초 단계의 reason(`FAVORITE | RECENT | NEARBY`)을 유지하고, 좌표가
   없으면 nearby를 추정하거나 빈 단계로 대체하지 않는다. 좌표 쌍·반경·compact limit은 기존
   nearby/recent 검증을 재사용하며, source 조회 장애는 503을 유지한다.
-  - `StoreRecommendationServiceTest` 3건이 first-reason dedupe, 좌표 없는 병합, 좌표/반경
-    조합의 400을 확인했다. nearby 매장만 `distanceMeters`를 갖고, favorite/recent는 null이다.
+  - `StoreRecommendationServiceTest` 4건이 first-reason dedupe, 좌표 없는 병합, 좌표 쌍의
+    `3,000m` 기본 반경, 좌표/반경 조합의 400을 확인했다. nearby 매장만 `distanceMeters`를 갖고,
+    favorite/recent는 null이다.
   - runtime OpenAPI path, `RuntimeOpenApiParityTest`, 인증 경로 단언과 미인증 401 단언을 함께
     추가했다.
   - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
