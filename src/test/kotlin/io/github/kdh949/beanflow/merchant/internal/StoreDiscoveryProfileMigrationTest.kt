@@ -73,12 +73,22 @@ internal class StoreDiscoveryProfileMigrationTest {
     fun `the store write entity does not gain a search name, geometry or spatial index`() {
         val jdbcTemplate = migrated("v33_store_entity_unchanged")
 
+        // 목록을 통째로 고정해 새 컬럼이 조용히 늘지 않게 한다. 컬럼을 추가하려면 이 테스트를
+        // 고쳐야 하고, 그때 그것이 검색 투영인지 아닌지 판단하게 된다.
+        // brand_id는 검색 편의 필드가 아니라 ADR-112가 정한 Brand Aggregate 참조라 허용한다.
+        // 매장명과 좌표는 여전히 merchant_store_discovery_profile만 가진다.
         assertThat(
             jdbcTemplate.queryForList(
                 "SELECT attname FROM pg_attribute WHERE attrelid = 'merchant_store'::regclass AND attnum > 0",
                 String::class.java,
             ),
-        ).containsExactlyInAnyOrder("id", "accepting_orders", "pickup_enabled", "version")
+        ).containsExactlyInAnyOrder("id", "accepting_orders", "pickup_enabled", "version", "brand_id")
+        assertThat(
+            jdbcTemplate.queryForList(
+                "SELECT attname FROM pg_attribute WHERE attrelid = 'merchant_store'::regclass AND attnum > 0",
+                String::class.java,
+            ),
+        ).doesNotContain("name", "location", "geom", "geometry", "region_code")
         assertThat(
             jdbcTemplate.queryForList(
                 "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'merchant_store'",

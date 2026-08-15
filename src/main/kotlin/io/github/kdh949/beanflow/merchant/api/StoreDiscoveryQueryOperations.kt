@@ -17,6 +17,15 @@ interface StoreDiscoveryQueryOperations {
      * returned; the caller asks for one extra row when it needs a next-page probe.
      */
     fun findPickupCapableStoresNear(query: NearbyStoreProfileQuery): List<NearbyStoreProfileProjection>
+
+    /**
+     * The number of stores the search index is expected to cover.
+     *
+     * Discovery divides its own indexed-store count by this to publish
+     * `beanflow.discovery.search.index.store-row-presence.coverage`, so the denominator is read by
+     * the module that owns the store table rather than by a Discovery query against it.
+     */
+    fun countIndexableStores(): Long
 }
 
 /**

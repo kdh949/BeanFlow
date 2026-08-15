@@ -4,6 +4,12 @@
 - **Date:** 2026-08-11
 - **Implementation owner:** [Customer store discovery](../exec-plans/active/productization-70-customer-store-discovery.md)
 
+> 2026-08-15: 검색 대상에 브랜드명·지역명이 추가되고 매칭·정렬·응답 계약이 개정됐다.
+> 아래 [Amendments](#amendments)가 원 Decision보다 우선한다. 원 Decision 본문은 개정 이전
+> 계약을 이해하기 위한 이력으로 남긴다.
+>
+> 2026-08-16: 색인 source 참조 무결성, 재색인 snapshot, freshness 관측을 보강했다.
+
 ## Context
 
 `GET /stores/nearby`는 좌표 반경 검색만 지원한다
@@ -95,6 +101,141 @@
 - 검색어 자동완성과 오타 교정.
 - ML 기반 추천.
 
+## Amendments
+
+### 브랜드·지역 검색과 오타 허용 Amendment (2026-08-15)
+
+원 Decision은 검색 대상을 매장명과 판매 중 메뉴명으로 한정하고, 매칭을 literal substring으로,
+정렬을 단일 고정 규칙으로 정했다. 제품 요구가 "매장명·브랜드명·메뉴명·지역명을 한 검색창에서"로
+확장되면서 다음 여섯 항목을 개정한다. 개정하지 않은 항목(위치 privacy, cursor 서명, Fulfillment
+batch 판정, 추천 baseline, Elasticsearch 미도입)은 원 Decision 그대로다.
+
+#### A1. 검색 대상에 브랜드명과 지역명을 추가한다
+
+검색 term은 `STORE_NAME`, `BRAND_NAME`, `REGION_SIDO`, `REGION_SIGUNGU`, `REGION_EUPMYEONDONG`,
+`MENU_NAME` 여섯 종류의 폐쇄 어휘다. 브랜드와 지역 데이터 모델은
+[ADR-112](ADR-112-store-brand-and-administrative-region.md)가 소유한다.
+(아래 A7이 `REGION_RI`를 더해 일곱 종류로 넓힌다.)
+
+검색 대상이 네 곳으로 늘면서 매 요청 4-way 조인 위에 유사도를 계산하는 것이 불가능해졌다.
+매장당 검색 가능 문자열을 한 행씩 모은 **동기 갱신 색인 테이블**
+`discovery_store_search_term`을 도입한다. 색인은 브랜드·지역 쓰기 커맨드와 같은 트랜잭션에서
+갱신하며 배치나 큐로 지연시키지 않는다. 색인 갱신 실패는 원 커맨드를 롤백시킨다.
+
+#### A2. 매칭은 substring 우선 + trigram 유사도 보완의 하이브리드다
+
+원 Decision의 case-insensitive literal substring 매칭을 **1순위로 유지**한다. 어떤 토큰이
+substring으로 걸리지 않을 때만 같은 토큰에 `pg_trgm` 유사도 매칭을 추가로 적용한다.
+유사도 임계값은 `0.3`이다.
+
+`%`, `_`, `\`를 literal로 escape하는 규칙은 그대로 유지한다. substring 경로의 결과는 개정 전과
+동일하므로 기존 계약 테스트가 그대로 유효하고, 유사도 경로는 "원래 0건이던 검색"만 구제한다.
+
+원 Decision의 "검색어 자동완성과 오타 교정을 도입하지 않는다" 중 **오타 교정 부분은 철회한다.**
+자동완성은 여전히 도입하지 않는다.
+
+#### A3. 다중 토큰은 AND로 해석한다
+
+원 Decision은 정규화한 검색어 전체를 하나의 substring으로 취급했다. 개정 후에는 공백으로 분리한
+최대 5개 토큰 각각이 해당 매장의 term 중 적어도 하나에 매칭돼야 결과에 포함된다.
+`"강남 스타벅스"`는 `강남`이 `REGION_SIGUNGU`에, `스타벅스`가 `BRAND_NAME`에 걸린 매장을 반환한다.
+
+지역명을 별도 파라미터로 인식하는 파서는 두지 않는다. 토큰은 모두 동등하게 전체 term 집합에
+대해 평가된다.
+
+#### A4. 정렬을 클라이언트가 선택한다
+
+`sort` 파라미터를 추가한다. 기본값은 `relevance`다.
+
+| `sort` | 정렬 튜플 | 좌표 |
+|---|---|---|
+| `relevance` (기본) | `(relevanceRank, distanceMicrometers, storeId)` | 선택. 없으면 거리 항은 상수 `0` |
+| `distance` | `(distanceMicrometers, storeId)` | **필수.** 없으면 400 |
+
+`relevanceRank`는 `1_000_000 - floor(relevance × 1_000_000)`이다. 내림차순 관련도를 오름차순
+정렬 하나로 표현해 nearby의 `distanceMicrometers`와 같은 all-ASC keyset 규칙을 쓰기 위함이다.
+관련도를 부동소수 그대로 cursor에 넣으면 page 경계에서 누락·중복이 생긴다.
+
+`relevance`는 토큰별 최고 가중 유사도의 평균이며 term 종류별 가중치는
+`STORE_NAME 1.00`, `BRAND_NAME 0.90`, `REGION_* 0.80`, `MENU_NAME 0.70`이다. substring 매칭은
+유사도 `1.0`으로 취급한다. 원 Decision의 "store-name prefix 우선"은 이 가중치 체계에 흡수한다.
+
+관련도 점수를 응답에 노출하지 않는다. 산식은 공개 계약이 아니며 튜닝 여지를 남긴다.
+
+#### A5. 응답에 매칭된 메뉴 목록을 포함한다
+
+원 Decision의 `matchReason`(`STORE_NAME | MENU_NAME | BOTH`)은 브랜드·지역이 추가되면서
+표현력이 부족하다. `matchReason`을 term 종류의 집합(A7 반영 후 일곱 종류)으로 확장하고, 추가로 검색어에 걸린
+메뉴를 매장당 최대 3개까지 `matchedMenus`로 내려준다. 정렬은
+`(가중 유사도 DESC, 메뉴명 ASC, 메뉴ID ASC)`이며 매칭 메뉴가 없으면 빈 배열이다. 매장이 결과에서
+빠지지는 않는다.
+
+결과는 원 Decision대로 **항상 매장 단위**로 집계한다.
+
+#### A6. `openOnly` 필터를 추가한다
+
+기존 `pickupAvailable`(7일 내 실제 예약 가능 슬롯 존재)은 의미를 바꾸지 않고 유지한다.
+그보다 약한 `openOnly`를 추가한다. `openOnly=true`는 `acceptingOrders && pickupEnabled`만 요구하고
+슬롯 존재는 묻지 않는다. 두 필터는 독립이며 동시에 지정하면 AND다. 기본값은 둘 다 미지정이고,
+그때 결과에는 닫힌 매장도 포함된다.
+
+닫힌 매장을 결과에서 지우지 않는 것이 기본값인 이유는, 이름을 알고 검색한 사용자에게 0건을
+돌려주는 것이 고장으로 읽히기 때문이다. 상태는 `open`, `pickupAvailable` 플래그로 표시한다.
+
+#### A7. 리 단위 지역명도 검색 대상이다 (2026-08-15 추가)
+
+A1의 term 종류에 `REGION_RI`를 더해 **일곱 종류**가 된다. 가중치는 다른 `REGION_*`과 같은 `0.80`이며
+`matchReason` 집합도 일곱 종류로 넓어진다.
+
+법정동 자료의 74%가 리 단위인데 A1 시점의 3계층 어휘로는 리 이름이 검색되지 않았다.
+데이터 모델과 근거는 [ADR-112 리 단위 지역 어휘 Amendment](ADR-112-store-brand-and-administrative-region.md)가
+소유한다. 매칭·정렬·cursor 규칙은 A2~A6 그대로이며 정렬 튜플이 바뀌지 않으므로
+[ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) 등록 내용도 그대로다.
+
+#### A8. 파생 색인의 참조·snapshot·신선도를 명시적으로 보장한다 (2026-08-16)
+
+`MENU_NAME` term의 `(source_id, store_id)`는 `merchant_menu(id, store_id)` 복합 key를 참조한다.
+따라서 존재하지 않는 메뉴나 다른 매장의 메뉴를 검색 근거로 저장할 수 없고, 메뉴 삭제는 해당 term을
+함께 삭제한다. 고객 즐겨찾기도 customer와 store 양쪽 FK를 두며, 두 원본 중 하나가 삭제되면
+`ON DELETE CASCADE`로 즐겨찾기를 소멸시킨다. 삭제된 주체의 선호 관계를 보존하거나 orphan으로
+조회에서 조용히 사라지게 두지 않는다.
+
+전체 재색인은 UUID keyset을 live하게 걷지 않는다. 시작 시점의 store ID 목록을 target snapshot으로
+고정하고 그 목록을 설정된 chunk 단위로 처리한다. 결과의 `completeSnapshot=true`는 이 snapshot의 모든
+ID가 처리됐다는 뜻이며, snapshot 뒤 생성된 매장은 정상 쓰기의 동기 색인 또는 다음 재색인 pass가
+담당한다. `beanflow.search-index-rebuild.chunk-size`는 `1..1000`으로 시작 시 검증한다.
+
+관측은 두 gauge로 분리한다.
+
+- `beanflow.discovery.search.index.store-row-presence.coverage`: `STORE_NAME` 행을 하나 이상 가진
+  매장 비율. 행 존재만 뜻하며 내용 최신성을 주장하지 않는다.
+- `beanflow.discovery.search.index.freshness.mismatches`: Merchant source의 매장명·판매 중 메뉴명과
+  index의 `STORE_NAME`·`MENU_NAME` 사실이 일치하지 않는 양방향 row 수. 직접 DML로 생긴 이름 변경,
+  메뉴 추가·이름 변경·판매 중지는 이 값으로 드러난다.
+
+두 값과 reconciliation 입력은 별도 `REPEATABLE_READ` read-only transaction bean에서 읽는다.
+scheduled method가 같은 객체의 transactional method를 직접 호출해 proxy를 우회하지 않으며, 한 번의
+측정 안에서 서로 다른 DB snapshot을 섞지 않는다.
+
+#### 유지하는 상한
+
+페이지 기본 `20`·최대 `50`(공통 `DiscoveryLimit`)과 검색어 `2~50` code point는 개정하지 않는다.
+`DiscoveryLimit`은 다른 Discovery endpoint가 공유하는 공통 파라미터이므로 이 endpoint만을 위해
+바꾸지 않는다.
+
+#### Amendment의 결과
+
+- `pg_trgm` GIN 인덱스가 매장명·메뉴명 컬럼이 아니라 색인 테이블의 `term_normalized`에 놓인다.
+  원 Decision의 `ix_merchant_store_profile_name_trgm`, `ix_merchant_menu_available_name_trgm`는
+  색인 테이블 인덱스로 대체된다.
+- 색인 테이블이라는 유지 대상이 새로 생긴다. 동기 갱신 경로 밖의 **API 밖 데이터**(시드·직접 DML)는
+  재색인 커맨드로만 반영된다. 이 한계는 행 존재 gauge와 source/index freshness mismatch gauge로
+  구분해 관측 가능하게 만든다.
+- cursor scope가 `sort` 값에 따라 둘로 나뉜다. [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md)에
+  두 정렬 튜플을 등록한다.
+- 검색어와 토큰은 원 Decision대로 어디에도 저장하지 않는다. 색인 테이블에 저장되는 것은 매장의
+  공개 속성이지 사용자의 검색어가 아니다.
+
 ## Alternatives Considered
 
 ### 1. 처음부터 Elasticsearch
@@ -119,6 +260,30 @@
 - 장점: 장기적으로 전환율이 높을 수 있다.
 - 단점: 학습 데이터가 없다. 실제 사용자 트래픽 없이 만든 모델의 성능을 주장할 수 없다.
 
+### 5. 색인 없이 매 요청 4-way 조인 (2026-08-15 Amendment)
+
+- 장점: 유지할 색인이 없고 항상 최신이다.
+- 단점: 오타 허용을 위해 전체 매장·브랜드·지역·메뉴에 `similarity`를 계산해야 해 GIN 인덱스가
+  사실상 무력화된다. 데이터 증가에 선형으로 열화한다.
+
+### 6. 색인 테이블을 배치로 주기 갱신 (2026-08-15 Amendment)
+
+- 장점: 쓰기 경로가 단순하고 fan-out 비용이 없다.
+- 단점: 매장명·브랜드명 변경이 즉시 반영되지 않아 "오래된 검색 결과"라는 실패 모드가 생긴다.
+  `AGENTS.md`의 stale 대체 금지 원칙과 충돌한다.
+
+### 7. 매장당 한 행에 모든 텍스트를 이어붙인 단일 검색 문서 (2026-08-15 Amendment)
+
+- 장점: 행 수가 매장 수와 같아 관리가 쉽다.
+- 단점: `similarity`가 문자열 길이에 희석돼 메뉴가 많은 매장의 점수가 부당하게 낮아진다.
+  토큰별 term 매칭이 필요하다.
+
+### 8. substring을 버리고 순수 trigram 유사도로 교체 (2026-08-15 Amendment)
+
+- 장점: 매칭 경로가 하나라 구현과 테스트가 단순하다.
+- 단점: `"스타"`처럼 짧은 입력이 `"스타벅스 강남역점"` 같은 긴 이름과 유사도가 낮게 나와
+  **정확한 부분 검색이 오히려 실패한다.** substring 우선 + 유사도 보완의 하이브리드를 선택한다.
+
 ## Rationale
 
 검색과 추천은 요구가 커진 뒤에 도구를 바꾸기 쉬운 영역이다. 반대로 처음부터 외부 검색 엔진을
@@ -142,6 +307,12 @@
 - 가용성 필터로 빈 페이지와 `nextCursor`가 함께 반환되어도 다음 페이지에 누락·중복이 없는지 검증한다.
 - 슬롯 capacity 손상이 pickup 불가 false가 아니라 503인지 검증한다.
 - 메뉴명 일치로 검색된 매장이 중복 없이 매장 단위로 집계되는지 검증한다.
+- `MENU_NAME`이 실존·동일 매장 메뉴만 가리키고 메뉴 삭제 시 term도 삭제되는지 검증한다.
+- 즐겨찾기가 unknown customer/store를 거부하고 양 원본 삭제 시 cascade되는지 검증한다.
+- 재색인 첫 chunk 뒤 더 작은 UUID의 매장이 생겨도 결과가 처음 target snapshot에만 완료 상태를
+  부여하는지 검증한다.
+- row-presence가 `1.0`이어도 직접 DML의 매장명·메뉴 추가·이름 변경·판매 중지 mismatch가 별도 gauge로
+  드러나며, 두 gauge가 한 transaction snapshot에서 계산되는지 검증한다.
 - Cursor 다음 페이지가 누락·중복 없이 이어지는지 검증한다.
 - query 길이·whitespace·wildcard literal, optional 좌표 쌍과 filter 변경 cursor 400을 검증한다.
 - 추천 규칙의 순서가 즐겨찾기·최근·거리 순으로 결정적인지 검증한다.
@@ -155,6 +326,8 @@
 - 좌표 없는 검색 비율
 - 추천 근거별 노출·선택 수
 - `pg_trgm` 인덱스 크기와 갱신 비용
+- `beanflow.discovery.search.index.store-row-presence.coverage`
+- `beanflow.discovery.search.index.freshness.mismatches`
 
 ## Revisit Conditions
 
@@ -167,3 +340,6 @@
 - [ADR-020](ADR-020-nearby-location-privacy.md)
 - [ADR-076](ADR-076-store-catalog-read-contract.md)
 - [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md)
+- [ADR-112](ADR-112-store-brand-and-administrative-region.md) — 2026-08-15 Amendment가 소비하는
+  브랜드·행정구역 데이터 모델
+- [BR-47](../product/business-policy-decisions.md) — 개정된 검색 계약의 제품 정책 수치

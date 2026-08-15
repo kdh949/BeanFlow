@@ -70,6 +70,10 @@ internal class StoreDiscoveryProfileQueryRepository(
         }, *arguments.toTypedArray())
     }
 
+    fun countStores(): Long =
+        jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_store", Long::class.java)
+            ?: throw IllegalStateException("Store count query returned no row")
+
     private companion object {
         /**
          * The canonical decimal coordinate is bound as `numeric` and cast in SQL, so the exact

@@ -2074,6 +2074,96 @@
 
 ---
 
+## BR-47 매장 통합 검색의 대상·매칭·정렬과 브랜드·지역 소유
+
+- **Status:** Accepted for P0
+- **Search Surface:** `GET /api/v1/stores/search`는 매장명, 브랜드명, 지역명(시도·시군구·읍면동·리),
+  판매 중 메뉴명을 하나의 `query`로 검색한다. 결과는 항상 매장 단위로 집계하며 매장이 여러 term에
+  걸려도 한 번만 반환한다. 검색은 인증된 고객 세션을 요구하고 AuditRecord와 도메인 이벤트를
+  만들지 않는다.
+- **Cross-store Scope:** 메뉴명 검색은 특정 매장으로 범위를 좁히지 않고 조건을 만족하는 **모든
+  매장의 메뉴**를 대상으로 한다. 좌표와 `radiusMeters`를 함께 주면 그 반경 안의 전 매장이 대상이며
+  반경 상한은 `10000`m다. 매장 단위 카탈로그 조회(`GET /stores/{storeId}/menus`, ADR-076)와는 목적과
+  계약이 다르며 서로를 대체하지 않는다. 결과 단위는 메뉴가 아니라 **매장**이고, 가격 비교형 메뉴
+  목록은 제공하지 않는다.
+- **Saved Address:** "설정 주소지 인근 검색"의 주소지는 client storage에만 두고 매 요청 좌표를
+  전송한다. 서버는 고객의 주소·좌표를 저장하지 않으며 이 요구를 위해 계정 스키마나 공개 API 계약을
+  바꾸지 않는다. 정밀 좌표 보존 금지는 `BR-28`과 ADR-020 그대로다.
+- **Query Grammar:** `query`는 trim하고 연속 whitespace를 한 칸으로 축약한 뒤 2~50 Unicode code
+  point여야 한다. 공백으로 분리한 토큰은 최대 5개다. `%`, `_`, `\`는 wildcard가 아닌 literal이다.
+  위반은 400이며 오류 메시지에 검색어 원문·좌표·cursor를 넣지 않는다. 서버가 임의로 nearby나 추천
+  결과로 대체하지 않는다.
+- **Matching:** 토큰별로 case-insensitive literal substring을 먼저 적용하고, substring으로 걸리지
+  않은 토큰에만 `pg_trgm` 유사도 매칭을 임계값 `0.3`으로 추가 적용한다. 모든 토큰이 해당 매장의
+  term 중 적어도 하나에 매칭돼야 결과에 포함된다(AND). 한 토큰이 여러 term에 걸리면 가중치가 가장
+  높은 것만 센다. 자동완성은 제공하지 않는다.
+- **Ranking:** term 가중치는 `STORE_NAME 1.00`, `BRAND_NAME 0.90`, `REGION_* 0.80`,
+  `MENU_NAME 0.70`이고 substring 매칭은 유사도 `1.0`으로 취급한다. 관련도는 토큰별 최고 가중
+  유사도의 평균이며 응답에 노출하지 않는다. `sort=relevance`(기본)는
+  `(relevanceRank, distanceMicrometers, storeId)`, `sort=distance`는 `(distanceMicrometers, storeId)`
+  순이다. `sort=distance`는 좌표가 필수이며 좌표 없이 요청하면 400이다.
+- **Location:** 좌표는 선택이다. latitude와 longitude는 둘 다 주거나 둘 다 생략하고, 좌표 없이
+  radius만 주면 400이다. 좌표를 주면 `radiusMeters`가 필수이며 `1..10000`이다. 좌표가 없으면
+  `distanceMeters`를 응답에서 생략한다. 정밀 좌표 보존 금지는 `BR-28`을 그대로 따른다.
+- **Filters:** `pickupAvailable=true`는 7일 안에 실제 예약 가능한 슬롯이 있는 매장만 남긴다.
+  `openOnly=true`는 `acceptingOrders && pickupEnabled`만 요구한다. 두 필터는 독립이고 동시 지정은
+  AND다. 둘 다 미지정이 기본이며 그때 닫힌 매장도 결과에 포함하고 상태는 `open`,
+  `pickupAvailable` 플래그로 표시한다.
+- **Response:** 항목은 매장 표시 정보, 브랜드(있을 때), 지역, `matchReason` term 종류 집합,
+  좌표가 있을 때 `distanceMeters`, `open`, `pickupAvailable`, 매장당 최대 3개의 `matchedMenus`를
+  포함한다. `matchedMenus`는 `(가중 유사도 DESC, 메뉴명 ASC, 메뉴ID ASC)` 순이며 매칭 메뉴가 없으면
+  빈 배열이고 매장이 결과에서 빠지지 않는다. 페이지는 `BR-28`·ADR-070대로 기본 20·최대 50이다.
+- **Brand Ownership:** 브랜드 생성·수정·보관과 매장의 브랜드 지정·해제는 `PLATFORM_OPERATOR`만
+  수행한다. 활성 브랜드의 정규화 이름은 유일하고 중복은 409다. 매장의 브랜드는 없을 수 있다.
+  브랜드명 변경은 소속 매장의 검색 색인을 같은 transaction에서 갱신하며 소속 매장이 1000개를
+  넘으면 `409 BRAND_FANOUT_LIMIT_EXCEEDED`로 거절한다.
+- **Region Ownership:** 매장의 지역 지정은 해당 매장의 `STORE_OWNER`만 수행하고 `STORE_STAFF`는
+  할 수 없다. 지역은 폐지되지 않은 법정동 코드 중에서 선택하며 자유 텍스트 입력을 허용하지 않는다.
+  모든 매장 프로필은 유효한 지역 코드를 가져야 하고 이는 DB `NOT NULL`로 강제한다.
+  어휘는 시도·시군구·읍면동·리 4계층이다. 리에 지정된 매장은 상위 읍·면 이름과 리 이름 **양쪽으로**
+  검색된다. 전국에 중복되는 리 이름은 좌표·반경 필터로 걸러지며 별도 식별자를 요구하지 않는다.
+- **Index Freshness:** 검색 색인은 브랜드·지역 명령과 같은 transaction에서 갱신한다. 색인 갱신
+  실패는 원 명령 전체를 rollback하며 데이터만 반영되고 색인이 누락된 상태를 만들지 않는다.
+  매장·메뉴는 현재 쓰기 API가 없어 시드·직접 DML로 바뀌므로 운영자 재색인 명령으로만 색인에
+  반영된다. 이 한계는 색인 커버리지 gauge와 runbook으로 관측 가능하게 남기며 stale 결과를
+  최신처럼 제공하지 않는다.
+- **Failure Policy:** `pg_trgm` extension 부재, 색인 조회 실패, Merchant·Fulfillment 장애는 모두
+  503이다. 빈 목록, 캐시된 결과 또는 순차 검색 fallback으로 대체하지 않는다. 결과 0건은 정상
+  200이며 장애와 구분한다.
+- **Privacy:** 검색어, 토큰, 정밀 좌표를 DB, AuditRecord, application log, metric tag, trace
+  attribute 또는 이벤트에 저장하지 않는다. 색인 테이블에 저장하는 것은 매장의 공개 속성이며
+  사용자의 검색어가 아니다.
+- **Rationale:** 이름을 알고 검색한 사용자에게 0건을 돌려주는 것은 고장으로 읽힌다. 부분 일치의
+  예측 가능성을 유지하면서 오타만 구제하고, 닫힌 매장도 상태 표시와 함께 노출한다. 브랜드는 여러
+  매장이 공유하는 자원이라 운영자가, 주소는 매장 하나의 사실이라 매장주가 관리하는 것이 정확하다.
+- **Affected Contexts:** Discovery, Merchant, Fulfillment, Operations, Identity
+- **Affected Aggregates:** Brand, Store, StoreDiscoveryProfile, Menu, PickupSlot, AuditRecord
+- **Required Tests:**
+  - 매장명·브랜드명·지역명·메뉴명 단일 토큰 검색과 매장 단위 dedupe
+  - `"강남 스타벅스"` 다중 토큰 AND와 한 토큰만 맞는 매장의 제외
+  - substring 우선 경로가 개정 전과 동일한 결과를 내고 유사도 경로가 0건만 구제하는지
+  - 유사도 임계값 `0.3` 경계의 매칭·비매칭
+  - 가중치 순서(동일 유사도에서 매장명 매칭이 메뉴명 매칭보다 상위)
+  - `sort=distance` 좌표 누락 400, 좌표 없는 `sort=relevance` 정상 동작과 `distanceMeters` 생략
+  - `pickupAvailable`·`openOnly` 단독·동시 지정 결과 차이
+  - 관련도 동점 다수 상황을 포함한 cursor page 순회의 누락·중복 부재
+  - 다른 `sort`·필터·좌표로 재사용한 cursor의 400과 만료 cursor 400
+  - `matchedMenus` 최대 3개, 동점 4개 이상일 때 정렬 결정성, 매칭 없는 매장의 빈 배열
+  - 브랜드 정규화 이름 동시 등록의 단일 성공과 409
+  - 브랜드명 변경의 색인 fan-out 원자성과 1000개 초과 409
+  - `STORE_STAFF`·타 매장 소유자의 지역 변경 403, `STORE_OWNER`의 브랜드 생성 403
+  - 지역 미입력 매장이 남아 있을 때 커버리지 migration 실패
+  - `pg_trgm` 부재·색인 조회 실패의 503과 빈 목록 미대체
+  - 검색어·좌표가 DB, log, metric tag, event에 남지 않음
+- **ADR Required:** [ADR-103](../adr/ADR-103-store-search-strategy.md) 2026-08-15 Amendment,
+  [ADR-112](../adr/ADR-112-store-brand-and-administrative-region.md),
+  [ADR-070](../adr/ADR-070-signed-cursor-and-pagination-contract.md) 정렬 tuple 등록
+- **Revisit Conditions:** `pg_trgm` 조회가 목표 지연을 만족하지 못한다고 측정될 때, 자동완성이
+  실제 요구가 될 때, 상권 별칭 검색이 필요할 때, 브랜드 fan-out 상한에 도달할 때, 매장·메뉴 쓰기
+  API가 생겨 색인 동기 갱신을 흡수할 수 있을 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2088,6 +2178,7 @@
 10. 고객 일회성 결제는 `BR-33`을 따르고 PaymentMethod lifecycle과 분리한다.
 11. 분석 Read Model은 `BR-31`, `BR-32`를 따른다.
 12. 고객·점주 사용자명과 고객 가입·로그인 응답은 `BR-34`를 따른다.
+13. 매장 통합 검색은 `BR-47`을 따르고 위치 보존은 `BR-28`, 추천·최근 매장은 `BR-40`을 따른다.
 13. 고객·점주 비밀번호와 로그인 제한은 `BR-35`를 따른다.
 14. 고객·점주 Session 수명과 동시 한도는 `BR-36`을 따른다.
 15. 고객 알림함 보존은 `BR-37`을 따른다.

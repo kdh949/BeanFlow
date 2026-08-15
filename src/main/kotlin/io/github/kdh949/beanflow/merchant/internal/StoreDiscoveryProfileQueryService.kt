@@ -21,6 +21,9 @@ internal class StoreDiscoveryProfileQueryService(
         return repository.findPickupCapableStoresNear(query).onEach(::requireProjectable)
     }
 
+    @Transactional(readOnly = true)
+    override fun countIndexableStores(): Long = repository.countStores()
+
     /**
      * A blank owner name or a negative distance means the verified profile invariant was broken
      * after startup. The read fails explicitly instead of returning a placeholder store.
