@@ -74,6 +74,10 @@ beanflow:
     initial-delay-ms: 60000
   search-index-rebuild:
     chunk-size: 100
+  search-index-rebuild-command-retention:
+    batch-size: 100
+    fixed-delay-ms: 3600000
+    initial-delay-ms: 3600000
   ordering-idempotency-retention:
     chunk-size: 100
     fixed-delay-ms: 3600000

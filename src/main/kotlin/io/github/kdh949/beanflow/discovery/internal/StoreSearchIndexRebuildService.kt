@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.merchant.api.StoreSearchTermSourceQuery
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.ReplaceStoreSearchTermsCommand
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
+import io.github.kdh949.beanflow.shared.api.StoreSearchIndexRebuildOperations
+import io.github.kdh949.beanflow.shared.api.StoreSearchIndexRebuildResult
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import io.micrometer.core.instrument.MeterRegistry
@@ -14,20 +16,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
-
-/**
- * What one rebuild pass did.
- *
- * Failures are reported as store ids rather than a count so that a partial rebuild can never be
- * read as a complete one, and so the operator command added later can name what to retry.
- */
-internal data class StoreSearchIndexRebuildResult(
-    val indexedStoreCount: Int,
-    val skippedStoreCount: Int,
-    val failedStoreIds: List<UUID>,
-) {
-    val complete: Boolean get() = failedStoreIds.isEmpty()
-}
 
 /**
  * Rebuilds the search index from the stores and menus Merchant currently holds.
@@ -48,10 +36,10 @@ internal class StoreSearchIndexRebuildService(
     private val metrics: StoreSearchIndexUpdateMetrics,
     @Value("\${beanflow.search-index-rebuild.chunk-size:100}")
     private val chunkSize: Int,
-) {
+) : StoreSearchIndexRebuildOperations {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun rebuildAll(): StoreSearchIndexRebuildResult {
+    override fun rebuildAll(): StoreSearchIndexRebuildResult {
         var afterStoreId: UUID? = null
         var indexed = 0
         var skipped = 0
