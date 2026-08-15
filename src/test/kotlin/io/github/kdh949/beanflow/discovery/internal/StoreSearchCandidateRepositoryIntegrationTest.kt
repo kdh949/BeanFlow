@@ -1,11 +1,8 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
-import io.github.kdh949.beanflow.shared.api.ReplaceBrandSearchTermsCommand
-import io.github.kdh949.beanflow.shared.api.ReplaceStoreSearchTermsCommand
 import io.github.kdh949.beanflow.shared.api.SearchTextNormalizer
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
-import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -55,12 +52,11 @@ internal class StoreSearchCandidateRepositoryIntegrationTest {
 
     private val transactions by lazy { TransactionTemplate(transactionManager) }
 
+    private val fixture by lazy { StoreSearchIndexTestFixture(jdbc, index, transactions) }
+
     @BeforeEach
     fun clearStoresAndTerms() {
-        jdbc.update("DELETE FROM discovery_store_search_term")
-        jdbc.update("DELETE FROM merchant_menu")
-        jdbc.update("DELETE FROM merchant_store_discovery_profile")
-        jdbc.update("DELETE FROM merchant_store")
+        fixture.clear()
     }
 
     @Test
@@ -407,71 +403,18 @@ internal class StoreSearchCandidateRepositoryIntegrationTest {
 
     private fun indexStore(
         name: String,
-        longitude: Double = 127.0361,
-        latitude: Double = 37.5006,
+        longitude: Double = StoreSearchIndexTestFixture.SEOUL_LONGITUDE,
+        latitude: Double = StoreSearchIndexTestFixture.SEOUL_LATITUDE,
         brandName: String? = null,
         region: List<Pair<StoreSearchTermKind, String>> = emptyList(),
         menus: List<String> = emptyList(),
         acceptingOrders: Boolean = true,
         pickupEnabled: Boolean = true,
-    ): UUID {
-        val storeId = UUID.randomUUID()
-        jdbc.update(
-            "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, ?, ?, 0)",
-            storeId,
-            acceptingOrders,
-            pickupEnabled,
-        )
-        jdbc.update(
-            """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
-            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, '1168010100')
-            """.trimIndent(),
-            storeId,
-            name,
-            longitude,
-            latitude,
-        )
-        transactions.executeWithoutResult {
-            index.replaceStoreTerms(
-                ReplaceStoreSearchTermsCommand(
-                    storeId,
-                    setOf(StoreSearchTermKind.STORE_NAME, StoreSearchTermKind.MENU_NAME),
-                    buildList {
-                        add(StoreSearchTermEntry(StoreSearchTermKind.STORE_NAME, name))
-                        menus.forEach { menu ->
-                            add(StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, menu, UUID.randomUUID()))
-                        }
-                    },
-                ),
-            )
-            if (region.isNotEmpty()) {
-                index.replaceStoreTerms(
-                    ReplaceStoreSearchTermsCommand(
-                        storeId,
-                        REGION_KINDS,
-                        region.map { (kind, text) -> StoreSearchTermEntry(kind, text) },
-                    ),
-                )
-            }
-            if (brandName != null) {
-                index.replaceBrandTerms(ReplaceBrandSearchTermsCommand(listOf(storeId), brandName))
-            }
-        }
-        return storeId
-    }
+    ): UUID = fixture.indexStore(name, longitude, latitude, brandName, region, menus, acceptingOrders, pickupEnabled)
 
     private companion object {
         /** trigram이 충분히 겹쳐 유사도 구제가 실제로 일어나는 쌍. */
         const val TYPO_TARGET = "starbucks"
         const val TYPO_TOKEN = "starbuks"
-
-        val REGION_KINDS =
-            setOf(
-                StoreSearchTermKind.REGION_SIDO,
-                StoreSearchTermKind.REGION_SIGUNGU,
-                StoreSearchTermKind.REGION_EUPMYEONDONG,
-                StoreSearchTermKind.REGION_RI,
-            )
     }
 }
