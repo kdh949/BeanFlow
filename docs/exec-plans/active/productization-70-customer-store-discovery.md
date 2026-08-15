@@ -190,7 +190,7 @@ interface StoreSearchIndexOperations {
 GET /stores/search or /stores/nearby
   SearchController
     StoreSearchCandidateRepository.findCandidates(filters, signedCursor, limit + 1)
-    FulfillmentPickupAvailabilityQuery.existsByStoreIds(candidateStoreIds, now)
+    PickupAvailabilityQueryOperations.findStoresWithAvailableSlots(examinedStoreIds, now)
     ordered candidates + availability → page + scan-boundary nextCursor
     StoreSearchCandidateRepository.findMatchedMenus(pageStoreIds, tokens, 3)
 
@@ -211,6 +211,13 @@ PUT/DELETE /me/favorite-stores/{storeId}
 모듈도 `merchant`가 아니다. 질의가 색인 테이블과 매장 프로필을 한 문장에서 함께 읽어야 하는데,
 ADR-112 5절이 검색을 `discovery`의 것으로 두고 `merchant`가 `discovery`를 모르게 못박았다.
 근거는 MD-2026-023이다.
+
+**(2026-08-15 정정)** 픽업 가용성 batch port의 이름도 계획 원안의
+`FulfillmentPickupAvailabilityQuery.existsByStoreIds`가 아니라
+`PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`이며 `Set<UUID>`를 돌려준다.
+근거는 MD-2026-025다. 인자가 `candidateStoreIds`가 아니라 `examinedStoreIds`인 것도 의도적이다.
+가용성은 이번 page에서 실제로 검사하는 앞 `limit`개에 대해서만 묻고, 다음 page 존재를 재는
+probe row는 검사하지 않는다.
 
 - 검색은 Merchant table과 Fulfillment table을 하나의 Repository SQL로 직접 조인하지 않는다.
   Fulfillment batch port는 candidate store 집합을 한 statement로 판정한다.
@@ -681,7 +688,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | `beanflow.discovery.search.index.update` | counter | `outcome`, `trigger` = `BRAND\|REGION\|REBUILD` |
 
 `empty` counter는 "검색은 되는데 결과가 늘 0건"인 상태(색인 누락, 정규화 불일치)를 장애와 구분해
-드러내기 위한 것이다.
+드러내기 위한 것이다. **(2026-08-15)** 그래서 `nextCursor`를 함께 낸 빈 page는 세지 않는다.
+`pickupAvailable` 필터가 중간 page를 비울 수 있는데, 뒤에 검사할 후보가 남아 있는 page까지 세면
+이 지표가 드러내려는 상태를 오히려 덮는다.
 
 추가로 유지한다.
 
@@ -827,10 +836,65 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
     `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12), 픽업 가용성 필터와 그 scan-boundary
     cursor(Milestone 6).
-- 2026-08-15: 미착수 — Milestone 6~12.
+- 2026-08-15: **Milestone 6 완료.** Fulfillment의 픽업 가용성 batch port를 추가하고, `nearby`와
+  검색의 `pickupAvailable`을 같은 판정으로 통일했으며, `GET /api/v1/stores/search` endpoint를
+  열었다. migration은 없다.
+  - **batch port.** `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots(storeIds, now)`가
+    후보 수와 무관하게 **statement 1개**를 쓴다(`store_id = ANY(?::uuid[])` + `GROUP BY store_id`).
+    후보 1개와 6개(그중 한 매장은 슬롯 61개)에서 statement 수가 모두 1이었고, 빈 후보 목록은
+    DB에 닿지 않고 0이었다. 인덱스는 V35의 `idx_pickup_slot_store_starts_id`를 그대로 쓴다.
+  - **손상 counter는 503.** `capacity - reserved - confirmed < 0`인 슬롯을 가진 매장이 후보에
+    하나라도 있으면 그 매장만 빼는 것이 아니라 batch 전체가 `DEPENDENCY_UNAVAILABLE`이다.
+    DB `CHECK`가 그 행을 막고 있어 제약을 잠시 내리고 확인한 뒤 되돌렸다.
+  - **nearby 의미 통일.** `merchant`의 `NearbyStoreProfileProjection`에서 `pickupAvailable` 필드를
+    **삭제**하고 `discovery`가 batch 결과로 채운다. 이전에는 `acceptingOrders && pickupEnabled`라
+    nearby 응답의 이 값이 언제나 `true`였다. 이제 슬롯이 없거나, 만석이거나, 이미 시작했거나,
+    7일 창 밖인 매장은 `false`로 나온다. 기존 통합 테스트의 단언 하나가 실제로 뒤집혔고 그 자리에
+    이유를 남겼다(MD-2026-027).
+  - **scan-boundary cursor.** 가용성 필터는 SQL 뒤에서 적용되므로 page가 짧거나 비어도 뒤에
+    후보가 남을 수 있다. `nextCursor`는 마지막 **반환 row**가 아니라 마지막 **검사 candidate**의
+    정렬 tuple이다. 두 endpoint가 같은 `scanCandidates` 함수를 쓴다. 6개 후보 중 첫·마지막만
+    가용한 fixture를 `limit=2`로 넘겼을 때 두 endpoint 모두 3쪽에 정확히 두 매장을 누락·중복 없이
+    반환했고, 가운데 쪽은 빈 배열과 cursor를 함께 냈다.
+  - **cursor 무효화.** `pickupAvailable`이 nearby의 filter hash에 들어가면서
+    ([ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 2026-08-15 nearby
+    amendment) 개정 전 form으로 발급된 `stores-nearby` cursor는 400이 된다. cursor version을 늘려
+    두 form을 함께 받는 대신 400을 택했다. 필터를 모르는 옛 cursor가 섞이면 조용히 잘못된 page가
+    나오고 그것은 오류로 드러나지 않는다. expiry가 24시간이라 노출 창도 그 이내다.
+  - **endpoint 개방.** `StoreSearchQueryController`, `AuthenticationPathRegistry`의 CUSTOMER
+    등록과 그 테스트, runtime OpenAPI의 path `$ref`, `RuntimeOpenApiParityTest`의 `@MockitoBean`을
+    함께 넣었다. 미인증 검색이 401인 것은 `AuthenticationSecurityIntegrationTest`가 고정한다.
+    응답 본문 자체는 `StoreSearchEndpointIntegrationTest`가 본다. Query port 테스트만으로는
+    `StoreSearchPage` schema의 required 필드 누락이 드러나지 않았다(Surprises 참고).
+  - `./gradlew build`가 **1,250건 통과 / 0 실패 / 1 skip**으로 끝났다(52m 58s). skip은 기존
+    opt-in `NearbyStoreDiscoveryBenchmark`다. Milestone 5의 1,225건에서 25건 늘었다.
+    `scripts/verify-docs.sh`도 통과했다(runtime 138 paths/146 operations).
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
+    `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12).
+- 2026-08-15: 미착수 — Milestone 7~12.
 
 ## Surprises & Discoveries
 
+- **(2026-08-15) `pickupAvailable`은 두 조건의 AND인데 SQL은 그중 절반만 안다.** ADR-103의 정의를
+  다시 읽으니 「`acceptingOrders && pickupEnabled`이고, ... 슬롯이 하나 이상 있다는 뜻」이었다.
+  슬롯 존재만으로 바꾸면 픽업을 끈 매장이 슬롯 행 때문에 `true`가 된다. 후보 질의의 필드를
+  `pickupCapable`로 이름을 바꿔 SQL이 아는 절반임을 드러내고, 공개 플래그는 서비스 계층에서
+  AND로 만들었다. Merchant 쪽은 이름을 고치는 대신 필드를 삭제했다. 소유자 상태만 아는 모듈이
+  그 필드를 갖고 있으면 재도출이 언제든 다시 가능하다(MD-2026-027).
+- **(2026-08-15) Query port 테스트만으로는 응답 계약이 지켜지는지 알 수 없다.** 컨트롤러를 붙인 뒤
+  `StoreSearchPage` schema의 required 필드 `distanceAvailable`을 응답 DTO에 빠뜨렸는데, 포트를
+  직접 부르는 통합 테스트 11건이 전부 통과했다. `distanceAvailable`은 `StoreSearchPage`에는 있고
+  컨트롤러의 `StoreSearchPageResponse`에는 없었기 때문이다. `verify-docs.sh`는 spec 자체만 검증하고
+  `RuntimeOpenApiParityTest`는 path·method만 비교하므로 둘 다 이것을 잡지 못한다. endpoint를 여는
+  Milestone에는 실제 HTTP 응답 본문을 보는 테스트가 필요하다고 보고
+  `StoreSearchEndpointIntegrationTest`를 추가했다.
+- **(2026-08-15) 파라미터를 가운데 끼워 넣자 테스트 helper의 위치 인자가 밀렸다.**
+  `SearchNearbyStoresCommand`에 `pickupAvailable`을 4번째로 추가했더니
+  `NearbyStoreDiscoveryValidationTest`의 helper가 `command(latitude, longitude, radiusMeters,
+  cursor, limit)`를 위치로 넘기고 있어 `cursor`가 `pickupAvailable` 자리로, `limit`이 `cursor`
+  자리로 들어갔다. 타입이 모두 `String?`이라 컴파일은 통과했고 limit·cursor 테스트 2건이 실패해서야
+  드러났다. 같은 타입 파라미터가 늘어선 생성자에서는 위치 인자가 컴파일러 검사를 받지 못한다.
+  helper 호출을 전부 named argument로 바꿨다.
 - **(2026-08-15) 지역 명령을 `operations`에 둘 수 없다.** 브랜드와 대칭으로 만들려 했으나
   `operations`는 `identity`에 의존하지 않고 `identity`가 `operations`에 의존한다. 매장 소속 확인이
   `identity.api`에 있으므로 `operations`에 두면 순환이 생긴다. 필요한 간선을 이미 전부 가진 모듈은
@@ -1000,6 +1064,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | Milestone 5는 컨트롤러를 붙이지 않는다. `pickupAvailable`이 동작하는 Milestone 6에서 endpoint를 연다 | 이 ExecPlan Progress |
 | 2026-08-15 | target OpenAPI의 `/stores/search`를 ADR-103 2026-08-15 Amendment에 맞게 개정한다 | [ADR-103 A4/A5/A6/A7](../../adr/ADR-103-store-search-strategy.md), `scripts/verify-docs.sh` |
 | 2026-08-15 | 한글 오타 검색은 이 plan에서 해소하지 않는다. 자모 분해 색인을 ADR-103 Revisit Condition으로 등록한다 | [ADR-103 Alternatives 9](../../adr/ADR-103-store-search-strategy.md), 이 문서 Non-goals |
+| 2026-08-15 | 픽업 가용성 batch port의 이름은 `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`, 반환은 `Set<UUID>` | [MD-2026-025](../../decisions/minor-decisions.md) |
+| 2026-08-15 | `nearby`는 `accepting_orders AND pickup_enabled` hard filter를 유지한다. 통일하는 것은 `pickupAvailable`의 판정이지 결과 집합 구성이 아니다 | [MD-2026-026](../../decisions/minor-decisions.md), [ADR-103](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-15 | 공개 `pickupAvailable`은 소유자 상태와 슬롯 존재의 AND다. SQL이 아는 절반은 `pickupCapable`로 이름 짓고 Merchant projection에서는 삭제한다 | [MD-2026-027](../../decisions/minor-decisions.md) |
+| 2026-08-15 | ADR-070의 `stores-nearby` filter hash에 `pickupAvailable`을 추가한다. 개정 전 cursor는 400이며 두 form을 동시에 받지 않는다 | [ADR-070 2026-08-15 nearby amendment](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
+| 2026-08-15 | `nextCursor`는 마지막 반환 row가 아니라 마지막 검사 candidate다. 두 endpoint가 `scanCandidates` 하나를 공유한다 | [ADR-103](../../adr/ADR-103-store-search-strategy.md), `ScannedCandidatePage.kt` |
 
 ## Outcomes & Retrospective
 

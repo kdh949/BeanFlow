@@ -226,7 +226,10 @@ internal class StoreSearchCandidateRepositoryIntegrationTest {
         val all = search("스타벅스")
         assertThat(all.map { it.storeId }).containsExactlyInAnyOrder(open, closed, pickupOff)
         assertThat(all.single { it.storeId == closed }.open).isFalse()
-        assertThat(all.single { it.storeId == pickupOff }.pickupAvailable).isFalse()
+        // 이 질의가 아는 것은 소유자 상태뿐이다. 공개 `pickupAvailable`은 여기에 Fulfillment의
+        // 슬롯 존재 판정을 AND한 값이다(ADR-103 2026-08-15 Amendment).
+        assertThat(all.single { it.storeId == pickupOff }.pickupCapable).isFalse()
+        assertThat(all.single { it.storeId == open }.pickupCapable).isTrue()
 
         val filtered = candidates(candidateQuery("스타벅스", openOnly = true))
         assertThat(filtered.map { it.storeId }).containsExactly(open)

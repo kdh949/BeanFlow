@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.discovery.api.StoreSearchItemView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchMenuView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchPage
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
+import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -32,6 +33,8 @@ internal data class PreparedStoreSearch(
     val limit: Int,
     val tokens: List<String>,
     val query: StoreSearchCandidateQuery,
+    val pickupAvailableOnly: Boolean,
+    val now: Instant,
     val cursorScope: SignedCursorScope<StoreSearchSortTuple>,
     val cursorExpiresAt: Instant,
     val distanceAvailable: Boolean,
@@ -57,7 +60,14 @@ internal class StoreSearchQueryService(
         val sort = prepared.query.sort
         return try {
             reads.search(prepared).also { page ->
-                metrics.record(StoreSearchQueryOutcome.SUCCEEDED, sort, startedAt, page.items.size, prepared.tokens.size)
+                metrics.record(
+                    StoreSearchQueryOutcome.SUCCEEDED,
+                    sort,
+                    startedAt,
+                    page.items.size,
+                    prepared.tokens.size,
+                    exhausted = page.nextCursor == null,
+                )
             }
         } catch (failure: DomainFailure) {
             metrics.record(failure.toOutcome(), sort, startedAt)
@@ -82,6 +92,7 @@ internal class StoreSearchQueryService(
 @Component
 internal class StoreSearchReadTransaction(
     private val repository: StoreSearchCandidateRepository,
+    private val availability: PickupAvailabilityQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
 ) {
     @Transactional(readOnly = true)
@@ -95,7 +106,18 @@ internal class StoreSearchReadTransaction(
             } catch (failure: PersistenceException) {
                 indexUnavailable(failure)
             }
-        val page = fetched.take(prepared.limit)
+        // 검사 대상은 probe row를 뺀 앞 limit개다. 가용성도 후보 수와 무관하게 한 번만 묻는다.
+        val examined = fetched.take(prepared.limit)
+        val availableStoreIds =
+            availability.findStoresWithAvailableSlots(
+                examined.map(StoreSearchCandidate::storeId),
+                prepared.now,
+            )
+        val scanned =
+            scanCandidates(fetched, prepared.limit) { candidate ->
+                !prepared.pickupAvailableOnly || candidate.pickupAvailable(availableStoreIds)
+            }
+        val page = scanned.items
         val storeIds = page.map(StoreSearchCandidate::storeId)
         val menus =
             try {
@@ -112,21 +134,19 @@ internal class StoreSearchReadTransaction(
                 indexUnavailable(failure)
             }
         val nextCursor =
-            if (fetched.size > prepared.limit) {
-                val boundary = page.last()
+            scanned.boundary?.let { boundary ->
                 signedCursorCodec.issue(
                     prepared.cursorScope,
                     StoreSearchSortTuple(boundary.relevanceRank, boundary.distanceMicrometers, boundary.storeId),
                     prepared.cursorExpiresAt,
                 )
-            } else {
-                null
             }
         return StoreSearchPage(
             items =
                 page.map { candidate ->
                     candidate.toView(
                         distanceAvailable = prepared.distanceAvailable,
+                        pickupAvailable = candidate.pickupAvailable(availableStoreIds),
                         menus = menus[candidate.storeId].orEmpty(),
                         terms = displayTerms[candidate.storeId].orEmpty(),
                     )
@@ -148,8 +168,15 @@ internal class StoreSearchReadTransaction(
     }
 }
 
+/**
+ * ADR-103: the public flag is the owner state **and** a reservable slot. A store that stopped
+ * accepting orders is not "pickup available" merely because tomorrow's slot row still has seats.
+ */
+private fun StoreSearchCandidate.pickupAvailable(availableStoreIds: Set<UUID>): Boolean = pickupCapable && storeId in availableStoreIds
+
 private fun StoreSearchCandidate.toView(
     distanceAvailable: Boolean,
+    pickupAvailable: Boolean,
     menus: List<StoreSearchMenuRow>,
     terms: List<StoreSearchTermText>,
 ): StoreSearchItemView =
@@ -197,6 +224,7 @@ internal class StoreSearchQueryValidation(
         val sort = sort(command.sort)
         val tokens = tokens(command.query)
         val limit = limit(command.limit)
+        val pickupAvailableOnly = flag(command.pickupAvailable, "pickupAvailable")
         val openOnly = flag(command.openOnly, "openOnly")
         val cursor = cursor(command.cursor)
         val coordinates = coordinates(command.latitude, command.longitude)
@@ -207,7 +235,7 @@ internal class StoreSearchQueryValidation(
         val scope =
             SignedCursorScope(
                 endpoint = sort.cursorEndpoint,
-                filterHash = filterHash(sort, tokens, openOnly, coordinates, radiusMeters),
+                filterHash = filterHash(sort, tokens, pickupAvailableOnly, openOnly, coordinates, radiusMeters),
                 sortAdapter = sort.sortAdapter,
             )
         val after = cursor?.let { signedCursorCodec.verify(it, scope).sort }
@@ -226,6 +254,8 @@ internal class StoreSearchQueryValidation(
                     // One extra row decides whether a next page exists without a second query.
                     limit = limit + 1,
                 ),
+            pickupAvailableOnly = pickupAvailableOnly,
+            now = command.now,
             cursorScope = scope,
             cursorExpiresAt = command.now.plus(CURSOR_TTL),
             distanceAvailable = coordinates != null,
@@ -333,6 +363,7 @@ internal class StoreSearchQueryValidation(
     private fun filterHash(
         sort: StoreSearchSort,
         tokens: List<String>,
+        pickupAvailableOnly: Boolean,
         openOnly: Boolean,
         coordinates: Coordinates?,
         radiusMeters: Int?,
@@ -341,9 +372,7 @@ internal class StoreSearchQueryValidation(
         builder.append("""{"endpoint":${jsonString(sort.cursorEndpoint)}""")
         builder.append(""","tokens":[${tokens.joinToString(",") { jsonString(it) }}]""")
         builder.append(""","sort":${jsonString(sort.name)}""")
-        // pickupAvailable은 Fulfillment batch 판정이 붙는 Milestone 6에서 실제 값이 들어온다.
-        // 등록된 canonical form을 처음부터 그대로 유지하기 위해 자리를 비워 두지 않는다.
-        builder.append(""","pickupAvailable":false""")
+        builder.append(""","pickupAvailable":$pickupAvailableOnly""")
         builder.append(""","openOnly":$openOnly""")
         if (coordinates != null) {
             builder.append(""","latitude":${jsonString(canonicalDecimal(coordinates.latitude))}""")
@@ -508,6 +537,12 @@ internal class StoreSearchQueryMetrics(
         startedAtNanos: Long,
         pageSize: Int? = null,
         tokenCount: Int? = null,
+        /**
+         * True when this page issued no `nextCursor`. 가용성 필터가 중간 page를 비울 수 있으므로
+         * 빈 page 자체는 "0건 검색"이 아니다. 뒤에 검사할 후보가 남은 page까지 세면 이 지표가
+         * 드러내려는 상태를 오히려 덮는다.
+         */
+        exhausted: Boolean = true,
     ) {
         meterRegistry.counter("beanflow.discovery.search.count", "outcome", outcome.name).increment()
         meterRegistry
@@ -516,7 +551,9 @@ internal class StoreSearchQueryMetrics(
         if (pageSize != null) {
             meterRegistry.summary("beanflow.discovery.search.page.size").record(pageSize.toDouble())
             // "검색은 되는데 결과가 늘 0건"인 상태를 장애와 구분해 드러낸다.
-            if (pageSize == 0) meterRegistry.counter("beanflow.discovery.search.empty", "sort", sort.name).increment()
+            if (pageSize == 0 && exhausted) {
+                meterRegistry.counter("beanflow.discovery.search.empty", "sort", sort.name).increment()
+            }
         }
         if (tokenCount != null) {
             meterRegistry.summary("beanflow.discovery.search.tokens").record(tokenCount.toDouble())

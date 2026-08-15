@@ -15,6 +15,11 @@ interface StoreDiscoveryQueryOperations {
      * Returns pickup-capable stores inside [NearbyStoreProfileQuery.radiusMeters], ordered by
      * `(distanceMicrometers ASC, storeId ASC)`. At most [NearbyStoreProfileQuery.limit] rows are
      * returned; the caller asks for one extra row when it needs a next-page probe.
+     *
+     * "Pickup-capable" is owner state only: the store is accepting orders and has pickup enabled.
+     * Whether a reservable slot actually exists is Fulfillment's answer
+     * (`PickupAvailabilityQueryOperations`), so Merchant does not project it (ADR-103 2026-08-15
+     * Amendment).
      */
     fun findPickupCapableStoresNear(query: NearbyStoreProfileQuery): List<NearbyStoreProfileProjection>
 
@@ -49,11 +54,14 @@ data class NearbyStoreProfileCursor(
 /**
  * Current owner state for one store. [distanceMicrometers] is the canonical sort and cursor value;
  * the public contract exposes its floored integer-meter display value.
+ *
+ * There is deliberately no `pickupAvailable` here. Merchant knowing only `acceptingOrders` and
+ * `pickupEnabled` is exactly how the weaker meaning used to leak into the nearby response; leaving
+ * the field out makes re-deriving it impossible rather than merely discouraged.
  */
 data class NearbyStoreProfileProjection(
     val storeId: UUID,
     val name: String,
     val distanceMicrometers: Long,
     val open: Boolean,
-    val pickupAvailable: Boolean,
 )

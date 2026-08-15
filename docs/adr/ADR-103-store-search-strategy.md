@@ -342,6 +342,40 @@ PostgreSQL 17 + `pg_trgm` 위에서 A2~A7을 측정했다.
 `Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12), 픽업 가용성 필터와 그
 scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone은 컨트롤러를 붙이지 않았다.
 
+### Milestone 6 implementation evidence (2026-08-15) — 픽업 가용성 batch와 scan boundary
+
+`PickupAvailabilityQueryTest`, `NearbyStoreDiscoveryIntegrationTest`,
+`NearbyStoreDiscoveryValidationTest`와 `StoreSearchQueryIntegrationTest`가 PostgreSQL 17 위에서
+측정했다.
+
+- **batch statement 수.** `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`가
+  후보 1개일 때도 6개(그중 한 매장은 슬롯 61개)일 때도 statement **1개**를 썼다. 같은 매장 id를
+  중복해 넘겨도 1개였고, 빈 후보 목록은 DB에 닿지 않아 0개였다. `store_id = ANY(?::uuid[])`와
+  `GROUP BY store_id`라 SQL 문자열이 후보 수와 무관하게 고정이다.
+- **판정의 경계.** 예약 가능 슬롯이 있는 매장만 가용으로 나왔다. 만석, 이미 시작한 슬롯,
+  `startsAt`이 정확히 `now`인 슬롯, 7일 창 밖 슬롯, 슬롯 없음은 모두 불가였다. 하한
+  `startsAt > now`는 `PickupSlotQueryOperations.listOpenSlots`가 쓰는 예약 가능 경계와 같다.
+- **손상 counter는 503.** `capacity - reserved - confirmed < 0`인 슬롯을 가진 매장이 후보에
+  하나라도 있으면 그 매장만 빠지는 것이 아니라 batch 전체가 `DEPENDENCY_UNAVAILABLE`이다.
+  나머지 후보가 정상이어서 그럴듯한 page가 나올 수 있는 상황에서도 그렇다. DB `CHECK`가 그 행을
+  막고 있어 제약을 잠시 내리고 확인한 뒤 되돌렸다.
+- **`pickupAvailable`은 AND.** 슬롯이 있어도 `pickupEnabled=false`인 매장은 `false`, 슬롯이 없는
+  매장도 `false`, 둘 다 만족해야 `true`였다. 검색 후보 질의의 필드 이름을 `pickupCapable`로 바꿔
+  SQL이 아는 절반임을 드러냈다(MD-2026-027).
+- **nearby 의미 통일.** `merchant`의 `NearbyStoreProfileProjection`에서 `pickupAvailable`을
+  삭제하고 `discovery`가 batch 결과로 채운다. 개정 전에는 nearby가 `acceptingOrders &&
+  pickupEnabled`인 매장만 반환했으므로 이 값이 언제나 `true`였고, 기존 통합 테스트의 단언 하나가
+  실제로 뒤집혔다. nearby의 소유자 상태 hard filter 자체는 유지한다(MD-2026-026).
+- **scan boundary.** 두 endpoint가 같은 `scanCandidates` 함수를 쓴다. 후보 6개 중 첫·마지막만
+  가용한 fixture를 `limit=2`로 넘겼을 때 둘 다 3쪽에 정확히 두 매장을 누락·중복 없이 반환했다.
+  가운데 쪽은 빈 배열과 `nextCursor`를 함께 냈다. 가용 매장이 마지막 하나뿐인 fixture에서는
+  첫 page가 빈 배열 + cursor, 다음 page가 그 매장이었다. 매 page가 정확히 `limit`개의 후보를
+  검사하므로 불가 매장이 길게 이어져도 scan이 전진한다.
+- **cursor.** `pickupAvailable`이 두 endpoint의 filter hash에 들어가, 필터를 켜기 전에 발급된
+  cursor는 400이다. nearby의 canonical form 개정은 ADR-070 2026-08-15 nearby amendment다.
+
+`Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12).
+
 ## Metrics
 
 - 매장 검색 p50·p95·p99

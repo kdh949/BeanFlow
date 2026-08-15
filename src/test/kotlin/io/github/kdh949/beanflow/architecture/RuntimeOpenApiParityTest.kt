@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.architecture
 
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
+import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
@@ -137,6 +138,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var nearbyStoreQueryOperations: NearbyStoreQueryOperations
+
+    @MockitoBean
+    private lateinit var storeSearchQueryOperations: StoreSearchQueryOperations
 
     @MockitoBean
     private lateinit var storeCatalogQueryOperations: StoreCatalogQueryOperations

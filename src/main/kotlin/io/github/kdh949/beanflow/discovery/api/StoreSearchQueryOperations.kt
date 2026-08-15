@@ -27,6 +27,7 @@ data class SearchStoresCommand(
     val latitude: String?,
     val longitude: String?,
     val radiusMeters: String?,
+    val pickupAvailable: String?,
     val openOnly: String?,
     val cursor: String?,
     val limit: String?,
@@ -52,7 +53,12 @@ data class StoreSearchItemView(
     val regionName: String?,
     val matchReason: Set<StoreSearchTermKind>,
     val distanceMeters: Long?,
+    /** `acceptingOrders && pickupEnabled` — the owner state the `openOnly` filter matches. */
     val open: Boolean,
+    /**
+     * A reservable slot exists inside the seven-day window. Fulfillment's batch judgement, and the
+     * same meaning the field carries on `GET /stores/nearby` (ADR-103 2026-08-15 Amendment).
+     */
     val pickupAvailable: Boolean,
     val matchedMenus: List<StoreSearchMenuView>,
 )

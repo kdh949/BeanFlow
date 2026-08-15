@@ -33,6 +33,7 @@ class AuthenticationPathRegistryTest {
                 "/api/v1/payments/00000000-0000-0000-0000-000000000001/confirmations" to AuthenticationChain.CUSTOMER,
                 "/api/v1/point-accounts/00000000-0000-0000-0000-000000000001" to AuthenticationChain.CUSTOMER,
                 "/api/v1/stores/nearby" to AuthenticationChain.CUSTOMER,
+                "/api/v1/stores/search" to AuthenticationChain.CUSTOMER,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/menus" to AuthenticationChain.CUSTOMER,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/pickup-slots" to AuthenticationChain.CUSTOMER,
             )

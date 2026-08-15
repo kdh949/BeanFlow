@@ -161,6 +161,125 @@ internal class StoreSearchQueryIntegrationTest {
     }
 
     @Test
+    fun `pickupAvailable is the owner state and a reservable slot together`() {
+        val reservable = fixture.indexStore(name = "스타벅스 1호점")
+        val slotless = fixture.indexStore(name = "스타벅스 2호점")
+        val fullyBooked = fixture.indexStore(name = "스타벅스 3호점")
+        val pickupDisabled = fixture.indexStore(name = "스타벅스 4호점", pickupEnabled = false)
+        fixture.indexPickupSlot(reservable, clock.instant())
+        fixture.indexPickupSlot(fullyBooked, clock.instant(), capacity = 2, reserved = 1, confirmed = 1)
+        // 슬롯은 있지만 매장이 픽업을 끈 경우다. 슬롯만으로 true가 되면 안 된다.
+        fixture.indexPickupSlot(pickupDisabled, clock.instant())
+
+        val flags =
+            search
+                .search(command(limit = "50"))
+                .items
+                .associate { it.storeId to it.pickupAvailable }
+
+        assertThat(flags)
+            .containsEntry(reservable, true)
+            .containsEntry(slotless, false)
+            .containsEntry(fullyBooked, false)
+            .containsEntry(pickupDisabled, false)
+    }
+
+    @Test
+    fun `the pickupAvailable filter is independent of openOnly`() {
+        val both = fixture.indexStore(name = "스타벅스 1호점")
+        val openWithoutSlot = fixture.indexStore(name = "스타벅스 2호점")
+        val closedWithSlot = fixture.indexStore(name = "스타벅스 3호점", acceptingOrders = false)
+        fixture.indexPickupSlot(both, clock.instant())
+        fixture.indexPickupSlot(closedWithSlot, clock.instant())
+
+        fun storeIds(vararg overrides: Pair<String, String>): List<UUID> {
+            val map = overrides.toMap()
+            return search
+                .search(
+                    command(
+                        limit = "50",
+                        pickupAvailable = map["pickupAvailable"],
+                        openOnly = map["openOnly"],
+                    ),
+                ).items
+                .map(StoreSearchItemView::storeId)
+        }
+
+        // 둘 다 미지정이 기본이고 그때 닫힌 매장도 포함한다(ADR-103 A6).
+        assertThat(storeIds()).containsExactlyInAnyOrder(both, openWithoutSlot, closedWithSlot)
+        assertThat(storeIds("openOnly" to "true")).containsExactlyInAnyOrder(both, openWithoutSlot)
+        // 닫힌 매장은 예약 가능한 슬롯이 남아 있어도 픽업 가용이 아니다.
+        assertThat(storeIds("pickupAvailable" to "true")).containsExactly(both)
+        assertThat(storeIds("pickupAvailable" to "true", "openOnly" to "true")).containsExactly(both)
+    }
+
+    /**
+     * 가용성 필터는 SQL 뒤에서 적용되므로 page가 짧거나 비어도 뒤에 후보가 남을 수 있다. cursor가
+     * 마지막 반환 row를 가리키면 그 뒤에서 걸러진 후보들이 통째로 사라진다.
+     */
+    @Test
+    fun `an availability filtered page walks every match without gaps or duplicates`() {
+        val stores = (0 until 6).map { position -> fixture.indexStore(name = "스타벅스 ${position}호점") }
+        val expected =
+            search
+                .search(command(limit = "50"))
+                .items
+                .map(StoreSearchItemView::storeId)
+        // 정렬 순서상 첫 매장과 마지막 매장만 가용하다. 가운데 넷은 page를 짧게 만든다.
+        fixture.indexPickupSlot(expected.first(), clock.instant())
+        fixture.indexPickupSlot(expected.last(), clock.instant())
+        assertThat(stores).containsExactlyInAnyOrderElementsOf(expected)
+
+        val walked = mutableListOf<UUID>()
+        var cursor: String? = null
+        var pages = 0
+        do {
+            val page = search.search(command(limit = "2", pickupAvailable = "true", cursor = cursor))
+            walked += page.items.map(StoreSearchItemView::storeId)
+            cursor = page.nextCursor
+            pages++
+        } while (cursor != null && pages < 10)
+
+        assertThat(walked).containsExactly(expected.first(), expected.last())
+        // 후보 6개를 2개씩 검사하므로 3쪽이다. 가운데 쪽은 비어 있지만 scan은 전진한다.
+        assertThat(pages).isEqualTo(3)
+    }
+
+    @Test
+    fun `an availability filtered page can be short or empty and still carry a next cursor`() {
+        val stores = (0 until 4).map { position -> fixture.indexStore(name = "스타벅스 ${position}호점") }
+        val ordered =
+            search
+                .search(command(limit = "50"))
+                .items
+                .map(StoreSearchItemView::storeId)
+        assertThat(ordered).hasSameSizeAs(stores)
+        // 가용 매장은 마지막 하나뿐이라 첫 두 쪽은 완전히 빈다.
+        fixture.indexPickupSlot(ordered.last(), clock.instant())
+
+        val first = search.search(command(limit = "2", pickupAvailable = "true"))
+        assertThat(first.items).isEmpty()
+        assertThat(first.nextCursor).isNotNull()
+
+        val second = search.search(command(limit = "2", pickupAvailable = "true", cursor = first.nextCursor))
+        assertThat(second.items.map(StoreSearchItemView::storeId)).containsExactly(ordered.last())
+        assertThat(second.nextCursor).isNull()
+    }
+
+    @Test
+    fun `a non boolean filter flag is rejected before the index is touched`() {
+        listOf(
+            command(pickupAvailable = "yes"),
+            command(openOnly = "1"),
+        ).forEach { request ->
+            assertThatThrownBy { search.search(request) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+                    assertThat(failure.code).isEqualTo(FailureCode.INVALID_REQUEST)
+                }
+        }
+    }
+
+    @Test
     fun `a cursor does not carry across a different sort, filter or query`() {
         fixture.indexStore(name = "스타벅스 1호점")
         fixture.indexStore(name = "스타벅스 2호점")
@@ -173,6 +292,7 @@ internal class StoreSearchQueryIntegrationTest {
         listOf(
             command(limit = "1", cursor = cursor, sort = "distance", latitude = "37.5006", longitude = "127.0361"),
             command(limit = "1", cursor = cursor, openOnly = "true"),
+            command(limit = "1", cursor = cursor, pickupAvailable = "true"),
             command(limit = "1", cursor = cursor, query = "블루보틀"),
             command(limit = "1", cursor = cursor, latitude = "37.5006", longitude = "127.0361"),
         ).forEach { request ->
@@ -305,6 +425,32 @@ internal class StoreSearchQueryIntegrationTest {
         ).isGreaterThanOrEqualTo(1.0)
     }
 
+    /**
+     * 가용성 필터가 중간 page를 비울 수 있으므로 빈 page 자체는 "검색이 늘 0건"인 상태가 아니다.
+     * 뒤에 검사할 후보가 남은 page까지 세면 이 지표가 드러내려는 상태를 오히려 덮는다.
+     */
+    @Test
+    fun `an empty page that still has candidates left does not count as an empty search`() {
+        val stores = (0 until 4).map { position -> fixture.indexStore(name = "스타벅스 ${position}호점") }
+        val ordered = search.search(command(limit = "50")).items.map(StoreSearchItemView::storeId)
+        assertThat(ordered).hasSameSizeAs(stores)
+        fixture.indexPickupSlot(ordered.last(), clock.instant())
+        val before = emptySearchCount()
+
+        val page = search.search(command(limit = "2", pickupAvailable = "true"))
+
+        assertThat(page.items).isEmpty()
+        assertThat(page.nextCursor).isNotNull()
+        assertThat(emptySearchCount()).isEqualTo(before)
+    }
+
+    private fun emptySearchCount(): Double =
+        meterRegistry
+            .find("beanflow.discovery.search.empty")
+            .tag("sort", "RELEVANCE")
+            .counter()
+            ?.count() ?: 0.0
+
     @Test
     fun `a search writes no audit record, no event and leaks no query text into a metric tag`() {
         fixture.indexStore(
@@ -343,6 +489,7 @@ internal class StoreSearchQueryIntegrationTest {
         latitude: String? = null,
         longitude: String? = null,
         radiusMeters: String? = null,
+        pickupAvailable: String? = null,
         openOnly: String? = null,
         cursor: String? = null,
         limit: String? = null,
@@ -352,6 +499,7 @@ internal class StoreSearchQueryIntegrationTest {
         latitude = latitude,
         longitude = longitude,
         radiusMeters = radiusMeters,
+        pickupAvailable = pickupAvailable,
         openOnly = openOnly,
         cursor = cursor,
         limit = limit,

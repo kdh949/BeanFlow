@@ -27,14 +27,13 @@ internal class StoreDiscoveryProfileQueryRepository(
         val sql =
             """
             SELECT candidate.store_id, candidate.name, candidate.distance_micrometers,
-                   candidate.accepting_orders, candidate.pickup_enabled
+                   candidate.accepting_orders
               FROM (
                     SELECT profile.store_id AS store_id,
                            profile.name AS name,
                            floor(ST_Distance(profile.location, $QUERY_POINT) * 1000000)::bigint
                                AS distance_micrometers,
-                           store.accepting_orders AS accepting_orders,
-                           store.pickup_enabled AS pickup_enabled
+                           store.accepting_orders AS accepting_orders
                       FROM merchant_store_discovery_profile profile
                       JOIN merchant_store store ON store.id = profile.store_id
                      WHERE ST_DWithin(profile.location, $QUERY_POINT, ?)
@@ -59,13 +58,11 @@ internal class StoreDiscoveryProfileQueryRepository(
         }
         arguments.add(query.limit)
         return jdbcTemplate.query(sql, { resultSet, _ ->
-            val acceptingOrders = resultSet.getBoolean("accepting_orders")
             NearbyStoreProfileProjection(
                 storeId = resultSet.getObject("store_id", UUID::class.java),
                 name = resultSet.getString("name"),
                 distanceMicrometers = resultSet.getLong("distance_micrometers"),
-                open = acceptingOrders,
-                pickupAvailable = acceptingOrders && resultSet.getBoolean("pickup_enabled"),
+                open = resultSet.getBoolean("accepting_orders"),
             )
         }, *arguments.toTypedArray())
     }

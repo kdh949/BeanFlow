@@ -78,6 +78,21 @@ internal class NearbyStoreDiscoveryValidationTest {
     }
 
     @Test
+    fun `pickupAvailable defaults to off and accepts only the two boolean spellings`() {
+        assertThat(prepare(pickupAvailable = null).pickupAvailableOnly).isFalse()
+        assertThat(prepare(pickupAvailable = "false").pickupAvailableOnly).isFalse()
+        assertThat(prepare(pickupAvailable = "true").pickupAvailableOnly).isTrue()
+
+        // 필터가 filter hash에 들어가므로 값이 다르면 cursor scope도 달라야 한다(ADR-070).
+        assertThat(prepare(pickupAvailable = "true").cursorScope.filterHash)
+            .isNotEqualTo(prepare(pickupAvailable = "false").cursorScope.filterHash)
+        assertThat(prepare(pickupAvailable = null).cursorScope.filterHash)
+            .isEqualTo(prepare(pickupAvailable = "false").cursorScope.filterHash)
+
+        listOf("yes", "TRUE", "1", "").forEach { flag -> assertInvalid(pickupAvailable = flag) }
+    }
+
+    @Test
     fun `latitude and longitude accept the inclusive contract range as finite decimals`() {
         // Everything `type: number, format: double` can finitely express: sign, fraction, exponent.
         listOf("90", "-90", "0", "89.999999", "+1", "3.75e1", "-8.9E1").forEach { latitude ->
@@ -180,20 +195,44 @@ internal class NearbyStoreDiscoveryValidationTest {
         latitude: String? = "37.5",
         longitude: String? = "127.0",
         radiusMeters: String? = "1000",
+        pickupAvailable: String? = null,
         cursor: String? = null,
         limit: String? = null,
-    ): PreparedNearbyStorePage = validation.prepare(command(latitude, longitude, radiusMeters, cursor, limit))
+    ): PreparedNearbyStorePage =
+        validation.prepare(
+            command(
+                latitude = latitude,
+                longitude = longitude,
+                radiusMeters = radiusMeters,
+                pickupAvailable = pickupAvailable,
+                cursor = cursor,
+                limit = limit,
+            ),
+        )
 
     private fun assertInvalid(
         latitude: String? = "37.5",
         longitude: String? = "127.0",
         radiusMeters: String? = "1000",
+        pickupAvailable: String? = null,
         cursor: String? = null,
         limit: String? = null,
     ) {
-        assertThatThrownBy { validation.prepare(command(latitude, longitude, radiusMeters, cursor, limit)) }
-            .describedAs("latitude=$latitude longitude=$longitude radius=$radiusMeters cursor=$cursor limit=$limit")
-            .isInstanceOf(DomainFailure::class.java)
+        assertThatThrownBy {
+            validation.prepare(
+                command(
+                    latitude = latitude,
+                    longitude = longitude,
+                    radiusMeters = radiusMeters,
+                    pickupAvailable = pickupAvailable,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            )
+        }.describedAs(
+            "latitude=$latitude longitude=$longitude radius=$radiusMeters " +
+                "pickupAvailable=$pickupAvailable cursor=$cursor limit=$limit",
+        ).isInstanceOf(DomainFailure::class.java)
             .extracting { (it as DomainFailure).code }
             .isEqualTo(FailureCode.INVALID_REQUEST)
     }
@@ -202,9 +241,10 @@ internal class NearbyStoreDiscoveryValidationTest {
         latitude: String? = "37.5",
         longitude: String? = "127.0",
         radiusMeters: String? = "1000",
+        pickupAvailable: String? = null,
         cursor: String? = null,
         limit: String? = null,
-    ) = SearchNearbyStoresCommand(latitude, longitude, radiusMeters, cursor, limit, now)
+    ) = SearchNearbyStoresCommand(latitude, longitude, radiusMeters, pickupAvailable, cursor, limit, now)
 
     private class RecordingSignedCursorCodec : SignedCursorCodec {
         val verifiedTokens = mutableListOf<String>()

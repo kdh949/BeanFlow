@@ -576,6 +576,13 @@ paths:
         persisted or written to application logs or traces. radiusMeters is 1..10000.
         Results use a canonical micrometer distance tuple and return its floored
         integer-meter display value.
+
+        The endpoint returns stores that accept orders with pickup enabled.
+        pickupAvailable narrows that to stores with a reservable slot inside the
+        seven-day window and carries the same meaning as on GET /stores/search; it is
+        a point-in-time projection and does not reserve a slot. The filter is applied
+        after the spatial query, so a page may be shorter than limit and still return
+        a nextCursor anchored to the last examined candidate.
       parameters:
         - $ref: "#/components/parameters/Latitude"
         - $ref: "#/components/parameters/Longitude"

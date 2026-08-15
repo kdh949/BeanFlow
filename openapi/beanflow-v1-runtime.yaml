@@ -52,6 +52,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me~1stores"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
+  /stores/search:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1search"
   /stores/{storeId}/menus:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
   /stores/{storeId}/pickup-slots:

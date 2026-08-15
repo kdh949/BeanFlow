@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.RequestPostProcessor
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.util.UUID
@@ -61,7 +62,8 @@ internal class NearbyStoreDiscoveryIntegrationTest
         fun cleanDatabase() {
             dropSpatialFailureTrigger()
             jdbcTemplate.execute(
-                "TRUNCATE TABLE merchant_store_discovery_profile, merchant_store, operations_audit_record CASCADE",
+                "TRUNCATE TABLE fulfillment_pickup_slot, merchant_store_discovery_profile, " +
+                    "merchant_store, operations_audit_record CASCADE",
             )
         }
 
@@ -75,6 +77,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
             insertStore(store(2), "Far cafe", longitude = 127.004, latitude = 37.5)
             insertStore(store(3), "Closed cafe", longitude = 127.0005, latitude = 37.5, acceptingOrders = false)
             insertStore(store(4), "Pickup disabled cafe", longitude = 127.0006, latitude = 37.5, pickupEnabled = false)
+            insertPickupSlot(store(1))
 
             mockMvc
                 .perform(nearby(radiusMeters = "1000"))
@@ -87,9 +90,129 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
                 .andExpect(jsonPath("$.items[1].storeId").value(store(2).toString()))
                 .andExpect(jsonPath("$.items[1].distanceMeters").value(353))
+                // 슬롯이 없는 매장은 결과에 남되 픽업 불가로 표시된다. Milestone 6 이전에는
+                // `acceptingOrders && pickupEnabled`라서 항상 true였다.
+                .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
                 .andExpect(jsonPath("$.items[0].distanceMicrometers").doesNotExist())
                 .andExpect(jsonPath("$.items[0].location").doesNotExist())
                 .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
+        }
+
+        @Test
+        fun `pickupAvailable means a reservable slot exists rather than owner pickup state`() {
+            insertStore(store(1), "Reservable cafe", longitude = 127.0, latitude = 37.5)
+            insertStore(store(2), "Fully booked cafe", longitude = 127.001, latitude = 37.5)
+            insertStore(store(3), "Already started cafe", longitude = 127.002, latitude = 37.5)
+            insertStore(store(4), "Beyond horizon cafe", longitude = 127.003, latitude = 37.5)
+            insertPickupSlot(store(1))
+            insertPickupSlot(store(2), capacity = 2, reserved = 1, confirmed = 1)
+            insertPickupSlot(store(3), startsIn = Duration.ofMinutes(-30))
+            insertPickupSlot(store(4), startsIn = Duration.ofDays(8))
+
+            mockMvc
+                .perform(nearby(radiusMeters = "1000"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(4))
+                .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+                .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[2].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[3].pickupAvailable").value(false))
+        }
+
+        @Test
+        fun `pickupAvailable filter keeps only stores with a reservable slot`() {
+            insertStore(store(1), "Slotless cafe", longitude = 127.0, latitude = 37.5)
+            insertStore(store(2), "Reservable cafe", longitude = 127.001, latitude = 37.5)
+            insertPickupSlot(store(2))
+
+            mockMvc
+                .perform(nearby(radiusMeters = "1000", pickupAvailable = "true"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].storeId").value(store(2).toString()))
+
+            // 필터를 끄면 슬롯 없는 매장도 남는다. 두 필터는 독립이다(ADR-103 A6).
+            mockMvc
+                .perform(nearby(radiusMeters = "1000", pickupAvailable = "false"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(2))
+        }
+
+        @Test
+        fun `a non boolean pickupAvailable is rejected before the spatial query runs`() {
+            mockMvc
+                .perform(nearby(radiusMeters = "1000", pickupAvailable = "yes"))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        }
+
+        /**
+         * The availability filter runs after the spatial query, so a page can be short or empty
+         * while candidates remain. The cursor must then anchor to the last **examined** candidate:
+         * anchoring to the last returned row would skip every rejected store after it.
+         */
+        @Test
+        fun `an availability filtered page pages on without gaps or duplicates`() {
+            val ordered = (0 until 6).map { store(20 + it) }
+            ordered.forEachIndexed { index, storeId ->
+                insertStore(storeId, "Cafe $index", longitude = 127.0 + index * 0.001, latitude = 37.5)
+            }
+            // 가용 매장은 처음과 마지막뿐이다. 가운데 넷은 필터에 걸려 page를 짧게 만든다.
+            insertPickupSlot(ordered.first())
+            insertPickupSlot(ordered.last())
+
+            val firstBody =
+                mockMvc
+                    .perform(nearby(radiusMeters = "5000", pickupAvailable = "true", limit = "2"))
+                    .andExpect(status().isOk)
+                    .andReturn()
+                    .response
+                    .contentAsString
+            // 검사한 2개 중 가용은 1개다. 뒤에 후보가 남았으므로 짧은 page와 cursor가 함께 나온다.
+            assertThat(storeIds(firstBody)).containsExactly(ordered.first().toString())
+
+            val visited = mutableListOf<String>()
+            visited += storeIds(firstBody)
+            var cursor: String? = nextCursor(firstBody)
+            var pages = 1
+            while (cursor != null) {
+                val body =
+                    mockMvc
+                        .perform(nearby(radiusMeters = "5000", pickupAvailable = "true", limit = "2", cursor = cursor))
+                        .andExpect(status().isOk)
+                        .andReturn()
+                        .response
+                        .contentAsString
+                visited += storeIds(body)
+                cursor = Regex("\"nextCursor\":\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+                pages++
+            }
+
+            assertThat(visited).containsExactly(ordered.first().toString(), ordered.last().toString())
+            // 6개 후보를 2개씩 검사하므로 3쪽이다. 페이지가 비어도 scan은 전진한다.
+            assertThat(pages).isEqualTo(3)
+        }
+
+        @Test
+        fun `a cursor issued without the availability filter is rejected once the filter is on`() {
+            insertStore(store(1), "Near cafe", longitude = 127.0, latitude = 37.5)
+            insertStore(store(2), "Far cafe", longitude = 127.001, latitude = 37.5)
+            insertPickupSlot(store(1))
+            insertPickupSlot(store(2))
+            val unfiltered =
+                nextCursor(
+                    mockMvc
+                        .perform(nearby(radiusMeters = "1000", limit = "1"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+                        .response
+                        .contentAsString,
+                )
+
+            mockMvc
+                .perform(nearby(radiusMeters = "1000", pickupAvailable = "true", limit = "1", cursor = unfiltered))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
 
         @Test
@@ -373,13 +496,14 @@ internal class NearbyStoreDiscoveryIntegrationTest
 
         private fun scope(): SignedCursorScope<NearbyStoreSort> =
             NearbyStoreQueryValidation(signedCursorCodec)
-                .prepare(SearchNearbyStoresCommand("37.5", "127.0", "1000", null, null, clock.instant()))
+                .prepare(SearchNearbyStoresCommand("37.5", "127.0", "1000", null, null, null, clock.instant()))
                 .cursorScope
 
         private fun nearby(
             latitude: String? = "37.5",
             longitude: String? = "127.0",
             radiusMeters: String? = "1000",
+            pickupAvailable: String? = null,
             cursor: String? = null,
             limit: String? = null,
         ) = get(NEARBY_PATH)
@@ -387,6 +511,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 latitude?.let { param("latitude", it) }
                 longitude?.let { param("longitude", it) }
                 radiusMeters?.let { param("radiusMeters", it) }
+                pickupAvailable?.let { param("pickupAvailable", it) }
                 cursor?.let { param("cursor", it) }
                 limit?.let { param("limit", it) }
             }.with(customerJwt())
@@ -421,6 +546,34 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 name,
                 longitude,
                 latitude,
+            )
+        }
+
+        /**
+         * One pickup slot. The default is reservable inside the seven-day window; the parameters
+         * exist so a test can place a slot outside the window or with no seats left.
+         */
+        private fun insertPickupSlot(
+            storeId: UUID,
+            startsIn: Duration = Duration.ofDays(1),
+            capacity: Long = 4,
+            reserved: Long = 0,
+            confirmed: Long = 0,
+        ) {
+            val startsAt = clock.instant().plus(startsIn)
+            jdbcTemplate.update(
+                """
+                INSERT INTO fulfillment_pickup_slot (
+                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                storeId,
+                Timestamp.from(startsAt),
+                Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
+                capacity,
+                reserved,
+                confirmed,
             )
         }
 
