@@ -282,7 +282,7 @@ Milestone 1이 이 결정의 스키마와 지역 어휘 부분을 실현했다. 
 
 ### Milestone 3 evidence (2026-08-15) — 브랜드 명령
 
-브랜드 명령과 그 동기 색인 갱신을 구현했다. 지역 명령과 커버리지 gate는 아직 Milestone 4다.
+브랜드 명령과 그 동기 색인 갱신을 구현했다. 지역 명령과 커버리지 gate는 Milestone 4다(아래).
 
 - `merchant/api`의 `StoreBrandOperations`가 브랜드 생성·수정·보관과 매장 브랜드 지정·해제를
   선언하고 `merchant/internal`의 `StoreBrandService`가 구현한다. 네 메서드 모두
@@ -308,6 +308,34 @@ Milestone 1이 이 결정의 스키마와 지역 어휘 부분을 실현했다. 
   남기면 없던 변경을 주장하게 된다.
 - 위 Verification 중 `403`·`409`·fan-out·rollback·순환 의존 항목이 이 Milestone에서 통과했다.
   지역 명령, `region_code` 커버리지 gate, 리 검색과 동명 리 반경 필터 항목은 여전히 `Not run`이다.
+
+### Milestone 4 evidence (2026-08-15) — 지역 명령과 커버리지 gate
+
+지역 명령과 그 동기 색인 갱신, 커버리지 gate를 구현했다.
+
+- `merchant/api`의 `StoreRegionOperations`가 매장 지역 지정을 선언하고 `merchant/internal`의
+  `StoreRegionService`가 구현한다. 브랜드와 같이 `Propagation.MANDATORY`라 호출자 transaction 없이는
+  실행되지 않는다. `region_code`, `REGION_*` term, 재실행 원장이 한 commit에 들어간다.
+- **명령의 소유 모듈은 `identity`다.** 4절이 요구하는 권한 주체가 「그 매장의 `STORE_OWNER`」이고
+  매장 소속은 `identity`가 소유한다. `identity`는 이미 `merchant`(데이터)와 `operations`(감사)에
+  의존하므로 새 간선이 생기지 않는다. 브랜드처럼 `operations`에 두면 `operations`가 `identity`에
+  의존해야 하는데 `identity`가 이미 `operations`에 의존하므로 Spring Modulith가 순환으로 거절한다.
+  5절의 순환 의존 회피가 지역 쪽에서도 유지된다.
+- **`STORE_STAFF`와 타 매장 소유자의 지역 변경이 `403`인 것을 실제로 측정했다.** 해지된 소속도
+  같다. 세 경우 모두 지역 행을 읽기 전에 막히고 감사 기록도 남지 않는다.
+- **색인 갱신 실패 시 rollback을 실제로 측정했다.** 색인을 실패하도록 바꾼 상태에서 지역을 옮기면
+  `region_code`가 **옛 지역 그대로** 남는다. 단언은 "오류가 났다"가 아니라 "옛 지역이 남았다"이다.
+- **지정마다 `REGION_*` 네 종류를 모두 교체한다.** 리에서 동으로 옮긴 매장의 낡은 `REGION_RI` 행이
+  남으면 그 매장은 떠나온 리 이름으로 계속 검색된다. 리 지역은 term 4행, 동 지역은 3행, 시도 행은
+  1행이고 리 행의 `eupmyeondong`이 상위 읍·면 이름을 유지하는 것을 통합 테스트가 확인한다.
+- **커버리지 gate는 V62다.** 원장(V61)과 나눈 이유는 배포 순서다. 한 migration에 담으면 명령이
+  생기는 순간과 커버리지를 단언하는 순간이 같아져 값을 넣을 틈이 없다. V33 → V34와 같은 두 단계
+  배포다(MD-2026-021). gate는 지역이 빈 매장이 남아 있으면 실제로 배포를 멈추고 컬럼도 바꾸지
+  않는다는 것을 migration 테스트가 확인한다. 이 때문에 Consequences의 "마이그레이션 3개"는 5개가 됐다.
+- **감사 요약은 법정동 코드를 코드 자체의 계층으로 끊어 담는다.** 원시 PII 판정기가 10자리 코드를
+  한국 휴대전화 번호로 인식해 append를 거절했다. 판정기를 완화하지 않고 payload를 바꿨다(MD-2026-022).
+- 위 Verification 중 지역 `403`, 커버리지 gate, 리 term 3행/4행 항목이 이 Milestone에서 통과했다.
+  리 이름 **검색**과 동명 리의 반경 필터 항목은 검색 endpoint가 아직 없어 `Not run`이다.
 
 ## Metrics
 

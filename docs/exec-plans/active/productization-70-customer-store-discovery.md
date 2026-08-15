@@ -414,26 +414,55 @@ CREATE TABLE merchant_brand_command (
 `operations_audit_record`의 `action`은 `fk_audit_action_category`로 묶인 폐쇄 어휘라 등록하지
 않으면 감사 append가 거절된다.
 
-### 단계 3 — 지역 커버리지 gate
+### 단계 2-C — 지역 명령 재실행 원장 (2026-08-15 추가)
 
-번호는 **V61**이다. V60이 앞에 들어가 원안의 V60에서 하나 밀렸다.
-
-V33 → V34 선례를 따른다. 컬럼 생성(단계 1) → 운영자 값 입력 → fail-closed 검증 순이다.
+번호는 **V61**이다. MD-2026-021대로 명령군마다 원장을 따로 둔다.
 
 ```sql
+CREATE TABLE merchant_store_region_command (
+    id uuid PRIMARY KEY,
+    actor_id uuid NOT NULL,
+    command_type varchar(24) NOT NULL,
+    idempotency_key varchar(128) NOT NULL,
+    payload_hash varchar(64) NOT NULL,
+    response_json text NOT NULL,
+    created_at timestamptz NOT NULL,
+    retention_expires_at timestamptz NOT NULL,
+    UNIQUE (actor_id, idempotency_key)
+);
+```
+
+브랜드 원장에 얹지 않는 이유는 행위자가 다르기 때문이다. 브랜드는 운영자, 지역은 매장주이므로
+`(actor_id, idempotency_key)` 유일성이 서로 다른 주체 집합 위에서 성립한다.
+
+같은 migration이 감사 action `STORE_REGION_ASSIGNED`와 `GET /regions`의 cursor 정렬 인덱스
+`(full_name, code)`도 만든다. 지역을 비우는 명령은 없으므로 `command_type` 허용값은 하나뿐이다.
+
+### 단계 3 — 지역 커버리지 gate
+
+번호는 **V62**다. V60(브랜드 원장)과 V61(지역 원장)이 앞에 들어가 원안의 V60에서 둘 밀렸다.
+
+V33 → V34 선례를 따른다. 컬럼 생성(단계 1) → 매장주 값 입력 → fail-closed 검증 순이다.
+원장과 gate를 한 migration에 담을 수 없는 이유도 같다. 기존 매장이 있는 환경에서는 명령이
+존재하게 된 뒤에야 지역을 채울 수 있는데, gate가 같은 migration에 있으면 값을 넣을 순간이 없다.
+
+```sql
+DO $$ ... RAISE EXCEPTION 'Region coverage migration found % ... without a region_code' ... $$;
+
 ALTER TABLE merchant_store_discovery_profile
     ALTER COLUMN region_code SET NOT NULL;
 ```
 
 `region_code`가 비어 있는 매장이 하나라도 있으면 이 migration은 실패하며 그것이 의도다. 지역이
-없는 매장은 지역명 검색에서 조용히 사라진다.
+없는 매장은 지역명 검색에서 조용히 사라진다. `SET NOT NULL`만 두면 실패 이유가 컬럼 이름뿐이라
+V34처럼 미지정 행 수를 먼저 세어 명시적 메시지로 멈춘다.
 
 브랜드에는 커버리지 gate를 두지 않는다. 브랜드 없음이 정상 상태다.
 
 ### 공통
 
 - 실제 table/column 이름은 migration writer lease 획득 후 최신 schema와 대조한다.
-- 네 단계는 하나의 lease를 공유한다. 단계 사이에 다른 schema writer를 시작하지 않는다.
+- 다섯 단계는 하나의 lease를 공유한다. 단계 사이에 다른 schema writer를 시작하지 않는다.
 - 다른 Context Aggregate와 JPA cascade를 만들지 않는다. Store·Customer 삭제 정책은 별도 lifecycle이
   생길 때 결정하며, P0에서는 목록 hydrate가 비노출 row를 안전하게 제외한다.
 - extension 생성 권한이 없으면 migration을 실패시키고 순차 검색으로 fallback하지 않는다.
@@ -574,6 +603,15 @@ POST   /api/v1/operations/search-index/rebuild
 - 색인 갱신 강제 실패 시 브랜드·지역 변경 rollback.
 - 같은 매장에 대한 동시 지역 변경의 최종 상태와 term 일치.
 - 지역 미입력 매장이 남아 있을 때 커버리지 migration 실패.
+- 커버리지 gate 실패가 컬럼을 바꾸지 않고 남기는지(실패 후 `region_code`가 여전히 nullable).
+- `region_code`가 `NOT NULL`이 된 뒤 지역을 비우는 갱신이 거부되는지.
+- 리 지역에서 동 지역으로 옮긴 매장에 낡은 `REGION_RI` term이 남지 않는지.
+- 지역 명령의 같은 키+다른 지역이 409 `IDEMPOTENCY_KEY_REUSED`이고 지역이 바뀌지 않는지.
+- 지역 명령이 caller transaction 밖에서 호출되면 새 transaction을 열지 않고 거부되는지.
+- 재실행된 지역 명령이 AuditRecord를 두 번 남기지 않는지.
+- 법정동 목록 cursor가 쪽을 넘겨도 누락·중복이 없고, 다른 질의로 발급된 cursor가 400인지.
+- 법정동 질의어의 `%`·`_`가 패턴으로 해석되지 않고 아무것도 매칭하지 않는지.
+- 해지된 매장 소속의 지역 변경이 403인지.
 - `sigungu`가 빈 문자열인 행정구역(세종시)의 정상 저장·검색.
 - 리 행의 `ri`가 리 이름이고 `eupmyeondong`이 상위 읍·면 이름을 유지하는지.
 - 리에 지정된 매장이 읍·면 이름과 리 이름 **양쪽**으로 검색되고 `matchReason`이 각각
@@ -734,10 +772,46 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11),
     검색 질의 성능 evidence(Milestone 12), 브랜드명 변경과 브랜드 해제의 동시 실행 검증
     (Milestone 5에서 검색 질의와 함께 다룬다).
-- 2026-08-15: 미착수 — Milestone 4~12.
+- 2026-08-15: **Milestone 4 완료.** 같은 branch에서 V61(지역 명령 재실행 원장·감사 action·법정동
+  cursor 인덱스), V62(지역 커버리지 gate), `merchant/api`의 `StoreRegionOperations`·
+  `RegionCatalogQueryOperations`, `merchant/internal`의 `StoreRegionService`·`RegionCatalogService`·
+  `RegionCatalogController`, `identity/internal`의 `StoreRegionCommandService`·`StoreRegionController`를
+  구현했다.
+  - **완료 조건 충족:** 지역이 빈 매장이 하나라도 남아 있으면 V62가 실패하고 컬럼도 바꾸지 않는다.
+    `StoreRegionCoverageMigrationTest`가 V61까지 올린 DB에 지역 없는 매장을 넣고 실제로 실패시킨다.
+    `STORE_STAFF`와 타 매장 소유자, 해지된 소속의 변경은 모두 403이며 감사 기록도 남지 않는다.
+  - **명령의 소유 모듈은 `identity`다.** 브랜드는 `operations`가 transaction·권한·감사를 가졌지만
+    지역의 권한 주체는 「그 매장의 `STORE_OWNER`」이고 매장 소속은 `identity`가 소유한다.
+    `identity`는 이미 `merchant`와 `operations`에 의존하므로 새 간선이 생기지 않는다. `operations`에
+    두면 `operations` → `identity` 간선이 필요한데 반대 방향이 이미 있어 Modulith가 순환으로 거절한다.
+  - 원장(V61)과 gate(V62)를 나눴다(MD-2026-021). 한 migration에 담으면 명령이 생기는 순간과
+    커버리지를 단언하는 순간이 같아져 값을 넣을 틈이 없다.
+  - 감사 요약의 법정동 코드를 코드 계층으로 끊어 담는다(MD-2026-022). 원시 PII 판정기가 10자리
+    코드를 휴대전화 번호로 인식했고, 판정기를 완화하지 않고 payload를 바꿨다.
+  - 두 endpoint를 target·runtime OpenAPI에 함께 넣고 `AuthenticationPathRegistry`에 merchant chain으로
+    등록했다.
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의 성능
+    evidence(Milestone 12), 리 이름 **검색**과 동명 리 반경 필터(검색 endpoint가 없는 Milestone 5),
+    브랜드명 변경과 브랜드 해제의 동시 실행 검증(Milestone 5).
+- 2026-08-15: 미착수 — Milestone 5~12.
 
 ## Surprises & Discoveries
 
+- **(2026-08-15) 지역 명령을 `operations`에 둘 수 없다.** 브랜드와 대칭으로 만들려 했으나
+  `operations`는 `identity`에 의존하지 않고 `identity`가 `operations`에 의존한다. 매장 소속 확인이
+  `identity.api`에 있으므로 `operations`에 두면 순환이 생긴다. 필요한 간선을 이미 전부 가진 모듈은
+  `identity` 하나뿐이었다. 모듈 배치는 URL 경로가 아니라 의존 방향이 정한다.
+- **(2026-08-15) 감사 payload 판정기가 법정동 코드를 휴대전화 번호로 본다.**
+  `AuditRecordService`의 원시 PII 정규식 `0?1[0-9][-\s]?\d{3,4}[-\s]?\d{4}`가 `1168010100`을
+  그대로 매칭해 감사 append가 400으로 거절됐다. 개인정보 장치를 완화하지 않고 코드 자체의 계층
+  구분(`11-680-101-00`)으로 담았다(MD-2026-022). 같은 판정기의 민감 **키** 규칙은 `fullName`을
+  포함하는 키를 거절하므로 `regionFullName`도 쓸 수 없었다.
+- **(2026-08-15) 커버리지 gate가 16곳의 fixture를 동시에 깨뜨린다.** `region_code`가 `NOT NULL`이
+  되면 매장 프로필을 만드는 모든 테스트와 로컬 데모 시드가 지역을 함께 넣어야 한다. 이것이 gate의
+  의도이며, 대신 명시적 target을 가진 migration 테스트 넷(V32/33·V49/50·V58·V59)은 영향받지 않는다.
+- **(2026-08-15) 매장주 브라우저 쓰기의 첫 실패는 401이 아니라 403이다.** CSRF 필터가 인증 판정보다
+  앞서므로 세션·CSRF가 모두 없는 요청은 `ACCESS_DENIED`다. 순서가 반대였다면 세션 없는 요청이
+  계정 존재 여부를 401과 403으로 구분해 알려주게 된다.
 - 기존 nearby의 픽업 가능 의미는 실제 잔여 슬롯 존재와 같지 않아 검색 endpoint만 추가해서는 화면
   간 결과가 일치하지 않는다.
 - **(2026-08-15) `merchant` 모듈에 쓰기 endpoint가 하나도 없다.**
@@ -831,6 +905,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 소속 매장이 남은 브랜드의 보관 거절, fan-out 상한을 매장 배정에도 적용 | [MD-2026-020](../../decisions/minor-decisions.md) |
 | 2026-08-15 | 브랜드 명령은 `operations`가 transaction·권한·감사를, `merchant`가 데이터·색인·멱등성을 소유 | [ADR-112 4·5절](../../adr/ADR-112-store-brand-and-administrative-region.md), 이 ExecPlan |
 | 2026-08-15 | 재실행된 브랜드 명령은 AuditRecord를 다시 남기지 않는다 | 이 ExecPlan |
+| 2026-08-15 | 지역 명령은 `identity`가 transaction·권한·감사를, `merchant`가 데이터·색인·멱등성을 소유 | [ADR-112 4·5절](../../adr/ADR-112-store-brand-and-administrative-region.md), 이 ExecPlan |
+| 2026-08-15 | 지역 명령 원장은 V61, 커버리지 gate는 V62로 나눈다 | [MD-2026-021](../../decisions/minor-decisions.md), 이 ExecPlan |
+| 2026-08-15 | 지역 감사 요약은 법정동 코드를 코드 계층으로 끊어 담고 표시 이름은 담지 않는다 | [MD-2026-022](../../decisions/minor-decisions.md) |
+| 2026-08-15 | 지역 해제 명령을 두지 않는다. `region_code`는 `NOT NULL`이다 | [ADR-112 3절](../../adr/ADR-112-store-brand-and-administrative-region.md), 이 ExecPlan |
+| 2026-08-15 | `GET /regions`는 merchant chain이고 질의 낱말은 전부 포함되어야 한다 | 이 ExecPlan, authorization matrix |
 | 2026-08-15 | 다중 토큰은 AND. 지역 인식 파서를 두지 않는다 | [ADR-103 A3](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-15 | `sort=relevance\|distance`를 클라이언트가 선택. 관련도는 정수 양자화 | [ADR-103 A4](../../adr/ADR-103-store-search-strategy.md), [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 2026-08-15 | `openOnly`를 `pickupAvailable`과 독립 필터로 추가. 기본은 닫힌 매장 포함 | [ADR-103 A6](../../adr/ADR-103-store-search-strategy.md) |
@@ -862,6 +941,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   Brand Aggregate, 법정동 어휘, 동기 색인 테이블, 운영자·매장주 쓰기 경로와 재색인 커맨드를
   In Scope에 추가했다. 별도 초안이던 `store-brand-region-keyword-search.md`는 이 문서로 흡수하고
   삭제했다.
+- 2026-08-15: Milestone 4 구현에 맞춰 단계 2-C(지역 명령 원장 V61)를 추가하고 단계 3 커버리지
+  gate를 V62로 옮겼다. migration 단계가 넷에서 다섯이 됐다. 지역 명령의 소유 모듈을 `identity`로
+  적고, 감사 요약의 법정동 코드 표기와 지역 해제 명령 부재를 Decision Log에 명시했다.
+  authorization matrix의 `/regions` 행을 실제 구현(merchant chain 전용)에 맞췄다.
 - 2026-08-15: Milestone 1 구현 중 법정동 자료의 74%가 리 단위임을 확인하고, 리를 검색 불가 한계로
   남기는 대신 ADR-112 리 Amendment와 ADR-103 A7으로 `ri` 열과 `REGION_RI` term 종류를 추가했다.
   term 종류가 여섯에서 일곱으로 늘고 지역 어휘가 4계층이 된다. 정렬 튜플과 cursor 계약은 그대로다.
