@@ -101,6 +101,10 @@
   컬럼을 추가하지 않고 공개 API 계약도 바꾸지 않는다(MD-2026-017, ADR-020 2026-08-15 평가).
 - **메뉴 단위 결과(가격 비교형 목록).** 결과 단위는 매장이며 매칭 메뉴는 매장 카드에 최대 3개
   포함된다. 메뉴가 결과 행이 되는 목록은 커서 튜플과 중복 매장 처리가 달라 별도 결정이 필요하다.
+- **한글 오타 검색을 위한 자모 분해 색인 (2026-08-15 추가).** Milestone 5에서 유사도 보완이 한글
+  짧은 상호에는 발동하지 않는 것을 측정했다. 이 plan은 그 한계를 숨기지 않고 기록만 하며 해소하지
+  않는다. 색인 스키마와 정규화 계약 개정이 따르는 별도 결정이다
+  ([ADR-103 Alternatives 9](../../adr/ADR-103-store-search-strategy.md), 같은 ADR Revisit Condition)
 - 주소 geocoding과 역지오코딩, 검색어 자동완성
 - 상권 별칭 사전(`홍대`, `가로수길`)
 - 브랜드 단위 정산·브랜드 페이지·브랜드 소유자 계정
@@ -995,6 +999,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 브랜드·지역 표시 이름은 원 테이블이 아니라 색인 term의 `display_text`에서 읽는다 | `StoreSearchCandidateRepository.kt` |
 | 2026-08-15 | Milestone 5는 컨트롤러를 붙이지 않는다. `pickupAvailable`이 동작하는 Milestone 6에서 endpoint를 연다 | 이 ExecPlan Progress |
 | 2026-08-15 | target OpenAPI의 `/stores/search`를 ADR-103 2026-08-15 Amendment에 맞게 개정한다 | [ADR-103 A4/A5/A6/A7](../../adr/ADR-103-store-search-strategy.md), `scripts/verify-docs.sh` |
+| 2026-08-15 | 한글 오타 검색은 이 plan에서 해소하지 않는다. 자모 분해 색인을 ADR-103 Revisit Condition으로 등록한다 | [ADR-103 Alternatives 9](../../adr/ADR-103-store-search-strategy.md), 이 문서 Non-goals |
 
 ## Outcomes & Retrospective
 
