@@ -512,6 +512,9 @@ POST   /api/v1/operations/search-index/rebuild
   기존 공통 `DiscoveryLimit`을 유지하고 이 endpoint를 위해 상한을 바꾸지 않는다.
 - recommendation은 좌표 쌍이 있을 때 `radiusMeters`를 생략하면 nearby 단계에 `3,000m`를
   사용한다. 좌표를 둘 다 생략하면 nearby를 실행하지 않고, 한 좌표만 또는 반경만 제공하면 400이다.
+- 재색인 명령은 `PLATFORM_OPERATOR`와 `STORE_BRAND_MANAGE`를 모두 요구한다. 같은 actor와
+  `Idempotency-Key`의 같은 reason은 완료 결과를 재생하고, 실행 중 같은 명령은 새 작업을 시작하지
+  않는다. `complete=false` 응답은 실패 매장 ID를 포함한 부분 처리 결과이며 완전 성공이 아니다.
 - `sort`는 `relevance`(기본) 또는 `distance`이며 `distance`는 좌표가 필수다.
 - search cursor는 ADR-070의 2026-08-15 amendment를 따른다. endpoint identifier가 `sort`에 따라
   `stores-search-relevance`/`stores-search-distance`로 갈리고, filter hash에 정규화 토큰 배열,
@@ -1081,6 +1084,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | PostgreSQL `pg_trgm`, Context 간 batch port와 scan-boundary cursor 사용 | [ADR-103](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-12 | recent는 결제 승인 이후 현재 실행·완료 상태만 포함 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-16 | recommendation 좌표 쌍의 nearby 기본 반경을 3,000m로 고정 | [BR-40](../../product/business-policy-decisions.md) |
+| 2026-08-16 | 재색인은 `STORE_BRAND_MANAGE` grant와 90일 결과 재생 원장을 사용 | [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-12 | 좌표 없는 추천도 favorite → recent 순서를 유지 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 검색 대상에 브랜드명·지역명 추가, 결과는 매장 단위 + 매칭 메뉴 최대 3개 | [ADR-103 A1/A5](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 매칭은 substring 우선 + 유사도 `0.3` 보완 하이브리드. 오타 교정 non-goal 철회 | [ADR-103 A2](../../adr/ADR-103-store-search-strategy.md) |
