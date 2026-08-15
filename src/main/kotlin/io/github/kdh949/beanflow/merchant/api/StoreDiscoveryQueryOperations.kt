@@ -24,6 +24,16 @@ interface StoreDiscoveryQueryOperations {
     fun findPickupCapableStoresNear(query: NearbyStoreProfileQuery): List<NearbyStoreProfileProjection>
 
     /**
+     * Current public display projections for an arbitrary set of stores.
+     *
+     * Discovery keeps customer-owned ordering (favorite creation order, recent order time) outside
+     * Merchant, then uses this bulk read to hydrate only stores that remain publicly discoverable.
+     * Missing ids deliberately have no projection: callers can reject a new target as 404 or omit
+     * a stale historical reference without changing their own source record.
+     */
+    fun findVisibleStores(storeIds: Collection<UUID>): List<StoreDiscoveryDisplayProjection>
+
+    /**
      * The number of stores the search index is expected to cover.
      *
      * Discovery divides its own indexed-store count by this to publish
@@ -64,4 +74,16 @@ data class NearbyStoreProfileProjection(
     val name: String,
     val distanceMicrometers: Long,
     val open: Boolean,
+)
+
+/**
+ * A non-spatial current display projection for a customer-owned store reference.
+ *
+ * [pickupCapable] is only Merchant's owner state. Discovery combines it with Fulfillment's
+ * reservable-slot batch answer before publishing the public `pickupAvailable` flag.
+ */
+data class StoreDiscoveryDisplayProjection(
+    val storeId: UUID,
+    val name: String,
+    val pickupCapable: Boolean,
 )

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.architecture
 
+import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
@@ -138,6 +139,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var nearbyStoreQueryOperations: NearbyStoreQueryOperations
+
+    @MockitoBean
+    private lateinit var favoriteStoreOperations: FavoriteStoreOperations
 
     @MockitoBean
     private lateinit var storeSearchQueryOperations: StoreSearchQueryOperations

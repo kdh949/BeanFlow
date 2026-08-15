@@ -27,6 +27,7 @@ class AuthenticationPathRegistryTest {
                 "/api/v1/payments/00000000-0000-0000-0000-000000000001/refunds" to AuthenticationChain.MERCHANT,
                 "/api/v1/auth/customer/csrf" to AuthenticationChain.CUSTOMER,
                 "/api/v1/me/orders" to AuthenticationChain.CUSTOMER,
+                "/api/v1/me/favorite-stores" to AuthenticationChain.CUSTOMER,
                 "/api/v1/orders" to AuthenticationChain.CUSTOMER,
                 "/api/v1/payment-methods" to AuthenticationChain.CUSTOMER,
                 "/api/v1/payments/00000000-0000-0000-0000-000000000001" to AuthenticationChain.CUSTOMER,

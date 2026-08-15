@@ -25,6 +25,7 @@ internal class StoreSearchIndexTestFixture(
     private val transactions: TransactionTemplate,
 ) {
     fun clear() {
+        jdbc.update("DELETE FROM discovery_customer_favorite_store")
         jdbc.update("DELETE FROM discovery_store_search_term")
         jdbc.update("DELETE FROM fulfillment_pickup_slot")
         jdbc.update("DELETE FROM merchant_menu")

@@ -2,11 +2,13 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 internal class StoreDiscoveryProfileQueryService(
@@ -24,6 +26,10 @@ internal class StoreDiscoveryProfileQueryService(
     @Transactional(readOnly = true)
     override fun countIndexableStores(): Long = repository.countStores()
 
+    @Transactional(readOnly = true)
+    override fun findVisibleStores(storeIds: Collection<UUID>): List<StoreDiscoveryDisplayProjection> =
+        repository.findVisibleStores(storeIds).onEach(::requireDisplayProjectable)
+
     /**
      * A blank owner name or a negative distance means the verified profile invariant was broken
      * after startup. The read fails explicitly instead of returning a placeholder store.
@@ -33,6 +39,15 @@ internal class StoreDiscoveryProfileQueryService(
             throw DomainFailure(
                 FailureCode.DEPENDENCY_UNAVAILABLE,
                 "Store discovery profile projection is invalid",
+            )
+        }
+    }
+
+    private fun requireDisplayProjectable(projection: StoreDiscoveryDisplayProjection) {
+        if (projection.name.isBlank()) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Store discovery display projection is invalid",
             )
         }
     }

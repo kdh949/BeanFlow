@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.util.UUID
@@ -70,6 +71,31 @@ internal class StoreDiscoveryProfileQueryRepository(
     fun countStores(): Long =
         jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_store", Long::class.java)
             ?: throw IllegalStateException("Store count query returned no row")
+
+    fun findVisibleStores(storeIds: Collection<UUID>): List<StoreDiscoveryDisplayProjection> {
+        if (storeIds.isEmpty()) return emptyList()
+        return jdbcTemplate.query({ connection ->
+            connection
+                .prepareStatement(
+                    """
+                    SELECT profile.store_id,
+                           profile.name,
+                           (store.accepting_orders AND store.pickup_enabled) AS pickup_capable
+                      FROM merchant_store_discovery_profile profile
+                      JOIN merchant_store store ON store.id = profile.store_id
+                     WHERE profile.store_id = ANY(?::uuid[])
+                    """.trimIndent(),
+                ).also { statement ->
+                    statement.setArray(1, connection.createArrayOf("uuid", storeIds.toSet().toTypedArray()))
+                }
+        }, { resultSet, _ ->
+            StoreDiscoveryDisplayProjection(
+                storeId = resultSet.getObject("store_id", UUID::class.java),
+                name = resultSet.getString("name"),
+                pickupCapable = resultSet.getBoolean("pickup_capable"),
+            )
+        })
+    }
 
     private companion object {
         /**

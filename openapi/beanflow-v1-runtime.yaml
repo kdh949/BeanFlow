@@ -46,6 +46,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
   /me:
     $ref: "./beanflow-v1.yaml#/paths/~1me"
+  /me/favorite-stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1favorite-stores"
+  /me/favorite-stores/{storeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1favorite-stores~1{storeId}"
   /merchant/me:
     $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me"
   /merchant/me/stores:
