@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Customer store discovery](../exec-plans/active/productization-70-customer-store-discovery.md)
+- **Implementation owner:** [Customer store discovery](../exec-plans/completed/productization-70-customer-store-discovery.md)
 
 > 2026-08-15: 검색 대상에 브랜드명·지역명이 추가되고 매칭·정렬·응답 계약이 개정됐다.
 > 아래 [Amendments](#amendments)가 원 Decision보다 우선한다. 원 Decision 본문은 개정 이전
@@ -277,7 +277,7 @@ trigram 인덱스를 거는 것이다. `스타벅스`가 `ㅅㅡㅌㅏㅂㅓㄱ�
   경로는 한글에서 완전히 동작한다. 즉 **검색이 깨진 것이 아니라 구제가 좁은 것**이다.
 
 이 한계는 숨기지 않는다. 아래 Revisit Condition으로 등록하고
-[ExecPlan 70](../exec-plans/active/productization-70-customer-store-discovery.md)의 Non-goals에
+[ExecPlan 70](../exec-plans/completed/productization-70-customer-store-discovery.md)의 Non-goals에
 명시한다.
 
 ## Rationale

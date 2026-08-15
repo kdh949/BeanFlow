@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-15
-- **Implementation owner:** [Customer store discovery](../exec-plans/active/productization-70-customer-store-discovery.md)
+- **Implementation owner:** [Customer store discovery](../exec-plans/completed/productization-70-customer-store-discovery.md)
 
 ## Context
 

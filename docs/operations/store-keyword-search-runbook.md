@@ -9,7 +9,7 @@
 [ADR-112](../adr/ADR-112-store-brand-and-administrative-region.md),
 [MD-2026-018](../decisions/minor-decisions.md),
 [MD-2026-028](../decisions/minor-decisions.md),
-[ExecPlan](../exec-plans/active/productization-70-customer-store-discovery.md).
+[ExecPlan](../exec-plans/completed/productization-70-customer-store-discovery.md).
 
 ## 1. 범위와 결과 의미
 

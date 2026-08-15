@@ -9,7 +9,7 @@
   [ADR-020](../adr/ADR-020-nearby-location-privacy.md),
   [BR-47](../product/business-policy-decisions.md),
   [MD-2026-015/016/017](../decisions/minor-decisions.md)
-- 구현 계획: [productization-70](../exec-plans/active/productization-70-customer-store-discovery.md)
+- 구현 계획: [productization-70](../exec-plans/completed/productization-70-customer-store-discovery.md)
 
 > **현재 상태 (2026-08-16): 구현과 M12 실행계획 증빙 완료.** V59 GIN, V57 favorite, V63 recent의
 > 고정-fixture 전후 계획은 실제 수치로 기록했다. 다만 반복 latency, 실제 corpus와 동시 부하는

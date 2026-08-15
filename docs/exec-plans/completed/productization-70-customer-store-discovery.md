@@ -1,11 +1,11 @@
 # 고객이 검색·즐겨찾기·최근 주문으로 매장을 찾는다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-50-customer-order-read-model.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-16`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -980,7 +980,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     성능 개선으로 해석하지 않는다.
   - fixture·raw plan·범위·미측정 항목은
     `docs/quality/customer-store-discovery-query-performance-evidence.md`에 기록했다.
-  - **`Not run`:** 최종 전체 `./gradlew build --stacktrace`, 문서 검증 재실행, frontend typecheck 재실행.
+  - 최종 검증: `./gradlew build --stacktrace`가 40분 22초에 통과했다. frontend의
+    `npm run generate:api && npx tsc --noEmit`도 재통과했고 generated schema diff는 없다.
 
 ## Surprises & Discoveries
 
@@ -1198,7 +1199,19 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Outcomes & Retrospective
 
-아직 없다. 측정하지 않은 성능·동작 결과를 여기에 기록하지 않는다.
+- 고객은 매장명·브랜드명·법정동·판매 중 메뉴명으로 검색하고, 즐겨찾기·최근 주문·좌표가 있을 때
+  3,000m nearby를 같은 공개·pickup 규칙으로 병합해 받을 수 있다.
+- 브랜드·지역 명령은 동기 term 색인을 갱신하고, 운영자 재색인은 권한·reason·idempotency·Audit와
+  partial/RUNNING unknown 계약을 갖는다. 실패를 빈 결과나 fake fallback으로 대체하지 않는다.
+- V59 GIN, V57 favorite, V63 recent의 deterministic EXPLAIN evidence는
+  `docs/quality/customer-store-discovery-query-performance-evidence.md`에 남겼다. V63의 한 번의
+  after capture가 느렸던 사실도 보존했으며, 이 결과로 latency 개선을 주장하지 않는다.
+- 최종 코드 검증은 `./gradlew build --stacktrace` 성공(40분 22초), frontend API generation과
+  TypeScript 검사 성공이다. 반복 p50/p95/p99, 동시 부하, 실제 한국어 corpus와 index write cost는
+  아직 측정하지 않았고 evidence의 Revisit when에 남긴다.
+- active → completed 이동 뒤 `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`도
+  통과했다(target 160 paths/169 operations, runtime 143 paths/152 operations, 47 policies,
+  112 ADRs, 566 Markdown files, 57 ExecPlans).
 
 ## Revision Notes
 
@@ -1233,3 +1246,6 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   함께 쓰도록 확정했다(MD-2026-024). target OpenAPI의 `/stores/search`가 ADR-103 원 Decision
   시절 형태로 남아 있어 2026-08-15 Amendment에 맞게 개정하고 `scripts/verify-docs.sh`의 옛 어휘
   단언도 함께 고쳤다. 컨트롤러는 `pickupAvailable`이 동작하는 Milestone 6으로 미뤘다.
+- 2026-08-16: Milestone 7~12 구현과 최종 전체 build를 확인했다. V57~V64 migration, 고객
+  favorite/recent/recommendation, 운영자 재색인, target/runtime OpenAPI와 실행계획 evidence를
+  실제 결과로 갱신하고 이 ExecPlan을 completed로 이동한다.

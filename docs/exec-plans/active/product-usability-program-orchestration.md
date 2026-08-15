@@ -248,8 +248,8 @@ force-push를 하지 않는다.
 | M4 | [productization-40](../completed/productization-40-merchant-account-and-initial-password.md) | 점주 계정+최초 membership 운영 발급, 최초 비밀번호 강제 변경, 매장 목록 | 완료 |
 | M5 | [productization-50](../completed/productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 완료 |
 | M6 | [productization-60](../completed/productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 완료 |
-| M7 | [productization-70](productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 준비 |
-| M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 대기 |
+| M7 | [productization-70](../completed/productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 완료 |
+| M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 준비 |
 | M9 | [productization-90](productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 대기 |
 | M10 | [productization-100](productization-100-operations-work-queues.md) | 운영자 PKCE, 실패 큐·정산 대사·감사·Support·점주 발급 UI | 대기 |
 
