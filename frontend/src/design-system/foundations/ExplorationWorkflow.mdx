@@ -1,0 +1,17 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Explorations/Workflow" tags={['!manifest']} />
+
+# Exploration workflow
+
+Exploration stories are temporary comparison tools, not canonical component APIs.
+
+1. Fix one shared fixture, viewport, required states, and interaction constraints.
+2. Put two to four alternatives under `Explorations/<feature>` and add `tags: ['!manifest']`.
+3. Reuse the same tokens and canonical components; vary only hierarchy, density, grouping, or layout.
+4. Preview every alternative and record the selected option in `frontend/docs/design-decisions.md`.
+5. Promote only the selected composition to `Patterns/` or `Pages/`.
+6. Delete rejected stories and temporary CSS in the same change.
+
+Do not leave a rejected option in canonical Storybook and do not introduce a second palette or
+typography system for an exploration.

@@ -15,6 +15,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { authToken, useAuthToken } from "../auth/session";
+import { Button, ButtonLink } from "../design-system";
 
 export function CustomerShell() {
   return (
@@ -151,12 +152,12 @@ function TokenEditor({ onClose }: { onClose: () => void }) {
         spellCheck={false}
       />
       <div>
-        <button className="button button-ghost" type="button" onClick={authToken.clear}>
+        <Button variant="ghost" type="button" onClick={authToken.clear}>
           지우기
-        </button>
-        <button className="button button-primary" type="submit">
+        </Button>
+        <Button type="submit">
           연결
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -187,9 +188,9 @@ export function RootRedirect() {
       <h1>어떤 화면을 열까요?</h1>
       <p>역할에 맞는 BeanFlow 작업 공간을 선택하세요.</p>
       <div>
-        <Link className="button button-primary" to="/app">고객 앱</Link>
-        <Link className="button button-secondary" to="/store"><Store size={18} /> 매장 콘솔</Link>
-        <Link className="button button-secondary" to="/ops"><ShieldCheck size={18} /> 운영 콘솔</Link>
+        <ButtonLink to="/app">고객 앱</ButtonLink>
+        <ButtonLink variant="secondary" to="/store"><Store size={18} /> 매장 콘솔</ButtonLink>
+        <ButtonLink variant="secondary" to="/ops"><ShieldCheck size={18} /> 운영 콘솔</ButtonLink>
       </div>
     </div>
   );

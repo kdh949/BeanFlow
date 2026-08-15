@@ -9,15 +9,20 @@
 --surface-brand-soft:var(--espresso-50);
 --surface-overlay:rgba(36,16,11,.44);
 --surface-glass:rgba(255,252,248,.78);
+--surface-header-glass:rgba(255,252,248,.94);
+--surface-console-header:rgba(255,252,248,.9);
+--surface-inverse-hover:rgba(255,255,255,.07);
+--border-on-inverse:rgba(255,255,255,.1);
+--reward-glow:rgba(245,168,90,.34);
 
 /* text */
 --text-strong:var(--espresso-800);
 --text-body:var(--crema-800);
 --text-muted:var(--crema-600);
---text-faint:var(--crema-500);
+--text-faint:var(--crema-700);
 --text-on-primary:#FFF9F2;
 --text-on-accent:var(--espresso-800);
---text-accent:var(--caramel-600);
+--text-accent:var(--caramel-700);
 --text-link:var(--espresso-600);
 --text-link-hover:var(--caramel-600);
 
@@ -26,6 +31,10 @@
 --border-strong:var(--crema-400);
 --border-accent:var(--caramel-300);
 --divider:var(--crema-200);
+--border-info-soft:var(--sky-200);
+--border-success-soft:var(--mint-200);
+--border-warning-soft:var(--amber-200);
+--border-danger-soft:var(--berry-200);
 
 /* actions */
 --primary-bg:var(--espresso-700);--primary-bg-hover:var(--espresso-600);--primary-bg-press:var(--espresso-800);
@@ -36,7 +45,7 @@
 
 /* status */
 --success-bg:var(--mint-100);--success-fg:var(--mint-600);--success-solid:var(--mint-500);
---warning-bg:var(--amber-100);--warning-fg:var(--amber-600);--warning-solid:var(--amber-500);
+--warning-bg:var(--amber-100);--warning-fg:var(--caramel-700);--warning-solid:var(--amber-500);
 --danger-bg:var(--berry-100);--danger-fg:var(--berry-600);--danger-solid:var(--berry-500);
 --info-bg:var(--sky-100);--info-fg:var(--sky-600);--info-solid:var(--sky-500);
 

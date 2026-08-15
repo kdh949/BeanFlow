@@ -111,6 +111,54 @@ jobs:
           ${{ steps.changes.outputs.base_sha }}
           ${{ steps.changes.outputs.head_sha }}
 
+      - name: Set up Node.js 24
+        if: steps.changes.outputs.scope == 'full'
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Storybook browser
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify frontend design adherence
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run check:design
+
+      - name: Verify frontend typecheck baseline
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run check:type-baseline
+
+      - name: Run frontend unit tests
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run test:unit
+
+      - name: Run Storybook interaction and accessibility tests
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run test:storybook:ci
+
+      - name: Build Storybook
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run build-storybook
+
+      - name: Verify Storybook Docs isolation
+        if: steps.changes.outputs.scope == 'full'
+        working-directory: frontend
+        run: npm run test:storybook:docs
+
       - name: Set up Java 21
         if: steps.changes.outputs.scope == 'full'
         uses: actions/setup-java@v5

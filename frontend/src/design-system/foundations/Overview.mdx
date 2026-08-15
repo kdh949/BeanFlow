@@ -1,0 +1,63 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import './foundations.css';
+
+<Meta title="Foundations/Overview" />
+
+# BeanFlow foundations
+
+`tokens/*.css`가 색, 글꼴, 여백, radius, elevation, motion의 canonical source입니다. 제품과
+Storybook은 palette 값이 아니라 semantic token을 소비합니다. 현재 token 정의는 201개이며,
+`_ds_manifest.json`의 187개 snapshot과 type 분류는 migration 참고값일 뿐입니다.
+
+## Color roles
+
+<div className="foundation-grid">
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--espresso" /><strong>Primary action</strong><code>--primary-bg</code><span>espresso-700</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--caramel" /><strong>Accent action</strong><code>--accent-bg</code><span>caramel-500</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--crema" /><strong>App surface</strong><code>--surface-app</code><span>crema-100</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--success" /><strong>Success</strong><code>--success-bg / --success-fg</code><span>확정된 성공에만 사용</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--warning" /><strong>Warning</strong><code>--warning-bg / --warning-fg</code><span>진행·주의 상태, 5.05:1</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--danger" /><strong>Danger</strong><code>--danger-bg / --danger-fg</code><span>실패·거절·파괴 행동</span></div>
+</div>
+
+Text roles are `--text-strong`, `--text-body`, `--text-muted`, `--text-faint`, and
+`--text-accent`. On a sunken `--crema-200` surface, use `--text-body`; muted text does not
+meet AA on that background. The approved softer borders are `--border-info-soft`,
+`--border-success-soft`, `--border-warning-soft`, and `--border-danger-soft`.
+
+## Typography
+
+<div className="foundation-card">
+  <p className="foundation-type-display">12,800원</p>
+  <p className="foundation-type-title">좋은 커피는 기다리지 않아도 돼요.</p>
+  <p className="foundation-type-body">거래 상태는 서버가 확정한 의미를 그대로 설명합니다.</p>
+</div>
+
+- UI and Korean body: `--font-sans`
+- identifiers and pickup numbers: `--font-mono`
+- currency and quantities: tabular numerals through `.bf-num`
+- headings: `--fs-title-*` with `--ls-title`
+- body: `--fs-body*` with `--lh-body`
+
+## Spacing and geometry
+
+<div className="foundation-space-row" aria-label="spacing token scale example"><span /><span /><span /><span /><span /></div>
+
+Use `--sp-2`, `--sp-4`, `--sp-6`, `--sp-8`, and `--sp-10` for the example above. Controls
+use `--r-control`; cards use `--r-card`; pill badges use `--r-pill`. Literal dimensions are
+reserved for intrinsic icons, media, minimum hit targets, charts, and breakpoints.
+
+## Elevation and motion
+
+- cards: `--sh-1`; hover: `--sh-2` or `--sh-3`; dialogs: `--sh-4`
+- customer device frame: `--sh-customer-frame`
+- focus: `--ring-focus`; destructive focus: `--ring-danger`
+- micro interaction: `--dur-fast`; normal transition: `--dur-base`; sheet: `--dur-sheet`
+- reduced motion changes all duration tokens to `0ms`
+
+<div className="foundation-motion" aria-label="hover to preview standard motion"><span /><code>--dur-base / --ease-standard</code></div>
+
+## New token checklist
+
+A new token must record its semantic name, owner layer, affected surfaces, usage here, and a
+story that renders it. Do not add a token solely to disguise a one-off value.

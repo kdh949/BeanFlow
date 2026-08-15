@@ -11,10 +11,10 @@
 --crema-300:#E7DDD1;--crema-400:#CFC2B3;--crema-500:#A5978A;--crema-600:#7B6F64;
 --crema-700:#574E46;--crema-800:#3A342E;--crema-900:#211D1A;
 /* ---- Semantic hues ---- */
---mint-100:#DCF5E9;--mint-500:#12996B;--mint-600:#0C7A55;
---amber-100:#FDF0CC;--amber-500:#C98A05;--amber-600:#A06E04;
---berry-100:#FBE0DF;--berry-500:#D93A3A;--berry-600:#B12A2A;
---sky-100:#DDEBFB;--sky-500:#2F7BD8;--sky-600:#2263B2;
+--mint-100:#DCF5E9;--mint-200:#BEE9D6;--mint-500:#12996B;--mint-600:#0C7A55;
+--amber-100:#FDF0CC;--amber-200:#F3E0A6;--amber-500:#C98A05;--amber-600:#A06E04;
+--berry-100:#FBE0DF;--berry-200:#F3C7C6;--berry-500:#D93A3A;--berry-600:#B12A2A;
+--sky-100:#DDEBFB;--sky-200:#C4DCF7;--sky-500:#2F7BD8;--sky-600:#2263B2;
 /* ---- Brand-literal (do not alter: sampled from the logo file) ---- */
 --brand-bean:#47211A;--brand-bean-hi:#5C3020;--brand-streak:#F5A85A;
 }

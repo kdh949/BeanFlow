@@ -1,0 +1,24 @@
+.foundation-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--sp-5);margin:var(--sp-6) 0}
+.foundation-card{padding:var(--sp-5);border:1px solid var(--border-hair);border-radius:var(--r-card);background:var(--surface-card);box-shadow:var(--sh-1)}
+.foundation-card strong,.foundation-card code{display:block;color:var(--text-strong)}
+.foundation-card span{display:block;margin-top:var(--sp-2);color:var(--text-muted);font-size:var(--fs-caption)}
+.foundation-swatch{height:64px;margin-bottom:var(--sp-4);border:1px solid var(--border-hair);border-radius:var(--r-md)}
+.foundation-swatch--espresso{background:var(--espresso-700)}
+.foundation-swatch--caramel{background:var(--caramel-500)}
+.foundation-swatch--crema{background:var(--crema-100)}
+.foundation-swatch--success{background:var(--success-bg)}
+.foundation-swatch--warning{background:var(--warning-bg)}
+.foundation-swatch--danger{background:var(--danger-bg)}
+.foundation-type-display{font-size:var(--fs-display-2);font-weight:var(--fw-black);letter-spacing:var(--ls-display)}
+.foundation-type-title{font-size:var(--fs-title-1);font-weight:var(--fw-bold);letter-spacing:var(--ls-title)}
+.foundation-type-body{font-size:var(--fs-body);line-height:var(--lh-body)}
+.foundation-space-row{display:flex;align-items:flex-end;gap:var(--sp-4);margin:var(--sp-6) 0}
+.foundation-space-row span{display:block;width:var(--sp-6);background:var(--caramel-500);border-radius:var(--r-xs)}
+.foundation-space-row span:nth-child(1){height:var(--sp-2)}
+.foundation-space-row span:nth-child(2){height:var(--sp-4)}
+.foundation-space-row span:nth-child(3){height:var(--sp-6)}
+.foundation-space-row span:nth-child(4){height:var(--sp-8)}
+.foundation-space-row span:nth-child(5){height:var(--sp-10)}
+.foundation-motion{display:flex;gap:var(--sp-5);align-items:center;margin:var(--sp-6) 0}
+.foundation-motion span{width:44px;height:44px;border-radius:var(--r-pill);background:var(--caramel-500);transition:transform var(--dur-base) var(--ease-standard)}
+.foundation-motion:hover span{transform:translateX(48px)}
