@@ -543,6 +543,10 @@ paths:
       summary: Recommend stores from favorite, recent, and nearby baseline signals
       x-beanflow-contract-status: TARGET
       security: [{ customerSession: [] }]
+      description: |
+        latitude and longitude must be supplied together or both omitted. When the pair is
+        supplied and radiusMeters is omitted, nearby uses a 3000 meter radius. Coordinates are
+        request-only and are not persisted or written to logs.
       parameters:
         - in: query
           name: latitude
@@ -555,7 +559,7 @@ paths:
         - in: query
           name: radiusMeters
           required: false
-          schema: { type: integer, minimum: 1, maximum: 10000 }
+          schema: { type: integer, minimum: 1, maximum: 10000, default: 3000 }
         - $ref: "#/components/parameters/CompactLimit"
       responses:
         "200":

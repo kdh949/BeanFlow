@@ -1837,6 +1837,10 @@
 - **Recommendation Merge:** 홈 추천은 즐겨찾기, 최근 주문 매장, 좌표가 있을 때 nearby 순으로
   중복을 제거한다. 좌표가 없으면 즐겨찾기와 최근 주문 매장까지만 반환한다. 앞 단계에 포함된 매장을
   다음 단계가 다시 추가하지 않으며 첫 번째 근거를 응답의 recommendation reason으로 사용한다.
+- **Recommendation Coordinates:** 추천 요청의 `latitude`와 `longitude`는 함께 제공하거나 둘 다
+  생략한다. 좌표 쌍이 있고 `radiusMeters`를 생략하면 nearby 단계는 기본 반경 `3,000m`를 사용한다.
+  반경은 좌표 쌍과 함께만 허용하며 `1..10,000m` 밖의 값, 좌표 하나만 제공한 요청, 반경만 제공한
+  요청은 `400`이다. 좌표가 모두 없으면 nearby 단계를 실행하지 않는다.
 - **Boundary:** Ordering은 customer scope로 eligible store ID와 `lastOrderedAt`만 Projection하여
   Discovery에 제공하고, Discovery가 현재 노출 가능한 매장 정보를 hydrate한다. 존재하지 않거나 현재
   노출 불가능한 매장은 결과에서 제외하되 주문 스냅샷이나 상태를 수정하지 않는다.
@@ -1850,7 +1854,8 @@
   - 상태별 포함·제외와 상태 변경 후 다음 조회 반영
   - 같은 매장의 여러 주문이 최신 `createdAt` 한 건으로 합쳐지는지 검증
   - 동률 `lastOrderedAt`의 `storeId` tie-breaker
-  - 즐겨찾기·최근·nearby 중복 제거와 좌표 없는 순서
+  - 즐겨찾기·최근·nearby 중복 제거, 좌표 없는 순서와 좌표 쌍의 3,000m 기본 반경
+  - 좌표 하나만 제공하거나 반경만 제공한 요청의 400
   - Ordering 또는 Discovery 조회 장애의 503과 빈 결과 fallback 부재
 - **ADR Required:** Yes — [ADR-103](../adr/ADR-103-store-search-strategy.md)
 - **Revisit Conditions:** 추천 제외/숨김 기능, 취소 사유별 재노출, 고객 행동 데이터 기반 ranking 또는
