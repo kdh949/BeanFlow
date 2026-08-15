@@ -2,7 +2,7 @@ package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreView
 import io.github.kdh949.beanflow.discovery.api.RecentStoreOperations
-import io.github.kdh949.beanflow.ordering.api.CustomerRecentStoreQuery
+import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant

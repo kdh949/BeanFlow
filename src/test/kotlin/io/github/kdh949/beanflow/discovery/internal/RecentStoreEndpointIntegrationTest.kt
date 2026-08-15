@@ -2,7 +2,7 @@ package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
-import io.github.kdh949.beanflow.ordering.api.CustomerRecentStoreQuery
+import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
 import org.assertj.core.api.Assertions.assertThat

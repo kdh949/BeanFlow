@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
-import io.github.kdh949.beanflow.ordering.api.CustomerRecentStoreProjection
-import io.github.kdh949.beanflow.ordering.api.CustomerRecentStoreQuery
+import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreProjection
+import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.dao.DataAccessException
