@@ -32,6 +32,10 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * The operator brand write path against PostgreSQL 17.
@@ -188,6 +192,50 @@ internal class StoreBrandServiceIntegrationTest {
         assertThat(terms(storeId)).containsExactly("BRAND_NAME" to "스타벅스")
         // 원장도 함께 rollback돼야 같은 키로 다시 시도할 수 있다.
         assertThat(commandCount()).isEqualTo(2)
+    }
+
+    @Test
+    fun `a rename racing a clear of one of its stores leaves no duplicate or orphan brand term`() {
+        val kept = insertStore("강남역점")
+        val cleared = insertStore("삼청점")
+        val brandId = create("스타벅스").brandId
+        transactions.execute { brands.assignStoreBrand(assign(kept, brandId)) }
+        transactions.execute { brands.assignStoreBrand(assign(cleared, brandId)) }
+
+        val barrier = CyclicBarrier(2)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            pool
+                .invokeAll(
+                    listOf(
+                        Callable {
+                            barrier.await(10, TimeUnit.SECONDS)
+                            runCatching { transactions.execute { brands.update(rename(brandId, "스타벅스코리아")) } }
+                        },
+                        Callable {
+                            barrier.await(10, TimeUnit.SECONDS)
+                            runCatching { transactions.execute { brands.clearStoreBrand(clear(cleared)) } }
+                        },
+                    ),
+                ).forEach { it.get(30, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+
+        // 어느 쪽이 먼저 commit되는지는 시점 문제다. 확인할 것은 색인이 브랜드 열과 정확히
+        // 일치한다는 것이다. 브랜드를 가진 매장은 현재 이름의 term을 정확히 하나 갖고, 브랜드를
+        // 잃은 매장에는 낡은 term이 남지 않는다.
+        val currentName = brandQueries.find(brandId)!!.normalizedName
+        listOf(kept, cleared).forEach { storeId ->
+            val brandTerms = terms(storeId).filter { it.first == "BRAND_NAME" }
+            if (storeBrandId(storeId) == null) {
+                assertThat(brandTerms).describedAs("cleared store keeps no brand term").isEmpty()
+            } else {
+                assertThat(brandTerms)
+                    .describedAs("assigned store keeps exactly one current term")
+                    .containsExactly("BRAND_NAME" to currentName)
+            }
+        }
     }
 
     @Test
