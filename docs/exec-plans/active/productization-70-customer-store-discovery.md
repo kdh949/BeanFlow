@@ -718,7 +718,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - `docs/api/api-conventions.md` — 검색 endpoint 규약
 - `docs/api/error-catalog.md` — `BRAND_NAME_ALREADY_IN_USE`, `BRAND_FANOUT_LIMIT_EXCEEDED`,
   `BRAND_STATE_CONFLICT` — 완료. 계획 원안의 `BRAND_NAME_CONFLICT`는 구현에서 의미가 더 분명한
-  `BRAND_NAME_ALREADY_IN_USE`로 확정했다
+  `BRAND_NAME_ALREADY_IN_USE`로 확정했다. 재색인 command의 replay·partial·RUNNING unknown/503
+  규약도 완료
 - `docs/architecture/ubiquitous-language.md` — Brand, Region, 검색 term, 관련도
 - `docs/architecture/capability-map.md`, `docs/architecture/context-map.md`
 - `docs/operations/store-keyword-search-runbook.md` — 신규. 재색인 절차, 커버리지 점검 쿼리,
@@ -726,7 +727,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - `docs/testing/test-strategy.md` — 검색 테스트 범주
 - `README.md` — 현재 상태 목록
 - `scripts/verify-docs.sh` — 새 필수 문서 등록 완료
-- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint 완료
+- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint와
+  재색인 endpoint 완료
 - 신규 검색 실행계획 evidence 문서
 
 ## Progress
@@ -949,7 +951,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가 통과했다.
   - **`Not run`:** M11 target/runtime OpenAPI·Error Catalog·frontend type generation, 전체
     `./gradlew build`, M12의 문서화된 실행계획 evidence.
-- 2026-08-16: 미착수 — Milestone 11~12.
+- 2026-08-16: **Milestone 11 완료.** target/runtime OpenAPI에
+  `POST /operations/search-index/rebuild`와 request/result schema, partial 200, RUNNING 409의
+  optional `Retry-After`, dependency-unknown 503 규약을 추가했다. Error Catalog는 자동 재시도가
+  partial 또는 unknown을 성공으로 바꾸지 않도록 runbook 절차를 연결한다.
+  - `RuntimeOpenApiParityTest` **1건**, `AuthenticationPathRegistryTest` **3건**,
+    `AuthenticationSecurityIntegrationTest` **8건**, `OperatorSearchIndexRebuildControllerTest`
+    **3건**이 통과했다. 처음 parity test는 새 controller의 service mock 부재로 실패했으며,
+    mock과 runtime path를 함께 추가한 뒤 통과했다.
+  - `./gradlew spotlessCheck`와
+    `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가 통과했다(runtime **143 paths / 152
+    operations**, target **160 paths / 169 operations**).
+  - `frontend`의 `npm run generate:api && npx tsc --noEmit`가 통과했다. 생성 타입은 M7~M10의
+    runtime 계약도 함께 반영했고, 이전에 누락된 customer/merchant CSRF header 세 요청은 actor별
+    token helper로 보완했다. UI·라우트·스타일은 변경하지 않았다. `client.test.ts` **6건**도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, M12의 문서화된 실행계획 evidence.
+- 2026-08-16: 미착수 — Milestone 12.
 
 ## Surprises & Discoveries
 
