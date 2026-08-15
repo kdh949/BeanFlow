@@ -79,6 +79,9 @@ internal class AuthenticationSecurityIntegrationTest(
             .perform(get("/api/v1/operations/me"))
             .andExpect(status().isUnauthorized)
         mockMvc
+            .perform(post("/api/v1/operations/search-index/rebuild"))
+            .andExpect(status().isUnauthorized)
+        mockMvc
             .perform(get("/api/v1/stores/${UUID.randomUUID()}/settlements"))
             .andExpect(status().isUnauthorized)
         mockMvc

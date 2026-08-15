@@ -74,6 +74,13 @@
 
 HTTP와 retry 정책의 초기 계약은 `openapi/beanflow-v1.yaml`을 따른다.
 
+검색 색인 재생성은 actor·operation·`Idempotency-Key`·정규화 reason을 동일 command로 본다.
+동일 완료 command는 저장된 200 body를 재생하지만, `complete=false`는 부분 결과이지 전체 성공이 아니다.
+`IDEMPOTENCY_REQUEST_IN_PROGRESS`의 `Retry-After`는 완료 예상 시간이 아니며, source 또는 결과 저장이
+확정되지 않아 `DEPENDENCY_UNAVAILABLE` 503을 받으면 매장별 transaction이 일부 commit됐는지 추정하지
+않는다. 같은 key를 자동 반복하지 말고 [Store Keyword Search Runbook](../operations/store-keyword-search-runbook.md)의
+ledger·coverage 확인 절차를 따른다.
+
 주문 생성과 빠른 재주문의 `MANUAL_REVIEW`는 아직 처리 중이라는 뜻이 아니다. 해당
 Idempotency-Key에는 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`를 반환하고 `Retry-After`를 넣지 않는다.
 클라이언트는 같은 key를 polling하지 않으며, 운영자는

@@ -632,6 +632,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands"
   /operations/brands/{brandId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands~1{brandId}"
+  /operations/search-index/rebuild:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1search-index~1rebuild"
   /operations/stores/{storeId}/brand:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1brand"
   /regions:

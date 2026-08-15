@@ -15,6 +15,7 @@ class AuthenticationPathRegistryTest {
                 "/api/v1/auth/operations/config" to AuthenticationChain.PUBLIC,
                 "/api/v1/operations/me" to AuthenticationChain.OPERATIONS,
                 "/api/v1/operations/point-accounts/00000000-0000-0000-0000-000000000001" to AuthenticationChain.OPERATIONS,
+                "/api/v1/operations/search-index/rebuild" to AuthenticationChain.OPERATIONS,
                 "/api/v1/support/cases" to AuthenticationChain.OPERATIONS,
                 "/api/v1/auth/merchant/csrf" to AuthenticationChain.MERCHANT,
                 "/api/v1/regions" to AuthenticationChain.MERCHANT,

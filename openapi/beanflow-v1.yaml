@@ -1890,6 +1890,48 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/search-index/rebuild:
+    post:
+      tags: [Operations, Discovery]
+      operationId: rebuildStoreSearchIndex
+      summary: Rebuild the store keyword search index from current source data
+      description: |
+        Requires PLATFORM_OPERATOR and an active STORE_BRAND_MANAGE grant. Idempotency is
+        scoped to the actor, this operation, Idempotency-Key, and normalized reason. The same
+        request replays the stored completed result for 90 days without another rebuild or audit;
+        a different reason with the same key returns IDEMPOTENCY_KEY_REUSED. A RUNNING command
+        returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After, which is a retry pace rather
+        than a completion estimate.
+
+        Stores are rebuilt in separate transactions. A 200 response with complete=false is a
+        persisted partial result, not a complete refresh. If source access or result persistence
+        cannot be confirmed, the endpoint returns 503 and callers must not infer that no store
+        transaction committed; follow the Store Keyword Search Runbook before retrying.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchIndexRebuildRequest"
+      responses:
+        "200":
+          description: Stored complete or partial rebuild result, including exact idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchIndexRebuildResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/SearchIndexRebuildConflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/stores/{storeId}/brand:
     put:
       tags: [Operations]
@@ -5275,6 +5317,22 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    SearchIndexRebuildConflict:
+      description: |
+        The Idempotency-Key was already bound to another normalized reason, or the same rebuild
+        command is still RUNNING. IDEMPOTENCY_REQUEST_IN_PROGRESS includes Retry-After;
+        IDEMPOTENCY_KEY_REUSED does not.
+      headers:
+        Retry-After:
+          required: false
+          description: Present only for IDEMPOTENCY_REQUEST_IN_PROGRESS; it is a retry pace, not a completion estimate.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     OrderCreationConflict:
       description: |
         Order resource conflict, idempotency payload reuse, or an identical
@@ -5500,6 +5558,37 @@ components:
       properties:
         reason:
           $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    SearchIndexRebuildRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          allOf:
+            - $ref: "#/components/schemas/OperationReason"
+          description: Trimmed before idempotency hashing; control characters and all-whitespace values are rejected.
+      additionalProperties: false
+    SearchIndexRebuildResponse:
+      type: object
+      required: [indexedStoreCount, skippedStoreCount, failedStoreIds, complete]
+      properties:
+        indexedStoreCount:
+          type: integer
+          minimum: 0
+          description: Stores whose STORE_NAME and available MENU_NAME terms were replaced.
+        skippedStoreCount:
+          type: integer
+          minimum: 0
+          description: Stores deleted before their per-store rebuild transaction started.
+        failedStoreIds:
+          type: array
+          uniqueItems: true
+          description: Stores whose rebuild transaction failed; a non-empty list makes complete false.
+          items:
+            $ref: "#/components/schemas/Identifier"
+        complete:
+          type: boolean
+          description: True only when failedStoreIds is empty. False is a persisted partial result, not a successful full refresh.
       additionalProperties: false
     Region:
       type: object

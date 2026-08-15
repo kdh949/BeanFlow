@@ -21,6 +21,7 @@ import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundR
 import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OperatorBrandService
+import io.github.kdh949.beanflow.operations.internal.OperatorSearchIndexRebuildService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -123,6 +124,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var operatorBrandService: OperatorBrandService
+
+    @MockitoBean
+    private lateinit var operatorSearchIndexRebuildService: OperatorSearchIndexRebuildService
 
     @MockitoBean
     private lateinit var regionCatalogService: RegionCatalogService
