@@ -64,6 +64,7 @@
 - [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
 - [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
 - [Nearby Store Query Plan Evidence](quality/nearby-store-discovery-performance-evidence.md)
+- [Customer Store Discovery Query Plan Evidence](quality/customer-store-discovery-query-performance-evidence.md)
 - [Code Review Guide](review/code-review.md)
 - [Support Repository Audit](quality/support-repository-audit-2026-08-10.md)
 - [Support Planned Test Strategy](testing/support-test-strategy.md)

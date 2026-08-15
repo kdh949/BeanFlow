@@ -729,7 +729,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - `scripts/verify-docs.sh` — 새 필수 문서 등록 완료
 - `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint와
   재색인 endpoint 완료
-- 신규 검색 실행계획 evidence 문서
+- [고객 매장 탐색 실행계획 evidence](../../quality/customer-store-discovery-query-performance-evidence.md) — V59 GIN, V57 favorite, V63 recent의 고정 fixture 전후 계획 기록 완료
 
 ## Progress
 
@@ -966,7 +966,21 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     runtime 계약도 함께 반영했고, 이전에 누락된 customer/merchant CSRF header 세 요청은 actor별
     token helper로 보완했다. UI·라우트·스타일은 변경하지 않았다. `client.test.ts` **6건**도 통과했다.
   - **`Not run`:** 전체 `./gradlew build`, M12의 문서화된 실행계획 evidence.
-- 2026-08-16: 미착수 — Milestone 12.
+- 2026-08-16: **Milestone 12 실행계획 evidence 완료.** PostgreSQL 17.5 Testcontainers에서
+  `StoreSearchQueryPlanTest`와 `CustomerRecentStoreQueryMigrationTest`를 함께 실행했다.
+  - V59 term query는 100,000행(오타 경로 200행)에서 index 전 Seq Scan(99,800행 제거, shared
+    hit=1143, execution 256.375 ms), 후 `BitmapOr`의 두 `ix_search_term_trgm` Bitmap Index Scan
+    (shared hit=113, execution 5.731 ms)이었다. planner setting을 강제하지 않았다.
+  - V57 favorite는 20,000행/대상 customer 500행에서 Seq Scan(19,500행 제거, shared hit=173,
+    execution 2.703 ms) 후 `ix_discovery_favorite_customer_created` Index Only Scan(shared
+    hit=1 read=3, execution 1.127 ms)이었다.
+  - V63 recent는 20,000 order/eligible 500행에서 Seq Scan(19,500행 제거, shared hit=234,
+    execution 4.284 ms) 후 `ix_ordering_order_customer_recent_store` Bitmap Index Scan
+    (shared hit=12 read=8, execution 5.025 ms)이었다. single capture에서 더 느린 수치를
+    성능 개선으로 해석하지 않는다.
+  - fixture·raw plan·범위·미측정 항목은
+    `docs/quality/customer-store-discovery-query-performance-evidence.md`에 기록했다.
+  - **`Not run`:** 최종 전체 `./gradlew build --stacktrace`, 문서 검증 재실행, frontend typecheck 재실행.
 
 ## Surprises & Discoveries
 
@@ -1120,6 +1134,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   담지만 그 정수를 만드는 `floor(관련도 * 1000000)`이 부동소수 경계에 걸리면 page마다 rank가
   1씩 흔들려 동점 매장이 누락되거나 중복될 수 있다. `similarity(...)::numeric`으로 캐스트해 전
   계산을 exact decimal로 유지했다.
+
+- **(2026-08-16) 20,000행의 좁은 term fixture에서는 GIN을 만든 뒤에도 planner가 Seq Scan을
+  선택했다.** production core predicate와 threshold는 유지했고 `enable_seqscan` 같은 planner
+  forcing은 하지 않았다. index가 자연스럽게 선택되는 경계를 검증하려고 term fixture만
+  결정적 100,000행으로 키웠고, V59는 BitmapOr/Bitmap Index Scan을 택했다. 이것은 20,000행에서
+  GIN이 고장났다는 주장이 아니라, plan 증빙이 데이터 규모·분포를 반드시 함께 기록해야 한다는
+  관측이다.
 
 ## Decision Log
 

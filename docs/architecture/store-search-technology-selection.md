@@ -11,9 +11,9 @@
   [MD-2026-015/016/017](../decisions/minor-decisions.md)
 - 구현 계획: [productization-70](../exec-plans/active/productization-70-customer-store-discovery.md)
 
-> **현재 상태 (2026-08-15): 결정 완료, 구현 전.** 아래의 성능·품질 서술은 모두 설계 근거이며
-> 측정 결과가 아니다. 측정값은 구현 후 ExecPlan의 `Outcomes & Retrospective`와 실행계획 evidence
-> 문서에 기록하고, 그때 이 문서의 6장을 실제 수치로 갱신한다.
+> **현재 상태 (2026-08-16): 구현과 M12 실행계획 증빙 완료.** V59 GIN, V57 favorite, V63 recent의
+> 고정-fixture 전후 계획은 실제 수치로 기록했다. 다만 반복 latency, 실제 corpus와 동시 부하는
+> 측정하지 않았으므로 아래의 미측정 항목을 성능 결과로 해석하지 않는다.
 
 ## 1. 무엇을 만드는가
 
@@ -384,7 +384,7 @@ cursor endpoint 4개(`stores-search-relevance`, `stores-search-distance`, `opera
 | 색인 쓰기 원자성 경계 | 커맨드 transaction 밖 호출 | 새 transaction을 열지 않고 거부. `StoreSearchIndexRebuildIntegrationTest` 통과 |
 | 커버리지 gauge | 재색인 전후와 미색인 매장 추가 | `0` → `1.0` → `2/3`으로 관측됨 |
 | 재색인 부분 실패 | profile 없는 매장을 섞어 실행 | 실패 매장 ID 보고, 나머지 매장 계속 처리 |
-| GIN trigram 인덱스 사용 | 동일 fixture에서 `EXPLAIN (ANALYZE, BUFFERS)` 인덱스 전후 비교 | Not run |
+| GIN trigram 인덱스 사용 | 동일 fixture에서 `EXPLAIN (ANALYZE, BUFFERS)` 인덱스 전후 비교 | [Customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md): 100,000 term에서 Seq Scan → V59 BitmapOr/Bitmap Index Scan. 단일 plan capture라 latency 개선 주장은 하지 않음 |
 | 검색 지연 p50/p95/p99 | nearby 기준선과 같은 조건 | Not run |
 | cursor page 순회 무결성 | 관련도 동점 다수 상황 포함 전수 순회에서 누락·중복 0 | Not run |
 | substring 경로 회귀 | 개정 전 계약 테스트가 그대로 통과하는지 | Not run |

@@ -40,6 +40,7 @@ required=(
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
   "docs/quality/nearby-store-discovery-performance-evidence.md"
+  "docs/quality/customer-store-discovery-query-performance-evidence.md"
   "docs/operations/nearby-store-discovery-runbook.md"
   "docs/operations/store-keyword-search-runbook.md"
   "docs/operations/local-demo-runbook.md"

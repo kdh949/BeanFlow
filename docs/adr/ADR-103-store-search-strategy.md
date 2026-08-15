@@ -339,8 +339,9 @@ PostgreSQL 17 + `pg_trgm` 위에서 A2~A7을 측정했다.
 - **개인정보.** 검색이 AuditRecord와 도메인 이벤트를 만들지 않는 것을 실제 행 수로 확인했고,
   어떤 metric 태그에도 검색어가 남지 않는 것을 태그 값 전수 검사로 확인했다.
 
-`Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12), 픽업 가용성 필터와 그
-scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone은 컨트롤러를 붙이지 않았다.
+후속 증빙: M6의 픽업 가용성·scan-boundary 계약은 아래 절에, M12의 V59 GIN·V57 favorite·V63
+recent 전후 실행계획은 [Customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md)에
+기록했다.
 
 ### Milestone 6 implementation evidence (2026-08-15) — 픽업 가용성 batch와 scan boundary
 
@@ -374,7 +375,9 @@ scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone�
 - **cursor.** `pickupAvailable`이 두 endpoint의 filter hash에 들어가, 필터를 켜기 전에 발급된
   cursor는 400이다. nearby의 canonical form 개정은 ADR-070 2026-08-15 nearby amendment다.
 
-`Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12).
+M12의 V59 GIN·V57 favorite·V63 recent 전후 실행계획은
+[Customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md)에
+기록했다.
 
 ## Metrics
 
