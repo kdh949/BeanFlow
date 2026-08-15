@@ -699,6 +699,17 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     실행했다. 두 migration class의 Testcontainers 실행은 `26s`였으며 schema migrate는 class당 한 번,
     fixture cleanup은 테스트마다 수행한다. 이 시간은 warm Gradle의 제한된 class 실행 결과로 전체 CI와
     직접 비교하지 않는다.
+- 2026-08-16: **CI timeout 보강.** GitHub Actions run `31893493864`의 build job은 전체 `:test`를
+  단일 JVM으로 순차 실행하다 20분 제한에 취소됐다. 이전 직렬 결과 XML은 첫 suite부터 마지막 suite까지
+  약 25분 14초였고 실패는 없었다. `Test.maxParallelForks`를 `2`로 제한해 hosted runner의 Docker·메모리
+  여유를 보존하면서 두 worker를 사용한다.
+  - 첫 병렬 전체 실행은 `StoreSearchIndexCoverageMetrics`의 기본 60초 scheduler와 fixture `TRUNCATE`의
+    deadlock을 드러냈다. test 공통 profile에 누락된 `search-index-coverage.initial-delay-ms=3600000`을
+    추가했다. metric 자체를 검증하는 테스트는 scheduler가 아니라 `refresh()`를 직접 호출하므로 관측
+    계약은 유지한다.
+  - 수정 뒤 `./gradlew cleanTest test --console=plain`은 **243 클래스, 1,145건, 실패 0, error 0, skip 1**로
+    통과했다. XML suite timestamp 범위는 `11분 19초`이며, 실행 전체는 약 12분이었다. CI 재실행의 remote
+    green 확인은 이 변경을 push한 뒤 별도로 기록한다.
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
@@ -755,6 +766,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   `urllib`의 CA 검증이 실패한다(`CERTIFICATE_VERIFY_FAILED`). `--source-zip`으로 미리 받아 둔
   원본을 넘겨 생성했고 checksum 검증 경로는 그대로 통과했다. **다운로드 경로 자체는 검증되지
   않았다(`Not run`).**
+- **(2026-08-16) 새 scheduler는 test 공통 profile에도 즉시 등록해야 한다.** 기존 test profile은
+  fixture `TRUNCATE`와 경쟁하지 않도록 모든 background worker의 initial delay를 1시간으로 둔다.
+  검색 색인 커버리지 worker만 이 목록에서 빠져 기본 60초 후 source/index reconciliation read를 실행했고,
+  장시간 병렬 전체 테스트에서 `TRUNCATE`와 PostgreSQL deadlock을 만들었다. 전역 profile에 같은 initial
+  delay를 추가하고, scheduler 자체의 동작은 해당 integration test가 `refresh()`를 직접 호출해 검증한다.
 
 ## Decision Log
 
@@ -787,6 +803,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-16 | 재색인 대상은 UUID keyset이 아니라 시작 ID snapshot. 완료는 snapshot 범위에 한정 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 전체 test는 2개 worker로 제한하고, 새 background worker는 test 공통 profile에서 지연 | 이 문서 Progress, `src/test/resources/application.yaml` |
 
 ## Outcomes & Retrospective
 
@@ -811,3 +828,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   Non-goals에 추가했다.
 - 2026-08-16: 리뷰 보강으로 V57/V59 참조 무결성, 재색인 target snapshot, freshness 관측과
   migration-test fixture lifecycle을 갱신했다. 공개 HTTP API는 바뀌지 않는다.
+- 2026-08-16: CI 20분 timeout을 위해 test worker를 2개로 제한하고, 검색 색인 커버리지 scheduler를
+  test 공통 profile에서 지연했다. 제품 runtime scheduler 주기와 공개 API는 바뀌지 않는다.
