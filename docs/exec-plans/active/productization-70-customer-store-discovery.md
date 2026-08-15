@@ -710,6 +710,10 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - 수정 뒤 `./gradlew cleanTest test --console=plain`은 **243 클래스, 1,145건, 실패 0, error 0, skip 1**로
     통과했다. XML suite timestamp 범위는 `11분 19초`이며, 실행 전체는 약 12분이었다. CI 재실행의 remote
     green 확인은 이 변경을 push한 뒤 별도로 기록한다.
+  - 후속 remote run `31897430653`은 두 worker를 적용했지만 `:test`가 `14분 32초` 동안 실행된 뒤 job
+    20분 한도에서 취소됐다(이전 run의 `:test` 취소 전 `15분 45초` 대비 1분 13초 단축). frontend
+    preflight가 약 2분 49초, Gradle compile/test가 약 17분 24초여서 같은 job에는 함께 들어갈 수 없다.
+    검증을 생략하거나 timeout을 올리지 않고 preflight와 backend `build`를 별도 20분 job으로 분리한다.
 - 2026-08-15: 미착수 — Milestone 3~12.
 
 ## Surprises & Discoveries
@@ -804,6 +808,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 전체 test는 2개 worker로 제한하고, 새 background worker는 test 공통 profile에서 지연 | 이 문서 Progress, `src/test/resources/application.yaml` |
+| 2026-08-16 | frontend/doc preflight와 backend 전체 build를 별도 CI job으로 실행 | 이 문서 Progress, `.github/workflows/ci.yml` |
 
 ## Outcomes & Retrospective
 
@@ -830,3 +835,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   migration-test fixture lifecycle을 갱신했다. 공개 HTTP API는 바뀌지 않는다.
 - 2026-08-16: CI 20분 timeout을 위해 test worker를 2개로 제한하고, 검색 색인 커버리지 scheduler를
   test 공통 profile에서 지연했다. 제품 runtime scheduler 주기와 공개 API는 바뀌지 않는다.
+- 2026-08-16: frontend/doc preflight와 backend 전체 build를 별도 20분 CI job으로 분리했다. 검증
+  대상과 각 명령은 유지하며, frontend 준비 시간이 backend test의 job 한도를 잠식하지 않게 한다.

@@ -15,10 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: build
+  preflight:
+    name: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    outputs:
+      scope: ${{ steps.changes.outputs.scope }}
 
     steps:
       - name: Check out repository
@@ -159,25 +161,47 @@ jobs:
         working-directory: frontend
         run: npm run test:storybook:docs
 
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-evidence-${{ github.run_id }}
+          path: |
+            build/reports/
+            build/test-results/
+            .ci-artifacts/
+            ${{ runner.temp }}/docker-info.txt
+            ${{ runner.temp }}/docker-containers.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: build
+    needs: preflight
+    if: needs.preflight.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
       - name: Set up Java 21
-        if: steps.changes.outputs.scope == 'full'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
-        if: steps.changes.outputs.scope == 'full'
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
-        if: steps.changes.outputs.scope == 'full'
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-build.log
           ./gradlew build --stacktrace --console=plain
 
       - name: Capture Docker diagnostics
-        if: failure() && steps.changes.outputs.scope == 'full'
+        if: failure()
         run: |
           docker info > "${RUNNER_TEMP}/docker-info.txt" 2>&1 || true
           docker ps -a > "${RUNNER_TEMP}/docker-containers.txt" 2>&1 || true
