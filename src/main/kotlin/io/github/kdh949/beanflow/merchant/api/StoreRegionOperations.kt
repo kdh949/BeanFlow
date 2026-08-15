@@ -19,9 +19,16 @@ data class RegionSnapshot(
     val fullName: String,
 )
 
+/**
+ * The result of an assignment, including the region the store had before it.
+ *
+ * [previousRegionCode] is what lets the caller record a truthful audit "before" without reading the
+ * profile a second time, and it is null only for a store that had no region yet.
+ */
 data class StoreRegionAssignment(
     val storeId: UUID,
     val region: RegionSnapshot,
+    val previousRegionCode: String?,
 )
 
 /**

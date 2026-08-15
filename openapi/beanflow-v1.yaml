@@ -1930,6 +1930,80 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /regions:
+    get:
+      tags: [Merchant]
+      operationId: listRegions
+      summary: List 법정동 regions a store owner can assign
+      security: [{ merchantSession: [] }]
+      description: |
+        폐지되지 않은 법정동 폐쇄 어휘를 (fullName ASC, code ASC)로 페이징한다. query의 각 낱말은
+        모두 fullName에 들어 있어야 하며 와일드카드로 해석되지 않는다. 어휘는 공개 참조 데이터라
+        매장·좌표·검색어는 이 응답으로 드러나지 않는다.
+      parameters:
+        - in: query
+          name: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Signed-cursor region page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/region:
+    put:
+      tags: [Merchant]
+      operationId: assignStoreRegion
+      summary: Assign the store's 법정동 region
+      security: [{ merchantSession: [] }]
+      description: |
+        해당 매장의 STORE_OWNER만 수행한다. STORE_STAFF와 타 매장 소유자는 403이다.
+        지정은 그 매장의 REGION_* term을 같은 transaction에서 교체하고 AuditRecord를 남긴다.
+        리가 있는 지역은 term이 4행, 없으면 3행이다. 지역을 비우는 명령은 없다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignStoreRegionRequest"
+      responses:
+        "200":
+          description: Store region after assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreRegion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
     get:
       tags: [Loyalty]
@@ -5395,6 +5469,81 @@ components:
       type: object
       required: [reason]
       properties:
+        reason:
+          $ref: "#/components/schemas/OperationReason"
+      additionalProperties: false
+    Region:
+      type: object
+      required: [code, sido, sigungu, eupmyeondong, ri, fullName]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{10}$"
+          description: 법정동 코드. 폐쇄 어휘의 기본 키다.
+        sido:
+          type: string
+          minLength: 1
+          maxLength: 40
+        sigungu:
+          type: string
+          maxLength: 40
+          description: |
+            계층이 없는 지역은 빈 문자열이다. 세종특별자치시에는 시군구 계층이 아예 없으므로
+            없는 계층과 값이 빠진 것을 구분하기 위해 null을 쓰지 않는다.
+        eupmyeondong:
+          type: string
+          maxLength: 40
+          description: |
+            리 행에서도 상위 읍·면 이름을 그대로 유지한다. 리에 있는 매장이 읍·면 이름과 리
+            이름 양쪽으로 검색되게 하기 위함이다.
+        ri:
+          type: string
+          maxLength: 40
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 120
+      additionalProperties: false
+    RegionPage:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Region"
+        page:
+          $ref: "#/components/schemas/RegionPageInfo"
+      additionalProperties: false
+    RegionPageInfo:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: [string, "null"]
+          maxLength: 2048
+      additionalProperties: false
+    StoreRegion:
+      type: object
+      required: [storeId, regionCode, regionFullName]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        regionCode:
+          type: string
+          pattern: "^[0-9]{10}$"
+        regionFullName:
+          type: string
+          minLength: 1
+          maxLength: 120
+      additionalProperties: false
+    AssignStoreRegionRequest:
+      type: object
+      required: [regionCode, reason]
+      properties:
+        regionCode:
+          type: string
+          pattern: "^[0-9]{10}$"
         reason:
           $ref: "#/components/schemas/OperationReason"
       additionalProperties: false

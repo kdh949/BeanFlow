@@ -57,12 +57,13 @@ internal class StoreRegionService(
             return objectMapper.readValue(existing.responseJson, StoreRegionAssignment::class.java)
         }
 
-        repository.findStoreRegionLocked(command.storeId)
-            ?: throw DomainFailure(
-                FailureCode.RESOURCE_NOT_FOUND,
-                "Store discovery profile not found",
-                targetReference = command.storeId.toString(),
-            )
+        val store =
+            repository.findStoreRegionLocked(command.storeId)
+                ?: throw DomainFailure(
+                    FailureCode.RESOURCE_NOT_FOUND,
+                    "Store discovery profile not found",
+                    targetReference = command.storeId.toString(),
+                )
         val region =
             repository.find(regionCode)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Region code not found", targetReference = regionCode)
@@ -76,7 +77,7 @@ internal class StoreRegionService(
             ),
         )
 
-        val result = StoreRegionAssignment(command.storeId, region)
+        val result = StoreRegionAssignment(command.storeId, region, store.regionCode)
         repository.insertCommand(
             id = identifiers.next(),
             actorId = command.actorId,
