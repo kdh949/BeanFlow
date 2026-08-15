@@ -206,4 +206,21 @@ internal class StoreSearchIndexRepository(
             Long::class.java,
             kind.name,
         ) ?: throw IllegalStateException("Search term coverage query returned no row")
+
+    fun findStoreAndMenuFreshnessFacts(): List<StoreSearchTermFreshnessFact> =
+        jdbcTemplate.query(
+            """
+            SELECT store_id, term_kind, source_id, term_normalized, display_text
+              FROM discovery_store_search_term
+             WHERE term_kind IN ('STORE_NAME', 'MENU_NAME')
+            """.trimIndent(),
+        ) { resultSet, _ ->
+            StoreSearchTermFreshnessFact(
+                resultSet.getObject("store_id", UUID::class.java),
+                StoreSearchTermKind.valueOf(resultSet.getString("term_kind")),
+                resultSet.getObject("source_id", UUID::class.java),
+                resultSet.getString("term_normalized"),
+                resultSet.getString("display_text"),
+            )
+        }
 }

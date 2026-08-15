@@ -4,8 +4,10 @@ import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
@@ -17,6 +19,7 @@ import java.time.Instant
 import java.util.UUID
 
 @Testcontainers(disabledWithoutDocker = true)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 internal class StoreSearchVocabularyMigrationTest {
     companion object {
         @Container
@@ -32,10 +35,18 @@ internal class StoreSearchVocabularyMigrationTest {
 
     private val jdbc by lazy { JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)) }
 
-    @BeforeEach
-    fun migrateFromCleanDatabase() {
-        flyway(false).clean()
+    @BeforeAll
+    fun migrateFromCleanDatabaseOnce() {
         flyway().migrate()
+    }
+
+    @AfterEach
+    fun clearTestRows() {
+        jdbc.update("DELETE FROM discovery_customer_favorite_store")
+        jdbc.update("DELETE FROM merchant_store_discovery_profile")
+        jdbc.update("DELETE FROM merchant_store")
+        jdbc.update("DELETE FROM merchant_brand")
+        jdbc.update("DELETE FROM identity_customer_account WHERE login_id LIKE 'search-%'")
     }
 
     @Test
@@ -208,12 +219,12 @@ internal class StoreSearchVocabularyMigrationTest {
 
     @Test
     fun `favorite store rows are unique per customer and store`() {
-        val customerId = UUID.randomUUID()
-        val storeId = UUID.randomUUID()
+        val customerId = insertCustomer()
+        val storeId = insertStoreWithProfile()
         insertFavorite(customerId, storeId)
         assertThatThrownBy { insertFavorite(customerId, storeId) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
-        insertFavorite(customerId, UUID.randomUUID())
+        insertFavorite(customerId, insertStoreWithProfile())
         assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM discovery_customer_favorite_store WHERE customer_id = ?",
@@ -221,6 +232,34 @@ internal class StoreSearchVocabularyMigrationTest {
                 customerId,
             ),
         ).isEqualTo(2)
+    }
+
+    @Test
+    fun `favorite rejects unknown customer or store references`() {
+        val customerId = insertCustomer()
+        val storeId = insertStoreWithProfile()
+
+        assertThatThrownBy { insertFavorite(UUID.randomUUID(), storeId) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy { insertFavorite(customerId, UUID.randomUUID()) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
+    fun `favorite rows are deleted with either customer or store`() {
+        val customerId = insertCustomer()
+        val storeId = insertStoreWithProfile()
+        insertFavorite(customerId, storeId)
+
+        jdbc.update("DELETE FROM identity_customer_account WHERE id = ?", customerId)
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM discovery_customer_favorite_store", Long::class.java)).isZero()
+
+        val secondCustomerId = insertCustomer()
+        val secondStoreId = insertStoreWithProfile()
+        insertFavorite(secondCustomerId, secondStoreId)
+        jdbc.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", secondStoreId)
+        jdbc.update("DELETE FROM merchant_store WHERE id = ?", secondStoreId)
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM discovery_customer_favorite_store", Long::class.java)).isZero()
     }
 
     /** 매장과 검색 profile을 한 쌍으로 만든다. V34 커버리지 gate가 짝 없는 매장을 막는다. */
@@ -293,11 +332,28 @@ internal class StoreSearchVocabularyMigrationTest {
         )
     }
 
-    private fun flyway(cleanDisabled: Boolean = true): Flyway =
+    private fun insertCustomer(): UUID {
+        val customerId = UUID.randomUUID()
+        val now = Timestamp.from(Instant.parse("2026-08-15T00:00:00Z"))
+        jdbc.update(
+            """
+            INSERT INTO identity_customer_account
+                (id, login_id, password_hash, credential_version, display_name, state, locked_until, created_at, updated_at, version)
+            VALUES (?, ?, ?, 0, '검색 테스트 고객', 'ACTIVE', NULL, ?, ?, 0)
+            """.trimIndent(),
+            customerId,
+            "search-${customerId.toString().replace("-", "").take(24)}",
+            "test-password-hash",
+            now,
+            now,
+        )
+        return customerId
+    }
+
+    private fun flyway(): Flyway =
         Flyway
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .target("58")
-            .cleanDisabled(cleanDisabled)
             .load()
 }

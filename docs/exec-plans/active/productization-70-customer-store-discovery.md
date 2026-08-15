@@ -554,8 +554,9 @@ POST   /api/v1/operations/search-index/rebuild
    `20560`으로 변하지 않는다.
 2. 단계 2 migration(색인 테이블)과 `shared/api` 색인 갱신 port, `discovery/internal` 구현,
    기존 매장·메뉴 초기 적재. 색인 term 종류에 `REGION_RI`를 포함한다.
-   **완료 조건:** 재색인을 실행한 뒤 모든 매장이 `STORE_NAME` term 1행을 갖고 커버리지 gauge가
-   `1.0`을 보고한다. 실행 전에는 `0`을 보고해야 하며 그 상태가 관측 가능해야 한다.
+   **완료 조건:** 재색인을 실행한 뒤 모든 매장이 `STORE_NAME` term 1행을 갖고
+   `store-row-presence.coverage`가 `1.0`, `freshness.mismatches`가 `0`을 보고한다. 실행 전에는
+   row-presence가 `0`을 보고해야 하며 두 상태가 관측 가능해야 한다.
 3. 운영자 브랜드 CRUD·매장 브랜드 지정과 `BRAND_NAME` term 동기 갱신, fan-out 상한, AuditRecord.
    **완료 조건:** 브랜드명 변경이 소속 매장 term을 같은 transaction에서 갱신하고, 색인 갱신을 강제
    실패시키면 브랜드 변경도 rollback된다.
@@ -628,6 +629,8 @@ POST   /api/v1/operations/search-index/rebuild
   비운영자 재색인 403, 미인증 검색 401.
 - `pg_trgm` 부재·색인 조회 실패의 503과 빈 목록 미대체.
 - 재색인 부분 실패가 성공으로 보고되지 않고 실패 매장 ID가 응답에 포함되는지.
+- 재색인 target snapshot을 잡은 뒤 더 작은 UUID 매장이 생겨도 live keyset 누락을 `complete`로
+  오인하지 않고, 결과가 snapshot 범위와 target 수를 명시하는지.
 - 검색 profile이 없는 매장이 재색인에서 실패로 기록되고 나머지 매장 처리가 계속되는지.
 - 매장명을 직접 DML로 바꾼 뒤 재색인 전에는 결과가 따라오지 않고 재색인 후에는 따라오는지.
 - 재색인 재실행이 term 행을 늘리지 않는지(종류 단위 교체의 멱등성).
@@ -636,7 +639,11 @@ POST   /api/v1/operations/search-index/rebuild
 - 판매 중이 아닌 메뉴에 `MENU_NAME` term이 만들어지지 않는지.
 - SQL `lower()`로는 재현되지 않는 정규화 결과(`İ` → `i̇`, 어말 시그마 `Σ` → `ς`)가 색인에
   그대로 저장되는지.
-- 커버리지 gauge가 재색인 전 `0`, 재색인 후 `1.0`, 색인되지 않은 매장 추가 시 그 사이 값인지.
+- row-presence gauge가 재색인 전 `0`, 재색인 후 `1.0`, 색인되지 않은 매장 추가 시 그 사이 값인지.
+- row-presence가 `1.0`인 채로 직접 DML 매장명·메뉴 추가·이름 변경·판매 중지가 freshness mismatch
+  gauge에 드러나고, 재색인 뒤 `0`으로 돌아오는지.
+- `MENU_NAME` source가 실존·동일 매장 메뉴만 가리키고 메뉴 삭제 시 term이 cascade되는지.
+- favorite가 unknown customer/store를 거부하고 customer/store 삭제 시 cascade되는지.
 - Spring Modulith 구조 검증에서 `merchant ↔ discovery` 순환 의존 부재.
 - 좌표 쌍·radius 경계, 좌표 유무에 따른 distance 필드·정렬 계약.
 - 한 매장의 여러 메뉴 일치가 매장 한 건과 정확한 match reason으로 합쳐지는지 검증.
@@ -673,7 +680,8 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | `beanflow.discovery.search.page.size` | summary | — |
 | `beanflow.discovery.search.tokens` | summary | — (토큰 **개수**만, 값 아님) |
 | `beanflow.discovery.search.empty` | counter | `sort` |
-| `beanflow.discovery.search.index.coverage` | gauge | — (색인된 매장 수 / 전체 매장 수) |
+| `beanflow.discovery.search.index.store-row-presence.coverage` | gauge | — (STORE_NAME 행을 하나 이상 가진 매장 수 / 전체 매장 수) |
+| `beanflow.discovery.search.index.freshness.mismatches` | gauge | — (매장명·판매 중 메뉴 source/index 양방향 불일치 row 수) |
 | `beanflow.discovery.search.index.update` | counter | `outcome`, `trigger` = `BRAND\|REGION\|REBUILD` |
 
 `empty` counter는 "검색은 되는데 결과가 늘 0건"인 상태(색인 누락, 정규화 불일치)를 장애와 구분해
@@ -824,6 +832,38 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12), 픽업 가용성 필터와 그 scan-boundary
     cursor(Milestone 6).
 - 2026-08-15: 미착수 — Milestone 6~12.
+- 2026-08-16: **Milestone 2 리뷰 보강.** 미병합·미적용 V57/V59를 제자리에서 고쳐 DB 최종
+  방어선을 추가했다.
+  - V57 favorite는 `identity_customer_account`·`merchant_store` FK와 양쪽 `ON DELETE CASCADE`를
+    가진다. V59 MENU_NAME은 `(source_id, store_id) → merchant_menu(id, store_id)` FK라 unknown 또는
+    다른 매장 메뉴를 저장할 수 없고 메뉴 삭제 시 term도 삭제된다.
+  - 재색인은 UUID live keyset 대신 시작 target ID snapshot을 chunk 처리한다. 결과는
+    `targetStoreCount`와 `completeSnapshot`으로 범위를 드러내며 chunk-size는 `1..1000` 시작 검증이다.
+  - gauge를 row-presence와 source/index freshness mismatch로 분리하고, 별도
+    `REPEATABLE_READ` bean에서 한 DB snapshot으로 계산한다.
+  - `StoreSearchIndexRebuildServiceTest` 2건, `StoreSearchTermIndexMigrationTest` 7건,
+    `StoreSearchVocabularyMigrationTest` 15건, `StoreSearchIndexRebuildIntegrationTest` 10건을
+    실행했다. 두 migration class의 Testcontainers 실행은 `26s`였으며 schema migrate는 class당 한 번,
+    fixture cleanup은 테스트마다 수행한다. 이 시간은 warm Gradle의 제한된 class 실행 결과로 전체 CI와
+    직접 비교하지 않는다.
+- 2026-08-16: **CI timeout 보강.** GitHub Actions run `31893493864`의 build job은 전체 `:test`를
+  단일 JVM으로 순차 실행하다 20분 제한에 취소됐다. 이전 직렬 결과 XML은 첫 suite부터 마지막 suite까지
+  약 25분 14초였고 실패는 없었다. `Test.maxParallelForks`를 `2`로 제한해 hosted runner의 Docker·메모리
+  여유를 보존하면서 두 worker를 사용한다.
+  - 첫 병렬 전체 실행은 `StoreSearchIndexCoverageMetrics`의 기본 60초 scheduler와 fixture `TRUNCATE`의
+    deadlock을 드러냈다. test 공통 profile에 누락된 `search-index-coverage.initial-delay-ms=3600000`을
+    추가했다. metric 자체를 검증하는 테스트는 scheduler가 아니라 `refresh()`를 직접 호출하므로 관측
+    계약은 유지한다.
+  - 수정 뒤 `./gradlew cleanTest test --console=plain`은 **243 클래스, 1,145건, 실패 0, error 0, skip 1**로
+    통과했다. XML suite timestamp 범위는 `11분 19초`이며, 실행 전체는 약 12분이었다. CI 재실행의 remote
+    green 확인은 이 변경을 push한 뒤 별도로 기록한다.
+  - 후속 remote run `31897430653`은 두 worker를 적용했지만 `:test`가 `14분 32초` 동안 실행된 뒤 job
+    20분 한도에서 취소됐다(이전 run의 `:test` 취소 전 `15분 45초` 대비 1분 13초 단축). frontend
+    preflight가 약 2분 49초, Gradle compile/test가 약 17분 24초여서 같은 job에는 함께 들어갈 수 없다.
+    검증을 생략하거나 timeout을 올리지 않고 preflight와 backend `build`를 별도 20분 job으로 분리한다.
+  - 분리 후 첫 run `31898567839`은 preflight를 통과했지만 backend checkout의 기본 shallow history에는
+    Spotless ratchet이 요구하는 `origin/main`이 없어 build 시작 전에 실패했다. backend checkout도 기존과
+    같이 `fetch-depth: 0`으로 설정했다. 이 실패에서는 test가 실행되지 않았다.
 
 ## Surprises & Discoveries
 
@@ -950,6 +990,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   담지만 그 정수를 만드는 `floor(관련도 * 1000000)`이 부동소수 경계에 걸리면 page마다 rank가
   1씩 흔들려 동점 매장이 누락되거나 중복될 수 있다. `similarity(...)::numeric`으로 캐스트해 전
   계산을 exact decimal로 유지했다.
+- **(2026-08-16) 새 scheduler는 test 공통 profile에도 즉시 등록해야 한다.** 기존 test profile은
+  fixture `TRUNCATE`와 경쟁하지 않도록 모든 background worker의 initial delay를 1시간으로 둔다.
+  검색 색인 커버리지 worker만 이 목록에서 빠져 기본 60초 후 source/index reconciliation read를 실행했고,
+  장시간 병렬 전체 테스트에서 `TRUNCATE`와 PostgreSQL deadlock을 만들었다. 전역 profile에 같은 initial
+  delay를 추가하고, scheduler 자체의 동작은 해당 integration test가 `refresh()`를 직접 호출해 검증한다.
 
 ## Decision Log
 
@@ -995,6 +1040,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 브랜드·지역 표시 이름은 원 테이블이 아니라 색인 term의 `display_text`에서 읽는다 | `StoreSearchCandidateRepository.kt` |
 | 2026-08-15 | Milestone 5는 컨트롤러를 붙이지 않는다. `pickupAvailable`이 동작하는 Milestone 6에서 endpoint를 연다 | 이 ExecPlan Progress |
 | 2026-08-15 | target OpenAPI의 `/stores/search`를 ADR-103 2026-08-15 Amendment에 맞게 개정한다 | [ADR-103 A4/A5/A6/A7](../../adr/ADR-103-store-search-strategy.md), `scripts/verify-docs.sh` |
+| 2026-08-16 | 재색인 대상은 UUID keyset이 아니라 시작 ID snapshot. 완료는 snapshot 범위에 한정 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-16 | 전체 test는 2개 worker로 제한하고, 새 background worker는 test 공통 profile에서 지연 | 이 문서 Progress, `src/test/resources/application.yaml` |
+| 2026-08-16 | frontend/doc preflight와 backend 전체 build를 별도 CI job으로 실행 | 이 문서 Progress, `.github/workflows/ci.yml` |
 
 ## Outcomes & Retrospective
 
@@ -1033,3 +1083,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   함께 쓰도록 확정했다(MD-2026-024). target OpenAPI의 `/stores/search`가 ADR-103 원 Decision
   시절 형태로 남아 있어 2026-08-15 Amendment에 맞게 개정하고 `scripts/verify-docs.sh`의 옛 어휘
   단언도 함께 고쳤다. 컨트롤러는 `pickupAvailable`이 동작하는 Milestone 6으로 미뤘다.
+- 2026-08-16: 리뷰 보강으로 V57/V59 참조 무결성, 재색인 target snapshot, freshness 관측과
+  migration-test fixture lifecycle을 갱신했다. 공개 HTTP API는 바뀌지 않는다.
+- 2026-08-16: CI 20분 timeout을 위해 test worker를 2개로 제한하고, 검색 색인 커버리지 scheduler를
+  test 공통 profile에서 지연했다. 제품 runtime scheduler 주기와 공개 API는 바뀌지 않는다.
+- 2026-08-16: frontend/doc preflight와 backend 전체 build를 별도 20분 CI job으로 분리했다. 검증
+  대상과 각 명령은 유지하며, frontend 준비 시간이 backend test의 job 한도를 잠식하지 않게 한다.

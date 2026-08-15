@@ -27,6 +27,10 @@ BeanFlow는 다점포 카페의 선주문, 결제, 픽업, 포인트, 정산, �
 - `docs/exec-plans/active/`의 해당 ExecPlan
 - 관련 OpenAPI 계약
 
+## Frontend UI work
+
+For any task that reads or changes `frontend/**`, read and follow `frontend/AGENTS.md` before planning or acting. UI work requires the BeanFlow Storybook MCP; do not implement UI while that prerequisite is unavailable.
+
 ## Repository content boundary
 
 저장소에는 BeanFlow 제품, 아키텍처, 구현, 테스트, 운영과 변경 이력에 직접 필요한 정보만 기록한다.

@@ -43,6 +43,8 @@ beanflow:
     initial-delay-ms: 3600000
   reservation-expiry:
     initial-delay-ms: 3600000
+  search-index-coverage:
+    initial-delay-ms: 3600000
   session:
     cleanup-cron: "-"
   settlement:

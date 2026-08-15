@@ -95,6 +95,9 @@ spotless {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	maxHeapSize = "1g"
+	// Keep a bounded level of parallelism so the hosted runner can complete the full suite
+	// within its 20-minute limit without exhausting its Docker or memory capacity.
+	maxParallelForks = 2
 	systemProperty("spring.test.context.cache.maxSize", "8")
 }
 

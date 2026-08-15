@@ -9,7 +9,5 @@
 @import url("./tokens/semantic.css");
 @import url("./tokens/base.css");
 @import url("./components/core/core.css");
-@import url("./components/forms/forms.css");
 @import url("./components/feedback/feedback.css");
-@import url("./components/navigation/navigation.css");
 @import url("./components/commerce/commerce.css");
