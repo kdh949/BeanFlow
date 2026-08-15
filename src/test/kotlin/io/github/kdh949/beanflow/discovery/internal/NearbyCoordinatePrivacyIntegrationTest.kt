@@ -72,8 +72,8 @@ internal class NearbyCoordinatePrivacyIntegrationTest
             )
             jdbcTemplate.update(
                 """
-                INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-                VALUES (?, 'Privacy cafe', ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)
+                INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+                VALUES (?, 'Privacy cafe', ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, '1168010100')
                 """.trimIndent(),
                 STORE_ID,
             )

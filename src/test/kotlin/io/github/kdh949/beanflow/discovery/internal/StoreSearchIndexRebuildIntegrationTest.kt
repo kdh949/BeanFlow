@@ -313,8 +313,8 @@ internal class StoreSearchIndexRebuildIntegrationTest {
         )
         jdbc.update(
             """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography)
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, '1168010100')
             """.trimIndent(),
             storeId,
             name,

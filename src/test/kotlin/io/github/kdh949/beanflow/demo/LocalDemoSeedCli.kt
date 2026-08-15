@@ -118,6 +118,7 @@ internal class LocalDemoSeeder(
             LocalDemoFixture.STORE_NAME,
             LocalDemoFixture.STORE_LONGITUDE,
             LocalDemoFixture.STORE_LATITUDE,
+            LocalDemoFixture.STORE_REGION_CODE,
             created,
         )
         seedStore(
@@ -125,6 +126,7 @@ internal class LocalDemoSeeder(
             LocalDemoFixture.OTHER_STORE_NAME,
             LocalDemoFixture.OTHER_STORE_LONGITUDE,
             LocalDemoFixture.OTHER_STORE_LATITUDE,
+            LocalDemoFixture.OTHER_STORE_REGION_CODE,
             created,
         )
         seedMerchantAccounts(now, created)
@@ -168,6 +170,7 @@ internal class LocalDemoSeeder(
         name: String,
         longitude: Double,
         latitude: Double,
+        regionCode: String,
         created: MutableList<String>,
     ) {
         if (!stores.existsById(storeId)) {
@@ -181,14 +184,15 @@ internal class LocalDemoSeeder(
         val inserted =
             jdbcTemplate.update(
                 """
-                INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-                VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography)
+                INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+                VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)
                 ON CONFLICT (store_id) DO NOTHING
                 """.trimIndent(),
                 storeId,
                 name,
                 longitude,
                 latitude,
+                regionCode,
             )
         if (inserted > 0) created += "storeDiscoveryProfile=$storeId"
     }

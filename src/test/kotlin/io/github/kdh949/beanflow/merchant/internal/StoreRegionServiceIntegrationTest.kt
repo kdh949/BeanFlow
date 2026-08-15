@@ -161,6 +161,17 @@ internal class StoreRegionServiceIntegrationTest {
     }
 
     @Test
+    fun `a store cannot be left without a region once the coverage gate is in place`() {
+        val storeId = insertStore("커버리지 매장")
+
+        // V62가 region_code를 NOT NULL로 올린 뒤에는 지역을 비우는 것 자체가 불가능하다.
+        // 그래서 해제 명령이 없고 명령 어휘에도 CLEAR가 없다.
+        assertThatThrownBy {
+            jdbc.update("UPDATE merchant_store_discovery_profile SET region_code = NULL WHERE store_id = ?", storeId)
+        }.isInstanceOf(org.springframework.dao.DataIntegrityViolationException::class.java)
+    }
+
+    @Test
     fun `assigning a region leaves the store's other terms alone`() {
         val storeId = insertStore("이름 유지 매장")
         insertStoreNameTerm(storeId, "이름 유지 매장")
@@ -226,7 +237,7 @@ internal class StoreRegionServiceIntegrationTest {
             .isInstanceOf(DomainFailure::class.java)
             .extracting { (it as DomainFailure).code }
             .isEqualTo(FailureCode.RESOURCE_NOT_FOUND)
-        assertThat(regionCode(storeId)).isNull()
+        assertThat(regionCode(storeId)).isEqualTo(SEOUL)
     }
 
     @Test
@@ -383,13 +394,14 @@ internal class StoreRegionServiceIntegrationTest {
         )
         jdbc.update(
             """
-            INSERT INTO merchant_store_discovery_profile (store_id, name, location)
-            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography)
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)
             """.trimIndent(),
             storeId,
             name,
             127.0361,
             37.5006,
+            SEOUL,
         )
         return storeId
     }

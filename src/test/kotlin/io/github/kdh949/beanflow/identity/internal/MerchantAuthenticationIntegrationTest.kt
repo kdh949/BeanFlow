@@ -474,8 +474,8 @@ internal class MerchantAuthenticationIntegrationTest(
         val id = UUID.randomUUID()
         jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", id)
         jdbc.update(
-            "INSERT INTO merchant_store_discovery_profile (store_id, name, location) " +
-                "VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)",
+            "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) " +
+                "VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, '1168010100')",
             id,
             name,
         )

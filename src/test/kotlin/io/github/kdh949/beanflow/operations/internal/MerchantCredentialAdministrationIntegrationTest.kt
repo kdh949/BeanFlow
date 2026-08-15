@@ -72,8 +72,8 @@ internal class MerchantCredentialAdministrationIntegrationTest(
         storeId = UUID.randomUUID()
         jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", storeId)
         jdbc.update(
-            "INSERT INTO merchant_store_discovery_profile (store_id, name, location) " +
-                "VALUES (?, 'BeanFlow Operations Test', ST_GeogFromText('SRID=4326;POINT(127.0 37.5)'))",
+            "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) " +
+                "VALUES (?, 'BeanFlow Operations Test', ST_GeogFromText('SRID=4326;POINT(127.0 37.5)'), '1168010100')",
             storeId,
         )
     }

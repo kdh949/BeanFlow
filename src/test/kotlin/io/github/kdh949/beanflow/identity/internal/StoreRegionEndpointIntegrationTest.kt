@@ -81,7 +81,7 @@ internal class StoreRegionEndpointIntegrationTest(
         // 감사 요약은 법정동 코드를 그 코드 자체의 계층으로 끊어 담는다. 10자리 숫자를 그대로
         // 넣으면 원시 PII 판정기가 휴대전화 번호로 보고 append를 거절한다.
         assertThat(auditRegionCodes(storeId))
-            .containsExactly("""{"regionCode":""}""" to """{"regionCode":"11-680-101-00"}""")
+            .containsExactly("""{"regionCode":"11-000-000-00"}""" to """{"regionCode":"11-680-101-00"}""")
     }
 
     @Test
@@ -121,7 +121,7 @@ internal class StoreRegionEndpointIntegrationTest(
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
 
-        assertThat(storeRegionCode(storeId)).isNull()
+        assertThat(storeRegionCode(storeId)).isEqualTo(SEOUL)
         assertThat(auditActions(storeId)).isEmpty()
     }
 
@@ -135,7 +135,7 @@ internal class StoreRegionEndpointIntegrationTest(
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
 
-        assertThat(storeRegionCode(otherStoreId)).isNull()
+        assertThat(storeRegionCode(otherStoreId)).isEqualTo(SEOUL)
     }
 
     @Test
@@ -181,7 +181,7 @@ internal class StoreRegionEndpointIntegrationTest(
                     .content("""{"regionCode":"$YEOKSAM","reason":"주소 등록"}"""),
             ).andExpect(status().isUnauthorized)
 
-        assertThat(storeRegionCode(storeId)).isNull()
+        assertThat(storeRegionCode(storeId)).isEqualTo(SEOUL)
         assertThat(commandCount()).isZero()
     }
 
@@ -207,7 +207,7 @@ internal class StoreRegionEndpointIntegrationTest(
         assign(session, storeId, "9999999999", "validation-key-03")
             .andExpect(status().isNotFound)
 
-        assertThat(storeRegionCode(storeId)).isNull()
+        assertThat(storeRegionCode(storeId)).isEqualTo(SEOUL)
         assertThat(commandCount()).isZero()
     }
 
@@ -346,10 +346,11 @@ internal class StoreRegionEndpointIntegrationTest(
         val id = UUID.randomUUID()
         jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", id)
         jdbc.update(
-            "INSERT INTO merchant_store_discovery_profile (store_id, name, location) " +
-                "VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography)",
+            "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) " +
+                "VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, ?)",
             id,
             name,
+            SEOUL,
         )
         return id
     }
@@ -395,6 +396,7 @@ internal class StoreRegionEndpointIntegrationTest(
         const val SESSION_COOKIE = "BEANFLOW_MERCHANT_SESSION"
         const val CSRF_HEADER = "X-BEANFLOW-CSRF"
         const val PASSWORD = "merchant-current-password-2026"
+        const val SEOUL = "1100000000"
         const val YEOKSAM = "1168010100"
         const val GUNNAE_RI = "1213025021"
         val NOW: Instant = Instant.parse("2026-08-15T00:00:00Z")
