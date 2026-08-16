@@ -236,6 +236,55 @@ scheduled method가 같은 객체의 transactional method를 직접 호출해 pr
 - 검색어와 토큰은 원 Decision대로 어디에도 저장하지 않는다. 색인 테이블에 저장되는 것은 매장의
   공개 속성이지 사용자의 검색어가 아니다.
 
+### 재색인 명령의 실패 상태 Amendment (2026-08-16)
+
+재색인 명령의 원장은 `RUNNING`과 `COMPLETED` 두 상태만 가졌고, 실패하면 `RUNNING` row를 **삭제**했다.
+이 삭제가 두 가지를 동시에 깨뜨린다.
+
+첫째, `(actor_id, idempotency_key)`에 묶인 `payload_hash`가 사라진다. 그러면 같은 key에 다른 reason을
+보낸 요청이 `IDEMPOTENCY_KEY_REUSED`가 아니라 **새 command로 수락**된다. 이것은 이 endpoint가
+계약으로 약속한 멱등성 경계와 정면으로 어긋난다.
+
+둘째, 감사 기록의 `source_reference`가 `actor:sha256(idempotencyKey)`였다. 첫 실행의 AuditRecord는
+남고 command row만 사라지므로, 같은 key의 두 번째 실행은 **새 reason으로 실제 재색인을 수행하면서
+감사 기록은 남기지 않는다.** AuditRecord 보존 기간이 command 보존 기간(90일)보다 훨씬 길어서 90일
+정리 이후 key 재사용에서도 같은 일이 생긴다.
+
+#### 결정
+
+실패를 삭제가 아니라 **상태**로 남긴다. 상태는 다섯이며, 나누는 기준은 오직 하나다. 같은 요청을
+서버가 스스로 다시 실행해도 되는가.
+
+| state | 뜻 | 같은 key·같은 payload 재요청 |
+|---|---|---|
+| `RUNNING` | 실행 중이거나 process loss 후 미확정 | `Retry-After`와 함께 409 |
+| `COMPLETED` | 결과 확정 | 저장된 응답을 재생 |
+| `FAILED_RETRYABLE` | 실패했고 반복이 안전함 | 같은 row에서 `attempt_count`를 올려 재실행 |
+| `UNKNOWN` | 결과 저장을 확인하지 못함 | 409 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` |
+| `MANUAL_REVIEW` | 재시도 상한 5회 초과 | 409 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` |
+
+`FAILED_RETRYABLE`의 자동 재실행은 매장별 재색인이 그 매장의 term을 통째로 교체한다는 성질에만
+근거한다. `UNKNOWN`에는 그 근거가 성립하지 않는다. 결과 row가 commit됐는지 자체를 모르기 때문이다.
+
+`UNKNOWN` 표시는 row가 아직 `RUNNING`일 때만 적용한다. 실제로 `COMPLETED`가 commit됐다면 그 결과가
+이긴다. 표시가 확정 결과를 덮어쓰면 재생 가능한 응답이 사라진다.
+
+감사 `source_reference`는 `command id:attempt`로 바꾼다. command id는 불변이고 attempt는 실행마다
+증가하므로 재시도가 별도 기록을 남기고, key 재사용이 기록 누락을 만들지 않는다.
+
+`COMPLETED`와 `FAILED_RETRYABLE`만 90일 뒤 정리한다. `UNKNOWN`·`MANUAL_REVIEW`는 운영자가 결론을
+내려야 하는 상태이므로 자동 정리 대상에서 뺀다.
+
+#### Amendment의 결과
+
+- 실패 응답 코드가 하나 늘어난다. `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`는 이미 Error Catalog에 있는
+  코드이며 의미(409, `Retry-After` 없음, 자동 재시도 금지)가 그대로 들어맞아 새로 만들지 않았다.
+- 실패한 command가 원장에 남으므로 `(actor, key)` 재사용은 payload가 같을 때만, 그리고 재시도가
+  안전한 상태일 때만 가능하다. 해소 후 다시 실행하려면 **새 key**를 쓴다.
+- 재시도 상한을 넘긴 command는 자동으로 `MANUAL_REVIEW`로 전이한다. 이 전이는 요청을 실패시키는
+  transaction 밖에서 commit해야 한다. 안에서 하면 예외와 함께 롤백돼 상태가 영원히 재시도 가능으로
+  남는다.
+
 ## Alternatives Considered
 
 ### 1. 처음부터 Elasticsearch

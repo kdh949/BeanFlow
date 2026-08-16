@@ -186,6 +186,84 @@ internal class OperatorSearchIndexRebuildControllerTest
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_REQUEST_IN_PROGRESS"))
         }
 
+        @Test
+        fun `a failed command keeps its key bound to the payload and retries on the same row`() {
+            insertStore("재시도 매장")
+            val commandId = insertCommand("http-rebuild-0004", "Retry proof", "FAILED_RETRYABLE", attemptCount = 1)
+
+            // The row survives the failure, so the key is still bound to the reason it was accepted
+            // with. Deleting it on failure was what let a different reason through as a new command.
+            mockMvc
+                .perform(
+                    post(PATH)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "http-rebuild-0004")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reason":"Another reason entirely"}"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+
+            mockMvc
+                .perform(
+                    post(PATH)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "http-rebuild-0004")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reason":"Retry proof"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.complete").value(true))
+
+            assertThat(commandState(commandId)).isEqualTo("COMPLETED")
+            assertThat(attemptCount(commandId)).isEqualTo(2)
+            // The audit reference is per attempt, so the retry is recorded rather than deduplicated
+            // away by the reference the first attempt would have used.
+            assertThat(auditSourceReferences()).containsExactly("search-index-rebuild:$commandId:2")
+        }
+
+        @Test
+        fun `unknown and manual review commands are never rerun automatically`() {
+            insertStore("보류 매장")
+            insertCommand("http-rebuild-0005", "Unknown outcome", "UNKNOWN", attemptCount = 1)
+            insertCommand("http-rebuild-0006", "Exhausted", "MANUAL_REVIEW", attemptCount = 5)
+
+            listOf("http-rebuild-0005" to "Unknown outcome", "http-rebuild-0006" to "Exhausted").forEach { (key, reason) ->
+                mockMvc
+                    .perform(
+                        post(PATH)
+                            .with(operatorJwt())
+                            .header("Idempotency-Key", key)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"reason":"$reason"}"""),
+                    ).andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("IDEMPOTENCY_MANUAL_REVIEW_REQUIRED"))
+                    // Retry-After would tell an operator to retry work that must not be repeated.
+                    .andExpect(header().doesNotExist("Retry-After"))
+            }
+
+            assertThat(storeNameTerms()).isEmpty()
+            assertThat(auditSourceReferences()).isEmpty()
+        }
+
+        @Test
+        fun `retry attempts are capped and the command escalates to manual review`() {
+            insertStore("상한 매장")
+            val commandId = insertCommand("http-rebuild-0007", "Capped", "FAILED_RETRYABLE", attemptCount = 5)
+
+            mockMvc
+                .perform(
+                    post(PATH)
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "http-rebuild-0007")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"reason":"Capped"}"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_MANUAL_REVIEW_REQUIRED"))
+
+            assertThat(commandState(commandId)).isEqualTo("MANUAL_REVIEW")
+            assertThat(attemptCount(commandId)).isEqualTo(5)
+            assertThat(storeNameTerms()).isEmpty()
+        }
+
         private fun insertStore(name: String): UUID =
             UUID.randomUUID().also { storeId ->
                 jdbcTemplate.update(
@@ -226,6 +304,53 @@ internal class OperatorSearchIndexRebuildControllerTest
                 sha256("SEARCH_INDEX_REBUILD\u001F$reason"),
             )
         }
+
+        private fun insertCommand(
+            idempotencyKey: String,
+            reason: String,
+            state: String,
+            attemptCount: Int,
+        ): UUID =
+            UUID.randomUUID().also { commandId ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO operations_search_index_rebuild_command (
+                        id, actor_id, idempotency_key, payload_hash, state, attempt_count,
+                        created_at, last_failure_at, retention_expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, now(), now(), now() + interval '90 days')
+                    """.trimIndent(),
+                    commandId,
+                    actorId,
+                    idempotencyKey,
+                    sha256("SEARCH_INDEX_REBUILD\u001F$reason"),
+                    state,
+                    attemptCount,
+                )
+            }
+
+        private fun commandState(commandId: UUID): String =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT state FROM operations_search_index_rebuild_command WHERE id = ?",
+                    String::class.java,
+                    commandId,
+                ),
+            )
+
+        private fun attemptCount(commandId: UUID): Int =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT attempt_count FROM operations_search_index_rebuild_command WHERE id = ?",
+                    Int::class.java,
+                    commandId,
+                ),
+            )
+
+        private fun auditSourceReferences(): List<String> =
+            jdbcTemplate.query(
+                "SELECT source_reference FROM operations_audit_record ORDER BY source_reference",
+                { row, _ -> row.getString("source_reference") },
+            )
 
         private fun storeNameTerms(): List<UUID> =
             jdbcTemplate.query(

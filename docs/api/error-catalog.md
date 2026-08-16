@@ -19,7 +19,7 @@
 | REORDER_ITEMS_UNAVAILABLE | 409 | Maybe, after source/current catalogue changes | source line 하나 이상을 검증된 option snapshot과 현재 Merchant 구성으로 전부 재구성할 수 없음. item별 stable reason을 반환하고 부분 Order는 만들지 않음 |
 | IDEMPOTENCY_KEY_REUSED | 409 | No | 같은 키에 다른 payload |
 | IDEMPOTENCY_REQUEST_IN_PROGRESS | 409 + Retry-After | Yes, same key after delay | 같은 key·payload의 최초 명령이 아직 처리 중이며 새 실행은 하지 않음. 사전등록 모델 명령에만 사용 |
-| IDEMPOTENCY_MANUAL_REVIEW_REQUIRED | 409, no Retry-After | No automatic retry | stale `PROCESSING`의 자동 처리가 중단되어 운영자 확인이 필요함. 같은 key 재요청은 owner 작업을 실행하지 않으며 현재 공식 자동 해결 API가 없음 |
+| IDEMPOTENCY_MANUAL_REVIEW_REQUIRED | 409, no Retry-After | No automatic retry | stale `PROCESSING`의 자동 처리가 중단되어 운영자 확인이 필요함. 같은 key 재요청은 owner 작업을 실행하지 않으며 현재 공식 자동 해결 API가 없음. 검색 색인 재생성에서는 결과 저장을 확인하지 못한 `UNKNOWN` command와 재시도 상한을 넘긴 `MANUAL_REVIEW` command가 이 코드를 낸다. 자동 재시도가 결과 불명이나 부분 결과를 성공으로 바꾸지 않도록 [Store Keyword Search Runbook](../operations/store-keyword-search-runbook.md)의 절차를 먼저 따른다 |
 | MENU_CONFIGURATION_NOT_AVAILABLE | 409 | Maybe | 유효한 메뉴·옵션 구성이 현재 판매 불가 |
 | BRAND_NAME_ALREADY_IN_USE | 409 | No, choose another name | 다른 활성 브랜드가 같은 정규화 이름을 이미 쓰고 있음. 보관된 브랜드의 이름은 다시 쓸 수 있음 |
 | BRAND_FANOUT_LIMIT_EXCEEDED | 409 | No | 브랜드 소속 매장이 ADR-112 6절의 1000개 상한을 넘김. 이름 변경의 색인 fan-out과 상한을 넘기는 매장 배정 양쪽에 적용하며 비동기 큐로 우회하지 않음 |

@@ -89,12 +89,35 @@ source를 다시 읽거나 AuditRecord를 하나 더 만들지 않는다. 같은
 | `200`, `complete=false` | 일부 Store는 실패했으며 전체 성공이 아님 | `failedStoreIds`의 owner source를 고친 뒤 **새 key**와 새 reason으로 다시 실행한다. 기존 key는 같은 불완전 결과만 재생한다 |
 | `409 IDEMPOTENCY_KEY_REUSED` | key가 다른 reason에 이미 귀속됨 | 새 key를 사용한다. 기존 row를 수정하거나 삭제하지 않는다 |
 | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` + `Retry-After: 2` | 같은 key의 command가 `RUNNING` | 2초는 polling/재시도 pace이지 완료 예상 시간이 아니다. 원 요청 상태를 확인하고 6절을 따른다 |
+| `409 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` | command가 `UNKNOWN` 또는 `MANUAL_REVIEW` | 자동 재시도하지 않는다. 6절로 간다. 해소했으면 **새 key**로 실행한다 |
 | `503 DEPENDENCY_UNAVAILABLE` | source·DB 또는 결과 저장이 확정되지 않음 | 같은 key를 즉시 반복하지 않는다. 먼저 ledger 상태를 확인한다 |
 
-source 읽기 실패로 server가 `RUNNING` claim을 정상 폐기한 경우에만 exact key 재시도가 가능하다.
-하지만 connection loss나 completion 저장 실패의 503은 `RUNNING`을 남길 수 있다. 호출자가 응답을
+### 실패한 command는 삭제되지 않는다
+
+실패해도 원장 row는 남는다. 지우면 `(actor_id, idempotency_key)`에 묶인 `payload_hash`가 사라져서
+같은 key에 다른 reason을 보낸 요청이 `IDEMPOTENCY_KEY_REUSED` 대신 **새 command로 통과**한다.
+그래서 실패는 삭제가 아니라 상태로 남긴다.
+
+| state | 뜻 | 같은 key·같은 reason 재요청 |
+|---|---|---|
+| `RUNNING` | 실행 중이거나 process loss 후 미확정 | `Retry-After`와 함께 409. 자동 재실행 없음 |
+| `COMPLETED` | 결과 확정 | 저장된 응답을 90일간 재생 |
+| `FAILED_RETRYABLE` | 실패했고 반복이 안전함 | 같은 row에서 `attempt_count`를 올려 다시 실행 |
+| `UNKNOWN` | 결과 저장을 확인하지 못함 | 409 manual review. 자동 재실행 없음 |
+| `MANUAL_REVIEW` | 재시도 상한(5회) 초과 | 409 manual review. 자동 재실행 없음 |
+
+매장별 재색인은 그 매장의 term을 통째로 교체하므로 반복이 안전하다. `FAILED_RETRYABLE`의 자동
+재실행은 그 성질에만 근거한다. 반면 `UNKNOWN`은 결과 row가 commit됐는지 자체를 모르는 상태이므로
+같은 근거가 성립하지 않는다.
+
+`RUNNING`에서 결과 저장이 확정되지 않으면 서버가 `UNKNOWN`으로 표시한다. 이 표시는 row가 아직
+`RUNNING`일 때만 적용되므로, 실제로 `COMPLETED`가 commit됐다면 그 결과가 이긴다. 호출자가 응답을
 받지 못했거나 상태를 확인할 수 없으면 성공·실패 어느 쪽으로도 단정하지 않고 6절의 unknown 처리로
 들어간다.
+
+감사 기록의 `source_reference`는 재사용 가능한 Idempotency-Key가 아니라 `command id:attempt`다.
+따라서 재시도마다 별도 AuditRecord가 남고, key를 다시 쓰더라도 이전 기록 때문에 새 실행의 감사가
+누락되지 않는다.
 
 ## 4. Coverage와 source 점검
 
@@ -194,9 +217,11 @@ global lock이 필요해지면 BR-47과 이 runbook을 함께 다시 결정한�
 
 ## 6. 보존과 금지 사항
 
-`COMPLETED` command response는 `created_at + 90일`까지 보존되고, worker는 매 시간 최대 100행을
-`FOR UPDATE SKIP LOCKED`로 정리한다. `RUNNING` row는 retention worker가 삭제하지 않는다. cleanup
-backlog는 다음 질의로만 확인하며, broad delete나 retention 시간 변경으로 우회하지 않는다.
+`COMPLETED`와 `FAILED_RETRYABLE` row는 `created_at + 90일`까지 보존되고, worker는 매 시간 최대
+100행을 `FOR UPDATE SKIP LOCKED`로 정리한다. `RUNNING`·`UNKNOWN`·`MANUAL_REVIEW` row는 retention
+worker가 삭제하지 않는다. 이 셋은 운영자가 결론을 내려야 하는 상태이고, 자동 정리가 조사 근거를
+지워 버리면 안 되기 때문이다. cleanup backlog는 다음 질의로만 확인하며, broad delete나 retention
+시간 변경으로 우회하지 않는다.
 
 ```sql
 SELECT state, count(*) AS command_count, min(created_at) AS oldest_created_at
@@ -204,15 +229,23 @@ SELECT state, count(*) AS command_count, min(created_at) AS oldest_created_at
  GROUP BY state
  ORDER BY state;
 
-SELECT count(*) AS due_completed_count
+SELECT count(*) AS due_count
   FROM operations_search_index_rebuild_command
- WHERE state = 'COMPLETED'
+ WHERE state IN ('COMPLETED', 'FAILED_RETRYABLE')
    AND retention_expires_at <= now();
+
+-- 운영자 확인이 필요한 command
+SELECT id, actor_id, state, attempt_count, created_at, last_failure_at
+  FROM operations_search_index_rebuild_command
+ WHERE state IN ('UNKNOWN', 'MANUAL_REVIEW')
+ ORDER BY last_failure_at;
 ```
 
 - `discovery_store_search_term`을 직접 insert/delete/update하여 coverage를 맞추지 않는다.
 - 실패한 Store를 빈 term, placeholder 이름 또는 비판매 메뉴로 색인하지 않는다.
-- `RUNNING` ledger row와 AuditRecord를 삭제·수정해 재실행을 강제하지 않는다.
+- `RUNNING`·`UNKNOWN`·`MANUAL_REVIEW` ledger row와 AuditRecord를 삭제·수정해 재실행을 강제하지
+  않는다. 특히 실패 row를 지워 같은 key를 다시 쓰게 만들지 않는다. 그 삭제가 곧 payload binding을
+  없애 다른 reason의 요청을 통과시킨다.
 - 검색어·token·고객 좌표를 DB, AuditRecord, log, trace, metric tag 또는 incident evidence에 기록하지
   않는다. DB 조사 결과도 필요한 Store/source 범위만 보관한다.
 - Postgres/`pg_trgm` 장애에서 in-memory index, cache, stale search result, 애플리케이션 순차 검색으로
