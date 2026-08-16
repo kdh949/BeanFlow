@@ -8,6 +8,7 @@ import io.github.kdh949.beanflow.discovery.api.StoreRecommendationOperations
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.discovery.internal.CustomerStoreHydrator
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
+import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeQueryService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
 import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationService
@@ -176,6 +177,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var settlementDisputeFilingService: SettlementDisputeFilingService
+
+    @MockitoBean
+    private lateinit var settlementDisputeQueryService: SettlementDisputeQueryService
 
     @MockitoBean
     private lateinit var supportCaseApplicationService: SupportCaseApplicationService

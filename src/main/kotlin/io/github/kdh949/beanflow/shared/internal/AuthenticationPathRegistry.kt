@@ -36,6 +36,7 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/region"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/orders/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/settlements/**"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/disputes"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/store-orders/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/support-order-change-authorizations/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/settlement-items/{itemId}/disputes"),

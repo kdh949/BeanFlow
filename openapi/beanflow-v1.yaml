@@ -2730,9 +2730,10 @@ paths:
         - in: query
           name: state
           required: false
+          description: 지정하면 해당 상태의 이의제기만 반환합니다. 생략하면 접수 시각 내림차순으로 모든 상태를 반환합니다.
           schema:
             type: string
-            enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED]
+            enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN]
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
       responses:
@@ -7769,11 +7770,13 @@ components:
     MerchantDisputeSummary:
       type: object
       additionalProperties: false
+      description: |
+        점주가 자신의 이의제기 진행 상태를 확인하는 데 필요한 값만 담습니다. 내부 재처리 case, worker 오류와 접수자 자격증명은 포함하지 않습니다.
       required: [disputeId, settlementItemId, state, expectedAdjustmentKrw, heldAmountKrw, filedAt]
       properties:
         disputeId: { $ref: "#/components/schemas/Identifier" }
         settlementItemId: { $ref: "#/components/schemas/Identifier" }
-        state: { type: string, enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED] }
+        state: { type: string, enum: [FILED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
         expectedAdjustmentKrw: { $ref: "#/components/schemas/SignedMoneyKrw" }
         heldAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
         filedAt: { $ref: "#/components/schemas/DateTime" }

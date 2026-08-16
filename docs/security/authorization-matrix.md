@@ -42,6 +42,7 @@
 | 부분 환불 preview·실행 | No | ACTIVE owned-store membership + reason + idempotency | ACTIVE assigned-store membership + reason + idempotency | Approved operation | Read only |
 | 매장 정산 조회 | No | Owned store | No by default | Yes | Yes |
 | 이의제기 생성 | No | Owned store | No | No | No |
+| 이의제기 store 목록 (`/stores/{storeId}/disputes`) | No | ACTIVE owned store | No | No | No |
 | 이의제기 판정 | No | No | No | No public endpoint | No public endpoint |
 | 운영 실패 작업 목록·상세 | No | No | No | Active `REPROCESSING_CASE_READ` grant | No |
 | 운영 정산 대사 목록·상세 | No | No | No | Active `SETTLEMENT_RECONCILIATION_READ` grant | No |
@@ -211,9 +212,12 @@ membership을 다시 확인한다. 따라서 membership이 없거나 revoke된 a
 Operator branch는 `POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 경로는 같은
 idempotency·Refund·Provider 불변식을 공유하며 상대 actor 인증을 fallback으로 받아들이지 않는다.
 
-정산 Batch/Item 조회와 이의제기 접수는 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
+정산 Batch/Item 조회와 이의제기 접수·store 목록은 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
 membership을 요구한다. `STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
-없다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
+없다. 정산 명세는 수수료·혜택 원가·실지급액을 담으므로 `STAFF`에게 목록 조회도 열지 않는다.
+`GET /stores/{storeId}/disputes`는 `store_id`를 SQL predicate에 포함하고 cursor에 store와 state
+filter를 함께 서명한다. 응답에는 내부 재처리 case, worker 오류와 접수자 자격증명을 넣지 않으며,
+query 장애는 빈 목록이 아니라 `503`이다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
 JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전용 permission, actor Audit와
 결정 사유 계약을 먼저 확정한다.
 

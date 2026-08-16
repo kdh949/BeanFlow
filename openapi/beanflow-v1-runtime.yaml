@@ -837,6 +837,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements~1{settlementBatchId}~1items"
   /settlement-items/{itemId}/disputes:
     $ref: "./beanflow-v1.yaml#/paths/~1settlement-items~1{itemId}~1disputes"
+  /stores/{storeId}/disputes:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes"
   /support/searches:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1searches"
   /support/cases:
