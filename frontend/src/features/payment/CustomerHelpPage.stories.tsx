@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
-import { CustomerHelpPage } from "./CustomerPages";
+import { CustomerHelpPage } from "./PaymentResultPages";
 
 const meta = {
   title: "Pages/Customer/Help",

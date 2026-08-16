@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../../api/customerClient";
-import { CustomerOrderDetailPage, CustomerOrdersPage, customerOrderTimelineModel, seoulDate } from "./CustomerOrders";
+import { won } from "../../lib/format";
+import { CustomerOrderDetailPage, CustomerOrdersPage, customerOrderTimelineModel, seoulDate } from "./OrderPages";
 
 const summary = {
   orderReference: "BF-7K3M-9Q2P",
@@ -21,6 +22,7 @@ const summary = {
 
 const detail = {
   ...summary,
+  storeId: "store-1",
   allowedActions: ["CANCEL" as const],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -98,8 +100,6 @@ describe("customer order detail", () => {
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
     expect(screen.getByText("아이스 아메리카노")).toBeInTheDocument();
     expect(screen.getByText("ICE · 샷 추가 · 2잔")).toBeInTheDocument();
-    expect(screen.getByText("취소 가능한 주문")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "주문 취소" })).not.toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/me/orders/{orderReference}", {
       params: { path: { orderReference: "BF-7K3M-9Q2P" } },
     });

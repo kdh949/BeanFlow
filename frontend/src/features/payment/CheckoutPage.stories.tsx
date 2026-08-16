@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { apiError, checkoutHandlers, ids, pending } from "../../../.storybook/fixtures";
-import { CheckoutPage } from "./CustomerPages";
+import { CheckoutPage } from "./CheckoutPage";
 
 const meta = {
   title: "Pages/Customer/Checkout",

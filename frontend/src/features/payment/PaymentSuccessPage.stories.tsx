@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { apiError, ids, paymentHandlers } from "../../../.storybook/fixtures";
-import { PaymentSuccessPage } from "./CustomerPages";
+import { PaymentSuccessPage } from "./PaymentResultPages";
 
 const meta = {
   title: "Pages/Customer/PaymentSuccess",
@@ -30,6 +30,22 @@ export const UnknownReconciliation: Story = {
   parameters: { msw: { handlers: paymentHandlers("UNKNOWN") } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("결제 결과를 확인하고 있어요")).toBeVisible();
+  },
+};
+
+/** Returning to the success URL does not make an unpaid payment approved. */
+export const NotPaidYet: Story = {
+  parameters: { msw: { handlers: paymentHandlers("READY") } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("아직 결제가 끝나지 않았어요")).toBeVisible();
+    await expect(canvas.queryByText("결제가 완료됐어요")).not.toBeInTheDocument();
+  },
+};
+
+export const Declined: Story = {
+  parameters: { msw: { handlers: paymentHandlers("FAILED") } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("결제를 완료하지 못했어요")).toBeVisible();
   },
 };
 

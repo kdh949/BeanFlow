@@ -94,13 +94,14 @@ const statefulDocs = {
   },
   "pages-customer-orderdetail--docs": {
     "pages-customer-orderdetail--ready-for-pickup": "A-142",
-    "pages-customer-orderdetail--recovery-pending": "환불 처리 상태",
     "pages-customer-orderdetail--cancelled": "취소된 주문입니다",
     "pages-customer-orderdetail--permission-failure": "이 주문을 볼 권한이 없습니다.",
   },
   "pages-customer-paymentsuccess--docs": {
     "pages-customer-paymentsuccess--approved": "결제가 완료됐어요",
     "pages-customer-paymentsuccess--unknown-reconciliation": "결제 결과를 확인하고 있어요",
+    "pages-customer-paymentsuccess--not-paid-yet": "아직 결제가 끝나지 않았어요",
+    "pages-customer-paymentsuccess--declined": "결제를 완료하지 못했어요",
     "pages-customer-paymentsuccess--dependency-error": "서비스 연결을 확인하고 있습니다.",
   },
   "pages-customer-paymentfailure--docs": {

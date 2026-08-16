@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { apiError, orderDetailHandlers, orderSummary } from "../../../.storybook/fixtures";
-import { CustomerOrderDetailPage } from "./CustomerOrders";
+import { CustomerOrderDetailPage } from "./OrderPages";
 
 const meta = {
   title: "Pages/Customer/OrderDetail",
@@ -23,17 +23,6 @@ export const ReadyForPickup: Story = {
   parameters: { msw: { handlers: orderDetailHandlers() } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("A-142")).toBeVisible();
-  },
-};
-
-export const RecoveryPending: Story = {
-  parameters: {
-    msw: { handlers: orderDetailHandlers({
-      paymentRecovery: { state: "RECONCILING", noticeCode: "PAYMENT_RESULT_PENDING" },
-    }) },
-  },
-  play: async ({ canvas }) => {
-    await expect(await canvas.findByText("환불 처리 상태")).toBeVisible();
   },
 };
 

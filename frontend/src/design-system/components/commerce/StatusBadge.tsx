@@ -1,6 +1,12 @@
 export type StatusBadgeProps = {
   /** Server state code. Known transaction states receive Korean labels and semantic tones. */
   state: string;
+  /**
+   * Overrides the shared label where one code means different things to different
+   * lifecycles — `READY` is a prepared pickup on the order board and an unpaid
+   * payment on the payment screens. The tone still follows `state`.
+   */
+  label?: string;
 };
 
 const labels: Record<string, string> = {
@@ -24,6 +30,7 @@ const labels: Record<string, string> = {
   RECONCILING: "복구 중",
   MANUAL_REVIEW: "확인 필요",
   FAILED: "실패",
+  NOT_REQUIRED: "해당 없음",
 };
 
 const tones: Record<string, string> = {
@@ -50,12 +57,12 @@ const tones: Record<string, string> = {
 };
 
 /** Domain-aware badge that preserves uncertain transaction states instead of collapsing them. */
-export function StatusBadge({ state }: StatusBadgeProps) {
+export function StatusBadge({ state, label }: StatusBadgeProps) {
   const tone = tones[state] ?? "neutral";
   return (
     <span className={`bf-status bf-status--${tone}`}>
       <span className="bf-status__dot" aria-hidden="true" />
-      {labels[state] ?? state}
+      {label ?? labels[state] ?? state}
     </span>
   );
 }
