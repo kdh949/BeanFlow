@@ -95,7 +95,9 @@ internal class RecentStoreEndpointIntegrationTest {
     fun `recent order projection applies every BR-40 state deduplicates stores breaks ties and isolates customers`() {
         val customerId = UUID.randomUUID()
         val otherCustomerId = UUID.randomUUID()
-        val base = clock.instant().minus(Duration.ofDays(1))
+        // PostgreSQL stores timestamps at microsecond precision. A whole-second fixture keeps
+        // this projection assertion about ordering rather than the system clock's nanoseconds.
+        val base = Instant.parse("2026-08-01T00:00:00Z")
         val reusedStore = createVisibleStore(customerId, "중복 최근 매장", uuid(1))
         val tiedFirstStore = createVisibleStore(customerId, "동률 첫 매장", uuid(2))
         val tiedSecondStore = createVisibleStore(customerId, "동률 둘째 매장", uuid(3))
