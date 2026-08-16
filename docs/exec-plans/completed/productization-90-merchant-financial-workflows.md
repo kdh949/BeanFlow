@@ -1,11 +1,11 @@
 # 점주가 UUID 없이 부분 환불·정산·이의제기를 처리한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/completed/productization-60-store-order-board.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-17`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -215,6 +215,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
+2026-08-17: 다섯 vertical slice로 구현을 완료했다. (1) pure `RefundAllocationCalculator`와
+`RefundPreviewVersion` 추출, (2) store-scoped preview/execute facade, (3) 정산 OWNER 정합화와
+store-scoped dispute Query, (4) merchant Session/CSRF client와 route gate, (5) 환불·정산·이의제기
+화면. 아래 Outcomes에 실제 측정값을 기록했다.
+
 2026-08-14: 선행 Plan 40과 Plan 60의 실제 Outcome·필수 검증이 모두 completed되어 dependency path와
 `Implementation-Ready=true`를 갱신했다. 구현은 시작하지 않았고 기존 dispute index 실행계획 확인은
 이 plan의 첫 milestone로 남는다. 이 plan 자체는 migration writer lease를 요구하지 않는다.
@@ -229,6 +234,14 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 ## Surprises & Discoveries
 
 - OrderLine에는 이미 order-scoped immutable `lineSequence`가 있어 새 공개 line ID migration이 필요 없다.
+- 2026-08-17: 주문보드 상세는 품목 목록을 주지 않아 preview가 잔여 수량의 유일한 source가 됐다.
+  그래서 preview `lines`를 선택적으로 바꿨다.
+- 2026-08-17: 정산 명세 조회 controller만 `STAFF`를 허용했고 기존 통합 테스트가 그 동작을 단언했다.
+  batch 목록이 OWNER 전용이라 `settlementBatchId`를 얻을 경로가 없어 실제로 도달 불가능한 틈이었다.
+- 2026-08-17: `ExpiredBenefitRestorationPolicyOperations.current`가 head를 `FOR UPDATE`로 읽어
+  read-only preview transaction에서 PostgreSQL이 거부했다. 잠그지 않는 조회를 별도 method로 추가했다.
+- 2026-08-17: 매장 콘솔이 Bearer 토큰으로 Merchant Chain을 호출하고 있어 실서버에서는 모든 요청이
+  `actor_credential_mismatch` 403이었다. Session client 전환이 화면 연결의 선행 조건이었다.
 - 이의제기는 접수·worker 판정은 있지만 점주가 새로고침 뒤 상태를 볼 store-scoped Query가 없다.
 - `ConsolePages`의 이름 `OpsRefundPage`와 달리 중앙 path registry는 `/payments/{paymentId}/refunds`를
   Merchant Chain으로 배정한다. 이를 Operations bearer 요청으로 취급하거나 CSRF를 끄면 ADR-094를 위반한다.
@@ -244,13 +257,60 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-12 | 공개 품목 식별자는 orderReference 범위의 lineSequence | [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md) |
 | 2026-08-12 | 정산·이의제기는 기존 ACTIVE OWNER 정책 유지 | [Authorization Matrix](../../security/authorization-matrix.md) |
 | 2026-08-15 | legacy `/payments/{paymentId}/refunds`의 CSRF consumer와 UUID form 제거는 이 plan의 Merchant financial Session/CSRF client milestone에서 함께 전환하며, Plan 60에는 one-off header를 선반영하지 않는다 | [MD-2026-014](../../decisions/minor-decisions.md), [ADR-094](../../adr/ADR-094-browser-session-security.md) |
+| 2026-08-17 | 미확정 Refund는 `REFUND_OUTCOME_UNRESOLVED`(409), 잔여 unit 초과 수량은 새 `REFUND_QUANTITY_UNAVAILABLE`(422)로 나눈다 | [MD-2026-030](../../decisions/minor-decisions.md), [Error Catalog](../../api/error-catalog.md) |
+| 2026-08-17 | preview `lines`는 선택적이며 생략은 "선택 없음"이다. 응답은 환불 가능한 모든 품목과 잔여 수량을 담고, 실행 endpoint는 계속 1건 이상을 요구한다 | [ADR-108](../../adr/ADR-108-merchant-partial-refund-preview.md), `openapi/beanflow-v1.yaml` |
+| 2026-08-17 | 정산 명세 조회를 batch 목록과 같은 ACTIVE OWNER 전용으로 좁힌다 | [Authorization Matrix](../../security/authorization-matrix.md), [MD-2026-031](../../decisions/minor-decisions.md) |
+| 2026-08-17 | 운영 콘솔의 UUID 환불 form을 제거한다. 운영자 토큰으로 Merchant 경로를 호출해 동작하지 않았고, 점주 환불은 주문번호 화면이 대체한다. `POST /operations/payments/{paymentId}/refunds` API는 그대로 유지한다 | [MD-2026-031](../../decisions/minor-decisions.md) |
 
 ## Outcomes & Retrospective
 
-아직 없다.
+### 실행한 검증
+
+| 명령 | 결과 |
+|---|---|
+| `./gradlew test --tests '*PartialRefund*' --tests '*MerchantRefund*' --tests '*Settlement*' --tests '*Dispute*' --tests '*RefundAllocation*' --tests '*RefundPreviewVersion*' --tests '*RuntimeOpenApiParity*' --tests '*architecture*'` | 통과 |
+| `cd frontend && npm test` | 통과 (12 files / 111 tests) |
+| `cd frontend && npm run typecheck` | 통과 |
+| `cd frontend && npm run build` | 통과 |
+| `cd frontend && npm run check:design` | 통과 (raw pixel baseline 15개 유지) |
+| Storybook MCP `run-story-tests` | 통과 (신규 store story 20개 포함) |
+| `./gradlew spotlessCheck` | 통과 |
+| `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh` | 통과 (runtime 150 paths / 159 operations) |
+| `cd frontend && npm run test:storybook:docs` | 실패 — `pages-customer-store-detail--docs` 누락. 이 plan 이전 commit에서도 같은 실패가 재현되며 이 plan의 회귀가 아니다 |
+
+### 측정 결과
+
+Milestone 1의 실행계획 확인은 `SettlementDisputeQueryPlanTest`가 20,000행 fixture로 수행했다.
+V28의 오름차순 `idx_settlement_dispute_store_filed`가 역방향 scan으로 최신순 page를 처리한다.
+
+```text
+Limit  (cost=0.29..7.87 rows=20 width=70) (actual time=0.240..0.287 rows=20 loops=1)
+  Buffers: shared hit=4
+  ->  Index Scan Backward using idx_settlement_dispute_store_filed on settlement_dispute
+        Index Cond: (store_id = ...)
+        Buffers: shared hit=4
+Execution Time: 1.038 ms
+```
+
+같은 질의를 index 없이 실행하면 `Seq Scan` + `top-N heapsort`로 `Buffers: shared hit=823`,
+`Execution Time: 5.778 ms`였다. 따라서 중복 DESC index를 만들지 않았고 이 plan은 migration을
+쓰지 않았다.
+
+### 회고
+
+- ADR-108이 preview에도 line 1건 이상을 요구했지만 주문보드 상세는 `itemSummary` 문자열만 주므로
+  화면이 첫 preview를 만들 재료가 없었다. 사용자 결정에 따라 preview `lines`를 선택적으로 바꾸고
+  응답이 환불 가능한 모든 품목을 담게 했다. 생략은 "아직 선택 없음"이며 전체 환불이 아니다.
+- 정산 명세 조회가 코드에서만 STAFF에게 열려 있었다. authorization matrix·target OpenAPI·BR 2가
+  모두 OWNER를 말하고 batch 목록도 OWNER 전용이라 도달 경로 자체가 없었으므로 코드를 정책에
+  맞췄다.
+- 읽기 전용 preview가 정책 head를 `FOR UPDATE`로 잠그려다 read-only transaction에서 실패했다.
+  잠그지 않는 `currentUnlocked` 조회를 추가해 preview가 운영자 정책 변경을 막지 않게 했다.
 
 ## Revision Notes
 
 - 2026-08-12: 최초 작성.
 - 2026-08-14: Plan 60 완료에 따라 dependency path와 readiness를 갱신. 구현은 시작하지 않음.
 - 2026-08-15: 사용자 선택 A에 따라 Merchant CSRF consumer 보정의 소유 범위, trade-off와 frontend 전체 build의 알려진 실패를 기록. 구현은 시작하지 않음.
+- 2026-08-17: 구현 완료. Status를 `COMPLETED`로, `Completed-At`을 실제 완료일로 갱신하고 실측
+  실행계획과 검증 결과를 Outcomes에 기록.

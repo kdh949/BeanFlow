@@ -127,9 +127,9 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 |---|---|---|---|---|---|---|
 | `1b POS 주문보드` | 점주·직원 | 모든 날짜의 실행 주문 처리 | Ordering | `GET /stores/{storeId}/orders` (신규), `POST /stores/{storeId}/orders/{orderReference}/transitions` (신규 경로) | P0 | 상태 전이는 있음(`PATCH /store-orders/{orderId}/status`). 목록·주문번호 없음. 미래 픽업 `PAID`도 수락 deadline 때문에 즉시 노출한다(BR-06). |
 | `4a 매장 비교` | 점주 | 매장 전환과 비교 | Identity, Analytics | `GET /merchant/me/stores` (신규) | P0(전환만) / P1(비교 지표) | `StoreMembership` 있음. 접근 가능 매장 목록 endpoint 없음. |
-| `4c 품목 부분 환불` | 점주·직원 | 품목 단위 환불 | Ordering, Payment | `POST /stores/{storeId}/orders/{orderReference}/refund-previews` (신규), `.../refunds` (신규 경로) | P0 | 환불 실행은 있음(`POST /payments/{paymentId}/refunds`). OWNER·STAFF가 lineSequence·quantity를 선택하고 서버가 금액을 계산한다(BR-38, ADR-108). |
+| `4c 품목 부분 환불` | 점주·직원 | 품목 단위 환불 | Ordering, Payment | `POST /stores/{storeId}/orders/{orderReference}/refund-previews`, `.../refunds` | P0 | 있음(Plan 90). OWNER·STAFF가 lineSequence·quantity를 선택하고 서버가 금액을 계산한다(BR-38, ADR-108). |
 | `2a 정산 내역` | 점주 | 정산 명세 조회 | Settlement | `GET /stores/{storeId}/settlements`, `/{batchId}/items` | P0 | 있음. |
-| `2b 이의제기 상세` | 점주 | 이의제기 접수·근거 확인 | Dispute | `POST /settlement-items/{itemId}/disputes`, `GET /stores/{storeId}/disputes` (신규) | P0(접수) / P1(상세·재실행 미리보기) | 접수·판정 서비스 있음. 점주 조회 목록 없음. |
+| `2b 이의제기 상세` | 점주 | 이의제기 접수·근거 확인 | Dispute | `POST /settlement-items/{itemId}/disputes`, `GET /stores/{storeId}/disputes` | P0(접수) / P1(상세·재실행 미리보기) | 접수·판정 서비스와 점주 store-scoped 목록 있음(Plan 90). |
 | `1a 대시보드` | 점주 | KPI 요약 | Analytics | `GET /stores/{storeId}/summary` (신규) | P1 | 없음. Analytics projection 계획은 별도 ExecPlan이다. |
 | `1c 재고 관리` | 점주·직원 | 품절·수량 조정 | Inventory | `GET/PATCH /stores/{storeId}/stocks` (신규) | P1 | 예약·확정·복원은 있음. 운영자용 수동 조정 API 없음. |
 | `4b 메뉴·가격` | 점주 | 메뉴·옵션·가격 관리 | Merchant | `GET/POST/PATCH /stores/{storeId}/menus` (신규) | P1 | 조회만 있음. 쓰기 없음. 낙관적 잠금 필요. |

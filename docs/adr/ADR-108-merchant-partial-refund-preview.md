@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-12
-- **Implementation owner:** [Merchant financial workflows](../exec-plans/active/productization-90-merchant-financial-workflows.md)
+- **Implementation owner:** [Merchant financial workflows](../exec-plans/completed/productization-90-merchant-financial-workflows.md)
 
 ## Context
 
@@ -38,8 +38,13 @@ POST /api/v1/stores/{storeId}/orders/{orderReference}/refunds
 - 두 endpoint는 BR-38에 따라 현재 `ACTIVE OWNER | STAFF` membership과 Order의 store 일치를 요구한다.
 - 요청 품목은 `{ lineSequence, quantity }`를 사용한다. `paymentId`, `orderLineId`, 환불 금액, 포인트
   복원액과 쿠폰 귀속액을 받지 않는다.
-- line selection은 1건 이상이며 sequence가 중복되면 400이다. 전체 잔여 환불도 모든 line의 잔여
-  수량을 명시한다. legacy endpoint의 omitted-lines full refund 의미를 새 UI 계약으로 가져오지 않는다.
+- 실행 request의 line selection은 1건 이상이며 sequence가 중복되면 400이다. 전체 잔여 환불도 모든
+  line의 잔여 수량을 명시한다. legacy endpoint의 omitted-lines full refund 의미를 새 UI 계약으로
+  가져오지 않는다.
+- **Amendment (2026-08-17):** preview request의 `lines`는 선택적이다. 생략은 "아직 아무 품목도 고르지
+  않음"이며 전체 환불이 아니다. 주문보드 상세가 품목 목록을 주지 않으므로 preview가 환불 가능한
+  품목과 잔여 수량의 유일한 source이고, 응답은 언제나 환불 가능한 모든 line을 담는다. 고르지 않은
+  line은 `selectedQuantity`와 금액이 0이다.
 
 ### Preview
 
@@ -49,7 +54,7 @@ preview는 현재 승인액, 성공 환불, 미확정 환불, unit consumption, 
 ```text
 RefundPreview
   orderReference
-  lines[]
+  lines[]                      # 환불 가능한 모든 line. 고르지 않은 line은 selectedQuantity 0
     lineSequence
     menuName
     selectedQuantity
@@ -114,6 +119,8 @@ TOCTOU를 줄일 수 있지만 preview 취소·만료 worker와 잠금 수명이
 ## Consequences
 
 - 새 migration 없이 Query/Facade와 API 계약이 추가된다.
+- preview가 품목 catalog 역할을 겸하므로 화면은 별도 조회 endpoint 없이 시작할 수 있다. 대신 preview
+  응답 크기가 주문 line 수에 비례한다.
 - STAFF도 금액 상한 없이 실행 가능하므로 BR-38의 actor·membership·사유 Audit과 운영 지표가 중요하다.
 - preview와 실행 사이 선행 환불은 정상적인 409가 되며 UI는 재조회·재선택을 안내해야 한다.
 - legacy UUID endpoint는 전환 동안 유지하되 새 점주 화면에서는 호출하지 않는다.

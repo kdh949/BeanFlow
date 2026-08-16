@@ -17,6 +17,9 @@ import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
 import { MerchantLoginPage, MerchantPasswordChangePage } from "./features/auth/merchant/MerchantAuthPages";
 import { MerchantSessionGate } from "./features/auth/merchant/MerchantSessionGate";
+import { StoreRefundPage } from "./features/merchant/StoreRefundPage";
+import { StoreSettlementsPage } from "./features/merchant/StoreSettlementsPage";
+import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
 import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
@@ -56,6 +59,9 @@ export const router = createBrowserRouter([
       {
         element: <MerchantSessionGate />, children: [
           { index: true, element: <StoreOrderBoardPage /> },
+          { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
+          { path: "settlements", element: <StoreSettlementsPage /> },
+          { path: "disputes", element: <StoreDisputesPage /> },
         ],
       },
     ],

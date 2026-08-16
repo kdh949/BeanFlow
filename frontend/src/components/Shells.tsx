@@ -5,16 +5,17 @@ import {
   LogOut,
   PackageCheck,
   ReceiptText,
+  WalletCards,
   Search,
   Settings,
   ShieldCheck,
   Store,
   UserRound,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { authToken, useAuthToken } from "../auth/session";
-import { merchantSession, useMerchantSession } from "../features/auth/merchant/merchantSession";
+import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { Button, ButtonLink } from "../design-system";
 
 export function CustomerShell() {
@@ -60,8 +61,17 @@ type ConsoleShellProps = {
 };
 
 export function ConsoleShell({ kind }: ConsoleShellProps) {
+  // 정산·이의제기는 ACTIVE OWNER만 쓸 수 있다. 이 gate는 표시 편의일 뿐이고
+  // 모든 endpoint가 요청 시점의 membership을 다시 검증한다.
+  const ownsAnyStore = useOwnerMembership(kind === "store");
   const storeItems = [
     { to: "/store", label: "주문 보드", icon: PackageCheck, end: true },
+    ...(ownsAnyStore
+      ? [
+          { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
+          { to: "/store/disputes", label: "이의제기", icon: ReceiptText, end: false },
+        ]
+      : []),
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
@@ -132,6 +142,38 @@ function ConsoleTokenStrip() {
       {open ? <TokenEditor onClose={() => setOpen(false)} /> : null}
     </div>
   );
+}
+
+/**
+ * Reads the current memberships to decide which console entries to show. A read
+ * failure hides the owner-only entries rather than guessing that the actor owns
+ * a store; the endpoints answer 403 either way.
+ */
+function useOwnerMembership(enabled: boolean): boolean {
+  const [ownsAnyStore, setOwnsAnyStore] = useState(false);
+  const session = useMerchantSession();
+  const signedIn = session.status === "authenticated";
+
+  useEffect(() => {
+    if (!enabled || !signedIn) {
+      setOwnsAnyStore(false);
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const stores = await requestMerchantStores();
+        if (!disposed) setOwnsAnyStore(stores.some((store) => store.membershipRole === "OWNER"));
+      } catch {
+        if (!disposed) setOwnsAnyStore(false);
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [enabled, signedIn]);
+
+  return ownsAnyStore;
 }
 
 function AuthStatus() {

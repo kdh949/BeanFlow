@@ -1,9 +1,19 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { StoreOrderBoardPage } from "./StoreOrderBoard";
+
+/** 보드 카드가 환불 화면으로 연결되므로 router context 안에서 렌더한다. */
+function renderBoard() {
+  return render(
+    <MemoryRouter initialEntries={["/store"]}>
+      <StoreOrderBoardPage />
+    </MemoryRouter>,
+  );
+}
 
 const gangnam = { storeId: "10000000-0000-4000-8000-000000000001", storeName: "강남 2호점", membershipRole: "OWNER" as const };
 const yeouido = { storeId: "10000000-0000-4000-8000-000000000002", storeName: "여의도점", membershipRole: "STAFF" as const };
@@ -66,7 +76,7 @@ describe("store order board", () => {
       throw new Error(`unexpected GET ${path}`);
     });
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
 
     expect(await screen.findByRole("heading", { name: "실행 주문 보드" })).toBeInTheDocument();
     expect(await screen.findByText("A-142")).toBeInTheDocument();
@@ -102,7 +112,7 @@ describe("store order board", () => {
     });
     const user = userEvent.setup();
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
 
     const button = await screen.findByRole("button", { name: "오래된 준비 완료 작업 2건 보기" });
     expect(screen.queryByRole("article", { name: "주문 A-143" })).not.toBeInTheDocument();
@@ -133,7 +143,7 @@ describe("store order board", () => {
     });
     const user = userEvent.setup();
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
 
     await user.click(await screen.findByRole("button", { name: "오래된 준비 완료 작업 2건 보기" }));
 
@@ -161,7 +171,7 @@ describe("store order board", () => {
     });
     const user = userEvent.setup();
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
     expect(await screen.findByRole("alert")).toHaveTextContent("매장 목록을 불러오지 못했습니다");
     expect(screen.queryByText("접근 가능한 매장이 없습니다")).not.toBeInTheDocument();
 
@@ -185,7 +195,7 @@ describe("store order board", () => {
     const post = vi.spyOn(merchantApi, "POST").mockResolvedValue(response({ ...paidOrder, lane: "ACCEPTED", status: "ACCEPTED", allowedActions: ["START_PREPARING"] }) as never);
     const user = userEvent.setup();
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
     await screen.findByRole("combobox", { name: "운영 매장" });
     await user.selectOptions(screen.getByRole("combobox", { name: "운영 매장" }), yeouido.storeId);
     const card = await screen.findByRole("article", { name: "주문 A-142" });
@@ -215,7 +225,7 @@ describe("store order board", () => {
       throw new Error(`unexpected GET ${path}`);
     });
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(screen.getByText("A-142")).toBeInTheDocument();
 
@@ -250,7 +260,7 @@ describe("store order board", () => {
       throw new Error(`unexpected GET ${path}`);
     });
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(screen.getByText("A-142")).toBeInTheDocument();
 
@@ -280,7 +290,7 @@ describe("store order board", () => {
     } as never);
     const user = userEvent.setup();
 
-    render(<StoreOrderBoardPage />);
+    renderBoard();
     const card = await screen.findByRole("article", { name: "주문 A-142" });
     await user.click(within(card).getByRole("button", { name: "주문 접수" }));
 
