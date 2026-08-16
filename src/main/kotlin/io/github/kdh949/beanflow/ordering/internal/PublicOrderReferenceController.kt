@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.MerchantActor
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -59,6 +60,20 @@ internal class PublicCustomerOrderController(
                 request,
             )
         return ResponseEntity.status(result.status).contentType(MediaType.APPLICATION_JSON).body(result.body)
+    }
+
+    @PostMapping("/{orderReference}/reorders")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun reorder(
+        actor: CustomerActor,
+        @PathVariable orderReference: String,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @Valid @RequestBody request: ReorderOrderRequest,
+    ): ResponseEntity<String> {
+        val result = service.reorderCustomerOrder(actor.actorId, orderReference, idempotencyKey, request)
+        val response = ResponseEntity.status(result.status).contentType(MediaType.APPLICATION_JSON)
+        result.retryAfterSeconds?.let { response.header(HttpHeaders.RETRY_AFTER, it.toString()) }
+        return response.body(result.body)
     }
 }
 

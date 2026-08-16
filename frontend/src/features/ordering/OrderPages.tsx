@@ -8,6 +8,9 @@ import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../compone
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime, shortTime, won } from "../../lib/format";
 import { Button, ButtonLink } from "../../design-system";
+import { CancelOrderPanel } from "./CancelOrderPanel";
+import { RefundProgress } from "./RefundProgress";
+import { ReorderPanel } from "./ReorderPanel";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];
 type CustomerOrderSummary = components["schemas"]["CustomerOrderSummary"];
@@ -176,6 +179,10 @@ export function CustomerOrderDetailPage() {
   if (error && !order) return <ErrorState error={error} retry={() => void load()} />;
   if (!order) return null;
 
+  const canCancel = order.allowedActions.includes("CANCEL");
+  const canViewRefund = order.allowedActions.includes("VIEW_REFUND");
+  const canReorder = order.allowedActions.includes("REORDER");
+
   return (
     <div className="customer-page customer-order-detail-page">
       <Link className="back-link" to="/app/orders"><ArrowLeft size={17} /> 주문 목록</Link>
@@ -206,7 +213,18 @@ export function CustomerOrderDetailPage() {
         <div className="order-detail-total"><span>결제 금액</span><strong>{won.format(order.totalAmountKrw)}</strong></div>
       </section>
 
+      {canViewRefund && order.paymentRecovery ? <RefundProgress recovery={order.paymentRecovery} /> : null}
       {error ? <ErrorState error={error} retry={() => void load()} /> : null}
+
+      {canCancel ? (
+        <CancelOrderPanel
+          orderReference={order.orderReference}
+          preview={order.cancellationPreview}
+          onCancelled={() => void load()}
+        />
+      ) : null}
+
+      {canReorder ? <ReorderPanel orderReference={order.orderReference} storeId={order.storeId} storeName={order.storeName} /> : null}
 
       <Button block variant="ghost" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</Button>
     </div>

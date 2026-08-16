@@ -26,6 +26,39 @@ export const ReadyForPickup: Story = {
   },
 };
 
+export const RefundInProgress: Story = {
+  parameters: {
+    msw: { handlers: orderDetailHandlers({
+      status: "CANCELLED",
+      allowedActions: ["VIEW_REFUND"],
+      paymentRecovery: {
+        state: "PROCESSING",
+        cancellationRequestedRefundAmountKrw: 12_800,
+        remainingRefundableAmountKrw: 0,
+      },
+    }) },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("환불을 처리하고 있어요")).toBeVisible();
+  },
+};
+
+export const CancellableBeforeAcceptance: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "PAID" }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: "주문 취소" })).toBeVisible();
+  },
+};
+
+export const ReorderableAfterPickup: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ })).toBeVisible();
+  },
+};
+
 export const Cancelled: Story = {
   parameters: { msw: { handlers: orderDetailHandlers({ status: "CANCELLED", allowedActions: [] }) } },
   play: async ({ canvas }) => {

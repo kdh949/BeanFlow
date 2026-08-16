@@ -14,6 +14,7 @@ import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationSer
 import io.github.kdh949.beanflow.identity.internal.StoreRegionCommandService
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentOperations
+import io.github.kdh949.beanflow.loyalty.internal.CustomerPointAccountLocator
 import io.github.kdh949.beanflow.merchant.internal.RegionCatalogService
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
@@ -239,6 +240,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var httpSessionIdResolver: HttpSessionIdResolver
+
+    @MockitoBean
+    private lateinit var customerPointAccountLocator: CustomerPointAccountLocator
 
     @MockitoBean
     private lateinit var customerStoreHydrator: CustomerStoreHydrator

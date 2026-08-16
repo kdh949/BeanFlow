@@ -671,6 +671,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/orders/{orderReference}/reorders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a current-condition order from an owned terminal order */
+        post: operations["reorderCurrentCustomerOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current customer point balance and expirations */
+        get: operations["getCurrentCustomerPoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/point-transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List current customer point ledger transactions */
+        get: operations["listCurrentCustomerPointTransactions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payment-config": {
         parameters: {
             query?: never;
@@ -5114,6 +5165,12 @@ export interface components {
         };
         CustomerOrderDetail: {
             orderReference: string;
+            /**
+             * @description Server-supplied opaque store identifier. It exists so the customer can
+             *     read that store's current pickup slots when reordering; no customer
+             *     screen accepts it as input.
+             */
+            storeId: components["schemas"]["Identifier"];
             pickupNumber: string;
             storeName: string;
             status: components["schemas"]["OrderState"];
@@ -5167,6 +5224,70 @@ export interface components {
             cancelledAt: components["schemas"]["DateTime"];
             /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
+        };
+        ExpiringPointAmount: {
+            expiresAt: components["schemas"]["DateTime"];
+            amountKrw: components["schemas"]["MoneyKrw"];
+        };
+        CustomerPointSummary: {
+            availablePointsKrw: components["schemas"]["MoneyKrw"];
+            recoveryPendingKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            expiring: components["schemas"]["ExpiringPointAmount"][];
+        };
+        /**
+         * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.
+         * @example {
+         *       "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *       "type": "ADJUSTMENT",
+         *       "amountKrw": 3000,
+         *       "occurredAt": "2026-08-15T15:00:00+09:00",
+         *       "sourceReference": "point-adjustment:sample:001"
+         *     }
+         */
+        PointTransaction: {
+            /** @description 해당 포인트 거래 자원을 가리키는 UUID 식별자입니다. */
+            transactionId: components["schemas"]["Identifier"];
+            /**
+             * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
+             *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
+             *     뜻합니다.
+             * @enum {string}
+             */
+            type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
+            /**
+             * @description 고객에게 표시되는 포인트 잔액에 미치는 부호 있는 효과입니다. ACCRUAL, RESTORE, COMPENSATION은
+             *     양수이고 USE, EXPIRATION, RECOVERY are negative(음수)이며 RESTORE_SKIPPED_EXPIRED is zero
+             *     (0)입니다. 항상 0 이상인 금액이 아니며 ADJUSTMENT follows its stored CREDIT or DEBIT balance effect(저장된 CREDIT 또는 DEBIT 효과를 따릅니다).
+             */
+            amountKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 포인트 거래가 발생한 시각입니다. */
+            occurredAt: components["schemas"]["DateTime"];
+            /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
+            sourceReference: string;
+        };
+        /**
+         * @description 포인트 거래 내역과 다음 페이지 정보를 담는 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *           "type": "ACCRUAL",
+         *           "amountKrw": 500,
+         *           "occurredAt": "2026-08-15T10:30:00+09:00",
+         *           "sourceReference": "order:74131bb9-688f-5370-8042-21015b3cd43a"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "v1.sample.cursor.eyJvY2N1cnJlZEF0IjoiMjAyNi0wOC0xNVQxMDozMDowMCswOTowMCJ9"
+         *       }
+         *     }
+         */
+        PointTransactionPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
+            items: components["schemas"]["PointTransaction"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
+            page: components["schemas"]["PageInfo"];
         };
         PaymentClientConfiguration: {
             /** @constant */
@@ -6066,37 +6187,6 @@ export interface components {
             currency: components["schemas"]["Currency"];
         };
         /**
-         * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.
-         * @example {
-         *       "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
-         *       "type": "ADJUSTMENT",
-         *       "amountKrw": 3000,
-         *       "occurredAt": "2026-08-15T15:00:00+09:00",
-         *       "sourceReference": "point-adjustment:sample:001"
-         *     }
-         */
-        PointTransaction: {
-            /** @description 해당 포인트 거래 자원을 가리키는 UUID 식별자입니다. */
-            transactionId: components["schemas"]["Identifier"];
-            /**
-             * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
-             *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
-             *     뜻합니다.
-             * @enum {string}
-             */
-            type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
-            /**
-             * @description 고객에게 표시되는 포인트 잔액에 미치는 부호 있는 효과입니다. ACCRUAL, RESTORE, COMPENSATION은
-             *     양수이고 USE, EXPIRATION, RECOVERY are negative(음수)이며 RESTORE_SKIPPED_EXPIRED is zero
-             *     (0)입니다. 항상 0 이상인 금액이 아니며 ADJUSTMENT follows its stored CREDIT or DEBIT balance effect(저장된 CREDIT 또는 DEBIT 효과를 따릅니다).
-             */
-            amountKrw: components["schemas"]["SignedMoneyKrw"];
-            /** @description 포인트 거래가 발생한 시각입니다. */
-            occurredAt: components["schemas"]["DateTime"];
-            /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
-            sourceReference: string;
-        };
-        /**
          * @description 포인트 수동 조정 결과입니다. 조정 후 계정 잔액과 이번 작업으로 생성된 포인트 거래 내역을 함께 반환합니다.
          * @example {
          *       "account": {
@@ -6120,29 +6210,6 @@ export interface components {
             account: components["schemas"]["PointAccount"];
             /** @description 이번 조정으로 생성되거나 조회된 포인트 거래 내역입니다. */
             transactions: components["schemas"]["PointTransaction"][];
-        };
-        /**
-         * @description 포인트 거래 내역과 다음 페이지 정보를 담는 응답입니다.
-         * @example {
-         *       "items": [
-         *         {
-         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
-         *           "type": "ACCRUAL",
-         *           "amountKrw": 500,
-         *           "occurredAt": "2026-08-15T10:30:00+09:00",
-         *           "sourceReference": "order:74131bb9-688f-5370-8042-21015b3cd43a"
-         *         }
-         *       ],
-         *       "page": {
-         *         "nextCursor": "v1.sample.cursor.eyJvY2N1cnJlZEF0IjoiMjAyNi0wOC0xNVQxMDozMDowMCswOTowMCJ9"
-         *       }
-         *     }
-         */
-        PointTransactionPage: {
-            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
-            items: components["schemas"]["PointTransaction"][];
-            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
-            page: components["schemas"]["PageInfo"];
         };
         /**
          * @description 전체 기본 정책 또는 매장별 정책의 한 버전입니다. 매장별 설정을 직접 지정했는지, 전체 기본 정책을 따르는지, 언제부터 적용되는지와 변경 사유를 기록합니다.
@@ -10750,6 +10817,8 @@ export interface operations {
                  * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
             };
             path: {
                 /**
@@ -10789,6 +10858,100 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    reorderCurrentCustomerOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description New order and price comparison committed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReorderOrderResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ReorderConflict"];
+            503: components["responses"]["OrderCreationDependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerPoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Actor-scoped point balance without PointAccount ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPointSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerPointTransactions: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Actor-scoped signed point ledger page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointTransactionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

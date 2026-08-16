@@ -47,6 +47,25 @@ Customer와 Merchant Session Cookie는 각각 `BEANFLOW_CUSTOMER_SESSION`,
 브라우저 Session Chain에 보내면 fallback하지 않고 403이다. 인증 부재·무효 Session은 401, Session
 저장소나 현재 계정 조회 장애는 503이다.
 
+### Browser client contract
+
+브라우저는 actor별로 서로 다른 API client를 쓴다. 하나의 client가 경로를 보고 인증 방식을
+추론하지 않는다.
+
+| Client | 인증 | 규칙 |
+|---|---|---|
+| `customerApi` | Session Cookie | `credentials: same-origin`. `Authorization` header를 붙이지 않고 unsafe method는 `X-BEANFLOW-CSRF`가 없으면 전송 전에 차단한다 |
+| `merchantApi`, `operationsApi` | Bearer | 콘솔 전용. customer 경로에 사용하지 않는다 |
+
+- `BEANFLOW_CUSTOMER_XSRF`는 JS로 읽는 CSRF Cookie이며 인증 정보가 아니다. Session Cookie는
+  `HttpOnly`라 JS가 읽지 않는다. client는 CSRF token을 저장하지 않고 매 unsafe 요청에서 Cookie를
+  읽어 header로 보낸다.
+- 고객 화면은 customer ID, PointAccount ID, Order UUID를 입력 form이나 request body로 받지 않는다.
+  API 응답이나 Provider callback으로 받은 opaque ID는 그대로 다시 호출에 쓸 수 있다.
+- 브라우저 저장소는 schema version이 붙은 client cart(`beanflow.customer.cart.v1`)와 미해결 submit
+  intent만 보관한다. Session, access token, password, provider key와 point/account UUID를 저장하지
+  않는다. 로그아웃은 이 customer 상태만 지우고 다른 actor의 인증 상태는 건드리지 않는다.
+
 `POST /settlement-items/{itemId}/disputes`는 Settlement Item 경로를 사용하지만 Dispute Context가
 소유하는 resource다. handler는 Settlement internal repository를 직접 읽지 않고 confirmed Item
 public view를 통해 검증하며, accepted decision은 Settlement public Adjustment command로 넘긴다.
@@ -141,7 +160,13 @@ the Case-list tuple in ADR-070; later Support cursor contracts remain unaccepted
 
 - Plan 13 V17/owner transaction이 `recoveryPendingKrw`, `ACCRUAL`과 `RECOVERY` storage contract를
   구현했다. Plan 14 read API는 이 값을 그대로 projection하며 0이나 ledger 합으로 대체하지 않는다.
-- Customer Session은 `GET /point-accounts/{accountId}`와 `/transactions`에서 자기 소유권만 사용한다.
+- 고객 화면은 `GET /me/points`와 `GET /me/point-transactions`를 사용한다. 두 endpoint는 customer ID로
+  PointAccount를 찾아 기존 Query Service를 호출하고 내부 `accountId`를 응답하지 않는다. 대응하는
+  PointAccount가 없으면 0원 DTO, lazy-create 또는 404가 아니라 `503
+  POINT_ACCOUNT_INTEGRITY_FAILURE`다. `GET /me/points`의 `expiring`은 미만료이면서 available 잔액이
+  남은 PointLot의 `(expiresAt, amountKrw)` 최소 projection이며 조회 실패를 생략하지 않는다.
+- `GET /point-accounts/{accountId}`와 `/transactions`는 account UUID를 이미 아는 운영 support 경로로
+  유지한다. Customer Session은 두 경로에서도 자기 소유권만 사용한다.
   운영자 조회는 `GET /operations/point-accounts/{accountId}`와 `/transactions`로 분리하고 Bearer JWT,
   active `POINT_ACCOUNT_READ`, required `X-Access-Reason`과 접근 Audit을 요구한다. 한 URI에서 두 인증
   방식을 판별하지 않는다.

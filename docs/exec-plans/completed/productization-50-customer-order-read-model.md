@@ -323,7 +323,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-13 | 상태 생략은 전체, `ACTIVE`는 진행 주문, `PAST`는 종료 주문으로 서버가 분류 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md), [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
 | 2026-08-14 | 목록은 R1 candidate scan → bounded atomic W1 expiry → R2 fixed-candidate projection의 세 transaction으로 실행 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-14 | ACTIVE 만료로 응답 row가 비어도 `nextCursor`는 candidate scan boundary로 만들고 다음 window를 채우지 않음 | [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
-| 2026-08-14 | Plan 50 UI는 `allowedActions.CANCEL` 안내만 표시하고 CSRF mutation·실제 취소 버튼은 Plan 80까지 만들지 않음 | [productization-80](../active/productization-80-customer-web-p0-integration.md) |
+| 2026-08-14 | Plan 50 UI는 `allowedActions.CANCEL` 안내만 표시하고 CSRF mutation·실제 취소 버튼은 Plan 80까지 만들지 않음 | [productization-80](../completed/productization-80-customer-web-p0-integration.md) |
 | 2026-08-14 | 통합 테스트의 background scheduler는 test profile에서 1시간 뒤로 미루고 worker 검증은 명시적 `runOnce()`로 유지 | 이 plan |
 | 2026-08-14 | 고객 주문 기본 날짜는 browser timezone이 아니라 `Asia/Seoul`로 계산 | [BR-01](../../product/business-policy-decisions.md), [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |
 | 2026-08-14 | 고객 주문 목록·상세 `totalAmountKrw`는 subtotal이 아니라 coupon·point 적용 뒤 `payableKrw`를 반환 | [ADR-099](../../adr/ADR-099-customer-order-read-model.md) |

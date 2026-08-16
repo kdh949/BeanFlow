@@ -232,3 +232,20 @@ export const searchHandlers = [
     distanceAvailable: false,
   })),
 ];
+
+export const pointsHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/me/points", () => HttpResponse.json({
+    availablePointsKrw: 1_500,
+    recoveryPendingKrw: 300,
+    currency: "KRW",
+    expiring: [{ expiresAt: "2026-09-01T00:00:00Z", amountKrw: 1_000 }],
+  })),
+  http.get("/api/v1/me/point-transactions", () => HttpResponse.json({
+    items: [
+      { transactionId: "a1", type: "ACCRUAL", amountKrw: 200, occurredAt: "2026-08-14T00:00:00Z", sourceReference: "order:1" },
+      { transactionId: "a2", type: "USE", amountKrw: -100, occurredAt: "2026-08-13T00:00:00Z", sourceReference: "order:2" },
+    ],
+    page: {},
+  })),
+];

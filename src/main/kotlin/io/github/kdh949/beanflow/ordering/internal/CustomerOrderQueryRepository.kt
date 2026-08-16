@@ -18,6 +18,7 @@ internal data class CustomerOrderCandidateProjection(
 
 internal data class CustomerOrderHeaderProjection(
     val orderId: UUID,
+    val storeId: UUID,
     val publicReference: String,
     val pickupSequence: Long,
     val storeName: String,
@@ -170,6 +171,7 @@ internal class CustomerOrderQueryRepository(
         ignoredRow: Int,
     ) = CustomerOrderHeaderProjection(
         orderId = resultSet.getObject("id", UUID::class.java),
+        storeId = resultSet.getObject("store_id", UUID::class.java),
         publicReference = resultSet.getString("public_reference"),
         pickupSequence = resultSet.getLong("pickup_sequence"),
         storeName = resultSet.getString("store_name_snapshot"),
@@ -204,7 +206,7 @@ internal class CustomerOrderQueryRepository(
         const val DETAIL = "detail"
         val HEADER_SELECT =
             """
-            SELECT id, public_reference, pickup_sequence, store_name_snapshot, state, created_at,
+            SELECT id, store_id, public_reference, pickup_sequence, store_name_snapshot, state, created_at,
                    pickup_window_start_snapshot, pickup_window_end_snapshot, subtotal_krw, payable_krw, currency,
                    reservation_expires_at, acceptance_deadline_at, cancellation_cause, paid_at, version
               FROM ordering_order

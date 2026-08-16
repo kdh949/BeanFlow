@@ -1,15 +1,20 @@
 import { createBrowserRouter } from "react-router";
 import { ConsoleShell, CustomerShell, RootRedirect } from "./components/Shells";
-import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
-import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
-import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import { CheckoutPage } from "./features/payment/CheckoutPage";
-import { CustomerHelpPage, PaymentFailPage, PaymentSuccessPage } from "./features/payment/PaymentResultPages";
+import {
+  CustomerHelpPage,
+  PaymentFailPage,
+  PaymentSuccessPage,
+} from "./features/payment/PaymentResultPages";
+import { CartPage } from "./features/ordering/CartPage";
+import { CustomerPointsPage } from "./features/loyalty/PointsPage";
+import { StoreDetailPage } from "./features/ordering/StoreDetailPage";
 import { CustomerHomePage } from "./features/discovery/HomePage";
 import { StoreSearchPage } from "./features/discovery/StoreSearchPage";
-import { StoreDetailPage } from "./features/ordering/StoreDetailPage";
-import { CartPage } from "./features/ordering/CartPage";
 import { CustomerOrderDetailPage, CustomerOrdersPage } from "./features/ordering/OrderPages";
+import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
+import { CustomerMyPage } from "./features/auth/customer/MyPage";
+import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
 import { OpsDashboardPage, OpsOrderPage, OpsRefundPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
@@ -26,7 +31,6 @@ export const router = createBrowserRouter([
       { path: "signup", element: <CustomerSignupPage /> },
       { path: "help", element: <CustomerHelpPage /> },
       {
-        // Everything that needs an actor waits for `GET /me` behind this gate.
         element: <CustomerSessionGate />, children: [
           { index: true, element: <CustomerHomePage /> },
           { path: "stores", element: <StoreSearchPage /> },
@@ -37,6 +41,7 @@ export const router = createBrowserRouter([
           { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
           { path: "orders", element: <CustomerOrdersPage /> },
           { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
+          { path: "points", element: <CustomerPointsPage /> },
           { path: "me", element: <CustomerMyPage /> },
         ],
       },

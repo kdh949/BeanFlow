@@ -249,7 +249,7 @@ force-push를 하지 않는다.
 | M5 | [productization-50](../completed/productization-50-customer-order-read-model.md) | 내 주문 목록·상세, `allowedActions` | 완료 |
 | M6 | [productization-60](../completed/productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 완료 |
 | M7 | [productization-70](../completed/productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 완료 |
-| M8 | [productization-80](productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 준비 |
+| M8 | [productization-80](../completed/productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 완료 |
 | M9 | [productization-90](productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 대기 |
 | M10 | [productization-100](productization-100-operations-work-queues.md) | 운영자 PKCE, 실패 큐·정산 대사·감사·Support·점주 발급 UI | 대기 |
 
@@ -457,6 +457,18 @@ git diff --cached --check
   고친 뒤 인증 7건과 RuntimeOpenApiParityTest 1건을 모두 통과했다. 보안 commit `6af1eee`과 test fix
   `a824e4a`는 Plan 30→60에 순차 merge했으며, `spotlessCheck`, 문서/OpenAPI 검증도 통과했다. 새 GitHub
   CI가 끝나기 전에는 성공으로 기록하지 않는다.
+- 2026-08-16 M8 구현 완료: [productization-80](../completed/productization-80-customer-web-p0-integration.md)이
+  고객 P0 13화면을 Session과 실제 거래 API에 연결하고 완료됐다. Plan 50이 Plan 80까지 미뤄 둔 CSRF
+  mutation과 실제 취소 버튼도 함께 들어갔다. frontend 98 tests, typecheck, build, 대상 backend test와
+  문서/OpenAPI 검증에 더해 `scripts/demo` stack을 띄운 420px 브라우저 전체 흐름을 확인했다. 그
+  smoke에서만 드러난 결제 결과 화면 결함 2건과 주문 화면 표기 결함 2건을 고쳤다. 결과가 있는 매장
+  검색 화면과 외부 결제창 이후 흐름은 실행하지 못했고 그 이유를 Plan 80에 남겼다.
+- 2026-08-16 M8 재개: 그 browser 확인에서 고객이 볼 수 있는 매장 단건 조회 endpoint가 없다는 계약
+  공백을 찾았다. 매장 상세를 URL로 열면 이름을 가져올 곳이 없어 화면과 장바구니에 일반 명칭이
+  남았다. 공개 API 계약 추가는 plan 소유가 필요하므로, 사용자 결정에 따라 Plan 80을 다시 `ACTIVE`로
+  열고 Milestone 10으로 `GET /stores/{storeId}`를 소유하게 했다. 매장 상세와 장바구니가 이름을
+  서버에서 읽도록 바꾸고 frontend 103 tests, 대상 backend test, `spotlessCheck`, 문서/OpenAPI 검증과
+  같은 demo stack의 브라우저 확인을 통과한 뒤 M8을 다시 완료로 표시했다.
 
 ## Surprises & Discoveries
 

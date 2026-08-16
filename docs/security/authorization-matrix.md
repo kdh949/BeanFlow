@@ -14,6 +14,9 @@
 | 매장 주문 상태 전이 (`/stores/{storeId}/orders/{orderReference}/transitions`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |
 | 빠른 재주문 | Own terminal source only | No | No | No direct reorder | No |
+| 주문번호 재주문 (`/me/orders/{orderReference}/reorders`) | Own terminal source only, 소유권을 서버가 주문번호로 확인 | No | No | No direct reorder | No |
+| 내 포인트 잔액·만료 (`/me/points`) | Own actor-scoped only | No | No | 별도 `/operations/point-accounts/**` | No |
+| 내 포인트 원장 (`/me/point-transactions`) | Own actor-scoped only, signed cursor | No | No | 별도 `/operations/point-accounts/**` | No |
 | 내 결제수단 등록·목록 | Own only | No | No | No public support endpoint | No |
 | 내 결제수단 default 지정·폐기 | Own active/lifecycle-allowed method | No | No | No direct command | No |
 | 내 주문 외부 결제 승인 | Own order and own active PaymentMethod | No | No | No direct approval | No |
@@ -29,6 +32,7 @@
 | 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
 | 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
+| 매장 단건 조회 (`/stores/{storeId}`) | Customer Session | No | No | No | No |
 | 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
 | 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |
 | 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
@@ -166,6 +170,12 @@ grant를 요구한다. 단일 운영자는 body reason과 `Idempotency-Key`만 �
 Application Service는 완전한 고객 취소 원천을 다시 검증한 뒤 기존 Provider key의 LOOKUP
 한 번만 예약한다. 다른 repair/read grant나 `PLATFORM_OPERATOR` role만으로 통과하지 않으며,
 금액·Provider 결과·금융 식별자를 입력하거나 새 REQUEST를 보내는 권한은 부여하지 않는다.
+고객 화면은 account UUID를 모르므로 actor-scoped `/me/points`와 `/me/point-transactions`를 쓴다. 두
+endpoint는 Session의 customer ID로 PointAccount를 찾고 응답과 cursor 어디에도 내부 accountId를
+노출하지 않는다. 대응 PointAccount가 없으면 0원 응답이나 404가 아니라 503
+`POINT_ACCOUNT_INTEGRITY_FAILURE`다. account UUID를 이미 아는 `/point-accounts/**`는 운영 support
+경로로 유지한다.
+
 고객 자신의 point-account/ledger read는 reason 없이 허용하지만, Platform Operator support read는
 별도 `/operations/point-accounts/**` URI에서 `POINT_ACCOUNT_READ` grant, `X-Access-Reason`과 target
 access Audit을 요구한다. Customer URI에는 reason header를 선언하지 않고 운영자 URI에서는 required다.

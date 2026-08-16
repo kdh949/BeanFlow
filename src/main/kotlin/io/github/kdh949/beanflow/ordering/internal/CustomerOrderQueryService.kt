@@ -218,6 +218,7 @@ internal class CustomerOrderReadTransaction(
             }
         return CustomerOrderDetailResponse(
             orderReference = publicReference,
+            storeId = storeId,
             pickupNumber = "A-$pickupSequence",
             storeName = storeName,
             status = state,

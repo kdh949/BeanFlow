@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import java.time.Instant
+import java.util.UUID
 
 internal data class CustomerOrderSummaryResponse(
     val orderReference: String,
@@ -35,6 +36,11 @@ internal data class CustomerOrderLineResponse(
 
 internal data class CustomerOrderDetailResponse(
     val orderReference: String,
+    /**
+     * Opaque store identifier supplied by the server so the reorder screen can
+     * read that store's current pickup slots. No screen accepts it as input.
+     */
+    val storeId: UUID,
     val pickupNumber: String,
     val storeName: String,
     val status: String,

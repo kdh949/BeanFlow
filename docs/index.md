@@ -86,7 +86,7 @@
 - [Productization 50 Customer Order Read Model](exec-plans/completed/productization-50-customer-order-read-model.md)
 - [Productization 60 Store Order Board](exec-plans/completed/productization-60-store-order-board.md)
 - [Productization 70 Customer Store Discovery](exec-plans/completed/productization-70-customer-store-discovery.md)
-- [Productization 80 Customer Web P0 Integration](exec-plans/active/productization-80-customer-web-p0-integration.md)
+- [Productization 80 Customer Web P0 Integration](exec-plans/completed/productization-80-customer-web-p0-integration.md)
 - [Productization 90 Merchant Financial Workflows](exec-plans/active/productization-90-merchant-financial-workflows.md)
 - [Productization 100 Operations Work Queues](exec-plans/active/productization-100-operations-work-queues.md)
 - [Completed Fast Reorder Vertical Slice](exec-plans/completed/fast-reorder-vertical-slice.md)

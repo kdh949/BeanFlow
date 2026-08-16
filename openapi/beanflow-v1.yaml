@@ -7282,9 +7282,16 @@ components:
     CustomerOrderDetail:
       type: object
       additionalProperties: false
-      required: [orderReference, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, lines, allowedActions]
+      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, lines, allowedActions]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        storeId:
+          allOf:
+            - $ref: "#/components/schemas/Identifier"
+          description: |
+            Server-supplied opaque store identifier. It exists so the customer can
+            read that store's current pickup slots when reordering; no customer
+            screen accepts it as input.
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
         storeName: { type: string, minLength: 1, maxLength: 200 }
         status: { $ref: "#/components/schemas/OrderState" }

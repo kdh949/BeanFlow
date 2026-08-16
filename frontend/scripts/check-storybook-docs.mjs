@@ -28,9 +28,10 @@ const expectedDocs = new Set([
   "pages-customer-paymentsuccess--docs",
   "pages-customer-store-detail--docs",
   "pages-customer-store-search--docs",
-  "pages-customer-cart--docs",
   "pages-customer-sign-in--docs",
   "pages-customer-my-page--docs",
+  "pages-customer-cart--docs",
+  "pages-customer-points--docs",
   "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
 ]);
@@ -68,18 +69,6 @@ const statefulDocs = {
     "pages-customer-store-detail--store-gone": "지금은 주문할 수 없는 매장이에요",
     "pages-customer-store-detail--loading": "메뉴와 픽업 시간을 준비하는 중",
   },
-  "pages-customer-store-search--docs": {
-    "pages-customer-store-search--results": "시청점",
-    "pages-customer-store-search--no-results": "검색 결과가 없어요",
-    "pages-customer-store-search--before-searching": "찾고 싶은 매장을 알려주세요",
-    "pages-customer-store-search--search-unavailable": "서비스 연결을 확인하고 있습니다.",
-  },
-  // The cart is localStorage-backed and every docs iframe shares this origin, so
-  // only one cart state can be shown here. Empty and corrupt are covered by the
-  // interaction tests instead.
-  "pages-customer-cart--docs": {
-    "pages-customer-cart--with-items": "시청점에서 픽업합니다.",
-  },
   "pages-customer-checkout--docs": {
     "pages-customer-checkout--pending-payment": "₩12,800 결제하기",
     "pages-customer-checkout--recoverable-error": "서비스 연결을 확인하고 있습니다.",
@@ -94,6 +83,7 @@ const statefulDocs = {
   },
   "pages-customer-orderdetail--docs": {
     "pages-customer-orderdetail--ready-for-pickup": "A-142",
+    "pages-customer-orderdetail--refund-in-progress": "환불을 처리하고 있어요",
     "pages-customer-orderdetail--cancelled": "취소된 주문입니다",
     "pages-customer-orderdetail--permission-failure": "이 주문을 볼 권한이 없습니다.",
   },
@@ -108,9 +98,26 @@ const statefulDocs = {
     "pages-customer-paymentfailure--retryable-failure": "주문서로 돌아가기",
     "pages-customer-paymentfailure--manual-review": "결제 결과를 확인하고 있어요",
   },
+  "pages-customer-store-search--docs": {
+    "pages-customer-store-search--results": "시청점",
+    "pages-customer-store-search--no-results": "검색 결과가 없어요",
+    "pages-customer-store-search--before-searching": "찾고 싶은 매장을 알려주세요",
+    "pages-customer-store-search--search-unavailable": "서비스 연결을 확인하고 있습니다.",
+  },
   "pages-customer-sign-in--docs": {
     "pages-customer-sign-in--sign-in": "주문과 포인트는 로그인한 계정에만 표시됩니다.",
     "pages-customer-sign-in--sign-up": "가입하고 시작하기",
+  },
+  // The cart is localStorage-backed and every docs iframe shares this origin, so
+  // only one cart state can be shown here. Empty and corrupt are covered by the
+  // interaction tests instead.
+  "pages-customer-cart--docs": {
+    "pages-customer-cart--with-items": "시청점에서 픽업합니다.",
+  },
+  "pages-customer-points--docs": {
+    "pages-customer-points--balance-and-ledger": "1,500P",
+    "pages-customer-points--zero-balance": "아직 포인트 내역이 없어요",
+    "pages-customer-points--account-integrity-failure": "잔액이 0원이라는 뜻은 아니며",
   },
   "patterns-customer-session-gate--docs": {
     "patterns-customer-session-gate--checking": "로그인 상태를 확인하는 중",
