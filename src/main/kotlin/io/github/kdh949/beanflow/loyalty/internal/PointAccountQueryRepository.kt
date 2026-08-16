@@ -27,6 +27,11 @@ internal data class PointTransactionSort(
     val transactionId: UUID,
 )
 
+internal data class ExpiringPointAmountProjection(
+    val expiresAt: Instant,
+    val amountKrw: Long,
+)
+
 @Repository
 internal class PointAccountQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
@@ -49,6 +54,49 @@ internal class PointAccountQueryRepository(
                 },
                 accountId,
             ).singleOrNull()
+
+    fun findAccountIdByCustomer(customerId: UUID): UUID? =
+        jdbcTemplate
+            .query(
+                """
+                SELECT id
+                  FROM loyalty_point_account
+                 WHERE customer_id = ?
+                """.trimIndent(),
+                { resultSet, _ -> resultSet.getObject("id", UUID::class.java) },
+                customerId,
+            ).singleOrNull()
+
+    /**
+     * Unexpired lots with a remaining available balance, soonest first. Reserved
+     * amounts are excluded because they are already committed to an order.
+     */
+    fun findExpiringLots(
+        accountId: UUID,
+        now: Instant,
+        limit: Int,
+    ): List<ExpiringPointAmountProjection> =
+        jdbcTemplate.query(
+            """
+            SELECT expires_at, sum(available_amount_krw) AS amount_krw
+              FROM loyalty_point_lot
+             WHERE point_account_id = ?
+               AND expires_at > ?
+               AND available_amount_krw > 0
+             GROUP BY expires_at
+             ORDER BY expires_at ASC
+             LIMIT ?
+            """.trimIndent(),
+            { resultSet, _ ->
+                ExpiringPointAmountProjection(
+                    expiresAt = resultSet.getTimestamp("expires_at").toInstant(),
+                    amountKrw = resultSet.getLong("amount_krw"),
+                )
+            },
+            accountId,
+            Timestamp.from(now),
+            limit,
+        )
 
     fun findTransactions(
         accountId: UUID,

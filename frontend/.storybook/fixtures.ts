@@ -28,6 +28,7 @@ export const orderSummary = {
 
 export const orderDetail = {
   ...orderSummary,
+  storeId: ids.store,
   allowedActions: ["CANCEL"],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -180,3 +181,71 @@ export function pending(path: string) {
     return HttpResponse.json({});
   });
 }
+
+export const customerIdentity = {
+  actorType: "CUSTOMER",
+  actorId: "60000000-0000-4000-8000-000000000001",
+  loginId: "demo.customer",
+  displayName: "김빈플로우",
+  accountState: "ACTIVE",
+};
+
+/** `GET /me` is what every guarded customer route waits for before it renders. */
+export const signedInHandlers = [
+  http.get("/api/v1/me", () => HttpResponse.json(customerIdentity)),
+  http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
+];
+
+export const customerStore = { storeId: ids.store, name: "시청점", pickupAvailable: true };
+
+export const storeIdentityHandlers = [
+  http.get("/api/v1/stores/:storeId", () => HttpResponse.json(customerStore)),
+];
+
+export const homeHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/me/orders", () => HttpResponse.json({ items: [orderSummary], page: { nextCursor: null } })),
+  http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({
+    items: [
+      { store: customerStore, reason: "RECENT" },
+      { store: { storeId: "10000000-0000-4000-8000-000000000002", name: "광화문점", pickupAvailable: false }, reason: "NEARBY" },
+    ],
+  })),
+];
+
+export const searchHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/stores/search", () => HttpResponse.json({
+    items: [
+      { ...customerStore, open: true, matchedMenus: [{ menuId: ids.menu, name: "오트 라떼" }], brandName: "빈플로우", regionName: "중구" },
+      {
+        storeId: "10000000-0000-4000-8000-000000000002",
+        name: "광화문점",
+        pickupAvailable: false,
+        open: false,
+        matchedMenus: [],
+        brandName: "빈플로우",
+        regionName: "종로구",
+      },
+    ],
+    page: {},
+    distanceAvailable: false,
+  })),
+];
+
+export const pointsHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/me/points", () => HttpResponse.json({
+    availablePointsKrw: 1_500,
+    recoveryPendingKrw: 300,
+    currency: "KRW",
+    expiring: [{ expiresAt: "2026-09-01T00:00:00Z", amountKrw: 1_000 }],
+  })),
+  http.get("/api/v1/me/point-transactions", () => HttpResponse.json({
+    items: [
+      { transactionId: "a1", type: "ACCRUAL", amountKrw: 200, occurredAt: "2026-08-14T00:00:00Z", sourceReference: "order:1" },
+      { transactionId: "a2", type: "USE", amountKrw: -100, occurredAt: "2026-08-13T00:00:00Z", sourceReference: "order:2" },
+    ],
+    page: {},
+  })),
+];

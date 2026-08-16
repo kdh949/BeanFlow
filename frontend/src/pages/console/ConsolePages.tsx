@@ -8,7 +8,8 @@ import {
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
-import { api, ApiRequestError, merchantCsrfToken, SubmissionIntent, unwrap } from "../../api/client";
+import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
+import { merchantApi, merchantCsrfToken, operationsApi } from "../../api/consoleClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { compactId, shortDateTime, won } from "../../lib/format";
@@ -57,7 +58,7 @@ export function OpsRefundPage({ initialPartial = false }: { initialPartial?: boo
     setLoading(true); setError(null); setResult(null);
     try {
       const csrf = await merchantCsrfToken();
-      const response = await api.POST("/payments/{paymentId}/refunds", {
+      const response = await merchantApi.POST("/payments/{paymentId}/refunds", {
         params: {
           path: { paymentId: normalizedPaymentId },
           header: { "Idempotency-Key": refundSubmission.current.keyFor(fingerprint), "X-BEANFLOW-CSRF": csrf },
@@ -101,7 +102,7 @@ export function OpsOrderPage() {
   async function lookup(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError(null); setResult(null);
     try {
-      const response = await api.GET("/operations/orders/{orderId}/compensation", { params: { path: { orderId: orderId.trim() }, header: { "X-Access-Reason": accessReason.trim() } } });
+      const response = await operationsApi.GET("/operations/orders/{orderId}/compensation", { params: { path: { orderId: orderId.trim() }, header: { "X-Access-Reason": accessReason.trim() } } });
       setResult(unwrap(response).compensation);
     } catch (failure) { setError(failure); } finally { setLoading(false); }
   }

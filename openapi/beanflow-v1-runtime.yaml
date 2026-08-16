@@ -116,6 +116,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
   /stores/search:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1search"
+  /stores/{storeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}"
   /stores/{storeId}/menus:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
   /stores/{storeId}/pickup-slots:
@@ -271,6 +273,7 @@ paths:
       parameters:
         - $ref: ./beanflow-v1.yaml#/components/parameters/OrderReference
         - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: ./beanflow-v1.yaml#/components/parameters/CustomerCsrfToken
       requestBody:
         required: true
         content:
@@ -302,6 +305,12 @@ paths:
           $ref: ./beanflow-v1.yaml#/components/responses/Conflict
         '503':
           $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+  /me/orders/{orderReference}/reorders:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}~1reorders"
+  /me/points:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1points"
+  /me/point-transactions:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1point-transactions"
   /payment-config:
     $ref: "./beanflow-v1.yaml#/paths/~1payment-config"
   /orders/{orderId}/payment-attempts:

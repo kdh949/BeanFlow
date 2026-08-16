@@ -62,8 +62,11 @@ bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전
 만들거나 customer checkpoint를 전체 smoke 성공으로 부르지 않는다.
 
 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`다. API smoke의 고객
-흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web
-로그인 화면 연결은 `productization-80` 범위라 이 Plan의 API smoke 성공을 UI 완료로 해석하지 않는다.
+흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web은
+`/app/login`에서 같은 계정으로 로그인한다. 화면에는 token·UUID 입력이 없고 보호 route는 `GET /me`가
+200일 때만 열린다. 401은 로그인으로, 403은 다른 actor 안내로, 503은 인증 의존성 실패로 각각 표시되므로
+Session 저장소 장애를 로그아웃으로 읽지 않는다. 로그아웃은 이 브라우저의 고객 장바구니와 미해결 요청
+키만 지우고 운영 콘솔 token은 남긴다.
 운영 화면은 `.demo-runtime/demo-identity.env`의 `PLATFORM_OPERATOR_TOKEN`을 사용한다. Merchant Chain은
 점주 JWT를 받지 않으며 productization-40 이후 매장 화면과 전체 smoke는 Merchant Session을 사용한다.
 JWT와 Session 값을 source, log나 문서에 복사하지 않는다.
@@ -95,6 +98,13 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
 | 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
 | local-only scripted payment config와 paymentKey 상태 규칙 | 실제 개인정보, 실제 Toss credential |
+| — | 매장 검색 색인(`discovery_store_search_term`) — seed는 색인을 만들지 않는다 |
+
+seed가 매장을 직접 SQL로 넣으므로 검색 색인을 채우는 event가 발생하지 않는다. 그래서 고객 화면의
+매장 찾기는 어떤 검색어에도 200과 빈 목록을 받고 "검색 결과가 없어요"를 표시한다. 이는 화면 결함이
+아니라 fixture 범위다. 결과가 있는 검색을 보려면 운영자에게 `STORE_BRAND_MANAGE` 권한을 부여한 뒤
+`POST /api/v1/operations/search-index/rebuild`를 호출해야 하고, 그 권한 부여는 seed 범위 밖이다.
+홈의 추천 매장과 매장 상세는 색인 없이도 동작하므로 주문 흐름 확인에는 영향이 없다.
 
 ## 6. 정지와 초기화
 

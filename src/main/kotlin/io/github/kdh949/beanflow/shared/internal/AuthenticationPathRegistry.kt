@@ -49,6 +49,7 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.CUSTOMER, "/api/v1/point-accounts/**"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/nearby"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/search"),
+            registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/pickup-slots"),
         )

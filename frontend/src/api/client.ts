@@ -1,40 +1,28 @@
-import createClient, { type Middleware } from "openapi-fetch";
-import type { paths } from "./schema";
-import { authToken } from "../auth/session";
-
 export type ApiErrorBody = {
   code?: string;
   message?: string;
   correlationId?: string;
-  details?: Array<{ field?: string; reason: string }>;
+  details?: Array<{ field?: string; reason: string; lineSequence?: number }>;
 };
 
+/**
+ * `status` is the HTTP status when the server answered. A request the client
+ * refused to send before reaching the network uses status 0 so that a blocked
+ * request is never confused with a server decision.
+ */
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
     message: string,
     readonly correlationId?: string,
+    /** Server-owned per-field or per-item reasons. Never synthesized by the client. */
+    readonly details?: ApiErrorBody["details"],
   ) {
     super(message);
     this.name = "ApiRequestError";
   }
 }
-
-export const api = createClient<paths>({ baseUrl: "/api/v1" });
-
-const authentication: Middleware = {
-  async onRequest({ request }) {
-    const token = authToken.get();
-    if (token) {
-      request.headers.set("Authorization", `Bearer ${token}`);
-    }
-    request.headers.set("Accept", "application/json");
-    return request;
-  },
-};
-
-api.use(authentication);
 
 export function unwrap<T>(result: {
   data?: T;
@@ -50,6 +38,7 @@ export function unwrap<T>(result: {
     error.code ?? "UNEXPECTED_RESPONSE",
     error.message ?? "요청을 완료하지 못했습니다.",
     error.correlationId,
+    error.details,
   );
 }
 
@@ -62,34 +51,26 @@ export function idempotencyKey(scope: string): string {
   return created;
 }
 
-function cookieValue(name: string): string | null {
+export function cookieValue(name: string): string | null {
   const prefix = `${name}=`;
   const cookie = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
   return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
 }
 
-export async function merchantCsrfToken(): Promise<string> {
-  const result = await api.GET("/auth/merchant/csrf");
-  if (!result.response.ok) {
-    unwrap(result);
-  }
-  const token = cookieValue("BEANFLOW_MERCHANT_XSRF");
-  if (!token) {
-    throw new ApiRequestError(503, "CSRF_TOKEN_UNAVAILABLE", "보안 토큰을 준비하지 못했습니다. 다시 시도해 주세요.");
-  }
-  return token;
+export const CSRF_HEADER = "X-BEANFLOW-CSRF";
+
+/**
+ * Absolute same-origin base so that every request carries an explicit origin
+ * instead of relying on an ambient document base.
+ */
+export function apiBaseUrl(): string {
+  return `${window.location.origin}/api/v1`;
 }
 
-export async function customerCsrfToken(): Promise<string> {
-  const result = await api.GET("/auth/customer/csrf");
-  if (!result.response.ok) {
-    unwrap(result);
-  }
-  const token = cookieValue("BEANFLOW_CUSTOMER_XSRF");
-  if (!token) {
-    throw new ApiRequestError(503, "CSRF_TOKEN_UNAVAILABLE", "보안 토큰을 준비하지 못했습니다. 다시 시도해 주세요.");
-  }
-  return token;
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+export function isUnsafeMethod(method: string): boolean {
+  return !SAFE_METHODS.has(method.toUpperCase());
 }
 
 /**

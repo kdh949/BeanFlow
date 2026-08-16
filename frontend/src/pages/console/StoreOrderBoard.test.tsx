@@ -1,7 +1,8 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiRequestError } from "../../api/client";
+import { ApiRequestError } from "../../api/client";
+import { merchantApi } from "../../api/consoleClient";
 import { StoreOrderBoardPage } from "./StoreOrderBoard";
 
 const gangnam = { storeId: "10000000-0000-4000-8000-000000000001", storeName: "강남 2호점", membershipRole: "OWNER" as const };
@@ -59,7 +60,7 @@ afterEach(() => {
 
 describe("store order board", () => {
   it("opens a single active store without a selector and renders the three operational columns", async () => {
-    const get = vi.spyOn(api, "GET").mockImplementation(async (path) => {
+    const get = vi.spyOn(merchantApi, "GET").mockImplementation(async (path) => {
       if (path === "/merchant/me/stores") return response([gangnam]) as never;
       if (path === "/stores/{storeId}/orders") return response(board) as never;
       throw new Error(`unexpected GET ${path}`);
@@ -80,7 +81,7 @@ describe("store order board", () => {
   });
 
   it("makes bounded older work visible and retrieves it only after the merchant requests it", async () => {
-    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+    const get = vi.spyOn(merchantApi, "GET").mockImplementation(async (path, options) => {
       if (path === "/merchant/me/stores") return response([gangnam]) as never;
       if (path === "/stores/{storeId}/orders") {
         return response({
@@ -115,7 +116,7 @@ describe("store order board", () => {
   it("recovers one fresh board snapshot after an expired overflow cursor without retrying the queue", async () => {
     let boardReads = 0;
     const boardOptions: unknown[] = [];
-    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+    const get = vi.spyOn(merchantApi, "GET").mockImplementation(async (path, options) => {
       if (path === "/merchant/me/stores") return response([gangnam]) as never;
       if (path === "/stores/{storeId}/orders") {
         boardReads += 1;
@@ -149,7 +150,7 @@ describe("store order board", () => {
 
   it("keeps a membership dependency failure explicit and retries the membership query", async () => {
     let storeReads = 0;
-    vi.spyOn(api, "GET").mockImplementation(async (path) => {
+    vi.spyOn(merchantApi, "GET").mockImplementation(async (path) => {
       if (path === "/merchant/me/stores") {
         storeReads += 1;
         if (storeReads === 1) throw new ApiRequestError(503, "DEPENDENCY_UNAVAILABLE", "매장 목록을 불러오지 못했습니다");
@@ -172,7 +173,7 @@ describe("store order board", () => {
 
   it("switches only between active memberships and sends a board action for the selected store", async () => {
     document.cookie = "BEANFLOW_MERCHANT_XSRF=merchant-csrf-token; path=/";
-    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+    const get = vi.spyOn(merchantApi, "GET").mockImplementation(async (path, options) => {
       if (path === "/merchant/me/stores") return response([gangnam, yeouido]) as never;
       if (path === "/auth/merchant/csrf") return noContent() as never;
       if (path === "/stores/{storeId}/orders") {
@@ -181,7 +182,7 @@ describe("store order board", () => {
       }
       throw new Error(`unexpected GET ${path}`);
     });
-    const post = vi.spyOn(api, "POST").mockResolvedValue(response({ ...paidOrder, lane: "ACCEPTED", status: "ACCEPTED", allowedActions: ["START_PREPARING"] }) as never);
+    const post = vi.spyOn(merchantApi, "POST").mockResolvedValue(response({ ...paidOrder, lane: "ACCEPTED", status: "ACCEPTED", allowedActions: ["START_PREPARING"] }) as never);
     const user = userEvent.setup();
 
     render(<StoreOrderBoardPage />);
@@ -205,7 +206,7 @@ describe("store order board", () => {
 
   it("stops conditional polling while hidden and resumes immediately with the current ETag", async () => {
     vi.useFakeTimers();
-    const get = vi.spyOn(api, "GET").mockImplementation(async (path, options) => {
+    const get = vi.spyOn(merchantApi, "GET").mockImplementation(async (path, options) => {
       if (path === "/merchant/me/stores") return response([gangnam]) as never;
       if (path === "/stores/{storeId}/orders") {
         const tag = (options as { params: { header?: { "If-None-Match"?: string } } }).params.header?.["If-None-Match"];
@@ -236,7 +237,7 @@ describe("store order board", () => {
     vi.useFakeTimers();
     let boardReads = 0;
     let storeReads = 0;
-    vi.spyOn(api, "GET").mockImplementation(async (path) => {
+    vi.spyOn(merchantApi, "GET").mockImplementation(async (path) => {
       if (path === "/merchant/me/stores") {
         storeReads += 1;
         return response(storeReads === 1 ? [gangnam, yeouido] : [yeouido]) as never;
@@ -264,7 +265,7 @@ describe("store order board", () => {
   it("refreshes the board and presents an informational message when a stale action loses with 409", async () => {
     document.cookie = "BEANFLOW_MERCHANT_XSRF=merchant-csrf-token; path=/";
     let boardReads = 0;
-    vi.spyOn(api, "GET").mockImplementation(async (path) => {
+    vi.spyOn(merchantApi, "GET").mockImplementation(async (path) => {
       if (path === "/merchant/me/stores") return response([gangnam]) as never;
       if (path === "/auth/merchant/csrf") return noContent() as never;
       if (path === "/stores/{storeId}/orders") {
@@ -273,7 +274,7 @@ describe("store order board", () => {
       }
       throw new Error(`unexpected GET ${path}`);
     });
-    vi.spyOn(api, "POST").mockResolvedValue({
+    vi.spyOn(merchantApi, "POST").mockResolvedValue({
       error: { code: "ORDER_STATE_CONFLICT", message: "Order state changed" },
       response: new Response(null, { status: 409 }),
     } as never);

@@ -1,6 +1,9 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
+import io.github.kdh949.beanflow.ordering.api.ReorderOrderCommand
+import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
@@ -13,6 +16,7 @@ import java.util.UUID
 internal class PublicOrderReferenceService(
     private val orders: OrderJpaRepository,
     private val cancellations: CustomerCancellationService,
+    private val reorders: ReorderOrderUseCase,
     private val storeOrders: StoreOrderTransitionService,
     private val storeAccess: StoreAccessOperations,
     private val objectMapper: ObjectMapper,
@@ -39,6 +43,31 @@ internal class PublicOrderReferenceService(
                         cancelledAt = stored.cancelledAt,
                         correlationId = stored.correlationId,
                     ),
+                ),
+        )
+    }
+
+    /**
+     * Resolves the owned source order from its public reference and hands the
+     * internal ID to the existing fast reorder transaction. State, price, stock
+     * and slot revalidation stay in that use case and are not duplicated here.
+     */
+    fun reorderCustomerOrder(
+        customerId: UUID,
+        rawReference: String,
+        idempotencyKey: String,
+        request: ReorderOrderRequest,
+    ): StoredHttpResponse {
+        val resolved = resolveCustomer(customerId, rawReference)
+        return reorders.reorder(
+            idempotencyKey = idempotencyKey,
+            command =
+                ReorderOrderCommand(
+                    customerId = customerId,
+                    sourceOrderId = resolved.orderId,
+                    pickupSlotId = request.pickupSlotId,
+                    couponIssuanceId = request.couponIssuanceId,
+                    pointsToUseKrw = request.pointsToUseKrw,
                 ),
         )
     }

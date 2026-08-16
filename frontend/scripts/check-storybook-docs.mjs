@@ -26,7 +26,13 @@ const expectedDocs = new Set([
   "pages-customer-home--docs",
   "pages-customer-paymentfailure--docs",
   "pages-customer-paymentsuccess--docs",
-  "pages-customer-storecatalog--docs",
+  "pages-customer-store-detail--docs",
+  "pages-customer-store-search--docs",
+  "pages-customer-sign-in--docs",
+  "pages-customer-my-page--docs",
+  "pages-customer-cart--docs",
+  "pages-customer-points--docs",
+  "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
 ]);
 
@@ -52,17 +58,16 @@ const statefulDocs = {
     "pages-store-orderboard--permission-failure": "접근 가능한 매장을 확인할 권한이 없습니다.",
   },
   "pages-customer-home--docs": {
-    "pages-customer-home--nearby-stores": "시청점",
-    "pages-customer-home--location-required": "위치를 알려주세요",
-    "pages-customer-home--empty-radius": "가까운 매장이 없어요",
-    "pages-customer-home--recoverable-error": "서비스 연결을 확인하고 있습니다.",
-    "pages-customer-home--loading": "가까운 매장을 찾는 중",
+    "pages-customer-home--active-order-and-recommendations": "최근 주문한 매장",
+    "pages-customer-home--nothing-in-progress": "진행 중인 주문이 없어요",
+    "pages-customer-home--recommendations-unavailable": "서비스 연결을 확인하고 있습니다.",
+    "pages-customer-home--loading": "진행 중인 주문을 확인하는 중",
   },
-  "pages-customer-storecatalog--docs": {
-    "pages-customer-storecatalog--menu-and-pickup-selection": "오트 라떼",
-    "pages-customer-storecatalog--empty-menu": "판매 중인 메뉴가 없어요",
-    "pages-customer-storecatalog--recoverable-error": "서비스 연결을 확인하고 있습니다.",
-    "pages-customer-storecatalog--loading": "메뉴와 픽업 시간을 준비하는 중",
+  "pages-customer-store-detail--docs": {
+    "pages-customer-store-detail--orderable": "오트 라떼",
+    "pages-customer-store-detail--pickup-closed": "판매 중인 메뉴가 없어요",
+    "pages-customer-store-detail--store-gone": "지금은 주문할 수 없는 매장이에요",
+    "pages-customer-store-detail--loading": "메뉴와 픽업 시간을 준비하는 중",
   },
   "pages-customer-checkout--docs": {
     "pages-customer-checkout--pending-payment": "₩12,800 결제하기",
@@ -78,18 +83,46 @@ const statefulDocs = {
   },
   "pages-customer-orderdetail--docs": {
     "pages-customer-orderdetail--ready-for-pickup": "A-142",
-    "pages-customer-orderdetail--recovery-pending": "환불 처리 상태",
+    "pages-customer-orderdetail--refund-in-progress": "환불을 처리하고 있어요",
     "pages-customer-orderdetail--cancelled": "취소된 주문입니다",
     "pages-customer-orderdetail--permission-failure": "이 주문을 볼 권한이 없습니다.",
   },
   "pages-customer-paymentsuccess--docs": {
     "pages-customer-paymentsuccess--approved": "결제가 완료됐어요",
     "pages-customer-paymentsuccess--unknown-reconciliation": "결제 결과를 확인하고 있어요",
+    "pages-customer-paymentsuccess--not-paid-yet": "아직 결제가 끝나지 않았어요",
+    "pages-customer-paymentsuccess--declined": "결제를 완료하지 못했어요",
     "pages-customer-paymentsuccess--dependency-error": "서비스 연결을 확인하고 있습니다.",
   },
   "pages-customer-paymentfailure--docs": {
     "pages-customer-paymentfailure--retryable-failure": "주문서로 돌아가기",
     "pages-customer-paymentfailure--manual-review": "결제 결과를 확인하고 있어요",
+  },
+  "pages-customer-store-search--docs": {
+    "pages-customer-store-search--results": "시청점",
+    "pages-customer-store-search--no-results": "검색 결과가 없어요",
+    "pages-customer-store-search--before-searching": "찾고 싶은 매장을 알려주세요",
+    "pages-customer-store-search--search-unavailable": "서비스 연결을 확인하고 있습니다.",
+  },
+  "pages-customer-sign-in--docs": {
+    "pages-customer-sign-in--sign-in": "주문과 포인트는 로그인한 계정에만 표시됩니다.",
+    "pages-customer-sign-in--sign-up": "가입하고 시작하기",
+  },
+  // The cart is localStorage-backed and every docs iframe shares this origin, so
+  // only one cart state can be shown here. Empty and corrupt are covered by the
+  // interaction tests instead.
+  "pages-customer-cart--docs": {
+    "pages-customer-cart--with-items": "시청점에서 픽업합니다.",
+  },
+  "pages-customer-points--docs": {
+    "pages-customer-points--balance-and-ledger": "1,500P",
+    "pages-customer-points--zero-balance": "아직 포인트 내역이 없어요",
+    "pages-customer-points--account-integrity-failure": "잔액이 0원이라는 뜻은 아니며",
+  },
+  "patterns-customer-session-gate--docs": {
+    "patterns-customer-session-gate--checking": "로그인 상태를 확인하는 중",
+    "patterns-customer-session-gate--wrong-actor": "다른 역할로 로그인되어 있는지 확인해 주세요",
+    "patterns-customer-session-gate--session-store-unavailable": "로그아웃된 것이 아니므로 다시 시도해 주세요",
   },
 };
 

@@ -234,6 +234,31 @@ P0 24화면 가운데 메뉴·슬롯, 결제, 취소, 재주문, 부분 환불, 
 | 운영 | `4e 고객 계정` | Support S40 | Plan 100 |
 | 운영 | `P0 신규 점주 계정 발급` | Plans 20, 40/BR-46 | Plan 100 |
 
+## 고객 P0 화면 구현 증거
+
+Plan 80이 고객 13화면을 Session과 실제 거래 API에 연결했다. 각 행의 증거는 실제로 실행한 자동
+검증이며, 브라우저 수동 확인이나 배포 결과가 아니다.
+
+| 화면 | 구현 | 상태 검증 증거 |
+|---|---|---|
+| `5a 첫 진입` | `features/auth/customer/AuthPages.tsx` | `customerSession.test.tsx` 로그인 401/429, 가입 409 |
+| `5e 오프라인` | `features/payment/usePaymentResolution.ts` | `PaymentCallbackPages.test.tsx` confirm 유실 뒤 status GET만 반복, online 중복 이벤트 |
+| `1a 홈` | `features/discovery/HomePage.tsx` | `Discovery.test.tsx` 진행 주문·추천, 조회 실패와 빈 목록 구분 |
+| `1b 매장 찾기` | `features/discovery/StoreSearchPage.tsx` | `Discovery.test.tsx` 검색·빈 결과·실패·위치 권한 거부 |
+| `1c 매장 상세` | `features/ordering/StoreDetailPage.tsx` | `Ordering.test.tsx` 품절 메뉴 비활성, 픽업 마감, URL 직접 진입 시 서버가 준 매장 이름 |
+| `1d 주문 추적` | `features/ordering/OrderPages.tsx` | `OrderPages.test.tsx` publicReference·pickupNumber·allowedActions |
+| `4a 장바구니` | `features/ordering/cart.ts`, `CartPage.tsx` | `Ordering.test.tsx` 한 매장 제약, 손상 cart, slot conflict, 저장된 이름보다 서버 이름 우선 |
+| `2a 결제` | `features/payment/CheckoutPage.tsx`, `PaymentResultPages.tsx` | `PaymentCallbackPages.test.tsx` callback 검증·승인·복구 |
+| `4c 주문 내역` | `features/ordering/OrderPages.tsx` | `OrderPages.test.tsx` 기간·탭·cursor·empty |
+| `4d 주문 취소` | `features/ordering/CancelOrderPanel.tsx` | `OrderPages.test.tsx` 202 취소와 환불 진행 분리 |
+| `4f 마이` | `features/auth/customer/MyPage.tsx` | `customerSession.test.tsx` 로그아웃 뒤 보호 route 차단, 운영자 token 보존 |
+| `3a 포인트` | `features/loyalty/PointsPage.tsx` | `Points.test.tsx` 실제 0원, 무결성 503, 원장 실패 |
+| `3c 재주문` | `features/ordering/ReorderPanel.tsx` | `OrderPages.test.tsx` 주문번호 재주문, `PublicReferenceReorderContractTest` 소유권·재검증 |
+
+공통 경계 검증은 `api/client.test.ts`(Bearer 미부착, unsafe CSRF guard)와
+`features/CustomerSurface.test.tsx`(토큰·UUID 입력 field 부재, 420px form label·focus·reduced motion)에
+있다.
+
 ## 확정된 후속 결정
 
 초안 단계에서 미해결이던 항목은 2026-08-12에 모두 결정됐다.

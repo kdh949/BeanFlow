@@ -2,11 +2,15 @@ import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
-import { api, unwrap } from "../../api/client";
+import { unwrap } from "../../api/client";
+import { customerApi } from "../../api/customerClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime, shortTime, won } from "../../lib/format";
 import { Button, ButtonLink } from "../../design-system";
+import { CancelOrderPanel } from "./CancelOrderPanel";
+import { RefundProgress } from "./RefundProgress";
+import { ReorderPanel } from "./ReorderPanel";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];
 type CustomerOrderSummary = components["schemas"]["CustomerOrderSummary"];
@@ -45,7 +49,7 @@ export function CustomerOrdersPage() {
     else setPage(null);
     setError(null);
     try {
-      const result = await api.GET("/me/orders", {
+      const result = await customerApi.GET("/me/orders", {
         params: { query: { status, from, to, cursor, limit: 20 } },
       });
       const next = unwrap(result);
@@ -89,7 +93,7 @@ export function CustomerOrdersPage() {
         <EmptyState
           title={status === "ACTIVE" ? "진행 중인 주문이 없어요" : "이 기간의 주문이 없어요"}
           description={status === "ACTIVE" ? "새 주문을 시작하면 픽업 상태가 여기에 표시됩니다." : "조회 기간을 넓혀 다시 확인해 보세요."}
-          action={<ButtonLink to="/app">매장 찾기</ButtonLink>}
+          action={<ButtonLink to="/app/stores">매장 찾기</ButtonLink>}
         />
       ) : null}
       {page?.items.length ? (
@@ -125,6 +129,24 @@ function CustomerOrderRow({ order, active }: { order: CustomerOrderSummary; acti
   );
 }
 
+/** Live states are polled; a terminal order no longer changes on its own. */
+function isLive(status: CustomerOrderDetail["status"]) {
+  return ["PENDING_PAYMENT", "PAID", "ACCEPTED", "PREPARING", "READY"].includes(status);
+}
+
+/**
+ * The pickup number only means something while the store is actually going to
+ * hand the order over. Showing it on an unpaid, cancelled or expired order sends
+ * the customer to a counter that has nothing for them.
+ */
+export function pickupNumberNote(status: CustomerOrderDetail["status"]): string | null {
+  if (status === "READY") return "픽업대에서 번호를 확인해 주세요.";
+  if (status === "PAID" || status === "ACCEPTED" || status === "PREPARING") {
+    return "준비가 끝나면 이 번호로 알려드릴게요.";
+  }
+  return null;
+}
+
 export function CustomerOrderDetailPage() {
   const { orderReference = "" } = useParams();
   const [order, setOrder] = useState<CustomerOrderDetail | null>(null);
@@ -133,7 +155,7 @@ export function CustomerOrderDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const result = await api.GET("/me/orders/{orderReference}", {
+      const result = await customerApi.GET("/me/orders/{orderReference}", {
         params: { path: { orderReference } },
       });
       setOrder(unwrap(result));
@@ -143,22 +165,36 @@ export function CustomerOrderDetailPage() {
   }, [orderReference]);
 
   useEffect(() => { void load(); }, [load]);
+  const refundInProgress = order?.paymentRecovery
+    ? ["REQUESTED", "PROCESSING"].includes(order.paymentRecovery.state)
+    : false;
+  const polling = order ? isLive(order.status) || refundInProgress : false;
   useEffect(() => {
+    if (!polling) return;
     const timer = window.setInterval(() => void load(), 5_000);
     return () => window.clearInterval(timer);
-  }, [load]);
+  }, [load, polling]);
 
   if (!order && !error) return <LoadingState label="주문 상태를 확인하는 중" />;
   if (error && !order) return <ErrorState error={error} retry={() => void load()} />;
   if (!order) return null;
+
+  const canCancel = order.allowedActions.includes("CANCEL");
+  const canViewRefund = order.allowedActions.includes("VIEW_REFUND");
+  const canReorder = order.allowedActions.includes("REORDER");
+
   return (
     <div className="customer-page customer-order-detail-page">
       <Link className="back-link" to="/app/orders"><ArrowLeft size={17} /> 주문 목록</Link>
       <PageTitle eyebrow="ORDER" title="주문 상태" action={<StatusBadge state={order.status} />} />
       <section className="active-order-card surface-card">
         <div className="active-order-card-head"><StatusBadge state={order.status} /><span>{order.storeName}</span></div>
-        <strong className="pickup-number">{order.pickupNumber}</strong>
-        <p>픽업대에서 번호를 확인해 주세요.</p>
+        {pickupNumberNote(order.status) ? (
+          <>
+            <strong className="pickup-number">{order.pickupNumber}</strong>
+            <p>{pickupNumberNote(order.status)}</p>
+          </>
+        ) : null}
         <OrderTimeline state={order.status} />
         <dl className="pickup-window">
           <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{shortTime.format(new Date(order.pickupWindowEnd))}</dd></div>
@@ -176,9 +212,20 @@ export function CustomerOrderDetailPage() {
         ))}
         <div className="order-detail-total"><span>결제 금액</span><strong>{won.format(order.totalAmountKrw)}</strong></div>
       </section>
-      {order.paymentRecovery ? <section className="recovery-note" role="status"><RefreshCw size={17} /><div><strong>환불 처리 상태</strong><span>{order.paymentRecovery.noticeCode ? "확인이 지연되고 있어요. 같은 요청을 반복하지 않아도 됩니다." : `현재 ${order.paymentRecovery.state} 상태입니다.`}</span></div></section> : null}
-      {order.allowedActions.includes("CANCEL") ? <section className="order-action-note" role="status"><div><strong>취소 가능한 주문</strong><span>매장에서 주문을 수락하기 전까지 취소할 수 있어요.</span></div></section> : null}
+
+      {canViewRefund && order.paymentRecovery ? <RefundProgress recovery={order.paymentRecovery} /> : null}
       {error ? <ErrorState error={error} retry={() => void load()} /> : null}
+
+      {canCancel ? (
+        <CancelOrderPanel
+          orderReference={order.orderReference}
+          preview={order.cancellationPreview}
+          onCancelled={() => void load()}
+        />
+      ) : null}
+
+      {canReorder ? <ReorderPanel orderReference={order.orderReference} storeId={order.storeId} storeName={order.storeName} /> : null}
+
       <Button block variant="ghost" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</Button>
     </div>
   );

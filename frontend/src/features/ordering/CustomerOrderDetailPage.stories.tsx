@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { apiError, orderDetailHandlers, orderSummary } from "../../../.storybook/fixtures";
-import { CustomerOrderDetailPage } from "./CustomerOrders";
+import { CustomerOrderDetailPage } from "./OrderPages";
 
 const meta = {
   title: "Pages/Customer/OrderDetail",
@@ -26,14 +26,36 @@ export const ReadyForPickup: Story = {
   },
 };
 
-export const RecoveryPending: Story = {
+export const RefundInProgress: Story = {
   parameters: {
     msw: { handlers: orderDetailHandlers({
-      paymentRecovery: { state: "RECONCILING", noticeCode: "PAYMENT_RESULT_PENDING" },
+      status: "CANCELLED",
+      allowedActions: ["VIEW_REFUND"],
+      paymentRecovery: {
+        state: "PROCESSING",
+        cancellationRequestedRefundAmountKrw: 12_800,
+        remainingRefundableAmountKrw: 0,
+      },
     }) },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("환불 처리 상태")).toBeVisible();
+    await expect(await canvas.findByText("환불을 처리하고 있어요")).toBeVisible();
+  },
+};
+
+export const CancellableBeforeAcceptance: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "PAID" }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: "주문 취소" })).toBeVisible();
+  },
+};
+
+export const ReorderableAfterPickup: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ })).toBeVisible();
   },
 };
 
