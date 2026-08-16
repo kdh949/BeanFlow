@@ -22,6 +22,10 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.PUBLIC, "/actuator/health"),
             registration(AuthenticationChain.PUBLIC, "/api/v1/payment-config"),
             registration(AuthenticationChain.PUBLIC, "/api/v1/auth/operations/config"),
+            // Scalar API 문서 페이지와 그 문서가 fetch하는 OpenAPI 스펙. 로그인 없이 열람 가능해야
+            // 외부 파트너(POS 연동사 등)가 별도 인증 없이 연동 문서를 먼저 확인할 수 있다.
+            registration(AuthenticationChain.PUBLIC, "/docs"),
+            registration(AuthenticationChain.PUBLIC, "/docs/**"),
             registration(AuthenticationChain.OPERATIONS, "/api/v1/operations/**"),
             registration(AuthenticationChain.OPERATIONS, "/api/v1/support/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/auth/merchant/**"),

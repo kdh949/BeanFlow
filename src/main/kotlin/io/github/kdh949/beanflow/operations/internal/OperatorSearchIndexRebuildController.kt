@@ -60,10 +60,14 @@ internal class OperatorSearchIndexRebuildController(
         }
 }
 
+/**
+ * `targetStoreCount` stays internal. The published response reports what the pass did, and
+ * `complete` carries the snapshot-scoped meaning of [StoreSearchIndexRebuildResult.completeSnapshot].
+ */
 private fun StoreSearchIndexRebuildResult.toResponse() =
     SearchIndexRebuildResponse(
         indexedStoreCount = indexedStoreCount,
         skippedStoreCount = skippedStoreCount,
         failedStoreIds = failedStoreIds,
-        complete = complete,
+        complete = completeSnapshot,
     )

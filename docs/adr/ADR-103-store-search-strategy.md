@@ -7,6 +7,8 @@
 > 2026-08-15: 검색 대상에 브랜드명·지역명이 추가되고 매칭·정렬·응답 계약이 개정됐다.
 > 아래 [Amendments](#amendments)가 원 Decision보다 우선한다. 원 Decision 본문은 개정 이전
 > 계약을 이해하기 위한 이력으로 남긴다.
+>
+> 2026-08-16: 색인 source 참조 무결성, 재색인 snapshot, freshness 관측을 보강했다.
 
 ## Context
 
@@ -190,6 +192,31 @@ A1의 term 종류에 `REGION_RI`를 더해 **일곱 종류**가 된다. 가중�
 소유한다. 매칭·정렬·cursor 규칙은 A2~A6 그대로이며 정렬 튜플이 바뀌지 않으므로
 [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md) 등록 내용도 그대로다.
 
+#### A8. 파생 색인의 참조·snapshot·신선도를 명시적으로 보장한다 (2026-08-16)
+
+`MENU_NAME` term의 `(source_id, store_id)`는 `merchant_menu(id, store_id)` 복합 key를 참조한다.
+따라서 존재하지 않는 메뉴나 다른 매장의 메뉴를 검색 근거로 저장할 수 없고, 메뉴 삭제는 해당 term을
+함께 삭제한다. 고객 즐겨찾기도 customer와 store 양쪽 FK를 두며, 두 원본 중 하나가 삭제되면
+`ON DELETE CASCADE`로 즐겨찾기를 소멸시킨다. 삭제된 주체의 선호 관계를 보존하거나 orphan으로
+조회에서 조용히 사라지게 두지 않는다.
+
+전체 재색인은 UUID keyset을 live하게 걷지 않는다. 시작 시점의 store ID 목록을 target snapshot으로
+고정하고 그 목록을 설정된 chunk 단위로 처리한다. 결과의 `completeSnapshot=true`는 이 snapshot의 모든
+ID가 처리됐다는 뜻이며, snapshot 뒤 생성된 매장은 정상 쓰기의 동기 색인 또는 다음 재색인 pass가
+담당한다. `beanflow.search-index-rebuild.chunk-size`는 `1..1000`으로 시작 시 검증한다.
+
+관측은 두 gauge로 분리한다.
+
+- `beanflow.discovery.search.index.store-row-presence.coverage`: `STORE_NAME` 행을 하나 이상 가진
+  매장 비율. 행 존재만 뜻하며 내용 최신성을 주장하지 않는다.
+- `beanflow.discovery.search.index.freshness.mismatches`: Merchant source의 매장명·판매 중 메뉴명과
+  index의 `STORE_NAME`·`MENU_NAME` 사실이 일치하지 않는 양방향 row 수. 직접 DML로 생긴 이름 변경,
+  메뉴 추가·이름 변경·판매 중지는 이 값으로 드러난다.
+
+두 값과 reconciliation 입력은 별도 `REPEATABLE_READ` read-only transaction bean에서 읽는다.
+scheduled method가 같은 객체의 transactional method를 직접 호출해 proxy를 우회하지 않으며, 한 번의
+측정 안에서 서로 다른 DB snapshot을 섞지 않는다.
+
 #### 유지하는 상한
 
 페이지 기본 `20`·최대 `50`(공통 `DiscoveryLimit`)과 검색어 `2~50` code point는 개정하지 않는다.
@@ -201,9 +228,9 @@ A1의 term 종류에 `REGION_RI`를 더해 **일곱 종류**가 된다. 가중�
 - `pg_trgm` GIN 인덱스가 매장명·메뉴명 컬럼이 아니라 색인 테이블의 `term_normalized`에 놓인다.
   원 Decision의 `ix_merchant_store_profile_name_trgm`, `ix_merchant_menu_available_name_trgm`는
   색인 테이블 인덱스로 대체된다.
-- 색인 테이블이라는 유지 대상이 새로 생긴다. 동기 갱신이므로 stale 결과는 없지만,
-  **API 밖에서 바뀌는 데이터**(시드·직접 DML)는 재색인 커맨드로만 반영된다. 이 한계는 숨기지 않고
-  커버리지 gauge와 runbook으로 관측 가능하게 만든다.
+- 색인 테이블이라는 유지 대상이 새로 생긴다. 동기 갱신 경로 밖의 **API 밖 데이터**(시드·직접 DML)는
+  재색인 커맨드로만 반영된다. 이 한계는 행 존재 gauge와 source/index freshness mismatch gauge로
+  구분해 관측 가능하게 만든다.
 - cursor scope가 `sort` 값에 따라 둘로 나뉜다. [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md)에
   두 정렬 튜플을 등록한다.
 - 검색어와 토큰은 원 Decision대로 어디에도 저장하지 않는다. 색인 테이블에 저장되는 것은 매장의
@@ -303,6 +330,12 @@ trigram 인덱스를 거는 것이다. `스타벅스`가 `ㅅㅡㅌㅏㅂㅓㄱ�
 - 가용성 필터로 빈 페이지와 `nextCursor`가 함께 반환되어도 다음 페이지에 누락·중복이 없는지 검증한다.
 - 슬롯 capacity 손상이 pickup 불가 false가 아니라 503인지 검증한다.
 - 메뉴명 일치로 검색된 매장이 중복 없이 매장 단위로 집계되는지 검증한다.
+- `MENU_NAME`이 실존·동일 매장 메뉴만 가리키고 메뉴 삭제 시 term도 삭제되는지 검증한다.
+- 즐겨찾기가 unknown customer/store를 거부하고 양 원본 삭제 시 cascade되는지 검증한다.
+- 재색인 첫 chunk 뒤 더 작은 UUID의 매장이 생겨도 결과가 처음 target snapshot에만 완료 상태를
+  부여하는지 검증한다.
+- row-presence가 `1.0`이어도 직접 DML의 매장명·메뉴 추가·이름 변경·판매 중지 mismatch가 별도 gauge로
+  드러나며, 두 gauge가 한 transaction snapshot에서 계산되는지 검증한다.
 - Cursor 다음 페이지가 누락·중복 없이 이어지는지 검증한다.
 - query 길이·whitespace·wildcard literal, optional 좌표 쌍과 filter 변경 cursor 400을 검증한다.
 - 추천 규칙의 순서가 즐겨찾기·최근·거리 순으로 결정적인지 검증한다.
@@ -386,6 +419,8 @@ M12의 V59 GIN·V57 favorite·V63 recent 전후 실행계획은
 - 좌표 없는 검색 비율
 - 추천 근거별 노출·선택 수
 - `pg_trgm` 인덱스 크기와 갱신 비용
+- `beanflow.discovery.search.index.store-row-presence.coverage`
+- `beanflow.discovery.search.index.freshness.mismatches`
 
 ## Revisit Conditions
 

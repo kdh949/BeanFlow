@@ -10,15 +10,21 @@ import java.util.UUID
  */
 interface StoreSearchTermSourceQuery {
     /**
-     * Store ids in ascending id order after [afterStoreId], at most [limit] of them.
+     * The immutable target set for one rebuild pass, captured before that pass starts writing.
      *
-     * A keyset walk rather than an offset, so a rebuild that runs while stores are being created
-     * cannot skip or repeat a store.
+     * Store ids are UUIDs and have no creation order, so a live keyset walk can silently miss an
+     * id created after a prior page. A completed rebuild therefore means this captured set was
+     * processed; stores created afterwards belong to their own synchronous write or a later pass.
      */
-    fun findStoreIdsAfter(
-        afterStoreId: UUID?,
-        limit: Int,
-    ): List<UUID>
+    fun findRebuildTargetStoreIds(): List<UUID>
+
+    /**
+     * All source facts that the store-name and menu-name index rows must mirror.
+     *
+     * Discovery uses this projection only to reconcile its derived index. Merchant remains the
+     * owner of the source rows and Discovery does not read Merchant tables directly.
+     */
+    fun findAllSearchTermSources(): List<StoreSearchTermSource>
 
     /**
      * The indexable attributes of one store, or null if the store no longer exists.

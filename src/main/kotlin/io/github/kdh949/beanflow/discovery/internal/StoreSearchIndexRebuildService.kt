@@ -10,7 +10,6 @@ import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Component
 import org.springframework.transaction.TransactionException
@@ -23,7 +22,7 @@ import java.util.UUID
  * Merchant has no store or menu write API, so seed data and direct DML are the only ways those
  * rows change today and there is no command to hang a synchronous index update on. This rebuild is
  * the explicit, operator-driven way that data reaches the index, and
- * `beanflow.discovery.search.index.coverage` is how the gap between the two stays visible.
+ * its row-presence and freshness gauges are how the gap between the two stays visible.
  *
  * It also carries the initial load: V59 creates the index empty on purpose, because the migration
  * would have to reimplement the normalizer in SQL to fill it and SQL cannot reproduce it
@@ -34,19 +33,21 @@ internal class StoreSearchIndexRebuildService(
     private val sources: StoreSearchTermSourceQuery,
     private val storeRebuild: StoreSearchIndexStoreRebuild,
     private val metrics: StoreSearchIndexUpdateMetrics,
-    @Value("\${beanflow.search-index-rebuild.chunk-size:100}")
-    private val chunkSize: Int,
+    private val properties: StoreSearchIndexRebuildProperties,
 ) : StoreSearchIndexRebuildOperations {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * The target ids are snapshotted before the first chunk. A UUID keyset walk would silently skip
+     * a store inserted below the boundary while the pass runs and still report a complete rebuild,
+     * so completeness is defined against this snapshot rather than against the live table.
+     */
     override fun rebuildAll(): StoreSearchIndexRebuildResult {
-        var afterStoreId: UUID? = null
+        val targetStoreIds = sources.findRebuildTargetStoreIds()
         var indexed = 0
         var skipped = 0
         val failed = mutableListOf<UUID>()
-        while (true) {
-            val storeIds = sources.findStoreIdsAfter(afterStoreId, chunkSize)
-            if (storeIds.isEmpty()) break
+        targetStoreIds.chunked(properties.chunkSize).forEach { storeIds ->
             storeIds.forEach { storeId ->
                 when (rebuildOne(storeId)) {
                     RebuildOutcome.INDEXED -> indexed++
@@ -54,16 +55,15 @@ internal class StoreSearchIndexRebuildService(
                     RebuildOutcome.FAILED -> failed.add(storeId)
                 }
             }
-            afterStoreId = storeIds.last()
         }
-        return StoreSearchIndexRebuildResult(indexed, skipped, failed)
+        return StoreSearchIndexRebuildResult(targetStoreIds.size, indexed, skipped, failed)
     }
 
     fun rebuildStore(storeId: UUID): StoreSearchIndexRebuildResult =
         when (rebuildOne(storeId)) {
-            RebuildOutcome.INDEXED -> StoreSearchIndexRebuildResult(1, 0, emptyList())
-            RebuildOutcome.SKIPPED -> StoreSearchIndexRebuildResult(0, 1, emptyList())
-            RebuildOutcome.FAILED -> StoreSearchIndexRebuildResult(0, 0, listOf(storeId))
+            RebuildOutcome.INDEXED -> StoreSearchIndexRebuildResult(1, 1, 0, emptyList())
+            RebuildOutcome.SKIPPED -> StoreSearchIndexRebuildResult(1, 0, 1, emptyList())
+            RebuildOutcome.FAILED -> StoreSearchIndexRebuildResult(1, 0, 0, listOf(storeId))
         }
 
     /**

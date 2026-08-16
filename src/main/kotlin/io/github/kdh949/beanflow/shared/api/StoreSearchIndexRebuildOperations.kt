@@ -13,11 +13,23 @@ interface StoreSearchIndexRebuildOperations {
     fun rebuildAll(): StoreSearchIndexRebuildResult
 }
 
-/** A completed rebuild pass, including any stores that could not be rebuilt. */
+/**
+ * What one rebuild pass did.
+ *
+ * Failures are reported as store ids rather than a count so that a partial rebuild can never be
+ * read as a complete one, and so the operator command can name what to retry.
+ *
+ * `targetStoreCount` is the size of the id snapshot taken before the first chunk. Completeness is
+ * judged against that snapshot, not against the live table: a store inserted while the pass runs
+ * is out of scope for this pass rather than a silent omission from a "complete" one. It stays out
+ * of the published HTTP response, which reports only what the pass did.
+ */
 data class StoreSearchIndexRebuildResult(
+    val targetStoreCount: Int,
     val indexedStoreCount: Int,
     val skippedStoreCount: Int,
     val failedStoreIds: List<UUID>,
 ) {
-    val complete: Boolean get() = failedStoreIds.isEmpty()
+    /** True only when every store id in this pass's initial target snapshot succeeded. */
+    val completeSnapshot: Boolean get() = failedStoreIds.isEmpty()
 }

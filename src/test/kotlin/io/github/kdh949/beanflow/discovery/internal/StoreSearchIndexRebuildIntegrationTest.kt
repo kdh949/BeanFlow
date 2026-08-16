@@ -82,10 +82,11 @@ internal class StoreSearchIndexRebuildIntegrationTest {
 
         val result = rebuild.rebuildAll()
 
+        assertThat(result.targetStoreCount).isEqualTo(2)
         assertThat(result.indexedStoreCount).isEqualTo(2)
         assertThat(result.skippedStoreCount).isZero()
         assertThat(result.failedStoreIds).isEmpty()
-        assertThat(result.complete).isTrue()
+        assertThat(result.completeSnapshot).isTrue()
 
         assertThat(terms(first)).containsExactlyInAnyOrder(
             Triple("STORE_NAME", "스타벅스 강남점", null),
@@ -106,11 +107,43 @@ internal class StoreSearchIndexRebuildIntegrationTest {
         rebuild.rebuildAll()
 
         assertThat(coverage.refresh()).isEqualTo(1.0)
-        assertThat(meterRegistry.get("beanflow.discovery.search.index.coverage").gauge().value()).isEqualTo(1.0)
+        assertThat(meterRegistry.get("beanflow.discovery.search.index.store-row-presence.coverage").gauge().value()).isEqualTo(1.0)
 
         // 색인을 거치지 않고 들어온 매장은 커버리지를 떨어뜨려 드러난다.
         insertStore("색인되지 않은 매장")
         assertThat(coverage.refresh()).isEqualTo(2.0 / 3.0)
+    }
+
+    @Test
+    fun `freshness gauge detects direct store and menu changes even when row presence stays complete`() {
+        val storeId = insertStore("스타벅스 강남점")
+        val menuId = insertMenu(storeId, "아메리카노", available = true)
+        rebuild.rebuildAll()
+
+        assertThat(coverage.refresh()).isEqualTo(1.0)
+        assertThat(freshnessMismatchGauge()).isZero()
+
+        jdbc.update("UPDATE merchant_store_discovery_profile SET name = ? WHERE store_id = ?", "스타벅스 역삼점", storeId)
+        assertThat(coverage.refresh()).isEqualTo(1.0)
+        assertThat(freshnessMismatchGauge()).isGreaterThan(0.0)
+
+        rebuild.rebuildAll()
+        coverage.refresh()
+        assertThat(freshnessMismatchGauge()).isZero()
+
+        insertMenu(storeId, "카페 라떼", available = true)
+        coverage.refresh()
+        assertThat(freshnessMismatchGauge()).isGreaterThan(0.0)
+
+        rebuild.rebuildAll()
+        jdbc.update("UPDATE merchant_menu SET name = ? WHERE id = ?", "디카페인 아메리카노", menuId)
+        coverage.refresh()
+        assertThat(freshnessMismatchGauge()).isGreaterThan(0.0)
+
+        rebuild.rebuildAll()
+        jdbc.update("UPDATE merchant_menu SET available = false WHERE id = ?", menuId)
+        coverage.refresh()
+        assertThat(freshnessMismatchGauge()).isGreaterThan(0.0)
     }
 
     @Test
@@ -158,7 +191,7 @@ internal class StoreSearchIndexRebuildIntegrationTest {
         val result = rebuild.rebuildAll()
 
         assertThat(result.failedStoreIds).containsExactly(broken)
-        assertThat(result.complete).isFalse()
+        assertThat(result.completeSnapshot).isFalse()
         assertThat(result.indexedStoreCount).isEqualTo(1)
         assertThat(terms(healthy)).hasSize(1)
     }
@@ -293,6 +326,8 @@ internal class StoreSearchIndexRebuildIntegrationTest {
             String::class.java,
             storeId,
         )
+
+    private fun freshnessMismatchGauge(): Double = meterRegistry.get("beanflow.discovery.search.index.freshness.mismatches").gauge().value()
 
     private fun weightOf(
         storeId: UUID,

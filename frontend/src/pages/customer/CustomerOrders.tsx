@@ -5,7 +5,8 @@ import type { components } from "../../api/schema";
 import { api, unwrap } from "../../api/client";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
-import { shortDateTime, won } from "../../lib/format";
+import { shortDateTime, shortTime, won } from "../../lib/format";
+import { Button, ButtonLink } from "../../design-system";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];
 type CustomerOrderSummary = components["schemas"]["CustomerOrderSummary"];
@@ -88,7 +89,7 @@ export function CustomerOrdersPage() {
         <EmptyState
           title={status === "ACTIVE" ? "진행 중인 주문이 없어요" : "이 기간의 주문이 없어요"}
           description={status === "ACTIVE" ? "새 주문을 시작하면 픽업 상태가 여기에 표시됩니다." : "조회 기간을 넓혀 다시 확인해 보세요."}
-          action={<Link className="button button-primary" to="/app">매장 찾기</Link>}
+          action={<ButtonLink to="/app">매장 찾기</ButtonLink>}
         />
       ) : null}
       {page?.items.length ? (
@@ -97,9 +98,9 @@ export function CustomerOrdersPage() {
         </section>
       ) : null}
       {page?.page.nextCursor ? (
-        <button className="button button-secondary button-block" type="button" disabled={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+        <Button block variant="secondary" type="button" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
           <RefreshCw size={16} className={loadingMore ? "spin" : undefined} /> {loadingMore ? "더 불러오는 중" : "주문 더 보기"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -160,7 +161,7 @@ export function CustomerOrderDetailPage() {
         <p>픽업대에서 번호를 확인해 주세요.</p>
         <OrderTimeline state={order.status} />
         <dl className="pickup-window">
-          <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{new Date(order.pickupWindowEnd).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</dd></div>
+          <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{shortTime.format(new Date(order.pickupWindowEnd))}</dd></div>
           <div><dt>주문 번호</dt><dd>{order.orderReference}</dd></div>
         </dl>
       </section>
@@ -178,7 +179,7 @@ export function CustomerOrderDetailPage() {
       {order.paymentRecovery ? <section className="recovery-note" role="status"><RefreshCw size={17} /><div><strong>환불 처리 상태</strong><span>{order.paymentRecovery.noticeCode ? "확인이 지연되고 있어요. 같은 요청을 반복하지 않아도 됩니다." : `현재 ${order.paymentRecovery.state} 상태입니다.`}</span></div></section> : null}
       {order.allowedActions.includes("CANCEL") ? <section className="order-action-note" role="status"><div><strong>취소 가능한 주문</strong><span>매장에서 주문을 수락하기 전까지 취소할 수 있어요.</span></div></section> : null}
       {error ? <ErrorState error={error} retry={() => void load()} /> : null}
-      <button className="button button-ghost button-block" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</button>
+      <Button block variant="ghost" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</Button>
     </div>
   );
 }

@@ -4,8 +4,10 @@ import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
@@ -24,6 +26,7 @@ import java.util.UUID
  * `StoreSearchIndexRebuildIntegrationTest`.
  */
 @Testcontainers(disabledWithoutDocker = true)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 internal class StoreSearchTermIndexMigrationTest {
     companion object {
         @Container
@@ -37,10 +40,17 @@ internal class StoreSearchTermIndexMigrationTest {
 
     private val jdbc by lazy { JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)) }
 
-    @BeforeEach
-    fun migrateFromCleanDatabase() {
-        flyway(cleanDisabled = false).clean()
+    @BeforeAll
+    fun migrateFromCleanDatabaseOnce() {
         flyway().migrate()
+    }
+
+    @AfterEach
+    fun clearTestRows() {
+        jdbc.update("DELETE FROM discovery_store_search_term")
+        jdbc.update("DELETE FROM merchant_menu")
+        jdbc.update("DELETE FROM merchant_store_discovery_profile")
+        jdbc.update("DELETE FROM merchant_store")
     }
 
     @Test
@@ -109,6 +119,26 @@ internal class StoreSearchTermIndexMigrationTest {
             .isInstanceOf(DataIntegrityViolationException::class.java)
         assertThatThrownBy { insertTerm(storeId, "SLOGAN", null, "무언가", STORE_NAME_WEIGHT) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
+    fun `menu term source must exist on the same store and is removed with its menu`() {
+        val firstStoreId = insertStoreWithProfile("스타벅스 강남점")
+        val secondStoreId = insertStoreWithProfile("스타벅스 역삼점")
+        val firstMenuId = insertMenu(firstStoreId, "아메리카노", available = true)
+        val secondMenuId = insertMenu(secondStoreId, "아메리카노", available = true)
+
+        assertThatThrownBy {
+            insertTerm(firstStoreId, "MENU_NAME", UUID.randomUUID(), "존재하지 않는 메뉴", MENU_NAME_WEIGHT)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            insertTerm(firstStoreId, "MENU_NAME", secondMenuId, "다른 매장 메뉴", MENU_NAME_WEIGHT)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+
+        insertTerm(firstStoreId, "MENU_NAME", firstMenuId, "아메리카노", MENU_NAME_WEIGHT)
+        jdbc.update("DELETE FROM merchant_menu WHERE id = ?", firstMenuId)
+
+        assertThat(countTerms(firstStoreId, "MENU_NAME")).isZero()
     }
 
     @Test
@@ -214,11 +244,10 @@ internal class StoreSearchTermIndexMigrationTest {
         return menuId
     }
 
-    private fun flyway(cleanDisabled: Boolean = true): Flyway =
+    private fun flyway(): Flyway =
         Flyway
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .target("59")
-            .cleanDisabled(cleanDisabled)
             .load()
 }

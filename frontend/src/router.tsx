@@ -11,9 +11,10 @@ import {
 import { CustomerOrderDetailPage, CustomerOrdersPage } from "./pages/customer/CustomerOrders";
 import { OpsDashboardPage, OpsOrderPage, OpsRefundPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
+import { ButtonLink } from "./design-system";
 
-function NotFoundPage() {
-  return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><a className="button button-primary" href="/">처음으로</a></main>;
+export function NotFoundPage() {
+  return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
 }
 
 export const router = createBrowserRouter([

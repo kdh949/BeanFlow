@@ -16,33 +16,33 @@ internal class StoreSearchTermSourceQueryService(
     private val repository: StoreSearchTermSourceRepository,
 ) : StoreSearchTermSourceQuery {
     @Transactional(readOnly = true)
-    override fun findStoreIdsAfter(
-        afterStoreId: UUID?,
-        limit: Int,
-    ): List<UUID> {
-        require(limit in 1..MAX_CHUNK_SIZE) { "Store id page size must be between 1 and $MAX_CHUNK_SIZE" }
-        return repository.findStoreIdsAfter(afterStoreId, limit)
-    }
+    override fun findRebuildTargetStoreIds(): List<UUID> = repository.findStoreIds()
+
+    @Transactional(readOnly = true)
+    override fun findAllSearchTermSources(): List<StoreSearchTermSource> =
+        repository.findAllSearchTermSources().map(::requireSearchableProfile)
 
     @Transactional(readOnly = true)
     override fun findSearchTermSource(storeId: UUID): StoreSearchTermSource? {
         val storeName = repository.findStoreName(storeId) ?: return null
-        if (storeName.isBlank()) {
-            throw DomainFailure(
-                FailureCode.DEPENDENCY_UNAVAILABLE,
-                "Store has no searchable profile name",
-                targetReference = storeId.toString(),
-            )
-        }
-        return StoreSearchTermSource(
-            storeId = storeId,
-            storeName = storeName,
-            availableMenus = repository.findAvailableMenus(storeId),
+        return requireSearchableProfile(
+            StoreSearchTermSource(
+                storeId = storeId,
+                storeName = storeName,
+                availableMenus = repository.findAvailableMenus(storeId),
+            ),
         )
     }
 
-    private companion object {
-        const val MAX_CHUNK_SIZE = 1000
+    private fun requireSearchableProfile(source: StoreSearchTermSource): StoreSearchTermSource {
+        if (source.storeName.isBlank()) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Store has no searchable profile name",
+                targetReference = source.storeId.toString(),
+            )
+        }
+        return source
     }
 }
 
@@ -50,17 +50,35 @@ internal class StoreSearchTermSourceQueryService(
 internal class StoreSearchTermSourceRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
-    fun findStoreIdsAfter(
-        afterStoreId: UUID?,
-        limit: Int,
-    ): List<UUID> {
-        val keysetPredicate = if (afterStoreId == null) "" else " WHERE id > ?"
-        val arguments = if (afterStoreId == null) arrayOf<Any>(limit) else arrayOf<Any>(afterStoreId, limit)
-        return jdbcTemplate.query(
-            "SELECT id FROM merchant_store$keysetPredicate ORDER BY id LIMIT ?",
+    fun findStoreIds(): List<UUID> =
+        jdbcTemplate.query(
+            "SELECT id FROM merchant_store ORDER BY id",
             { resultSet, _ -> resultSet.getObject("id", UUID::class.java) },
-            *arguments,
         )
+
+    fun findAllSearchTermSources(): List<StoreSearchTermSource> {
+        val sources = linkedMapOf<UUID, StoreSearchTermSourceBuilder>()
+        jdbcTemplate.query(
+            """
+            SELECT store.id AS store_id,
+                   COALESCE(profile.name, '') AS store_name,
+                   menu.id AS menu_id,
+                   menu.name AS menu_name
+              FROM merchant_store store
+              LEFT JOIN merchant_store_discovery_profile profile ON profile.store_id = store.id
+              LEFT JOIN merchant_menu menu ON menu.store_id = store.id AND menu.available
+             ORDER BY store.id, menu.id
+            """.trimIndent(),
+        ) { resultSet ->
+            val storeId = resultSet.getObject("store_id", UUID::class.java)
+            val source = sources.getOrPut(storeId) { StoreSearchTermSourceBuilder(storeId, resultSet.getString("store_name")) }
+            resultSet.getObject("menu_id", UUID::class.java)?.let { menuId ->
+                source.availableMenus += StoreSearchMenuSource(menuId, resultSet.getString("menu_name"))
+            }
+        }
+        return sources.values.map { source ->
+            StoreSearchTermSource(source.storeId, source.storeName, source.availableMenus)
+        }
     }
 
     /**
@@ -98,4 +116,10 @@ internal class StoreSearchTermSourceRepository(
             },
             storeId,
         )
+
+    private data class StoreSearchTermSourceBuilder(
+        val storeId: UUID,
+        val storeName: String,
+        val availableMenus: MutableList<StoreSearchMenuSource> = mutableListOf(),
+    )
 }

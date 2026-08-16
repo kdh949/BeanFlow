@@ -12,6 +12,12 @@ SET LOCAL lock_timeout = '5s';
 -- SearchTextNormalizer가 만든 값이어야 하는데(MD-2026-015, 구현 불변식 13) SQL의
 -- lower()는 같은 결과를 내지 못한다. 측정된 차이는 MD-2026-018에 있다. 기존 매장·메뉴는
 -- StoreSearchIndexRebuildService가 같은 함수로 채운다.
+--
+-- MENU_NAME source_id는 같은 매장의 실존 메뉴만 가리킨다. merchant_menu.id가 단독 PK여도
+-- 복합 FK의 referenced key는 정확히 (id, store_id)여야 매장 귀속까지 DB가 검증한다.
+ALTER TABLE merchant_menu
+    ADD CONSTRAINT uq_merchant_menu_id_store UNIQUE (id, store_id);
+
 CREATE TABLE discovery_store_search_term (
     id uuid PRIMARY KEY,
     store_id uuid NOT NULL REFERENCES merchant_store(id) ON DELETE CASCADE,
@@ -26,7 +32,10 @@ CREATE TABLE discovery_store_search_term (
     display_text varchar(200) NOT NULL,
     weight numeric(3,2) NOT NULL CHECK (weight > 0 AND weight <= 1),
     CONSTRAINT ck_search_term_menu_source
-        CHECK ((term_kind = 'MENU_NAME') = (source_id IS NOT NULL))
+        CHECK ((term_kind = 'MENU_NAME') = (source_id IS NOT NULL)),
+    CONSTRAINT fk_search_term_menu_source
+        FOREIGN KEY (source_id, store_id)
+        REFERENCES merchant_menu(id, store_id) ON DELETE CASCADE
 );
 
 -- source_id가 nullable이라 PK에 넣을 수 없다. 대리 키 id와 COALESCE 식 unique 인덱스로

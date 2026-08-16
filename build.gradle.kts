@@ -95,11 +95,23 @@ spotless {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	maxHeapSize = "1g"
+	// Keep a bounded level of parallelism so the hosted runner can complete the full suite
+	// within its 20-minute limit without exhausting its Docker or memory capacity.
+	maxParallelForks = 2
 	systemProperty("spring.test.context.cache.maxSize", "8")
 }
 
 tasks.test {
 	outputs.dir(project.extra["snippetsDir"]!!)
+}
+
+tasks.named<ProcessResources>("processResources") {
+	// Scalar API 문서 페이지가 런타임에 fetch할 수 있도록 계약 원본(openapi/)을 그대로
+	// classpath:/openapi/에 포함한다. 계약 테스트는 별도로 저장소 루트 경로를 직접 읽으므로
+	// 이 복사본은 문서 서빙 전용이며 원본(source of truth)이 아니다.
+	from("openapi") {
+		into("openapi")
+	}
 }
 
 tasks.asciidoctor {
