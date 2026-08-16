@@ -200,6 +200,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
+        env:
+          BEANFLOW_CI_TEST_PROGRESS: "true"
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-build.log
           ./gradlew build --stacktrace --console=plain

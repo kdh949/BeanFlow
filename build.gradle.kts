@@ -98,6 +98,11 @@ tasks.withType<Test> {
 	// Each JVM fork starts its own PostGIS Testcontainers singleton. Keep the hosted-runner
 	// suite serial so parallel containers do not stall the full integration-test gate.
 	maxParallelForks = 1
+	if (System.getenv("BEANFLOW_CI_TEST_PROGRESS") == "true") {
+		// The hosted runner is the only Docker-capable full-suite environment in this workspace.
+		// Emit the current test so a timeout identifies the exact stalled test rather than a blank log.
+		testLogging.events("started", "failed")
+	}
 	systemProperty("spring.test.context.cache.maxSize", "8")
 }
 
