@@ -180,9 +180,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
-    # A 20-minute cap cancels the full hosted Testcontainers suite before it reports a result.
-    # Keep the serial suite bounded while retaining all required integration coverage.
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -199,12 +197,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build and test
-        env:
-          BEANFLOW_CI_TEST_PROGRESS: "true"
+      - name: Build without tests
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-build.log
-          ./gradlew build --stacktrace --console=plain
+          ./gradlew build -x test --stacktrace --console=plain
 
       - name: Capture Docker diagnostics
         if: failure()
@@ -217,6 +213,62 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: failure-evidence-${{ github.run_id }}
+          path: |
+            build/reports/
+            build/test-results/
+            .ci-artifacts/
+            ${{ runner.temp }}/docker-info.txt
+            ${{ runner.temp }}/docker-containers.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test:
+    name: test (${{ matrix.shard }}/3)
+    needs: preflight
+    if: needs.preflight.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Verify CI test shard assignment
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard-assignment.log
+          ./gradlew verifyCiTestShards --stacktrace --console=plain
+
+      - name: Run test shard
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard.log
+          ./gradlew test -PciTestShardIndex=${{ matrix.shard }} -PciTestShardCount=3 --stacktrace --console=plain
+
+      - name: Capture Docker diagnostics
+        if: failure()
+        run: |
+          docker info > "${RUNNER_TEMP}/docker-info.txt" 2>&1 || true
+          docker ps -a > "${RUNNER_TEMP}/docker-containers.txt" 2>&1 || true
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-evidence-${{ github.run_id }}-test-${{ matrix.shard }}
           path: |
             build/reports/
             build/test-results/

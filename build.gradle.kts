@@ -21,6 +21,58 @@ repositories {
 	mavenCentral()
 }
 
+val CI_TEST_SHARD_COUNT = 3
+
+data class CiTestShard(
+	val index: Int,
+	val count: Int,
+)
+
+private fun parseCiTestShard(
+	indexValue: String?,
+	countValue: String?,
+): CiTestShard? =
+	when {
+		indexValue == null && countValue == null -> null
+		indexValue == null || countValue == null ->
+			error("ciTestShardIndex and ciTestShardCount must be supplied together")
+		else -> {
+			val index = indexValue.toIntOrNull() ?: error("ciTestShardIndex must be an integer")
+			val count = countValue.toIntOrNull() ?: error("ciTestShardCount must be an integer")
+			require(count > 0) { "ciTestShardCount must be greater than zero" }
+			require(index in 0 until count) { "ciTestShardIndex must be in 0 until ciTestShardCount" }
+			CiTestShard(index, count)
+		}
+	}
+
+private fun Project.testClassNamesFromSources(): List<String> =
+	fileTree("src/test/kotlin") {
+		include("**/*Test.kt", "**/*Tests.kt", "**/*Benchmark.kt")
+	}.files
+		.map { source ->
+			val packageName =
+				source.useLines { lines ->
+					lines
+						.map { it.trim() }
+						.firstOrNull { it.startsWith("package ") }
+						?.removePrefix("package ")
+						?: error("Test source must declare a package: $source")
+				}
+			"$packageName.${source.nameWithoutExtension}"
+		}
+		.sorted()
+
+val ciTestShard =
+	parseCiTestShard(
+		providers.gradleProperty("ciTestShardIndex").orNull,
+		providers.gradleProperty("ciTestShardCount").orNull,
+	)
+val ciTestClassNames = testClassNamesFromSources()
+val ciTestShardClassNames =
+	ciTestShard?.let { shard ->
+		ciTestClassNames.filterIndexed { classIndex, _ -> classIndex % shard.count == shard.index }
+	}
+
 extra["snippetsDir"] = file("build/generated-snippets")
 extra["springModulithVersion"] = "2.1.0"
 
@@ -98,12 +150,63 @@ tasks.withType<Test> {
 	// Each JVM fork starts its own PostGIS Testcontainers singleton. Keep the hosted-runner
 	// suite serial so parallel containers do not stall the full integration-test gate.
 	maxParallelForks = 1
-	if (System.getenv("BEANFLOW_CI_TEST_PROGRESS") == "true") {
-		// The hosted runner is the only Docker-capable full-suite environment in this workspace.
-		// Emit the current test so a timeout identifies the exact stalled test rather than a blank log.
-		testLogging.events("started", "failed")
+	ciTestShardClassNames?.let { classNames ->
+		inputs.property("ciTestShardIndex", ciTestShard!!.index)
+		inputs.property("ciTestShardCount", ciTestShard.count)
+		filter {
+			isFailOnNoMatchingTests = true
+			classNames.forEach { includeTestsMatching(it) }
+		}
+		doFirst {
+			logger.lifecycle(
+				"Running CI test shard ${ciTestShard.index + 1}/${ciTestShard.count}: " +
+					"${classNames.size}/${ciTestClassNames.size} test classes",
+			)
+		}
 	}
 	systemProperty("spring.test.context.cache.maxSize", "8")
+}
+
+tasks.register("verifyCiTestShards") {
+	group = "verification"
+	description = "Verify that deterministic CI test shards cover every compiled test class exactly once"
+	dependsOn(tasks.named("testClasses"))
+
+	doLast {
+		val testTask = tasks.named<Test>("test").get()
+		val compiledTestClassNames =
+			testTask.testClassesDirs.files
+				.flatMap { classesDirectory ->
+					fileTree(classesDirectory) {
+						include("**/*Test.class", "**/*Tests.class", "**/*Benchmark.class")
+						exclude("**/*\$*.class")
+					}.files.map { classFile ->
+						classFile
+							.relativeTo(classesDirectory)
+							.invariantSeparatorsPath
+							.removeSuffix(".class")
+							.replace('/', '.')
+					}
+				}
+				.sorted()
+
+		check(compiledTestClassNames == ciTestClassNames) {
+			"CI shard source/class mismatch. " +
+				"Missing compiled classes: ${(ciTestClassNames - compiledTestClassNames.toSet()).sorted()}; " +
+				"unexpected compiled classes: ${(compiledTestClassNames - ciTestClassNames.toSet()).sorted()}"
+		}
+
+		val assignedClassNames =
+			(0 until CI_TEST_SHARD_COUNT).flatMap { shardIndex ->
+				ciTestClassNames.filterIndexed { classIndex, _ -> classIndex % CI_TEST_SHARD_COUNT == shardIndex }
+			}
+		check(assignedClassNames.size == ciTestClassNames.size) { "CI test shards assigned duplicate classes" }
+		check(assignedClassNames.toSet() == ciTestClassNames.toSet()) { "CI test shards omitted a test class" }
+
+		logger.lifecycle(
+			"Verified $CI_TEST_SHARD_COUNT CI test shards cover ${ciTestClassNames.size} test classes exactly once",
+		)
+	}
 }
 
 tasks.test {
