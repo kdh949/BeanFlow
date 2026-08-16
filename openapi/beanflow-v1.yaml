@@ -544,6 +544,11 @@ paths:
       tags: [Discovery]
       operationId: addCurrentCustomerFavoriteStore
       summary: Add a store to current customer favorites idempotently
+      description: |
+        A customer may hold at most 200 favorite stores. Adding a store that is already a favorite
+        stays a 204 regardless of the count; only a request that would create the 201st favorite
+        returns 409 FAVORITE_STORE_LIMIT_EXCEEDED. The count is evaluated while the customer's
+        favorites are serialized, so simultaneous adds cannot settle above the cap.
       x-beanflow-contract-status: TARGET
       security: [{ customerSession: [] }]
       parameters:
@@ -554,6 +559,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
     delete:
       tags: [Discovery]

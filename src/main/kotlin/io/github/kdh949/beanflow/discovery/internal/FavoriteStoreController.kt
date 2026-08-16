@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreView
 import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
+import io.github.kdh949.beanflow.discovery.api.MAX_FAVORITE_STORES
 import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -26,7 +27,9 @@ internal class FavoriteStoreController(
     @GetMapping("/favorite-stores")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun list(actor: CustomerActor): CustomerStoreListResponse =
-        CustomerStoreListResponse(favorites.list(customerId(actor), clock.instant()).map(CustomerStoreView::toResponse))
+        CustomerStoreListResponse(
+            favorites.list(customerId(actor), clock.instant(), MAX_FAVORITE_STORES).map(CustomerStoreView::toResponse),
+        )
 
     @PutMapping("/favorite-stores/{storeId}")
     @PreAuthorize("hasRole('CUSTOMER')")

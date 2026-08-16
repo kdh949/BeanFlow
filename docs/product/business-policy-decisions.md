@@ -1844,6 +1844,14 @@
 - **Boundary:** Ordering은 customer scope로 eligible store ID와 `lastOrderedAt`만 Projection하여
   Discovery에 제공하고, Discovery가 현재 노출 가능한 매장 정보를 hydrate한다. 존재하지 않거나 현재
   노출 불가능한 매장은 결과에서 제외하되 주문 스냅샷이나 상태를 수정하지 않는다.
+- **Visible Limit:** `limit`은 **최종 노출 결과**의 개수다. 노출 불가능한 매장이 앞자리를 차지해도
+  뒤의 정상 매장이 가려지지 않도록, Discovery는 hydrate 결과가 `limit`에 못 미치면 같은 정렬
+  순서의 다음 candidate window를 이어 읽는다. window 수에는 상한을 둔다. 최근 매장 endpoint에는
+  cursor가 없으므로 여기서 가려진 매장은 "다음 page"가 아니라 **영구히 도달 불가**가 된다.
+- **Favorite Limit:** 고객 한 명이 가질 수 있는 즐겨찾기는 최대 **200개**다. 상한을 넘기는 추가는
+  `409 FAVORITE_STORE_LIMIT_EXCEEDED`이며, 이미 즐겨찾기인 매장의 반복 PUT은 상한과 무관하게
+  `204`다. 개수 판정은 해당 고객에 대해 직렬화된 상태에서 수행하므로 동시 추가가 상한을 넘겨
+  확정될 수 없다. 홈 추천은 즐겨찾기 전체가 아니라 병합에 필요한 만큼만 읽는다.
 - **Failure Policy:** 최근 주문 Projection이나 매장 hydrate 실패를 빈 recent 목록 또는 거리순 결과로
   대체하지 않고 홈 추천 요청을 `503`으로 실패시킨다. 고객 주문 이력을 Discovery table로 복제하지 않는다.
 - **Rationale:** 실제 결제·운영 흐름에 들어간 매장은 편의 추천에 반영하면서 결제 전 포기, 만료,
@@ -1856,6 +1864,9 @@
   - 동률 `lastOrderedAt`의 `storeId` tie-breaker
   - 즐겨찾기·최근·nearby 중복 제거, 좌표 없는 순서와 좌표 쌍의 3,000m 기본 반경
   - 좌표 하나만 제공하거나 반경만 제공한 요청의 400
+  - `limit=1`이고 최신 최근 매장만 노출 불가일 때 두 번째 매장이 반환되는지 검증
+  - 즐겨찾기 상한 도달 후 추가의 409, 이미 즐겨찾기인 매장 반복 PUT의 204
+  - 상한 경계에서 동시 PUT이 상한을 넘겨 확정되지 않는지 PostgreSQL 동시성 검증
   - Ordering 또는 Discovery 조회 장애의 503과 빈 결과 fallback 부재
 - **ADR Required:** Yes — [ADR-103](../adr/ADR-103-store-search-strategy.md)
 - **Revisit Conditions:** 추천 제외/숨김 기능, 취소 사유별 재노출, 고객 행동 데이터 기반 ranking 또는

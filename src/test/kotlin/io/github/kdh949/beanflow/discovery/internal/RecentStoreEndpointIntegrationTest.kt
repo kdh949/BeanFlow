@@ -125,6 +125,49 @@ internal class RecentStoreEndpointIntegrationTest {
     }
 
     @Test
+    fun `limit counts visible stores so a store hidden behind a stale one is still reachable`() {
+        val customerId = UUID.randomUUID()
+        val staleStore = createVisibleStore(customerId, "가장 최근이지만 비노출", uuid(11))
+        val visibleStore = createVisibleStore(customerId, "그 다음 정상 매장", uuid(12))
+        val now = clock.instant()
+        insertOrder(staleStore, "PAID", now.minus(Duration.ofMinutes(1)), 1)
+        insertOrder(visibleStore, "PAID", now.minus(Duration.ofMinutes(2)), 2)
+        jdbc.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", staleStore.storeId)
+
+        // The endpoint has no cursor. If limit were applied to raw candidates, the stale newest
+        // store would consume the only slot and the visible store would be unreachable entirely.
+        mockMvc
+            .perform(get("/api/v1/me/recent-stores").param("limit", "1").with(customerJwt(customerId)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].storeId").value(visibleStore.storeId.toString()))
+    }
+
+    @Test
+    fun `recent store keyset continuation returns each store once across windows`() {
+        val customerId = UUID.randomUUID()
+        val base = clock.instant().minus(Duration.ofDays(1))
+        val stores = (1..5).map { createVisibleStore(customerId, "연속 조회 매장 $it", uuid(20L + it)) }
+        stores.forEachIndexed { index, store ->
+            insertOrder(store, "PAID", base.plusSeconds((10 - index).toLong()), (index + 1).toLong())
+        }
+
+        val firstWindow = recentStoreQuery.top(customerId, 2)
+        val secondWindow =
+            recentStoreQuery.top(
+                customerId,
+                2,
+                io.github.kdh949.beanflow.shared.api.CustomerRecentStoreCursor(
+                    firstWindow.last().lastOrderedAt,
+                    firstWindow.last().storeId,
+                ),
+            )
+
+        assertThat(firstWindow.map { it.storeId }).containsExactly(stores[0].storeId, stores[1].storeId)
+        assertThat(secondWindow.map { it.storeId }).containsExactly(stores[2].storeId, stores[3].storeId)
+    }
+
+    @Test
     fun `recent store compact limit rejects invalid values before any result is returned`() {
         val customerId = UUID.randomUUID()
 

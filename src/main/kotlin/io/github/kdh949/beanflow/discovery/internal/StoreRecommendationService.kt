@@ -37,7 +37,9 @@ internal class StoreRecommendationService(
         val nearby = prepareNearby(command, limit)
         val merged = LinkedHashMap<UUID, StoreRecommendation>(limit)
 
-        append(merged, favorites.list(customerId, command.now), RecommendationReason.FAVORITE, limit)
+        // The merged list holds at most `limit` stores, so reading more favorites than that only
+        // hydrates ids through Merchant and Fulfillment for rows that can never be returned.
+        append(merged, favorites.list(customerId, command.now, limit), RecommendationReason.FAVORITE, limit)
         append(merged, recentStores.list(customerId, limit.toString(), command.now), RecommendationReason.RECENT, limit)
 
         if (nearby != null) {

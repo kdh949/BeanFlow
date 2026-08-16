@@ -2,8 +2,10 @@ package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
+import io.github.kdh949.beanflow.discovery.api.MAX_FAVORITE_STORES
 import io.github.kdh949.beanflow.shared.api.BrowserActorType
 import io.github.kdh949.beanflow.shared.api.CreateLoginSession
+import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.LoginSessionCoordinator
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
 import jakarta.servlet.http.Cookie
@@ -192,6 +194,66 @@ internal class FavoriteStoreEndpointIntegrationTest {
     }
 
     @Test
+    fun `the cap rejects one more store while a repeat of an existing favorite stays successful`() {
+        val customerId = createCustomer()
+        val alreadyFavorited = fixture.indexStore(name = "이미 즐겨찾기인 매장")
+        val session = customerSession(customerId)
+        val csrf = issueCsrf()
+        mockMvc
+            .perform(putFavorite(alreadyFavorited).cookie(session, csrf).header(CSRF_HEADER, csrf.value))
+            .andExpect(status().isNoContent)
+        fillFavoritesTo(customerId, MAX_FAVORITE_STORES)
+        val oneTooMany = fixture.indexStore(name = "상한 초과 매장")
+
+        mockMvc
+            .perform(putFavorite(oneTooMany).cookie(session, csrf).header(CSRF_HEADER, csrf.value))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("FAVORITE_STORE_LIMIT_EXCEEDED"))
+
+        // Re-adding a store that is already a favorite creates no row, so the cap does not apply.
+        mockMvc
+            .perform(putFavorite(alreadyFavorited).cookie(session, csrf).header(CSRF_HEADER, csrf.value))
+            .andExpect(status().isNoContent)
+
+        assertThat(totalFavoriteCount(customerId)).isEqualTo(MAX_FAVORITE_STORES.toLong())
+        assertThat(favoriteCount(customerId, oneTooMany)).isZero()
+    }
+
+    @Test
+    fun `simultaneous adds at the cap boundary cannot settle above the cap`() {
+        val customerId = createCustomer()
+        fillFavoritesTo(customerId, MAX_FAVORITE_STORES - 1)
+        val contenders = List(2) { fixture.indexStore(name = "상한 경계 동시 추가 $it") }
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+
+        // Counting before inserting is only safe under a per-customer lock. Without it both threads
+        // read 199 and both insert, settling at 201.
+        val outcomes =
+            try {
+                val futures =
+                    contenders.map { storeId ->
+                        executor.submit<String> {
+                            start.await(10, TimeUnit.SECONDS)
+                            try {
+                                favorites.add(customerId, storeId, clock.instant())
+                                "ADDED"
+                            } catch (failure: DomainFailure) {
+                                failure.code.name
+                            }
+                        }
+                    }
+                start.countDown()
+                futures.map { it.get(20, TimeUnit.SECONDS) }
+            } finally {
+                executor.shutdownNow()
+            }
+
+        assertThat(outcomes).containsExactlyInAnyOrder("ADDED", "FAVORITE_STORE_LIMIT_EXCEEDED")
+        assertThat(totalFavoriteCount(customerId)).isEqualTo(MAX_FAVORITE_STORES.toLong())
+    }
+
+    @Test
     fun `favorite persistence failure is reported as 503 instead of a successful no-op`() {
         val customerId = createCustomer()
         val storeId = fixture.indexStore(name = "즐겨찾기 장애 대상")
@@ -283,6 +345,38 @@ internal class FavoriteStoreEndpointIntegrationTest {
             name,
         )
     }
+
+    /** Tops the customer up to [target] favorites without going through the endpoint. */
+    private fun fillFavoritesTo(
+        customerId: UUID,
+        target: Int,
+    ) {
+        val missing = target - totalFavoriteCount(customerId).toInt()
+        if (missing <= 0) return
+        jdbc.update(
+            """
+            WITH created AS (
+                INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version)
+                SELECT gen_random_uuid(), true, true, 0 FROM generate_series(1, ?)
+                RETURNING id
+            )
+            INSERT INTO discovery_customer_favorite_store (customer_id, store_id, created_at)
+            SELECT ?, id, ? FROM created
+            """.trimIndent(),
+            missing,
+            customerId,
+            Timestamp.from(clock.instant().minus(Duration.ofDays(1))),
+        )
+    }
+
+    private fun totalFavoriteCount(customerId: UUID): Long =
+        requireNotNull(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM discovery_customer_favorite_store WHERE customer_id = ?",
+                Long::class.java,
+                customerId,
+            ),
+        )
 
     private fun favoriteCount(
         customerId: UUID,

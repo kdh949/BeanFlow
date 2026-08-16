@@ -144,7 +144,8 @@ class StoreRecommendationServiceTest {
             override fun list(
                 customerId: UUID,
                 now: Instant,
-            ): List<CustomerStoreView> = stores.toList()
+                limit: Int,
+            ): List<CustomerStoreView> = stores.toList().take(limit)
 
             override fun add(
                 customerId: UUID,

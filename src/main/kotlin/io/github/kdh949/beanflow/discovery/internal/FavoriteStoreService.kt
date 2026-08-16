@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreView
 import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
+import io.github.kdh949.beanflow.discovery.api.MAX_FAVORITE_STORES
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.dao.DataAccessException
@@ -28,8 +29,9 @@ internal class FavoriteStoreService(
     override fun list(
         customerId: UUID,
         now: Instant,
+        limit: Int,
     ): List<CustomerStoreView> {
-        val storeIds = persistence { favorites.findStoreIds(customerId) }
+        val storeIds = persistence { favorites.findStoreIds(customerId, limit) }
         // A stale reference to a store no longer publicly discoverable stays in the customer's
         // source record but is not exposed. It must not change the order of the remaining rows.
         return hydrator.hydrate(storeIds, now)
@@ -44,9 +46,24 @@ internal class FavoriteStoreService(
         if (!hydrator.isVisible(storeId)) {
             throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         }
-        // The composite primary key and `ON CONFLICT DO NOTHING` make same-customer retries and
-        // simultaneous PUTs converge to one row instead of surfacing a unique-constraint 500.
-        persistence { favorites.insertIfAbsent(customerId, storeId, now) }
+        persistence {
+            // Counting and then inserting is only correct if nothing else can add a row for this
+            // customer in between. Two simultaneous PUTs both reading 199 would otherwise both
+            // insert and settle at 201, so the customer is serialized for the rest of the
+            // transaction before the count is read.
+            favorites.lockCustomer(customerId)
+            if (!favorites.exists(customerId, storeId)) {
+                if (favorites.count(customerId) >= MAX_FAVORITE_STORES) {
+                    throw DomainFailure(
+                        FailureCode.FAVORITE_STORE_LIMIT_EXCEEDED,
+                        "A customer may hold at most $MAX_FAVORITE_STORES favorite stores",
+                    )
+                }
+                // The composite primary key and `ON CONFLICT DO NOTHING` still make same-customer
+                // retries converge to one row rather than surfacing a unique-constraint 500.
+                favorites.insertIfAbsent(customerId, storeId, now)
+            }
+        }
     }
 
     @Transactional
@@ -79,17 +96,49 @@ internal class FavoriteStoreService(
 internal class FavoriteStoreRepository(
     private val jdbc: org.springframework.jdbc.core.JdbcTemplate,
 ) {
-    fun findStoreIds(customerId: UUID): List<UUID> =
+    fun findStoreIds(
+        customerId: UUID,
+        limit: Int,
+    ): List<UUID> =
         jdbc.query(
             """
             SELECT store_id
               FROM discovery_customer_favorite_store
              WHERE customer_id = ?
              ORDER BY created_at DESC, store_id ASC
+             LIMIT ?
             """.trimIndent(),
             { resultSet, _ -> resultSet.getObject("store_id", UUID::class.java) },
             customerId,
+            limit,
         )
+
+    /** Transaction-scoped and per customer, so it never blocks another customer's writes. */
+    fun lockCustomer(customerId: UUID) {
+        jdbc.queryForObject(
+            "select pg_advisory_xact_lock(hashtextextended(?, 0))",
+            Any::class.java,
+            "discovery-favorite:$customerId",
+        )
+    }
+
+    fun exists(
+        customerId: UUID,
+        storeId: UUID,
+    ): Boolean =
+        jdbc.queryForObject(
+            "SELECT exists(SELECT 1 FROM discovery_customer_favorite_store WHERE customer_id = ? AND store_id = ?)",
+            Boolean::class.java,
+            customerId,
+            storeId,
+        ) == true
+
+    fun count(customerId: UUID): Int =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM discovery_customer_favorite_store WHERE customer_id = ?",
+            Int::class.java,
+            customerId,
+        ) ?: 0
 
     fun insertIfAbsent(
         customerId: UUID,

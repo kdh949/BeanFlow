@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreCursor
 import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreProjection
 import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Repository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
+import java.sql.Timestamp
 import java.util.UUID
 
 /**
@@ -26,10 +27,11 @@ internal class CustomerRecentStoreQueryService(
     override fun top(
         customerId: UUID,
         limit: Int,
+        after: CustomerRecentStoreCursor?,
     ): List<CustomerRecentStoreProjection> {
         require(limit in MIN_LIMIT..MAX_LIMIT) { "Recent store query limit must be in $MIN_LIMIT..$MAX_LIMIT" }
         return try {
-            repository.findTop(customerId, limit)
+            repository.findTop(customerId, limit, after)
         } catch (failure: DataAccessException) {
             unavailable(failure)
         } catch (failure: TransactionException) {
@@ -56,14 +58,23 @@ internal class CustomerRecentStoreQueryRepository(
     fun findTop(
         customerId: UUID,
         limit: Int,
+        after: CustomerRecentStoreCursor?,
     ): List<CustomerRecentStoreProjection> =
         jdbc.query(
+            // The keyset predicate is spelled out rather than written as a row-value comparison
+            // because the sort mixes directions: last_ordered_at DESC with store_id ASC.
             """
-            SELECT store_id, max(created_at) AS last_ordered_at
-              FROM ordering_order
-             WHERE customer_id = ?
-               AND state IN ('PAID', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED')
-             GROUP BY store_id
+            SELECT store_id, last_ordered_at
+              FROM (
+                    SELECT store_id, max(created_at) AS last_ordered_at
+                      FROM ordering_order
+                     WHERE customer_id = ?
+                       AND state IN ('PAID', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED')
+                     GROUP BY store_id
+                   ) recent
+             WHERE ?::timestamptz IS NULL
+                OR last_ordered_at < ?::timestamptz
+                OR (last_ordered_at = ?::timestamptz AND store_id > ?::uuid)
              ORDER BY last_ordered_at DESC, store_id ASC
              LIMIT ?
             """.trimIndent(),
@@ -74,6 +85,10 @@ internal class CustomerRecentStoreQueryRepository(
                 )
             },
             customerId,
+            after?.let { Timestamp.from(it.lastOrderedAt) },
+            after?.let { Timestamp.from(it.lastOrderedAt) },
+            after?.let { Timestamp.from(it.lastOrderedAt) },
+            after?.storeId,
             limit,
         )
 }
