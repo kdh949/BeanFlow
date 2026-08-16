@@ -136,10 +136,10 @@ jobs:
         working-directory: frontend
         run: npm run check:design
 
-      - name: Verify frontend typecheck baseline
+      - name: Verify frontend typecheck
         if: steps.changes.outputs.scope == 'full'
         working-directory: frontend
-        run: npm run check:type-baseline
+        run: npm run typecheck
 
       - name: Run frontend unit tests
         if: steps.changes.outputs.scope == 'full'

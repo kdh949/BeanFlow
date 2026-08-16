@@ -83,7 +83,6 @@ Run and report exact results for all relevant commands:
 
 - `npm run typecheck`
 - `npm run test:unit`
-- `npm run check:type-baseline` while MD-2026-014 remains active
 - `npm run check:design`
 - `npm run build-storybook`
 - `npm run build`

@@ -75,7 +75,7 @@ inventory와 candidate docs를 확인한다. 실행·복구 절차는 `frontend/
 ```bash
 npm run check:design
 npm run test:unit
-npm run check:type-baseline
+npm run typecheck
 npm run build-storybook
 npm run test:storybook:docs
 ```
