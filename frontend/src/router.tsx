@@ -1,5 +1,8 @@
 import { createBrowserRouter } from "react-router";
 import { ConsoleShell, CustomerShell, RootRedirect } from "./components/Shells";
+import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
+import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
+import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import {
   CheckoutPage,
   CustomerHelpPage,
@@ -21,14 +24,22 @@ export const router = createBrowserRouter([
   { path: "/", element: <RootRedirect /> },
   {
     path: "/app", element: <CustomerShell />, children: [
-      { index: true, element: <CustomerHomePage /> },
-      { path: "stores/:storeId", element: <StoreCatalogPage /> },
-      { path: "checkout/:orderId", element: <CheckoutPage /> },
-      { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
-      { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
-      { path: "orders", element: <CustomerOrdersPage /> },
-      { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
+      { path: "login", element: <CustomerLoginPage /> },
+      { path: "signup", element: <CustomerSignupPage /> },
       { path: "help", element: <CustomerHelpPage /> },
+      {
+        // Everything that needs an actor waits for `GET /me` behind this gate.
+        element: <CustomerSessionGate />, children: [
+          { index: true, element: <CustomerHomePage /> },
+          { path: "stores/:storeId", element: <StoreCatalogPage /> },
+          { path: "checkout/:orderId", element: <CheckoutPage /> },
+          { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
+          { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
+          { path: "orders", element: <CustomerOrdersPage /> },
+          { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
+          { path: "me", element: <CustomerMyPage /> },
+        ],
+      },
     ],
   },
   { path: "/store", element: <ConsoleShell kind="store" />, children: [{ index: true, element: <StoreOrderBoardPage /> }] },

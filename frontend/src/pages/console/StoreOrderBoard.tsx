@@ -1,7 +1,8 @@
 import { AlertTriangle, CalendarDays, Clock3, PackageCheck, RefreshCw, Store } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { components } from "../../api/schema";
-import { api, ApiRequestError, merchantCsrfToken, SubmissionIntent, unwrap } from "../../api/client";
+import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
+import { merchantApi, merchantCsrfToken } from "../../api/consoleClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime } from "../../lib/format";
@@ -40,11 +41,11 @@ const laneLabels: Record<BoardLane, string> = {
 };
 
 async function requestStores(): Promise<MerchantStore[]> {
-  return unwrap(await api.GET("/merchant/me/stores"));
+  return unwrap(await merchantApi.GET("/merchant/me/stores"));
 }
 
 async function requestBoard(storeId: string, etag: string | null) {
-  const result = await api.GET("/stores/{storeId}/orders", {
+  const result = await merchantApi.GET("/stores/{storeId}/orders", {
     params: {
       path: { storeId },
       header: etag ? { "If-None-Match": etag } : undefined,
@@ -61,7 +62,7 @@ async function requestBoard(storeId: string, etag: string | null) {
 }
 
 async function requestOverflow(storeId: string, lane: BoardLane, cursor: string): Promise<BoardOverflowPage> {
-  return unwrap(await api.GET("/stores/{storeId}/orders/overflow", {
+  return unwrap(await merchantApi.GET("/stores/{storeId}/orders/overflow", {
     params: { path: { storeId }, query: { lane, cursor } },
   }));
 }
@@ -226,7 +227,7 @@ export function StoreOrderBoardPage() {
     setNotice(null);
     try {
       const csrf = await merchantCsrfToken();
-      const result = await api.POST("/stores/{storeId}/orders/{orderReference}/transitions", {
+      const result = await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/transitions", {
         params: {
           path: { storeId: selectedStoreId, orderReference: item.orderReference },
           header: {

@@ -2,7 +2,8 @@ import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
-import { api, unwrap } from "../../api/client";
+import { unwrap } from "../../api/client";
+import { customerApi } from "../../api/customerClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime, shortTime, won } from "../../lib/format";
@@ -45,7 +46,7 @@ export function CustomerOrdersPage() {
     else setPage(null);
     setError(null);
     try {
-      const result = await api.GET("/me/orders", {
+      const result = await customerApi.GET("/me/orders", {
         params: { query: { status, from, to, cursor, limit: 20 } },
       });
       const next = unwrap(result);
@@ -133,7 +134,7 @@ export function CustomerOrderDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const result = await api.GET("/me/orders/{orderReference}", {
+      const result = await customerApi.GET("/me/orders/{orderReference}", {
         params: { path: { orderReference } },
       });
       setOrder(unwrap(result));

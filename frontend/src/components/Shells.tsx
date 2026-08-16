@@ -2,7 +2,6 @@ import {
   BarChart3,
   Coffee,
   Home,
-  LifeBuoy,
   LogOut,
   PackageCheck,
   ReceiptText,
@@ -10,6 +9,7 @@ import {
   Settings,
   ShieldCheck,
   Store,
+  UserRound,
   WalletCards,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -29,7 +29,6 @@ export function CustomerShell() {
             <ReceiptText size={20} />
           </Link>
         </header>
-        <AuthStrip />
         <main className="mobile-content">
           <Outlet />
         </main>
@@ -38,13 +37,17 @@ export function CustomerShell() {
             <Home size={20} />
             <span>홈</span>
           </NavLink>
+          <NavLink to="/app/stores">
+            <Search size={20} />
+            <span>매장</span>
+          </NavLink>
           <NavLink to="/app/orders">
             <ReceiptText size={20} />
             <span>주문</span>
           </NavLink>
-          <NavLink to="/app/help">
-            <LifeBuoy size={20} />
-            <span>도움말</span>
+          <NavLink to="/app/me">
+            <UserRound size={20} />
+            <span>마이</span>
           </NavLink>
         </nav>
       </div>
@@ -103,6 +106,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
             </button>
           </div>
         </header>
+        <ConsoleTokenStrip />
         <main className="console-content">
           <Outlet />
         </main>
@@ -111,7 +115,11 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
   );
 }
 
-function AuthStrip() {
+/**
+ * Console-only credential entry. Customer screens authenticate with a Session
+ * Cookie and must never expose a token field.
+ */
+function ConsoleTokenStrip() {
   const token = useAuthToken();
   const [open, setOpen] = useState(false);
   if (token && !open) return null;

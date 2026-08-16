@@ -180,3 +180,17 @@ export function pending(path: string) {
     return HttpResponse.json({});
   });
 }
+
+export const customerIdentity = {
+  actorType: "CUSTOMER",
+  actorId: "60000000-0000-4000-8000-000000000001",
+  loginId: "demo.customer",
+  displayName: "김빈플로우",
+  accountState: "ACTIVE",
+};
+
+/** `GET /me` is what every guarded customer route waits for before it renders. */
+export const signedInHandlers = [
+  http.get("/api/v1/me", () => HttpResponse.json(customerIdentity)),
+  http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
+];

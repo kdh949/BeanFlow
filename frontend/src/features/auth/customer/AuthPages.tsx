@@ -1,0 +1,195 @@
+import { type FormEvent, useEffect, useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
+import { ApiRequestError } from "../../../api/client";
+import { PageTitle } from "../../../components/Shells";
+import { Button } from "../../../design-system";
+import { customerSession, sanitizeReturnPath, useCustomerSession } from "./customerSession";
+
+const PASSWORD_MIN_LENGTH = 15;
+
+function messageFor(failure: unknown, fallback: string): string {
+  if (failure instanceof ApiRequestError) return failure.message || fallback;
+  return fallback;
+}
+
+function codeOf(failure: unknown): string | null {
+  return failure instanceof ApiRequestError ? failure.code : null;
+}
+
+export function CustomerLoginPage() {
+  const session = useCustomerSession();
+  const [searchParams] = useSearchParams();
+  const returnPath = sanitizeReturnPath(searchParams.get("next"));
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
+  const [failure, setFailure] = useState<unknown>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (session.status === "loading") void customerSession.refresh();
+  }, [session.status]);
+
+  if (session.status === "authenticated") return <Navigate replace to={returnPath} />;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setFailure(null);
+    try {
+      await customerSession.logIn({ loginId: loginId.trim().toLowerCase(), password });
+    } catch (error) {
+      setFailure(error);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const code = codeOf(failure);
+  const rateLimited = code === "AUTHENTICATION_RATE_LIMITED";
+  return (
+    <div className="customer-page auth-page">
+      <PageTitle eyebrow="SIGN IN" title="로그인" description="주문과 포인트는 로그인한 계정에만 표시됩니다." />
+      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+        <label htmlFor="customer-login-id">아이디</label>
+        <input
+          id="customer-login-id"
+          name="loginId"
+          value={loginId}
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          required
+          aria-invalid={failure !== null}
+          aria-describedby={failure ? "customer-login-error" : undefined}
+          onChange={(event) => setLoginId(event.target.value)}
+        />
+        <label htmlFor="customer-login-password">비밀번호</label>
+        <input
+          id="customer-login-password"
+          name="password"
+          type="password"
+          value={password}
+          autoComplete="current-password"
+          required
+          aria-invalid={failure !== null}
+          aria-describedby={failure ? "customer-login-error" : undefined}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        {failure ? (
+          <p className="form-error" id="customer-login-error" role="alert">
+            {rateLimited
+              ? messageFor(failure, "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.")
+              : code === "AUTHENTICATION_FAILED"
+                ? "아이디 또는 비밀번호를 확인해 주세요."
+                : messageFor(failure, "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+          </p>
+        ) : null}
+        <Button size="xl" block type="submit" loading={submitting} disabled={!loginId.trim() || !password}>
+          {submitting ? "로그인 중" : "로그인"}
+        </Button>
+      </form>
+      <p className="auth-switch">
+        처음이신가요? <Link to={`/app/signup?next=${encodeURIComponent(returnPath)}`}>회원가입</Link>
+      </p>
+    </div>
+  );
+}
+
+export function CustomerSignupPage() {
+  const session = useCustomerSession();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnPath = sanitizeReturnPath(searchParams.get("next"));
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [failure, setFailure] = useState<unknown>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (session.status === "authenticated") return <Navigate replace to={returnPath} />;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setFailure(null);
+    const normalizedLoginId = loginId.trim().toLowerCase();
+    try {
+      await customerSession.register({ loginId: normalizedLoginId, password, displayName: displayName.trim() });
+      await customerSession.logIn({ loginId: normalizedLoginId, password });
+      navigate(returnPath, { replace: true });
+    } catch (error) {
+      setFailure(error);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const code = codeOf(failure);
+  const duplicateLoginId = code === "LOGIN_ID_UNAVAILABLE";
+  const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
+  return (
+    <div className="customer-page auth-page">
+      <PageTitle eyebrow="SIGN UP" title="회원가입" description="아이디와 비밀번호만으로 가입하고 바로 주문할 수 있어요." />
+      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+        <label htmlFor="customer-signup-id">아이디</label>
+        <input
+          id="customer-signup-id"
+          name="loginId"
+          value={loginId}
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          required
+          aria-invalid={duplicateLoginId}
+          aria-describedby="customer-signup-id-hint"
+          onChange={(event) => {
+            setLoginId(event.target.value);
+            if (duplicateLoginId) setFailure(null);
+          }}
+        />
+        <small id="customer-signup-id-hint">영문 소문자와 숫자로 5~32자를 사용합니다.</small>
+        <label htmlFor="customer-signup-name">표시 이름</label>
+        <input
+          id="customer-signup-name"
+          name="displayName"
+          value={displayName}
+          autoComplete="nickname"
+          required
+          onChange={(event) => setDisplayName(event.target.value)}
+        />
+        <label htmlFor="customer-signup-password">비밀번호</label>
+        <input
+          id="customer-signup-password"
+          name="password"
+          type="password"
+          value={password}
+          autoComplete="new-password"
+          required
+          aria-invalid={passwordTooShort}
+          aria-describedby="customer-signup-password-hint"
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        <small id="customer-signup-password-hint">{PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.</small>
+        {failure ? (
+          <p className="form-error" id="customer-signup-error" role="alert">
+            {duplicateLoginId
+              ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요."
+              : messageFor(failure, "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.")}
+          </p>
+        ) : null}
+        <Button
+          size="xl"
+          block
+          type="submit"
+          loading={submitting}
+          disabled={!loginId.trim() || !displayName.trim() || password.length < PASSWORD_MIN_LENGTH}
+        >
+          {submitting ? "가입 중" : "가입하고 시작하기"}
+        </Button>
+      </form>
+      <p className="auth-switch">
+        이미 계정이 있으신가요? <Link to={`/app/login?next=${encodeURIComponent(returnPath)}`}>로그인</Link>
+      </p>
+    </div>
+  );
+}

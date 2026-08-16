@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../api/client";
+import { customerApi } from "../../api/customerClient";
 import { PaymentFailPage, PaymentSuccessPage } from "./CustomerPages";
 
 const payment = (approvalState: "READY" | "APPROVING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW") => ({
@@ -47,9 +47,9 @@ describe("payment success callback sequencing", () => {
     // The confirmation is a customer write, so it now fetches a CSRF token first. Both the token
     // endpoint and the cookie it sets have to exist or the page renders its error state instead.
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token";
-    vi.spyOn(api, "GET").mockResolvedValue(response(null) as never);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(null) as never);
     let sentCsrf: string | undefined;
-    vi.spyOn(api, "POST").mockImplementation(async (_path: unknown, init: unknown) => {
+    vi.spyOn(customerApi, "POST").mockImplementation(async (_path: unknown, init: unknown) => {
       sentCsrf = (init as { params?: { header?: Record<string, string> } })?.params?.header?.["X-BEANFLOW-CSRF"];
       sequence.push(`post:${window.location.search}`);
       return response(payment("APPROVED")) as never;
@@ -65,8 +65,8 @@ describe("payment success callback sequencing", () => {
   });
 
   it("uses status GET and never replays confirmation after a clean URL reload", async () => {
-    const get = vi.spyOn(api, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
-    const post = vi.spyOn(api, "POST");
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
+    const post = vi.spyOn(customerApi, "POST");
 
     renderAt("/app/payments/payment-id/success");
 
@@ -78,8 +78,8 @@ describe("payment success callback sequencing", () => {
 
 describe("payment fail callback reconciliation", () => {
   it("queries server status and never posts confirmation", async () => {
-    const get = vi.spyOn(api, "GET").mockResolvedValue(response(payment("READY")) as never);
-    const post = vi.spyOn(api, "POST");
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("READY")) as never);
+    const post = vi.spyOn(customerApi, "POST");
 
     renderAt("/app/payments/payment-id/fail?code=PAY_PROCESS_CANCELED");
 
@@ -90,7 +90,7 @@ describe("payment fail callback reconciliation", () => {
   });
 
   it("does not offer a new payment while the server is reconciling", async () => {
-    vi.spyOn(api, "GET").mockResolvedValue(response(payment("UNKNOWN")) as never);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("UNKNOWN")) as never);
 
     renderAt("/app/payments/payment-id/fail?code=PAY_PROCESS_ABORTED");
 
@@ -99,7 +99,7 @@ describe("payment fail callback reconciliation", () => {
   });
 
   it("redirects an already approved payment to the clean success status route", async () => {
-    vi.spyOn(api, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
 
     renderAt("/app/payments/payment-id/fail?code=PAY_PROCESS_ABORTED");
 

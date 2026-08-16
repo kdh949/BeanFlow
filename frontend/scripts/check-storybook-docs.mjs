@@ -27,6 +27,9 @@ const expectedDocs = new Set([
   "pages-customer-paymentfailure--docs",
   "pages-customer-paymentsuccess--docs",
   "pages-customer-storecatalog--docs",
+  "pages-customer-sign-in--docs",
+  "pages-customer-my-page--docs",
+  "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
 ]);
 
@@ -90,6 +93,15 @@ const statefulDocs = {
   "pages-customer-paymentfailure--docs": {
     "pages-customer-paymentfailure--retryable-failure": "주문서로 돌아가기",
     "pages-customer-paymentfailure--manual-review": "결제 결과를 확인하고 있어요",
+  },
+  "pages-customer-sign-in--docs": {
+    "pages-customer-sign-in--sign-in": "주문과 포인트는 로그인한 계정에만 표시됩니다.",
+    "pages-customer-sign-in--sign-up": "가입하고 시작하기",
+  },
+  "patterns-customer-session-gate--docs": {
+    "patterns-customer-session-gate--checking": "로그인 상태를 확인하는 중",
+    "patterns-customer-session-gate--wrong-actor": "다른 역할로 로그인되어 있는지 확인해 주세요",
+    "patterns-customer-session-gate--session-store-unavailable": "로그아웃된 것이 아니므로 다시 시도해 주세요",
   },
 };
 

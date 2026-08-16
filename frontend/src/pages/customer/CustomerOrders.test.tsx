@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../api/client";
+import { customerApi } from "../../api/customerClient";
 import { CustomerOrderDetailPage, CustomerOrdersPage, customerOrderTimelineModel, seoulDate } from "./CustomerOrders";
 
 const summary = {
@@ -55,7 +55,7 @@ describe("customer order list", () => {
   });
 
   it("replaces UUID lookup with active and past tabs, date filters, and public-reference links", async () => {
-    vi.spyOn(api, "GET").mockResolvedValue(response({ items: [summary], page: {} }) as never);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response({ items: [summary], page: {} }) as never);
 
     renderAt("/app/orders");
 
@@ -72,7 +72,7 @@ describe("customer order list", () => {
   });
 
   it("reloads the server-owned PAST classification when the tab changes", async () => {
-    const get = vi.spyOn(api, "GET").mockResolvedValue(response({ items: [], page: {} }) as never);
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response({ items: [], page: {} }) as never);
     const user = userEvent.setup();
     renderAt("/app/orders");
     await screen.findByRole("heading", { name: "주문" });
@@ -90,7 +90,7 @@ describe("customer order list", () => {
 
 describe("customer order detail", () => {
   it("loads by public reference and renders the pickup identity and immutable line snapshots", async () => {
-    const get = vi.spyOn(api, "GET").mockResolvedValue(response(detail) as never);
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(detail) as never);
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
