@@ -205,6 +205,59 @@ internal class DiscoveryStoreCatalogIntegrationTest
         }
 
         @Test
+        fun `the store read names the store and reports whether pickup is actually reservable`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+            insertSlot(storeId, clock.instant().plus(Duration.ofMinutes(30)), clock.instant().plus(Duration.ofMinutes(60)), capacity = 2)
+
+            val body =
+                mockMvc
+                    .perform(get(storePath(storeId)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.storeId").value(storeId.toString()))
+                    .andExpect(jsonPath("$.name").value("BeanFlow Yeouido"))
+                    .andExpect(jsonPath("$.pickupAvailable").value(true))
+                    .andReturn()
+                    .response.contentAsString
+
+            // This read takes no coordinate, so it must not carry a distance the caller could believe.
+            assertThat(fieldNames(body, "$")).containsExactlyInAnyOrder("storeId", "name", "pickupAvailable")
+        }
+
+        @Test
+        fun `a store with no reservable slot is named but not advertised as pickup available`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+
+            mockMvc
+                .perform(get(storePath(storeId)).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.name").value("BeanFlow Yeouido"))
+                .andExpect(jsonPath("$.pickupAvailable").value(false))
+        }
+
+        @Test
+        fun `a store the customer must not see is reported the same as one that does not exist`() {
+            // `storeId` exists as an owner row but has no public discovery profile.
+            mockMvc
+                .perform(get(storePath(storeId)).with(customerJwt()))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.name").doesNotExist())
+            mockMvc
+                .perform(get(storePath(UUID.randomUUID())).with(customerJwt()))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+        }
+
+        @Test
+        fun `the store read requires a customer session`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+
+            mockMvc
+                .perform(get(storePath(storeId)))
+                .andExpect(status().isUnauthorized)
+        }
+
+        @Test
         fun `a catalogue past the published bound fails explicitly instead of returning truncated rows`() {
             jdbcTemplate.update(
                 """
@@ -420,6 +473,8 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .andExpect(jsonPath("$.items.length()").value(1))
         }
 
+        private fun storePath(storeId: UUID) = "/api/v1/stores/$storeId"
+
         private fun menuPath(storeId: UUID) = "/api/v1/stores/$storeId/menus"
 
         private fun slotPath(storeId: UUID) = "/api/v1/stores/$storeId/pickup-slots"
@@ -440,6 +495,19 @@ internal class DiscoveryStoreCatalogIntegrationTest
             storeId,
             acceptingOrders,
             pickupEnabled,
+        )
+
+        /** A store is only publicly visible once its owner-verified discovery profile exists. */
+        private fun insertDiscoveryProfile(
+            storeId: UUID,
+            name: String,
+        ) = jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(126.9245, 37.5219), 4326)::geography, '1168010100')
+            """.trimIndent(),
+            storeId,
+            name,
         )
 
         private fun insertMenu(

@@ -175,13 +175,50 @@ code {
 .availability { color: var(--text-faint); font-size: var(--fs-micro); font-weight: var(--fw-semibold); }
 .availability.is-open { color: var(--success-fg); }
 
+.store-copy > span em { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-button { display: inline-flex; align-items: center; gap: var(--sp-2); border: 0; background: transparent; color: var(--text-faint); cursor: pointer; font-size: var(--fs-caption); font-weight: var(--fw-medium); }
+.link-button:disabled { cursor: wait; }
+.inline-note { padding: var(--sp-4); border-radius: var(--r-sm); background: var(--surface-app); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.5; }
+.active-order-summary { padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); color: var(--text-body); }
+.active-order-summary > div { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); color: var(--text-muted); font-size: var(--fs-caption); }
+.active-order-summary .pickup-number { color: var(--text-strong); }
+
+.menu-card-group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.menu-card-group.is-soldout .menu-card { opacity: .55; }
+.menu-config { padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+.option-group { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.option-group legend { margin-bottom: var(--sp-2); color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.option-group label { display: flex; align-items: center; gap: var(--sp-3); color: var(--text-body); font-size: var(--fs-body-sm); }
+.option-group label.is-soldout { color: var(--text-faint); }
+.option-group label span { flex: 1; }
+.option-group input { width: var(--sp-7); height: var(--sp-7); accent-color: var(--caramel-600); }
+.cart-cta { position: sticky; bottom: var(--sp-6); }
+.cart-conflict { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
+.cart-conflict strong { color: var(--text-strong); }
+.cart-conflict p { color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.6; }
+.cart-conflict > div { margin-top: var(--sp-3); display: flex; justify-content: flex-end; gap: var(--sp-3); }
 
 
 
 
 
+.cart-lines { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
+.cart-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-4); }
+.cart-line > div { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.cart-line strong { overflow: hidden; color: var(--text-strong); text-overflow: ellipsis; white-space: nowrap; }
+.cart-line span { color: var(--text-muted); font-size: var(--fs-caption); }
+.cart-line b { color: var(--text-strong); font-size: var(--fs-body-sm); }
+.cart-total { padding-top: var(--sp-5); border-top: var(--bw-hair) solid var(--divider); display: flex; align-items: baseline; justify-content: space-between; }
+.cart-total strong { color: var(--text-strong); font-size: var(--fs-title-2); }
+.cart-slots { display: flex; flex-direction: column; gap: var(--sp-4); }
+.cart-slots h2 { font-size: var(--fs-title-2); }
 
-
+.store-search-page { gap: var(--sp-5); }
+.store-search-bar > label { display: block; margin-bottom: var(--sp-3); color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.store-search-bar > div { min-height: var(--control-h-lg); padding-left: var(--sp-4); border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-control); display: flex; align-items: center; gap: var(--sp-3); background: var(--surface-card); color: var(--text-faint); }
+.store-search-bar input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-strong); }
+.store-search-bar > small { display: block; margin-top: var(--sp-2); color: var(--text-faint); font-size: var(--fs-caption); }
+.store-result-list { display: flex; flex-direction: column; gap: var(--sp-3); }
 
 .back-link { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--text-muted); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
 .menu-list { display: flex; flex-direction: column; gap: var(--sp-3); }

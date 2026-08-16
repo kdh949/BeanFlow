@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.discovery.api.RecentStoreOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
 import io.github.kdh949.beanflow.discovery.api.StoreRecommendationOperations
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
+import io.github.kdh949.beanflow.discovery.internal.CustomerStoreHydrator
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
@@ -238,6 +239,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var httpSessionIdResolver: HttpSessionIdResolver
+
+    @MockitoBean
+    private lateinit var customerStoreHydrator: CustomerStoreHydrator
 
     @Test
     fun `runtime OpenAPI operations exactly match public Spring MVC mappings`() {

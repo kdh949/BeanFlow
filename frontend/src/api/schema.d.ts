@@ -413,6 +413,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the display identity of one store
+         * @description Returns the store's current name and pickup availability so that a client which reached the
+         *     store by URL, deep link or reload can name the store from the server instead of a value it
+         *     carried in navigation state. `distanceMeters` is absent here because this read takes no
+         *     coordinate. A store the customer must not see is reported the same as one that does not
+         *     exist.
+         */
+        get: operations["getStore"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/menus": {
         parameters: {
             query?: never;
@@ -10424,6 +10448,31 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Store display identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerStore"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

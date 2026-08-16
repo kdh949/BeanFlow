@@ -28,6 +28,7 @@ export const orderSummary = {
 
 export const orderDetail = {
   ...orderSummary,
+  storeId: ids.store,
   allowedActions: ["CANCEL"],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -193,4 +194,41 @@ export const customerIdentity = {
 export const signedInHandlers = [
   http.get("/api/v1/me", () => HttpResponse.json(customerIdentity)),
   http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
+];
+
+export const customerStore = { storeId: ids.store, name: "시청점", pickupAvailable: true };
+
+export const storeIdentityHandlers = [
+  http.get("/api/v1/stores/:storeId", () => HttpResponse.json(customerStore)),
+];
+
+export const homeHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/me/orders", () => HttpResponse.json({ items: [orderSummary], page: { nextCursor: null } })),
+  http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({
+    items: [
+      { store: customerStore, reason: "RECENT" },
+      { store: { storeId: "10000000-0000-4000-8000-000000000002", name: "광화문점", pickupAvailable: false }, reason: "NEARBY" },
+    ],
+  })),
+];
+
+export const searchHandlers = [
+  ...signedInHandlers,
+  http.get("/api/v1/stores/search", () => HttpResponse.json({
+    items: [
+      { ...customerStore, open: true, matchedMenus: [{ menuId: ids.menu, name: "오트 라떼" }], brandName: "빈플로우", regionName: "중구" },
+      {
+        storeId: "10000000-0000-4000-8000-000000000002",
+        name: "광화문점",
+        pickupAvailable: false,
+        open: false,
+        matchedMenus: [],
+        brandName: "빈플로우",
+        regionName: "종로구",
+      },
+    ],
+    page: {},
+    distanceAvailable: false,
+  })),
 ];

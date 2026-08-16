@@ -22,6 +22,12 @@ internal class StoreCatalogOpenApiContractTest {
             .contains("5,000개")
             .contains("503")
 
+        val store = operation(document, "/stores/{storeId}")
+        assertThat(store)
+            .contains("CustomerStore")
+            .contains("`distanceMeters` is absent")
+            .contains("404")
+
         val pickupSlots = operation(document, "/stores/{storeId}/pickup-slots")
         assertThat(pickupSlots)
             .contains("서버 현재 시각보다 미래")

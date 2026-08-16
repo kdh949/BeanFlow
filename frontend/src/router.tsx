@@ -3,14 +3,11 @@ import { ConsoleShell, CustomerShell, RootRedirect } from "./components/Shells";
 import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
 import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
 import { CustomerMyPage } from "./features/auth/customer/MyPage";
-import {
-  CheckoutPage,
-  CustomerHelpPage,
-  CustomerHomePage,
-  PaymentFailPage,
-  PaymentSuccessPage,
-  StoreCatalogPage,
-} from "./pages/customer/CustomerPages";
+import { CheckoutPage, CustomerHelpPage, PaymentFailPage, PaymentSuccessPage } from "./pages/customer/CustomerPages";
+import { CustomerHomePage } from "./features/discovery/HomePage";
+import { StoreSearchPage } from "./features/discovery/StoreSearchPage";
+import { StoreDetailPage } from "./features/ordering/StoreDetailPage";
+import { CartPage } from "./features/ordering/CartPage";
 import { CustomerOrderDetailPage, CustomerOrdersPage } from "./pages/customer/CustomerOrders";
 import { OpsDashboardPage, OpsOrderPage, OpsRefundPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
@@ -31,7 +28,9 @@ export const router = createBrowserRouter([
         // Everything that needs an actor waits for `GET /me` behind this gate.
         element: <CustomerSessionGate />, children: [
           { index: true, element: <CustomerHomePage /> },
-          { path: "stores/:storeId", element: <StoreCatalogPage /> },
+          { path: "stores", element: <StoreSearchPage /> },
+          { path: "stores/:storeId", element: <StoreDetailPage /> },
+          { path: "cart", element: <CartPage /> },
           { path: "checkout/:orderId", element: <CheckoutPage /> },
           { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
           { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
