@@ -89,6 +89,22 @@ internal class StoreSearchIndexTestFixture(
             longitude,
             latitude,
         )
+        // V59 constrains MENU_NAME terms with a composite FK to merchant_menu(id, store_id), so a
+        // menu term can only exist for a menu row this store actually owns.
+        val menuIds =
+            menus.map { menu ->
+                UUID.randomUUID().also { menuId ->
+                    jdbc.update(
+                        """
+                        INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
+                        VALUES (?, ?, ?, 4500, true, 0)
+                        """.trimIndent(),
+                        menuId,
+                        storeId,
+                        menu,
+                    )
+                }
+            }
         transactions.executeWithoutResult {
             index.replaceStoreTerms(
                 ReplaceStoreSearchTermsCommand(
@@ -96,8 +112,8 @@ internal class StoreSearchIndexTestFixture(
                     setOf(StoreSearchTermKind.STORE_NAME, StoreSearchTermKind.MENU_NAME),
                     buildList {
                         add(StoreSearchTermEntry(StoreSearchTermKind.STORE_NAME, name))
-                        menus.forEach { menu ->
-                            add(StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, menu, UUID.randomUUID()))
+                        menus.forEachIndexed { position, menu ->
+                            add(StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, menu, menuIds[position]))
                         }
                     },
                 ),
