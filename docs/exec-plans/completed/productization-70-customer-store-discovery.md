@@ -990,6 +990,43 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `docs/quality/customer-store-discovery-query-performance-evidence.md`에 기록했다.
   - 최종 검증: `./gradlew build --stacktrace`가 40분 22초에 통과했다. frontend의
     `npm run generate:api && npx tsc --noEmit`도 재통과했고 generated schema diff는 없다.
+- 2026-08-16: **PR #74 리뷰 대응과 main 병합.** `origin/main`(#71·#72·#73)을 병합하고 리뷰
+  지적 P1 3건·P2 2건을 반영했다. 공개 계약 변경은 즐겨찾기 상한 409 하나다.
+  - **재색인 완료 의미.** main의 target-snapshot 설계를 채택했다. UUID live keyset은 재색인 중
+    boundary보다 작은 UUID로 추가된 매장을 건너뛰면서도 `complete=true`를 낼 수 있었다.
+    `StoreSearchIndexRebuildResult`는 `shared/api`에 남긴다. `discovery/internal`로 되돌리면
+    `operations → discovery` 역방향 의존으로 Modulith 순환이 된다(MD-2026-028).
+    `targetStoreCount`는 공개 응답에 넣지 않고 controller 매핑에서 떨어뜨린다.
+  - **REQUIRES_NEW commit 실패.** `claim`·`complete`의 commit은 메서드 본문이 끝난 뒤 일어나
+    기존 try/catch 밖이었고, 전역 처리기가 `TransactionException`을 다루지 않아 명세의 503이
+    아니라 500이 나갔다. 두 프록시 호출 자체를 감싸 결과 불명을 503으로 낸다.
+  - **실패 command의 상태화.** 실패 시 `RUNNING` row를 삭제하면 payload binding이 사라져 같은
+    key·다른 reason이 통과하고, key 기반 audit `source_reference` 때문에 재실행 감사가
+    누락됐다. 5상태(`RUNNING`/`COMPLETED`/`FAILED_RETRYABLE`/`UNKNOWN`/`MANUAL_REVIEW`)와
+    `attempt_count`로 바꾸고 `source_reference`를 `command id:attempt`로 옮겼다
+    ([ADR-103 재색인 명령의 실패 상태 Amendment](../../adr/ADR-103-store-search-strategy.md)).
+    상한 초과의 `MANUAL_REVIEW` 전이는 요청을 실패시키는 transaction 밖에서 commit해야 한다.
+    안에서 하면 예외와 함께 롤백되며, 테스트가 실제로 이것을 잡았다.
+  - **최근 매장 limit.** `limit`을 노출 결과 기준으로 보장한다. 이전에는 비노출 매장이 앞자리를
+    차지하면 뒤의 정상 매장이 cursor 없는 endpoint에서 영구히 도달 불가였다. Ordering 조회에
+    keyset continuation을 넣고 window 수에 상한을 뒀다.
+  - **즐겨찾기 상한 200개.** 고객 단위 advisory xact lock으로 직렬화한 뒤 개수를 판정한다.
+    사전 count만으로는 동시 PUT 두 건이 모두 199를 읽고 201로 확정된다. 이미 즐겨찾기인 매장의
+    반복 PUT은 행을 만들지 않으므로 상한과 무관하게 204다.
+  - **병합이 드러낸 실패 2종.** V59의 메뉴 복합 FK 때문에 검색 fixture가 실제 `merchant_menu`
+    행을 만들도록 고쳤다. `StoreCatalogOpenApiContractTest`는 스펙 한국어화로 깨져 있었는데
+    `origin/main`에서도 실패하는 것을 별도 워크트리에서 확인하고 단언을 현재 언어에 맞췄다.
+  - **프런트엔드 회귀.** M11이 결제 확인 POST 앞에 CSRF GET을 넣었는데 테스트가 그것을 mock하지
+    않아 성공 화면 대신 오류 화면이 렌더됐다. `origin/main`에서는 통과하고 이 브랜치에서만
+    실패하는 실제 회귀였다. 테스트가 새 동작을 수용만 하지 않도록 `X-BEANFLOW-CSRF` 전송 단언을
+    함께 넣었다.
+  - `./gradlew build --stacktrace`가 24분 36초에 **1,282건 중 10건 실패, skip 1**로 끝났다.
+    skip은 기존 opt-in `NearbyStoreDiscoveryBenchmark`다. 실패 10건은 전부 OpenAPI 계약
+    테스트이며 **`origin/main`에서 동일하게 10건 모두 실패한다**(별도 워크트리에서 확인).
+    #73의 스펙 한국어화가 영문 단언을 깨뜨린 것으로, 이 branch가 새로 만든 실패는 없다.
+    이 PR 범위 밖이라 고치지 않았다.
+  - `scripts/verify-docs.sh` 통과(target 160 paths/169 operations, runtime 143/152, 325 schemas).
+    frontend `npm run generate:api && npx tsc --noEmit` 통과, `npm test` **39건 전부 통과**.
 - 2026-08-16: **Milestone 2 리뷰 보강.** 미병합·미적용 V57/V59를 제자리에서 고쳐 DB 최종
   방어선을 추가했다.
   - V57 favorite는 `identity_customer_account`·`merchant_store` FK와 양쪽 `ON DELETE CASCADE`를
