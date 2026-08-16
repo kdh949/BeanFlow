@@ -1067,8 +1067,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     `31943898875`은 30분 budget에서도 `:test`의 완료·실패 결과를 내지 못하고 취소됐다. JVM-static
     Testcontainers singleton은 Gradle worker마다 별도 PostGIS container가 되므로, two-worker local
     measurement만으로 hosted runner 완료 시간을 단정할 수 없었다. `maxParallelForks`를 `1`로 복원하고,
-    preflight/backend 분리와 backend의 20분 budget은 유지한다. 전체 remote build가 이 변경의 acceptance
-    check다.
+    preflight/backend 분리는 유지한다. 단일 worker remote run `31945687981`도 test failure 없이 20분에
+    취소돼 backend budget은 full suite가 결과를 보고할 수 있는 30분으로 조정한다. 전체 remote build가 이
+    변경의 acceptance check다.
 
 ## Surprises & Discoveries
 
@@ -1292,7 +1293,7 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 전체 test는 2개 worker로 제한하고, 새 background worker는 test 공통 profile에서 지연 | 이 문서 Progress, `src/test/resources/application.yaml` |
-| 2026-08-16 | hosted runner의 Testcontainers 전체 검증은 worker 1개로 실행한다. 위 two-worker 결정은 PR #74의 remote timeout으로 대체한다 | 이 문서 Progress, `build.gradle.kts` |
+| 2026-08-16 | hosted runner의 Testcontainers 전체 검증은 worker 1개와 30분 budget으로 실행한다. 위 two-worker/20분 결정은 PR #74의 remote timeout으로 대체한다 | 이 문서 Progress, `build.gradle.kts`, `.github/workflows/ci.yml` |
 | 2026-08-16 | frontend/doc preflight와 backend 전체 build를 별도 CI job으로 실행 | 이 문서 Progress, `.github/workflows/ci.yml` |
 
 ## Outcomes & Retrospective
@@ -1355,4 +1356,5 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   대상과 각 명령은 유지하며, frontend 준비 시간이 backend test의 job 한도를 잠식하지 않게 한다.
 - 2026-08-16: PR #74에서 two-worker Testcontainers 실행이 hosted runner의 전체 build를 완료하지 못한
   evidence를 반영해 worker 1개로 복원했다. PostgreSQL timestamp 정밀도에 의존하던 recent-store assertion도
-  deterministic fixture로 교정했다. 제품 runtime과 공개 API는 변경하지 않는다.
+  deterministic fixture로 교정했다. 전체 suite가 결과를 보고할 수 있도록 backend budget은 30분으로
+  조정했다. 제품 runtime과 공개 API는 변경하지 않는다.
