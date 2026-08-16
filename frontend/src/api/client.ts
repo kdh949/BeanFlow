@@ -80,6 +80,18 @@ export async function merchantCsrfToken(): Promise<string> {
   return token;
 }
 
+export async function customerCsrfToken(): Promise<string> {
+  const result = await api.GET("/auth/customer/csrf");
+  if (!result.response.ok) {
+    unwrap(result);
+  }
+  const token = cookieValue("BEANFLOW_CUSTOMER_XSRF");
+  if (!token) {
+    throw new ApiRequestError(503, "CSRF_TOKEN_UNAVAILABLE", "보안 토큰을 준비하지 못했습니다. 다시 시도해 주세요.");
+  }
+  return token;
+}
+
 /**
  * Keeps one key only for the lifetime of a single unresolved submit intent.
  * A network retry of the same payload reuses the key; success or an explicit

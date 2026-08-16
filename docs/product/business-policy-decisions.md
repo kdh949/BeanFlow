@@ -1837,9 +1837,21 @@
 - **Recommendation Merge:** 홈 추천은 즐겨찾기, 최근 주문 매장, 좌표가 있을 때 nearby 순으로
   중복을 제거한다. 좌표가 없으면 즐겨찾기와 최근 주문 매장까지만 반환한다. 앞 단계에 포함된 매장을
   다음 단계가 다시 추가하지 않으며 첫 번째 근거를 응답의 recommendation reason으로 사용한다.
+- **Recommendation Coordinates:** 추천 요청의 `latitude`와 `longitude`는 함께 제공하거나 둘 다
+  생략한다. 좌표 쌍이 있고 `radiusMeters`를 생략하면 nearby 단계는 기본 반경 `3,000m`를 사용한다.
+  반경은 좌표 쌍과 함께만 허용하며 `1..10,000m` 밖의 값, 좌표 하나만 제공한 요청, 반경만 제공한
+  요청은 `400`이다. 좌표가 모두 없으면 nearby 단계를 실행하지 않는다.
 - **Boundary:** Ordering은 customer scope로 eligible store ID와 `lastOrderedAt`만 Projection하여
   Discovery에 제공하고, Discovery가 현재 노출 가능한 매장 정보를 hydrate한다. 존재하지 않거나 현재
   노출 불가능한 매장은 결과에서 제외하되 주문 스냅샷이나 상태를 수정하지 않는다.
+- **Visible Limit:** `limit`은 **최종 노출 결과**의 개수다. 노출 불가능한 매장이 앞자리를 차지해도
+  뒤의 정상 매장이 가려지지 않도록, Discovery는 hydrate 결과가 `limit`에 못 미치면 같은 정렬
+  순서의 다음 candidate window를 이어 읽는다. window 수에는 상한을 둔다. 최근 매장 endpoint에는
+  cursor가 없으므로 여기서 가려진 매장은 "다음 page"가 아니라 **영구히 도달 불가**가 된다.
+- **Favorite Limit:** 고객 한 명이 가질 수 있는 즐겨찾기는 최대 **200개**다. 상한을 넘기는 추가는
+  `409 FAVORITE_STORE_LIMIT_EXCEEDED`이며, 이미 즐겨찾기인 매장의 반복 PUT은 상한과 무관하게
+  `204`다. 개수 판정은 해당 고객에 대해 직렬화된 상태에서 수행하므로 동시 추가가 상한을 넘겨
+  확정될 수 없다. 홈 추천은 즐겨찾기 전체가 아니라 병합에 필요한 만큼만 읽는다.
 - **Failure Policy:** 최근 주문 Projection이나 매장 hydrate 실패를 빈 recent 목록 또는 거리순 결과로
   대체하지 않고 홈 추천 요청을 `503`으로 실패시킨다. 고객 주문 이력을 Discovery table로 복제하지 않는다.
 - **Rationale:** 실제 결제·운영 흐름에 들어간 매장은 편의 추천에 반영하면서 결제 전 포기, 만료,
@@ -1850,7 +1862,11 @@
   - 상태별 포함·제외와 상태 변경 후 다음 조회 반영
   - 같은 매장의 여러 주문이 최신 `createdAt` 한 건으로 합쳐지는지 검증
   - 동률 `lastOrderedAt`의 `storeId` tie-breaker
-  - 즐겨찾기·최근·nearby 중복 제거와 좌표 없는 순서
+  - 즐겨찾기·최근·nearby 중복 제거, 좌표 없는 순서와 좌표 쌍의 3,000m 기본 반경
+  - 좌표 하나만 제공하거나 반경만 제공한 요청의 400
+  - `limit=1`이고 최신 최근 매장만 노출 불가일 때 두 번째 매장이 반환되는지 검증
+  - 즐겨찾기 상한 도달 후 추가의 409, 이미 즐겨찾기인 매장 반복 PUT의 204
+  - 상한 경계에서 동시 PUT이 상한을 넘겨 확정되지 않는지 PostgreSQL 동시성 검증
   - Ordering 또는 Discovery 조회 장애의 503과 빈 결과 fallback 부재
 - **ADR Required:** Yes — [ADR-103](../adr/ADR-103-store-search-strategy.md)
 - **Revisit Conditions:** 추천 제외/숨김 기능, 취소 사유별 재노출, 고객 행동 데이터 기반 ranking 또는
@@ -2127,6 +2143,13 @@
   매장·메뉴는 현재 쓰기 API가 없어 시드·직접 DML로 바뀌므로 운영자 재색인 명령으로만 색인에
   반영된다. 이 한계는 색인 커버리지 gauge와 runbook으로 관측 가능하게 남기며 stale 결과를
   최신처럼 제공하지 않는다.
+- **Index Rebuild Command:** `POST /api/v1/operations/search-index/rebuild`는
+  `PLATFORM_OPERATOR` 역할과 활성 `STORE_BRAND_MANAGE` grant, `Idempotency-Key`, 1..200자 reason을
+  요구한다. 같은 actor·key·정규화 reason은 저장한 결과를 재생하고, 다른 reason은
+  `409 IDEMPOTENCY_KEY_REUSED`다. 진행 중인 같은 명령은 새 재색인을 시작하지 않고
+  `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`다. 재색인은 매장 단위 transaction으로 계속 진행하며
+  결과는 성공·skip 수와 실패 매장 ID를 반환한다. 실패 ID가 있으면 `complete=false`로 명시해
+  부분 처리를 완전 성공으로 표현하지 않는다.
 - **Failure Policy:** `pg_trgm` extension 부재, 색인 조회 실패, Merchant·Fulfillment 장애는 모두
   503이다. 빈 목록, 캐시된 결과 또는 순차 검색 fallback으로 대체하지 않는다. 결과 0건은 정상
   200이며 장애와 구분한다.
@@ -2154,6 +2177,8 @@
   - `STORE_STAFF`·타 매장 소유자의 지역 변경 403, `STORE_OWNER`의 브랜드 생성 403
   - 지역 미입력 매장이 남아 있을 때 커버리지 migration 실패
   - `pg_trgm` 부재·색인 조회 실패의 503과 빈 목록 미대체
+  - 재색인 명령의 role·grant·reason·Idempotency-Key, 같은 key replay와 진행 중 중복 거부
+  - 재색인 부분 실패의 실패 매장 ID·`complete=false`, 나머지 매장의 계속 처리와 AuditRecord
   - 검색어·좌표가 DB, log, metric tag, event에 남지 않음
 - **ADR Required:** [ADR-103](../adr/ADR-103-store-search-strategy.md) 2026-08-15 Amendment,
   [ADR-112](../adr/ADR-112-store-brand-and-administrative-region.md),

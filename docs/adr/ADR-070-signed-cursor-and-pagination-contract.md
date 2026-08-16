@@ -101,7 +101,7 @@ beanflow:
 
 | Endpoint | Fixed sort tuple | filterHash inputs |
 |---|---|---|
-| `GET /stores/nearby` | `(distanceMicrometers ASC, storeId ASC)` | canonical latitude/longitude/radius와 endpoint |
+| `GET /stores/nearby` | `(distanceMicrometers ASC, storeId ASC)` | endpoint, `pickupAvailable`, canonical latitude/longitude/radius |
 | `GET /point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 endpoint |
 | `GET /operations/point-accounts/{accountId}/transactions` | `(occurredAt DESC, transactionId DESC)` | account ID와 Operations endpoint |
 | `GET /stores/{storeId}/settlements` | `(settlementDate DESC, settlementBatchId DESC)` | store ID와 endpoint |
@@ -168,6 +168,24 @@ common default 20에 Discovery maximum 50이다.
 
 `GET /operations/brands`는 endpoint identifier `operations-brands`, `GET /regions`는 `regions`를
 사용하고 expiry는 모두 24시간이다.
+
+**2026-08-15 Plan 70 nearby amendment.** `GET /stores/nearby`의 filter hash canonical form에
+`pickupAvailable`을 추가해 property 순서를 `endpoint`, `pickupAvailable`, canonical latitude,
+canonical longitude, integer `radiusMeters`로 고정한다. ADR-103의 2026-08-15 Amendment가 nearby의
+`pickupAvailable`을 Fulfillment batch 판정으로 통일하면서 이 필터가 nearby에서도 실제로 결과
+집합을 바꾸게 됐고, 결과를 바꾸는 필터가 filter hash에 없으면 필터를 켠 뒤에도 이전 cursor가 계속
+통과해 누락·중복이 생긴다. `sort` 없이 좌표만으로 identity가 결정되던 기존 canonical form은 더
+이상 충분하지 않다.
+
+이 개정으로 배포 시점에 발급돼 있던 `stores-nearby` cursor는 hash가 달라져 400이 된다. cursor
+version을 늘려 두 form을 동시에 받는 대신 400을 택한다. 두 form을 동시에 받으면 필터를 모르는
+옛 cursor가 필터가 켜진 page 순회에 섞여 조용히 잘못된 page를 만들고, 그 상태는 오류로 드러나지
+않기 때문이다. expiry가 24시간이라 노출 창도 그 이내로 닫힌다.
+
+가용성 필터는 SQL이 아니라 후보를 순서대로 검사해 적용하므로 `nextCursor`는 마지막 **반환 row**가
+아니라 마지막 **검사 candidate**의 정렬 tuple이다. 필터에 걸려 page가 짧거나 비어도 뒤에 검사하지
+않은 candidate가 남아 있으면 cursor를 발급한다. 이 규칙은 `/stores/search`와 `/stores/nearby`가
+공유한다.
 
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고
@@ -253,10 +271,11 @@ default/max limit, tamper/expiry, 다른 store/Batch scope 재사용과 authoriz
 parameter로 bind한다. PostgreSQL HTTP tests는 default 20, limit 1, tamper와 다른 account cursor의 400을
 검증했다. endpoint는 별도 cursor secret, unsigned/base64 fallback 또는 cursor store를 추가하지 않았다.
 
-**Nearby endpoint evidence (2026-08-06):** `GET /stores/nearby`는 common codec의 24시간 expiry와
-`stores-nearby` endpoint scope를 사용한다. filter hash는 key 순서가 고정된 canonical JSON
-(`endpoint`, canonical latitude, canonical longitude, integer `radiusMeters`)의 SHA-256이며 raw
-coordinate text는 token에 없다. `37.5`와 `37.5000`, `0`/`-0`/`0.0`/`0.000`이 같은 hash를 만들고
+**Nearby endpoint evidence (2026-08-06, 2026-08-15 개정):** `GET /stores/nearby`는 common codec의
+24시간 expiry와 `stores-nearby` endpoint scope를 사용한다. filter hash는 key 순서가 고정된
+canonical JSON (`endpoint`, `pickupAvailable`, canonical latitude, canonical longitude, integer
+`radiusMeters`)의 SHA-256이며 raw coordinate text는 token에 없다. `pickupAvailable`은 2026-08-15
+Plan 70 nearby amendment에서 추가됐고 그 이전 form으로 발급된 cursor는 400이다. `37.5`와 `37.5000`, `0`/`-0`/`0.0`/`0.000`이 같은 hash를 만들고
 radius 또는 좌표를 바꾸면 hash가 달라짐을 단위 테스트가 고정한다. typed adapter는
 `(distanceMicrometers, storeId)`를 unsigned decimal과 lowercase canonical UUID로 round-trip
 검증하고 negative, leading-zero, uppercase UUID, arity 불일치를 거부한다. DB range predicate는 raw

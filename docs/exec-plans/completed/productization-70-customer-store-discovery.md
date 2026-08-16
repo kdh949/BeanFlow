@@ -1,11 +1,11 @@
 # 고객이 검색·즐겨찾기·최근 주문으로 매장을 찾는다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-50-customer-order-read-model.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-16`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신하는 living document다.
@@ -101,6 +101,10 @@
   컬럼을 추가하지 않고 공개 API 계약도 바꾸지 않는다(MD-2026-017, ADR-020 2026-08-15 평가).
 - **메뉴 단위 결과(가격 비교형 목록).** 결과 단위는 매장이며 매칭 메뉴는 매장 카드에 최대 3개
   포함된다. 메뉴가 결과 행이 되는 목록은 커서 튜플과 중복 매장 처리가 달라 별도 결정이 필요하다.
+- **한글 오타 검색을 위한 자모 분해 색인 (2026-08-15 추가).** Milestone 5에서 유사도 보완이 한글
+  짧은 상호에는 발동하지 않는 것을 측정했다. 이 plan은 그 한계를 숨기지 않고 기록만 하며 해소하지
+  않는다. 색인 스키마와 정규화 계약 개정이 따르는 별도 결정이다
+  ([ADR-103 Alternatives 9](../../adr/ADR-103-store-search-strategy.md), 같은 ADR Revisit Condition)
 - 주소 geocoding과 역지오코딩, 검색어 자동완성
 - 상권 별칭 사전(`홍대`, `가로수길`)
 - 브랜드 단위 정산·브랜드 페이지·브랜드 소유자 계정
@@ -186,14 +190,14 @@ interface StoreSearchIndexOperations {
 GET /stores/search or /stores/nearby
   SearchController
     StoreSearchCandidateRepository.findCandidates(filters, signedCursor, limit + 1)
-    FulfillmentPickupAvailabilityQuery.existsByStoreIds(candidateStoreIds, now)
+    PickupAvailabilityQueryOperations.findStoresWithAvailableSlots(examinedStoreIds, now)
     ordered candidates + availability → page + scan-boundary nextCursor
     StoreSearchCandidateRepository.findMatchedMenus(pageStoreIds, tokens, 3)
 
 GET /me/store-recommendations
   CustomerActor
     FavoriteStoreQuery.top(customerId)
-    CustomerRecentStoreQuery.top(customerId)       // Ordering public query port
+    CustomerRecentStoreQuery.top(customerId)       // shared/api contract, Ordering implementation
     NearbyStoreQuery.top(optional coordinates)
     MerchantStoreDisplayQuery.hydrate(storeIds)
     stable de-duplication → reason 포함 response
@@ -207,6 +211,13 @@ PUT/DELETE /me/favorite-stores/{storeId}
 모듈도 `merchant`가 아니다. 질의가 색인 테이블과 매장 프로필을 한 문장에서 함께 읽어야 하는데,
 ADR-112 5절이 검색을 `discovery`의 것으로 두고 `merchant`가 `discovery`를 모르게 못박았다.
 근거는 MD-2026-023이다.
+
+**(2026-08-15 정정)** 픽업 가용성 batch port의 이름도 계획 원안의
+`FulfillmentPickupAvailabilityQuery.existsByStoreIds`가 아니라
+`PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`이며 `Set<UUID>`를 돌려준다.
+근거는 MD-2026-025다. 인자가 `candidateStoreIds`가 아니라 `examinedStoreIds`인 것도 의도적이다.
+가용성은 이번 page에서 실제로 검사하는 앞 `limit`개에 대해서만 묻고, 다음 page 존재를 재는
+probe row는 검사하지 않는다.
 
 - 검색은 Merchant table과 Fulfillment table을 하나의 Repository SQL로 직접 조인하지 않는다.
   Fulfillment batch port는 candidate store 집합을 한 statement로 판정한다.
@@ -499,6 +510,11 @@ POST   /api/v1/operations/search-index/rebuild
 
 - search 기본 page size는 20, 최대 50이다. recent/recommendations 기본 10, 최대 20이다.
   기존 공통 `DiscoveryLimit`을 유지하고 이 endpoint를 위해 상한을 바꾸지 않는다.
+- recommendation은 좌표 쌍이 있을 때 `radiusMeters`를 생략하면 nearby 단계에 `3,000m`를
+  사용한다. 좌표를 둘 다 생략하면 nearby를 실행하지 않고, 한 좌표만 또는 반경만 제공하면 400이다.
+- 재색인 명령은 `PLATFORM_OPERATOR`와 `STORE_BRAND_MANAGE`를 모두 요구한다. 같은 actor와
+  `Idempotency-Key`의 같은 reason은 완료 결과를 재생하고, 실행 중 같은 명령은 새 작업을 시작하지
+  않는다. `complete=false` 응답은 실패 매장 ID를 포함한 부분 처리 결과이며 완전 성공이 아니다.
 - `sort`는 `relevance`(기본) 또는 `distance`이며 `distance`는 좌표가 필수다.
 - search cursor는 ADR-070의 2026-08-15 amendment를 따른다. endpoint identifier가 `sort`에 따라
   `stores-search-relevance`/`stores-search-distance`로 갈리고, filter hash에 정규화 토큰 배열,
@@ -685,7 +701,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | `beanflow.discovery.search.index.update` | counter | `outcome`, `trigger` = `BRAND\|REGION\|REBUILD` |
 
 `empty` counter는 "검색은 되는데 결과가 늘 0건"인 상태(색인 누락, 정규화 불일치)를 장애와 구분해
-드러내기 위한 것이다.
+드러내기 위한 것이다. **(2026-08-15)** 그래서 `nextCursor`를 함께 낸 빈 page는 세지 않는다.
+`pickupAvailable` 필터가 중간 page를 비울 수 있는데, 뒤에 검사할 후보가 남아 있는 page까지 세면
+이 지표가 드러내려는 상태를 오히려 덮는다.
 
 추가로 유지한다.
 
@@ -703,21 +721,23 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - [ADR-112](../../adr/ADR-112-store-brand-and-administrative-region.md) — 완료
 - [ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 정렬 tuple 등록 — 완료
 - [BR-47](../../product/business-policy-decisions.md), [BR-40](../../product/business-policy-decisions.md) — BR-47 완료
-- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018, MD-2026-019, MD-2026-020 — 완료
-- `docs/security/authorization-matrix.md` — 완료
+- `docs/decisions/minor-decisions.md` MD-2026-015, MD-2026-016, MD-2026-018, MD-2026-019, MD-2026-020, MD-2026-028 — 완료
+- `docs/security/authorization-matrix.md` — 재색인 grant·reason·idempotency·Audit 갱신 완료
 - `docs/api/api-conventions.md` — 검색 endpoint 규약
 - `docs/api/error-catalog.md` — `BRAND_NAME_ALREADY_IN_USE`, `BRAND_FANOUT_LIMIT_EXCEEDED`,
   `BRAND_STATE_CONFLICT` — 완료. 계획 원안의 `BRAND_NAME_CONFLICT`는 구현에서 의미가 더 분명한
-  `BRAND_NAME_ALREADY_IN_USE`로 확정했다
+  `BRAND_NAME_ALREADY_IN_USE`로 확정했다. 재색인 command의 replay·partial·RUNNING unknown/503
+  규약도 완료
 - `docs/architecture/ubiquitous-language.md` — Brand, Region, 검색 term, 관련도
 - `docs/architecture/capability-map.md`, `docs/architecture/context-map.md`
 - `docs/operations/store-keyword-search-runbook.md` — 신규. 재색인 절차, 커버리지 점검 쿼리,
-  색인 신선도 한계
+  색인 신선도 한계, partial·RUNNING unknown 처리 — 완료
 - `docs/testing/test-strategy.md` — 검색 테스트 범주
 - `README.md` — 현재 상태 목록
-- `scripts/verify-docs.sh` — 새 필수 문서 등록
-- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint 완료
-- 신규 검색 실행계획 evidence 문서
+- `scripts/verify-docs.sh` — 새 필수 문서 등록 완료
+- `openapi/beanflow-v1.yaml`, `openapi/beanflow-v1-runtime.yaml` — 브랜드 여섯 endpoint와
+  재색인 endpoint 완료
+- [고객 매장 탐색 실행계획 evidence](../../quality/customer-store-discovery-query-performance-evidence.md) — V59 GIN, V57 favorite, V63 recent의 고정 fixture 전후 계획 기록 완료
 
 ## Progress
 
@@ -831,7 +851,184 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
     `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12), 픽업 가용성 필터와 그 scan-boundary
     cursor(Milestone 6).
-- 2026-08-15: 미착수 — Milestone 6~12.
+- 2026-08-15: **Milestone 6 완료.** Fulfillment의 픽업 가용성 batch port를 추가하고, `nearby`와
+  검색의 `pickupAvailable`을 같은 판정으로 통일했으며, `GET /api/v1/stores/search` endpoint를
+  열었다. migration은 없다.
+  - **batch port.** `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots(storeIds, now)`가
+    후보 수와 무관하게 **statement 1개**를 쓴다(`store_id = ANY(?::uuid[])` + `GROUP BY store_id`).
+    후보 1개와 6개(그중 한 매장은 슬롯 61개)에서 statement 수가 모두 1이었고, 빈 후보 목록은
+    DB에 닿지 않고 0이었다. 인덱스는 V35의 `idx_pickup_slot_store_starts_id`를 그대로 쓴다.
+  - **손상 counter는 503.** `capacity - reserved - confirmed < 0`인 슬롯을 가진 매장이 후보에
+    하나라도 있으면 그 매장만 빼는 것이 아니라 batch 전체가 `DEPENDENCY_UNAVAILABLE`이다.
+    DB `CHECK`가 그 행을 막고 있어 제약을 잠시 내리고 확인한 뒤 되돌렸다.
+  - **nearby 의미 통일.** `merchant`의 `NearbyStoreProfileProjection`에서 `pickupAvailable` 필드를
+    **삭제**하고 `discovery`가 batch 결과로 채운다. 이전에는 `acceptingOrders && pickupEnabled`라
+    nearby 응답의 이 값이 언제나 `true`였다. 이제 슬롯이 없거나, 만석이거나, 이미 시작했거나,
+    7일 창 밖인 매장은 `false`로 나온다. 기존 통합 테스트의 단언 하나가 실제로 뒤집혔고 그 자리에
+    이유를 남겼다(MD-2026-027).
+  - **scan-boundary cursor.** 가용성 필터는 SQL 뒤에서 적용되므로 page가 짧거나 비어도 뒤에
+    후보가 남을 수 있다. `nextCursor`는 마지막 **반환 row**가 아니라 마지막 **검사 candidate**의
+    정렬 tuple이다. 두 endpoint가 같은 `scanCandidates` 함수를 쓴다. 6개 후보 중 첫·마지막만
+    가용한 fixture를 `limit=2`로 넘겼을 때 두 endpoint 모두 3쪽에 정확히 두 매장을 누락·중복 없이
+    반환했고, 가운데 쪽은 빈 배열과 cursor를 함께 냈다.
+  - **cursor 무효화.** `pickupAvailable`이 nearby의 filter hash에 들어가면서
+    ([ADR-070](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) 2026-08-15 nearby
+    amendment) 개정 전 form으로 발급된 `stores-nearby` cursor는 400이 된다. cursor version을 늘려
+    두 form을 함께 받는 대신 400을 택했다. 필터를 모르는 옛 cursor가 섞이면 조용히 잘못된 page가
+    나오고 그것은 오류로 드러나지 않는다. expiry가 24시간이라 노출 창도 그 이내다.
+  - **endpoint 개방.** `StoreSearchQueryController`, `AuthenticationPathRegistry`의 CUSTOMER
+    등록과 그 테스트, runtime OpenAPI의 path `$ref`, `RuntimeOpenApiParityTest`의 `@MockitoBean`을
+    함께 넣었다. 미인증 검색이 401인 것은 `AuthenticationSecurityIntegrationTest`가 고정한다.
+    응답 본문 자체는 `StoreSearchEndpointIntegrationTest`가 본다. Query port 테스트만으로는
+    `StoreSearchPage` schema의 required 필드 누락이 드러나지 않았다(Surprises 참고).
+  - `./gradlew build`가 **1,250건 통과 / 0 실패 / 1 skip**으로 끝났다(52m 58s). skip은 기존
+    opt-in `NearbyStoreDiscoveryBenchmark`다. Milestone 5의 1,225건에서 25건 늘었다.
+    `scripts/verify-docs.sh`도 통과했다(runtime 138 paths/146 operations).
+  - **`Not run`:** `npm run generate:api && npx tsc --noEmit`(Milestone 11), 검색 질의
+    `EXPLAIN (ANALYZE, BUFFERS)` evidence(Milestone 12).
+- 2026-08-16: **Milestone 7 완료.** `discovery/api`의 `FavoriteStoreOperations`와
+  `discovery/internal`의 customer-scoped favorite command/query, 그리고
+  `GET/PUT/DELETE /api/v1/me/favorite-stores`를 추가했다. migration은 없다(V57의 favorite
+  table과 `(customer_id, created_at DESC, store_id)` index를 사용한다).
+  - Merchant의 `StoreDiscoveryQueryOperations.findVisibleStores` bulk port로 현재 공개 display와
+    owner-side pickup capability를 hydrate하고, Fulfillment의 기존 batch port와 AND하여
+    `pickupAvailable`을 nearby/search와 동일한 실제 슬롯 의미로 유지한다. 공개 프로필을 잃은
+    favorite는 source row를 지우지 않고 목록에서만 제외한다.
+  - target의 공개 탐색 가능 여부는 PUT transaction 안에서 확인해 404로 답하고, 같은 customer의
+    반복 PUT은 `ON CONFLICT DO NOTHING`, 존재하지 않는 row DELETE는 exact customer/store predicate의
+    204로 수렴한다. CustomerActor만 ID 원천으로 쓰며 browser command는 customer session +
+    `X-BEANFLOW-CSRF`를 요구한다.
+  - `FavoriteStoreEndpointIntegrationTest` 5건이 newest-first + store-ID tie-break, 다른 customer
+    격리, stale-profile 제외, 실시간 pickup availability, CSRF 403, 반복/동시 PUT, no-op DELETE,
+    non-public target 404, injected persistence failure 503을 PostgreSQL Testcontainers에서 확인했다.
+  - `AuthenticationSecurityIntegrationTest` 8건, `AuthenticationPathRegistryTest` 3건,
+    `RuntimeOpenApiParityTest` 1건이 통과했고 `./gradlew spotlessCheck`도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
+    M12 실행계획 evidence.
+- 2026-08-16: **Milestone 8 완료.** V63의 `ordering_order(customer_id, state, created_at DESC,
+  store_id)` index, `shared/api` cross-context contract `CustomerRecentStoreQuery`의 Ordering 구현,
+  Discovery의 current-display hydrate와 `GET /api/v1/me/recent-stores?limit=`를 추가했다.
+  - Ordering은 customer predicate와 BR-40의 다섯 eligible state predicate를 한 SQL에 넣고,
+    매장별 `max(created_at)`만 `CustomerRecentStoreProjection(storeId, lastOrderedAt)`으로 반환한다.
+    Order Aggregate·Order snapshot·Discovery 복제 테이블은 읽거나 만들지 않는다. 결과는
+    `(lastOrderedAt DESC, storeId ASC)`이며 bounded compact limit(기본 10, 최대 20)만 받는다.
+  - favorites와 recent가 Merchant public display + Fulfillment batch availability를 서로 다르게
+    해석하지 않도록 `CustomerStoreHydrator`로 통합했다. 현재 public profile이 없는 historical
+    store는 응답에서만 빠지고 favorite row와 Order snapshot은 그대로 남는다. Ordering, Merchant 또는
+    Fulfillment 의존 조회는 빈 목록·nearby 결과로 fallback하지 않고 503을 유지한다.
+  - target/runtime OpenAPI에 recent path를 실제 controller와 함께 반영했고 compact limit의 400 응답도
+    계약에 추가했다. route는 customer chain이며 actor ID는 `CustomerActor`만 사용한다.
+  - `RecentStoreEndpointIntegrationTest` **3건**이 current 상태 다섯 개 포함, PENDING/REJECTED/
+    EXPIRED/CANCELLED 제외, 매장별 dedupe, 동률 UUID tie-break, 고객 격리, stale profile 제외,
+    current pickup availability와 invalid limit 400을 PostgreSQL Testcontainers에서 확인했다.
+  - `CustomerRecentStoreQueryMigrationTest` **2건**이 V63 정의와 동일 20,000-row fixture의
+    `EXPLAIN (ANALYZE, BUFFERS)` 전후 plan(전 Seq Scan, 후 V63 index 사용)을 확인했다.
+    `RuntimeOpenApiParityTest`, `AuthenticationPathRegistryTest`,
+    `AuthenticationSecurityIntegrationTest`, `./gradlew spotlessCheck`도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
+    M12의 문서화된 실행계획 evidence.
+- 2026-08-16: **Milestone 9 완료.** `StoreRecommendationOperations`와
+  `GET /api/v1/me/store-recommendations`를 추가해 즐겨찾기 → 최근 주문 → 선택적 nearby 순서로
+  병합한다. 중복 매장은 최초 단계의 reason(`FAVORITE | RECENT | NEARBY`)을 유지하고, 좌표가
+  없으면 nearby를 추정하거나 빈 단계로 대체하지 않는다. 좌표 쌍·반경·compact limit은 기존
+  nearby/recent 검증을 재사용하며, source 조회 장애는 503을 유지한다.
+  - `StoreRecommendationServiceTest` 4건이 first-reason dedupe, 좌표 없는 병합, 좌표 쌍의
+    `3,000m` 기본 반경, 좌표/반경 조합의 400을 확인했다. nearby 매장만 `distanceMeters`를 갖고,
+    favorite/recent는 null이다.
+  - runtime OpenAPI path, `RuntimeOpenApiParityTest`, 인증 경로 단언과 미인증 401 단언을 함께
+    추가했다.
+  - **`Not run`:** 전체 `./gradlew build`, `scripts/verify-docs.sh`, M11의 frontend type generation,
+    M12의 문서화된 실행계획 evidence.
+- 2026-08-16: **Milestone 10 완료.** V64의 재색인 command ledger와 audit action,
+  `shared/api`의 `StoreSearchIndexRebuildOperations`, Operations의 권한·audit·replay controller를
+  추가했다. Discovery는 매장별 transaction으로 기존 색인 교체를 소유하며 Operations는 전체 재색인
+  동안 DB transaction을 열지 않는다.
+  - `PLATFORM_OPERATOR`와 활성 `STORE_BRAND_MANAGE` grant, 1..200자 reason, 8..128자
+    `Idempotency-Key`를 함께 강제한다. 같은 actor/key/정규화 reason은 완료 response를 90일간
+    재생하고, 다른 reason은 409, 실행 중 command는 `Retry-After: 2`를 포함한 409이다.
+    partial 결과는 200이어도 `complete=false`와 실패 Store ID로 명시한다.
+  - `OperatorSearchIndexRebuildControllerTest` **3건**이 완료 결과 replay·audit 단일 기록,
+    profile 누락 partial과 나머지 Store 계속 처리, role/grant/request shape/RUNNING command와
+    `Retry-After`를 Testcontainers에서 확인했다. 기존
+    `StoreSearchIndexRebuildIntegrationTest` **9건**과 `ModularityTests` **1건**도 통과했다.
+  - M8의 direct `discovery → ordering/api`와 M10의 `operations → discovery/api`가 Modulith
+    순환을 만들었음을 확인해 compact contract만 `shared/api`로 옮겼다(MD-2026-028). 구현·데이터
+    소유는 Ordering/Discovery에 남는다.
+  - `Store Keyword Search Runbook`에 coverage query, 재실행/partial 규칙과 process loss의
+    `RUNNING` unknown을 기록했다. `./gradlew spotlessCheck`가 통과했다.
+  - `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가 통과했다.
+  - **`Not run`:** M11 target/runtime OpenAPI·Error Catalog·frontend type generation, 전체
+    `./gradlew build`, M12의 문서화된 실행계획 evidence.
+- 2026-08-16: **Milestone 11 완료.** target/runtime OpenAPI에
+  `POST /operations/search-index/rebuild`와 request/result schema, partial 200, RUNNING 409의
+  optional `Retry-After`, dependency-unknown 503 규약을 추가했다. Error Catalog는 자동 재시도가
+  partial 또는 unknown을 성공으로 바꾸지 않도록 runbook 절차를 연결한다.
+  - `RuntimeOpenApiParityTest` **1건**, `AuthenticationPathRegistryTest` **3건**,
+    `AuthenticationSecurityIntegrationTest` **8건**, `OperatorSearchIndexRebuildControllerTest`
+    **3건**이 통과했다. 처음 parity test는 새 controller의 service mock 부재로 실패했으며,
+    mock과 runtime path를 함께 추가한 뒤 통과했다.
+  - `./gradlew spotlessCheck`와
+    `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가 통과했다(runtime **143 paths / 152
+    operations**, target **160 paths / 169 operations**).
+  - `frontend`의 `npm run generate:api && npx tsc --noEmit`가 통과했다. 생성 타입은 M7~M10의
+    runtime 계약도 함께 반영했고, 이전에 누락된 customer/merchant CSRF header 세 요청은 actor별
+    token helper로 보완했다. UI·라우트·스타일은 변경하지 않았다. `client.test.ts` **6건**도 통과했다.
+  - **`Not run`:** 전체 `./gradlew build`, M12의 문서화된 실행계획 evidence.
+- 2026-08-16: **Milestone 12 실행계획 evidence 완료.** PostgreSQL 17.5 Testcontainers에서
+  `StoreSearchQueryPlanTest`와 `CustomerRecentStoreQueryMigrationTest`를 함께 실행했다.
+  - V59 term query는 100,000행(오타 경로 200행)에서 index 전 Seq Scan(99,800행 제거, shared
+    hit=1143, execution 256.375 ms), 후 `BitmapOr`의 두 `ix_search_term_trgm` Bitmap Index Scan
+    (shared hit=113, execution 5.731 ms)이었다. planner setting을 강제하지 않았다.
+  - V57 favorite는 20,000행/대상 customer 500행에서 Seq Scan(19,500행 제거, shared hit=173,
+    execution 2.703 ms) 후 `ix_discovery_favorite_customer_created` Index Only Scan(shared
+    hit=1 read=3, execution 1.127 ms)이었다.
+  - V63 recent는 20,000 order/eligible 500행에서 Seq Scan(19,500행 제거, shared hit=234,
+    execution 4.284 ms) 후 `ix_ordering_order_customer_recent_store` Bitmap Index Scan
+    (shared hit=12 read=8, execution 5.025 ms)이었다. single capture에서 더 느린 수치를
+    성능 개선으로 해석하지 않는다.
+  - fixture·raw plan·범위·미측정 항목은
+    `docs/quality/customer-store-discovery-query-performance-evidence.md`에 기록했다.
+  - 최종 검증: `./gradlew build --stacktrace`가 40분 22초에 통과했다. frontend의
+    `npm run generate:api && npx tsc --noEmit`도 재통과했고 generated schema diff는 없다.
+- 2026-08-16: **PR #74 리뷰 대응과 main 병합.** `origin/main`(#71·#72·#73)을 병합하고 리뷰
+  지적 P1 3건·P2 2건을 반영했다. 공개 계약 변경은 즐겨찾기 상한 409 하나다.
+  - **재색인 완료 의미.** main의 target-snapshot 설계를 채택했다. UUID live keyset은 재색인 중
+    boundary보다 작은 UUID로 추가된 매장을 건너뛰면서도 `complete=true`를 낼 수 있었다.
+    `StoreSearchIndexRebuildResult`는 `shared/api`에 남긴다. `discovery/internal`로 되돌리면
+    `operations → discovery` 역방향 의존으로 Modulith 순환이 된다(MD-2026-028).
+    `targetStoreCount`는 공개 응답에 넣지 않고 controller 매핑에서 떨어뜨린다.
+  - **REQUIRES_NEW commit 실패.** `claim`·`complete`의 commit은 메서드 본문이 끝난 뒤 일어나
+    기존 try/catch 밖이었고, 전역 처리기가 `TransactionException`을 다루지 않아 명세의 503이
+    아니라 500이 나갔다. 두 프록시 호출 자체를 감싸 결과 불명을 503으로 낸다.
+  - **실패 command의 상태화.** 실패 시 `RUNNING` row를 삭제하면 payload binding이 사라져 같은
+    key·다른 reason이 통과하고, key 기반 audit `source_reference` 때문에 재실행 감사가
+    누락됐다. 5상태(`RUNNING`/`COMPLETED`/`FAILED_RETRYABLE`/`UNKNOWN`/`MANUAL_REVIEW`)와
+    `attempt_count`로 바꾸고 `source_reference`를 `command id:attempt`로 옮겼다
+    ([ADR-103 재색인 명령의 실패 상태 Amendment](../../adr/ADR-103-store-search-strategy.md)).
+    상한 초과의 `MANUAL_REVIEW` 전이는 요청을 실패시키는 transaction 밖에서 commit해야 한다.
+    안에서 하면 예외와 함께 롤백되며, 테스트가 실제로 이것을 잡았다.
+  - **최근 매장 limit.** `limit`을 노출 결과 기준으로 보장한다. 이전에는 비노출 매장이 앞자리를
+    차지하면 뒤의 정상 매장이 cursor 없는 endpoint에서 영구히 도달 불가였다. Ordering 조회에
+    keyset continuation을 넣고 window 수에 상한을 뒀다.
+  - **즐겨찾기 상한 200개.** 고객 단위 advisory xact lock으로 직렬화한 뒤 개수를 판정한다.
+    사전 count만으로는 동시 PUT 두 건이 모두 199를 읽고 201로 확정된다. 이미 즐겨찾기인 매장의
+    반복 PUT은 행을 만들지 않으므로 상한과 무관하게 204다.
+  - **병합이 드러낸 실패 2종.** V59의 메뉴 복합 FK 때문에 검색 fixture가 실제 `merchant_menu`
+    행을 만들도록 고쳤다. `StoreCatalogOpenApiContractTest`는 스펙 한국어화로 깨져 있었는데
+    `origin/main`에서도 실패하는 것을 별도 워크트리에서 확인하고 단언을 현재 언어에 맞췄다.
+  - **프런트엔드 회귀.** M11이 결제 확인 POST 앞에 CSRF GET을 넣었는데 테스트가 그것을 mock하지
+    않아 성공 화면 대신 오류 화면이 렌더됐다. `origin/main`에서는 통과하고 이 브랜치에서만
+    실패하는 실제 회귀였다. 테스트가 새 동작을 수용만 하지 않도록 `X-BEANFLOW-CSRF` 전송 단언을
+    함께 넣었다.
+  - `./gradlew build --stacktrace`가 24분 36초에 **1,282건 중 10건 실패, skip 1**로 끝났다.
+    skip은 기존 opt-in `NearbyStoreDiscoveryBenchmark`다. 실패 10건은 전부 OpenAPI 계약
+    테스트이며 **`origin/main`에서 동일하게 10건 모두 실패한다**(별도 워크트리에서 확인).
+    #73의 스펙 한국어화가 영문 단언을 깨뜨린 것으로, 이 branch가 새로 만든 실패는 없다.
+    당시 이 PR 범위 밖이라 고치지 않았다. 2026-08-16 PR #74 후속에서 response status·tag·required
+    YAML 표기와 한국어 계약 설명에 독립적인 단언으로 바꾸고, 누락된 SP-19 만료·비소비 의미를
+    OpenAPI에 복원했다. `./gradlew test --tests '*OpenApiContractTest'`는 15건 모두 통과했다.
+  - `scripts/verify-docs.sh` 통과(target 160 paths/169 operations, runtime 143/152, 325 schemas).
+    frontend `npm run generate:api && npx tsc --noEmit` 통과, `npm test` **39건 전부 통과**.
 - 2026-08-16: **Milestone 2 리뷰 보강.** 미병합·미적용 V57/V59를 제자리에서 고쳐 DB 최종
   방어선을 추가했다.
   - V57 favorite는 `identity_customer_account`·`merchant_store` FK와 양쪽 `ON DELETE CASCADE`를
@@ -864,9 +1061,43 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   - 분리 후 첫 run `31898567839`은 preflight를 통과했지만 backend checkout의 기본 shallow history에는
     Spotless ratchet이 요구하는 `origin/main`이 없어 build 시작 전에 실패했다. backend checkout도 기존과
     같이 `fetch-depth: 0`으로 설정했다. 이 실패에서는 test가 실행되지 않았다.
+  - **PR #74 correction.** 이후 two-worker remote run `31942670590`은 `:test` 중
+    `RecentStoreEndpointIntegrationTest`의 PostgreSQL microsecond round-trip과 system Clock nanosecond를
+    직접 비교한 assertion을 드러냈다. fixture를 whole-second instant로 바꿨다. 그 수정 뒤
+    `31943898875`은 30분 budget에서도 `:test`의 완료·실패 결과를 내지 못하고 취소됐다. JVM-static
+    Testcontainers singleton은 Gradle worker마다 별도 PostGIS container가 되므로, two-worker local
+    measurement만으로 hosted runner 완료 시간을 단정할 수 없었다. `maxParallelForks`를 `1`로 복원하고,
+    preflight/backend 분리는 유지한다. 단일 worker remote run `31945687981`도 test failure 없이 20분에
+    취소돼 backend budget은 full suite가 결과를 보고할 수 있는 30분으로 조정했다.
+  - **후속 correction.** run `31948426585`는 30분을 모두 사용했지만 test failure 없이
+    `CustomerOrderQueryMigrationTest`까지 연속 진행한 뒤 job 한도에서 취소됐다. single worker가
+    멈춘 것이 아니라 현재 전체 suite가 30분을 초과한다는 증거다. Testcontainers를 한 JVM 안에서 병렬화하지
+    않고, source/class 일치와 누락·중복 없는 배정을 검증하는 3개 deterministic Gradle test shard를
+    별도 hosted runner에서 실행한다. `build -x test`는 compile·Spotless 등 non-test build를 유지하고,
+    각 shard는 single worker·30분 한도에서 전체 test class의 정확히 한 부분만 실행한다.
 
 ## Surprises & Discoveries
 
+- **(2026-08-15) `pickupAvailable`은 두 조건의 AND인데 SQL은 그중 절반만 안다.** ADR-103의 정의를
+  다시 읽으니 「`acceptingOrders && pickupEnabled`이고, ... 슬롯이 하나 이상 있다는 뜻」이었다.
+  슬롯 존재만으로 바꾸면 픽업을 끈 매장이 슬롯 행 때문에 `true`가 된다. 후보 질의의 필드를
+  `pickupCapable`로 이름을 바꿔 SQL이 아는 절반임을 드러내고, 공개 플래그는 서비스 계층에서
+  AND로 만들었다. Merchant 쪽은 이름을 고치는 대신 필드를 삭제했다. 소유자 상태만 아는 모듈이
+  그 필드를 갖고 있으면 재도출이 언제든 다시 가능하다(MD-2026-027).
+- **(2026-08-15) Query port 테스트만으로는 응답 계약이 지켜지는지 알 수 없다.** 컨트롤러를 붙인 뒤
+  `StoreSearchPage` schema의 required 필드 `distanceAvailable`을 응답 DTO에 빠뜨렸는데, 포트를
+  직접 부르는 통합 테스트 11건이 전부 통과했다. `distanceAvailable`은 `StoreSearchPage`에는 있고
+  컨트롤러의 `StoreSearchPageResponse`에는 없었기 때문이다. `verify-docs.sh`는 spec 자체만 검증하고
+  `RuntimeOpenApiParityTest`는 path·method만 비교하므로 둘 다 이것을 잡지 못한다. endpoint를 여는
+  Milestone에는 실제 HTTP 응답 본문을 보는 테스트가 필요하다고 보고
+  `StoreSearchEndpointIntegrationTest`를 추가했다.
+- **(2026-08-15) 파라미터를 가운데 끼워 넣자 테스트 helper의 위치 인자가 밀렸다.**
+  `SearchNearbyStoresCommand`에 `pickupAvailable`을 4번째로 추가했더니
+  `NearbyStoreDiscoveryValidationTest`의 helper가 `command(latitude, longitude, radiusMeters,
+  cursor, limit)`를 위치로 넘기고 있어 `cursor`가 `pickupAvailable` 자리로, `limit`이 `cursor`
+  자리로 들어갔다. 타입이 모두 `String?`이라 컴파일은 통과했고 limit·cursor 테스트 2건이 실패해서야
+  드러났다. 같은 타입 파라미터가 늘어선 생성자에서는 위치 인자가 컴파일러 검사를 받지 못한다.
+  helper 호출을 전부 named argument로 바꿨다.
 - **(2026-08-15) 지역 명령을 `operations`에 둘 수 없다.** 브랜드와 대칭으로 만들려 했으나
   `operations`는 `identity`에 의존하지 않고 `identity`가 `operations`에 의존한다. 매장 소속 확인이
   `identity.api`에 있으므로 `operations`에 두면 순환이 생긴다. 필요한 간선을 이미 전부 가진 모듈은
@@ -892,6 +1123,13 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 - **(2026-08-15) `merchant ↔ discovery` 순환 의존 위험.** 색인 갱신(merchant → discovery)과 매장
   상태 조회(discovery → merchant)가 동시에 필요해 Spring Modulith 검증이 깨질 수 있다. 색인 갱신
   port를 `shared/api`에 두어 회피하며 ADR-112에 기록했다.
+- **(2026-08-16) 공개 API package가 곧 허용된 의존 방향을 뜻하지는 않는다.** M10의 운영자 재색인
+  서비스가 `operations → discovery/api`를, 이미 완료로 기록한 M8의 최근 주문 서비스가
+  `discovery → ordering/api`를 직접 참조하자 `ModularityTests`가 둘 다 거절했다. 전자는
+  `discovery → fulfillment → operations → discovery` 순환까지 만들었다. 데이터·구현 소유권은
+  그대로 Ordering/Discovery에 두고, caller가 필요한 작은 contract와 DTO만 `shared/api`로 옮긴다.
+  `shared`가 데이터를 소유하거나 범용 service locator가 되는 것이 아니며, 큰 후보 집합을 넘기는
+  search query에는 적용하지 않는다(MD-2026-028).
 - **(2026-08-15) 오타 허용과 keyset cursor의 충돌.** 유사도는 실수라 그대로 cursor에 넣으면 page
   경계에서 동점 판정이 흔들려 누락·중복이 생긴다. nearby의 `distanceMicrometers`와 같은 정수
   양자화(`relevanceRank`)로 해결하고 전체 tuple을 all-ASC로 맞췄다.
@@ -996,12 +1234,22 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   장시간 병렬 전체 테스트에서 `TRUNCATE`와 PostgreSQL deadlock을 만들었다. 전역 profile에 같은 initial
   delay를 추가하고, scheduler 자체의 동작은 해당 integration test가 `refresh()`를 직접 호출해 검증한다.
 
+- **(2026-08-16) 20,000행의 좁은 term fixture에서는 GIN을 만든 뒤에도 planner가 Seq Scan을
+  선택했다.** production core predicate와 threshold는 유지했고 `enable_seqscan` 같은 planner
+  forcing은 하지 않았다. index가 자연스럽게 선택되는 경계를 검증하려고 term fixture만
+  결정적 100,000행으로 키웠고, V59는 BitmapOr/Bitmap Index Scan을 택했다. 이것은 20,000행에서
+  GIN이 고장났다는 주장이 아니라, plan 증빙이 데이터 규모·분포를 반드시 함께 기록해야 한다는
+  관측이다.
+
 ## Decision Log
 
 | 일자 | 결정 | 기록 위치 |
 |---|---|---|
 | 2026-08-12 | PostgreSQL `pg_trgm`, Context 간 batch port와 scan-boundary cursor 사용 | [ADR-103](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-12 | recent는 결제 승인 이후 현재 실행·완료 상태만 포함 | [BR-40](../../product/business-policy-decisions.md) |
+| 2026-08-16 | recommendation 좌표 쌍의 nearby 기본 반경을 3,000m로 고정 | [BR-40](../../product/business-policy-decisions.md) |
+| 2026-08-16 | 재색인은 `STORE_BRAND_MANAGE` grant와 90일 결과 재생 원장을 사용 | [BR-47](../../product/business-policy-decisions.md) |
+| 2026-08-16 | M8 recent와 M10 재색인의 작은 cross-context contract는 `shared/api`에 두고 구현·데이터 소유는 Ordering/Discovery에 유지 | [MD-2026-028](../../decisions/minor-decisions.md) |
 | 2026-08-12 | 좌표 없는 추천도 favorite → recent 순서를 유지 | [BR-40](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 검색 대상에 브랜드명·지역명 추가, 결과는 매장 단위 + 매칭 메뉴 최대 3개 | [ADR-103 A1/A5](../../adr/ADR-103-store-search-strategy.md), [BR-47](../../product/business-policy-decisions.md) |
 | 2026-08-15 | 매칭은 substring 우선 + 유사도 `0.3` 보완 하이브리드. 오타 교정 non-goal 철회 | [ADR-103 A2](../../adr/ADR-103-store-search-strategy.md) |
@@ -1040,15 +1288,34 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 | 2026-08-15 | 브랜드·지역 표시 이름은 원 테이블이 아니라 색인 term의 `display_text`에서 읽는다 | `StoreSearchCandidateRepository.kt` |
 | 2026-08-15 | Milestone 5는 컨트롤러를 붙이지 않는다. `pickupAvailable`이 동작하는 Milestone 6에서 endpoint를 연다 | 이 ExecPlan Progress |
 | 2026-08-15 | target OpenAPI의 `/stores/search`를 ADR-103 2026-08-15 Amendment에 맞게 개정한다 | [ADR-103 A4/A5/A6/A7](../../adr/ADR-103-store-search-strategy.md), `scripts/verify-docs.sh` |
+| 2026-08-15 | 한글 오타 검색은 이 plan에서 해소하지 않는다. 자모 분해 색인을 ADR-103 Revisit Condition으로 등록한다 | [ADR-103 Alternatives 9](../../adr/ADR-103-store-search-strategy.md), 이 문서 Non-goals |
+| 2026-08-15 | 픽업 가용성 batch port의 이름은 `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`, 반환은 `Set<UUID>` | [MD-2026-025](../../decisions/minor-decisions.md) |
+| 2026-08-15 | `nearby`는 `accepting_orders AND pickup_enabled` hard filter를 유지한다. 통일하는 것은 `pickupAvailable`의 판정이지 결과 집합 구성이 아니다 | [MD-2026-026](../../decisions/minor-decisions.md), [ADR-103](../../adr/ADR-103-store-search-strategy.md) |
+| 2026-08-15 | 공개 `pickupAvailable`은 소유자 상태와 슬롯 존재의 AND다. SQL이 아는 절반은 `pickupCapable`로 이름 짓고 Merchant projection에서는 삭제한다 | [MD-2026-027](../../decisions/minor-decisions.md) |
+| 2026-08-15 | ADR-070의 `stores-nearby` filter hash에 `pickupAvailable`을 추가한다. 개정 전 cursor는 400이며 두 form을 동시에 받지 않는다 | [ADR-070 2026-08-15 nearby amendment](../../adr/ADR-070-signed-cursor-and-pagination-contract.md) |
+| 2026-08-15 | `nextCursor`는 마지막 반환 row가 아니라 마지막 검사 candidate다. 두 endpoint가 `scanCandidates` 하나를 공유한다 | [ADR-103](../../adr/ADR-103-store-search-strategy.md), `ScannedCandidatePage.kt` |
 | 2026-08-16 | 재색인 대상은 UUID keyset이 아니라 시작 ID snapshot. 완료는 snapshot 범위에 한정 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 메뉴 source·favorite는 복합/원본 FK와 삭제 cascade로 참조 무결성을 DB에서 보장 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 행 존재율과 freshness mismatch를 분리하고 REPEATABLE_READ snapshot에서 계산 | [ADR-103 A8](../../adr/ADR-103-store-search-strategy.md) |
 | 2026-08-16 | 전체 test는 2개 worker로 제한하고, 새 background worker는 test 공통 profile에서 지연 | 이 문서 Progress, `src/test/resources/application.yaml` |
+| 2026-08-16 | hosted runner의 Testcontainers 전체 검증은 각 runner worker 1개를 유지하되, source/class 대조로 완전성을 검증한 3개 deterministic test shard로 나눈다. 이전 single-worker/30분 전체 실행 결정은 PR #74의 remote timeout evidence로 대체한다 | 이 문서 Progress, `build.gradle.kts`, `.github/workflows/ci.yml` |
 | 2026-08-16 | frontend/doc preflight와 backend 전체 build를 별도 CI job으로 실행 | 이 문서 Progress, `.github/workflows/ci.yml` |
 
 ## Outcomes & Retrospective
 
-아직 없다. 측정하지 않은 성능·동작 결과를 여기에 기록하지 않는다.
+- 고객은 매장명·브랜드명·법정동·판매 중 메뉴명으로 검색하고, 즐겨찾기·최근 주문·좌표가 있을 때
+  3,000m nearby를 같은 공개·pickup 규칙으로 병합해 받을 수 있다.
+- 브랜드·지역 명령은 동기 term 색인을 갱신하고, 운영자 재색인은 권한·reason·idempotency·Audit와
+  partial/RUNNING unknown 계약을 갖는다. 실패를 빈 결과나 fake fallback으로 대체하지 않는다.
+- V59 GIN, V57 favorite, V63 recent의 deterministic EXPLAIN evidence는
+  `docs/quality/customer-store-discovery-query-performance-evidence.md`에 남겼다. V63의 한 번의
+  after capture가 느렸던 사실도 보존했으며, 이 결과로 latency 개선을 주장하지 않는다.
+- 최종 코드 검증은 `./gradlew build --stacktrace` 성공(40분 22초), frontend API generation과
+  TypeScript 검사 성공이다. 반복 p50/p95/p99, 동시 부하, 실제 한국어 corpus와 index write cost는
+  아직 측정하지 않았고 evidence의 Revisit when에 남긴다.
+- active → completed 이동 뒤 `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`도
+  통과했다(target 160 paths/169 operations, runtime 143 paths/152 operations, 47 policies,
+  112 ADRs, 566 Markdown files, 57 ExecPlans).
 
 ## Revision Notes
 
@@ -1083,9 +1350,17 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
   함께 쓰도록 확정했다(MD-2026-024). target OpenAPI의 `/stores/search`가 ADR-103 원 Decision
   시절 형태로 남아 있어 2026-08-15 Amendment에 맞게 개정하고 `scripts/verify-docs.sh`의 옛 어휘
   단언도 함께 고쳤다. 컨트롤러는 `pickupAvailable`이 동작하는 Milestone 6으로 미뤘다.
+- 2026-08-16: Milestone 7~12 구현과 최종 전체 build를 확인했다. V57~V64 migration, 고객
+  favorite/recent/recommendation, 운영자 재색인, target/runtime OpenAPI와 실행계획 evidence를
+  실제 결과로 갱신하고 이 ExecPlan을 completed로 이동한다.
 - 2026-08-16: 리뷰 보강으로 V57/V59 참조 무결성, 재색인 target snapshot, freshness 관측과
   migration-test fixture lifecycle을 갱신했다. 공개 HTTP API는 바뀌지 않는다.
 - 2026-08-16: CI 20분 timeout을 위해 test worker를 2개로 제한하고, 검색 색인 커버리지 scheduler를
   test 공통 profile에서 지연했다. 제품 runtime scheduler 주기와 공개 API는 바뀌지 않는다.
 - 2026-08-16: frontend/doc preflight와 backend 전체 build를 별도 20분 CI job으로 분리했다. 검증
   대상과 각 명령은 유지하며, frontend 준비 시간이 backend test의 job 한도를 잠식하지 않게 한다.
+- 2026-08-16: PR #74에서 two-worker Testcontainers 실행이 hosted runner의 전체 build를 완료하지 못한
+  evidence를 반영해 worker 1개로 복원했다. PostgreSQL timestamp 정밀도에 의존하던 recent-store assertion도
+  deterministic fixture로 교정했다. 30분 단일 worker run도 정지 없이 한도를 초과한 evidence를 반영해,
+  complete class coverage를 검증하는 3개 CI test shard와 non-test build를 분리했다. 제품 runtime과 공개 API는
+  변경하지 않는다.

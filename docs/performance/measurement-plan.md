@@ -37,6 +37,7 @@
 ## Initial scenarios
 
 - nearby store search at multiple data sizes (measured 2026-08-07)
+- customer store discovery index access plans (measured 2026-08-16)
 - order list query and N+1
 - last stock/slot/coupon contention
 - external PG latency with transaction inside versus outside only as controlled experiment
@@ -69,6 +70,23 @@
 - 상세 조건과 실제 값은 [nearby query plan evidence](../quality/nearby-store-discovery-performance-evidence.md)에 있다.
 - **Revisit when:** select list, sort tuple, index 정의, radius 계약, 최대 page size 또는
   PostgreSQL/PostGIS version이 바뀌거나 실제 매장 밀도 분포와 SLO가 생길 때.
+
+## Customer store discovery index plans (2026-08-16)
+
+- **Reproduce:** StoreSearchQueryPlanTest와 CustomerRecentStoreQueryMigrationTest를 함께 실행한다.
+  clean database에 V1~V64를 적용한 뒤 isolated schema에서 index 없는 같은 fixture를 먼저 잡고,
+  exact V59/V57/V63 index를 만든 뒤 ANALYZE와 같은 EXPLAIN (ANALYZE, BUFFERS)를 다시 실행한다.
+- **Measured:** V59는 100,000 term fixture에서 Seq Scan → BitmapOr/Bitmap Index Scan, V57은
+  20,000 favorite fixture에서 Seq Scan → Index Only Scan, V63은 20,000 order fixture에서
+  Seq Scan → Bitmap Index Scan/Bitmap Heap Scan으로 바뀌었다. V63의 단일 after capture에는
+  새 index-page read가 포함되고 5.025 ms로 before 4.284 ms보다 느렸으며, 이를 성능 개선으로
+  해석하지 않는다.
+- **Not measured:** repeated warm/cold p50/p95/p99, RPS, concurrent load, real Korean corpus
+  selectivity, full candidate/profile/pickup query, index size/write cost, connection pool 및 GC.
+- 상세 조건, raw capture와 한계는
+  [customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md)에 있다.
+- **Revisit when:** captured predicate 또는 group/sort tuple, index definition, pg_trgm threshold,
+  PostgreSQL version, public page limit이 바뀌거나 SLO/실제 corpus 분포가 생길 때.
 
 ## Settlement lifecycle measurement (2026-08-03)
 

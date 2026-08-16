@@ -6,7 +6,14 @@
 
 관련 결정: [BR-28](../product/business-policy-decisions.md), [ADR-020](../adr/ADR-020-nearby-location-privacy.md),
 [ADR-070](../adr/ADR-070-signed-cursor-and-pagination-contract.md),
+[ADR-103](../adr/ADR-103-store-search-strategy.md),
 [ExecPlan](../exec-plans/completed/nearby-store-discovery.md).
+
+**(2026-08-15)** `nearby` 응답의 `pickupAvailable`은 더 이상 `acceptingOrders && pickupEnabled`가
+아니라 7일 창 안에 실제 예약 가능한 슬롯이 있다는 뜻이며 `GET /stores/search`와 같은 판정이다
+(ADR-103 2026-08-15 Amendment). 따라서 이 endpoint는 이제 Fulfillment 슬롯 테이블 읽기에도
+의존한다. `pickupAvailable=true` 필터도 이때 실제로 동작하기 시작했다. 검색 endpoint 자체의
+운영 절차는 `store-keyword-search-runbook.md`가 다룬다.
 
 ## 1. 배포 전 preflight
 
@@ -85,7 +92,10 @@ readiness만 DOWN으로 두고 계속 실행하지 않는다.
 |---|---|---|
 | `503 DEPENDENCY_UNAVAILABLE` 급증 | `beanflow.discovery.spatial.failure{reason=QUERY_FAILED}` | PostGIS extension, `idx_store_discovery_profile_location` index, connection pool과 DB 상태를 확인한다. 빈 결과나 애플리케이션 거리 계산으로 대체하지 않는다 |
 | `503`이지만 `reason=TRANSACTION_FAILED` | read transaction commit 실패 | DB 가용성과 pool 고갈을 확인한다 |
+| `503`인데 spatial failure 지표가 조용하다 | 픽업 가용성 batch가 손상된 slot counter를 만났다. `reserved_count + confirmed_count > capacity`인 행이다 | 값을 clamp하거나 해당 매장을 "픽업 불가"로 접지 않는다. `fulfillment_pickup_slot` row를 확인하고 owner counter를 바로잡는다 (5절과 같은 원인) |
 | `400 INVALID_REQUEST` 급증 | `beanflow.discovery.nearby.count{outcome=INVALID_INPUT}` | client가 계약 밖 좌표·radius·limit·cursor를 보내고 있다. cursor 만료(24시간)와 key rotation 여부를 함께 확인한다 |
+| 배포 직후에만 `400`이 몰린다 | `pickupAvailable`이 `stores-nearby` filter hash에 추가되면서 개정 전 form으로 발급된 cursor가 400이 된다 (ADR-070 2026-08-15 nearby amendment) | 정상 동작이다. cursor expiry가 24시간이라 그 안에 잦아든다. 잦아들지 않으면 client가 cursor를 저장해 재사용하고 있는지 확인한다 |
+| `pickupAvailable=true`인데 page가 자주 비어 있다 | 가용성 필터는 SQL 뒤에서 적용되므로 짧거나 빈 page가 정상이다. `nextCursor`가 함께 오면 뒤에 후보가 남아 있다는 뜻이다 | 장애가 아니다. 매장들의 7일 창 슬롯 편성 자체를 확인한다. 빈 page + cursor 없음이면 진짜 0건이다 |
 | 검색 지연 증가 | `beanflow.discovery.nearby.latency` | GiST index 존재와 `ANALYZE` 최신성을 확인하고 [query plan evidence](../quality/nearby-store-discovery-performance-evidence.md)와 같은 조건으로 재측정한다 |
 
 ## 5. 매장 메뉴·픽업 슬롯 조회

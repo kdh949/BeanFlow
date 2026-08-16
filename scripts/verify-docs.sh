@@ -40,7 +40,9 @@ required=(
   "docs/performance/measurement-plan.md"
   "docs/quality/quality-evidence-map.md"
   "docs/quality/nearby-store-discovery-performance-evidence.md"
+  "docs/quality/customer-store-discovery-query-performance-evidence.md"
   "docs/operations/nearby-store-discovery-runbook.md"
+  "docs/operations/store-keyword-search-runbook.md"
   "docs/operations/local-demo-runbook.md"
   "docs/quality/customer-order-cancellation-readiness.md"
   "docs/quality/customer-order-cancellation-release-evidence.md"
@@ -1554,6 +1556,28 @@ else:
     nearby_distance_description = schemas['NearbyStore']['properties']['distanceMeters'].get('description', '')
     if 'canonical micrometer distance tuple' not in nearby_description or 'display value, not the cursor tuple' not in nearby_distance_description:
         print('Nearby distance display/cursor tuple contract is incomplete.', file=sys.stderr)
+        sys.exit(1)
+    # ADR-103 2026-08-15 Amendment: 두 endpoint의 pickupAvailable 의미가 갈라지지 않게 고정한다.
+    nearby_pickup_available = next(
+        (
+            parameter
+            for parameter in spec['paths']['/stores/nearby']['get'].get('parameters', [])
+            if parameter.get('name') == 'pickupAvailable'
+        ),
+        None,
+    )
+    if nearby_pickup_available is None or nearby_pickup_available.get('schema', {}).get('type') != 'boolean':
+        print('Nearby must declare an optional boolean pickupAvailable filter.', file=sys.stderr)
+        sys.exit(1)
+    if (
+        'reservable slot inside the' not in nearby_description
+        or 'same meaning as on GET /stores/search' not in nearby_description
+        or 'last examined candidate' not in nearby_description
+    ):
+        print('Nearby pickupAvailable must state the shared slot meaning and the scan-boundary cursor.', file=sys.stderr)
+        sys.exit(1)
+    if 'pickupAvailable additionally requires a reservable slot' not in store_search.get('description', ''):
+        print('Store search must state that pickupAvailable requires a reservable slot.', file=sys.stderr)
         sys.exit(1)
     expected_cursor_limits = {
         'GET /stores/nearby': '#/components/parameters/DiscoveryLimit',

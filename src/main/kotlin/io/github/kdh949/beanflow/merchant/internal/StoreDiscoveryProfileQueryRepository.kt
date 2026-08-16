@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.util.UUID
@@ -27,14 +28,13 @@ internal class StoreDiscoveryProfileQueryRepository(
         val sql =
             """
             SELECT candidate.store_id, candidate.name, candidate.distance_micrometers,
-                   candidate.accepting_orders, candidate.pickup_enabled
+                   candidate.accepting_orders
               FROM (
                     SELECT profile.store_id AS store_id,
                            profile.name AS name,
                            floor(ST_Distance(profile.location, $QUERY_POINT) * 1000000)::bigint
                                AS distance_micrometers,
-                           store.accepting_orders AS accepting_orders,
-                           store.pickup_enabled AS pickup_enabled
+                           store.accepting_orders AS accepting_orders
                       FROM merchant_store_discovery_profile profile
                       JOIN merchant_store store ON store.id = profile.store_id
                      WHERE ST_DWithin(profile.location, $QUERY_POINT, ?)
@@ -59,13 +59,11 @@ internal class StoreDiscoveryProfileQueryRepository(
         }
         arguments.add(query.limit)
         return jdbcTemplate.query(sql, { resultSet, _ ->
-            val acceptingOrders = resultSet.getBoolean("accepting_orders")
             NearbyStoreProfileProjection(
                 storeId = resultSet.getObject("store_id", UUID::class.java),
                 name = resultSet.getString("name"),
                 distanceMicrometers = resultSet.getLong("distance_micrometers"),
-                open = acceptingOrders,
-                pickupAvailable = acceptingOrders && resultSet.getBoolean("pickup_enabled"),
+                open = resultSet.getBoolean("accepting_orders"),
             )
         }, *arguments.toTypedArray())
     }
@@ -73,6 +71,31 @@ internal class StoreDiscoveryProfileQueryRepository(
     fun countStores(): Long =
         jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_store", Long::class.java)
             ?: throw IllegalStateException("Store count query returned no row")
+
+    fun findVisibleStores(storeIds: Collection<UUID>): List<StoreDiscoveryDisplayProjection> {
+        if (storeIds.isEmpty()) return emptyList()
+        return jdbcTemplate.query({ connection ->
+            connection
+                .prepareStatement(
+                    """
+                    SELECT profile.store_id,
+                           profile.name,
+                           (store.accepting_orders AND store.pickup_enabled) AS pickup_capable
+                      FROM merchant_store_discovery_profile profile
+                      JOIN merchant_store store ON store.id = profile.store_id
+                     WHERE profile.store_id = ANY(?::uuid[])
+                    """.trimIndent(),
+                ).also { statement ->
+                    statement.setArray(1, connection.createArrayOf("uuid", storeIds.toSet().toTypedArray()))
+                }
+        }, { resultSet, _ ->
+            StoreDiscoveryDisplayProjection(
+                storeId = resultSet.getObject("store_id", UUID::class.java),
+                name = resultSet.getString("name"),
+                pickupCapable = resultSet.getBoolean("pickup_capable"),
+            )
+        })
+    }
 
     private companion object {
         /**

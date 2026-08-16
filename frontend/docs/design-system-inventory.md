@@ -123,9 +123,8 @@ component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `
 - repeated raw pixel baseline은 product layout의 15개 값 조합이다. 새 값이나 count 증가는 실패하고
   감소하면 baseline 갱신을 요구한다.
 - `_ds_bundle.js`와 `_ds_manifest.json`은 여전히 historical migration input이다. Product import는 guard가 막는다.
-- MD-2026-014가 배정한 unsafe request 세 곳의 CSRF header가 남아 `npm run build`는 실패한다.
-  `check:type-baseline`은 정확히 이 세 오류만 허용하며 Plan 80/90에서 제거한다.
-- 그 build가 `dist/client`를 만들지 못하므로 Sites packaging assertion은 후속 실패다.
+- formerly blocked unsafe request 세 곳은 actor별 CSRF helper로 header를 보낸다. `npm run typecheck`은
+  이제 오류 없이 통과하며, 알려진 오류를 허용하는 baseline은 없다.
 - 브라우저 `Headers`는 한글 `X-Access-Reason` 값을 전송 전에 거부한다. Operations 통합 plan은 입력
   표현과 wire encoding을 명시적으로 결정해야 하며, story는 현재 전송 가능한 ASCII 사유를 사용한다.
 - visual regression은 approved baseline과 credential이 없어 `Not configured`다.
@@ -139,8 +138,8 @@ component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `
 | `test:storybook:ci` | every CSF interaction and a11y `error` in Chromium |
 | `build-storybook` | manager/preview/static asset compilation |
 | `test:storybook:docs` | all 19 Docs render; 10 stateful Docs의 40 state surfaces show their own marker |
-| `check:type-baseline` | only the three assigned MD-2026-014 errors remain |
-| CI | install, adherence, type baseline, unit, Storybook browser/a11y, static build, Docs smoke |
+| `typecheck` | generated runtime schema와 TypeScript 오류 0건 |
+| CI | install, adherence, typecheck, unit, Storybook browser/a11y, static build, Docs smoke |
 
 새 production dependency는 추가하지 않았다. TypeScript AST, Playwright, Storybook, MSW는 기존 lockfile의
 dependency를 사용한다.
@@ -151,7 +150,5 @@ dependency를 사용한다.
    component로 승격한다.
 2. Plan 90에서 merchant refund/settlement UI와 UUID form을 교체하고 `X-Access-Reason` browser wire
    표현을 결정한다.
-3. 두 plan이 세 CSRF 오류를 제거하면 `check:type-baseline`을 삭제하고 `typecheck`, product `build`,
-   `test:sites`를 CI의 직접 green gate로 전환한다.
-4. 중복 layout debt를 정리하고 사람이 critical page baseline을 승인한 뒤 Chromatic 또는 repository-owned
+3. 중복 layout debt를 정리하고 사람이 critical page baseline을 승인한 뒤 Chromatic 또는 repository-owned
    screenshot assertion 중 하나를 별도 결정으로 활성화한다.

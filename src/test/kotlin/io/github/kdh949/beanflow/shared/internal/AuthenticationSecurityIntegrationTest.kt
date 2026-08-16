@@ -79,10 +79,27 @@ internal class AuthenticationSecurityIntegrationTest(
             .perform(get("/api/v1/operations/me"))
             .andExpect(status().isUnauthorized)
         mockMvc
+            .perform(post("/api/v1/operations/search-index/rebuild"))
+            .andExpect(status().isUnauthorized)
+        mockMvc
             .perform(get("/api/v1/stores/${UUID.randomUUID()}/settlements"))
             .andExpect(status().isUnauthorized)
         mockMvc
             .perform(get("/api/v1/point-accounts/${UUID.randomUUID()}"))
+            .andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(get("/api/v1/me/favorite-stores"))
+            .andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(get("/api/v1/me/recent-stores"))
+            .andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(get("/api/v1/me/store-recommendations"))
+            .andExpect(status().isUnauthorized)
+        // 검색은 공개 카탈로그처럼 보이지만 고객 chain이다. 인증 없이 열리면 색인 전체가
+        // 익명 열람 대상이 된다(BR-47 Required Tests).
+        mockMvc
+            .perform(get("/api/v1/stores/search").param("query", "스타벅스"))
             .andExpect(status().isUnauthorized)
     }
 

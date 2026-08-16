@@ -100,12 +100,22 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
   /me:
     $ref: "./beanflow-v1.yaml#/paths/~1me"
+  /me/favorite-stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1favorite-stores"
+  /me/favorite-stores/{storeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1favorite-stores~1{storeId}"
+  /me/recent-stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1recent-stores"
+  /me/store-recommendations:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1store-recommendations"
   /merchant/me:
     $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me"
   /merchant/me/stores:
     $ref: "./beanflow-v1.yaml#/paths/~1merchant~1me~1stores"
   /stores/nearby:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1nearby"
+  /stores/search:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1search"
   /stores/{storeId}/menus:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
   /stores/{storeId}/pickup-slots:
@@ -800,6 +810,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands"
   /operations/brands/{brandId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands~1{brandId}"
+  /operations/search-index/rebuild:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1search-index~1rebuild"
   /operations/stores/{storeId}/brand:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1brand"
   /regions:

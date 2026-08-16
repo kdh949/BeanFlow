@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -50,7 +51,7 @@ internal class SupportProfileChangeOpenApiContractTest {
 
         assertThat(paths).hasSize(32)
         paths.forEach { path ->
-            assertThat(pathItem(target, path)).contains("\"403\"", "\"503\"")
+            assertOpenApiResponseStatuses(pathItem(target, path), 403, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
         assertThat(target).contains(
@@ -76,7 +77,7 @@ internal class SupportProfileChangeOpenApiContractTest {
         assertThat(schema(target, "CustomerCredentialResetProfileChangeRequest"))
             .doesNotContain("password", "secret", "token")
         assertThat(pathItem(target, "/support/cases/{caseId}/profile-changes/customer-primary-phone-requests"))
-            .contains("previously registered channel", "ENHANCED")
+            .contains("기존에 등록된 연락 수단", "강화 본인 확인")
     }
 
     private fun pathItem(

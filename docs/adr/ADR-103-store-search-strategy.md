@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
-- **Implementation owner:** [Customer store discovery](../exec-plans/active/productization-70-customer-store-discovery.md)
+- **Implementation owner:** [Customer store discovery](../exec-plans/completed/productization-70-customer-store-discovery.md)
 
 > 2026-08-15: 검색 대상에 브랜드명·지역명이 추가되고 매칭·정렬·응답 계약이 개정됐다.
 > 아래 [Amendments](#amendments)가 원 Decision보다 우선한다. 원 Decision 본문은 개정 이전
@@ -236,6 +236,55 @@ scheduled method가 같은 객체의 transactional method를 직접 호출해 pr
 - 검색어와 토큰은 원 Decision대로 어디에도 저장하지 않는다. 색인 테이블에 저장되는 것은 매장의
   공개 속성이지 사용자의 검색어가 아니다.
 
+### 재색인 명령의 실패 상태 Amendment (2026-08-16)
+
+재색인 명령의 원장은 `RUNNING`과 `COMPLETED` 두 상태만 가졌고, 실패하면 `RUNNING` row를 **삭제**했다.
+이 삭제가 두 가지를 동시에 깨뜨린다.
+
+첫째, `(actor_id, idempotency_key)`에 묶인 `payload_hash`가 사라진다. 그러면 같은 key에 다른 reason을
+보낸 요청이 `IDEMPOTENCY_KEY_REUSED`가 아니라 **새 command로 수락**된다. 이것은 이 endpoint가
+계약으로 약속한 멱등성 경계와 정면으로 어긋난다.
+
+둘째, 감사 기록의 `source_reference`가 `actor:sha256(idempotencyKey)`였다. 첫 실행의 AuditRecord는
+남고 command row만 사라지므로, 같은 key의 두 번째 실행은 **새 reason으로 실제 재색인을 수행하면서
+감사 기록은 남기지 않는다.** AuditRecord 보존 기간이 command 보존 기간(90일)보다 훨씬 길어서 90일
+정리 이후 key 재사용에서도 같은 일이 생긴다.
+
+#### 결정
+
+실패를 삭제가 아니라 **상태**로 남긴다. 상태는 다섯이며, 나누는 기준은 오직 하나다. 같은 요청을
+서버가 스스로 다시 실행해도 되는가.
+
+| state | 뜻 | 같은 key·같은 payload 재요청 |
+|---|---|---|
+| `RUNNING` | 실행 중이거나 process loss 후 미확정 | `Retry-After`와 함께 409 |
+| `COMPLETED` | 결과 확정 | 저장된 응답을 재생 |
+| `FAILED_RETRYABLE` | 실패했고 반복이 안전함 | 같은 row에서 `attempt_count`를 올려 재실행 |
+| `UNKNOWN` | 결과 저장을 확인하지 못함 | 409 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` |
+| `MANUAL_REVIEW` | 재시도 상한 5회 초과 | 409 `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED` |
+
+`FAILED_RETRYABLE`의 자동 재실행은 매장별 재색인이 그 매장의 term을 통째로 교체한다는 성질에만
+근거한다. `UNKNOWN`에는 그 근거가 성립하지 않는다. 결과 row가 commit됐는지 자체를 모르기 때문이다.
+
+`UNKNOWN` 표시는 row가 아직 `RUNNING`일 때만 적용한다. 실제로 `COMPLETED`가 commit됐다면 그 결과가
+이긴다. 표시가 확정 결과를 덮어쓰면 재생 가능한 응답이 사라진다.
+
+감사 `source_reference`는 `command id:attempt`로 바꾼다. command id는 불변이고 attempt는 실행마다
+증가하므로 재시도가 별도 기록을 남기고, key 재사용이 기록 누락을 만들지 않는다.
+
+`COMPLETED`와 `FAILED_RETRYABLE`만 90일 뒤 정리한다. `UNKNOWN`·`MANUAL_REVIEW`는 운영자가 결론을
+내려야 하는 상태이므로 자동 정리 대상에서 뺀다.
+
+#### Amendment의 결과
+
+- 실패 응답 코드가 하나 늘어난다. `IDEMPOTENCY_MANUAL_REVIEW_REQUIRED`는 이미 Error Catalog에 있는
+  코드이며 의미(409, `Retry-After` 없음, 자동 재시도 금지)가 그대로 들어맞아 새로 만들지 않았다.
+- 실패한 command가 원장에 남으므로 `(actor, key)` 재사용은 payload가 같을 때만, 그리고 재시도가
+  안전한 상태일 때만 가능하다. 해소 후 다시 실행하려면 **새 key**를 쓴다.
+- 재시도 상한을 넘긴 command는 자동으로 `MANUAL_REVIEW`로 전이한다. 이 전이는 요청을 실패시키는
+  transaction 밖에서 commit해야 한다. 안에서 하면 예외와 함께 롤백돼 상태가 영원히 재시도 가능으로
+  남는다.
+
 ## Alternatives Considered
 
 ### 1. 처음부터 Elasticsearch
@@ -283,6 +332,29 @@ scheduled method가 같은 객체의 transactional method를 직접 호출해 pr
 - 장점: 매칭 경로가 하나라 구현과 테스트가 단순하다.
 - 단점: `"스타"`처럼 짧은 입력이 `"스타벅스 강남역점"` 같은 긴 이름과 유사도가 낮게 나와
   **정확한 부분 검색이 오히려 실패한다.** substring 우선 + 유사도 보완의 하이브리드를 선택한다.
+
+### 9. 한글 오타 구제를 위한 자모 분해 색인 (2026-08-15 Milestone 5, 후속 과제로 등록)
+
+Milestone 5 구현에서 **A2의 유사도 보완이 한글 짧은 상호에는 사실상 발동하지 않는다**는 것이
+측정됐다. `스타벅스 강남점`과 오타 `스타박스`의 `similarity`가 임계값 `0.3`에 크게 못 미친다.
+한글은 한 글자가 한 문자라 4~8자 이름의 trigram 집합이 작고, 한 글자만 달라져도 겹치는 trigram이
+급감하기 때문이다. 라틴 표기 상호(`starbucks` ↔ `starbuks`)에서는 정상 동작한다.
+
+해소책은 `term_normalized`와 질의 토큰을 **자모로 분해한 파생 컬럼**을 하나 더 두고 그쪽에
+trigram 인덱스를 거는 것이다. `스타벅스`가 `ㅅㅡㅌㅏㅂㅓㄱㅅㅡ` 10자가 되어 trigram 수가 늘고
+한 글자 차이가 부분 차이로 바뀐다.
+
+이번 Amendment에서 채택하지 않는다.
+
+- 색인 스키마와 정규화 계약이 다시 바뀐다. MD-2026-015가 정한 "색인과 질의가 같은 함수"를
+  자모 분해까지 확장해야 하고, 분해 방식(호환 자모 vs 조합형, 종성 분리 규칙)이 새 결정이다.
+- 임계값을 낮추는 것으로 대신할 수 없다. 무관한 매장을 대량으로 끌어온다.
+- 오타 구제는 A2가 "원래 0건이던 검색만 구제한다"고 못박은 보조 경로이고, 지금도 substring
+  경로는 한글에서 완전히 동작한다. 즉 **검색이 깨진 것이 아니라 구제가 좁은 것**이다.
+
+이 한계는 숨기지 않는다. 아래 Revisit Condition으로 등록하고
+[ExecPlan 70](../exec-plans/completed/productization-70-customer-store-discovery.md)의 Non-goals에
+명시한다.
 
 ## Rationale
 
@@ -349,8 +421,45 @@ PostgreSQL 17 + `pg_trgm` 위에서 A2~A7을 측정했다.
 - **개인정보.** 검색이 AuditRecord와 도메인 이벤트를 만들지 않는 것을 실제 행 수로 확인했고,
   어떤 metric 태그에도 검색어가 남지 않는 것을 태그 값 전수 검사로 확인했다.
 
-`Not run`: `EXPLAIN (ANALYZE, BUFFERS)` 실행계획 evidence(Milestone 12), 픽업 가용성 필터와 그
-scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone은 컨트롤러를 붙이지 않았다.
+후속 증빙: M6의 픽업 가용성·scan-boundary 계약은 아래 절에, M12의 V59 GIN·V57 favorite·V63
+recent 전후 실행계획은 [Customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md)에
+기록했다.
+
+### Milestone 6 implementation evidence (2026-08-15) — 픽업 가용성 batch와 scan boundary
+
+`PickupAvailabilityQueryTest`, `NearbyStoreDiscoveryIntegrationTest`,
+`NearbyStoreDiscoveryValidationTest`와 `StoreSearchQueryIntegrationTest`가 PostgreSQL 17 위에서
+측정했다.
+
+- **batch statement 수.** `PickupAvailabilityQueryOperations.findStoresWithAvailableSlots`가
+  후보 1개일 때도 6개(그중 한 매장은 슬롯 61개)일 때도 statement **1개**를 썼다. 같은 매장 id를
+  중복해 넘겨도 1개였고, 빈 후보 목록은 DB에 닿지 않아 0개였다. `store_id = ANY(?::uuid[])`와
+  `GROUP BY store_id`라 SQL 문자열이 후보 수와 무관하게 고정이다.
+- **판정의 경계.** 예약 가능 슬롯이 있는 매장만 가용으로 나왔다. 만석, 이미 시작한 슬롯,
+  `startsAt`이 정확히 `now`인 슬롯, 7일 창 밖 슬롯, 슬롯 없음은 모두 불가였다. 하한
+  `startsAt > now`는 `PickupSlotQueryOperations.listOpenSlots`가 쓰는 예약 가능 경계와 같다.
+- **손상 counter는 503.** `capacity - reserved - confirmed < 0`인 슬롯을 가진 매장이 후보에
+  하나라도 있으면 그 매장만 빠지는 것이 아니라 batch 전체가 `DEPENDENCY_UNAVAILABLE`이다.
+  나머지 후보가 정상이어서 그럴듯한 page가 나올 수 있는 상황에서도 그렇다. DB `CHECK`가 그 행을
+  막고 있어 제약을 잠시 내리고 확인한 뒤 되돌렸다.
+- **`pickupAvailable`은 AND.** 슬롯이 있어도 `pickupEnabled=false`인 매장은 `false`, 슬롯이 없는
+  매장도 `false`, 둘 다 만족해야 `true`였다. 검색 후보 질의의 필드 이름을 `pickupCapable`로 바꿔
+  SQL이 아는 절반임을 드러냈다(MD-2026-027).
+- **nearby 의미 통일.** `merchant`의 `NearbyStoreProfileProjection`에서 `pickupAvailable`을
+  삭제하고 `discovery`가 batch 결과로 채운다. 개정 전에는 nearby가 `acceptingOrders &&
+  pickupEnabled`인 매장만 반환했으므로 이 값이 언제나 `true`였고, 기존 통합 테스트의 단언 하나가
+  실제로 뒤집혔다. nearby의 소유자 상태 hard filter 자체는 유지한다(MD-2026-026).
+- **scan boundary.** 두 endpoint가 같은 `scanCandidates` 함수를 쓴다. 후보 6개 중 첫·마지막만
+  가용한 fixture를 `limit=2`로 넘겼을 때 둘 다 3쪽에 정확히 두 매장을 누락·중복 없이 반환했다.
+  가운데 쪽은 빈 배열과 `nextCursor`를 함께 냈다. 가용 매장이 마지막 하나뿐인 fixture에서는
+  첫 page가 빈 배열 + cursor, 다음 page가 그 매장이었다. 매 page가 정확히 `limit`개의 후보를
+  검사하므로 불가 매장이 길게 이어져도 scan이 전진한다.
+- **cursor.** `pickupAvailable`이 두 endpoint의 filter hash에 들어가, 필터를 켜기 전에 발급된
+  cursor는 400이다. nearby의 canonical form 개정은 ADR-070 2026-08-15 nearby amendment다.
+
+M12의 V59 GIN·V57 favorite·V63 recent 전후 실행계획은
+[Customer store discovery query plan evidence](../quality/customer-store-discovery-query-performance-evidence.md)에
+기록했다.
 
 ## Metrics
 
@@ -366,6 +475,10 @@ scan-boundary cursor 계약(Milestone 6). 후자가 없으므로 이 Milestone�
 
 - 매장 수 또는 메뉴 수가 늘어 `pg_trgm` 조회가 목표 지연을 만족하지 못한다고 측정될 때
 - 검색어 자동완성·오타 교정이 실제 요구가 될 때
+- **한글 상호의 오타 검색이 실제 요구로 확인될 때.** Milestone 5에서 A2의 유사도 보완이 한글
+  짧은 이름에는 발동하지 않는 것을 측정했다(위 Alternatives 9). 자모 분해 색인이 해소책이며
+  색인 스키마와 정규화 계약 개정을 동반한다. 0건 검색 비율과
+  `beanflow.discovery.search.empty`가 이 요구를 드러내는 신호다
 - 실제 사용자 행동 데이터가 쌓여 추천 규칙을 비교 평가할 수 있을 때
 
 ## Related Decisions

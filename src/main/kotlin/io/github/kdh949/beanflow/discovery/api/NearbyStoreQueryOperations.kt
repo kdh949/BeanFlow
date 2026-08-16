@@ -28,6 +28,7 @@ data class SearchNearbyStoresCommand(
     val latitude: String?,
     val longitude: String?,
     val radiusMeters: String?,
+    val pickupAvailable: String?,
     val cursor: String?,
     val limit: String?,
     val now: Instant,
@@ -41,6 +42,11 @@ data class NearbyStorePage(
 /**
  * One public nearby result. [distanceMeters] is the floored integer-meter display value of the
  * canonical micrometer distance and is never reused as a pagination key.
+ *
+ * [pickupAvailable] is the Fulfillment batch judgement — a reservable slot exists inside the
+ * seven-day window — and means exactly what the same field means on `GET /stores/search`
+ * (ADR-103 2026-08-15 Amendment). It is a read-time projection, so a concurrent order can consume
+ * the last seat immediately afterwards.
  */
 data class NearbyStoreView(
     val storeId: UUID,

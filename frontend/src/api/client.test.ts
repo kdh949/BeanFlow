@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "./client";
+import { api, ApiRequestError, customerCsrfToken, SubmissionIntent, idempotencyKey, unwrap } from "./client";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
 });
 
 describe("API client helpers", () => {
@@ -27,6 +28,14 @@ describe("API client helpers", () => {
     expect(idempotencyKey("payment.order-1")).toBe("00000000-0000-4000-8000-000000000001");
     expect(idempotencyKey("payment.order-1")).toBe("00000000-0000-4000-8000-000000000001");
     expect(idempotencyKey("payment.order-2")).toBe("00000000-0000-4000-8000-000000000002");
+  });
+
+  it("issues and reads the customer CSRF token without persisting it", async () => {
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    const get = vi.spyOn(api, "GET").mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
+
+    await expect(customerCsrfToken()).resolves.toBe("customer-csrf-token");
+    expect(get).toHaveBeenCalledWith("/auth/customer/csrf");
   });
 
   it("reuses an intent key while the same request is unresolved", () => {

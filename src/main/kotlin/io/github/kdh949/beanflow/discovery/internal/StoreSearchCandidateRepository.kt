@@ -47,7 +47,15 @@ internal data class StoreSearchCandidate(
     val relevanceRank: Long,
     val distanceMicrometers: Long,
     val open: Boolean,
-    val pickupAvailable: Boolean,
+    /**
+     * `acceptingOrders && pickupEnabled` — the owner half of `pickupAvailable` and exactly what the
+     * `openOnly` filter matches (ADR-103 A6).
+     *
+     * The public `pickupAvailable` is this conjoined with Fulfillment's slot-existence answer. The
+     * field is deliberately not called `pickupAvailable`: this query cannot see slots, and naming
+     * it after the public flag is how the weaker meaning reached the response before Milestone 6.
+     */
+    val pickupCapable: Boolean,
     val matchedKinds: Set<StoreSearchTermKind>,
 )
 
@@ -406,7 +414,7 @@ internal class StoreSearchCandidateRepository(
                     relevanceRank = row.getLong("relevance_rank"),
                     distanceMicrometers = row.getLong("distance_micrometers"),
                     open = acceptingOrders,
-                    pickupAvailable = acceptingOrders && row.getBoolean("pickup_enabled"),
+                    pickupCapable = acceptingOrders && row.getBoolean("pickup_enabled"),
                     matchedKinds =
                         (row.getArray("kinds").array as Array<*>)
                             .map { StoreSearchTermKind.valueOf(it as String) }

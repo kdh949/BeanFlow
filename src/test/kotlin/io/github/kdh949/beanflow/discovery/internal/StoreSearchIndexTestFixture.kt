@@ -7,6 +7,9 @@ import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
+import java.sql.Timestamp
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -22,10 +25,41 @@ internal class StoreSearchIndexTestFixture(
     private val transactions: TransactionTemplate,
 ) {
     fun clear() {
+        jdbc.update("DELETE FROM discovery_customer_favorite_store")
         jdbc.update("DELETE FROM discovery_store_search_term")
+        jdbc.update("DELETE FROM fulfillment_pickup_slot")
         jdbc.update("DELETE FROM merchant_menu")
         jdbc.update("DELETE FROM merchant_store_discovery_profile")
         jdbc.update("DELETE FROM merchant_store")
+    }
+
+    /**
+     * One pickup slot for [storeId]. The default is reservable inside the seven-day window, which
+     * is what makes the public `pickupAvailable` flag true (ADR-103 2026-08-15 Amendment).
+     */
+    fun indexPickupSlot(
+        storeId: UUID,
+        now: Instant,
+        startsIn: Duration = Duration.ofDays(1),
+        capacity: Long = 4,
+        reserved: Long = 0,
+        confirmed: Long = 0,
+    ) {
+        val startsAt = now.plus(startsIn)
+        jdbc.update(
+            """
+            INSERT INTO fulfillment_pickup_slot (
+                id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            storeId,
+            Timestamp.from(startsAt),
+            Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
+            capacity,
+            reserved,
+            confirmed,
+        )
     }
 
     fun indexStore(
@@ -55,6 +89,22 @@ internal class StoreSearchIndexTestFixture(
             longitude,
             latitude,
         )
+        // V59 constrains MENU_NAME terms with a composite FK to merchant_menu(id, store_id), so a
+        // menu term can only exist for a menu row this store actually owns.
+        val menuIds =
+            menus.map { menu ->
+                UUID.randomUUID().also { menuId ->
+                    jdbc.update(
+                        """
+                        INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
+                        VALUES (?, ?, ?, 4500, true, 0)
+                        """.trimIndent(),
+                        menuId,
+                        storeId,
+                        menu,
+                    )
+                }
+            }
         transactions.executeWithoutResult {
             index.replaceStoreTerms(
                 ReplaceStoreSearchTermsCommand(
@@ -62,8 +112,8 @@ internal class StoreSearchIndexTestFixture(
                     setOf(StoreSearchTermKind.STORE_NAME, StoreSearchTermKind.MENU_NAME),
                     buildList {
                         add(StoreSearchTermEntry(StoreSearchTermKind.STORE_NAME, name))
-                        menus.forEach { menu ->
-                            add(StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, menu, UUID.randomUUID()))
+                        menus.forEachIndexed { position, menu ->
+                            add(StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, menu, menuIds[position]))
                         }
                     },
                 ),

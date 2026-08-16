@@ -67,7 +67,23 @@ export const Loading: Story = {
 export const SuccessfulRefundInteraction: Story = {
   tags: ["!autodocs"],
   parameters: {
-    msw: { handlers: [http.post("/api/v1/payments/:paymentId/refunds", () => HttpResponse.json(refund("SUCCEEDED"), { status: 201 }))] },
+    msw: {
+      handlers: [
+        http.get("/api/v1/auth/merchant/csrf", () => new HttpResponse(null, { status: 204 })),
+        http.post("/api/v1/payments/:paymentId/refunds", ({ request }) => {
+          if (request.headers.get("X-BEANFLOW-CSRF") !== "merchant-csrf-token") {
+            return HttpResponse.json({ code: "CSRF_TOKEN_INVALID", message: "CSRF token is required." }, { status: 403 });
+          }
+          return HttpResponse.json(refund("SUCCEEDED"), { status: 201 });
+        }),
+      ],
+    },
+  },
+  beforeEach: () => {
+    document.cookie = "BEANFLOW_MERCHANT_XSRF=merchant-csrf-token; path=/";
+    return () => {
+      document.cookie = "BEANFLOW_MERCHANT_XSRF=; Max-Age=0; path=/";
+    };
   },
   play: async ({ canvas }) => {
     await submitFullRefund(canvas);

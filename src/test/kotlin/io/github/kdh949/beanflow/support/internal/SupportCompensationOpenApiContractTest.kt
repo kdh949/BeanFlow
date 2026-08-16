@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -21,8 +22,9 @@ internal class SupportCompensationOpenApiContractTest {
             )
 
         operations.forEach { (path, operationId) ->
-            assertThat(pathItem(target, path))
-                .contains("operationId: $operationId", "Cache-Control", "\"403\"", "\"503\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("operationId: $operationId", "Cache-Control")
+            assertOpenApiResponseStatuses(operation, 403, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
         setOf(
@@ -30,7 +32,9 @@ internal class SupportCompensationOpenApiContractTest {
             "/support/compensations/{compensationRequestId}/executions",
             "/support/compensations/{compensationRequestId}/notification-retries",
         ).forEach { path ->
-            assertThat(pathItem(target, path)).contains("#/components/parameters/IdempotencyKey", "\"409\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("#/components/parameters/IdempotencyKey")
+            assertOpenApiResponseStatuses(operation, 409)
         }
 
         listOf(
@@ -50,9 +54,9 @@ internal class SupportCompensationOpenApiContractTest {
             .contains("policyVersionId", "terminalBenefitId", "notificationState")
             .doesNotContain("customerId", "evidenceDigest", "costEvidenceDigest", "providerPayload")
         assertThat(pathItem(target, "/support/compensations/{compensationRequestId}/executions"))
-            .contains("rolling-window", "commit atomically", "Audit failure rolls the issuance back")
+            .contains("최근 기간 한도", "한 트랜잭션에서 함께 저장", "감사 기록 저장에 실패하면 혜택 지급도 취소합니다")
         assertThat(pathItem(target, "/support/compensations/{compensationRequestId}/notification-retries"))
-            .contains("never reissues Points or Coupons")
+            .contains("이미 발급된 포인트나 쿠폰을 다시 발급하지 않습니다")
     }
 
     private fun pathItem(

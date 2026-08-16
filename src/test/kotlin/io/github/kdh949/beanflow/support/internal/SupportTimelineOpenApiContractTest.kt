@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
+import io.github.kdh949.beanflow.architecture.assertOpenApiTag
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -18,9 +20,12 @@ internal class SupportTimelineOpenApiContractTest {
             )
 
         operations.forEach { (path, operationId) ->
-            assertThat(pathItem(target, path))
+            val operation = pathItem(target, path)
+            assertThat(operation)
                 .describedAs("OpenAPI path item %s", path)
-                .contains("tags: [Support]", "operationId: $operationId", "Cache-Control", "\"503\"")
+                .contains("operationId: $operationId", "Cache-Control")
+            assertOpenApiTag(operation, "Support")
+            assertOpenApiResponseStatuses(operation, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
 

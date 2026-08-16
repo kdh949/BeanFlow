@@ -64,6 +64,7 @@
 - [Settlement Lifecycle Quality Evidence](quality/settlement-lifecycle-release-evidence.md)
 - [Audited Loyalty Point Adjustment Release Evidence](quality/loyalty-point-adjustment-release-evidence.md)
 - [Nearby Store Query Plan Evidence](quality/nearby-store-discovery-performance-evidence.md)
+- [Customer Store Discovery Query Plan Evidence](quality/customer-store-discovery-query-performance-evidence.md)
 - [Code Review Guide](review/code-review.md)
 - [Support Repository Audit](quality/support-repository-audit-2026-08-10.md)
 - [Support Planned Test Strategy](testing/support-test-strategy.md)
@@ -71,6 +72,7 @@
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
+- [Store Keyword Search Runbook](operations/store-keyword-search-runbook.md)
 - [Local Demo Runbook](operations/local-demo-runbook.md)
 
 ## Execution Plans
@@ -83,7 +85,7 @@
 - [Productization 40 Merchant Account and Initial Password](exec-plans/completed/productization-40-merchant-account-and-initial-password.md)
 - [Productization 50 Customer Order Read Model](exec-plans/completed/productization-50-customer-order-read-model.md)
 - [Productization 60 Store Order Board](exec-plans/completed/productization-60-store-order-board.md)
-- [Productization 70 Customer Store Discovery](exec-plans/active/productization-70-customer-store-discovery.md)
+- [Productization 70 Customer Store Discovery](exec-plans/completed/productization-70-customer-store-discovery.md)
 - [Productization 80 Customer Web P0 Integration](exec-plans/active/productization-80-customer-web-p0-integration.md)
 - [Productization 90 Merchant Financial Workflows](exec-plans/active/productization-90-merchant-financial-workflows.md)
 - [Productization 100 Operations Work Queues](exec-plans/active/productization-100-operations-work-queues.md)
@@ -131,6 +133,7 @@
 - [Settlement Lifecycle and Dispute Runbook](operations/settlement-lifecycle-and-dispute-runbook.md)
 - [Audited Loyalty Point Adjustment Runbook](operations/loyalty-point-adjustment-runbook.md)
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
+- [Store Keyword Search Runbook](operations/store-keyword-search-runbook.md)
 - [Local Demo Runbook](operations/local-demo-runbook.md)
 - [Support Planned Operational Procedures](operations/support-planned-operational-procedures.md)
 - [Planned Support Observability](operations/observability.md)

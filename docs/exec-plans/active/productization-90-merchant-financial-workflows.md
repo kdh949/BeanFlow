@@ -220,10 +220,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 이 plan의 첫 milestone로 남는다. 이 plan 자체는 migration writer lease를 요구하지 않는다.
 
 - 2026-08-15: runtime OpenAPI는 Merchant Chain의 legacy `POST /payments/{paymentId}/refunds`에
-  `X-BEANFLOW-CSRF`를 요구하지만, `ConsolePages`의 UUID refund form은 `Idempotency-Key`만 보내
-  frontend typecheck/build를 실패시킨다. 사용자 선택 A에 따라 이 보정은 완료된 Plan 60에 one-off header로
-  넣지 않고, 이 plan의 Merchant financial Session/CSRF client 및 UUID form 교체 milestone에서 함께 처리한다.
-  구현은 여전히 시작하지 않았다.
+  `X-BEANFLOW-CSRF`를 요구했고, 당시 `ConsolePages`의 UUID refund form은 `Idempotency-Key`만 보내
+  frontend typecheck/build를 실패시켰다. 이 known failure는 temporary baseline으로 추적했다.
+- 2026-08-16: PR #74가 shared `merchantCsrfToken()` helper와 refund header를 추가해 typecheck를 clean하게
+  만들었고 baseline과 그 CI step을 제거했다. 이는 Merchant financial client·UUID form 교체 milestone을
+  시작하거나 완료했다는 뜻은 아니다.
 
 ## Surprises & Discoveries
 

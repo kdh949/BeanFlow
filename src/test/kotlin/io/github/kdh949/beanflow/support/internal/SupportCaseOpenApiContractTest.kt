@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
+import io.github.kdh949.beanflow.architecture.assertOpenApiTag
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -27,7 +29,9 @@ internal class SupportCaseOpenApiContractTest {
             val operation = pathItem(target, path)
             assertThat(operation)
                 .describedAs("OpenAPI path item %s", path)
-                .contains("tags: [Support]", "Cache-Control", "\"503\"")
+                .contains("Cache-Control")
+            assertOpenApiTag(operation, "Support")
+            assertOpenApiResponseStatuses(operation, 503)
             operationIds.forEach { operationId -> assertThat(operation).contains("operationId: $operationId") }
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
@@ -53,7 +57,7 @@ internal class SupportCaseOpenApiContractTest {
         }
 
         assertThat(pathItem(target, "/support/cases/{caseId}/status-transitions"))
-            .contains("OPEN→IN_PROGRESS", "RESOLVED→CLOSED", "CLOSED is terminal")
+            .contains("OPEN→IN_PROGRESS", "RESOLVED→CLOSED", "CLOSED는 종결 상태")
         assertThat(schema(target, "AppendSupportNoteRequest"))
             .contains("successful response never returns content")
         assertThat(schema(target, "SupportSubjectLink")).doesNotContain("nullable: true")

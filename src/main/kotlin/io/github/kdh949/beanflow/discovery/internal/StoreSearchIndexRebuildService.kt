@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.merchant.api.StoreSearchTermSourceQuery
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.ReplaceStoreSearchTermsCommand
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
+import io.github.kdh949.beanflow.shared.api.StoreSearchIndexRebuildOperations
+import io.github.kdh949.beanflow.shared.api.StoreSearchIndexRebuildResult
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import io.micrometer.core.instrument.MeterRegistry
@@ -13,22 +15,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
-
-/**
- * What one rebuild pass did.
- *
- * Failures are reported as store ids rather than a count so that a partial rebuild can never be
- * read as a complete one, and so the operator command added later can name what to retry.
- */
-internal data class StoreSearchIndexRebuildResult(
-    val targetStoreCount: Int,
-    val indexedStoreCount: Int,
-    val skippedStoreCount: Int,
-    val failedStoreIds: List<UUID>,
-) {
-    /** True only when every store id in this pass's initial target snapshot succeeded. */
-    val completeSnapshot: Boolean get() = failedStoreIds.isEmpty()
-}
 
 /**
  * Rebuilds the search index from the stores and menus Merchant currently holds.
@@ -48,10 +34,15 @@ internal class StoreSearchIndexRebuildService(
     private val storeRebuild: StoreSearchIndexStoreRebuild,
     private val metrics: StoreSearchIndexUpdateMetrics,
     private val properties: StoreSearchIndexRebuildProperties,
-) {
+) : StoreSearchIndexRebuildOperations {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun rebuildAll(): StoreSearchIndexRebuildResult {
+    /**
+     * The target ids are snapshotted before the first chunk. A UUID keyset walk would silently skip
+     * a store inserted below the boundary while the pass runs and still report a complete rebuild,
+     * so completeness is defined against this snapshot rather than against the live table.
+     */
+    override fun rebuildAll(): StoreSearchIndexRebuildResult {
         val targetStoreIds = sources.findRebuildTargetStoreIds()
         var indexed = 0
         var skipped = 0

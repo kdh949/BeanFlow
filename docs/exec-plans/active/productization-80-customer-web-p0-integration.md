@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-50-customer-order-read-model.md`, `docs/exec-plans/active/productization-70-customer-store-discovery.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-30-customer-account-and-login.md`, `docs/exec-plans/completed/productization-50-customer-order-read-model.md`, `docs/exec-plans/completed/productization-70-customer-store-discovery.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -240,10 +240,11 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 아직 시작하지 않았다. 모든 선행 backend plan의 runtime OpenAPI가 완료된 뒤 준비 상태를 전환한다.
 
 - 2026-08-15: runtime OpenAPI가 `CustomerPages`의 payment-attempt·payment-confirmation POST에
-  `X-BEANFLOW-CSRF`를 요구함을 frontend typecheck/build에서 확인했다. 사용자 선택 A에 따라 이
-  consumer 보정은 완료된 Plan 60에 선반영하지 않고, 이 plan의 Customer Session/CSRF client milestone에서
-  공통 client와 두 call site를 함께 전환한다. Plan 70 dependency가 아직 active이므로 구현은 시작하지 않았고,
-  그때까지 frontend 전체 typecheck/build는 이 두 건과 Plan 90 소유 한 건으로 실패한다.
+  `X-BEANFLOW-CSRF`를 요구함을 frontend typecheck/build에서 확인했다. 당시에는 Plan 70 dependency가
+  아직 active여서 implementation을 시작하지 않았고, 세 consumer 누락을 temporary baseline으로만 추적했다.
+- 2026-08-16: PR #74가 shared `customerCsrfToken()` helper와 두 customer header를 추가해 세 consumer
+  누락을 모두 해소했다. `npm run typecheck`은 clean이며 baseline과 그 CI step은 제거했다. 이는 Plan 80의
+  actor별 API client 분리·Session route·P0 화면 milestone을 시작하거나 완료했다는 뜻은 아니다.
 
 ## Surprises & Discoveries
 

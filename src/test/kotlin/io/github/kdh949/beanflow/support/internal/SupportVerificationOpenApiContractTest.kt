@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
+import io.github.kdh949.beanflow.architecture.assertOpenApiTag
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -30,7 +32,9 @@ internal class SupportVerificationOpenApiContractTest {
             val operation = pathItem(target, path)
             assertThat(operation)
                 .describedAs("OpenAPI path item %s", path)
-                .contains("tags: [Support]", "operationId: $operationId", "Cache-Control", "\"503\"")
+                .contains("operationId: $operationId", "Cache-Control")
+            assertOpenApiTag(operation, "Support")
+            assertOpenApiResponseStatuses(operation, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
 
@@ -69,9 +73,9 @@ internal class SupportVerificationOpenApiContractTest {
             .contains("additionalProperties: false")
             .doesNotContain("secret", "password", "token")
         assertThat(pathItem(target, "/support/data-access-grants/{grantId}/reveals"))
-            .contains("Audit record and reveal-attempt reservation commit before owner decryption")
+            .contains("owner 측 복호화 전에 Audit 기록과 reveal 시도 예약을 먼저 commit합니다")
         assertThat(pathItem(target, "/support/break-glass-requests/{requestId}/reveals"))
-            .contains("mandatory post-review")
+            .contains("필수 사후 검토(post-review) 상태")
     }
 
     private fun pathItem(

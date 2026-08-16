@@ -40,6 +40,7 @@ internal class NearbyStoreQueryController(
         @RequestParam(required = false) latitude: String?,
         @RequestParam(required = false) longitude: String?,
         @RequestParam(required = false) radiusMeters: String?,
+        @RequestParam(required = false) pickupAvailable: String?,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) limit: String?,
     ): NearbyStorePageResponse =
@@ -49,6 +50,7 @@ internal class NearbyStoreQueryController(
                     latitude = latitude,
                     longitude = longitude,
                     radiusMeters = radiusMeters,
+                    pickupAvailable = pickupAvailable,
                     cursor = cursor,
                     limit = limit,
                     now = clock.instant(),

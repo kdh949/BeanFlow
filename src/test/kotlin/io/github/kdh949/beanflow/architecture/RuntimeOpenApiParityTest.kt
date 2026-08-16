@@ -1,7 +1,11 @@
 package io.github.kdh949.beanflow.architecture
 
+import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
+import io.github.kdh949.beanflow.discovery.api.RecentStoreOperations
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
+import io.github.kdh949.beanflow.discovery.api.StoreRecommendationOperations
+import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
@@ -17,6 +21,7 @@ import io.github.kdh949.beanflow.operations.internal.CustomerCancellationRefundR
 import io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationService
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.operations.internal.OperatorBrandService
+import io.github.kdh949.beanflow.operations.internal.OperatorSearchIndexRebuildService
 import io.github.kdh949.beanflow.operations.internal.OrdinaryPointAccrualPolicyService
 import io.github.kdh949.beanflow.operations.internal.PaymentSetupRepairService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -121,6 +126,9 @@ internal class RuntimeOpenApiParityTest(
     private lateinit var operatorBrandService: OperatorBrandService
 
     @MockitoBean
+    private lateinit var operatorSearchIndexRebuildService: OperatorSearchIndexRebuildService
+
+    @MockitoBean
     private lateinit var regionCatalogService: RegionCatalogService
 
     @MockitoBean
@@ -137,6 +145,18 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var nearbyStoreQueryOperations: NearbyStoreQueryOperations
+
+    @MockitoBean
+    private lateinit var favoriteStoreOperations: FavoriteStoreOperations
+
+    @MockitoBean
+    private lateinit var recentStoreOperations: RecentStoreOperations
+
+    @MockitoBean
+    private lateinit var storeRecommendationOperations: StoreRecommendationOperations
+
+    @MockitoBean
+    private lateinit var storeSearchQueryOperations: StoreSearchQueryOperations
 
     @MockitoBean
     private lateinit var storeCatalogQueryOperations: StoreCatalogQueryOperations

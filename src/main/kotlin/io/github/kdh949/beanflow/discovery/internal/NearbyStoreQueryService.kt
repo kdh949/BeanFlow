@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.discovery.api.NearbyStorePage
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreView
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
+import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileCursor
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
@@ -38,6 +39,8 @@ internal data class NearbyStoreSort(
 internal data class PreparedNearbyStorePage(
     val limit: Int,
     val query: NearbyStoreProfileQuery,
+    val pickupAvailableOnly: Boolean,
+    val now: Instant,
     val cursorScope: SignedCursorScope<NearbyStoreSort>,
     val cursorExpiresAt: Instant,
 )
@@ -76,7 +79,8 @@ internal class NearbyStoreQueryService(
 }
 
 /**
- * One read-only transaction around the Merchant public Query API.
+ * One read-only transaction around the Merchant public Query API and the Fulfillment availability
+ * batch.
  *
  * A spatial, extension or database failure becomes an explicit 503. It is never converted into an
  * empty successful page, a cached page or an application distance calculation.
@@ -84,6 +88,7 @@ internal class NearbyStoreQueryService(
 @Component
 internal class NearbyStoreReadTransaction(
     private val stores: StoreDiscoveryQueryOperations,
+    private val availability: PickupAvailabilityQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
     private val metrics: NearbyStoreQueryMetrics,
 ) {
@@ -97,19 +102,29 @@ internal class NearbyStoreReadTransaction(
             } catch (failure: PersistenceException) {
                 spatialUnavailable(failure)
             }
-        val items = fetched.take(prepared.limit).map(NearbyStoreProfileProjection::toView)
+        // 검사 대상은 probe row를 뺀 앞 limit개다. 가용성도 딱 그만큼만 묻는다.
+        val examined = fetched.take(prepared.limit)
+        val availableStoreIds =
+            availability.findStoresWithAvailableSlots(
+                examined.map(NearbyStoreProfileProjection::storeId),
+                prepared.now,
+            )
+        val scanned =
+            scanCandidates(fetched, prepared.limit) { candidate ->
+                !prepared.pickupAvailableOnly || candidate.storeId in availableStoreIds
+            }
         val nextCursor =
-            if (fetched.size > prepared.limit) {
-                val last = fetched[prepared.limit - 1]
+            scanned.boundary?.let { boundary ->
                 signedCursorCodec.issue(
                     prepared.cursorScope,
-                    NearbyStoreSort(last.distanceMicrometers, last.storeId),
+                    NearbyStoreSort(boundary.distanceMicrometers, boundary.storeId),
                     prepared.cursorExpiresAt,
                 )
-            } else {
-                null
             }
-        return NearbyStorePage(items, nextCursor)
+        return NearbyStorePage(
+            items = scanned.items.map { it.toView(pickupAvailable = it.storeId in availableStoreIds) },
+            nextCursor = nextCursor,
+        )
     }
 
     private fun spatialUnavailable(cause: Throwable): Nothing {
@@ -121,7 +136,7 @@ internal class NearbyStoreReadTransaction(
     }
 }
 
-internal fun NearbyStoreProfileProjection.toView(): NearbyStoreView =
+internal fun NearbyStoreProfileProjection.toView(pickupAvailable: Boolean): NearbyStoreView =
     NearbyStoreView(
         storeId = storeId,
         name = name,
@@ -144,6 +159,7 @@ internal class NearbyStoreQueryValidation(
 ) {
     fun prepare(command: SearchNearbyStoresCommand): PreparedNearbyStorePage {
         val limit = limit(command.limit)
+        val pickupAvailableOnly = flag(command.pickupAvailable, "pickupAvailable")
         val cursor = cursor(command.cursor)
         val latitude = coordinate(command.latitude, MIN_LATITUDE, MAX_LATITUDE, "Latitude")
         val longitude = coordinate(command.longitude, MIN_LONGITUDE, MAX_LONGITUDE, "Longitude")
@@ -151,7 +167,7 @@ internal class NearbyStoreQueryValidation(
         val scope =
             SignedCursorScope(
                 endpoint = CURSOR_ENDPOINT,
-                filterHash = filterHash(latitude, longitude, radiusMeters),
+                filterHash = filterHash(pickupAvailableOnly, latitude, longitude, radiusMeters),
                 sortAdapter = SORT_ADAPTER,
             )
         val after = cursor?.let { signedCursorCodec.verify(it, scope).sort }
@@ -166,10 +182,23 @@ internal class NearbyStoreQueryValidation(
                     // One extra row decides whether a next page exists without a second query.
                     limit = limit + 1,
                 ),
+            pickupAvailableOnly = pickupAvailableOnly,
+            now = command.now,
             cursorScope = scope,
             cursorExpiresAt = command.now.plus(CURSOR_TTL),
         )
     }
+
+    private fun flag(
+        raw: String?,
+        name: String,
+    ): Boolean =
+        when (raw) {
+            null -> false
+            "true" -> true
+            "false" -> false
+            else -> invalid("$name must be true or false")
+        }
 
     private fun limit(raw: String?): Int {
         if (raw == null) return DEFAULT_LIMIT
@@ -223,11 +252,16 @@ internal class NearbyStoreQueryValidation(
     }
 
     /**
-     * ADR-070 canonical filter binding. `37.5` and `37.5000` produce the same digest and the raw
-     * coordinate text never enters the token, so a cursor cannot be replayed against another
-     * radius and cannot be decoded back into the original request text.
+     * ADR-070 canonical filter binding, 2026-08-15 nearby amendment. `37.5` and `37.5000` produce
+     * the same digest and the raw coordinate text never enters the token, so a cursor cannot be
+     * replayed against another radius and cannot be decoded back into the original request text.
+     *
+     * `pickupAvailable` joins the digest because it now changes the result set. Without it a cursor
+     * issued before the filter was switched on would keep verifying and page over a different
+     * sequence of rows than the one it was cut from.
      */
     private fun filterHash(
+        pickupAvailableOnly: Boolean,
         latitude: BigDecimal,
         longitude: BigDecimal,
         radiusMeters: Int,
@@ -235,8 +269,9 @@ internal class NearbyStoreQueryValidation(
         val canonicalLatitude = canonicalDecimal(latitude)
         val canonicalLongitude = canonicalDecimal(longitude)
         val canonicalJson =
-            """{"endpoint":"$CURSOR_ENDPOINT","latitude":"$canonicalLatitude",""" +
-                """"longitude":"$canonicalLongitude","radiusMeters":$radiusMeters}"""
+            """{"endpoint":"$CURSOR_ENDPOINT","pickupAvailable":$pickupAvailableOnly,""" +
+                """"latitude":"$canonicalLatitude","longitude":"$canonicalLongitude",""" +
+                """"radiusMeters":$radiusMeters}"""
         return HexFormat
             .of()
             .formatHex(MessageDigest.getInstance("SHA-256").digest(canonicalJson.toByteArray(StandardCharsets.UTF_8)))
