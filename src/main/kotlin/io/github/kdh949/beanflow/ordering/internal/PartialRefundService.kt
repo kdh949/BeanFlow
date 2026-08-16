@@ -71,24 +71,6 @@ internal data class PreparedPartialRefund(
     val inProgress: Boolean = false,
 )
 
-private data class RequestedLineAllocation(
-    val line: RefundableOrderLineSnapshot,
-    val firstUnitIndex: Long,
-    val quantity: Long,
-    val grossKrw: Long,
-    val couponKrw: Long,
-    val pointsKrw: Long,
-    val cashKrw: Long,
-)
-
-private data class UnitAllocation(
-    val grossKrw: Long,
-    val couponKrw: Long,
-    val pointsKrw: Long,
-) {
-    val cashKrw: Long = grossKrw - couponKrw - pointsKrw
-}
-
 @Service
 internal class PartialRefundService(
     private val preparation: PartialRefundPreparationTransaction,
@@ -222,80 +204,16 @@ internal class PartialRefundPreparationTransaction(
         commandLines: List<PartialRefundLineInput>?,
         allLines: List<RefundableOrderLineSnapshot>,
         consumed: Map<UUID, Long>,
-    ): List<RequestedLineAllocation> {
-        val inputById = commandLines?.associateBy { it.orderLineId }
+    ): List<RefundLineAllocation> {
+        val inputById = commandLines?.associate { it.orderLineId to it.quantity }
         if (commandLines != null && inputById!!.size != commandLines.size) {
             fail(FailureCode.INVALID_REQUEST, "Refund OrderLine IDs must be unique")
         }
-        if (inputById != null && inputById.keys.any { id -> allLines.none { it.orderLineId == id } }) {
-            fail(FailureCode.INVALID_REQUEST, "Refund contains an OrderLine from another order")
-        }
-        return allLines.mapNotNull { line ->
-            val first = consumed[line.orderLineId] ?: 0L
-            if (first > line.quantity) {
-                fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Successful Refund quantity exceeds OrderLine snapshot")
-            }
-            val remaining = line.quantity - first
-            val requested = inputById?.get(line.orderLineId)?.quantity ?: remaining.takeIf { inputById == null } ?: 0L
-            if (requested == 0L) return@mapNotNull null
-            if (requested < 1 || requested > remaining) {
-                fail(FailureCode.ORDER_STATE_CONFLICT, "Refund quantity exceeds remaining OrderLine units")
-            }
-            val units = allocateUnits(line).subList(first.toInt(), Math.addExact(first, requested).toInt())
-            RequestedLineAllocation(
-                line = line,
-                firstUnitIndex = first,
-                quantity = requested,
-                grossKrw = units.sumOf { it.grossKrw },
-                couponKrw = units.sumOf { it.couponKrw },
-                pointsKrw = units.sumOf { it.pointsKrw },
-                cashKrw = units.sumOf { it.cashKrw },
-            )
-        }
-    }
-
-    private fun allocateUnits(line: RefundableOrderLineSnapshot): List<UnitAllocation> {
-        if (line.quantity > Int.MAX_VALUE) fail(FailureCode.INVALID_REQUEST, "OrderLine quantity is too large")
-        if (Math.multiplyExact(line.unitPriceKrw, line.quantity) != line.grossKrw) {
-            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine gross snapshot is inconsistent")
-        }
-        val quantity = line.quantity.toInt()
-        val couponBase = line.couponDiscountKrw / quantity
-        val couponRemainder = (line.couponDiscountKrw % quantity).toInt()
-        val coupons = List(quantity) { index -> couponBase + if (index < couponRemainder) 1 else 0 }
-        val balances = coupons.map { line.unitPriceKrw - it }
-        val balanceTotal = balances.sum()
-        if (balanceTotal < line.pointsAppliedKrw) {
-            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine points exceed its post-coupon balance")
-        }
-        val points = LongArray(quantity)
-        if (line.pointsAppliedKrw > 0) {
-            balances.forEachIndexed { index, balance ->
-                points[index] = Math.multiplyExact(line.pointsAppliedKrw, balance) / balanceTotal
-            }
-            var remainder = line.pointsAppliedKrw - points.sum()
-            balances.indices.sortedWith(compareByDescending<Int> { balances[it] }.thenBy { it }).forEach { index ->
-                if (remainder > 0 && points[index] < balances[index]) {
-                    points[index]++
-                    remainder--
-                }
-            }
-            if (remainder != 0L) fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine point remainder did not tie out")
-        }
-        return balances.indices
-            .map { index -> UnitAllocation(line.unitPriceKrw, coupons[index], points[index]) }
-            .also { units ->
-                if (units.sumOf { it.couponKrw } != line.couponDiscountKrw ||
-                    units.sumOf { it.pointsKrw } != line.pointsAppliedKrw ||
-                    units.sumOf { it.cashKrw } != line.cashPayableKrw
-                ) {
-                    fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine unit allocation did not tie out")
-                }
-            }
+        return RefundAllocationCalculator.allocate(allLines, consumed, inputById)
     }
 
     private fun pointRequests(
-        lines: List<RequestedLineAllocation>,
+        lines: List<RefundLineAllocation>,
         sources: List<PartialRefundPointSourceAllocation>,
         consumed: Map<UUID, Long>,
     ): List<PartialRefundPointRequestSnapshot> {
@@ -338,7 +256,7 @@ internal class PartialRefundPreparationTransaction(
         return requests
     }
 
-    private fun RequestedLineAllocation.toPaymentSnapshot() =
+    private fun RefundLineAllocation.toPaymentSnapshot() =
         PartialRefundLineRequestSnapshot(
             orderLineId = line.orderLineId,
             lineSequence = line.lineSequence,

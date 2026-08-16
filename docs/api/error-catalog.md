@@ -44,7 +44,8 @@
 | PAYMENT_REFUND_EXCEEDED | 409 | No | 누적 환불이 승인액 초과 |
 | PAYMENT_REFUND_UNRESOLVED | 409 | Yes, after refund reaches a definitive state | 선행 환불이 진행·재시도 대기·결과 불명·수동 검토 상태라 새 고객 취소 환불액을 안전하게 확정할 수 없음 |
 | REFUND_PREVIEW_STALE | 409 | Yes, fetch a new preview | preview 이후 Order·Payment·Refund watermark·잔여 unit·복원 policy version 중 하나가 바뀌어 실행 입력을 재검증할 수 없음 |
-| REFUND_OUTCOME_UNRESOLVED | 409 | Yes, after reconciliation | 미확정 Refund 때문에 새 점주 preview 또는 실행의 남은 승인액을 확정할 수 없음. 새 Provider 요청을 만들지 않음 |
+| REFUND_OUTCOME_UNRESOLVED | 409 | Yes, after reconciliation | 미확정 Refund 때문에 새 점주 preview 또는 실행의 남은 승인액을 확정할 수 없음. 새 Provider 요청을 만들지 않음. 같은 준비 transaction을 쓰는 legacy `POST /payments/{paymentId}/refunds`와 `POST /operations/payments/{paymentId}/refunds`도 같은 code를 반환함 |
+| REFUND_QUANTITY_UNAVAILABLE | 422 | Yes, fetch a new preview | 요청 수량이 해당 OrderLine의 잔여 환불 가능 unit을 초과함. 수량을 잔여분으로 줄이거나 0원으로 축소해 실행하지 않음 |
 | REPROCESSING_NOT_SAFE | 409 | No until integrity issue changes | 누락 Refund 제한 복구의 immutable snapshot·source·금액 guard 불충족 또는 S80에서 Payment lookup 외 owner step의 수동 재실행 요청 |
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |

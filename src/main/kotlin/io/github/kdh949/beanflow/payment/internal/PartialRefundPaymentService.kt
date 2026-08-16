@@ -77,7 +77,7 @@ internal class PartialRefundPaymentService(
             fail(FailureCode.ORDER_STATE_CONFLICT, "Payment is not an approved external payment")
         }
         if (refundRepository.findUnresolvedByPaymentId(payment.id).isNotEmpty()) {
-            fail(FailureCode.ORDER_STATE_CONFLICT, "Payment has an unresolved Refund")
+            fail(FailureCode.REFUND_OUTCOME_UNRESOLVED, "Payment has an unresolved Refund")
         }
         return PartialRefundPaymentLock.Ready(
             paymentId = payment.id,
@@ -111,7 +111,7 @@ internal class PartialRefundPaymentService(
             ),
         )?.let { fail(FailureCode.IDEMPOTENCY_REQUEST_IN_PROGRESS, "Refund request already exists") }
         if (refundRepository.findUnresolvedByPaymentId(payment.id).isNotEmpty()) {
-            fail(FailureCode.ORDER_STATE_CONFLICT, "Payment has an unresolved Refund")
+            fail(FailureCode.REFUND_OUTCOME_UNRESOLVED, "Payment has an unresolved Refund")
         }
         val cashRequested = command.lineRequests.sumOf { it.cashRefundKrw }
         val pointsRequested = command.lineRequests.sumOf { it.pointsRestorationKrw }
