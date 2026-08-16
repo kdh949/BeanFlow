@@ -2,7 +2,7 @@ import { AlertTriangle, CalendarDays, Clock3, PackageCheck, RefreshCw, Store } f
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
-import { merchantApi, merchantCsrfToken } from "../../api/consoleClient";
+import { merchantApi, merchantCsrfToken } from "../../api/merchantClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime } from "../../lib/format";

@@ -1125,6 +1125,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/orders/{orderReference}/refund-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a server-calculated line and quantity refund without side effects */
+        post: operations["previewStoreOrderRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/orders/{orderReference}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a refund from an exact fresh preview */
+        post: operations["refundStoreOrderByReference"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/orders/{orderId}/compensation": {
         parameters: {
             query?: never;
@@ -1959,6 +1993,23 @@ export interface paths {
          *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createSettlementDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List disputes filed for an owner-operated store */
+        get: operations["listStoreDisputes"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5694,6 +5745,58 @@ export interface components {
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason?: string;
         };
+        MerchantRefundSelection: {
+            lineSequence: number;
+            quantity: number;
+        };
+        /** @description 환불 preview 요청입니다. `lines`를 생략하면 아직 아무 품목도 고르지 않은 상태를 뜻하며, 응답은 환불 가능한 모든 품목과 잔여 수량만 담고 금액 합계는 0입니다. 생략은 전체 환불을 뜻하지 않습니다. 전체 잔여 환불도 모든 품목의 잔여 수량을 명시해야 합니다. */
+        MerchantRefundPreviewRequest: {
+            lines?: components["schemas"]["MerchantRefundSelection"][];
+        };
+        /** @description 환불 preview의 품목 한 줄입니다. 응답은 환불 가능한 모든 품목을 담으므로 고르지 않은 품목은 `selectedQuantity`가 0이고 금액도 0입니다. */
+        MerchantRefundPreviewLine: {
+            lineSequence: number;
+            menuName: string;
+            selectedQuantity: number;
+            remainingQuantity: number;
+            grossAttributionKrw: components["schemas"]["MoneyKrw"];
+            couponAttributionKrw: components["schemas"]["MoneyKrw"];
+            pointsRestorationKrw: components["schemas"]["MoneyKrw"];
+            cashRefundKrw: components["schemas"]["MoneyKrw"];
+        };
+        MerchantRefundTotals: {
+            grossAttributionKrw: components["schemas"]["MoneyKrw"];
+            couponAttributionKrw: components["schemas"]["MoneyKrw"];
+            pointsRestorationKrw: components["schemas"]["MoneyKrw"];
+            cashRefundKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+        };
+        MerchantRefundPreview: {
+            orderReference: string;
+            lines: components["schemas"]["MerchantRefundPreviewLine"][];
+            totals: components["schemas"]["MerchantRefundTotals"];
+            previewVersion: string;
+        };
+        MerchantRefundRequest: {
+            lines: components["schemas"]["MerchantRefundSelection"][];
+            previewVersion: string;
+            reason: string;
+        };
+        MerchantRefundResult: {
+            orderReference: string;
+            /** @enum {string} */
+            state: "REQUESTED" | "PROCESSING" | "RETRY_SCHEDULED" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            cashRefundRequestedKrw: components["schemas"]["MoneyKrw"];
+            pointsRestorationRequestedKrw: components["schemas"]["MoneyKrw"];
+            /** @enum {string} */
+            pointsRestorationState: "NOT_REQUIRED" | "REQUESTED" | "PROCESSING" | "SUCCEEDED" | "MANUAL_REVIEW";
+            cashRefundedKrw?: components["schemas"]["MoneyKrw"];
+            pointsRestoredKrw?: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+            correlationId: string;
+        };
         /**
          * @description 주문 보상에 실제로 사용한 쿠폰 또는 포인트 복원 정책의 버전 정보입니다.
          * @example {
@@ -6985,6 +7088,21 @@ export interface components {
             currency: components["schemas"]["Currency"];
             /** @description 이의제기가 접수된 시각입니다. */
             filedAt: components["schemas"]["DateTime"];
+        };
+        /** @description 점주가 자신의 이의제기 진행 상태를 확인하는 데 필요한 값만 담습니다. 내부 재처리 case, worker 오류와 접수자 자격증명은 포함하지 않습니다. */
+        MerchantDisputeSummary: {
+            disputeId: components["schemas"]["Identifier"];
+            settlementItemId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            state: "FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+            expectedAdjustmentKrw: components["schemas"]["SignedMoneyKrw"];
+            heldAmountKrw: components["schemas"]["MoneyKrw"];
+            filedAt: components["schemas"]["DateTime"];
+            decidedAt?: components["schemas"]["DateTime"];
+        };
+        MerchantDisputePage: {
+            items: components["schemas"]["MerchantDisputeSummary"][];
+            page: components["schemas"]["PageInfo"];
         };
         /** @enum {string} */
         ExactSearchCriterionType: "PHONE" | "EMAIL";
@@ -11594,6 +11712,101 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    previewStoreOrderRefund: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MerchantRefundPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Current preview; no Refund, Audit, Provider, or Loyalty write was made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantRefundPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    refundStoreOrderByReference: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MerchantRefundRequest"];
+            };
+        };
+        responses: {
+            /** @description Refund reached a definitive successful state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantRefundResult"];
+                };
+            };
+            /** @description Provider outcome is still processing, unknown, or reconciling */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantRefundResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getOrderCompensation: {
         parameters: {
             query?: never;
@@ -12749,6 +12962,40 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreDisputes: {
+        parameters: {
+            query?: {
+                /** @description 지정하면 해당 상태의 이의제기만 반환합니다. 생략하면 접수 시각 내림차순으로 모든 상태를 반환합니다. */
+                state?: "FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed-cursor dispute summary page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantDisputePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

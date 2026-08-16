@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError } from "../../api/client";
-import { merchantApi } from "../../api/consoleClient";
+import { merchantApi } from "../../api/merchantClient";
 import { StoreOrderBoardPage } from "./StoreOrderBoard";
 
 const gangnam = { storeId: "10000000-0000-4000-8000-000000000001", storeName: "강남 2호점", membershipRole: "OWNER" as const };

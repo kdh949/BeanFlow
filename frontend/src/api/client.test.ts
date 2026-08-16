@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "./client";
 import { customerApi, customerCsrfHeader, customerCsrfToken } from "./customerClient";
-import { merchantApi, operationsApi } from "./consoleClient";
+import { operationsApi } from "./consoleClient";
+import { merchantApi, merchantCsrfHeader } from "./merchantClient";
 import { authToken } from "../auth/session";
 
 function clearCsrfCookie() {
   document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
+  document.cookie = "BEANFLOW_MERCHANT_XSRF=; Max-Age=0; path=/";
 }
 
 afterEach(() => {
@@ -123,16 +125,54 @@ describe("customer client credential boundary", () => {
     expect(unsafeRequest.headers.get("X-BEANFLOW-CSRF")).toBe("customer-csrf-token");
   });
 
-  it("keeps console clients on Bearer credentials", async () => {
+  it("keeps the operations console on Bearer credentials", async () => {
     authToken.set("operator-access-token");
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(ok);
 
-    await merchantApi.GET("/merchant/me");
     await operationsApi.GET("/operations/me");
 
     for (const call of fetchSpy.mock.calls) {
       expect((call[0] as Request).headers.get("Authorization")).toBe("Bearer operator-access-token");
     }
     authToken.clear();
+  });
+});
+
+describe("merchant client credential boundary", () => {
+  const ok = () => Promise.resolve(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+  it("never attaches a Bearer token, because the Merchant Chain rejects one", async () => {
+    authToken.set("operator-access-token");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(ok);
+
+    await merchantApi.GET("/merchant/me");
+
+    const request = fetchSpy.mock.calls[0]?.[0] as Request;
+    expect(request.headers.get("Authorization")).toBeNull();
+    expect(request.credentials).toBe("same-origin");
+    authToken.clear();
+  });
+
+  it("refuses to send an unsafe merchant request without the CSRF header", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(ok);
+
+    await expect(
+      merchantApi.DELETE("/auth/merchant/sessions/current", { params: { header: {} as never } }),
+    ).rejects.toMatchObject({ status: 0, code: "CSRF_TOKEN_MISSING" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends the merchant CSRF header only on unsafe requests", async () => {
+    document.cookie = "BEANFLOW_MERCHANT_XSRF=merchant-csrf-token; path=/";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(ok);
+
+    await merchantApi.GET("/merchant/me");
+    await merchantApi.DELETE("/auth/merchant/sessions/current", {
+      params: { header: await merchantCsrfHeader() },
+    });
+
+    const [safeRequest, unsafeRequest] = fetchSpy.mock.calls.map((call) => call[0] as Request) as [Request, Request];
+    expect(safeRequest.headers.get("X-BEANFLOW-CSRF")).toBeNull();
+    expect(unsafeRequest.headers.get("X-BEANFLOW-CSRF")).toBe("merchant-csrf-token");
   });
 });

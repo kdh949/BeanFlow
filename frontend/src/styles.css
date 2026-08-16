@@ -540,6 +540,8 @@ code {
 .state-page { align-items: stretch; }
 .state-page-note { color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.6; }
 
+.console-auth { max-width: 440px; margin-inline: auto; display: flex; flex-direction: column; gap: var(--sp-5); }
+
 .my-identity { padding: var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-2); }
 .my-identity strong { color: var(--text-strong); font-size: var(--fs-title-2); }
 .my-identity span { color: var(--text-muted); font-size: var(--fs-body-sm); }

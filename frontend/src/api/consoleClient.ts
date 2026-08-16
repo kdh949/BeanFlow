@@ -1,13 +1,13 @@
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "./schema";
-import { ApiRequestError, CSRF_HEADER, apiBaseUrl, cookieValue, unwrap } from "./client";
+import { apiBaseUrl } from "./client";
 import { authToken } from "../auth/session";
 
 /**
- * Merchant and operations consoles still authenticate with an operator-supplied
- * Bearer token. They are separate clients from the customer one so that adding a
- * new customer endpoint can never route a token into a Session request by
- * accident.
+ * The operations console authenticates with an operator-supplied Bearer token.
+ * It is a separate client from the customer and merchant Session clients so
+ * that adding an endpoint can never route an operator token into a browser
+ * Session request — the Operations Chain is the only chain that accepts one.
  */
 function bearerClient() {
   const client = createClient<paths>({
@@ -29,21 +29,4 @@ function bearerClient() {
   return client;
 }
 
-export const merchantApi = bearerClient();
 export const operationsApi = bearerClient();
-
-export async function merchantCsrfToken(): Promise<string> {
-  const result = await merchantApi.GET("/auth/merchant/csrf");
-  if (!result.response.ok) {
-    unwrap(result);
-  }
-  const token = cookieValue("BEANFLOW_MERCHANT_XSRF");
-  if (!token) {
-    throw new ApiRequestError(503, "CSRF_TOKEN_UNAVAILABLE", "보안 토큰을 준비하지 못했습니다. 다시 시도해 주세요.");
-  }
-  return token;
-}
-
-export async function merchantCsrfHeader(): Promise<{ "X-BEANFLOW-CSRF": string }> {
-  return { [CSRF_HEADER]: await merchantCsrfToken() } as { "X-BEANFLOW-CSRF": string };
-}

@@ -10,11 +10,11 @@ import {
   ShieldCheck,
   Store,
   UserRound,
-  WalletCards,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { authToken, useAuthToken } from "../auth/session";
+import { merchantSession, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { Button, ButtonLink } from "../design-system";
 
 export function CustomerShell() {
@@ -65,7 +65,6 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
-    { to: "/ops/refunds", label: "환불 조정", icon: WalletCards },
     { to: "/ops/orders", label: "주문 조회", icon: Search },
   ];
   const items = kind === "store" ? storeItems : opsItems;
@@ -88,7 +87,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
           <Link to="/app">
             <Coffee size={18} /> 고객 앱
           </Link>
-          <button type="button" onClick={authToken.clear}>
+          <button type="button" onClick={kind === "store" ? () => void merchantSession.logOut() : authToken.clear}>
             <LogOut size={18} /> 로그아웃
           </button>
         </div>
@@ -100,13 +99,13 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
             <strong>{kind === "store" ? "매장 운영" : "플랫폼 운영"}</strong>
           </div>
           <div className="topbar-actions">
-            <AuthStatus />
+            {kind === "store" ? <MerchantAuthStatus /> : <AuthStatus />}
             <button className="icon-action" type="button" aria-label="설정">
               <Settings size={19} />
             </button>
           </div>
         </header>
-        <ConsoleTokenStrip />
+        {kind === "store" ? null : <ConsoleTokenStrip />}
         <main className="console-content">
           <Outlet />
         </main>
@@ -138,6 +137,20 @@ function ConsoleTokenStrip() {
 function AuthStatus() {
   const token = useAuthToken();
   return <span className={`auth-status ${token ? "is-ready" : ""}`}>{token ? "인증됨" : "인증 필요"}</span>;
+}
+
+/**
+ * The store console authenticates with a Session Cookie, so it shows who the
+ * server says is signed in rather than whether a token was pasted.
+ */
+function MerchantAuthStatus() {
+  const session = useMerchantSession();
+  const signedIn = session.status === "authenticated" || session.status === "initialPassword";
+  return (
+    <span className={`auth-status ${signedIn ? "is-ready" : ""}`}>
+      {signedIn ? session.actor.displayName : "인증 필요"}
+    </span>
+  );
 }
 
 function TokenEditor({ onClose }: { onClose: () => void }) {
