@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -21,13 +22,17 @@ internal class SupportActionRequestOpenApiContractTest {
             )
 
         operations.forEach { (path, operationId) ->
-            assertThat(pathItem(target, path))
+            val operation = pathItem(target, path)
+            assertThat(operation)
                 .describedAs("OpenAPI path item %s", path)
-                .contains("operationId: $operationId", "Cache-Control", "\"403\"", "\"503\"")
+                .contains("operationId: $operationId", "Cache-Control")
+            assertOpenApiResponseStatuses(operation, 403, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
         operations.keys.filterNot { it == "/support/action-requests/{requestId}" }.forEach { path ->
-            assertThat(pathItem(target, path)).contains("#/components/parameters/IdempotencyKey", "\"409\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("#/components/parameters/IdempotencyKey")
+            assertOpenApiResponseStatuses(operation, 409)
         }
 
         listOf(
@@ -60,10 +65,10 @@ internal class SupportActionRequestOpenApiContractTest {
             .contains("actionPayloadDigest", "evidenceDigest", "approvalSteps", "terminalExecutionId", "terminalResolutionId")
             .doesNotContain("reason:", "rawPayload", "proof", "otp", "token")
         assertThat(pathItem(target, "/operations/investigations/{investigationId}/decisions"))
-            .contains("callback or Audit failure rolls")
+            .contains("고객센터 상태 반영이나 감사 기록 저장에 실패하면 어느 쪽도 승인된 것으로 남기지 않습니다")
             .doesNotContain("200 response proves execution")
         assertThat(pathItem(target, "/support/cases/{caseId}/action-requests"))
-            .contains("never executes an owner command")
+            .contains("승인 작업만 만들며 주문이나 결제 상태를 바로 바꾸지 않습니다")
     }
 
     private fun pathItem(

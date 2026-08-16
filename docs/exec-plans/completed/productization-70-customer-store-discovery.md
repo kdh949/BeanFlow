@@ -1024,7 +1024,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
     skip은 기존 opt-in `NearbyStoreDiscoveryBenchmark`다. 실패 10건은 전부 OpenAPI 계약
     테스트이며 **`origin/main`에서 동일하게 10건 모두 실패한다**(별도 워크트리에서 확인).
     #73의 스펙 한국어화가 영문 단언을 깨뜨린 것으로, 이 branch가 새로 만든 실패는 없다.
-    이 PR 범위 밖이라 고치지 않았다.
+    당시 이 PR 범위 밖이라 고치지 않았다. 2026-08-16 PR #74 후속에서 response status·tag·required
+    YAML 표기와 한국어 계약 설명에 독립적인 단언으로 바꾸고, 누락된 SP-19 만료·비소비 의미를
+    OpenAPI에 복원했다. `./gradlew test --tests '*OpenApiContractTest'`는 15건 모두 통과했다.
   - `scripts/verify-docs.sh` 통과(target 160 paths/169 operations, runtime 143/152, 325 schemas).
     frontend `npm run generate:api && npx tsc --noEmit` 통과, `npm test` **39건 전부 통과**.
 - 2026-08-16: **Milestone 2 리뷰 보강.** 미병합·미적용 V57/V59를 제자리에서 고쳐 DB 최종

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -11,24 +12,30 @@ internal class StoreOrderBoardOpenApiContractTest {
         val target = Path.of("openapi/beanflow-v1.yaml").readText()
         val runtime = Path.of("openapi/beanflow-v1-runtime.yaml").readText()
 
-        assertThat(pathItem(target, "/stores/{storeId}/orders"))
+        val orderBoard = pathItem(target, "/stores/{storeId}/orders")
+        assertThat(orderBoard)
             .contains(
                 "StoreOrderBoard",
                 "If-None-Match",
                 "ETag",
-                "Weak validator",
-                "does not renew an overflow cursor",
+                "약한(weak)",
+                "overflow 커서의 TTL을 연장하지 않습니다",
                 "PENDING_ACCEPTANCE",
                 "overflow",
-                "\"304\"",
-                "\"503\"",
             )
-        assertThat(pathItem(target, "/stores/{storeId}/orders/overflow"))
-            .contains("StoreOrderBoardOverflowPage", "lane", "cursor", "\"400\"", "\"403\"", "\"503\"")
-        assertThat(pathItem(target, "/stores/{storeId}/orders/{orderReference}"))
-            .contains("StoreOrderBoardItem", "\"403\"", "\"404\"", "\"503\"")
-        assertThat(pathItem(target, "/stores/{storeId}/orders/{orderReference}/transitions"))
-            .contains("StoreOrderActionRequest", "StoreOrderBoardItem", "\"202\"", "\"409\"", "\"422\"")
+        assertOpenApiResponseStatuses(orderBoard, 304, 503)
+
+        val overflow = pathItem(target, "/stores/{storeId}/orders/overflow")
+        assertThat(overflow).contains("StoreOrderBoardOverflowPage", "lane", "cursor")
+        assertOpenApiResponseStatuses(overflow, 400, 403, 503)
+
+        val order = pathItem(target, "/stores/{storeId}/orders/{orderReference}")
+        assertThat(order).contains("StoreOrderBoardItem")
+        assertOpenApiResponseStatuses(order, 403, 404, 503)
+
+        val transition = pathItem(target, "/stores/{storeId}/orders/{orderReference}/transitions")
+        assertThat(transition).contains("StoreOrderActionRequest", "StoreOrderBoardItem")
+        assertOpenApiResponseStatuses(transition, 202, 409, 422)
         assertThat(pathItem(runtime, "/stores/{storeId}/orders"))
             .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders")
         assertThat(pathItem(runtime, "/stores/{storeId}/orders/overflow"))

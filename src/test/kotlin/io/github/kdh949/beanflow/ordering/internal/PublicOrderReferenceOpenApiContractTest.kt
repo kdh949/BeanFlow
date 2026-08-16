@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -19,17 +20,23 @@ internal class PublicOrderReferenceOpenApiContractTest {
             )
 
         paths.forEach { path ->
-            assertThat(pathItem(target, path)).contains("OrderReference", "\"400\"", "\"403\"", "\"404\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("OrderReference")
+            assertOpenApiResponseStatuses(operation, 400, 403, 404)
         }
         assertThat(pathItem(runtime, "/me/orders/{orderReference}"))
             .contains("./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}")
-        assertThat(pathItem(runtime, "/me/orders/{orderReference}/cancellations"))
-            .contains("OrderReference", "\"400\"", "\"403\"", "\"404\"")
+        val cancellation = pathItem(runtime, "/me/orders/{orderReference}/cancellations")
+        assertThat(cancellation).contains("OrderReference")
+        assertOpenApiResponseStatuses(cancellation, 400, 403, 404)
         assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}"))
             .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}")
         assertThat(pathItem(runtime, "/stores/{storeId}/orders/{orderReference}/transitions"))
             .contains("./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1transitions")
-        val inputPattern = Regex("(?ms)^    OrderReference:\\n.*?pattern: '([^']+)'").find(target)!!.groupValues[1]
+        val inputPattern =
+            Regex("(?ms)^    OrderReference:\\n.*?pattern:\\s*(?:\\n\\s*)?[\"']?([^\\s\"']+)")
+                .find(target)!!
+                .groupValues[1]
         assertThat(Regex(inputPattern).matches("bf-7k3m-9q2p")).isTrue()
         assertThat(Regex(inputPattern).matches("BF-7K3I-9Q2P")).isFalse()
         assertThat(schema(target, "CustomerOrderDetail"))
@@ -39,7 +46,7 @@ internal class PublicOrderReferenceOpenApiContractTest {
             .contains("orderReference", "pickupNumber", "allowedActions")
             .doesNotContain("orderId:", "customerId:", "paymentId:")
         assertThat(schema(target, "CustomerCancellationResult"))
-            .contains("required: [orderReference")
+            .contains("required:", "- orderReference")
             .doesNotContain("orderId:")
     }
 

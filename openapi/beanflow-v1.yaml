@@ -5668,7 +5668,7 @@ paths:
       summary: (스토어) 고객센터 주문 변경 승인·권한 부여
       description: |
         스토어 구성원이 고객센터의 주문 변경을 승인하거나 제한된 변경 권한을 부여하는 API입니다.
-        `CONFIRMATION`은 특정 요청 한 건과 주문 버전에만 사용할 수 있습니다. `DELEGATION`은 매장과 작업 종류에 묶이며, 주문 취소는 10분 동안 1회, 픽업 시간 변경은 30분 동안 최대 3회 성공 처리할 수 있습니다. 검증 실패나 저장 실패는 사용 횟수에 포함하지 않습니다.
+        `CONFIRMATION`은 특정 요청 한 건과 주문 버전에만 사용할 수 있습니다. `DELEGATION`은 매장과 작업 종류에 묶이며, 주문 취소는 10분 동안 1회, 픽업 시간 변경은 30분 동안 최대 3회 성공 처리할 수 있습니다. `now >= expiresAt`이면 만료되어 더 이상 사용할 수 없으며, 검증 실패, 롤백, `RESOLUTION_REQUIRED`는 사용 횟수에 포함하지 않습니다.
 
         주요 오류:
         - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -11263,8 +11263,6 @@ components:
       additionalProperties: false
       required: [proof]
       description: challenge에 대한 1회성 proof를 제출해 검증을 요청합니다. proof는 저장되지 않는 write-only 값입니다.
-      example:
-        proof: "000000"
       properties:
         proof:
           type: string

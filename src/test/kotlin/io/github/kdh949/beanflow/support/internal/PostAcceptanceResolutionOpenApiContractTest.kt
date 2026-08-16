@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -19,12 +20,15 @@ internal class PostAcceptanceResolutionOpenApiContractTest {
             )
 
         operations.forEach { (path, operationId) ->
-            assertThat(pathItem(target, path))
-                .contains("operationId: $operationId", "Cache-Control", "\"403\"", "\"503\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("operationId: $operationId", "Cache-Control")
+            assertOpenApiResponseStatuses(operation, 403, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
         operations.keys.filterNot { it.endsWith("{resolutionId}") }.forEach { path ->
-            assertThat(pathItem(target, path)).contains("#/components/parameters/IdempotencyKey", "\"409\"")
+            val operation = pathItem(target, path)
+            assertThat(operation).contains("#/components/parameters/IdempotencyKey")
+            assertOpenApiResponseStatuses(operation, 409)
         }
 
         listOf(
@@ -46,9 +50,13 @@ internal class PostAcceptanceResolutionOpenApiContractTest {
             .contains("triggerOrderState", "settlementAdjustmentKrw", "steps")
             .doesNotContain("evidenceDigest", "providerPayload", "reason", "customerName", "phone", "email")
         assertThat(pathItem(target, "/support/post-acceptance-resolutions/{resolutionId}/executions"))
-            .contains("outside the Support", "UNKNOWN/RECONCILING", "never assumes success")
+            .contains(
+                "고객센터 감사 기록·상태 저장이 모두 끝난 뒤에만 성공으로 표시합니다",
+                "`UNKNOWN` 또는 `RECONCILING`",
+                "같은 환불 요청을 자동으로 다시 보내지 않습니다",
+            )
         assertThat(pathItem(target, "/support/orders/{orderId}/post-acceptance-resolutions"))
-            .contains("exact approved S60", "No owner command")
+            .contains("이미 승인받은 요청 내용만 사용할 수 있으며", "이 단계에서는 실제 환불이나 복원을 실행하지 않고")
             .doesNotContain("/approvals")
     }
 

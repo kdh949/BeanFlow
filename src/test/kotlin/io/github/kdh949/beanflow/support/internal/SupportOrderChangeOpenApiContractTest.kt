@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.architecture.assertOpenApiResponseStatuses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -17,22 +18,21 @@ internal class SupportOrderChangeOpenApiContractTest {
             )
 
         operations.forEach { (path, operationId) ->
-            assertThat(pathItem(target, path))
+            val operation = pathItem(target, path)
+            assertThat(operation)
                 .contains(
                     "operationId: $operationId",
                     "#/components/parameters/IdempotencyKey",
                     "Cache-Control",
-                    "\"403\"",
-                    "\"409\"",
-                    "\"503\"",
                 )
+            assertOpenApiResponseStatuses(operation, 403, 409, 503)
             assertThat(runtime).contains("  $path:\n    \$ref: \"./beanflow-v1.yaml#/paths/${pointer(path)}\"")
         }
 
         assertThat(pathItem(target, "/support/action-requests/{requestId}/executions"))
-            .contains("latest owner state", "RESOLUTION_REQUIRED", "rolls all of them back")
+            .contains("최신 오너 상태", "RESOLUTION_REQUIRED", "Audit이나 영속화 실패 시 전부\n        롤백됩니다")
         assertThat(pathItem(target, "/stores/{storeId}/support-order-change-authorizations"))
-            .contains("ten minutes", "thirty", "now >= expiresAt", "do not consume")
+            .contains("10분", "30분", "`now >= expiresAt`이면 만료", "`RESOLUTION_REQUIRED`는 사용 횟수에 포함하지 않습니다")
 
         assertThat(schema(target, "ExecuteSupportOrderChangeRequest"))
             .contains("oneOf:", "discriminator:", "ORDER_CANCELLATION", "PICKUP_RESCHEDULE", "authorizationId is not")
