@@ -44,7 +44,13 @@ describe("payment success callback sequencing", () => {
       sequence.push("replace");
       originalReplaceState(...args);
     });
-    vi.spyOn(api, "POST").mockImplementation(async () => {
+    // The confirmation is a customer write, so it now fetches a CSRF token first. Both the token
+    // endpoint and the cookie it sets have to exist or the page renders its error state instead.
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token";
+    vi.spyOn(api, "GET").mockResolvedValue(response(null) as never);
+    let sentCsrf: string | undefined;
+    vi.spyOn(api, "POST").mockImplementation(async (_path: unknown, init: unknown) => {
+      sentCsrf = (init as { params?: { header?: Record<string, string> } })?.params?.header?.["X-BEANFLOW-CSRF"];
       sequence.push(`post:${window.location.search}`);
       return response(payment("APPROVED")) as never;
     });
@@ -55,6 +61,7 @@ describe("payment success callback sequencing", () => {
     expect(sequence).toContain("post:");
     expect(sequence.indexOf("replace")).toBeLessThan(sequence.indexOf("post:"));
     expect(window.location.search).toBe("");
+    expect(sentCsrf).toBe("customer-csrf-token");
   });
 
   it("uses status GET and never replays confirmation after a clean URL reload", async () => {

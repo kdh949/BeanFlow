@@ -11,7 +11,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Issue the customer-chain CSRF cookie */
+        /**
+         * 고객용 CSRF 쿠키를 발급합니다
+         * @description 고객 인증 체인 전용 CSRF 쿠키(BEANFLOW_CUSTOMER_XSRF)를 발급합니다. 회원가입,
+         *     로그인, 세션 삭제 등 상태를 변경하는 고객 API를 호출하기 전에 먼저 이 엔드포인트를
+         *     호출해 쿠키를 받고, 쿠키 값을 `X-BEANFLOW-CSRF` 헤더에 담아 함께 보내야 합니다.
+         */
         get: operations["issueCustomerCsrfToken"];
         put?: never;
         post?: never;
@@ -30,7 +35,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register a customer account and its zero-balance point account */
+        /**
+         * 고객 계정을 가입하고 0원 포인트 계좌를 함께 생성합니다
+         * @description loginId, password, displayName으로 고객 계정을 만들고 잔액 0원인 포인트 계좌를
+         *     같은 트랜잭션에서 원자적으로 생성합니다. `/auth/customer/csrf`로 발급받은 쿠키
+         *     값을 `X-BEANFLOW-CSRF` 헤더에 담아 보내야 하며, loginId가 이미 사용 중이면
+         *     409, 요청값이 형식에 맞지 않으면 400을 반환합니다.
+         */
         post: operations["registerCustomerAccount"];
         delete?: never;
         options?: never;
@@ -47,7 +58,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authenticate a customer and rotate the browser session */
+        /**
+         * 고객 로그인 후 브라우저 세션을 새로 발급합니다
+         * @description loginId/password로 고객을 인증하고 세션 쿠키를 새로 발급(rotate)합니다.
+         *     `X-BEANFLOW-CSRF` 헤더가 필요하며, 인증에 실패하면 401, 반복 실패로 rate limit에
+         *     걸리면 429를 반환합니다.
+         */
         post: operations["createCustomerSession"];
         delete?: never;
         options?: never;
@@ -65,7 +81,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete the current customer session */
+        /**
+         * 현재 고객 세션을 삭제합니다(로그아웃)
+         * @description 현재 요청에 담긴 고객 세션 쿠키를 무효화합니다. 로그인되어 있지 않으면 401을
+         *     반환합니다.
+         */
         delete: operations["deleteCurrentCustomerSession"];
         options?: never;
         head?: never;
@@ -79,7 +99,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Issue the merchant-chain CSRF cookie */
+        /**
+         * 점주용 CSRF 쿠키를 발급합니다
+         * @description 점주(merchant) 인증 체인 전용 CSRF 쿠키(BEANFLOW_MERCHANT_XSRF)를 발급합니다.
+         *     로그인, 비밀번호 변경, 세션 삭제 등 상태를 변경하는 점주 API를 호출하기 전에
+         *     먼저 이 엔드포인트를 호출해 쿠키를 받고, 쿠키 값을 `X-BEANFLOW-CSRF` 헤더에
+         *     담아 함께 보내야 합니다.
+         */
         get: operations["issueMerchantCsrfToken"];
         put?: never;
         post?: never;
@@ -98,7 +124,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authenticate a merchant and rotate the browser session */
+        /**
+         * 점주 로그인 후 브라우저 세션을 새로 발급합니다
+         * @description loginId/password로 점주를 인증하고 세션 쿠키를 새로 발급(rotate)합니다.
+         *     `X-BEANFLOW-CSRF` 헤더가 필요하며, 계정 상태가 INITIAL_PASSWORD이면 로그인은
+         *     성공하지만 초기 비밀번호 변경 전까지 다른 API는 계속 차단됩니다. 인증에
+         *     실패하면 401, 반복 실패로 rate limit에 걸리면 429를 반환합니다.
+         */
         post: operations["createMerchantSession"];
         delete?: never;
         options?: never;
@@ -115,7 +147,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the merchant password and rotate the session */
+        /**
+         * 점주 비밀번호를 변경하고 세션을 새로 발급합니다
+         * @description 현재 비밀번호를 검증한 뒤 새 비밀번호로 교체하고 credential version을 올려
+         *     기존 세션을 모두 무효화한 다음 새 세션을 발급합니다. INITIAL_PASSWORD 상태인
+         *     계정은 이 API로 비밀번호를 바꿔야 다른 API 사용이 풀립니다. 현재 비밀번호가
+         *     틀리면 401, 새 비밀번호가 정책(길이 등)에 맞지 않으면 400을 반환합니다.
+         */
         post: operations["changeMerchantPassword"];
         delete?: never;
         options?: never;
@@ -133,7 +171,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete the current merchant session */
+        /**
+         * 현재 점주 세션을 삭제합니다(로그아웃)
+         * @description 현재 요청에 담긴 점주 세션 쿠키를 무효화합니다. 로그인되어 있지 않으면 401을
+         *     반환합니다.
+         */
         delete: operations["deleteCurrentMerchantSession"];
         options?: never;
         head?: never;
@@ -147,7 +189,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the current Keycloak-backed operator actor */
+        /**
+         * 현재 로그인한 운영자(operator) 정보를 조회합니다
+         * @description Keycloak에서 발급한 bearer 토큰으로 인증된 현재 운영자 actor와 부여된 역할
+         *     목록을 반환합니다. 토큰이 없거나 유효하지 않으면 401, 권한이 부족하면 403을
+         *     반환합니다.
+         */
         get: operations["getCurrentOperator"];
         put?: never;
         post?: never;
@@ -164,7 +211,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the current customer actor */
+        /**
+         * 현재 로그인한 고객 정보를 조회합니다
+         * @description 현재 세션 쿠키가 가리키는 고객 actor를 반환합니다. 세션이 없거나 만료되었으면
+         *     401을 반환합니다.
+         */
         get: operations["getCurrentCustomer"];
         put?: never;
         post?: never;
@@ -199,7 +250,13 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Add a store to current customer favorites idempotently */
+        /**
+         * Add a store to current customer favorites idempotently
+         * @description A customer may hold at most 200 favorite stores. Adding a store that is already a favorite
+         *     stays a 204 regardless of the count; only a request that would create the 201st favorite
+         *     returns 409 FAVORITE_STORE_LIMIT_EXCEEDED. The count is evaluated while the customer's
+         *     favorites are serialized, so simultaneous adds cannot settle above the cap.
+         */
         put: operations["addCurrentCustomerFavoriteStore"];
         post?: never;
         /** Remove a store from current customer favorites idempotently */
@@ -255,7 +312,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the current merchant actor, including INITIAL_PASSWORD state */
+        /**
+         * 현재 로그인한 점주 정보를 조회합니다(INITIAL_PASSWORD 상태 포함)
+         * @description 현재 세션 쿠키가 가리키는 점주 actor를 반환합니다. accountState가
+         *     INITIAL_PASSWORD면 비밀번호를 아직 변경하지 않은 상태이므로 클라이언트는
+         *     비밀번호 변경 화면으로 유도해야 합니다. 세션이 없거나 만료되었으면 401을
+         *     반환합니다.
+         */
         get: operations["getCurrentMerchant"];
         put?: never;
         post?: never;
@@ -272,7 +335,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List stores with current active membership */
+        /**
+         * 현재 상인이 소속된 매장 목록 조회
+         * @description 현재 Merchant Session 액터가 활성 멤버십을 가진 매장 전체를 반환한다. 페이징이 없는
+         *     완전한 목록이며, OWNER/STAFF 역할 구분은 각 항목의 membershipRole에 담긴다.
+         */
         get: operations["listCurrentMerchantStores"];
         put?: never;
         post?: never;
@@ -290,18 +357,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Search nearby pickup-capable stores
-         * @description Precise customer coordinates are used only for this request and are not
-         *     persisted or written to application logs or traces. radiusMeters is 1..10000.
-         *     Results use a canonical micrometer distance tuple and return its floored
-         *     integer-meter display value.
+         * 픽업 가능한 인근 매장을 검색합니다
+         * @description 위도/경도와 반경(미터)으로 인근 매장을 거리순으로 검색합니다. 정확한 고객
+         *     좌표는 이 요청에만 사용되며 저장되거나 애플리케이션 로그·트레이스에 기록되지
+         *     않습니다. radiusMeters는 1..10000 범위입니다. 결과는 내부적으로 canonical micrometer distance tuple(정규 마이크로미터 단위 거리 튜플)을 사용하며, 응답에는
+         *     그것을 내림한 정수 미터 표시값을 반환합니다. 요청값이 범위를 벗어나면 400을 반환합니다.
          *
-         *     The endpoint returns stores that accept orders with pickup enabled.
-         *     pickupAvailable narrows that to stores with a reservable slot inside the
-         *     seven-day window and carries the same meaning as on GET /stores/search; it is
-         *     a point-in-time projection and does not reserve a slot. The filter is applied
-         *     after the spatial query, so a page may be shorter than limit and still return
-         *     a nextCursor anchored to the last examined candidate.
+         *     이 endpoint는 픽업 주문을 받고 있는 매장만 반환합니다. pickupAvailable은 거기서
+         *     reservable slot inside the seven-day window(7일 창 안의 예약 가능한 슬롯)가 있는
+         *     매장으로 더 좁히며, same meaning as on GET /stores/search(GET /stores/search와 동일한
+         *     의미)입니다. 특정 시점의 사영이며 슬롯을 예약하지 않습니다. 이 필터는 공간 질의 뒤에
+         *     적용되므로 한 page가 limit보다 짧아도 nextCursor가 함께 나올 수 있고, 그 cursor는
+         *     마지막 반환 row가 아니라 last examined candidate(마지막으로 검사한 candidate)에
+         *     앵커됩니다.
          */
         get: operations["searchNearbyStores"];
         put?: never;
@@ -353,10 +421,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List currently visible menus for a store
-         * @description Returns the current owner catalogue, including unavailable menus and options. A 200 response
-         *     is a complete list, not a page or a partial result. More than 1,000 menus or 5,000 options
-         *     yields 503 rather than silently truncating the catalogue.
+         * 매장의 현재 노출 메뉴 목록을 조회합니다
+         * @description 해당 매장 사장님이 등록한 현재 카탈로그 전체를 반환합니다. 판매 중지된
+         *     메뉴/옵션도 포함됩니다. 200 응답은 페이지가 아닌 완전한 목록입니다. 메뉴가
+         *     1,000개, 옵션이 5,000개를 넘으면 카탈로그를 조용히 잘라내는 대신 503을
+         *     반환합니다. 존재하지 않는 매장이면 404를 반환합니다.
          */
         get: operations["listStoreMenus"];
         put?: never;
@@ -375,11 +444,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List available pickup slots
-         * @description Returns only slots with startsAt > server time and startsAt less than seven days ahead.
-         *     An existing store that is not currently accepting pickup orders returns a 200 empty list;
-         *     unknown stores still return 404. A window containing 1,001 matching slots yields 503 rather
-         *     than a partial list.
+         * 이용 가능한 픽업 슬롯 목록을 조회합니다
+         * @description startsAt이 서버 현재 시각보다 미래이면서 7일 이내인 슬롯만 반환합니다. 매장은
+         *     존재하지만 현재 픽업 주문을 받지 않는 경우 200과 빈 목록을 반환하며, 존재하지
+         *     않는 매장이면 여전히 404를 반환합니다. 조건에 맞는 슬롯이 1,001개를 넘는 창구간은
+         *     부분 목록 대신 503을 반환합니다.
          */
         get: operations["listStorePickupSlots"];
         put?: never;
@@ -399,7 +468,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create an order and reserve required resources */
+        /**
+         * (고객) 주문 생성
+         * @description 고객이 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
+         *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
+         *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 모두 재검증·예약합니다.
+         *     같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 매장·쿠폰 등 접근 권한이 없는 경우
+         *     - 409: 메뉴 판매 불가, 재고·슬롯 부족, 쿠폰·포인트 사용 불가 또는 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createOrder"];
         delete?: never;
         options?: never;
@@ -417,23 +499,23 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create a new order from a terminal source order
-         * @description The owning customer may use a COMPLETED, CANCELLED, REJECTED or EXPIRED
-         *     source order. The server copies only menu IDs, normalized option IDs and
-         *     quantities, then revalidates current Merchant prices and availability and
-         *     uses the existing atomic reservation workflow. It never copies historical
-         *     benefits, payment, pickup slot or settlement snapshots. Any unavailable
-         *     source item fails the whole request; no partial order is created.
+         * 종료된 주문을 원본으로 새 주문 생성(재주문)
+         * @description 소유 고객은 COMPLETED, CANCELLED, REJECTED, EXPIRED 상태의 원본(source)
+         *     주문으로만 재주문할 수 있습니다. 서버는 메뉴 ID, 정규화된 옵션 ID, 수량만
+         *     복사한 뒤 현재 시점의 Merchant 가격과 재고를 다시 검증하고, 기존과 동일한
+         *     원자적 예약(reservation) 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
+         *     정산 스냅샷은 절대 복사하지 않습니다. 원본 항목 중 하나라도 더 이상 이용할
+         *     수 없으면 요청 전체가 실패하며, 부분 주문은 생성되지 않습니다.
          *
-         *     Idempotency scope is actor ID, REORDER_ORDER_V1 and Idempotency-Key. The
-         *     canonical payload contains sourceOrderId, pickupSlotId, couponIssuanceId
-         *     including null, and pointsToUseKrw. Same-key/same-payload terminal retries
-         *     replay the first status and body. A different source or request returns
-         *     IDEMPOTENCY_KEY_REUSED without exposing the first order response.
-         *     PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After.
-         *     MANUAL_REVIEW means automatic processing stopped and returns
-         *     IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without Retry-After; the owner work is
-         *     not executed again.
+         *     멱등성(idempotency) 범위는 actor ID, REORDER_ORDER_V1, Idempotency-Key로
+         *     결정됩니다. 정규 payload는 sourceOrderId, pickupSlotId, couponIssuanceId
+         *     (null 포함), pointsToUseKrw로 구성됩니다. 동일 key/동일 payload로 종료
+         *     상태를 재요청하면 최초 응답의 상태 코드와 본문을 그대로 재생합니다. 원본이나
+         *     요청 내용이 다르면 최초 주문 응답을 노출하지 않고 IDEMPOTENCY_KEY_REUSED를
+         *     반환합니다. PROCESSING 상태이면 Retry-After와 함께
+         *     IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환합니다. MANUAL_REVIEW는 자동 처리가
+         *     중단됐다는 뜻이며 Retry-After 없이 IDEMPOTENCY_MANUAL_REVIEW_REQUIRED를
+         *     반환하고, 소유자 작업은 다시 실행되지 않습니다.
          */
         post: operations["reorderOrder"];
         delete?: never;
@@ -449,7 +531,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an order and materialize a due reservation expiry */
+        /**
+         * (고객) 주문 조회
+         * @description 고객이 본인 주문의 현재 상태, 주문 금액, 메뉴, 픽업 정보를 조회하는 API입니다.
+         *     결제 대기 예약의 만료 시간이 지났다면 서버가 주문을 만료 상태로 정리한 뒤 최신 내용을 반환합니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 본인 소유 주문이 아닌 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 주문 저장소를 사용할 수 없는 경우
+         */
         get: operations["getOrder"];
         put?: never;
         post?: never;
@@ -469,11 +561,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cancel an order in a customer-allowed state
-         * @description The owning customer may cancel PENDING_PAYMENT or pre-acceptance PAID
-         *     orders. Same-key/same-payload replay returns the first 200 or 202 body.
-         *     A PAID cancellation durably starts compensation; it does not claim that
-         *     refund or owner restoration has completed.
+         * (고객) 주문 취소
+         * @description 고객이 내부 주문 ID로 본인 주문을 취소하는 API입니다.
+         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 전 취소는 즉시 완료되어 200을 반환하고, 결제 완료 주문은 취소를 확정한 뒤 환불·쿠폰·포인트·재고 복구를 별도로 시작하므로 202를 반환할 수 있습니다. 202는 후속 복구가 모두 끝났다는 뜻이 아닙니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 본인 소유 주문이 아닌 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 주문이 이미 수락됐거나 취소할 수 없는 상태이거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["cancelOrder"];
         delete?: never;
@@ -490,8 +588,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List orders owned by the current customer
-         * @description Defaults to the latest 30 Asia/Seoul calendar days; historical ranges have no product cap.
+         * 현재 고객이 소유한 주문 목록 조회
+         * @description 기본적으로 최근 30일(Asia/Seoul 달력 기준)의 주문만 반환합니다. `from`/`to`로
+         *     과거 기간을 직접 지정하면 해당 범위에는 건수 상한이 없습니다.
          */
         get: operations["listCurrentCustomerOrders"];
         put?: never;
@@ -509,7 +608,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an owned order by public order reference */
+        /** 공개 주문 참조번호로 본인 소유 주문 조회 */
         get: operations["getCurrentCustomerOrder"];
         put?: never;
         post?: never;
@@ -528,7 +627,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel an owned order through its canonical public reference */
+        /**
+         * (고객) 공개 주문번호로 주문 취소
+         * @description 고객이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 본인 주문을 찾아 취소하는 API입니다.
+         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 완료 주문은 취소 후 환불·혜택·재고 복구가 별도로 이어질 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 공개 주문번호가 본인 주문이 아닌 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 주문이 이미 수락됐거나 취소할 수 없는 상태이거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["cancelCurrentCustomerOrderByReferenceRuntime"];
         delete?: never;
         options?: never;
@@ -543,7 +654,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get public Toss V2 Standard payment-window configuration */
+        /**
+         * 공개 Toss V2 Standard 결제창 설정 조회
+         * @description 인증이 필요 없는 공개 API입니다. 클라이언트가 Toss Payments 결제창을 초기화하는
+         *     데 필요한 provider, SDK 버전, client key를 반환합니다. 비밀 키나 서버 전용
+         *     설정은 포함하지 않습니다.
+         */
         get: operations["getPaymentClientConfiguration"];
         put?: never;
         post?: never;
@@ -563,11 +679,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Prepare a server-owned one-time Toss payment-window attempt
-         * @description CUSTOMER only. The server derives orderId, amount, orderName, currency,
-         *     customerKey and callback URLs from the owned Order snapshot. No
-         *     PaymentMethod or browser-supplied price is accepted. Same-key replay
-         *     returns the same immutable attempt.
+         * 서버 소유의 1회성 Toss 결제창 시도(attempt) 준비
+         * @description CUSTOMER 전용입니다. 서버는 orderId, amount, orderName, currency, customerKey,
+         *     콜백 URL을 모두 소유 중인 Order 스냅샷에서 직접 계산합니다. PaymentMethod나
+         *     브라우저가 전달한 금액은 절대 받아들이지 않습니다. 동일 Idempotency-Key로
+         *     재요청하면 동일한 불변 attempt를 그대로 반환합니다.
          */
         post: operations["prepareOneTimeOrderPayment"];
         delete?: never;
@@ -583,7 +699,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the owner-visible one-time payment and recovery state */
+        /** 소유 고객에게 공개되는 1회성 결제 상태와 복구 진행 상황 조회 */
         get: operations["getOneTimePayment"];
         put?: never;
         post?: never;
@@ -603,12 +719,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Validate a Toss success callback and confirm the prepared payment server-to-server
-         * @description CUSTOMER only. paymentKey, orderId and amount must exactly match the
-         *     server-owned attempt. The first valid callback claims the attempt before
-         *     the Provider call. Exact replays return current state without a second
-         *     confirmation; altered replays return PAYMENT_CALLBACK_MISMATCH. A 202
-         *     response is unresolved and must be recovered by status lookup.
+         * Toss 성공 콜백을 검증하고 서버-투-서버로 결제 승인 확정
+         * @description CUSTOMER 전용입니다. paymentKey, orderId, amount는 서버가 소유한 attempt와
+         *     정확히 일치해야 합니다. 최초로 유효성을 통과한 콜백이 Provider 승인 호출 전에
+         *     해당 attempt를 선점합니다. 동일한 값으로 재요청하면 다시 승인을 시도하지 않고
+         *     현재 상태를 그대로 반환하며, 값이 달라진 재요청은 PAYMENT_CALLBACK_MISMATCH를
+         *     반환합니다. 202 응답은 아직 결과가 확정되지 않은 상태이며, 상태 조회 API로
+         *     복구해야 합니다.
          */
         post: operations["confirmOneTimePayment"];
         delete?: never;
@@ -625,31 +742,28 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the authenticated customer's usable payment methods
-         * @description CUSTOMER only. Returns the caller's ACTIVE and deactivation-pending
-         *     methods; terminal DEACTIVATED tombstones are excluded. Internal token,
-         *     provider customer reference, expiry, attempt and failure fields are never
-         *     returned. Results are ordered by isDefault DESC, createdAt DESC and
-         *     paymentMethodId DESC. The signed cursor is bound to the authenticated
-         *     customer. A default or lifecycle change between pages is not a snapshot;
-         *     clients refresh the first page for the latest preference.
+         * 인증된 고객이 사용 가능한 결제수단 목록 조회
+         * @description CUSTOMER 전용이다. 호출자의 ACTIVE 및 비활성화 대기(DEACTIVATION_PENDING) 결제수단을
+         *     반환하며, 종결 상태인 DEACTIVATED 항목은 제외된다. 내부 토큰, Provider 고객 참조,
+         *     만료일, 시도/실패 필드는 절대 반환되지 않는다. 결과는 isDefault DESC, createdAt DESC,
+         *     paymentMethodId DESC 순으로 정렬된다. signed cursor는 인증된 고객에게 바인딩된다.
+         *     페이지 사이에 기본값이나 상태가 바뀌어도 스냅샷이 아니므로, 클라이언트는 최신 선호를
+         *     확인하려면 첫 페이지를 다시 조회해야 한다.
          */
         get: operations["listPaymentMethods"];
         put?: never;
         /**
-         * Register a provider-window-authorized payment method
-         * @description CUSTOMER only. The request accepts a one-time authKey returned by the
-         *     Provider payment window and a customer display alias. It never accepts
-         *     PAN, CVC, expiry, birth date or card password. Provider is fixed to
-         *     TOSS_PAYMENTS and cannot be selected by the caller.
+         * Provider 결제창 인증을 거친 결제수단 등록
+         * @description CUSTOMER 전용이다. 요청은 Provider 결제창이 반환한 1회용 authKey와 고객이 지정한
+         *     표시 별칭만 받는다. 카드번호(PAN), CVC, 유효기간, 생년월일, 카드 비밀번호는 절대
+         *     받지 않는다. Provider는 TOSS_PAYMENTS로 고정되며 호출자가 선택할 수 없다.
          *
-         *     Idempotency scope is actor ID, REGISTER_PAYMENT_METHOD_V1 and
-         *     Idempotency-Key. The canonical payload contains fixed provider, SHA-256
-         *     of authKey without storing the raw key, and normalized displayAlias.
-         *     Same-key/same-payload retries return the first terminal response or the
-         *     current 202 representation without a new Provider call. Reusing the key
-         *     for another payload or the same authKey under another key returns 409.
-         *     An unknown Provider result is never retried with the one-time authKey.
+         *     멱등성 범위는 액터 ID, REGISTER_PAYMENT_METHOD_V1, Idempotency-Key다. 정규화된
+         *     페이로드는 고정 provider, 원본을 저장하지 않는 authKey의 SHA-256 해시, 정규화된
+         *     displayAlias로 구성된다. 같은 키/같은 페이로드로 재시도하면 새 Provider 호출 없이
+         *     최초의 종결 응답 또는 현재의 202 표현을 반환한다. 같은 키로 다른 페이로드를 보내거나
+         *     같은 authKey를 다른 키로 보내면 409가 반환된다. 결과가 불확실한 Provider 응답은
+         *     1회용 authKey로 재시도되지 않는다.
          */
         post: operations["registerPaymentMethod"];
         delete?: never;
@@ -669,19 +783,18 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Deactivate an owned payment method and detach its Provider token
-         * @description CUSTOMER only. Tx D1 first marks the owned method unavailable for new
-         *     payments, clears its default flag and stores durable work. The Provider
-         *     DELETE runs once outside that transaction. Only confirmed Provider success
-         *     and Tx D2 return 204. Timeout, response loss, parse failure or result-store
-         *     failure returns 202 and never triggers an automatic second DELETE. A
-         *     verified BILLING_DELETED notification may converge the method; otherwise
-         *     the operation is retained for manual review after 96 hours.
+         * 소유한 결제수단 비활성화 및 Provider 토큰 해제
+         * @description CUSTOMER 전용이다. Tx D1이 먼저 해당 결제수단을 신규 결제 불가 상태로 표시하고
+         *     기본 결제수단 플래그를 해제한 뒤 후속 작업을 durable하게 저장한다. Provider DELETE는
+         *     이 트랜잭션 밖에서 단 한 번 실행된다. Provider 성공이 확인되고 Tx D2가 커밋된
+         *     경우에만 204를 반환한다. 타임아웃, 응답 유실, 파싱 실패, 결과 저장 실패는 202를
+         *     반환하며 자동으로 두 번째 DELETE를 재시도하지 않는다. 검증된 BILLING_DELETED
+         *     알림이 오면 해당 결제수단이 수렴될 수 있고, 그렇지 않으면 96시간 후 수동 검토
+         *     대상으로 남는다.
          *
-         *     Idempotency scope is actor ID, DEACTIVATE_PAYMENT_METHOD_V1 and
-         *     Idempotency-Key. Same-key/same-target replay returns the original 204 or
-         *     current 202 representation without another Provider call. Using that key
-         *     for another target returns 409.
+         *     멱등성 범위는 액터 ID, DEACTIVATE_PAYMENT_METHOD_V1, Idempotency-Key다. 같은
+         *     키/같은 대상으로 재요청하면 새 Provider 호출 없이 원래의 204 또는 현재의 202
+         *     표현을 반환한다. 같은 키를 다른 대상에 사용하면 409가 반환된다.
          */
         delete: operations["deactivatePaymentMethod"];
         options?: never;
@@ -698,15 +811,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * Set an owned active payment method as the display default
-         * @description CUSTOMER only. This command has no request body. It atomically clears the
-         *     previous default and marks this ACTIVE method as default under a
-         *     customer-scoped lock. The preference is never used to infer an omitted
-         *     paymentMethodId during payment confirmation.
+         * 소유한 활성 결제수단을 기본 결제수단으로 지정
+         * @description CUSTOMER 전용이다. 이 명령은 요청 본문이 없다. 고객 범위 락 하에서 이전 기본
+         *     결제수단을 원자적으로 해제하고 이 ACTIVE 결제수단을 기본으로 지정한다. 이 선호값은
+         *     결제 확인 시 생략된 paymentMethodId를 추론하는 데 절대 사용되지 않는다.
          *
-         *     Same actor, operation, Idempotency-Key and target replays the original 200
-         *     without changing a newer preference. Reusing the key for another target
-         *     returns IDEMPOTENCY_KEY_REUSED.
+         *     같은 액터, 오퍼레이션, Idempotency-Key, 대상으로 재요청하면 더 최신 선호값을
+         *     바꾸지 않고 원래의 200을 그대로 재현한다. 같은 키를 다른 대상에 재사용하면
+         *     IDEMPOTENCY_KEY_REUSED가 반환된다.
          */
         put: operations["setDefaultPaymentMethod"];
         post?: never;
@@ -726,11 +838,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create a merchant full/item partial refund
-         * @description STORE_OWNER and STORE_STAFF require a Merchant Session and active membership
-         *     in the Order store. Omitted lineItems consumes every remaining unit. Explicit
-         *     quantities consume the lowest unrefunded conceptual unit positions. Coupon
-         *     values are attribution only and are never restored.
+         * (스토어) 결제 환불 접수
+         * @description 스토어 소유자 또는 직원이 결제의 전액 환불이나 주문 항목 단위 부분 환불을 접수하는 API입니다.
+         *     요청자는 해당 주문 매장의 활성 멤버여야 합니다. `lineItems`를 생략하면 아직 환불할 수 있는 모든 수량을 대상으로 하며, 항목과 수량을 보내면 지정한 수량만 환불합니다. 같은 항목을 여러 번 부분 환불할 때는 아직 환불되지 않은 수량부터 순서대로 처리합니다. 쿠폰 할인액은 비용 계산에만 사용하며 쿠폰 자체를 다시 발급하지 않습니다. 현금 환불 결과가 확인되면 201, 결제사 결과를 아직 확정할 수 없거나 재시도·상태 확인이 남으면 202를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 주문 매장의 활성 소유자·직원 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 이미 환불한 수량을 다시 요청했거나 환불 가능 금액·상태가 충돌한 경우
+         *     - 503: 결제사 또는 필수 저장소를 사용할 수 없는 경우
          */
         post: operations["createPaymentRefund"];
         delete?: never;
@@ -749,11 +867,18 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create a platform-operator full or item-based partial refund
-         * @description PLATFORM_OPERATOR only. This endpoint is the actor-exclusive Operations form
-         *     of the legacy UUID refund contract. It uses the same preparation, idempotency,
-         *     Provider key and Refund ledger as the Merchant endpoint; changing URI never
-         *     creates another side effect for the same actor, key and canonical payload.
+         * (운영팀) 결제 환불 접수
+         * @description 운영팀이 결제의 전액 환불이나 주문 항목 단위 부분 환불을 접수하는 API입니다.
+         *     점주용 환불 API와 같은 환불 기록과 외부 결제사 요청 식별값을 사용합니다. 같은 운영자, 같은 Idempotency-Key, 같은 요청 내용이라면 어느 환불 경로로 요청해도 환불이 중복으로 만들어지지 않습니다. 현금 환불이 확인되면 201, 결과 확인이나 재처리가 남으면 202를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 운영팀 환불 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 환불 가능 금액·현재 상태·`Idempotency-Key`가 충돌한 경우
+         *     - 422: 환불 항목이나 수량이 업무 규칙에 맞지 않는 경우
+         *     - 503: 결제사 또는 필수 저장소를 사용할 수 없는 경우
          */
         post: operations["createOperationsPaymentRefund"];
         delete?: never;
@@ -770,10 +895,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get an order and its abbreviated compensation status
-         * @description Returns the store projection plus trigger, case state and updatedAt only.
-         *     Step detail, attempts, internal errors, case identifier and policy versions
-         *     are available only through the audited platform-operator endpoint.
+         * (스토어) 주문 상세 조회
+         * @description 스토어 구성원이 주문 상세를 조회하는 API입니다.
+         *     주문이 취소되거나 거절된 경우에는 환불, 쿠폰·포인트 반환, 재고·픽업 예약 해제 같은 후속 처리의 전체 진행 상태도 함께 보여 줍니다. 스토어 화면에는 업무에 필요한 요약만 제공하며 내부 오류 코드, 재시도 횟수, 처리 건 ID, 정책 버전은 제외합니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 구성원 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getStoreOrder"];
         put?: never;
@@ -797,7 +927,19 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Transition an order from the store operational view */
+        /**
+         * (스토어) 주문 상태 변경
+         * @description 스토어 구성원이 내부 주문 ID로 주문 상태를 변경하는 API입니다.
+         *     허용된 순서에 따라 수락, 제조 시작, 준비 완료, 픽업 완료 또는 거절로 변경합니다. 이미 수락한 주문은 거절 상태로 되돌릴 수 없습니다. 같은 Idempotency-Key를 다른 주문이나 다른 상태 변경에 재사용하면 409를 반환하며, 정확히 같은 요청은 최초 결과를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 구성원 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 허용되지 않은 상태 변경이거나 `Idempotency-Key`·현재 주문 상태가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         patch: operations["transitionStoreOrderStatus"];
         trace?: never;
     };
@@ -808,7 +950,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the bounded actionable board snapshot, including future paid orders awaiting acceptance */
+        /**
+         * 매장 주문 보드의 bounded 스냅샷 조회
+         * @description 레인(lane)별로 개수가 제한된 실행 가능 주문 보드 스냅샷을 반환합니다. 아직
+         *     접수되지 않았지만 결제가 완료되어 향후 접수 대상인 주문도 포함됩니다.
+         *     각 레인에서 스냅샷에 담기지 않은 더 오래된 주문은 overflow 큐로 안내되며,
+         *     If-None-Match로 조건부 조회를 하면 변경이 없을 때 304를 받아 폴링 비용을
+         *     줄일 수 있습니다.
+         */
         get: operations["listStoreOrderBoard"];
         put?: never;
         post?: never;
@@ -826,12 +975,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the next bounded page of older actionable orders for one board lane
-         * @description The signed cursor is issued only by the bounded board snapshot or a preceding overflow page.
-         *     It is bound to this store and lane, expires after 15 minutes, and does not authorize access by itself.
-         *     This queue is user-requested work, not part of the three-second conditional polling loop.
-         *     On 400 INVALID_REQUEST for this cursor, clients discard the local queue and obtain one unconditional
-         *     board snapshot; they do not treat 304 as a cursor renewal or automatically retry this queue request.
+         * 보드 레인 하나의 이후 overflow 페이지 조회
+         * @description signed cursor는 bounded 보드 스냅샷이나 이전 overflow 페이지에서만 발급됩니다.
+         *     이 store와 lane에만 결속되며 15분 후 만료되고, 커서 자체만으로는 접근 권한이
+         *     부여되지 않습니다. 이 큐는 3초 주기 조건부 폴링 루프의 일부가 아니라 사용자가
+         *     직접 요청할 때만 호출됩니다. 이 커서로 400 INVALID_REQUEST를 받으면 클라이언트는
+         *     로컬 큐를 버리고 무조건적(unconditional) 보드 스냅샷을 다시 받아야 하며, 304를
+         *     커서 갱신으로 취급하거나 이 요청을 자동으로 재시도하지 않습니다.
          */
         get: operations["listStoreOrderOverflowQueue"];
         put?: never;
@@ -849,7 +999,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a store order by public order reference */
+        /**
+         * (스토어) 공개 주문번호로 주문 조회
+         * @description 스토어 구성원이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 매장 주문을 조회하는 API입니다.
+         *     고객이 선택한 취소 사유나 고객용 환불 상세처럼 스토어 업무에 필요하지 않은 정보는 응답에서 제외합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 구성원 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["getStoreOrderByReference"];
         put?: never;
         post?: never;
@@ -868,7 +1029,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply one server-allowed store order action */
+        /**
+         * (스토어) 주문 처리 단계 변경
+         * @description 스토어 구성원이 공개 주문번호로 주문을 찾아 수락, 거절, 제조 시작, 준비 완료, 픽업 완료 중 현재 상태에서 허용된 작업 하나를 실행하는 API입니다.
+         *     `expectedStatus`는 화면을 본 뒤 다른 요청이 주문 상태를 먼저 바꿨는지 확인하는 값입니다. 같은 Idempotency-Key와 같은 요청은 최초 결과를 반환합니다. 거절은 즉시 확정될 수 있지만 환불·혜택·재고 복구는 별도로 계속되므로 202를 반환할 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 구성원 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 화면에서 본 상태와 현재 상태가 다르거나 `Idempotency-Key`가 충돌한 경우
+         *     - 422: 현재 상태에서 요청한 매장 작업을 수행할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["transitionStoreOrderByReference"];
         delete?: never;
         options?: never;
@@ -884,9 +1058,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read owner compensation progress for a rejected order
-         * @description Requires an active PLATFORM_OPERATOR with ORDER_COMPENSATION_READ and a
-         *     non-blank X-Access-Reason. The access is audited before the response returns.
+         * (운영팀) 주문 취소·거절 후 처리 상태 조회
+         * @description 운영팀이 취소되거나 거절된 주문의 후속 처리 상태를 조회하는 API입니다.
+         *     환불, 픽업 예약 해제, 재고 복구, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 확인할 수 있습니다. `ORDER_COMPENSATION_READ` 권한과 조회 사유를 담은 `X-Access-Reason` 헤더가 필요하며, 조회 사실은 감사 기록에 남습니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 주문 후속 복구 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getOrderCompensation"];
         put?: never;
@@ -904,10 +1085,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get one merchant account by exact canonical login ID */
+        /**
+         * (운영팀) 점주 계정 조회
+         * @description 운영팀이 로그인 ID로 점주 계정 관리 정보를 조회하는 API입니다.
+         *     공백·대소문자 규칙을 적용한 정확한 로그인 ID가 필요합니다. 계정 상태, 잠금 상태, 임시 비밀번호 만료 시각, 매장 권한을 반환하지만 비밀번호나 일회성 비밀값은 절대 반환하지 않으며 응답은 캐시하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 점주 계정 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["getMerchantAccountByLoginId"];
         put?: never;
-        /** Create a merchant account and first active store membership atomically */
+        /**
+         * (운영팀) 점주 계정·매장 권한 생성
+         * @description 운영팀이 점주 계정과 첫 매장 권한을 한 트랜잭션에서 함께 생성하는 API입니다.
+         *     성공한 최초 응답에서만 임시 비밀번호를 한 번 보여 줍니다. 임시 비밀번호는 같은 요청을 다시 보낼 때 재표시할 목적으로 저장하지 않으므로 안전하게 보관하거나 점주에게 전달해야 합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 점주 계정 생성 권한이 없는 경우
+         *     - 409: 로그인 ID가 이미 사용 중이거나 매장 권한 생성이 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createMerchantAccount"];
         delete?: never;
         options?: never;
@@ -924,7 +1127,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace a merchant credential with a one-time-display temporary password */
+        /**
+         * (운영팀) 점주 임시 비밀번호 재발급
+         * @description 운영팀이 점주 계정의 임시 비밀번호를 새 값으로 재발급하는 API입니다.
+         *     새 임시 비밀번호는 최초 성공 응답에서만 한 번 표시됩니다. 같은 Idempotency-Key로 다시 요청해도 비밀번호를 재표시하지 않고 409를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 점주 계정 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 같은 `Idempotency-Key` 재요청이거나 계정 상태·버전이 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["resetMerchantTemporaryPassword"];
         delete?: never;
         options?: never;
@@ -941,7 +1156,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Release a merchant login lock and matching login-ID attempt block */
+        /**
+         * (운영팀) 점주 계정 잠금 해제
+         * @description 운영팀이 로그인 실패로 잠긴 점주 계정을 해제하는 API입니다.
+         *     계정 잠금과 같은 로그인 ID에 걸린 로그인 시도 차단을 한 트랜잭션에서 함께 해제합니다. 정확히 같은 같은 `Idempotency-Key` 요청은 추가 변경 없이 204로 처리됩니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 점주 계정 잠금 해제 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 계정 상태나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["releaseMerchantAccountLock"];
         delete?: never;
         options?: never;
@@ -959,11 +1186,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Schedule one operator-authorized LOOKUP for a terminal customer-cancellation Refund
-         * @description Requires PLATFORM_OPERATOR and an active
-         *     CUSTOMER_CANCELLATION_REFUND_RECONCILE grant. It schedules one LOOKUP
-         *     with existing server-owned financial identifiers and never sends a new
-         *     Provider REQUEST. A 202 response is not proof of refund success.
+         * (운영팀) 고객 취소 환불 상태 재확인
+         * @description 운영팀이 고객 취소 환불의 결과를 외부 결제사에 다시 확인하도록 예약하는 API입니다.
+         *     기존 결제 식별자로 상태만 조회하며 새로운 환불 요청을 보내지 않습니다. 202 응답은 확인 작업이 등록됐다는 뜻이며 환불 성공을 보장하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 고객 취소 환불 상태 확인 권한이 없는 경우
+         *     - 409: 대상 환불이 상태 재확인 대상이 아니거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 결제사 조회 작업을 예약할 수 없는 경우
          */
         post: operations["scheduleCustomerCancellationRefundReconciliation"];
         delete?: never;
@@ -982,11 +1214,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Propose safe recreation of a missing customer-cancellation Refund
-         * @description Requires PLATFORM_OPERATOR and an active
-         *     PAYMENT_CANCELLATION_SETUP_REPAIR grant. Financial values and identifiers
-         *     are derived from the complete recovery snapshot; unknown request fields
-         *     are rejected.
+         * (운영팀) 누락 환불 복구 제안
+         * @description 운영팀이 고객 취소는 저장됐지만 환불 처리 정보가 누락된 건의 복구를 제안하는 API입니다.
+         *     복구에 필요한 금액과 식별자는 서버에 남아 있는 검증된 기록에서 계산합니다. 이 API는 제안만 만들며 실제 복구는 다른 운영자가 승인한 뒤 진행됩니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 환불 복구 제안 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 이미 복구 제안이 있거나 복구 자료·현재 상태가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["proposeCustomerCancellationSetupRepair"];
         delete?: never;
@@ -1005,11 +1243,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve or reject a missing-Refund repair proposal
-         * @description Requires a different PLATFORM_OPERATOR with an active
-         *     PAYMENT_CANCELLATION_SETUP_REPAIR grant. Approval revalidates under
-         *     Order then Payment locks and creates LOOKUP-only recovery without an
-         *     in-transaction Provider call.
+         * (운영팀) 누락 환불 복구 승인·반려
+         * @description 제안자와 다른 운영팀 담당자가 누락 환불 복구 제안을 승인하거나 반려하는 API입니다.
+         *     승인할 때 주문과 결제의 현재 상태를 다시 확인한 뒤 누락된 환불 처리 정보를 생성하고, 새로운 환불 요청을 보내지 않은 채 기존 결제 상태 조회부터 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 복구 결정 권한이 없거나 본인이 만든 제안을 직접 결정하려는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 제안이 이미 결정됐거나 주문·결제 상태 또는 버전이 바뀐 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["decideCustomerCancellationSetupRepair"];
         delete?: never;
@@ -1026,10 +1270,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the five current trigger and benefit policy heads
-         * @description Requires an active PLATFORM_OPERATOR with the explicit
-         *     EXPIRED_BENEFIT_POLICY_READ grant and a non-blank X-Access-Reason.
-         *     The server records the read access before returning the current heads.
+         * (운영팀) 만료 혜택 복원 정책 조회
+         * @description 운영팀이 만료된 쿠폰·포인트를 취소나 부분 환불 때 어떻게 복원할지 정한 현재 정책을 조회하는 API입니다.
+         *     매장 거절, 고객 취소, 부분 환불에 적용되는 다섯 개 정책을 반환합니다. 전용 조회 권한과 `X-Access-Reason`이 필요하며, 서버는 정책을 반환하기 전에 조회 감사 기록을 저장합니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 정책 조회 권한이 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["listExpiredBenefitRestorationPolicies"];
         put?: never;
@@ -1054,8 +1303,17 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Create a new version for one trigger and benefit policy
-         * @description Requires an active PLATFORM_OPERATOR with the explicit EXPIRED_BENEFIT_POLICY_WRITE grant.
+         * (운영팀) 만료 혜택 복원 정책 변경
+         * @description 운영팀이 특정 주문 종료 원인과 혜택 유형의 복원 정책을 새 버전으로 변경하는 API입니다.
+         *     부분 환불(PARTIAL_REFUND)에는 포인트(POINTS) 정책만 설정할 수 있습니다. 존재하지 않는 정책 조합은 404로 처리하고, 현재 버전과 다른 상태에서 변경하려 하면 409를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 정책 변경 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 현재 정책 버전이 바뀌었거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["updateExpiredBenefitRestorationPolicy"];
         trace?: never;
@@ -1070,12 +1328,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Apply an audited signed point adjustment
-         * @description Requires the PLATFORM_OPERATOR role and an active persistent
-         *     POINT_ADJUSTMENT grant. Same actor, operation, Idempotency-Key, account,
-         *     and canonical payload replay the first committed 201 response. Positive
-         *     amounts require an explicit issuer snapshot and future expiry; negative
-         *     amounts forbid those fields and consume only unexpired available lots.
+         * (운영팀) 포인트 수동 조정
+         * @description 운영팀이 고객 포인트를 수동으로 추가하거나 차감하는 API입니다.
+         *     양수 금액은 포인트를 추가하며 발행 주체와 미래 만료 시각이 필요합니다. 음수 금액은 포인트를 차감하며 발행 주체와 만료 시각을 보내면 안 되고, 아직 만료되지 않은 사용 가능 적립분에서만 차감합니다. 같은 운영자, 계정, Idempotency-Key, 요청 내용은 최초 201 결과를 반환하며 모든 변경은 감사 기록에 남습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 포인트 수동 조정 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 잔액이 부족하거나 계정 상태·`Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createAuditedPointAdjustment"];
         delete?: never;
@@ -1092,9 +1355,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a point account summary
-         * @description The Customer Session actor who owns the account may read without a reason.
-         *     Operator support reads use the actor-exclusive Operations endpoint.
+         * 포인트 계정 요약 조회
+         * @description 해당 계정을 소유한 Customer Session 액터는 사유 없이 조회할 수 있다. 오퍼레이터의
+         *     고객지원 조회는 액터 전용 Operations 엔드포인트를 사용한다.
          */
         get: operations["getPointAccount"];
         put?: never;
@@ -1113,11 +1376,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List point ledger transactions
-         * @description The Customer Session actor who owns the account may read without a reason.
-         *     Results use the stable (occurredAt DESC, transactionId DESC) tuple; the cursor is
-         *     bound to this account and endpoint. Operator support reads use the actor-exclusive
-         *     Operations endpoint.
+         * 포인트 원장 거래 내역 조회
+         * @description 해당 계정을 소유한 Customer Session 액터는 사유 없이 조회할 수 있다. 결과는 안정적인
+         *     (occurredAt DESC, transactionId DESC) 순서를 사용하며, 커서는 이 계정과 엔드포인트에
+         *     바인딩된다. 오퍼레이터의 고객지원 조회는 액터 전용 Operations 엔드포인트를 사용한다.
          */
         get: operations["listPointTransactions"];
         put?: never;
@@ -1136,10 +1398,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a point account summary for an audited operator investigation
-         * @description Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
-         *     X-Access-Reason. The target access Audit and projection commit in one local
-         *     transaction before 200 is returned.
+         * (운영팀) 포인트 계정 조회
+         * @description 운영팀이 조사 목적으로 고객 포인트 계정의 현재 잔액을 조회하는 API입니다.
+         *     즉시 사용할 수 있는 포인트와 복구 처리 중인 포인트를 구분해 반환합니다. `POINT_ACCOUNT_READ` 권한과 `X-Access-Reason`이 필요하며, 조회 사실을 감사 기록에 남긴 뒤 결과를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 포인트 계정 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getOperationsPointAccount"];
         put?: never;
@@ -1158,10 +1426,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List point ledger transactions for an audited operator investigation
-         * @description Requires PLATFORM_OPERATOR, an active POINT_ACCOUNT_READ grant and a required
-         *     X-Access-Reason. Results use the stable (occurredAt DESC, transactionId DESC)
-         *     tuple and a cursor bound to this Operations endpoint and account.
+         * (운영팀) 포인트 내역 조회
+         * @description 운영팀이 고객 포인트 계정의 적립·사용·만료·복원·조정 이력을 조회하는 API입니다.
+         *     `POINT_ACCOUNT_READ` 권한과 `X-Access-Reason`이 필요합니다. 최신 발생 시각과 거래 ID 순으로 정렬하며, 다음 페이지 커서는 같은 API와 같은 포인트 계정에서만 사용할 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유나 페이지 커서가 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 포인트 내역 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["listOperationsPointTransactions"];
         put?: never;
@@ -1180,8 +1454,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get the current GLOBAL ordinary point accrual policy
-         * @description Requires PLATFORM_OPERATOR, POINT_ACCRUAL_POLICY_READ and a committed access Audit.
+         * (운영팀) 공통 포인트 적립 정책 조회
+         * @description 운영팀이 모든 매장의 기본값으로 사용하는 공통 포인트 적립 정책을 조회하는 API입니다.
+         *     전용 조회 권한과 조회 감사 기록이 필요하며, 현재 적용 중인 완전한 정책 버전을 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 공통 적립 정책 조회 권한이 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getGlobalOrdinaryPointAccrualPolicy"];
         put?: never;
@@ -1190,8 +1471,16 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Append and activate a GLOBAL ordinary point accrual policy version
-         * @description Requires PLATFORM_OPERATOR and POINT_ACCRUAL_POLICY_WRITE. Same-key replay returns the first result.
+         * (운영팀) 공통 포인트 적립 정책 변경
+         * @description 운영팀이 공통 포인트 적립 정책의 새 버전을 추가하고 바로 적용하는 API입니다.
+         *     적립률, 반올림 방식, 발행 주체, 만료 규칙 등을 한 버전으로 저장합니다. 같은 Idempotency-Key와 같은 요청을 다시 보내면 최초 결과를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 공통 적립 정책 변경 권한이 없는 경우
+         *     - 409: 현재 정책 버전이 바뀌었거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["changeGlobalOrdinaryPointAccrualPolicy"];
         trace?: never;
@@ -1203,7 +1492,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List GLOBAL ordinary point accrual policy history */
+        /**
+         * (운영팀) 공통 포인트 적립 정책 이력 조회
+         * @description 운영팀이 공통 포인트 적립 정책의 변경 이력을 최신 버전부터 조회하는 API입니다.
+         *     조회 사유, 페이지 크기, 커서를 사용할 수 있으며 다음 페이지 커서는 이 이력 조회 조건에서만 유효합니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유나 페이지 커서가 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 공통 적립 정책 이력 조회 권한이 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["listGlobalOrdinaryPointAccrualPolicyVersions"];
         put?: never;
         post?: never;
@@ -1220,7 +1519,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List explicit STORE policy heads */
+        /**
+         * (운영팀) 매장별 포인트 적립 정책 목록 조회
+         * @description 운영팀이 매장별로 따로 저장된 현재 포인트 적립 설정을 조회하는 API입니다.
+         *     매장 자체 정책(OVERRIDE)과 공통 정책 상속(INHERIT_GLOBAL)을 구분해 보여 줍니다. 선택한 상태만 필터링할 수 있으며 공통 정책만 사용하는 매장은 별도 매장 설정이 없을 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유, 상태 필터 또는 페이지 커서가 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 매장별 적립 정책 조회 권한이 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["listStoreOrdinaryPointAccrualPolicyHeads"];
         put?: never;
         post?: never;
@@ -1237,7 +1546,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an explicit STORE head and its effective resolved policy */
+        /**
+         * (운영팀) 매장별 포인트 적립 정책 조회
+         * @description 운영팀이 특정 매장의 포인트 적립 설정과 실제 적용 결과를 함께 조회하는 API입니다.
+         *     매장 전용 설정이 있으면 그 내용을, 공통 정책을 상속하면 현재 공통 정책을 적용한 결과를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유나 매장 ID 형식이 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 매장별 적립 정책 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["getStoreOrdinaryPointAccrualPolicy"];
         put?: never;
         post?: never;
@@ -1245,8 +1565,17 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Append a STORE override or inheritance version
-         * @description First STORE version omits expectedPolicyVersionId; later versions require the exact current ID.
+         * (운영팀) 매장별 포인트 적립 정책 변경
+         * @description 운영팀이 특정 매장에 전용 포인트 적립 정책을 설정하거나 공통 정책 상속으로 되돌리는 API입니다.
+         *     해당 매장의 첫 정책 버전은 `expectedPolicyVersionId`를 생략할 수 있지만, 이후 변경은 현재 버전 ID와 정확히 일치해야 합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 매장별 적립 정책 변경 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 현재 매장 정책 버전이 바뀌었거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["changeStoreOrdinaryPointAccrualPolicy"];
         trace?: never;
@@ -1258,7 +1587,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List one STORE policy history */
+        /**
+         * (운영팀) 매장별 포인트 적립 정책 이력 조회
+         * @description 운영팀이 특정 매장의 포인트 적립 정책 변경 이력을 최신 버전부터 조회하는 API입니다.
+         *     매장 전용 설정과 공통 정책 상속으로 전환한 기록을 모두 확인할 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 조회 사유나 페이지 커서가 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 매장별 적립 정책 이력 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["listStoreOrdinaryPointAccrualPolicyVersions"];
         put?: never;
         post?: never;
@@ -1276,15 +1616,29 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List brands ordered by normalized name then brand ID
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+         * (운영팀) 브랜드 목록 조회
+         * @description 운영팀이 브랜드 목록을 페이지 단위로 조회하는 API입니다.
+         *     브랜드 이름을 공백·대소문자 규칙을 적용해 정리한 값과 브랜드 ID 순으로 안정적으로 정렬합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["listBrands"];
         put?: never;
         /**
-         * Create a brand
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. Same-key replay returns the first
-         *     result. 활성 브랜드의 정규화 이름은 유일하며 중복 등록은 409 BRAND_NAME_ALREADY_IN_USE다.
+         * (운영팀) 브랜드 등록
+         * @description 운영팀이 카페 브랜드를 등록하는 API입니다.
+         *     활성 브랜드 이름은 공백·대소문자 규칙을 적용한 뒤 서로 달라야 합니다. 같은 Idempotency-Key와 같은 요청은 최초 결과를 반환하며, 이미 사용 중인 이름이면 409를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 409: 같은 이름의 활성 브랜드가 있거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createBrand"];
         delete?: never;
@@ -1301,8 +1655,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get one brand
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE.
+         * (운영팀) 브랜드 조회
+         * @description 운영팀이 브랜드 ID로 브랜드 하나를 조회하는 API입니다.
+         *     브랜드 이름, 활성·보관 상태, 소속 매장 수, 현재 버전을 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getBrand"];
         put?: never;
@@ -1311,11 +1673,17 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename or archive a brand
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 이름 변경은 소속 매장의 검색
-         *     BRAND_NAME term을 같은 transaction에서 교체하며, 소속 매장이 ADR-112 6절의 1000개
-         *     상한을 넘으면 409 BRAND_FANOUT_LIMIT_EXCEEDED다. 소속 매장이 남은 브랜드의 보관과
-         *     expectedVersion 불일치는 409 BRAND_STATE_CONFLICT다.
+         * (운영팀) 브랜드 정보 변경
+         * @description 운영팀이 브랜드 이름을 바꾸거나 브랜드를 보관 처리하는 API입니다.
+         *     이름을 바꾸면 소속 매장의 검색용 브랜드 이름도 같은 트랜잭션에서 함께 갱신합니다. 소속 매장이 1,000개를 넘으면 대량 갱신을 막기 위해 409를 반환합니다. 소속 매장이 남아 있는 브랜드는 보관할 수 없으며, `expectedVersion`이 현재 버전과 다르면 409를 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 소속 매장 수가 변경 한도를 넘거나 소속 매장이 남아 있거나 버전이 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["updateBrand"];
         trace?: never;
@@ -1330,18 +1698,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Rebuild the store keyword search index from current source data
-         * @description Requires PLATFORM_OPERATOR and an active STORE_BRAND_MANAGE grant. Idempotency is
-         *     scoped to the actor, this operation, Idempotency-Key, and normalized reason. The same
-         *     request replays the stored completed result for 90 days without another rebuild or audit;
-         *     a different reason with the same key returns IDEMPOTENCY_KEY_REUSED. A RUNNING command
-         *     returns IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After, which is a retry pace rather
-         *     than a completion estimate.
+         * (운영팀) 매장 검색 색인 재생성
+         * @description PLATFORM_OPERATOR 역할과 활성 STORE_BRAND_MANAGE grant가 모두 필요합니다. 멱등성은
+         *     actor, 이 operation, Idempotency-Key, 정규화된 reason에 묶입니다. 같은 요청은 저장된
+         *     완료 결과를 90일간 재생하며 재색인도 감사 기록도 다시 만들지 않습니다. 같은 key에 다른
+         *     reason을 보내면 IDEMPOTENCY_KEY_REUSED이고, 아직 실행 중인 command는 Retry-After를
+         *     포함한 IDEMPOTENCY_REQUEST_IN_PROGRESS입니다. Retry-After는 완료 예상 시각이 아니라
+         *     재시도 간격입니다.
          *
-         *     Stores are rebuilt in separate transactions. A 200 response with complete=false is a
-         *     persisted partial result, not a complete refresh. If source access or result persistence
-         *     cannot be confirmed, the endpoint returns 503 and callers must not infer that no store
-         *     transaction committed; follow the Store Keyword Search Runbook before retrying.
+         *     매장은 각각 별도 transaction으로 재색인됩니다. 재색인 대상 ID는 첫 chunk 이전에
+         *     snapshot으로 고정하며, complete는 그 snapshot 범위에 대한 값입니다. 실행 중 추가된
+         *     매장은 이번 pass의 대상이 아니라 다음 실행의 대상입니다. complete=false인 200 응답은
+         *     저장된 부분 결과이며 전체 갱신이 아닙니다. source 접근이나 결과 저장을 확인할 수 없으면
+         *     503을 반환하며, 호출자는 어떤 매장 transaction도 commit되지 않았다고 단정해서는 안 됩니다.
+         *     재시도 전에 Store Keyword Search Runbook을 따르십시오.
          */
         post: operations["rebuildStoreSearchIndex"];
         delete?: never;
@@ -1359,16 +1729,31 @@ export interface paths {
         };
         get?: never;
         /**
-         * Assign a store to a brand
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 매장주는 이 명령을 수행할 수 없다.
-         *     지정은 그 매장의 BRAND_NAME term을 같은 transaction에서 갱신한다.
+         * (운영팀) 매장 브랜드 지정
+         * @description 운영팀이 매장을 브랜드에 소속시키는 API입니다.
+         *     점주는 이 작업을 수행할 수 없습니다. 브랜드 지정과 매장 검색용 브랜드 이름 갱신을 같은 트랜잭션에서 함께 처리합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 브랜드·매장 상태나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         put: operations["assignStoreBrand"];
         post?: never;
         /**
-         * Remove a store from its brand
-         * @description Requires PLATFORM_OPERATOR and STORE_BRAND_MANAGE. 브랜드가 없던 매장에도 실행할 수
-         *     있으며 그 매장의 BRAND_NAME term을 지운다.
+         * (운영팀) 매장 브랜드 지정 해제
+         * @description 운영팀이 매장의 브랜드 소속을 해제하는 API입니다.
+         *     이미 브랜드가 없는 매장에도 안전하게 요청할 수 있으며 매장 검색용 브랜드 이름도 함께 제거합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 브랜드 관리 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         delete: operations["clearStoreBrand"];
         options?: never;
@@ -1384,7 +1769,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List 법정동 regions a store owner can assign
+         * 매장 소유자가 지정 가능한 법정동 지역 목록 조회
          * @description 폐지되지 않은 법정동 폐쇄 어휘를 (fullName ASC, code ASC)로 페이징한다. query의 각 낱말은
          *     모두 fullName에 들어 있어야 하며 와일드카드로 해석되지 않는다. 어휘는 공개 참조 데이터라
          *     매장·좌표·검색어는 이 응답으로 드러나지 않는다.
@@ -1407,7 +1792,7 @@ export interface paths {
         };
         get?: never;
         /**
-         * Assign the store's 법정동 region
+         * 매장의 법정동 지역 지정
          * @description 해당 매장의 STORE_OWNER만 수행한다. STORE_STAFF와 타 매장 소유자는 403이다.
          *     지정은 그 매장의 REGION_* term을 같은 transaction에서 교체하고 AuditRecord를 남긴다.
          *     리가 있는 지역은 term이 4행, 없으면 3행이다. 지역을 비우는 명령은 없다.
@@ -1428,11 +1813,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List settlement batches for an owned store
-         * @description Returns only CALCULATED and CONFIRMED batch summaries. OPEN batches are
-         *     internal ingestion state and are not represented with fabricated zero
-         *     summaries. Results are ordered by settlementDate and settlementBatchId
-         *     descending, and the cursor is scoped to this store.
+         * (스토어) 정산 내역 조회
+         * @description 스토어 소유자가 본인 매장의 정산 내역을 페이지 단위로 조회하는 API입니다.
+         *     계산이 끝난 CALCULATED와 확정된 CONFIRMED 정산만 반환합니다. 아직 집계 중인 OPEN 상태를 0원 정산처럼 만들어 보여 주지 않습니다. 최신 정산일과 정산 ID 순으로 정렬하며, 다음 페이지 커서는 같은 매장에서만 사용할 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 본인 소유 매장이 아니거나 정산 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["listStoreSettlements"];
         put?: never;
@@ -1451,11 +1841,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List settlement items in an owned store batch
-         * @description Returns the item identifiers and immutable amount snapshots needed to
-         *     inspect a settlement batch and file an item dispute. Items are ordered by
-         *     completedAt and settlementItemId ascending. The cursor is scoped to this
-         *     store and batch and cannot be reused for another batch.
+         * (스토어) 정산 항목 조회
+         * @description 스토어 소유자가 특정 정산에 포함된 주문별 정산 항목을 조회하는 API입니다.
+         *     각 항목에는 이의제기 대상 식별자와 당시 확정한 결제액·수수료·혜택 비용·정산액이 포함됩니다. 완료 시각과 항목 ID 순으로 안정적으로 정렬하며, 다음 페이지 커서는 같은 매장과 같은 정산에서만 사용할 수 있습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 본인 소유 매장이 아니거나 정산 조회 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["listStoreSettlementItems"];
         put?: never;
@@ -1476,13 +1871,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * File a dispute for a confirmed settlement item
-         * @description Requires the STORE_OWNER role and an active OWNER membership for the
-         *     item's store. Filing is allowed during [D+1 00:00, D+15 00:00) in
-         *     Asia/Seoul, where D is the batch confirmation date. The same actor,
-         *     operation, Idempotency-Key, and canonical payload replay the original
-         *     201 response. An active dispute, a refile without a new evidence
-         *     reference, or a second refile is a stable conflict.
+         * (스토어) 정산 이의제기 접수
+         * @description 스토어 소유자가 확정된 정산 항목의 금액에 이의제기를 접수하는 API입니다.
+         *     해당 매장의 활성 OWNER 권한이 필요합니다. 정산 확정일을 D라고 할 때 서울 시간 기준 D+1 00:00부터 D+15 00:00 전까지 접수할 수 있습니다. 같은 Idempotency-Key와 같은 요청은 최초 201 결과를 반환합니다. 진행 중인 이의제기가 있으면 새로 접수할 수 없으며, 다시 접수할 때는 새 증빙이 필요하고 재접수는 한 번만 허용됩니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 OWNER 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 접수 기간이 지났거나 진행 중인 이의제기가 있거나 재접수 규칙을 위반한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createSettlementDispute"];
         delete?: never;
@@ -1501,16 +1900,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Exact-search protected Support profiles
-         * @description The supported contract accepts one phone or email criterion only in the JSON body and
-         *     rejects every query parameter. A client-supplied query may reach upstream infrastructure
-         *     before rejection, so ingress and container access logs for this route must omit or redact
-         *     query strings. BeanFlow does not put the raw or normalized criterion in its response, Audit
-         *     payload, application log, metric, cursor, or Support storage. Owner Contexts perform
-         *     versioned blind-index lookup and return masked projections.
-         *     Results are ordered by CUSTOMER, STORE, RIDER then subject ID, limited to 20, and expose a
-         *     match count capped at 21. A genuine no-match returns an audited empty 200 only after every
-         *     required dependency succeeds.
+         * 전화번호/이메일로 Support 대상을 정확히 검색
+         * @description 전화번호 또는 이메일 중 하나의 검증 조건만 JSON 본문으로 받으며, 쿼리 파라미터는 모두 거부합니다.
+         *     클라이언트가 보낸 쿼리 문자열이 거부 전에 업스트림 인프라까지 도달할 수 있으므로, 이 라우트의
+         *     인그레스/컨테이너 접근 로그는 쿼리 문자열을 반드시 생략하거나 마스킹해야 합니다. BeanFlow는
+         *     원본 또는 정규화된 검증 조건 값을 응답, Audit 페이로드, 애플리케이션 로그, 메트릭, 커서, Support
+         *     저장소 어디에도 남기지 않습니다. 각 오너 Context가 버전 관리되는 blind-index 조회를 수행하고
+         *     마스킹된 결과만 반환합니다.
+         *     결과는 CUSTOMER, STORE, RIDER 순서 후 subject ID 순으로 정렬되며 최대 20건까지 노출하고,
+         *     매칭 건수는 21로 상한됩니다(21은 "21건 이상"을 의미). 실제로 매칭이 없는 경우는 필요한 모든
+         *     의존성이 성공한 뒤에만 감사 기록이 남는 빈 200 응답으로 반환됩니다.
+         *     429는 검증 조건(actorId+criterion)당 5분간 30회로 제한되는 영속적 레이트 가드를 초과했을 때 발생합니다.
          */
         post: operations["searchSupportSubjects"];
         delete?: never;
@@ -1527,17 +1927,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List SupportCases using a filter-bound cursor
-         * @description Ordered by openedAt descending then Case ID descending. The signed cursor is bound to state and
-         *     assigneeId, expires after 15 minutes, and never loads interactions or notes as an entity collection.
+         * 필터에 고정된 커서로 SupportCase 목록 조회
+         * @description openedAt 내림차순, 동률 시 Case ID 내림차순으로 정렬됩니다. 서명된 커서는 조회 시점의 state,
+         *     assigneeId 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
+         *     로드하지 않습니다. 만료되었거나 필터가 바뀐 커서로 재요청하면 400을 반환합니다.
          */
         get: operations["listSupportCases"];
         put?: never;
         /**
-         * Create an assigned SupportCase
-         * @description Creates an OPEN Case assigned to the authenticated operator. The Case, initial assignment/state
-         *     histories, retention snapshot, Audit record, and stored idempotent response commit atomically.
-         *     Free text is rejected when it contains secrets or high-risk PII. No owner Context record is updated.
+         * 담당자가 배정된 SupportCase 생성
+         * @description 인증된 운영자에게 배정된 OPEN 상태의 Case를 생성합니다. Case, 최초 배정/상태 이력, 보존 스냅샷,
+         *     Audit 기록, 저장된 멱등 응답이 하나의 트랜잭션으로 원자적으로 커밋됩니다. 비밀정보나 고위험
+         *     PII가 포함된 자유 텍스트는 거부됩니다. 이 호출로 오너 Context 레코드가 갱신되지는 않습니다.
+         *     실패 시 400(유효성 오류 또는 금지된 텍스트), 409(같은 Idempotency-Key로 다른 payload 재사용)를 반환합니다.
          */
         post: operations["createSupportCase"];
         delete?: never;
@@ -1553,7 +1955,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a SupportCase and active identifier links */
+        /**
+         * SupportCase와 활성 식별자 연결 조회
+         * @description Case의 현재 상태, 배정, 우선순위, 활성 subject 연결 목록과 버전을 반환합니다. Case가 없거나 조회 권한이 없으면 각각 404, 403을 반환합니다.
+         */
         get: operations["getSupportCase"];
         put?: never;
         post?: never;
@@ -1572,7 +1977,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Append a SupportCase assignment */
+        /**
+         * SupportCase 담당자 배정 이력 추가
+         * @description Case를 새 담당 운영자에게 재배정하고 배정 이력을 추가합니다. expected Case version이 현재 버전과 다르면 409, 대상 운영자가 존재하지 않거나 비활성이면 400을 반환합니다.
+         */
         post: operations["assignSupportCase"];
         delete?: never;
         options?: never;
@@ -1590,8 +1998,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Transition an assigned active SupportCase
-         * @description Only OPEN→IN_PROGRESS, IN_PROGRESS→WAITING|RESOLVED, WAITING→IN_PROGRESS, and RESOLVED→CLOSED are valid. CLOSED is terminal.
+         * 배정된 활성 SupportCase의 상태 전이
+         * @description OPEN→IN_PROGRESS, IN_PROGRESS→WAITING|RESOLVED, WAITING→IN_PROGRESS, RESOLVED→CLOSED만
+         *     유효한 전이입니다. CLOSED는 종결 상태로 더 이상 전이할 수 없습니다. 허용되지 않는 전이나
+         *     만료된 expected version이면 각각 400, 409를 반환합니다.
          */
         post: operations["transitionSupportCase"];
         delete?: never;
@@ -1609,7 +2019,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Append a redacted Support interaction */
+        /**
+         * 비식별화된 Support 상담 이력 추가
+         * @description Case에 상담 채널/방향/발생 시각과 비식별 요약만 기록합니다. 원문 상담 내용은 저장하지 않습니다. Case가 없거나 현재 배정 담당자가 아니면 각각 404, 403을 반환합니다.
+         */
         post: operations["appendSupportInteraction"];
         delete?: never;
         options?: never;
@@ -1626,7 +2039,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Append a secret-filtered Support note */
+        /**
+         * 비밀정보가 필터링된 Support 메모 추가
+         * @description Case에 내부 메모를 추가합니다. 비밀정보나 고위험 PII가 포함된 텍스트는 저장을 거부합니다. 응답에는 메모 원문 대신 비식별 요약만 포함됩니다.
+         */
         post: operations["appendSupportNote"];
         delete?: never;
         options?: never;
@@ -1643,7 +2059,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Link an opaque typed identifier to an active SupportCase */
+        /**
+         * 활성 SupportCase에 불투명 식별자 연결 추가
+         * @description 고객, 매장, 주문 등 타입이 정해진 opaque 식별자를 Case에 연결합니다. 이미 동일한 관계로 연결된 경우 409, Case가 종결 상태면 400을 반환합니다.
+         */
         post: operations["linkSupportSubject"];
         delete?: never;
         options?: never;
@@ -1661,7 +2080,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Close an active Support subject link */
+        /**
+         * 활성 Support subject 연결 해제
+         * @description 지정한 링크를 닫아 더 이상 Case와 연결되지 않도록 합니다. 이미 해제된 링크이거나 expected Case version이 다르면 각각 404, 409를 반환합니다.
+         */
         delete: operations["unlinkSupportSubject"];
         options?: never;
         head?: never;
@@ -1676,11 +2098,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List a bounded cross-context timeline for one SupportCase
-         * @description Merges closed, masked Support and owner facts using the stable tuple
-         *     occurredAt DESC, source rank ASC, itemId DESC. The signed cursor is bound
-         *     to the Case and canonical source/type filters for 15 minutes. A required
-         *     owner failure returns 503; it is never converted to a partial or empty page.
+         * (고객센터) 상담 처리 내역 조회
+         * @description 고객센터 상담사가 한 상담 건과 관련된 주문, 결제, 환불, 포인트, 쿠폰, 픽업, 정산, 알림, 운영 기록을 시간순으로 조회하는 API입니다.
+         *     개인정보와 내부 원문을 가린 상태로 최신 발생 시각, 출처 우선순위, 항목 ID 순으로 합칩니다. 다음 페이지 커서는 상담 건과 선택한 출처·유형 필터에 15분 동안만 유효합니다. 필요한 담당 시스템 하나라도 조회에 실패하면 일부 결과나 빈 목록으로 숨기지 않고 503을 반환합니다.
+         *
+         *     주요 오류:
+         *     - 400: 출처·유형 필터, 페이지 크기 또는 커서가 올바르지 않은 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건을 볼 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 상담 건 상태나 필터 범위가 현재 요청과 충돌한 경우
+         *     - 503: 필수 담당 시스템의 타임라인 정보를 읽을 수 없는 경우
          */
         get: operations["listSupportCaseTimeline"];
         put?: never;
@@ -1699,10 +2127,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List owner facts for an Order linked to one SupportCase
-         * @description Requires both Support Case/Order read permissions, current assignment and
-         *     an active RELATED_ORDER link. SUPPORT is not a valid explicit source for
-         *     this owner-only endpoint. Authorization is rechecked before response release.
+         * 특정 SupportCase에 연결된 Order의 오너 사실 목록 조회
+         * @description Support Case/Order 읽기 권한, 현재 배정, 활성 RELATED_ORDER 연결을 모두 요구합니다.
+         *     이 오너 전용 엔드포인트에서는 SUPPORT가 명시적 source로 유효하지 않습니다. 응답을
+         *     내려주기 전에 권한을 다시 검증합니다. Case나 Order가 없거나 연결되어 있지 않으면 404를 반환합니다.
          */
         get: operations["listSupportOrderTimeline"];
         put?: never;
@@ -1723,12 +2151,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Evaluate one typed Support action against current server state
-         * @description Returns advisory ALLOWED, APPROVAL_REQUIRED or DENIED with closed reasons,
-         *     current target version, immutable policy version and two-minute expiry.
-         *     The server reads role-independent persistent permissions, Case/relationship,
-         *     action-bound verification and the current Ordering snapshot. Execution must
-         *     re-evaluate and this response is never an execution capability.
+         * (고객센터) 주문 변경 가능 여부 확인
+         * @description 고객센터 상담사가 현재 주문 상태에서 취소, 픽업 시간 변경, 수락 후 해결안 등록이 가능한지 확인하는 API입니다.
+         *     ALLOWED, APPROVAL_REQUIRED, DENIED 중 하나와 사유, 필요한 권한·본인 확인 수준·승인 단계, 주문 버전, 정책 버전, 2분 만료 시각을 반환합니다. 결과는 안내용이며 실제 실행 시 모든 조건을 다시 확인합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 상담 건 또는 주문 변경 평가 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["evaluateSupportAction"];
         delete?: never;
@@ -1747,10 +2179,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create an immutable revision-bound Support action request
-         * @description Persists only SHA-256 action/evidence digests and an exact binding to the
-         *     Case, target version, verification session, policy version and expiry.
-         *     This endpoint creates approval work only and never executes an owner command.
+         * (고객센터) 주문 변경 승인 요청
+         * @description 고객센터 상담사가 주문 취소, 픽업 시간 변경, 매장 수락 후 문제 해결에 필요한 승인 요청을 만드는 API입니다.
+         *     이 API는 승인 작업만 만들며 주문이나 결제 상태를 바로 바꾸지 않습니다. 변경 내용과 증거 원문 대신 내용이 바뀌었는지 확인할 수 있는 SHA-256 해시값을 저장하고, 상담 건, 주문 버전, 본인 확인 세션, 정책 버전, 만료 시각을 함께 기록합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 상담 건 또는 주문 변경 요청 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 같은 요청이 이미 있거나 주문·본인 확인·정책 버전이 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createSupportActionRequest"];
         delete?: never;
@@ -1766,7 +2205,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one visible Support action request and materialize due terminal state */
+        /**
+         * (고객센터) 주문 변경 요청 조회
+         * @description 고객센터 상담사가 주문 변경 승인 요청의 현재 상태를 조회하는 API입니다.
+         *     현재 요청 내용 버전, 승인 단계와 이력, 실행 담당자, 실행 가능 여부, 만료 시각을 반환합니다. 만료 시각이 이미 지났다면 서버가 만료 상태를 반영한 뒤 최신 내용을 반환합니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 주문 변경 요청을 볼 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["getSupportActionRequest"];
         put?: never;
         post?: never;
@@ -1786,8 +2235,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Replace a returned request with a new immutable revision
-         * @description Existing approval steps remain immutable and become stale lineage.
+         * (고객센터) 주문 변경 요청 내용 수정
+         * @description 고객센터 상담사가 수정이 필요한 주문 변경 요청을 새 내용으로 다시 제출하는 API입니다.
+         *     기존 요청 내용과 승인 기록은 이력으로 남지만 새 실행에는 사용할 수 없습니다. 새 주문 버전, 본인 확인 결과, 변경 내용 해시, 증빙 해시, 사유를 제출합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 요청을 수정할 고객센터 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 요청이 수정 가능한 상태가 아니거나 현재 버전이 바뀐 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["reviseSupportActionRequest"];
         delete?: never;
@@ -1806,9 +2264,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Decide the Support-manager step for one exact revision
-         * @description The reviewer must differ from the requester and executor. Permission,
-         *     verification, policy, target version and exact expiry are rechecked under lock.
+         * (고객센터) 관리자 승인·반려
+         * @description 고객센터 관리자가 주문 변경 요청의 특정 내용 버전을 승인, 반려 또는 수정 요청으로 결정하는 API입니다.
+         *     검토자는 요청 작성자와 실제 실행 담당자와 달라야 합니다. 다른 요청이 동시에 내용을 바꾸지 못하도록 현재 요청을 잠근 뒤 권한, 본인 확인 결과, 적용 정책, 주문 버전, 만료 시각을 다시 확인하고 결정을 저장합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 관리자 승인 권한이 없거나 작성자·실행 담당자가 직접 승인하려는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 요청 내용 버전·주문 버전·만료 시각 또는 현재 승인 상태가 바뀐 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["decideSupportManagerApproval"];
         delete?: never;
@@ -1827,10 +2293,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Atomically reassign a ready request and its SupportCase
-         * @description Requires exact request revision/version and Case version. The target must
-         *     hold active Case-write, action-execute and capability-specific permissions
-         *     and must not be an approver for this revision.
+         * (고객센터) 주문 변경 요청 담당자 변경
+         * @description 고객센터가 실행 준비된 주문 변경 요청과 상담 건의 담당자를 함께 변경하는 API입니다.
+         *     현재 요청 내용 버전, 요청 버전, 상담 건 버전이 모두 일치해야 합니다. 새 담당자는 상담 건 수정, 작업 실행, 해당 기능 권한을 모두 보유해야 하며 이 요청의 승인자여서는 안 됩니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 담당자 변경 권한이 없거나 새 담당자가 필요한 권한을 갖지 않은 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 요청·상담 건 버전이 바뀌었거나 새 담당자가 승인자인 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["reassignSupportActionRequest"];
         delete?: never;
@@ -1849,15 +2322,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Execute one exact cancellation or pickup-reschedule revision
-         * @description Recomputes the canonical action payload digest and rechecks the assigned
-         *     executor, active Case and relationship, verification, persistent permissions,
-         *     immutable policy, exact revision/request/target versions and latest owner state.
-         *     ACCEPTED requires a matching active store confirmation or delegation. A
-         *     PREPARING/READY/COMPLETED race commits RESOLUTION_REQUIRED without changing
-         *     the Order or consuming authorization. Owner changes, authorization use,
-         *     PII-free Audit, notification intent and the terminal response commit in one
-         *     local transaction; an Audit or persistence failure rolls all of them back.
+         * 승인된 취소 또는 픽업 재조정 리비전을 정확히 실행
+         * @description 표준 action payload digest를 다시 계산하고, 배정된 실행자, 활성 Case와 관계, 검증,
+         *     영속 권한, 불변 정책, 정확한 리비전/요청/대상 버전, 최신 오너 상태를 모두 재검증합니다.
+         *     ACCEPTED 상태의 주문은 일치하는 활성 매장 확인 또는 위임이 있어야 합니다.
+         *     PREPARING/READY/COMPLETED로 이미 넘어간 경합 상태에서는 주문을 변경하거나 authorization을
+         *     소모하지 않고 RESOLUTION_REQUIRED로 커밋됩니다. 오너 변경, authorization 사용, PII 없는 Audit,
+         *     알림 발송 의도, 최종 응답이 하나의 로컬 트랜잭션으로 커밋되며, Audit이나 영속화 실패 시 전부
+         *     롤백됩니다. 정확한 버전이 맞지 않으면 409를 반환합니다.
          */
         post: operations["executeSupportOrderChange"];
         delete?: never;
@@ -1876,14 +2348,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Confirm one exact accepted-order change or create a bounded delegation
-         * @description Requires active store membership and an explicit STORE cost-responsibility
-         *     acceptance. CONFIRMATION is bound to the exact request, revision, canonical
-         *     action payload digest, target version and request expiry. DELEGATION is bound
-         *     to store, action and support-order-change-policy/2026-08-12/v1: cancellation
-         *     lasts ten minutes for one successful use and pickup reschedule lasts thirty
-         *     minutes for three successful uses. now >= expiresAt is expired. Validation
-         *     failure, rollback and RESOLUTION_REQUIRED do not consume a use.
+         * (스토어) 고객센터 주문 변경 승인·권한 부여
+         * @description 스토어 구성원이 고객센터의 주문 변경을 승인하거나 제한된 변경 권한을 부여하는 API입니다.
+         *     `CONFIRMATION`은 특정 요청 한 건과 주문 버전에만 사용할 수 있습니다. `DELEGATION`은 매장과 작업 종류에 묶이며, 주문 취소는 10분 동안 1회, 픽업 시간 변경은 30분 동안 최대 3회 성공 처리할 수 있습니다. 검증 실패나 저장 실패는 사용 횟수에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 매장의 활성 구성원 권한이 없거나 비용 책임에 동의하지 않은 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 요청 내용·주문 버전·만료·사용 한도 또는 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createSupportOrderChangeAuthorization"];
         delete?: never;
@@ -1902,13 +2377,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Plan an approved post-acceptance resolution without rewriting Order facts
-         * @description Consumes only the exact approved S60 POST_ACCEPTANCE_RESOLUTION revision.
-         *     The canonical action digest uses support-command-payload/v1 operation
-         *     POST_ACCEPTANCE_RESOLUTION_ACTION_V1 with ordered orderId, outcome,
-         *     responsibility, cashRefundKrw, restorePoints, restoreCoupon,
-         *     settlementAdjustmentKrw and evidenceDigest fields. No owner command runs
-         *     until the separate execution operation consumes the revision.
+         * (고객센터) 매장 수락 후 주문 문제 해결안 등록
+         * @description 고객센터 상담사가 매장 수락 이후 발생한 주문 문제의 해결안을 등록하는 API입니다.
+         *     이미 승인받은 요청 내용만 사용할 수 있으며 기존 주문 상태 이력을 과거로 되돌려 쓰지 않습니다. 전액·부분 환불, 포인트·쿠폰 복원, 비용 책임, 정산 조정, 증빙 해시를 계획으로 저장합니다. 이 단계에서는 실제 환불이나 복원을 실행하지 않고 별도 실행 API가 승인된 계획을 처리합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해결안 등록 권한이나 필요한 승인이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 승인받은 요청 내용·주문 버전·현재 주문 상태가 바뀐 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createPostAcceptanceResolution"];
         delete?: never;
@@ -1925,8 +2404,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one visible post-acceptance resolution and typed owner states
-         * @description Returns closed step state and references only; evidence, Provider payloads and PII are never returned.
+         * (고객센터) 매장 수락 후 주문 문제 해결안 조회
+         * @description 고객센터가 매장 수락 후 해결안과 각 처리 단계의 현재 상태를 조회하는 API입니다.
+         *     결제 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림의 부분 성공·결과 미확인·재확인 중·수동 검토·완료 상태를 보여 줍니다. 증빙 원문, 외부 결제사 요청 원문, 개인정보는 반환하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 해결안을 볼 고객센터 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getPostAcceptanceResolution"];
         put?: never;
@@ -1947,13 +2433,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Consume the exact approval and advance owner-specific resolution steps
-         * @description Rechecks the assigned executor, persistent permissions, active Case/order
-         *     relationship, exact request/revision/Order versions and current owner fact.
-         *     Support claims one durable step before invoking its owner outside the Support
-         *     transaction. Owner success is not presented until the following Support Audit
-         *     and state commit succeeds. Provider timeout stays UNKNOWN/RECONCILING; a later
-         *     recovery performs lookup and never assumes success or silently reissues work.
+         * (고객센터) 매장 수락 후 주문 문제 해결 실행
+         * @description 고객센터가 승인된 매장 수락 후 해결안의 다음 처리 단계를 실행하는 API입니다.
+         *     실행 담당자, 권한, 상담 건과 주문 관계, 요청·주문 버전, 현재 결제·포인트·쿠폰·정산 상태를 다시 확인합니다. 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림 중 아직 필요한 단계 하나만 실행합니다. 담당 시스템의 실제 처리 결과와 고객센터 감사 기록·상태 저장이 모두 끝난 뒤에만 성공으로 표시합니다. 외부 결제사 결과가 불명확하면 `UNKNOWN` 또는 `RECONCILING`으로 남기고 상태만 다시 조회하며, 같은 환불 요청을 자동으로 다시 보내지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 실행 담당자·권한·승인 조건을 충족하지 못한 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 해결안·요청·주문 버전이나 담당 시스템 상태가 바뀐 경우
+         *     - 503: 필수 담당 시스템을 호출하거나 결과를 저장할 수 없는 경우
          */
         post: operations["executePostAcceptanceResolution"];
         delete?: never;
@@ -1972,10 +2462,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Explicitly reconcile a manual-review Payment refund by owner lookup
-         * @description Initial S80 permits only PAYMENT_REFUND. The exact resolution/Order versions
-         *     and idempotency payload are rechecked; POINT, COUPON, SETTLEMENT and notification
-         *     reissue through this operator endpoint is rejected as unsafe.
+         * (고객센터) 결제 환불 상태 재확인
+         * @description 고객센터가 수동 확인이 필요한 결제 환불 단계의 실제 상태를 외부 결제사에 다시 조회하는 API입니다.
+         *     현재는 `PAYMENT_REFUND` 단계만 지원합니다. 해결안과 주문 버전, Idempotency-Key와 요청 내용을 다시 확인하며, 새로운 환불을 보내거나 포인트·쿠폰·정산·알림 작업을 이 API로 다시 실행하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 결제 환불 상태 재확인 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 대상 단계가 수동 확인 대상이 아니거나 버전·`Idempotency-Key`가 충돌한 경우
+         *     - 503: 외부 결제사 상태를 조회할 수 없는 경우
          */
         post: operations["reconcilePostAcceptanceResolution"];
         delete?: never;
@@ -1994,12 +2491,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Evaluate one versioned goodwill point or coupon request
-         * @description Advises the LOW/MEDIUM/HIGH/EXCEPTIONAL band and route from the current
-         *     immutable policy version. The evaluation is case, customer, incident,
-         *     optional Order version and verification-session bound. It does not issue a
-         *     benefit and is re-evaluated at execution. Cost responsibility has no hidden
-         *     platform fallback and raw evidence is never accepted or returned.
+         * (고객센터) 고객 불편 보상 가능 여부 확인
+         * @description 고객센터 상담사가 포인트 또는 쿠폰으로 고객 불편을 보상할 수 있는지 현재 정책으로 미리 확인하는 API입니다.
+         *     정책상 금액 구간(LOW·MEDIUM·HIGH·EXCEPTIONAL), 필요한 승인 경로, 거절 사유를 반환합니다. 평가는 상담 건, 고객, 사고, 선택적 주문 버전, 본인 확인 결과에 연결됩니다. 이 API는 혜택을 발급하지 않으며 실제 지급 시 다시 평가합니다. 비용 책임을 임의로 플랫폼에 돌리지 않고 증빙 원문도 받거나 반환하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 상담 건 또는 보상 평가 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 고객·주문·사고 관계나 현재 버전이 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["evaluateSupportCompensation"];
         delete?: never;
@@ -2018,11 +2520,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create one exact goodwill benefit request
-         * @description Persists one POINT or immutable-template COUPON request and its exact policy,
-         *     target, verification, cost-allocation and digest bindings. MEDIUM creates an
-         *     S60 Support-manager approval; HIGH and EXCEPTIONAL create an Operations
-         *     investigation. Creation never issues the benefit.
+         * (고객센터) 고객 불편 보상 요청
+         * @description 고객센터 상담사가 포인트 또는 쿠폰 고객 불편 보상을 요청하는 API입니다.
+         *     적용 정책, 고객·주문·사고, 본인 확인 결과, 비용 부담 비율, 요청 내용 해시를 저장하지만 이 단계에서 혜택을 발급하지 않습니다. MEDIUM 구간은 고객센터 관리자 승인, HIGH와 EXCEPTIONAL 구간은 운영팀 조사가 필요합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 보상 요청 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 중복 사고·현재 버전·비용 책임·`Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createSupportCompensation"];
         delete?: never;
@@ -2039,8 +2547,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one masked goodwill request and owner delivery state
-         * @description Returns identifiers and closed typed states only; customer PII, evidence and raw notification payloads are excluded.
+         * (고객센터) 고객 불편 보상 조회
+         * @description 고객센터 상담사가 고객 불편 보상 요청의 현재 상태를 조회하는 API입니다.
+         *     포인트·쿠폰 발급 상태와 고객 알림 상태를 확인할 수 있습니다. 고객 개인정보, 증빙 원문, 외부 알림 요청 원문은 응답에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 보상 요청을 볼 수 있는 고객센터 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         get: operations["getSupportCompensation"];
         put?: never;
@@ -2061,14 +2576,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Re-evaluate and issue one approved goodwill benefit exactly once
-         * @description Rechecks the assigned actor, persistent permissions, active Case and Order,
-         *     exact request/target/payload versions, current immutable policy and approval
-         *     or investigation. Sorted CUSTOMER/ORDER/INCIDENT/ACTOR/STORE locks serialize
-         *     the inclusive rolling-window decision. The owner Point Ledger/Lot or Coupon,
-         *     terminal incident marker, limit consumption, approval consumption, Audit and
-         *     idempotency record commit atomically. Audit failure rolls the issuance back.
-         *     Notification is requested only after commit and its failure remains visible.
+         * (고객센터) 고객 불편 보상 지급
+         * @description 고객센터가 승인된 포인트 또는 쿠폰 고객 불편 보상을 한 번만 지급하는 API입니다.
+         *     실행 담당자, 권한, 활성 상담 건과 주문, 요청·대상 버전, 현재 정책과 승인·조사 결과를 다시 확인합니다. 동시 요청이 최근 기간 한도를 중복 사용하지 못하도록 관련 고객·주문·사고·담당자·매장 정보를 정해진 순서로 잠급니다. 혜택 지급, 한도·승인 사용, 감사 기록과 중복 처리 방지 기록은 한 트랜잭션에서 함께 저장하며, 감사 기록 저장에 실패하면 혜택 지급도 취소합니다. 고객 알림은 혜택 저장 후 별도로 요청하고 알림 실패 상태를 그대로 남깁니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 실행 담당자·권한·승인 조건을 충족하지 못한 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 요청·대상·정책 버전, 한도, 승인 상태 또는 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["executeSupportCompensation"];
         delete?: never;
@@ -2087,8 +2605,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retry only the independent goodwill notification intent
-         * @description Reuses the terminal benefit and never reissues Points or Coupons. Exact retry commands are idempotent.
+         * (고객센터) 보상 알림 재발송
+         * @description 고객센터가 고객 불편 보상 발급 후 실패한 알림만 다시 보내도록 요청하는 API입니다.
+         *     이미 발급된 포인트나 쿠폰을 다시 발급하지 않습니다. 같은 Idempotency-Key와 같은 재시도 요청은 중복 알림 작업을 만들지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 보상 알림 재시도 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 알림이 재시도 대상이 아니거나 `Idempotency-Key`가 충돌한 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["retrySupportCompensationNotification"];
         delete?: never;
@@ -2106,7 +2633,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct a customer display name under the R1 workflow */
+        /**
+         * (고객센터) 고객 표시 이름 정정
+         * @description 고객센터가 고객 화면에 표시되는 이름을 정정하는 API입니다.
+         *     기본 본인 확인과 담당자 권한을 확인한 뒤 별도 관리자 승인이나 실행 단계 없이 이 요청에서 바로 반영합니다. 새 이름은 요청으로만 받고 응답에는 가린 값만 표시합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCustomerDisplayNameCorrection"];
         delete?: never;
         options?: never;
@@ -2123,7 +2662,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct a customer legal-name typo under the R2 specialist workflow */
+        /**
+         * (고객센터) 고객 실명 오타 정정
+         * @description 고객센터가 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 API입니다.
+         *     강화 본인 확인과 전문 담당자 권한을 확인한 뒤 이 요청에서 바로 반영합니다. 새 실명은 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCustomerLegalNameCorrection"];
         delete?: never;
         options?: never;
@@ -2141,8 +2692,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Request an R3 customer primary-phone change
-         * @description A bound ENHANCED verification through a previously registered channel is required; the new phone alone is never sufficient.
+         * (고객센터) 고객 휴대전화 변경 요청
+         * @description 고객센터가 고객의 로그인·계정 복구용 주 휴대전화 변경 요청을 등록하는 API입니다.
+         *     계정 소유권에 영향을 주는 민감한 변경이므로 기존에 등록된 연락 수단을 이용한 강화 본인 확인이 필요합니다. 새 전화번호만 알고 있다는 사실로는 본인 확인이 되지 않습니다. 이 API는 승인 요청만 만들며 고객센터 관리자와 운영팀 승인을 거친 뒤 별도 실행 API에서 실제 번호를 변경합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createCustomerPrimaryPhoneChange"];
         delete?: never;
@@ -2160,7 +2720,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R4 customer credential reset without accepting a secret */
+        /**
+         * (고객센터) 고객 계정 재설정 요청
+         * @description 고객센터가 고객의 로그인 수단 재설정 요청을 등록하는 API입니다.
+         *     비밀번호, OTP, MFA 비밀값, 인증 토큰 같은 비밀정보는 입력받거나 반환하지 않습니다. 이 API는 승인 요청만 만들며 고객센터 관리자와 운영팀 승인을 거친 뒤 별도 실행 API가 계정 재설정 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCustomerCredentialReset"];
         delete?: never;
         options?: never;
@@ -2177,7 +2749,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct one or more R1 public store-profile fields */
+        /**
+         * (고객센터) 매장 공개 정보 정정
+         * @description 고객센터가 고객에게 공개되는 매장 이름, 전화번호, 소개, 픽업 안내 중 하나 이상을 정정하는 API입니다.
+         *     기본 본인 확인과 담당자 권한을 확인한 뒤 별도 관리자 승인이나 실행 단계 없이 이 요청에서 바로 반영합니다. 제출한 값 원문은 응답에 그대로 노출하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createStorePublicProfileCorrection"];
         delete?: never;
         options?: never;
@@ -2194,7 +2778,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct R2 store operations contact fields */
+        /**
+         * (고객센터) 매장 운영 연락처 정정
+         * @description 고객센터가 매장 운영용 전화번호나 이메일을 정정하는 API입니다.
+         *     전화번호와 이메일 중 하나 이상을 보내야 합니다. 강화 본인 확인과 담당자 권한을 확인한 뒤 이 요청에서 바로 반영하며 제출한 연락처 원문은 응답에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createStoreOperationsContactCorrection"];
         delete?: never;
         options?: never;
@@ -2211,7 +2807,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R3 store representative change */
+        /**
+         * (고객센터) 매장 대표자 변경 요청
+         * @description 고객센터가 매장 법적 대표자 변경 요청을 등록하는 API입니다.
+         *     대표자 변경은 소유권과 계약에 영향을 줄 수 있으므로 강화 본인 확인과 고객센터 관리자·운영팀 승인이 필요합니다. 이 API는 승인 요청만 만들며 별도 실행 API에서 실제 반영합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createStoreRepresentativeChange"];
         delete?: never;
         options?: never;
@@ -2228,7 +2836,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R3 opaque store settlement-account reference change */
+        /**
+         * (고객센터) 매장 정산 식별값 변경 요청
+         * @description 고객센터가 매장 정산 식별값 변경 요청을 등록하는 API입니다.
+         *     `accountReference`는 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값이며 계좌번호 자체가 아닙니다. 고객센터 관리자와 운영팀 승인을 받은 뒤 별도 실행 API에서 반영합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createStoreSettlementAccountChange"];
         delete?: never;
         options?: never;
@@ -2245,7 +2865,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R4 store access re-registration without accepting a secret */
+        /**
+         * (고객센터) 매장 계정 접근 재설정 요청
+         * @description 고객센터가 점주가 기존 로그인 수단을 사용할 수 없을 때 매장 계정 접근 재설정을 요청하는 API입니다.
+         *     비밀번호, 인증키, OTP 같은 비밀값은 입력받거나 반환하지 않습니다. 이 API는 승인 요청만 만들며 고객센터 관리자와 운영팀 승인을 거친 뒤 별도 실행 API가 재설정 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createStoreAccessReregistration"];
         delete?: never;
         options?: never;
@@ -2262,7 +2894,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct an external courier display name under the R1 workflow */
+        /**
+         * (고객센터) 외부 배달원 표시 이름 정정
+         * @description 고객센터가 외부 배달원 화면 표시 이름을 정정하는 API입니다.
+         *     기본 본인 확인과 담당자 권한을 확인한 뒤 별도 관리자 승인이나 실행 단계 없이 이 요청에서 바로 반영합니다. 새 이름 원문은 응답에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCourierDisplayNameCorrection"];
         delete?: never;
         options?: never;
@@ -2279,7 +2923,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct external-courier relay contact fields under the R2 workflow */
+        /**
+         * (고객센터) 외부 배달원 중계 연락처 정정
+         * @description 고객센터가 외부 배달원에게 연락을 중계할 전화번호나 이메일을 정정하는 API입니다.
+         *     전화번호와 이메일 중 하나 이상을 보내야 합니다. 강화 본인 확인과 담당자 권한을 확인한 뒤 이 요청에서 바로 반영하며 제출한 연락처 원문은 응답에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCourierRelayContactCorrection"];
         delete?: never;
         options?: never;
@@ -2296,7 +2952,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R3 external-provider courier identity-reference change */
+        /**
+         * (고객센터) 외부 배달원 연동 식별값 변경 요청
+         * @description 고객센터가 외부 배달 서비스에서 사용하는 배달원 연동 식별값 변경 요청을 등록하는 API입니다.
+         *     `providerReference`는 외부 서비스가 배달원을 구분하기 위해 발급한 값이며 주민등록번호나 신분증 정보가 아닙니다. 고객센터 관리자와 운영팀 승인을 받은 뒤 별도 실행 API에서 반영합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCourierProviderIdentityChange"];
         delete?: never;
         options?: never;
@@ -2313,7 +2981,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R3 opaque external-courier payout-reference change */
+        /**
+         * (고객센터) 외부 배달원 정산 식별값 변경 요청
+         * @description 고객센터가 외부 배달원의 정산 식별값 변경 요청을 등록하는 API입니다.
+         *     `payoutReference`는 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값이며 실제 계좌번호가 아닙니다. 고객센터 관리자와 운영팀 승인을 받은 뒤 별도 실행 API에서 반영합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCourierPayoutReferenceChange"];
         delete?: never;
         options?: never;
@@ -2330,7 +3010,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request an R4 external-courier provider re-registration without accepting a secret */
+        /**
+         * (고객센터) 외부 배달원 연동 재설정 요청
+         * @description 고객센터가 외부 배달원 계정의 연동을 다시 설정하도록 요청하는 API입니다.
+         *     외부 서비스 비밀번호, 인증키, 토큰 같은 비밀값은 입력받거나 반환하지 않습니다. 이 API는 승인 요청만 만들며 고객센터 관리자와 운영팀 승인을 받은 뒤 별도 실행 API가 재설정 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["createCourierProviderReregistration"];
         delete?: never;
         options?: never;
@@ -2345,7 +3037,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one masked purpose-specific profile-change workflow */
+        /**
+         * (고객센터) 프로필 변경 요청 조회
+         * @description 고객센터가 프로필 변경 요청 한 건의 진행 상태를 조회하는 API입니다.
+         *     변경 종류, 승인·실행·알림 상태와 현재 버전을 반환합니다. 전화번호, 실명, 정산 식별값, 외부 연동 식별값처럼 요청에서만 받는 원문과 증거 원문, 비밀번호·토큰·인증키는 응답에 포함하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         get: operations["getSupportProfileChange"];
         put?: never;
         post?: never;
@@ -2364,7 +3066,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R3 customer-phone approval revision */
+        /**
+         * (고객센터) 고객 휴대전화 변경 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 고객 휴대전화 변경 내용을 다시 제출하는 API입니다.
+         *     새 전화번호, 현재 버전, 기존 등록 채널을 통한 새 본인 확인 결과, 변경 사유, 증빙 해시를 제출해 승인 절차를 다시 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseCustomerPrimaryPhoneChange"];
         delete?: never;
         options?: never;
@@ -2381,7 +3095,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R4 customer-reset approval revision */
+        /**
+         * (고객센터) 고객 계정 재설정 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 고객 계정 재설정 요청을 다시 제출하는 API입니다.
+         *     비밀번호나 인증 비밀값은 받지 않습니다. 현재 버전, 새 본인 확인 결과, 변경 사유, 증빙 해시를 갱신해 승인 절차를 다시 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseCustomerCredentialReset"];
         delete?: never;
         options?: never;
@@ -2398,7 +3124,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R3 store-representative approval revision */
+        /**
+         * (고객센터) 매장 대표자 변경 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 매장 대표자 변경 내용을 새 값으로 다시 제출하는 API입니다.
+         *     이전 요청 내용과 승인 기록은 이력으로 남고 새 실행에는 사용할 수 없습니다. 현재 처리 건·승인 요청·매장 프로필 버전과 새 본인 확인·증빙을 함께 확인한 뒤 다시 승인 절차를 진행합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseStoreRepresentativeChange"];
         delete?: never;
         options?: never;
@@ -2415,7 +3153,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R3 settlement-reference approval revision */
+        /**
+         * (고객센터) 매장 정산 식별값 변경 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 매장 정산 식별값 변경 내용을 다시 제출하는 API입니다.
+         *     새 `accountReference`, 현재 버전, 새 본인 확인 결과, 변경 사유, 증빙 해시를 제출해 승인 절차를 다시 시작합니다. 실제 계좌번호는 받지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseStoreSettlementAccountChange"];
         delete?: never;
         options?: never;
@@ -2432,7 +3182,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R4 store-access approval revision */
+        /**
+         * (고객센터) 매장 계정 접근 재설정 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 매장 계정 접근 재설정 요청을 다시 제출하는 API입니다.
+         *     비밀번호나 인증 비밀값은 받지 않습니다. 현재 버전, 새 본인 확인 결과, 변경 사유, 증빙 해시를 갱신해 승인 절차를 다시 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseStoreAccessReregistration"];
         delete?: never;
         options?: never;
@@ -2449,7 +3211,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R3 courier provider-identity approval revision */
+        /**
+         * (고객센터) 외부 배달원 연동 식별값 변경 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 외부 배달원 연동 식별값 변경 내용을 다시 제출하는 API입니다.
+         *     새 `providerReference`, 현재 버전, 새 본인 확인 결과, 변경 사유, 증빙 해시를 제출해 승인 절차를 다시 시작합니다. 주민등록번호나 신분증 정보는 받지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseCourierProviderIdentityChange"];
         delete?: never;
         options?: never;
@@ -2466,7 +3240,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R3 courier payout-reference approval revision */
+        /**
+         * (고객센터) 외부 배달원 정산 식별값 변경 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 외부 배달원 정산 식별값 변경 내용을 다시 제출하는 API입니다.
+         *     새 `payoutReference`, 현재 버전, 새 본인 확인 결과, 변경 사유, 증빙 해시를 제출해 승인 절차를 다시 시작합니다. 실제 계좌번호는 받지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseCourierPayoutReferenceChange"];
         delete?: never;
         options?: never;
@@ -2483,7 +3269,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replace the exact R4 courier re-registration approval revision */
+        /**
+         * (고객센터) 외부 배달원 연동 재설정 승인 요청 수정
+         * @description 고객센터가 수정 요청을 받은 외부 배달원 연동 재설정 요청을 다시 제출하는 API입니다.
+         *     비밀번호나 외부 연동 비밀값은 받지 않습니다. 이전 요청 내용은 이력으로 남기고 현재 버전, 새 본인 확인 결과, 증빙 해시를 기준으로 승인 절차를 다시 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["reviseCourierProviderReregistration"];
         delete?: never;
         options?: never;
@@ -2500,7 +3298,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R3 customer-phone payload */
+        /**
+         * (고객센터) 고객 휴대전화 변경 실행
+         * @description 고객센터가 승인된 고객 주 휴대전화 변경을 실제 고객 프로필에 반영하는 API입니다.
+         *     승인받은 전화번호와 현재 처리 건·승인 요청·고객 프로필 버전이 모두 일치해야 합니다. 새 전화번호 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeCustomerPrimaryPhoneChange"];
         delete?: never;
         options?: never;
@@ -2517,7 +3327,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R4 customer reset intent */
+        /**
+         * (고객센터) 고객 계정 재설정 실행
+         * @description 고객센터가 승인된 고객 계정 재설정 절차를 실행하는 API입니다.
+         *     비밀번호, OTP, 인증 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·고객 프로필 버전이 일치할 때 계정 재설정 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeCustomerCredentialReset"];
         delete?: never;
         options?: never;
@@ -2534,7 +3356,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R3 store-representative payload */
+        /**
+         * (고객센터) 매장 대표자 변경 실행
+         * @description 고객센터가 승인된 매장 대표자 변경을 실제 매장 프로필에 반영하는 API입니다.
+         *     승인받은 대표자 이름과 현재 처리 건·승인 요청·매장 프로필 버전이 모두 일치해야 합니다. 대표자 이름 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeStoreRepresentativeChange"];
         delete?: never;
         options?: never;
@@ -2551,7 +3385,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R3 settlement-reference payload */
+        /**
+         * (고객센터) 매장 정산 식별값 변경 실행
+         * @description 고객센터가 승인된 매장 정산 식별값 변경을 실제 매장 프로필에 반영하는 API입니다.
+         *     `accountReference`는 정산 시스템에서 지급 계정을 찾는 식별값이며 실제 계좌번호가 아닙니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 모두 일치해야 합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeStoreSettlementAccountChange"];
         delete?: never;
         options?: never;
@@ -2568,7 +3414,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R4 store access re-registration intent */
+        /**
+         * (고객센터) 매장 계정 접근 재설정 실행
+         * @description 고객센터가 승인된 매장 계정 접근 재설정 절차를 실행하는 API입니다.
+         *     비밀번호, 인증키, OTP 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 일치할 때 매장 계정의 재설정 또는 재등록 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeStoreAccessReregistration"];
         delete?: never;
         options?: never;
@@ -2585,7 +3443,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R3 courier provider-identity payload */
+        /**
+         * (고객센터) 외부 배달원 연동 식별값 변경 실행
+         * @description 고객센터가 승인된 외부 배달원 연동 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+         *     승인받은 `providerReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 이 값은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeCourierProviderIdentityChange"];
         delete?: never;
         options?: never;
@@ -2602,7 +3472,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R3 courier payout-reference payload */
+        /**
+         * (고객센터) 외부 배달원 정산 식별값 변경 실행
+         * @description 고객센터가 승인된 외부 배달원 정산 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+         *     승인받은 `payoutReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 실제 계좌번호는 받지 않으며 이 값은 조회 응답에 원문으로 노출하지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeCourierPayoutReferenceChange"];
         delete?: never;
         options?: never;
@@ -2619,7 +3501,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute the exact approved R4 courier provider re-registration intent */
+        /**
+         * (고객센터) 외부 배달원 연동 재설정 실행
+         * @description 고객센터가 승인된 외부 배달원 연동 재설정 절차를 실행하는 API입니다.
+         *     외부 연동 비밀번호나 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·외부 배달원 프로필 버전이 일치할 때 재등록 절차를 시작합니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
+         */
         post: operations["executeCourierProviderReregistration"];
         delete?: never;
         options?: never;
@@ -2637,8 +3531,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retry only failed old/new/current profile notification intents
-         * @description Never repeats the owner write or consumes approval again; the command and owner notification logical sources are idempotent.
+         * (고객센터) 프로필 변경 알림 재발송
+         * @description 고객센터가 프로필 변경 후 실패한 알림만 다시 보내도록 요청하는 API입니다.
+         *     변경 전 연락처, 변경 후 연락처 또는 현재 등록 연락처에 필요한 알림을 재시도합니다. 프로필을 다시 변경하거나 기존 승인을 다시 사용하지 않으며 같은 요청은 중복 알림 작업을 만들지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 해당 상담 건, 대상 프로필 또는 변경 작업 권한이 없는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 처리 건·승인 요청·대상 프로필 버전이 바뀌었거나 현재 상태에서 요청할 수 없는 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["retrySupportProfileChangeNotifications"];
         delete?: never;
@@ -2657,10 +3560,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Decide an Operations investigation for one Support request revision
-         * @description Requires a distinct Operations reviewer. The Operations row and required
-         *     Support callback commit in one transaction; callback or Audit failure rolls
-         *     back both owners and does not claim a decision.
+         * (운영팀) 고객센터 요청 승인·반려
+         * @description 요청 작성자와 다른 운영팀 담당자가 고객센터의 중요 변경 요청을 승인하거나 반려하는 API입니다.
+         *     운영팀 결정과 고객센터 요청 상태는 함께 저장됩니다. 고객센터 상태 반영이나 감사 기록 저장에 실패하면 어느 쪽도 승인된 것으로 남기지 않습니다.
+         *
+         *     주요 오류:
+         *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
+         *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
+         *     - 403: 운영 조사 결정 권한이 없거나 요청 작성자가 직접 결정하려는 경우
+         *     - 404: 대상 자원을 찾을 수 없는 경우
+         *     - 409: 조사·고객센터 요청 버전이 바뀌었거나 이미 결정된 경우
+         *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["decideOperationsSupportInvestigation"];
         delete?: never;
@@ -2679,11 +3589,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start purpose-bound step-up verification
-         * @description Starts a 15-minute BASIC or ENHANCED session bound to the assigned active Case,
-         *     one active subject link, the authenticated operator, a purpose, and a closed
-         *     action scope. Omitted scope means PERSONAL_DATA_REVEAL; SUPPORT_ACTION is valid
-         *     only with CASE_RESOLUTION. No OTP, raw link, answer, or proof is stored.
+         * 목적 결합 단계적 본인확인 세션 시작
+         * @description 담당 Case, 활성 subject link 하나, 인증된 운영자, purpose와 닫힌 action scope에 묶인
+         *     15분짜리 BASIC 또는 ENHANCED 본인확인 세션을 시작합니다. scope를 생략하면
+         *     PERSONAL_DATA_REVEAL로 간주되며, SUPPORT_ACTION은 CASE_RESOLUTION purpose에서만
+         *     허용됩니다. OTP, raw link, 답변, proof는 저장하지 않습니다.
+         *     현재 할당된 담당자가 아니거나 subject link가 비활성이면 403, Case나 subject link를
+         *     찾을 수 없으면 404, 같은 Case+Subject에 대해 lockout 기간(30분) 내 재요청이면 409를
+         *     반환합니다.
          */
         post: operations["createSupportVerificationSession"];
         delete?: never;
@@ -2699,7 +3612,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the current purpose-bound verification state */
+        /**
+         * 현재 목적 결합 본인확인 상태 조회
+         * @description path로 지정한 세션의 현재 상태와 opaque challenge 메타데이터를 반환합니다. proof나
+         *     provider reference는 포함하지 않습니다. 세션을 생성한 운영자와 동일한 actor만
+         *     조회할 수 있으며, 다른 운영자가 조회하면 403, 세션을 찾을 수 없으면 404를 반환합니다.
+         */
         get: operations["getSupportVerificationSession"];
         put?: never;
         post?: never;
@@ -2719,9 +3637,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Issue an opaque registered-channel challenge
-         * @description Persists a challenge intent, calls the configured Identity provider outside the
-         *     database transaction, then records the definitive or UNKNOWN provider outcome.
+         * 등록된 채널로 opaque challenge 발급
+         * @description challenge intent를 저장한 뒤 DB transaction 밖에서 설정된 Identity provider를 호출하고,
+         *     확정 결과 또는 UNKNOWN 결과를 기록합니다. secret이나 raw link는 응답에 절대 포함하지
+         *     않습니다. 세션이 만료·잠김 상태이면 409, provider 호출이 실패하거나 지연되면 503을
+         *     반환할 수 있습니다.
          */
         post: operations["issueSupportVerificationChallenge"];
         delete?: never;
@@ -2740,10 +3660,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verify one opaque challenge proof
-         * @description The proof is transient write-only input. Invalid proofs consume the Case+Subject
-         *     attempt budget; the fifth invalid proof creates a 30-minute persistent lockout.
-         *     Concurrent or replayed verification cannot call the provider twice.
+         * opaque challenge proof 한 건 검증
+         * @description proof는 일시적인 write-only 입력이며 저장하지 않습니다. 잘못된 proof는 Case+Subject
+         *     단위 시도 횟수를 소진시키며, 5번째 실패 시 30분 lockout이 걸립니다. 동시 요청이나
+         *     재검증 요청이 provider를 두 번 호출하지 않도록 idempotent하게 처리합니다.
+         *     challenge가 이미 terminal 상태이거나 세션이 잠겼으면 409, 시도 횟수를 초과하면
+         *     429를 반환합니다.
          */
         post: operations["verifySupportVerificationChallenge"];
         delete?: never;
@@ -2761,7 +3683,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke a verification session */
+        /**
+         * 본인확인 세션 폐기
+         * @description path로 지정한 세션을 즉시 폐기 상태로 전환합니다. raw 사유 텍스트는 받지 않습니다.
+         *     세션을 생성한 운영자와 동일한 actor만 폐기할 수 있으며, 이미 종료(만료·폐기)된
+         *     세션이면 409, 존재하지 않으면 404를 반환합니다. 같은 Idempotency-Key로 재요청하면
+         *     이전 응답을 그대로 재생합니다.
+         */
         post: operations["revokeSupportVerificationSession"];
         delete?: never;
         options?: never;
@@ -2779,11 +3707,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Request a field-scoped personal-data grant
-         * @description Binds the Grant to the Case, subject link, subject, requester and verification
-         *     purpose. BASIC display fields activate for 10 minutes and three reveals;
-         *     SENSITIVE fields require ENHANCED verification and a distinct approver before
-         *     a five-minute, one-reveal Grant can activate.
+         * 필드 범위가 제한된 개인정보 열람 승인(Grant) 요청
+         * @description Grant를 Case, subject link, subject, 요청자와 verification purpose에 묶어 생성합니다.
+         *     BASIC 등급 필드(표시 이름 등)는 10분/3회 reveal 예산으로 즉시 활성화되고, SENSITIVE
+         *     등급 필드(전화·이메일·provider reference)는 ENHANCED 본인확인과 요청자와 다른
+         *     승인자의 승인을 거쳐야 5분/1회 reveal 예산으로 활성화됩니다.
+         *     verification session이 요구 등급에 미달하거나 필드 조합이 잘못되면 400, 담당
+         *     Case가 아니면 403, Case나 세션을 찾을 수 없으면 404를 반환합니다.
          */
         post: operations["requestSupportDataAccessGrant"];
         delete?: never;
@@ -2802,8 +3732,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Decide a SENSITIVE DataAccessGrant
-         * @description The approver must differ from the requester and the exact Grant version must still be current.
+         * SENSITIVE DataAccessGrant 승인/거부 결정
+         * @description 승인자는 요청자와 달라야 하며 전달한 expectedVersion이 현재 Grant version과 정확히
+         *     일치해야 합니다. 승인 권한이 없으면 403, Grant를 찾을 수 없으면 404, 버전이
+         *     어긋나거나 이미 결정된 Grant면 409를 반환합니다.
          */
         post: operations["decideSupportDataAccessGrant"];
         delete?: never;
@@ -2822,11 +3754,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reveal exactly the fields allowed by an active Grant
-         * @description Audit record and reveal-attempt reservation commit before owner decryption.
-         *     The owner Context decrypts outside the Support transaction. Audit or owner failure
-         *     never returns raw data, and a committed attempt consumes budget even if decryption fails.
-         *     A successful body is not persisted and same-key replay requires manual review.
+         * 활성 Grant가 허용한 필드만 정확히 열람
+         * @description owner 측 복호화 전에 Audit 기록과 reveal 시도 예약을 먼저 commit합니다. owner
+         *     Context는 Support transaction 밖에서 복호화를 수행하며, Audit이나 owner 처리가
+         *     실패하면 raw 데이터를 절대 반환하지 않습니다. commit된 시도는 복호화 성공 여부와
+         *     무관하게 reveal 예산을 소비합니다. 성공 응답은 저장되지 않으며, 같은
+         *     Idempotency-Key로 재요청하면 수동 검토가 필요합니다.
+         *     요청 필드가 Grant 범위를 벗어나면 400, Grant가 만료·소진·거부 상태면 409를
+         *     반환합니다.
          */
         post: operations["revealSupportPersonalData"];
         delete?: never;
@@ -2845,9 +3780,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Request emergency access to one personal-data field
-         * @description BREAK_GLASS is separate from normal verification and Grant paths. It is limited
-         *     to one emergency-purpose field and emits a durable PII-free security notification.
+         * 개인정보 필드 1건에 대한 비상 접근(break-glass) 요청
+         * @description BREAK_GLASS는 일반 본인확인·Grant 경로와 별도인 Aggregate입니다. 비상 목적의 필드
+         *     1건으로 범위가 제한되며, PII가 포함되지 않은 보안 알림을 durable하게 발송합니다.
+         *     승인되면 2분 유효기간과 1회 reveal 예산을 가진 요청이 생성됩니다.
+         *     Case가 활성 담당 상태가 아니면 403, Case나 subject link를 찾을 수 없으면 404를
+         *     반환합니다.
          */
         post: operations["requestSupportBreakGlass"];
         delete?: never;
@@ -2866,8 +3804,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pre-approve or deny one break-glass request
-         * @description Approval requires an actor distinct from the requester and activates a two-minute, one-reveal window.
+         * break-glass 요청 1건 사전 승인/거부
+         * @description 승인은 요청자와 다른 actor만 수행할 수 있으며, 승인 시 2분/1회 reveal 창이
+         *     활성화됩니다. 승인 권한이 없으면 403, 요청을 찾을 수 없으면 404, expectedVersion이
+         *     어긋나거나 이미 결정된 요청이면 409를 반환합니다.
          */
         post: operations["decideSupportBreakGlass"];
         delete?: never;
@@ -2886,9 +3826,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reveal the exact pre-approved emergency field once
-         * @description Uses the same Audit-before-owner-decryption boundary as normal reveal, emits a
-         *     durable security notification, consumes the single attempt, and enters mandatory post-review.
+         * 사전 승인된 비상 필드 1건을 단 한 번 열람
+         * @description 일반 reveal과 동일한 "Audit 먼저, owner 복호화 나중" 경계를 사용하며, durable 보안
+         *     알림을 발송하고 단 1회의 시도를 소비한 뒤 필수 사후 검토(post-review) 상태로
+         *     전환됩니다.
+         *     요청자 본인이 아니면 403, 승인 창(2분)이 지났거나 이미 사용된 요청이면 409를
+         *     반환합니다.
          */
         post: operations["revealSupportBreakGlassData"];
         delete?: never;
@@ -2907,8 +3850,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Complete mandatory post-review
-         * @description The reviewer must differ from both requester and pre-approver; the exact request version is required.
+         * 필수 사후 검토 완료
+         * @description 검토자는 요청자와 사전 승인자 모두와 달라야 하며 정확한 expectedVersion이
+         *     필요합니다. 검토 권한이 없으면 403, 요청을 찾을 수 없으면 404, 아직 reveal되지
+         *     않았거나 이미 검토된 요청이면 409를 반환합니다.
          */
         post: operations["reviewSupportBreakGlass"];
         delete?: never;
@@ -2921,65 +3866,324 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 스토어가 주문을 다음 처리 단계로 변경하는 요청입니다. 목표 상태와 선택 사유를 보내며, 이미 수락한 주문을 다시 거절할 수는 없습니다.
+         * @example {
+         *       "targetState": "PREPARING",
+         *       "reason": null
+         *     }
+         */
         RuntimeStoreOrderTransitionRequest: {
-            /** @enum {string} */
+            /**
+             * @description 매장이 요청하는 다음 주문 상태입니다.
+             * @enum {string}
+             */
             targetState: "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED";
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason?: string | null;
         };
+        /**
+         * @description 스토어가 조회한 주문 상세 응답입니다. 주문이 취소되거나 거절되어 후속 처리가 진행 중인 경우에만 `compensationRecovery`를 함께 제공합니다.
+         * @example {
+         *       "order": {
+         *         "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *         "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "publicReference": "BF-7K4M-Q2XZ",
+         *         "pickupNumber": "A-12",
+         *         "pickupBusinessDate": "2026-08-15",
+         *         "storeName": "빈플로우 성수점",
+         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *         "state": "ACCEPTED",
+         *         "lines": [
+         *           {
+         *             "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *             "menuId": "df0b93c6-ceb2-57d2-9f0f-8949c2db2642",
+         *             "menuName": "아이스 아메리카노",
+         *             "optionNames": [
+         *               "샷 추가"
+         *             ],
+         *             "unitPriceKrw": 4500,
+         *             "quantity": 2,
+         *             "couponDiscountKrw": 1000,
+         *             "pointsAppliedKrw": 500,
+         *             "cashPaidKrw": 7500
+         *           }
+         *         ],
+         *         "subtotalKrw": 9000,
+         *         "couponDiscountKrw": 1000,
+         *         "pointsAppliedKrw": 500,
+         *         "payableKrw": 7500,
+         *         "currency": "KRW",
+         *         "createdAt": "2026-08-15T09:30:00+09:00",
+         *         "updatedAt": "2026-08-15T09:33:00+09:00"
+         *       }
+         *     }
+         */
         RuntimeStoreOrderResult: {
             order: components["schemas"]["StoreOrder"];
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
         };
+        /**
+         * @description 스토어 주문 상태 변경 결과입니다. 거절 처리에서는 후속 복구 요약이 함께 올 수 있지만, 응답 시점에 환불·혜택·재고 복구가 모두 끝났다는 뜻은 아닙니다.
+         * @example {
+         *       "order": {
+         *         "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *         "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "publicReference": "BF-7K4M-Q2XZ",
+         *         "pickupNumber": "A-12",
+         *         "pickupBusinessDate": "2026-08-15",
+         *         "storeName": "빈플로우 성수점",
+         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *         "state": "REJECTED",
+         *         "lines": [
+         *           {
+         *             "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *             "menuId": "df0b93c6-ceb2-57d2-9f0f-8949c2db2642",
+         *             "menuName": "아이스 아메리카노",
+         *             "optionNames": [
+         *               "샷 추가"
+         *             ],
+         *             "unitPriceKrw": 4500,
+         *             "quantity": 2,
+         *             "couponDiscountKrw": 1000,
+         *             "pointsAppliedKrw": 500,
+         *             "cashPaidKrw": 7500
+         *           }
+         *         ],
+         *         "subtotalKrw": 9000,
+         *         "couponDiscountKrw": 1000,
+         *         "pointsAppliedKrw": 500,
+         *         "payableKrw": 7500,
+         *         "currency": "KRW",
+         *         "rejectedAt": "2026-08-15T09:40:00+09:00",
+         *         "rejectionReason": "재료가 소진되었습니다.",
+         *         "createdAt": "2026-08-15T09:30:00+09:00",
+         *         "updatedAt": "2026-08-15T09:40:00+09:00"
+         *       },
+         *       "compensationRecovery": {
+         *         "trigger": "STORE_REJECTION",
+         *         "state": "PROCESSING",
+         *         "updatedAt": "2026-08-15T09:40:00+09:00"
+         *       }
+         *     }
+         */
         RuntimeStoreOrderTransitionResult: {
             order: components["schemas"]["StoreOrder"];
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
         };
+        /**
+         * @description 주문 취소나 거절 뒤 진행되는 환불·혜택·재고 복구를 스토어에 간단히 보여 주는 정보입니다. 발생 원인, 전체 진행 상태, 마지막 갱신 시각만 포함하며 내부 오류·재시도 횟수·정책 버전은 제외합니다.
+         * @example {
+         *       "trigger": "STORE_REJECTION",
+         *       "state": "PROCESSING",
+         *       "updatedAt": "2026-08-15T09:40:00+09:00"
+         *     }
+         */
         RuntimeStoreCompensationSummary: {
-            /** @enum {string} */
+            /**
+             * @description 보상을 시작하게 한 주문 종료 원인입니다.
+             * @enum {string}
+             */
             trigger: "STORE_REJECTION" | "CUSTOMER_CANCELLATION";
-            /** @enum {string} */
+            /**
+             * @description 매장에 허용된 범위로 축약한 후속 처리 건 상태입니다.
+             * @enum {string}
+             */
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 후속 처리 요약이 마지막으로 변경된 시각입니다.
+             */
             updatedAt: string;
         };
+        /**
+         * @description 주문 거절이나 고객 취소 뒤 진행되는 환불·재고·쿠폰·포인트 복구 상황을 담는 운영자용 응답입니다.
+         * @example {
+         *       "compensation": {
+         *         "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *         "trigger": "STORE_REJECTION",
+         *         "benefitPolicies": [
+         *           {
+         *             "benefitType": "COUPON",
+         *             "policyVersionId": 21
+         *           },
+         *           {
+         *             "benefitType": "POINTS",
+         *             "policyVersionId": 34
+         *           }
+         *         ],
+         *         "state": "PROCESSING",
+         *         "steps": [
+         *           {
+         *             "type": "PAYMENT",
+         *             "state": "SUCCEEDED",
+         *             "attemptCount": 1
+         *           },
+         *           {
+         *             "type": "PICKUP",
+         *             "state": "SUCCEEDED",
+         *             "attemptCount": 1
+         *           },
+         *           {
+         *             "type": "STOCK",
+         *             "state": "SUCCEEDED",
+         *             "attemptCount": 1
+         *           },
+         *           {
+         *             "type": "COUPON",
+         *             "state": "PROCESSING",
+         *             "attemptCount": 1
+         *           },
+         *           {
+         *             "type": "POINTS",
+         *             "state": "NOT_REQUIRED",
+         *             "attemptCount": 0
+         *           },
+         *           {
+         *             "type": "CUSTOMER_NOTIFICATION",
+         *             "state": "RETRY_SCHEDULED",
+         *             "attemptCount": 2,
+         *             "lastErrorCode": "PROVIDER_TIMEOUT"
+         *           }
+         *         ],
+         *         "updatedAt": "2026-08-15T09:45:00+09:00"
+         *       }
+         *     }
+         */
         RuntimeOperatorCompensationView: {
+            /** @description 운영자 전용 전체 환불·혜택·재고 복구 진행 정보입니다. */
             compensation: components["schemas"]["CompensationSummary"];
         };
+        /**
+         * @description 요청 바디의 특정 필드 하나에 대한 검증 실패 사유입니다.
+         * @example {
+         *       "field": "pointsToUseKrw",
+         *       "reason": "보유 포인트 잔액을 초과했습니다."
+         *     }
+         */
         ErrorDetail: {
+            /**
+             * @description 검증에 실패한 요청 필드 경로. 필드 단위가 아닌 실패는 생략됩니다.
+             * @example pointsToUseKrw
+             */
             field?: string;
+            /**
+             * @description 실패 사유(한국어).
+             * @example 보유 포인트 잔액을 초과했습니다.
+             */
             reason: string;
         };
+        /**
+         * @description 모든 API가 공통으로 사용하는 에러 응답 형식입니다. 내부 예외명, SQL, secret,
+         *     stack trace는 절대 포함하지 않습니다.
+         * @example {
+         *       "code": "ORDER_STATE_CONFLICT",
+         *       "message": "이미 처리된 주문입니다.",
+         *       "correlationId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "details": []
+         *     }
+         */
         Error: {
+            /**
+             * @description 기계 판독용 에러 코드. 클라이언트 분기 처리에 사용합니다.
+             * @example ORDER_STATE_CONFLICT
+             */
             code: string;
+            /**
+             * @description 사람이 읽을 수 있는 에러 메시지(한국어).
+             * @example 이미 처리된 주문입니다.
+             */
             message: string;
+            /**
+             * @description 서버 로그와 대조할 수 있는 요청 추적 ID.
+             * @example 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
+             */
             correlationId: string;
+            /** @description 필드 단위 검증 실패 목록. 없으면 빈 배열입니다. */
             details: components["schemas"]["ErrorDetail"][];
-            /** @description Opaque convergence target present only when a safe retry contract explicitly requires it. */
+            /**
+             * @description 안전한 재시도 계약이 명시적으로 요구할 때만 존재하는, 수렴 대상을 가리키는
+             *     opaque 참조값입니다.
+             */
             targetReference?: string;
         };
-        /** @description Canonical lowercase login ID in an actor-specific namespace. */
+        /**
+         * @description 로그인 주체별로 사용하는 소문자 로그인 ID입니다. 서버가 대소문자와 앞뒤 공백을 정리한 값입니다.
+         * @example merchant01
+         */
         LoginId: string;
-        /** @description 15..128 Unicode code points and at most 512 UTF-8 bytes; never trimmed or normalized. */
+        /**
+         * @description 15~128 유니코드 코드포인트이며 at most 512 UTF-8 bytes(UTF-8 기준 최대 512바이트)여야
+         *     합니다. 앞뒤 공백 제거(trim)나 정규화를 하지 않습니다.
+         */
         Password: string;
+        /**
+         * @description 고객 계정 가입 요청입니다. 성공 시 잔액 0원인 포인트 계좌가 함께 생성됩니다.
+         * @example {
+         *       "loginId": "customer01",
+         *       "password": "Str0ngP@ssw0rd!",
+         *       "displayName": "김도넛"
+         *     }
+         */
         CustomerRegistrationRequest: {
             loginId: components["schemas"]["LoginId"];
             password: components["schemas"]["Password"];
             displayName: string;
         };
+        /**
+         * @description 고객 계정 가입이 완료되었음을 나타내는 결과입니다.
+         * @example {
+         *       "loginId": "customer01"
+         *     }
+         */
         CustomerRegistrationResult: {
             loginId: components["schemas"]["LoginId"];
         };
+        /**
+         * @description 로그인 ID/비밀번호로 인증을 요청하는 로그인 요청입니다. 고객/점주 로그인 모두 같은 형식을 사용합니다.
+         * @example {
+         *       "loginId": "merchant01",
+         *       "password": "Str0ngP@ssw0rd!"
+         *     }
+         */
         LoginRequest: {
             loginId: components["schemas"]["LoginId"];
             password: components["schemas"]["Password"];
         };
+        /**
+         * @description 내부 자원을 가리키는 UUID 문자열 식별자입니다.
+         * @example 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
+         */
         Identifier: string;
+        /**
+         * @description 현재 인증된 고객을 나타내는 actor 정보입니다.
+         * @example {
+         *       "actorType": "CUSTOMER",
+         *       "customerId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "displayName": "김도넛"
+         *     }
+         */
         CustomerActor: {
             /** @constant */
             actorType: "CUSTOMER";
             customerId: components["schemas"]["Identifier"];
             displayName: string;
         };
+        /**
+         * @description 현재 인증된 점주를 나타내는 actor 정보입니다. accountState가 INITIAL_PASSWORD면
+         *     아직 초기 비밀번호를 변경하지 않은 상태로, 비밀번호 변경 전까지 다른 API가
+         *     차단됩니다.
+         * @example {
+         *       "actorType": "MERCHANT",
+         *       "merchantId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "displayName": "홍길동",
+         *       "accountState": "ACTIVE"
+         *     }
+         */
         MerchantActor: {
             /** @constant */
             actorType: "MERCHANT";
@@ -2988,10 +4192,27 @@ export interface components {
             /** @enum {string} */
             accountState: "INITIAL_PASSWORD" | "ACTIVE";
         };
+        /**
+         * @description 현재 비밀번호를 검증한 뒤 새 비밀번호로 교체하는 요청입니다.
+         * @example {
+         *       "currentPassword": "OldStr0ngP@ss!",
+         *       "newPassword": "NewStr0ngP@ss!"
+         *     }
+         */
         MerchantPasswordChangeRequest: {
             currentPassword: components["schemas"]["Password"];
             newPassword: components["schemas"]["Password"];
         };
+        /**
+         * @description Keycloak 기반으로 인증된 현재 운영자(operator)를 나타내는 actor 정보입니다.
+         * @example {
+         *       "actorType": "OPERATOR",
+         *       "operatorId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "roles": [
+         *         "SETTLEMENT_REVIEWER"
+         *       ]
+         *     }
+         */
         OperatorActor: {
             /** @constant */
             actorType: "OPERATOR";
@@ -3015,24 +4236,87 @@ export interface components {
         StoreRecommendationList: {
             items: components["schemas"]["StoreRecommendation"][];
         };
+        /**
+         * @description 상인이 소속된 하나의 매장과 그 매장에서의 멤버십 역할입니다.
+         * @example {
+         *       "storeId": "01J8Z3QK2N5R7X9V6W4T8Y1B0C",
+         *       "storeName": "빈플로우 강남역점",
+         *       "membershipRole": "OWNER"
+         *     }
+         */
         MerchantStore: {
             storeId: components["schemas"]["Identifier"];
             storeName: string;
-            /** @enum {string} */
+            /**
+             * @description 해당 매장에서의 멤버십 역할. OWNER는 매장 소유자
+             * @enum {string}
+             */
             membershipRole: "OWNER" | "STAFF";
         };
+        /**
+         * @description 현재 상인이 활성 멤버십을 가진 매장 전체 목록입니다.
+         * @example [
+         *       {
+         *         "storeId": "01J8Z3QK2N5R7X9V6W4T8Y1B0C",
+         *         "storeName": "빈플로우 강남역점",
+         *         "membershipRole": "OWNER"
+         *       },
+         *       {
+         *         "storeId": "01J8Z3QK2N5R7X9V6W4T8Y1B0D",
+         *         "storeName": "빈플로우 역삼점",
+         *         "membershipRole": "STAFF"
+         *       }
+         *     ]
+         */
         MerchantStoreList: components["schemas"]["MerchantStore"][];
+        /**
+         * @description 인근 매장 검색 결과에 포함되는 매장 요약 정보입니다.
+         * @example {
+         *       "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "name": "빈플로우 강남점",
+         *       "distanceMeters": 320,
+         *       "open": true,
+         *       "pickupAvailable": true
+         *     }
+         */
         NearbyStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
-            /** @description Floored integer meters from the canonical micrometer query distance. It is a display value, not the cursor tuple. */
+            /**
+             * @description 내부 마이크로미터 단위 거리를 내림한 정수 미터 표시값입니다. This is a display value, not the cursor tuple(커서 정렬에 쓰이는 튜플이 아니라 화면 표시값)입니다.
+             * @example 320
+             */
             distanceMeters: number;
             open: boolean;
             pickupAvailable: boolean;
         };
+        /**
+         * @description 커서 기반 페이지네이션의 다음 페이지 정보를 나타냅니다.
+         * @example {
+         *       "nextCursor": "v1.sample.cursor.eyJvZmZzZXQiOjIwfQ"
+         *     }
+         */
         PageInfo: {
+            /** @description 다음 페이지가 있을 때 서버가 반환하는 문자열입니다. 다음 요청의 `cursor`에 그대로 사용합니다. */
             nextCursor?: string;
         };
+        /**
+         * @description 인근 매장 검색 결과 페이지입니다. 거리순, 동률 시 매장 ID순으로 정렬됩니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *           "name": "빈플로우 강남점",
+         *           "distanceMeters": 320,
+         *           "open": true,
+         *           "pickupAvailable": true
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "eyJvIjoiZGlzdGFuY2UiLCJ2IjoiMzIwIn0"
+         *       }
+         *     }
+         */
         NearbyStorePage: {
             items: components["schemas"]["NearbyStore"][];
             page: components["schemas"]["PageInfo"];
@@ -3063,17 +4347,49 @@ export interface components {
         };
         /**
          * Format: int64
-         * @description Integer Korean won
+         * @description 음수가 아닌 정수 원(KRW) 단위 금액입니다. 소수점 금액은 사용하지 않습니다.
+         * @example 12500
          */
         MoneyKrw: number;
-        /** @enum {string} */
+        /**
+         * @description 금액에 사용하는 통화 코드입니다. 현재는 원화(KRW)만 지원합니다.
+         * @example KRW
+         * @enum {string}
+         */
         Currency: "KRW";
+        /**
+         * @description 메뉴에 추가로 붙일 수 있는 옵션입니다(예 - 샷 추가, 사이즈 업).
+         * @example {
+         *       "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *       "name": "샷 추가",
+         *       "additionalPriceKrw": 500,
+         *       "available": true
+         *     }
+         */
         MenuOption: {
             optionId: components["schemas"]["Identifier"];
             name: string;
             additionalPriceKrw: components["schemas"]["MoneyKrw"];
             available: boolean;
         };
+        /**
+         * @description 매장이 판매하는 메뉴 하나와 선택 가능한 옵션 목록입니다.
+         * @example {
+         *       "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "name": "아메리카노",
+         *       "basePriceKrw": 4500,
+         *       "currency": "KRW",
+         *       "available": true,
+         *       "options": [
+         *         {
+         *           "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *           "name": "샷 추가",
+         *           "additionalPriceKrw": 500,
+         *           "available": true
+         *         }
+         *       ]
+         *     }
+         */
         Menu: {
             menuId: components["schemas"]["Identifier"];
             name: string;
@@ -3082,182 +4398,338 @@ export interface components {
             available: boolean;
             options: components["schemas"]["MenuOption"][];
         };
+        /**
+         * @description 매장의 현재 노출 메뉴 전체 목록입니다. 페이지가 아닌 완전한 목록입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *           "name": "아메리카노",
+         *           "basePriceKrw": 4500,
+         *           "currency": "KRW",
+         *           "available": true,
+         *           "options": [
+         *             {
+         *               "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *               "name": "샷 추가",
+         *               "additionalPriceKrw": 500,
+         *               "available": true
+         *             }
+         *           ]
+         *         }
+         *       ]
+         *     }
+         */
         MenuList: {
             items: components["schemas"]["Menu"][];
         };
-        /** Format: date-time */
+        /**
+         * Format: date-time
+         * @description 오프셋 또는 UTC 지정자를 포함한 ISO-8601 시각입니다.
+         * @example 2026-08-15T09:30:00+09:00
+         */
         DateTime: string;
+        /**
+         * @description 특정 시간대에 픽업 가능한 잔여 수용량을 나타내는 슬롯입니다.
+         * @example {
+         *       "pickupSlotId": "6d3c4e3b-2d9f-4b6d-ad1b-9f2e3d4c5b7c",
+         *       "startsAt": "2026-08-15T10:00:00+09:00",
+         *       "endsAt": "2026-08-15T10:15:00+09:00",
+         *       "remainingCapacity": 5
+         *     }
+         */
         PickupSlot: {
             pickupSlotId: components["schemas"]["Identifier"];
             startsAt: components["schemas"]["DateTime"];
             endsAt: components["schemas"]["DateTime"];
             remainingCapacity: number;
         };
+        /**
+         * @description 매장의 이용 가능한 픽업 슬롯 목록입니다(서버 현재 시각 이후 7일 이내).
+         * @example {
+         *       "items": [
+         *         {
+         *           "pickupSlotId": "6d3c4e3b-2d9f-4b6d-ad1b-9f2e3d4c5b7c",
+         *           "startsAt": "2026-08-15T10:00:00+09:00",
+         *           "endsAt": "2026-08-15T10:15:00+09:00",
+         *           "remainingCapacity": 5
+         *         }
+         *       ]
+         *     }
+         */
         PickupSlotList: {
             items: components["schemas"]["PickupSlot"][];
         };
+        /**
+         * @description 주문 한 줄(메뉴 1종 + 옵션 조합 + 수량)입니다.
+         * @example {
+         *       "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *       "optionIds": [
+         *         "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+         *       ],
+         *       "quantity": 2
+         *     }
+         */
         CreateOrderLineRequest: {
             menuId: components["schemas"]["Identifier"];
+            /** @description 선택한 옵션 ID 목록. 정규화된 옵션 조합이 해당 메뉴에 존재해야 합니다. */
             optionIds: components["schemas"]["Identifier"][];
+            /**
+             * @description 수량(1 이상).
+             * @example 2
+             */
             quantity: number;
         };
+        /**
+         * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
+         *     번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
+         *     트랜잭션에서 모두 재검증·예약합니다.
+         * @example {
+         *       "storeId": "9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8",
+         *       "pickupSlotId": "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+         *       "lines": [
+         *         {
+         *           "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *           "optionIds": [
+         *             "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+         *           ],
+         *           "quantity": 2
+         *         }
+         *       ],
+         *       "couponIssuanceId": null,
+         *       "pointsToUseKrw": 1000
+         *     }
+         */
         CreateOrderRequest: {
             storeId: components["schemas"]["Identifier"];
             pickupSlotId: components["schemas"]["Identifier"];
+            /** @description 주문할 메뉴 목록. 최소 1개 이상이어야 합니다. */
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
         };
-        /** @enum {string} */
+        /**
+         * @description 주문의 현재 생명주기 상태를 나타내는 열거형입니다.
+         * @example ACCEPTED
+         * @enum {string}
+         */
         OrderState: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "EXPIRED" | "CANCELLED" | "REJECTED";
+        /**
+         * @description 주문 당시 메뉴와 옵션, 단가, 수량, 할인·포인트·현금 배분 금액을 저장한 주문 항목입니다.
+         * @example {
+         *       "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *       "menuId": "df0b93c6-ceb2-57d2-9f0f-8949c2db2642",
+         *       "menuName": "아이스 아메리카노",
+         *       "optionNames": [
+         *         "샷 추가"
+         *       ],
+         *       "unitPriceKrw": 4500,
+         *       "quantity": 2,
+         *       "couponDiscountKrw": 1000,
+         *       "pointsAppliedKrw": 500,
+         *       "cashPaidKrw": 7500
+         *     }
+         */
         OrderLine: {
+            /** @description 해당 주문 항목 자원을 가리키는 UUID 식별자입니다. */
             orderLineId: components["schemas"]["Identifier"];
+            /** @description 해당 메뉴 자원을 가리키는 UUID 식별자입니다. */
             menuId: components["schemas"]["Identifier"];
             menuName: string;
+            /** @description 주문 시점에 고정된 선택 옵션 이름 목록입니다. */
             optionNames: string[];
+            /** @description 주문 시점에 고정된 메뉴 한 개의 단가입니다. */
             unitPriceKrw: components["schemas"]["MoneyKrw"];
             quantity: number;
+            /** @description 쿠폰으로 할인된 금액입니다. */
             couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            /** @description 주문 결제에 사용된 포인트 금액입니다. */
             pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            /** @description 해당 주문 항목에 배분된 현금 결제 금액입니다. */
             cashPaidKrw: components["schemas"]["MoneyKrw"];
         };
         /**
-         * @description Customer-facing recovery projection for the Refund created by a customer
-         *     cancellation. Internal Refund states are projected to the public state
-         *     and optional notice below; verified cancellation allocation amounts are
-         *     included only when their durable sources are complete.
+         * @description 고객이 주문을 취소한 뒤 현금 환불이 어디까지 진행됐는지 보여 주는 요약입니다.
+         *     고객 화면에는 `NOT_REQUIRED`, `REQUESTED`, `PROCESSING`, `SUCCEEDED`만 사용합니다. 내부 재시도 예정, 결과 불명, 상태 재확인 중은 모두 `PROCESSING`으로 보여 주며, 자동 처리가 오래 지연되거나 수동 확인이 필요하면 `noticeCode: REFUND_DELAYED`를 함께 제공합니다. 서버가 금액을 확인할 수 없을 때는 0원으로 추정하지 않고 관련 금액 필드를 생략합니다.
+         * @example {
+         *       "state": "SUCCEEDED",
+         *       "approvedAmountKrw": 9000,
+         *       "succeededRefundAmountBeforeCancellationKrw": 0,
+         *       "cancellationRequestedRefundAmountKrw": 9000,
+         *       "remainingRefundableAmountKrw": 0,
+         *       "lastUpdatedAt": "2026-08-15T09:36:00+09:00"
+         *     }
          */
         CancellationRefundRecoverySummary: {
             /**
-             * @description Customer-facing projection of the Refund created for this cancellation
-             *     only. Internal PROCESSING, RETRY_SCHEDULED, UNKNOWN and RECONCILING are
-             *     exposed as PROCESSING. Internal FAILED and MANUAL_REVIEW are also exposed
-             *     as PROCESSING with noticeCode REFUND_DELAYED. Other Refunds and the
-             *     compensation PAYMENT step are not combined. NOT_REQUIRED is used
-             *     exactly when the cancellation requested refund amount is zero. That
-             *     covers a BENEFIT_ONLY cancellation, where all four amounts are zero;
-             *     a PENDING_PAYMENT cancellation, which has no approval and no durable
-             *     snapshot to verify and therefore omits all four amounts rather than
-             *     reporting them as zero; and a PAID cancellation whose approved
-             *     amount was already fully returned by an earlier refund, where
-             *     approvedAmountKrw and succeededRefundAmountBeforeCancellationKrw
-             *     stay positive.
-             *     Internal setup damage is exposed as PROCESSING with REFUND_DELAYED;
-             *     SETUP_INCOMPLETE and missing artifact details are operator-only.
+             * @description 고객에게 보여 주는 이번 취소 환불 상태입니다.
+             *     - `NOT_REQUIRED`: 이번 취소로 새로 환불할 현금이 없습니다. 결제 전 취소, 현금 결제가 없는 취소, 이전 환불로 전액이 이미 반환된 경우가 포함될 수 있습니다.
+             *     - `REQUESTED`: 환불 요청이 저장됐습니다.
+             *     - `PROCESSING`: 외부 결제사 처리, 재시도, 결과 확인 또는 수동 확인이 진행 중입니다.
+             *     - `SUCCEEDED`: 환불 성공이 확인됐습니다.
+             *     내부 실패나 수동 검토 상태는 고객 화면에서 `PROCESSING`으로 표시하고 필요한 경우 `REFUND_DELAYED` 안내 코드를 함께 제공합니다.
              * @enum {string}
              */
             state: "NOT_REQUIRED" | "REQUESTED" | "PROCESSING" | "SUCCEEDED";
             /**
-             * @description Present as REFUND_DELAYED after automatic processing is exhausted or
-             *     when required cancellation refund setup is incomplete. Clients show
-             *     an information icon and localized delay/apology copy. Retry mode,
-             *     attempt count, failure code, setup artifact details and manual-review
-             *     status are never exposed to customers.
+             * @description `REFUND_DELAYED`는 자동 처리가 오래 지연되거나 담당자 확인이 필요한 경우 고객에게 지연 안내를 보여 주기 위한 코드입니다. 내부 오류·시도 횟수·처리 방식은 노출하지 않습니다.
              * @enum {string}
              */
             noticeCode?: "REFUND_DELAYED";
-            /**
-             * @description Immutable Provider-approved amount snapshotted by the cancellation
-             *     transaction. Present for a complete setup and omitted rather than
-             *     inferred when the durable snapshot is unavailable.
-             */
+            /** @description 외부 결제사가 승인한 원래 결제 금액입니다. 취소 시점에 확인해 저장한 값이 있을 때만 제공합니다. */
             approvedAmountKrw?: components["schemas"]["MoneyKrw"];
-            /**
-             * @description Sum of SUCCEEDED Refund amounts committed before the cancellation
-             *     transaction. Present for a complete setup and omitted when the durable
-             *     snapshot is unavailable.
-             */
+            /** @description 이번 취소 전에 이미 성공한 환불 금액의 합계입니다. 확인 가능한 저장 기록이 있을 때만 제공합니다. */
             succeededRefundAmountBeforeCancellationKrw?: components["schemas"]["MoneyKrw"];
-            /**
-             * @description Refund amount requested by this customer cancellation. Present for a
-             *     complete setup and omitted when the durable snapshot is unavailable.
-             */
+            /** @description 이번 고객 취소로 새로 요청한 현금 환불 금액입니다. 확인 가능한 저장 기록이 있을 때만 제공합니다. */
             cancellationRequestedRefundAmountKrw?: components["schemas"]["MoneyKrw"];
-            /**
-             * @description Current actual refundable balance at representation time: approved
-             *     amount minus all SUCCEEDED Refund amounts. REQUESTED, PROCESSING,
-             *     RETRY_SCHEDULED, UNKNOWN, RECONCILING, FAILED and MANUAL_REVIEW Refunds
-             *     do not reduce this value until they succeed.
-             */
+            /** @description 현재 실제로 더 환불할 수 있는 금액입니다. 승인 금액에서 성공이 확인된 모든 환불액을 뺀 값이며 처리 중인 환불은 성공하기 전까지 차감하지 않습니다. */
             remainingRefundableAmountKrw?: components["schemas"]["MoneyKrw"];
+            /** @description 환불 복구 조회용 응답이 마지막으로 갱신된 시각입니다. */
             lastUpdatedAt?: components["schemas"]["DateTime"];
         } & (unknown & unknown & unknown & unknown & unknown & unknown);
         /**
-         * @description System-determined cancellation origin. CUSTOMER_REQUEST is a customer
-         *     command, SUPPORT_REQUEST is an approved Support owner command and
-         *     PAYMENT_DECLINED is caused by an explicit Provider approval decline.
-         *     CUSTOMER_REQUEST and SUPPORT_REQUEST carry a structured reason code.
+         * @description 주문이 취소된 직접 원인입니다. `CUSTOMER_REQUEST`는 고객 요청, `SUPPORT_REQUEST`는 고객센터 처리, `PAYMENT_DECLINED`는 결제 승인 거절을 뜻합니다.
+         * @example CUSTOMER_REQUEST
          * @enum {string}
          */
         CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "SUPPORT_REQUEST";
         /**
-         * @description Customer-declared cancellation reason, independent of the system-determined cause
+         * @description 고객이 선택한 주문 취소 사유입니다. 시스템이 기록하는 취소 원인과 별도로 사용됩니다.
+         * @example CHANGED_MIND
          * @enum {string}
          */
         CancellationReasonCode: "CHANGED_MIND" | "ORDER_MISTAKE" | "WAIT_TOO_LONG" | "PICKUP_TIME_CONFLICT" | "PAYMENT_ISSUE" | "OTHER";
+        /**
+         * @description 고객에게 제공하는 주문 전체 정보입니다. 주문 당시 메뉴·옵션·가격, 결제 금액, 현재 상태와 실제로 발생한 상태 변경 시각을 포함합니다.
+         * @example {
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "publicReference": "BF-7K4M-Q2XZ",
+         *       "pickupNumber": "A-12",
+         *       "pickupBusinessDate": "2026-08-15",
+         *       "storeName": "빈플로우 성수점",
+         *       "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *       "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *       "state": "ACCEPTED",
+         *       "lines": [
+         *         {
+         *           "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *           "menuId": "df0b93c6-ceb2-57d2-9f0f-8949c2db2642",
+         *           "menuName": "아이스 아메리카노",
+         *           "optionNames": [
+         *             "샷 추가"
+         *           ],
+         *           "unitPriceKrw": 4500,
+         *           "quantity": 2,
+         *           "couponDiscountKrw": 1000,
+         *           "pointsAppliedKrw": 500,
+         *           "cashPaidKrw": 7500
+         *         }
+         *       ],
+         *       "subtotalKrw": 9000,
+         *       "couponDiscountKrw": 1000,
+         *       "pointsAppliedKrw": 500,
+         *       "payableKrw": 7500,
+         *       "currency": "KRW",
+         *       "paidAt": "2026-08-15T09:31:00+09:00",
+         *       "acceptanceDeadlineAt": "2026-08-15T09:36:00+09:00",
+         *       "acceptedAt": "2026-08-15T09:33:00+09:00",
+         *       "createdAt": "2026-08-15T09:30:00+09:00",
+         *       "updatedAt": "2026-08-15T09:33:00+09:00"
+         *     }
+         */
         Order: {
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
+            /** @description 고객·점주 화면에서 사용하는 BF-XXXX-XXXX 형식의 공개 주문 참조번호입니다. */
             publicReference: string;
+            /** @description 해당 영업일 매장에서 호출하는 A-숫자 형식의 픽업 번호입니다. */
             pickupNumber: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description 매장 영업일 기준 픽업 날짜입니다.
+             */
             pickupBusinessDate: string;
             storeName: string;
+            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
             pickupWindowStart: components["schemas"]["DateTime"];
+            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
             pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description 주문의 현재 상태입니다. */
             state: components["schemas"]["OrderState"];
+            /** @description 결제 대기 예약이 만료되는 시각입니다. */
             reservationExpiresAt?: components["schemas"]["DateTime"];
+            /** @description 주문에 포함된 주문 항목 목록입니다. */
             lines: components["schemas"]["OrderLine"][];
+            /** @description 할인과 포인트 적용 전 주문 항목 합계 금액입니다. */
             subtotalKrw: components["schemas"]["MoneyKrw"];
+            /** @description 쿠폰으로 할인된 금액입니다. */
             couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            /** @description 주문 결제에 사용된 포인트 금액입니다. */
             pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            /** @description 쿠폰과 포인트 적용 후 현금으로 결제할 금액입니다. */
             payableKrw: components["schemas"]["MoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
+            /** @description 고객 취소 상태에서 노출되는 환불 복구 요약입니다. */
             paymentRecovery?: components["schemas"]["CancellationRefundRecoverySummary"];
+            /** @description 결제 승인으로 주문이 PAID가 된 시각입니다. */
             paidAt?: components["schemas"]["DateTime"];
+            /** @description 매장 수락 지연 경고 기준 시각입니다. */
             acceptanceWarningAt?: components["schemas"]["DateTime"];
+            /** @description 수락 지연 경고 알림을 요청한 시각입니다. */
             acceptanceWarningRequestedAt?: components["schemas"]["DateTime"];
+            /** @description 매장이 주문을 수락해야 하는 마감 시각입니다. */
             acceptanceDeadlineAt?: components["schemas"]["DateTime"];
+            /** @description 매장이 주문을 수락한 시각입니다. */
             acceptedAt?: components["schemas"]["DateTime"];
+            /** @description 매장이 주문을 거절한 시각입니다. */
             rejectedAt?: components["schemas"]["DateTime"];
+            /** @description 주문 제조가 시작된 시각입니다. */
             preparingAt?: components["schemas"]["DateTime"];
+            /** @description 주문이 픽업 준비 완료 상태가 된 시각입니다. */
             readyAt?: components["schemas"]["DateTime"];
+            /** @description 주문 픽업 또는 정산 대상 거래가 완료된 시각입니다. */
             completedAt?: components["schemas"]["DateTime"];
+            /** @description 매장이 주문을 거절한 사람이 읽을 수 있는 사유입니다. */
             rejectionReason?: string;
-            /**
-             * @description Present only when state is CANCELLED. Required together with
-             *     cancellationCause by the order cancellation model (ADR-029).
-             */
+            /** @description state가 CANCELLED일 때만 존재하며 주문 취소 모델(ADR-029)에 따라 cancellationCause와 함께 요구되는 취소 시각입니다. */
             cancelledAt?: components["schemas"]["DateTime"];
-            /**
-             * @description System-determined cancellation origin. Present only when state is
-             *     CANCELLED. Independent of the customer-declared reason code.
-             */
+            /** @description state가 CANCELLED일 때만 존재하는 시스템 판정 취소 원인입니다. 고객이 선택한 사유 코드와 독립적입니다. */
             cancellationCause?: components["schemas"]["CancellationCause"];
-            /**
-             * @description Customer-declared reason, present only when cancellationCause is
-             *     CUSTOMER_REQUEST. Customer projection only; the store projection
-             *     (StoreOrder) never carries it. The free-text cancellation detail is
-             *     never exposed in any representation.
-             */
+            /** @description cancellationCause가 CUSTOMER_REQUEST일 때만 고객 조회용 응답에 노출되는 구조화된 취소 사유입니다. 매장 조회용 응답과 자유 입력 상세에는 노출하지 않습니다. */
             cancellationReasonCode?: components["schemas"]["CancellationReasonCode"];
+            /** @description 리소스가 생성된 시각입니다. */
             createdAt: components["schemas"]["DateTime"];
+            /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
+        /** @description 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. 예약이 만료되기 전에 결제를 완료해야 합니다. */
         PendingPaymentOrder: components["schemas"]["Order"] & {
             /** @constant */
             state?: "PENDING_PAYMENT";
+            /** @description 이 시각까지 결제를 완료하지 않으면 예약과 주문이 만료됩니다. */
             reservationExpiresAt: components["schemas"]["DateTime"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 결제해야 할 남은 금액(원). 1원 이상입니다.
+             */
             payableKrw?: number;
         };
+        /** @description 결제할 금액이 남아 있는 주문 생성 결과입니다. 별도의 결제 승인 API를 이어서 호출해야 합니다. */
         PendingPaymentOrderCreation: {
             order: components["schemas"]["PendingPaymentOrder"];
         };
+        /** @description 쿠폰·포인트만으로 결제가 즉시 확정된(`PAID`) 주문입니다. 결제할 현금이 없습니다. */
         BenefitOnlyPaidOrder: components["schemas"]["Order"] & {
             /** @constant */
             state?: "PAID";
-            /** @constant */
+            /**
+             * @description 쿠폰·포인트로 전액 결제되어 결제할 현금이 없습니다(항상 0).
+             * @constant
+             */
             payableKrw?: 0;
         };
         /** @enum {string} */
@@ -3293,11 +4765,26 @@ export interface components {
             /** @constant */
             approvedAmountKrw?: 0;
         };
+        /** @description 쿠폰·포인트만으로 결제가 즉시 완료된 주문 생성 결과입니다. 결제 금액은 0원입니다. */
         BenefitOnlyOrderCreation: {
             order: components["schemas"]["BenefitOnlyPaidOrder"];
             payment: components["schemas"]["BenefitOnlyPayment"];
         };
+        /**
+         * @description 주문 생성 결과입니다. 결제할 금액이 남아 있으면 `PendingPaymentOrderCreation`(주문만
+         *     생성, 별도 결제 승인 필요)을, 쿠폰·포인트만으로 결제가 끝나면
+         *     `BenefitOnlyOrderCreation`(주문과 결제가 함께 확정)을 반환합니다.
+         */
         CreateOrderResult: components["schemas"]["PendingPaymentOrderCreation"] | components["schemas"]["BenefitOnlyOrderCreation"];
+        /**
+         * @description 재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
+         *     새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
+         * @example {
+         *       "pickupSlotId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "couponIssuanceId": null,
+         *       "pointsToUseKrw": 0
+         *     }
+         */
         ReorderOrderRequest: {
             pickupSlotId: components["schemas"]["Identifier"];
             couponIssuanceId?: components["schemas"]["Identifier"];
@@ -3305,9 +4792,24 @@ export interface components {
         };
         /**
          * Format: int64
-         * @description Signed integer Korean won
+         * @description 부호 있는 정수 원(KRW) 단위 금액입니다. 음수는 차감·회수·부담을, 양수는 증가·지급·적립을 나타낼 수 있습니다.
+         * @example -3000
          */
         SignedMoneyKrw: number;
+        /**
+         * @description 재주문 시점에 가격이 변경된 원본 주문 라인 하나에 대한 상세 비교입니다.
+         * @example {
+         *       "sourceOrderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
+         *       "lineSequence": 0,
+         *       "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *       "quantity": 2,
+         *       "sourceUnitPriceKrw": 4500,
+         *       "currentUnitPriceKrw": 4750,
+         *       "sourceLineGrossKrw": 9000,
+         *       "currentLineGrossKrw": 9500,
+         *       "lineDifferenceKrw": 500
+         *     }
+         */
         ReorderLinePriceChange: {
             sourceOrderLineId: components["schemas"]["Identifier"];
             lineSequence: number;
@@ -3319,23 +4821,155 @@ export interface components {
             currentLineGrossKrw: components["schemas"]["MoneyKrw"];
             lineDifferenceKrw: components["schemas"]["SignedMoneyKrw"];
         };
+        /**
+         * @description 원본 주문 시점 가격과 재주문 시점 현재 가격을 비교한 결과입니다. 메뉴/옵션
+         *     가격이 변경됐거나 더 이상 판매하지 않는 항목이 있으면 items에 그 차이가
+         *     나열됩니다.
+         * @example {
+         *       "hasPriceChanges": true,
+         *       "sourceSubtotalKrw": 9000,
+         *       "currentSubtotalKrw": 9500,
+         *       "subtotalDifferenceKrw": 500,
+         *       "items": [
+         *         {
+         *           "sourceOrderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
+         *           "lineSequence": 0,
+         *           "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *           "quantity": 2,
+         *           "sourceUnitPriceKrw": 4500,
+         *           "currentUnitPriceKrw": 4750,
+         *           "sourceLineGrossKrw": 9000,
+         *           "currentLineGrossKrw": 9500,
+         *           "lineDifferenceKrw": 500
+         *         }
+         *       ]
+         *     }
+         */
         ReorderPriceComparison: {
+            /** @description 원본 주문과 현재 가격 사이에 하나라도 차이가 있으면 true입니다. */
             hasPriceChanges: boolean;
             sourceSubtotalKrw: components["schemas"]["MoneyKrw"];
             currentSubtotalKrw: components["schemas"]["MoneyKrw"];
             subtotalDifferenceKrw: components["schemas"]["SignedMoneyKrw"];
-            /** @description Changed lines only, ordered by source lineSequence */
+            /** @description 가격이 변경된 라인만 포함하며, 원본 주문의 lineSequence 순서로 정렬됩니다. */
             items: components["schemas"]["ReorderLinePriceChange"][];
         };
+        /**
+         * @description 결제가 필요한(PENDING_PAYMENT) 상태로 생성된 재주문 결과입니다.
+         * @example {
+         *       "order": {
+         *         "orderId": "7c8d9e0f-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+         *         "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *         "publicReference": "BF-7K2M-9QRT",
+         *         "pickupNumber": "A-12",
+         *         "pickupBusinessDate": "2026-08-15",
+         *         "storeName": "성수 1호점",
+         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *         "state": "PENDING_PAYMENT",
+         *         "reservationExpiresAt": "2026-08-15T09:45:00+09:00",
+         *         "lines": [
+         *           {
+         *             "orderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
+         *             "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *             "menuName": "아메리카노",
+         *             "optionNames": [
+         *               "ICE"
+         *             ],
+         *             "unitPriceKrw": 4500,
+         *             "quantity": 2,
+         *             "couponDiscountKrw": 0,
+         *             "pointsAppliedKrw": 0,
+         *             "cashPaidKrw": 9000
+         *           }
+         *         ],
+         *         "subtotalKrw": 9000,
+         *         "couponDiscountKrw": 0,
+         *         "pointsAppliedKrw": 0,
+         *         "payableKrw": 9000,
+         *         "currency": "KRW",
+         *         "createdAt": "2026-08-15T09:30:00+09:00",
+         *         "updatedAt": "2026-08-15T09:30:00+09:00"
+         *       },
+         *       "priceComparison": {
+         *         "hasPriceChanges": false,
+         *         "sourceSubtotalKrw": 9000,
+         *         "currentSubtotalKrw": 9000,
+         *         "subtotalDifferenceKrw": 0,
+         *         "items": []
+         *       }
+         *     }
+         */
         PendingPaymentReorderOrderCreation: {
             order: components["schemas"]["PendingPaymentOrder"];
             priceComparison: components["schemas"]["ReorderPriceComparison"];
         };
+        /**
+         * @description 쿠폰과 포인트만으로 결제가 전액 상쇄되어 별도 카드 결제 없이 바로 확정(PAID)된
+         *     재주문 결과입니다.
+         * @example {
+         *       "order": {
+         *         "orderId": "7c8d9e0f-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+         *         "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *         "publicReference": "BF-7K2M-9QRT",
+         *         "pickupNumber": "A-12",
+         *         "pickupBusinessDate": "2026-08-15",
+         *         "storeName": "성수 1호점",
+         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *         "state": "PAID",
+         *         "lines": [
+         *           {
+         *             "orderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
+         *             "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+         *             "menuName": "아메리카노",
+         *             "optionNames": [
+         *               "ICE"
+         *             ],
+         *             "unitPriceKrw": 4500,
+         *             "quantity": 2,
+         *             "couponDiscountKrw": 0,
+         *             "pointsAppliedKrw": 9000,
+         *             "cashPaidKrw": 0
+         *           }
+         *         ],
+         *         "subtotalKrw": 9000,
+         *         "couponDiscountKrw": 0,
+         *         "pointsAppliedKrw": 9000,
+         *         "payableKrw": 0,
+         *         "currency": "KRW",
+         *         "paidAt": "2026-08-15T09:30:00+09:00",
+         *         "createdAt": "2026-08-15T09:30:00+09:00",
+         *         "updatedAt": "2026-08-15T09:30:00+09:00"
+         *       },
+         *       "payment": {
+         *         "paymentId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+         *         "orderId": "7c8d9e0f-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+         *         "type": "BENEFIT_ONLY",
+         *         "approvalState": "APPROVED",
+         *         "approvedAmountKrw": 0,
+         *         "currency": "KRW",
+         *         "updatedAt": "2026-08-15T09:30:00+09:00"
+         *       },
+         *       "priceComparison": {
+         *         "hasPriceChanges": false,
+         *         "sourceSubtotalKrw": 9000,
+         *         "currentSubtotalKrw": 9000,
+         *         "subtotalDifferenceKrw": 0,
+         *         "items": []
+         *       }
+         *     }
+         */
         BenefitOnlyReorderOrderCreation: {
             order: components["schemas"]["BenefitOnlyPaidOrder"];
             payment: components["schemas"]["BenefitOnlyPayment"];
             priceComparison: components["schemas"]["ReorderPriceComparison"];
         };
+        /**
+         * @description 재주문 생성 결과입니다. 결제가 필요하면 PendingPaymentReorderOrderCreation을,
+         *     쿠폰/포인트만으로 결제가 전액 상쇄되면 BenefitOnlyReorderOrderCreation을
+         *     반환합니다.
+         */
         ReorderOrderResult: components["schemas"]["PendingPaymentReorderOrderCreation"] | components["schemas"]["BenefitOnlyReorderOrderCreation"];
         ReorderItemFailureDetail: {
             sourceOrderLineId: components["schemas"]["Identifier"];
@@ -3352,30 +4986,59 @@ export interface components {
             correlationId: string;
             details: components["schemas"]["ReorderItemFailureDetail"][];
         };
+        /**
+         * @description 주문 취소 요청입니다. 취소 사유 코드는 필수입니다. 선택 입력한 상세 사유는 주문 기록에만 저장하고 로그, 이벤트, 외부 결제사 요청, API 응답에는 포함하지 않습니다.
+         * @example {
+         *       "reasonCode": "CHANGED_MIND",
+         *       "detail": "픽업 시간에 방문하기 어려워졌습니다."
+         *     }
+         */
         CancellationRequest: {
+            /** @description API에서 정한 사유 코드입니다. */
             reasonCode: components["schemas"]["CancellationReasonCode"];
             /**
-             * @description Optional free-text detail supplied by the customer. The server trims it
-             *     before validation. An empty normalized value is treated as absent. A
-             *     present normalized value must contain 1 to 200 characters.
-             *     Control characters are rejected. Stored on the order only. Never
-             *     included in events, audit records, provider requests, application
-             *     logs or any API response.
+             * @description 고객이 입력하는 선택적 상세 설명입니다. The server trims it before validation
+             *     (서버가 검증 전에 앞뒤 공백을 제거합니다). An empty normalized value is treated as
+             *     absent(trim 결과가 빈 문자열이면 미입력으로 처리), a present normalized value must
+             *     contain 1 to 200 characters(존재하면 1~200자). Control characters are rejected
+             *     (제어문자는 거부됩니다). 주문에만 저장하고 이벤트·감사·외부 결제사 요청·로그·API
+             *     응답에는 넣지 않습니다.
              */
             detail?: string;
         };
         /**
-         * @description Cancellation result for an order. The order is identified by orderId; no
-         *     separate cancellation identifier exists because cancellation is not a
-         *     separate aggregate and an order can be cancelled at most once.
+         * @description 주문 취소 결과입니다. 취소는 주문 상태에 포함되므로 별도 취소 ID 없이 `orderId`로 식별합니다.
+         * @example {
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "orderState": "CANCELLED",
+         *       "reasonCode": "CHANGED_MIND",
+         *       "paymentRecovery": {
+         *         "state": "SUCCEEDED",
+         *         "approvedAmountKrw": 9000,
+         *         "succeededRefundAmountBeforeCancellationKrw": 0,
+         *         "cancellationRequestedRefundAmountKrw": 9000,
+         *         "remainingRefundableAmountKrw": 0,
+         *         "lastUpdatedAt": "2026-08-15T09:36:00+09:00"
+         *       },
+         *       "cancelledAt": "2026-08-15T09:35:00+09:00",
+         *       "correlationId": "6bd654e4-c246-5998-a665-9cbdd19a4047"
+         *     }
          */
         Cancellation: {
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
-            /** @constant */
+            /**
+             * @description 취소 결과의 주문 상태이며 항상 CANCELLED입니다.
+             * @constant
+             */
             orderState: "CANCELLED";
+            /** @description 고객이 선택한 API에서 정한 취소 사유 코드입니다. */
             reasonCode: components["schemas"]["CancellationReasonCode"];
+            /** @description 이번 고객 취소로 생성된 환불의 고객용 복구 요약입니다. */
             paymentRecovery: components["schemas"]["CancellationRefundRecoverySummary"];
+            /** @description 주문이 취소된 시각입니다. */
             cancelledAt: components["schemas"]["DateTime"];
+            /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
         };
         /** @enum {string} */
@@ -3446,13 +5109,39 @@ export interface components {
             cancellationPreview?: components["schemas"]["CustomerCancellationPreview"];
             paymentRecovery?: components["schemas"]["CancellationRefundRecoverySummary"];
         };
+        /**
+         * @description 공개 주문 참조번호로 요청한 고객 취소 결과입니다. 내부 주문 ID 대신 공개 참조번호와 취소 상태, 환불 복구 요약, 추적 정보를 제공합니다.
+         * @example {
+         *       "orderReference": "BF-7K4M-Q2XZ",
+         *       "orderState": "CANCELLED",
+         *       "reasonCode": "CHANGED_MIND",
+         *       "paymentRecovery": {
+         *         "state": "PROCESSING",
+         *         "approvedAmountKrw": 9000,
+         *         "succeededRefundAmountBeforeCancellationKrw": 0,
+         *         "cancellationRequestedRefundAmountKrw": 9000,
+         *         "remainingRefundableAmountKrw": 9000,
+         *         "lastUpdatedAt": "2026-08-15T09:35:30+09:00"
+         *       },
+         *       "cancelledAt": "2026-08-15T09:35:00+09:00",
+         *       "correlationId": "072b89dc-3e01-5af2-a29a-1921eed64db0"
+         *     }
+         */
         CustomerCancellationResult: {
+            /** @description 사람이 읽을 수 있는 BF-XXXX-XXXX 형식의 공개 주문 참조번호입니다. */
             orderReference: string;
-            /** @constant */
+            /**
+             * @description 취소된 주문 상태이며 항상 CANCELLED입니다.
+             * @constant
+             */
             orderState: "CANCELLED";
+            /** @description API에서 정한 사유 코드입니다. */
             reasonCode: components["schemas"]["CancellationReasonCode"];
+            /** @description 고객에게 노출되는 환불 복구 진행 요약입니다. */
             paymentRecovery: components["schemas"]["CancellationRefundRecoverySummary"];
+            /** @description 주문이 취소된 시각입니다. */
             cancelledAt: components["schemas"]["DateTime"];
+            /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
         };
         PaymentClientConfiguration: {
@@ -3490,6 +5179,21 @@ export interface components {
             orderId: string;
             amount: components["schemas"]["MoneyKrw"];
         };
+        /**
+         * @description 고객이 등록한 결제수단입니다. 내부 토큰, Provider 고객 참조 등 민감정보는 포함하지
+         *     않으며, 카드 뒷자리 4자리(lastFour)까지만 노출합니다.
+         * @example {
+         *       "paymentMethodId": "01J8Z3QK2N5R7X9V6W4T8Y1B0E",
+         *       "provider": "TOSS_PAYMENTS",
+         *       "displayAlias": "내 신용카드",
+         *       "cardBrand": "KB국민카드",
+         *       "lastFour": "1234",
+         *       "isDefault": true,
+         *       "status": "ACTIVE",
+         *       "createdAt": "2026-06-01T09:00:00Z",
+         *       "updatedAt": "2026-06-01T09:00:00Z"
+         *     }
+         */
         PaymentMethod: {
             paymentMethodId: components["schemas"]["Identifier"];
             /** @constant */
@@ -3501,135 +5205,297 @@ export interface components {
             /** @enum {string} */
             status: "ACTIVE" | "DEACTIVATION_PENDING";
             /**
-             * @description Present only when automatic deactivation recovery has stopped for manual investigation
+             * @description 자동 비활성화 복구가 중단되어 수동 조사 대상이 된 경우에만 존재합니다.
              * @constant
              */
             noticeCode?: "DEACTIVATION_DELAYED";
             createdAt: components["schemas"]["DateTime"];
             updatedAt: components["schemas"]["DateTime"];
         } & unknown;
+        /**
+         * @description 고객의 결제수단 목록을 담은 signed cursor 페이지입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "paymentMethodId": "01J8Z3QK2N5R7X9V6W4T8Y1B0E",
+         *           "provider": "TOSS_PAYMENTS",
+         *           "displayAlias": "내 신용카드",
+         *           "cardBrand": "KB국민카드",
+         *           "lastFour": "1234",
+         *           "isDefault": true,
+         *           "status": "ACTIVE",
+         *           "createdAt": "2026-06-01T09:00:00Z",
+         *           "updatedAt": "2026-06-01T09:00:00Z"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": null
+         *       }
+         *     }
+         */
         PaymentMethodPage: {
             items: components["schemas"]["PaymentMethod"][];
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * @description Provider 결제창 인증을 완료한 뒤 결제수단을 등록하는 요청입니다. 카드번호, CVC,
+         *     유효기간, 생년월일 등 민감정보는 받지 않으며, Provider가 발급한 1회용 authKey와
+         *     고객이 지정하는 표시 별칭만 받습니다.
+         * @example {
+         *       "authKey": "(Provider 결제창이 반환한 1회용 opaque 인증 키)",
+         *       "displayAlias": "내 신용카드"
+         *     }
+         */
         RegisterPaymentMethodRequest: {
-            /** @description One-time opaque authorization key returned by the Provider payment window */
+            /** @description Provider 결제창이 반환한 1회용 opaque 인증 키입니다. */
             authKey: string;
-            /** @description The server trims this value, then requires 1 to 80 characters; control characters are rejected */
+            /**
+             * @description The server trims this value(서버가 값의 앞뒤 공백을 제거)한 뒤 requires 1 to 80 characters
+             *     (1~80자여야 하며), control characters are rejected(제어 문자는 거부됩니다).
+             */
             displayAlias: string;
         };
+        /**
+         * @description 결제수단 등록 결과가 아직 확정되지 않았을 때 반환되는 진행 중 상태입니다. 이 상태는
+         *     등록 완료된 결제수단이 아니며 결제에 사용할 수 없습니다.
+         * @example {
+         *       "paymentMethodId": "01J8Z3QK2N5R7X9V6W4T8Y1B0E",
+         *       "state": "PROCESSING",
+         *       "correlationId": "01J8Z3QK2N5R7X9V6W4T8Y1B0F",
+         *       "updatedAt": "2026-06-01T09:00:00Z"
+         *     }
+         */
         PaymentMethodRegistration: {
             paymentMethodId: components["schemas"]["Identifier"];
             /** @constant */
             state: "PROCESSING";
             /**
-             * @description Present when automatic resolution has stopped and operator investigation is required
+             * @description 자동 처리가 중단되어 오퍼레이터 조사가 필요한 경우에만 존재합니다.
              * @constant
              */
             noticeCode?: "REGISTRATION_DELAYED";
             correlationId: string;
             updatedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 결제수단 비활성화가 Provider 측에서 아직 확정되지 않았을 때 반환되는 진행 중
+         *     상태입니다. 이미 신규 결제에는 사용할 수 없는 상태입니다.
+         * @example {
+         *       "paymentMethodId": "01J8Z3QK2N5R7X9V6W4T8Y1B0E",
+         *       "state": "PROCESSING",
+         *       "correlationId": "01J8Z3QK2N5R7X9V6W4T8Y1B0F",
+         *       "updatedAt": "2026-06-01T09:00:00Z"
+         *     }
+         */
         PaymentMethodDeactivation: {
             paymentMethodId: components["schemas"]["Identifier"];
             /** @constant */
             state: "PROCESSING";
             /**
-             * @description Present after the 96-hour automatic webhook convergence window has ended
+             * @description 96시간 자동 웹훅 수렴 기간이 종료된 뒤에만 존재합니다.
              * @constant
              */
             noticeCode?: "DEACTIVATION_DELAYED";
             correlationId: string;
             updatedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 부분 환불할 주문 항목과 수량을 지정하는 요청 항목입니다.
+         * @example {
+         *       "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *       "quantity": 1
+         *     }
+         */
         RefundLineRequest: {
+            /** @description 해당 주문 항목 자원을 가리키는 UUID 식별자입니다. */
             orderLineId: components["schemas"]["Identifier"];
             quantity: number;
         };
+        /**
+         * @description 전액 또는 주문 항목별 부분 환불 요청입니다. `lineItems`를 생략하면 아직 환불되지 않은 금액 전체를 환불합니다.
+         * @example {
+         *       "lineItems": [
+         *         {
+         *           "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *           "quantity": 1
+         *         }
+         *       ],
+         *       "reason": "음료 한 잔이 누락되어 해당 수량을 환불합니다."
+         *     }
+         */
         CreateRefundRequest: {
-            /**
-             * @description Omit to request a full refund of every remaining refundable unit. Each
-             *     successful request consumes the lowest unrefunded conceptual unit positions.
-             */
+            /** @description 생략하면 아직 환불되지 않은 모든 수량을 환불합니다. 수량을 지정하면 각 주문 항목에서 아직 환불되지 않은 수량부터 차례로 처리합니다. */
             lineItems?: components["schemas"]["RefundLineRequest"][];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
         /**
-         * @description Requested amounts are immutable snapshots present in every state.
-         *     state describes the Payment-owned cash refund. pointsRestorationState
-         *     independently describes Loyalty restoration. Each confirmed amount exists
-         *     only when its owner state is SUCCEEDED. Absence never means zero.
+         * @description 현금 환불과 사용 포인트 복원 상태를 함께 보여 주는 결과입니다. 두 작업은 별도로 진행될 수 있습니다. 요청 금액은 항상 표시하고 실제 환불·복원 금액은 성공이 확인된 경우에만 표시합니다. 필드가 없다고 0원을 뜻하지 않습니다.
+         * @example {
+         *       "refundId": "747692bd-c322-529a-8cc7-e5290aa342b7",
+         *       "paymentId": "c511bb0b-aa37-558e-97e4-6d111bb13cf9",
+         *       "state": "SUCCEEDED",
+         *       "cashRefundRequestedKrw": 4500,
+         *       "pointsRestorationRequestedKrw": 500,
+         *       "pointsRestorationState": "SUCCEEDED",
+         *       "cashRefundedKrw": 4500,
+         *       "pointsRestoredKrw": 500,
+         *       "currency": "KRW",
+         *       "createdAt": "2026-08-15T10:20:00+09:00",
+         *       "updatedAt": "2026-08-15T10:21:00+09:00",
+         *       "correlationId": "eccf1270-badb-5dff-b4fb-4cfd6fa3433a"
+         *     }
          */
         Refund: {
+            /** @description 해당 환불 자원을 가리키는 UUID 식별자입니다. */
             refundId: components["schemas"]["Identifier"];
+            /** @description 해당 결제 자원을 가리키는 UUID 식별자입니다. */
             paymentId: components["schemas"]["Identifier"];
-            /** @enum {string} */
+            /**
+             * @description 현금 환불의 현재 처리 상태입니다.
+             * @enum {string}
+             */
             state: "REQUESTED" | "PROCESSING" | "RETRY_SCHEDULED" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
-            /** @description Immutable cash refund amount requested for this Refund */
+            /** @description 이 환불 건가 요청한 생성 후 바뀌지 않는 현금 환불 금액입니다. */
             cashRefundRequestedKrw: components["schemas"]["MoneyKrw"];
-            /** @description Immutable points restoration amount requested for this Refund */
+            /** @description 이 환불 건가 요청한 생성 후 바뀌지 않는 포인트 복원 금액입니다. */
             pointsRestorationRequestedKrw: components["schemas"]["MoneyKrw"];
             /**
-             * @description Public state of the asynchronous Loyalty restoration. REQUESTED is
-             *     used before cash refund success. PROCESSING includes durable
-             *     publication pending and bounded retry after cash refund success.
-             *     MANUAL_REVIEW means automatic convergence stopped; it is not success.
+             * @description 사용한 포인트를 돌려주는 작업의 현재 상태입니다. 현금 환불 성공 전에는 `REQUESTED`, 성공 후 처리·재시도 중에는 `PROCESSING`, 자동 처리를 끝내지 못해 담당자 확인이 필요하면 `MANUAL_REVIEW`를 사용합니다.
              * @enum {string}
              */
             pointsRestorationState: "NOT_REQUIRED" | "REQUESTED" | "PROCESSING" | "SUCCEEDED" | "MANUAL_REVIEW";
-            /** @description Confirmed cash refund amount; present only in SUCCEEDED */
+            /** @description 외부 결제사가 성공으로 확정한 현금 환불 금액입니다. */
             cashRefundedKrw?: components["schemas"]["MoneyKrw"];
-            /**
-             * @description Confirmed Loyalty restoration amount; present only when
-             *     pointsRestorationState is SUCCEEDED
-             */
+            /** @description Loyalty가 성공으로 확정한 포인트 복원 금액입니다. */
             pointsRestoredKrw?: components["schemas"]["MoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
+            /** @description 리소스가 생성된 시각입니다. */
             createdAt: components["schemas"]["DateTime"];
+            /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
+            /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
         } & (unknown & unknown & unknown & unknown & unknown);
         /**
-         * @description Store-facing Order projection. Store members see the cancellation fact
-         *     (state, cancelledAt, cancellationCause) so they can distinguish a
-         *     customer cancellation from a rejection or a declined payment, but they
-         *     never see the customer-declared reason code or customer refund recovery
-         *     progress. The free-text cancellation detail is excluded from every
-         *     representation.
+         * @description 스토어 화면에 제공하는 주문 정보입니다. 주문 취소 사실과 원인은 보여 주지만 고객이 입력한 취소 상세와 고객 전용 환불 진행 정보는 제외합니다.
+         * @example {
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "publicReference": "BF-7K4M-Q2XZ",
+         *       "pickupNumber": "A-12",
+         *       "pickupBusinessDate": "2026-08-15",
+         *       "storeName": "빈플로우 성수점",
+         *       "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *       "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *       "state": "CANCELLED",
+         *       "lines": [
+         *         {
+         *           "orderLineId": "30481d44-61d4-5f68-8f8b-a4d7064f4ddd",
+         *           "menuId": "df0b93c6-ceb2-57d2-9f0f-8949c2db2642",
+         *           "menuName": "아이스 아메리카노",
+         *           "optionNames": [
+         *             "샷 추가"
+         *           ],
+         *           "unitPriceKrw": 4500,
+         *           "quantity": 2,
+         *           "couponDiscountKrw": 1000,
+         *           "pointsAppliedKrw": 500,
+         *           "cashPaidKrw": 7500
+         *         }
+         *       ],
+         *       "subtotalKrw": 9000,
+         *       "couponDiscountKrw": 1000,
+         *       "pointsAppliedKrw": 500,
+         *       "payableKrw": 7500,
+         *       "currency": "KRW",
+         *       "cancelledAt": "2026-08-15T09:35:00+09:00",
+         *       "cancellationCause": "CUSTOMER_REQUEST",
+         *       "createdAt": "2026-08-15T09:30:00+09:00",
+         *       "updatedAt": "2026-08-15T09:35:00+09:00"
+         *     }
          */
         StoreOrder: components["schemas"]["Order"] & Record<string, never>;
-        /** @enum {string} */
+        /**
+         * @description 스토어가 주문에 적용할 수 있는 수락, 거절, 제조 시작, 준비 완료, 픽업 완료 작업입니다.
+         * @example START_PREPARING
+         * @enum {string}
+         */
         StoreOrderAction: "ACCEPT" | "REJECT" | "START_PREPARING" | "MARK_READY" | "COMPLETE";
         /**
-         * @description Store-facing compensation projection for a terminated order. Store
-         *     members see what terminated the order and whether owner compensation is
-         *     still running, but never the step breakdown, attempt counts, internal
-         *     error codes, case identifier or benefit policy versions. Those are
-         *     operator-only and returned by OperatorCompensationView (ADR-030,
-         *     ADR-033). Order termination does not imply compensation success.
+         * @description 주문 거절이나 고객 취소 뒤 환불·재고·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
+         * @example {
+         *       "trigger": "CUSTOMER_CANCELLATION",
+         *       "state": "SUCCEEDED",
+         *       "updatedAt": "2026-08-15T09:38:00+09:00"
+         *     }
          */
         StoreCompensationSummary: {
-            /** @enum {string} */
+            /**
+             * @description 보상을 시작하게 한 주문 종료 원인입니다.
+             * @enum {string}
+             */
             trigger: "STORE_REJECTION" | "CUSTOMER_CANCELLATION";
-            /** @enum {string} */
+            /**
+             * @description 매장에 노출되는 보상 처리 상태입니다.
+             * @enum {string}
+             */
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
+            /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 스토어 주문 현황판에 표시할 주문 한 건입니다. 공개 주문번호, 픽업 번호·시간, 현재 상태, 메뉴 요약과 지금 수행할 수 있는 작업을 포함합니다.
+         * @example {
+         *       "orderReference": "BF-7K4M-Q2XZ",
+         *       "pickupNumber": "A-12",
+         *       "pickupBusinessDate": "2026-08-15",
+         *       "lane": "ACCEPTED",
+         *       "status": "ACCEPTED",
+         *       "pickupWindowStart": "2026-08-15T10:00:00+09:00",
+         *       "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
+         *       "itemSummary": "아이스 아메리카노 2잔 · 샷 추가",
+         *       "acceptanceDeadlineAt": "2026-08-15T09:36:00+09:00",
+         *       "acceptancePhase": "OPEN",
+         *       "allowedActions": [
+         *         "START_PREPARING"
+         *       ]
+         *     }
+         */
         StoreOrderBoardItem: {
+            /** @description 사람이 읽을 수 있는 BF-XXXX-XXXX 형식의 공개 주문 참조번호입니다. */
             orderReference: string;
+            /** @description 매장 운영 화면과 픽업 호출에 사용하는 번호입니다. */
             pickupNumber: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description 매장 영업일 기준 픽업 날짜입니다.
+             */
             pickupBusinessDate: string;
-            /** @enum {string} */
+            /**
+             * @description 주문 보드에서 항목을 배치할 진행 레인입니다.
+             * @enum {string}
+             */
             lane?: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
+            /** @description 현재 주문 상태입니다. */
             status: components["schemas"]["OrderState"];
+            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
             pickupWindowStart: components["schemas"]["DateTime"];
+            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
             pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description 메뉴와 수량을 매장 화면용으로 축약한 한 줄 요약입니다. */
             itemSummary: string;
+            /** @description 매장이 주문을 수락해야 하는 마감 시각입니다. */
             acceptanceDeadlineAt?: components["schemas"]["DateTime"];
-            /** @enum {string} */
+            /**
+             * @description 수락 마감까지의 현재 단계입니다.
+             * @enum {string}
+             */
             acceptancePhase?: "OPEN" | "WARNING" | "TIMEOUT_PENDING";
+            /** @description 현재 상태와 권한에서 서버가 허용하는 매장 작업 목록입니다. */
             allowedActions: components["schemas"]["StoreOrderAction"][];
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
         };
         StoreOrderBoardDateGroup: {
@@ -3661,276 +5527,901 @@ export interface components {
             /** @description Cursor for the following overflow page, or null when this queue has no older item. Its 15-minute TTL is not extended by a board 304 response. */
             nextCursor: string | null;
         };
+        /**
+         * @description 공개 주문번호로 주문 상태를 바꿀 때 보내는 요청입니다. 실행할 작업과 화면에서 마지막으로 본 주문 상태를 함께 보내며, 서버의 현재 상태가 달라졌으면 충돌로 처리합니다.
+         * @example {
+         *       "action": "START_PREPARING",
+         *       "expectedStatus": "ACCEPTED",
+         *       "reason": "제조를 시작합니다."
+         *     }
+         */
         StoreOrderActionRequest: {
+            /** @description 주문에 적용할 서버 허용 매장 작업입니다. */
             action: components["schemas"]["StoreOrderAction"];
             /**
-             * @description Order status rendered when the operator chose the action; a changed current status returns ORDER_STATE_CONFLICT.
+             * @description 운영자가 작업을 선택했을 때 화면에 표시된 주문 상태입니다. 현재 상태가 달라졌으면 ORDER_STATE_CONFLICT를 반환합니다.
              * @enum {string}
              */
             expectedStatus: "PAID" | "ACCEPTED" | "PREPARING" | "READY";
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason?: string;
         };
+        /**
+         * @description 주문 보상에 실제로 사용한 쿠폰 또는 포인트 복원 정책의 버전 정보입니다.
+         * @example {
+         *       "benefitType": "COUPON",
+         *       "policyVersionId": 21
+         *     }
+         */
         CompensationBenefitPolicyReference: {
-            /** @enum {string} */
+            /**
+             * @description 참조하는 혜택 정책 유형입니다.
+             * @enum {string}
+             */
             benefitType: "COUPON" | "POINTS";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 케이스 생성 시 선택해 고정한 정책 버전 ID입니다.
+             */
             policyVersionId: number;
         };
+        /**
+         * @description 주문 취소·거절 뒤 처리해야 하는 환불, 픽업 예약, 재고, 쿠폰, 포인트, 고객 알림 중 한 단계의 상태입니다. 현재 상태, 시도 횟수와 선택적인 최근 오류 코드를 포함합니다.
+         * @example {
+         *       "type": "PAYMENT",
+         *       "state": "SUCCEEDED",
+         *       "attemptCount": 1
+         *     }
+         */
         CompensationStep: {
-            /** @enum {string} */
+            /**
+             * @description 환불, 픽업 예약, 재고, 쿠폰, 포인트, 고객 알림 중 어떤 복구 단계인지 나타냅니다.
+             * @enum {string}
+             */
             type: "PAYMENT" | "PICKUP" | "STOCK" | "COUPON" | "POINTS" | "CUSTOMER_NOTIFICATION";
-            /** @enum {string} */
+            /**
+             * @description 해당 보상 단계의 현재 처리 상태입니다.
+             * @enum {string}
+             */
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "NOT_REQUIRED" | "MANUAL_REVIEW";
+            /** @description 현재 단계에서 수행한 처리 시도 횟수입니다. */
             attemptCount: number;
+            /** @description 최근 실패의 내부 오류 코드이며 실패가 없으면 생략됩니다. */
             lastErrorCode?: string;
         };
         /**
-         * @description Full owner compensation progress for a terminated order. The same shape
-         *     covers store rejection and customer cancellation; the trigger field
-         *     distinguishes the origin. Step detail, attempt counts, internal error
-         *     codes, the case identifier and the benefit policy versions are
-         *     operator-only, so this schema is returned only inside
-         *     OperatorCompensationView; store members receive the abbreviated
-         *     StoreCompensationSummary. Order termination does not imply compensation
-         *     success.
+         * @description 주문 취소나 거절 뒤 진행되는 전체 후속 처리 상태입니다. 환불, 픽업 예약 해제, 재고 복구, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 운영팀에 제공합니다. 주문이 종료됐다고 모든 후속 처리가 끝난 것은 아닙니다.
+         * @example {
+         *       "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *       "trigger": "STORE_REJECTION",
+         *       "benefitPolicies": [
+         *         {
+         *           "benefitType": "COUPON",
+         *           "policyVersionId": 21
+         *         },
+         *         {
+         *           "benefitType": "POINTS",
+         *           "policyVersionId": 34
+         *         }
+         *       ],
+         *       "state": "PROCESSING",
+         *       "steps": [
+         *         {
+         *           "type": "PAYMENT",
+         *           "state": "SUCCEEDED",
+         *           "attemptCount": 1
+         *         },
+         *         {
+         *           "type": "PICKUP",
+         *           "state": "SUCCEEDED",
+         *           "attemptCount": 1
+         *         },
+         *         {
+         *           "type": "STOCK",
+         *           "state": "SUCCEEDED",
+         *           "attemptCount": 1
+         *         },
+         *         {
+         *           "type": "COUPON",
+         *           "state": "PROCESSING",
+         *           "attemptCount": 1
+         *         },
+         *         {
+         *           "type": "POINTS",
+         *           "state": "NOT_REQUIRED",
+         *           "attemptCount": 0
+         *         },
+         *         {
+         *           "type": "CUSTOMER_NOTIFICATION",
+         *           "state": "RETRY_SCHEDULED",
+         *           "attemptCount": 2,
+         *           "lastErrorCode": "PROVIDER_TIMEOUT"
+         *         }
+         *       ],
+         *       "updatedAt": "2026-08-15T09:45:00+09:00"
+         *     }
          */
         CompensationSummary: {
+            /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
             caseId: components["schemas"]["Identifier"];
-            /** @enum {string} */
+            /**
+             * @description 후속 처리 건를 시작한 주문 종료 원인입니다.
+             * @enum {string}
+             */
             trigger: "STORE_REJECTION" | "CUSTOMER_CANCELLATION";
-            /** @description Immutable COUPON and POINTS policy version references selected with the case */
+            /** @description 케이스 생성 시 선택해 변경되지 않는 COUPON·POINTS 정책 버전 참조 두 개입니다. */
             benefitPolicies: components["schemas"]["CompensationBenefitPolicyReference"][];
-            /** @enum {string} */
+            /**
+             * @description 전체 후속 처리 건의 현재 상태입니다.
+             * @enum {string}
+             */
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
+            /** @description PAYMENT, PICKUP, STOCK, COUPON, POINTS, CUSTOMER_NOTIFICATION 여섯 단계의 상세입니다. */
             steps: components["schemas"]["CompensationStep"][];
+            /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 점주 계정이 특정 매장에서 보유한 OWNER 또는 STAFF 멤버십입니다.
+         * @example {
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "role": "OWNER"
+         *     }
+         */
         MerchantMembershipView: {
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
-            /** @enum {string} */
+            /**
+             * @description 해당 매장에서의 OWNER 또는 STAFF 역할입니다.
+             * @enum {string}
+             */
             role: "OWNER" | "STAFF";
         };
+        /**
+         * @description 운영자용 점주 계정 관리 뷰입니다. 계정 상태, 잠금·임시 비밀번호 만료 시각, 매장 멤버십을 제공하지만 비밀번호는 포함하지 않습니다.
+         * @example {
+         *       "merchantAccountId": "94f51996-f0ff-5ab8-8d7e-ba8a08ffadc8",
+         *       "loginId": "merchant01",
+         *       "displayName": "성수점 점주",
+         *       "accountState": "ACTIVE",
+         *       "memberships": [
+         *         {
+         *           "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *           "role": "OWNER"
+         *         }
+         *       ]
+         *     }
+         */
         MerchantAccountView: {
+            /** @description 해당 점주 계정 자원을 가리키는 UUID 식별자입니다. */
             merchantAccountId: components["schemas"]["Identifier"];
+            /** @description 관련 내부 자원을 가리키는 UUID 식별자입니다. */
             loginId: components["schemas"]["LoginId"];
             displayName: string;
-            /** @enum {string} */
+            /**
+             * @description 점주 자격증명의 현재 계정 상태입니다.
+             * @enum {string}
+             */
             accountState: "INITIAL_PASSWORD" | "ACTIVE" | "EXPIRED";
+            /** @description 점주 계정 로그인 잠금이 유지되는 시각입니다. */
             lockedUntil?: components["schemas"]["DateTime"];
+            /** @description 일회 표시 임시 비밀번호가 만료되는 시각입니다. */
             temporaryPasswordExpiresAt?: components["schemas"]["DateTime"];
+            /** @description 점주 계정의 활성 매장 멤버십 목록입니다. */
             memberships: components["schemas"]["MerchantMembershipView"][];
         };
+        /**
+         * @description 점주 계정과 첫 매장 소속을 함께 생성하는 요청입니다. 로그인 ID, 표시 이름, 매장, `OWNER` 또는 `STAFF` 역할, 운영 사유를 포함합니다.
+         * @example {
+         *       "loginId": "merchant01",
+         *       "displayName": "성수점 점주",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "membershipRole": "OWNER",
+         *       "reason": "신규 가맹점 점주 계정 발급"
+         *     }
+         */
         CreateMerchantAccountRequest: {
+            /** @description 관련 내부 자원을 가리키는 UUID 식별자입니다. */
             loginId: components["schemas"]["LoginId"];
             displayName: string;
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
-            /** @enum {string} */
-            membershipRole: "OWNER" | "STAFF";
-            reason: string;
-        };
-        MerchantAccountCreationResult: {
-            merchantAccountId: components["schemas"]["Identifier"];
-            loginId: components["schemas"]["LoginId"];
-            /** @constant */
-            accountState: "INITIAL_PASSWORD";
-            membership: components["schemas"]["MerchantMembershipView"];
-            /** @description One-time-display value present only in the first successful response. */
-            temporaryPassword: string;
-            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
-        };
-        ReasonRequest: {
-            reason: string;
-        };
-        MerchantTemporaryPasswordResult: {
-            merchantAccountId: components["schemas"]["Identifier"];
-            loginId?: components["schemas"]["LoginId"];
-            /** @constant */
-            accountState: "INITIAL_PASSWORD";
-            membership?: components["schemas"]["MerchantMembershipView"];
-            /** @description One-time-display value present only in the first successful response. */
-            temporaryPassword: string;
-            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
-        };
-        CustomerCancellationRefundReconciliationRequest: {
             /**
-             * @description Operational justification. It is normalized for command idempotency
-             *     but is not copied to the response or Audit summaries.
+             * @description 최초 매장 멤버십 역할입니다.
+             * @enum {string}
              */
+            membershipRole: "OWNER" | "STAFF";
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 점주 계정과 최초 멤버십 생성 결과입니다. 최초 성공 응답에서만 일회 표시 임시 비밀번호와 만료 시각을 포함합니다.
+         * @example {
+         *       "merchantAccountId": "94f51996-f0ff-5ab8-8d7e-ba8a08ffadc8",
+         *       "loginId": "merchant01",
+         *       "accountState": "INITIAL_PASSWORD",
+         *       "membership": {
+         *         "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "role": "OWNER"
+         *       },
+         *       "temporaryPassword": "SAMPLE_TEMP_PASSWORD_2026_000001",
+         *       "temporaryPasswordExpiresAt": "2026-08-16T09:30:00+09:00"
+         *     }
+         */
+        MerchantAccountCreationResult: {
+            /** @description 해당 점주 계정 자원을 가리키는 UUID 식별자입니다. */
+            merchantAccountId: components["schemas"]["Identifier"];
+            /** @description 관련 내부 자원을 가리키는 UUID 식별자입니다. */
+            loginId: components["schemas"]["LoginId"];
+            /**
+             * @description 최초 비밀번호 변경이 필요한 계정 상태이며 항상 INITIAL_PASSWORD입니다.
+             * @constant
+             */
+            accountState: "INITIAL_PASSWORD";
+            /** @description 이번 응답과 관련된 매장 멤버십입니다. */
+            membership: components["schemas"]["MerchantMembershipView"];
+            /** @description 최초 성공 응답에서만 한 번 표시하는 32자 임시 비밀번호입니다. 예시는 명백한 샘플 placeholder입니다. */
+            temporaryPassword: string;
+            /** @description 일회 표시 임시 비밀번호가 만료되는 시각입니다. */
+            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 운영 명령의 사유만 전달하는 공통 요청 본문입니다.
+         * @example {
+         *       "reason": "본인 확인 후 로그인 잠금 해제를 승인함"
+         *     }
+         */
+        ReasonRequest: {
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
+            reason: string;
+        };
+        /**
+         * @description 점주 임시 비밀번호 재설정 결과입니다. 새 자격증명은 최초 성공 응답에서만 일회 표시되며 만료 시각을 함께 제공합니다.
+         * @example {
+         *       "merchantAccountId": "94f51996-f0ff-5ab8-8d7e-ba8a08ffadc8",
+         *       "loginId": "merchant01",
+         *       "accountState": "INITIAL_PASSWORD",
+         *       "membership": {
+         *         "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "role": "OWNER"
+         *       },
+         *       "temporaryPassword": "SAMPLE_TEMP_PASSWORD_2026_000001",
+         *       "temporaryPasswordExpiresAt": "2026-08-16T09:30:00+09:00"
+         *     }
+         */
+        MerchantTemporaryPasswordResult: {
+            /** @description 해당 점주 계정 자원을 가리키는 UUID 식별자입니다. */
+            merchantAccountId: components["schemas"]["Identifier"];
+            /** @description 관련 내부 자원을 가리키는 UUID 식별자입니다. */
+            loginId?: components["schemas"]["LoginId"];
+            /**
+             * @description 재설정 직후 상태이며 항상 INITIAL_PASSWORD입니다.
+             * @constant
+             */
+            accountState: "INITIAL_PASSWORD";
+            /** @description 이번 응답과 관련된 매장 멤버십입니다. */
+            membership?: components["schemas"]["MerchantMembershipView"];
+            /** @description 최초 성공 응답에서만 한 번 표시하는 32자 임시 비밀번호입니다. 예시는 명백한 샘플 placeholder입니다. */
+            temporaryPassword: string;
+            /** @description 일회 표시 임시 비밀번호가 만료되는 시각입니다. */
+            temporaryPasswordExpiresAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 고객 취소 환불 결과를 외부 결제사에 다시 확인하도록 예약할 때 보내는 요청입니다. 운영 사유만 입력하며 새로운 환불 요청은 보내지 않습니다.
+         * @example {
+         *       "reason": "외부 결제사 결과를 확인할 수 없어 기존 결제 식별값으로 결과 조회를 예약함"
+         *     }
+         */
+        CustomerCancellationRefundReconciliationRequest: {
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
+            reason: string;
+        };
+        /**
+         * @description 고객 취소 환불 상태 재확인 작업입니다. 대상 주문과 취소 당시 주문 버전, 현재 작업 상태, 예약 시각을 포함하며 이 응답 자체가 환불 성공을 뜻하지는 않습니다.
+         * @example {
+         *       "operationId": "3992a89d-db2e-5f8d-88f6-a834d801d378",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "cancellationOrderVersion": 8,
+         *       "state": "LOOKUP_SCHEDULED",
+         *       "scheduledAt": "2026-08-15T11:00:00+09:00"
+         *     }
+         */
         CustomerCancellationRefundReconciliation: {
+            /** @description 해당 운영 작업 자원을 가리키는 UUID 식별자입니다. */
             operationId: components["schemas"]["Identifier"];
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 결과 재확인 예약이 연결된 취소 완료 주문 버전입니다.
+             */
             cancellationOrderVersion: number;
-            /** @constant */
+            /**
+             * @description 결과 재확인 작업 상태이며 항상 결과 조회_SCHEDULED입니다.
+             * @constant
+             */
             state: "LOOKUP_SCHEDULED";
+            /** @description 조회 또는 결과 재확인 작업이 예약된 시각입니다. */
             scheduledAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 고객 취소 환불 처리 정보가 누락된 건의 복구를 제안하는 요청입니다. 운영 사유만 입력하며 금액과 식별자는 서버에 남아 있는 검증된 기록에서 계산합니다.
+         * @example {
+         *       "reason": "주문 취소는 저장됐지만 환불 처리 정보가 누락되어 복구가 필요함"
+         *     }
+         */
         CreateRepairProposalRequest: {
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 누락된 고객 취소 환불 처리 정보를 복구하기 위한 제안입니다. 제안자와 결정자를 분리하며, 현재 상태, 만료 시각, 결정 시각과 추적 ID를 포함합니다.
+         * @example {
+         *       "proposalId": "bddf20a0-f416-5e9c-8fb7-4c66cbd7ccf0",
+         *       "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *       "action": "RECREATE_MISSING_CANCELLATION_REFUND",
+         *       "state": "PENDING_APPROVAL",
+         *       "proposedBy": "a42e8b90-20ff-5d72-be1f-cf0342d86aa4",
+         *       "createdAt": "2026-08-15T13:00:00+09:00",
+         *       "expiresAt": "2026-08-15T13:30:00+09:00",
+         *       "correlationId": "a522646e-e48c-5168-a01d-72909c2806a8"
+         *     }
+         */
         RepairProposal: {
+            /** @description 해당 복구 제안 자원을 가리키는 UUID 식별자입니다. */
             proposalId: components["schemas"]["Identifier"];
+            /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
             caseId: components["schemas"]["Identifier"];
-            /** @constant */
+            /**
+             * @description 제안이 수행하려는 허용된 복구 작업입니다.
+             * @constant
+             */
             action: "RECREATE_MISSING_CANCELLATION_REFUND";
-            /** @enum {string} */
+            /**
+             * @description 복구 제안의 승인 생명주기 상태입니다.
+             * @enum {string}
+             */
             state: "PENDING_APPROVAL" | "EXECUTED" | "REJECTED" | "EXPIRED" | "STALE";
             proposedBy: components["schemas"]["Identifier"];
             decidedBy?: components["schemas"]["Identifier"];
+            /** @description 리소스가 생성된 시각입니다. */
             createdAt: components["schemas"]["DateTime"];
+            /** @description 리소스, 요청, 권한 또는 정책 판단이 만료되는 시각입니다. */
             expiresAt: components["schemas"]["DateTime"];
+            /** @description 승인·조사 결정이 확정된 시각이며 아직 결정되지 않았으면 null입니다. */
             decidedAt?: components["schemas"]["DateTime"];
+            /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
         };
+        /**
+         * @description 복구 제안을 승인 또는 반려하는 요청입니다. 결정과 운영 사유를 포함합니다.
+         * @example {
+         *       "decision": "APPROVE",
+         *       "reason": "남아 있는 주문·결제 기록과 금액 배분을 확인해 승인함"
+         *     }
+         */
         RepairProposalDecisionRequest: {
-            /** @enum {string} */
+            /**
+             * @description 복구 제안에 대한 승인 또는 반려 결정입니다.
+             * @enum {string}
+             */
             decision: "APPROVE" | "REJECT";
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 주문 취소·거절·부분 환불 때 이미 만료된 쿠폰이나 포인트를 다시 제공할지 정하는 정책 버전입니다. 발생 원인, 혜택 종류, 복원 방식, 새 유효기간, 적용 시각과 변경자를 기록합니다.
+         * @example {
+         *       "policyVersionId": 18,
+         *       "trigger": "CUSTOMER_CANCELLATION",
+         *       "benefitType": "COUPON",
+         *       "mode": "COMPENSATE_WITH_NEW_ISSUANCE",
+         *       "compensationValidityDays": 30,
+         *       "effectiveAt": "2026-08-15T00:00:00+09:00",
+         *       "updatedBy": "2adb4fce-d737-5c9a-ada4-d321f1d1c47e",
+         *       "reason": "취소 시 만료 쿠폰을 30일 유효 신규 쿠폰으로 보상함"
+         *     }
+         */
         ExpiredBenefitRestorationPolicy: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다.
+             */
             policyVersionId: number;
-            /** @enum {string} */
+            /**
+             * @description 이 정책을 선택하는 보상 또는 환불 발생 원인입니다.
+             * @enum {string}
+             */
             trigger: "STORE_REJECTION" | "CUSTOMER_CANCELLATION" | "PARTIAL_REFUND";
-            /** @enum {string} */
+            /**
+             * @description 복원 대상 혜택 유형입니다. PARTIAL_REFUND에서는 POINTS만 허용됩니다.
+             * @enum {string}
+             */
             benefitType: "COUPON" | "POINTS";
-            /** @enum {string} */
+            /**
+             * @description 새 보상 발급 또는 원래 만료 유지 중 복원 방식을 선택합니다.
+             * @enum {string}
+             */
             mode: "COMPENSATE_WITH_NEW_ISSUANCE" | "PRESERVE_ORIGINAL_EXPIRY";
+            /** @description 새 보상 발급 방식에서 적용하는 유효일수입니다. */
             compensationValidityDays: number;
+            /** @description 정책 버전이 효력을 갖기 시작한 시각입니다. */
             effectiveAt: components["schemas"]["DateTime"];
             updatedBy: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         } & unknown;
+        /**
+         * @description 만료 혜택 복원 정책의 새 버전을 만드는 요청입니다. 현재 버전 ID, 복원 방식, 보상 유효일수, 변경 사유를 포함합니다.
+         * @example {
+         *       "expectedPolicyVersionId": 18,
+         *       "mode": "COMPENSATE_WITH_NEW_ISSUANCE",
+         *       "compensationValidityDays": 45,
+         *       "reason": "고객 보상 쿠폰 유효기간을 45일로 연장함"
+         *     }
+         */
         UpdateExpiredBenefitRestorationPolicyRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 현재 정책 버전 ID입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedPolicyVersionId: number;
-            /** @enum {string} */
+            /**
+             * @description 새 정책 버전의 만료 혜택 복원 방식입니다.
+             * @enum {string}
+             */
             mode: "COMPENSATE_WITH_NEW_ISSUANCE" | "PRESERVE_ORIGINAL_EXPIRY";
+            /** @description 새 발급 보상 혜택의 유효일수입니다. */
             compensationValidityDays: number;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 포인트를 발행한 플랫폼, 브랜드 또는 매장의 정보를 적립 당시 값으로 저장한 기록입니다.
+         * @example {
+         *       "issuerType": "PLATFORM",
+         *       "issuerReference": "platform:beanflow"
+         *     }
+         */
         PointIssuer: {
-            /** @enum {string} */
+            /**
+             * @description 포인트 발행 비용 주체 유형입니다.
+             * @enum {string}
+             */
             issuerType: "PLATFORM" | "BRAND" | "STORE";
-            /** @description Non-blank immutable cost-owner reference selected for a positive adjustment */
+            /** @description 포인트 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다. */
             issuerReference: string;
         };
+        /**
+         * @description 운영자가 포인트 계정에 부호 있는 조정을 적용하는 요청입니다. 양수 조정은 발행자와 미래 만료 시각을 요구하고, 음수 조정은 해당 필드를 허용하지 않습니다.
+         * @example {
+         *       "amountKrw": 3000,
+         *       "issuer": {
+         *         "issuerType": "PLATFORM",
+         *         "issuerReference": "platform:beanflow"
+         *       },
+         *       "expiresAt": "2027-08-15T23:59:59+09:00",
+         *       "reason": "고객 문의 조사 결과 누락 적립을 수동 보정함",
+         *       "evidenceReferences": [
+         *         "support-case://sample/POINT-ADJUSTMENT-001"
+         *       ]
+         *     }
+         */
         PointAdjustmentRequest: {
-            /** @description Nonzero signed correction. Positive creates a new PointLot; negative consumes available lots. */
+            /** @description 0이 아닌 부호 있는 조정 금액입니다. 양수는 새 PointLot을 만들고 음수는 사용 가능한 포인트 묶음을 소비합니다. */
             amountKrw: components["schemas"]["SignedMoneyKrw"] & unknown;
+            /** @description 포인트를 추가할 때 필요한 발행 주체 정보입니다. */
             issuer?: components["schemas"]["PointIssuer"];
-            /** @description Required only for a positive adjustment and must be strictly after server time. */
+            /** @description 양수 조정에서만 필수이며 서버 현재 시각보다 엄격히 미래여야 하는 새 PointLot 만료 시각입니다. */
             expiresAt?: components["schemas"]["DateTime"];
-            /** @description Non-blank operator reason for the correction */
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 공백이 아닌 조정 근거 참조 목록입니다. 증거 원문 대신 감사 조사에서 근거를 찾을 수 있는 비민감 참조를 제공합니다. */
             evidenceReferences: string[];
         } & unknown;
+        /**
+         * @description 고객 포인트 계정의 운영자용 요약입니다. 즉시 사용 가능한 포인트와 아직 복구 중인 포인트를 원화 단위로 구분합니다.
+         * @example {
+         *       "accountId": "cbd89645-276d-5c40-9feb-edeaf0c145af",
+         *       "availablePointsKrw": 12500,
+         *       "recoveryPendingKrw": 1500,
+         *       "currency": "KRW"
+         *     }
+         */
         PointAccount: {
+            /** @description 해당 포인트 계정 자원을 가리키는 UUID 식별자입니다. */
             accountId: components["schemas"]["Identifier"];
+            /** @description 현재 즉시 사용할 수 있는 포인트 잔액입니다. */
             availablePointsKrw: components["schemas"]["MoneyKrw"];
-            /** @description Sum of Loyalty PointRecoveryPending remaining amounts. It is not a negative available balance. */
+            /**
+             * @description Loyalty PointRecoveryPending remaining amounts(회수 대기 잔여 금액)의 합계입니다. 사용
+             *     가능 잔액이 음수라는 뜻이 아닙니다.
+             */
             recoveryPendingKrw: components["schemas"]["MoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
         };
+        /**
+         * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.
+         * @example {
+         *       "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *       "type": "ADJUSTMENT",
+         *       "amountKrw": 3000,
+         *       "occurredAt": "2026-08-15T15:00:00+09:00",
+         *       "sourceReference": "point-adjustment:sample:001"
+         *     }
+         */
         PointTransaction: {
+            /** @description 해당 포인트 거래 자원을 가리키는 UUID 식별자입니다. */
             transactionId: components["schemas"]["Identifier"];
             /**
-             * @description Ledger fact type. RECOVERY is an actual debit of available points for a refund; it is distinct from PointRecoveryPending, which records an amount not yet recoverable. ADJUSTMENT is an audited manual Loyalty correction, not a refund or settlement adjustment.
+             * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
+             *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
+             *     뜻합니다.
              * @enum {string}
              */
             type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
-            /** @description Signed effect on the visible point balance: ACCRUAL, RESTORE and COMPENSATION are positive; USE, EXPIRATION and RECOVERY are negative; RESTORE_SKIPPED_EXPIRED is zero. This is not the non-negative storage magnitude. ADJUSTMENT follows its stored CREDIT or DEBIT balance effect. */
+            /**
+             * @description 고객에게 표시되는 포인트 잔액에 미치는 부호 있는 효과입니다. ACCRUAL, RESTORE, COMPENSATION은
+             *     양수이고 USE, EXPIRATION, RECOVERY are negative(음수)이며 RESTORE_SKIPPED_EXPIRED is zero
+             *     (0)입니다. 항상 0 이상인 금액이 아니며 ADJUSTMENT follows its stored CREDIT or DEBIT balance effect(저장된 CREDIT 또는 DEBIT 효과를 따릅니다).
+             */
             amountKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 포인트 거래가 발생한 시각입니다. */
             occurredAt: components["schemas"]["DateTime"];
-            /** @description Opaque immutable ledger source. A multi-lot ADJUSTMENT uses a distinct child source per affected lot. */
+            /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
             sourceReference: string;
         };
+        /**
+         * @description 포인트 수동 조정 결과입니다. 조정 후 계정 잔액과 이번 작업으로 생성된 포인트 거래 내역을 함께 반환합니다.
+         * @example {
+         *       "account": {
+         *         "accountId": "cbd89645-276d-5c40-9feb-edeaf0c145af",
+         *         "availablePointsKrw": 15500,
+         *         "recoveryPendingKrw": 1500,
+         *         "currency": "KRW"
+         *       },
+         *       "transactions": [
+         *         {
+         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *           "type": "ADJUSTMENT",
+         *           "amountKrw": 3000,
+         *           "occurredAt": "2026-08-15T15:00:00+09:00",
+         *           "sourceReference": "point-adjustment:sample:001"
+         *         }
+         *       ]
+         *     }
+         */
         PointAdjustmentResult: {
             account: components["schemas"]["PointAccount"];
+            /** @description 이번 조정으로 생성되거나 조회된 포인트 거래 내역입니다. */
             transactions: components["schemas"]["PointTransaction"][];
         };
+        /**
+         * @description 포인트 거래 내역과 다음 페이지 정보를 담는 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *           "type": "ACCRUAL",
+         *           "amountKrw": 500,
+         *           "occurredAt": "2026-08-15T10:30:00+09:00",
+         *           "sourceReference": "order:74131bb9-688f-5370-8042-21015b3cd43a"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "v1.sample.cursor.eyJvY2N1cnJlZEF0IjoiMjAyNi0wOC0xNVQxMDozMDowMCswOTowMCJ9"
+         *       }
+         *     }
+         */
         PointTransactionPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["PointTransaction"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * @description 전체 기본 정책 또는 매장별 정책의 한 버전입니다. 매장별 설정을 직접 지정했는지, 전체 기본 정책을 따르는지, 언제부터 적용되는지와 변경 사유를 기록합니다.
+         * @example {
+         *       "policyVersionId": 12,
+         *       "scopeType": "GLOBAL",
+         *       "scopeReference": "d6578ecd-7fe4-5493-92e0-bebde2fbcd13",
+         *       "state": "OVERRIDE",
+         *       "accrualRateBps": 500,
+         *       "roundingMode": "FLOOR",
+         *       "issuerType": "PLATFORM",
+         *       "issuerReference": "platform:beanflow",
+         *       "expiryRule": "SEOUL_CALENDAR_DAYS_FROM_COMPLETION",
+         *       "validityDays": 365,
+         *       "effectiveAt": "2026-08-15T00:00:00+09:00",
+         *       "actorType": "PLATFORM_OPERATOR",
+         *       "actorReference": "ff5babc0-a7e5-5776-a6cc-97f550f8ed7c",
+         *       "reason": "일반 주문 적립률을 5%로 설정함"
+         *     }
+         */
         OrdinaryPointAccrualPolicyVersion: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다.
+             */
             policyVersionId: number;
-            /** @enum {string} */
+            /**
+             * @description 정책이 적용되는 GLOBAL 또는 STORE 범위입니다.
+             * @enum {string}
+             */
             scopeType: "GLOBAL" | "STORE";
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 외부 원문이나 민감정보 대신 사용하는 외부 시스템용 식별값 문자열입니다.
+             */
             scopeReference: string;
-            /** @enum {string} */
+            /**
+             * @description STORE 범위의 명시적 재정의 또는 GLOBAL 상속 상태입니다.
+             * @enum {string}
+             */
             state: "OVERRIDE" | "INHERIT_GLOBAL";
+            /** @description 10000을 100%로 계산하는 비율입니다. */
             accrualRateBps?: number;
-            /** @enum {string} */
+            /**
+             * @description 금액 또는 포인트 계산의 반올림 방식입니다.
+             * @enum {string}
+             */
             roundingMode?: "FLOOR" | "HALF_UP";
-            /** @enum {string} */
+            /**
+             * @description 발행 또는 비용 책임 주체의 유형입니다.
+             * @enum {string}
+             */
             issuerType?: "PLATFORM" | "BRAND" | "STORE";
+            /** @description 포인트 발행 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다. */
             issuerReference?: string;
-            /** @enum {string} */
+            /**
+             * @description 만료 시각을 계산하는 규칙입니다.
+             * @enum {string}
+             */
             expiryRule?: "EXACT_DURATION_FROM_COMPLETION" | "SEOUL_CALENDAR_DAYS_FROM_COMPLETION";
             validityDays?: number;
+            /** @description 정책 버전이 효력을 갖기 시작한 시각입니다. */
             effectiveAt: components["schemas"]["DateTime"];
-            /** @enum {string} */
+            /**
+             * @description 이 정책 버전을 만든 변경 주체 유형입니다.
+             * @enum {string}
+             */
             actorType: "PLATFORM_OPERATOR" | "SYSTEM";
+            /** @description 외부 원문이나 민감정보 대신 사용하는 외부 시스템용 식별값 문자열입니다. */
             actorReference: string;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 포인트 적립률, 반올림 방식, 발행 주체, 만료 방식, 유효일수와 변경 사유를 정의하는 정책 설정입니다.
+         * @example {
+         *       "state": "OVERRIDE",
+         *       "accrualRateBps": 500,
+         *       "roundingMode": "FLOOR",
+         *       "issuerType": "PLATFORM",
+         *       "issuerReference": "platform:beanflow",
+         *       "expiryRule": "SEOUL_CALENDAR_DAYS_FROM_COMPLETION",
+         *       "validityDays": 365,
+         *       "reason": "일반 주문 적립률을 5%로 설정함",
+         *       "expectedPolicyVersionId": 12
+         *     }
+         */
         OrdinaryPointAccrualOverrideFields: {
-            /** @constant */
+            /**
+             * @description 명시적 재정의 상태이며 항상 OVERRIDE입니다.
+             * @constant
+             */
             state: "OVERRIDE";
+            /** @description 실결제액에 적용하는 적립률입니다. 10000은 100%입니다. */
             accrualRateBps: number;
-            /** @enum {string} */
+            /**
+             * @description 계산된 포인트의 정수 원 반올림 방식입니다.
+             * @enum {string}
+             */
             roundingMode: "FLOOR" | "HALF_UP";
-            /** @enum {string} */
+            /**
+             * @description 포인트 비용을 부담하는 플랫폼, 브랜드 또는 매장 유형입니다.
+             * @enum {string}
+             */
             issuerType: "PLATFORM" | "BRAND" | "STORE";
+            /** @description 포인트 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다. */
             issuerReference: string;
-            /** @enum {string} */
+            /**
+             * @description 주문 완료 후 만료일을 계산하는 시간 규칙입니다.
+             * @enum {string}
+             */
             expiryRule: "EXACT_DURATION_FROM_COMPLETION" | "SEOUL_CALENDAR_DAYS_FROM_COMPLETION";
+            /** @description 적립 포인트가 유효한 일수입니다. */
             validityDays: number;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 현재 정책 버전 ID입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedPolicyVersionId?: number;
         };
+        /**
+         * @description 모든 매장에 기본으로 적용되는 포인트 적립 정책을 변경하는 요청입니다. `expectedPolicyVersionId`로 현재 정책이 다른 운영자에 의해 먼저 바뀌지 않았는지 확인합니다.
+         * @example {
+         *       "state": "OVERRIDE",
+         *       "accrualRateBps": 500,
+         *       "roundingMode": "FLOOR",
+         *       "issuerType": "PLATFORM",
+         *       "issuerReference": "platform:beanflow",
+         *       "expiryRule": "SEOUL_CALENDAR_DAYS_FROM_COMPLETION",
+         *       "validityDays": 365,
+         *       "reason": "기본 적립률을 5%로 조정함",
+         *       "expectedPolicyVersionId": 12
+         *     }
+         */
         ChangeGlobalOrdinaryPointAccrualPolicyRequest: components["schemas"]["OrdinaryPointAccrualOverrideFields"] & Record<string, never>;
+        /**
+         * @description 일반 포인트 적립 정책 목록의 다음 페이지 커서입니다.
+         * @example {
+         *       "nextCursor": null
+         *     }
+         */
         OrdinaryPointAccrualPolicyPageInfo: {
+            /** @description 다음 페이지가 있을 때 서버가 반환하는 문자열입니다. 다음 요청의 `cursor`에 그대로 사용합니다. */
             nextCursor: string | null;
         };
+        /**
+         * @description 포인트 적립 정책의 현재 설정 또는 변경 이력과 다음 페이지 정보를 담는 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "policyVersionId": 12,
+         *           "scopeType": "GLOBAL",
+         *           "scopeReference": "d6578ecd-7fe4-5493-92e0-bebde2fbcd13",
+         *           "state": "OVERRIDE",
+         *           "accrualRateBps": 500,
+         *           "roundingMode": "FLOOR",
+         *           "issuerType": "PLATFORM",
+         *           "issuerReference": "platform:beanflow",
+         *           "expiryRule": "SEOUL_CALENDAR_DAYS_FROM_COMPLETION",
+         *           "validityDays": 365,
+         *           "effectiveAt": "2026-08-15T00:00:00+09:00",
+         *           "actorType": "PLATFORM_OPERATOR",
+         *           "actorReference": "ff5babc0-a7e5-5776-a6cc-97f550f8ed7c",
+         *           "reason": "일반 주문 적립률을 5%로 설정함"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": null
+         *       }
+         *     }
+         */
         OrdinaryPointAccrualPolicyPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["OrdinaryPointAccrualPolicyVersion"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["OrdinaryPointAccrualPolicyPageInfo"];
         };
+        /**
+         * @description 주문 완료 시 실제 적용한 포인트 적립 정책을 당시 값으로 저장한 기록입니다. 어떤 범위의 정책을 선택했는지와 계산에 사용한 설정, 정책 내용의 해시값을 포함합니다.
+         * @example {
+         *       "policyVersionId": 12,
+         *       "scopeType": "GLOBAL",
+         *       "scopeReference": "d6578ecd-7fe4-5493-92e0-bebde2fbcd13",
+         *       "accrualRateBps": 500,
+         *       "roundingMode": "FLOOR",
+         *       "issuerType": "PLATFORM",
+         *       "issuerReference": "platform:beanflow",
+         *       "expiryRule": "SEOUL_CALENDAR_DAYS_FROM_COMPLETION",
+         *       "validityDays": 365,
+         *       "canonicalPolicyHash": "e7b5a3f1d9c7b5a4f2e0d8c6b4a2f1e9d7c5b3a1f0e8d6c4b2a9f7e5d3c1b0a8"
+         *     }
+         */
         OrdinaryPointAccrualPolicySnapshot: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다.
+             */
             policyVersionId: number;
-            /** @enum {string} */
+            /**
+             * @description 실제 선택된 정책 범위 유형입니다.
+             * @enum {string}
+             */
             scopeType: "GLOBAL" | "STORE";
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 외부 원문이나 민감정보 대신 사용하는 외부 시스템용 식별값 문자열입니다.
+             */
             scopeReference: string;
+            /** @description 10000을 100%로 계산하는 비율입니다. */
             accrualRateBps: number;
-            /** @enum {string} */
+            /**
+             * @description 금액 또는 포인트 계산의 반올림 방식입니다.
+             * @enum {string}
+             */
             roundingMode: "FLOOR" | "HALF_UP";
-            /** @enum {string} */
+            /**
+             * @description 발행 또는 비용 책임 주체의 유형입니다.
+             * @enum {string}
+             */
             issuerType: "PLATFORM" | "BRAND" | "STORE";
+            /** @description 포인트 발행 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다. */
             issuerReference: string;
-            /** @enum {string} */
+            /**
+             * @description 만료 시각을 계산하는 규칙입니다.
+             * @enum {string}
+             */
             expiryRule: "EXACT_DURATION_FROM_COMPLETION" | "SEOUL_CALENDAR_DAYS_FROM_COMPLETION";
             validityDays: number;
+            /** @description 주문 완료 시 적용한 정책 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             canonicalPolicyHash: string;
         };
+        /**
+         * @description 특정 매장의 저장된 정책과 전체 기본 정책을 반영해 계산한 실제 적용 정책을 함께 보여 줍니다. `selectionSource`로 어떤 정책이 선택됐는지 확인할 수 있습니다.
+         * @example {
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "explicitHead": {
+         *         "policyVersionId": 7,
+         *         "scopeType": "STORE",
+         *         "scopeReference": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "state": "OVERRIDE",
+         *         "accrualRateBps": 700,
+         *         "roundingMode": "HALF_UP",
+         *         "issuerType": "STORE",
+         *         "issuerReference": "store:5273704d-f924-59e0-8883-827535fb86ad",
+         *         "expiryRule": "EXACT_DURATION_FROM_COMPLETION",
+         *         "validityDays": 180,
+         *         "effectiveAt": "2026-08-15T00:00:00+09:00",
+         *         "actorType": "PLATFORM_OPERATOR",
+         *         "actorReference": "ff5babc0-a7e5-5776-a6cc-97f550f8ed7c",
+         *         "reason": "매장별 적립률을 7%로 설정함"
+         *       },
+         *       "effectivePolicy": {
+         *         "policyVersionId": 7,
+         *         "scopeType": "STORE",
+         *         "scopeReference": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "accrualRateBps": 700,
+         *         "roundingMode": "HALF_UP",
+         *         "issuerType": "STORE",
+         *         "issuerReference": "store:5273704d-f924-59e0-8883-827535fb86ad",
+         *         "expiryRule": "EXACT_DURATION_FROM_COMPLETION",
+         *         "validityDays": 180,
+         *         "canonicalPolicyHash": "e7b5a3f1d9c7b5a4f2e0d8c6b4a2f1e9d7c5b3a1f0e8d6c4b2a9f7e5d3c1b0a8"
+         *       },
+         *       "selectionSource": "STORE_OVERRIDE"
+         *     }
+         */
         StoreOrdinaryPointAccrualPolicy: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 매장 자원을 가리키는 UUID 식별자입니다.
+             */
             storeId: string;
+            /** @description 매장에 별도로 저장된 현재 포인트 적립 정책입니다. 별도 정책이 없으면 이 필드를 생략합니다. */
             explicitHead?: components["schemas"]["OrdinaryPointAccrualPolicyVersion"];
+            /** @description 전체 기본 정책 상속까지 반영한 최종 적용 정책입니다. */
             effectivePolicy: components["schemas"]["OrdinaryPointAccrualPolicySnapshot"];
-            /** @enum {string} */
+            /**
+             * @description 최종 적용 정책이 STORE 재정의 또는 GLOBAL 상속 중 어디서 선택됐는지 나타냅니다.
+             * @enum {string}
+             */
             selectionSource: "STORE_OVERRIDE" | "GLOBAL_INHERITED" | "GLOBAL_NO_OVERRIDE";
         };
+        /**
+         * @description 특정 매장만 별도 포인트 적립 정책을 사용하도록 변경하는 요청입니다. 첫 설정 이후에는 현재 버전 ID가 정확히 일치해야 합니다.
+         * @example {
+         *       "state": "OVERRIDE",
+         *       "accrualRateBps": 700,
+         *       "roundingMode": "HALF_UP",
+         *       "issuerType": "STORE",
+         *       "issuerReference": "store:5273704d-f924-59e0-8883-827535fb86ad",
+         *       "expiryRule": "EXACT_DURATION_FROM_COMPLETION",
+         *       "validityDays": 180,
+         *       "reason": "해당 매장의 한시적 적립률을 7%로 설정함",
+         *       "expectedPolicyVersionId": 7
+         *     }
+         */
         ChangeStoreOrdinaryPointAccrualOverrideRequest: components["schemas"]["OrdinaryPointAccrualOverrideFields"] & {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 현재 정책 버전 ID입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedPolicyVersionId?: number;
         } & {
             /**
@@ -3939,83 +6430,208 @@ export interface components {
              */
             state: "ChangeStoreOrdinaryPointAccrualOverrideRequest";
         };
+        /**
+         * @description 특정 매장의 별도 포인트 정책을 해제하고 전체 기본 정책을 따르게 하는 요청입니다. 기존 매장 정책이 있으면 현재 버전 ID를 함께 보냅니다.
+         * @example {
+         *       "expectedPolicyVersionId": 7,
+         *       "state": "INHERIT_GLOBAL",
+         *       "reason": "매장별 재정의를 종료하고 전역 정책을 상속함"
+         *     }
+         */
         ChangeStoreOrdinaryPointAccrualInheritanceRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 현재 정책 버전 ID입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedPolicyVersionId?: number;
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description 리소스의 현재 처리 상태입니다. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             state: "ChangeStoreOrdinaryPointAccrualInheritanceRequest";
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
         /**
-         * @description ARCHIVED frees the normalized name for another brand.
+         * @description 브랜드 운영 상태입니다. `ARCHIVED`로 보관하면 같은 이름을 새 브랜드에서 다시 사용할 수 있습니다.
+         * @example ACTIVE
          * @enum {string}
          */
         BrandStatus: "ACTIVE" | "ARCHIVED";
+        /**
+         * @description 플랫폼에서 관리하는 카페 브랜드입니다. 이름, 활성·보관 상태, 소속 매장 수와 동시 변경 확인용 버전을 포함합니다.
+         * @example {
+         *       "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
+         *       "name": "빈플로우 커피",
+         *       "status": "ACTIVE",
+         *       "assignedStoreCount": 12,
+         *       "version": 3
+         *     }
+         */
         Brand: {
+            /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
             brandId: components["schemas"]["Identifier"];
             name: string;
+            /** @description 리소스의 현재 상태입니다. */
             status: components["schemas"]["BrandStatus"];
-            /**
-             * @description 소속 매장 수. 이름 변경의 색인 fan-out 비용이며 ADR-112 6절의 1000개 상한에
-             *     얼마나 가까운지를 운영자가 알 수 있는 유일한 값이다.
-             */
+            /** @description 이 브랜드에 연결된 매장 수입니다. 브랜드 이름을 바꿀 때 함께 갱신해야 하는 매장 수를 판단하는 데 사용합니다. */
             assignedStoreCount: number;
             /**
              * Format: int64
-             * @description Pass back as expectedVersion to detect a concurrent change.
+             * @description 동시에 다른 운영자가 브랜드를 바꾸지 않았는지 확인하는 버전입니다.
              */
             version: number;
         };
+        /**
+         * @description 브랜드 목록의 다음 페이지를 요청할 때 사용할 선택적 커서입니다.
+         * @example {
+         *       "nextCursor": null
+         *     }
+         */
         BrandPageInfo: {
+            /** @description 다음 페이지가 있을 때 서버가 반환하는 문자열입니다. 다음 요청의 `cursor`에 그대로 사용합니다. */
             nextCursor: string | null;
         };
+        /**
+         * @description 이름과 브랜드 ID 순으로 조회한 브랜드 목록과 다음 페이지 정보를 담습니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
+         *           "name": "빈플로우 커피",
+         *           "status": "ACTIVE",
+         *           "assignedStoreCount": 12,
+         *           "version": 3
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": null
+         *       }
+         *     }
+         */
         BrandPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["Brand"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["BrandPageInfo"];
         };
-        /** @description Recorded on the AuditRecord this command appends. */
+        /**
+         * @description 운영 명령이 추가하는 감사 기록에 저장되는 사유입니다.
+         * @example 운영 정책 변경 승인 티켓 OPS-SAMPLE-001에 따라 처리함
+         */
         OperationReason: string;
+        /**
+         * @description 새 브랜드를 생성하는 운영자 요청입니다. 브랜드 이름과 감사 사유를 포함합니다.
+         * @example {
+         *       "name": "빈플로우 커피",
+         *       "reason": "신규 프랜차이즈 브랜드 등록"
+         *     }
+         */
         CreateBrandRequest: {
             name: string;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
         };
-        /** @description name과 status 중 적어도 하나가 있어야 한다. 둘 다 없으면 400이다. */
+        /**
+         * @description 브랜드 이름 또는 상태를 변경하는 요청입니다. expectedVersion으로 동시 변경을 탐지하고 운영 사유를 감사 기록에 남깁니다.
+         * @example {
+         *       "name": "빈플로우 로스터스",
+         *       "status": "ACTIVE",
+         *       "expectedVersion": 3,
+         *       "reason": "브랜드 리뉴얼에 따른 공식 명칭 변경"
+         *     }
+         */
         UpdateBrandRequest: {
             name?: string | null;
+            /** @description 변경할 브랜드 상태입니다. 생략하면 현재 상태를 유지합니다. */
             status?: components["schemas"]["BrandStatus"] | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 동시 변경을 탐지할 현재 Brand.version입니다.
+             */
             expectedVersion?: number | null;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
         };
+        /**
+         * @description 매장 검색 색인 전체 재생성을 요청합니다. reason은 멱등성 해시의 일부입니다.
+         * @example {
+         *       "reason": "브랜드 일괄 변경 후 검색 색인 정합성 복구"
+         *     }
+         */
         SearchIndexRebuildRequest: {
-            /** @description Trimmed before idempotency hashing; control characters and all-whitespace values are rejected. */
+            /** @description 멱등성 해시 이전에 trim합니다. 제어 문자와 공백뿐인 값은 거부합니다. */
             reason: components["schemas"]["OperationReason"];
         };
+        /**
+         * @description 한 번의 재색인 pass 결과입니다. 재색인 대상은 첫 chunk 이전 snapshot으로 고정되며
+         *     complete는 그 snapshot 범위에 대한 값입니다.
+         * @example {
+         *       "indexedStoreCount": 128,
+         *       "skippedStoreCount": 2,
+         *       "failedStoreIds": [],
+         *       "complete": true
+         *     }
+         */
         SearchIndexRebuildResponse: {
-            /** @description Stores whose STORE_NAME and available MENU_NAME terms were replaced. */
+            /** @description STORE_NAME과 판매 중 MENU_NAME term이 교체된 매장 수입니다. */
             indexedStoreCount: number;
-            /** @description Stores deleted before their per-store rebuild transaction started. */
+            /** @description 매장별 재색인 transaction이 시작되기 전에 삭제된 매장 수입니다. */
             skippedStoreCount: number;
-            /** @description Stores whose rebuild transaction failed; a non-empty list makes complete false. */
+            /** @description 재색인 transaction이 실패한 매장입니다. 목록이 비어 있지 않으면 complete는 false입니다. */
             failedStoreIds: components["schemas"]["Identifier"][];
-            /** @description True only when failedStoreIds is empty. False is a persisted partial result, not a successful full refresh. */
+            /** @description failedStoreIds가 비어 있을 때만 true입니다. false는 저장된 부분 결과이며 전체 갱신 성공이 아닙니다. */
             complete: boolean;
         };
+        /**
+         * @description 플랫폼 운영자가 매장에 브랜드를 지정하는 요청입니다. 대상 브랜드와 감사 기록에 남길 운영 사유를 포함합니다.
+         * @example {
+         *       "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
+         *       "reason": "신규 가맹 계약에 따라 브랜드를 지정함"
+         *     }
+         */
         AssignStoreBrandRequest: {
+            /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
             brandId: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
         };
+        /**
+         * @description 매장에 현재 연결된 브랜드 정보입니다. 연결된 브랜드가 없으면 브랜드 정보는 `null`입니다.
+         * @example {
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
+         *       "brandName": "빈플로우 커피"
+         *     }
+         */
         StoreBrand: {
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
+            /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
             brandId: components["schemas"]["Identifier"] | null;
             brandName: string | null;
         };
+        /**
+         * @description 매장의 브랜드 지정을 해제하는 운영자 요청입니다. 감사 기록에 남길 사유를 포함합니다.
+         * @example {
+         *       "reason": "가맹 계약 종료에 따라 브랜드 지정을 해제함"
+         *     }
+         */
         ClearStoreBrandRequest: {
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
         };
+        /**
+         * @description 법정동 폐쇄 어휘의 한 항목입니다. 매장에 지역을 지정할 때 참조 데이터로 사용됩니다.
+         * @example {
+         *       "code": "1168010100",
+         *       "sido": "서울특별시",
+         *       "sigungu": "강남구",
+         *       "eupmyeondong": "역삼동",
+         *       "ri": "",
+         *       "fullName": "서울특별시 강남구 역삼동"
+         *     }
+         */
         Region: {
             /** @description 법정동 코드. 폐쇄 어휘의 기본 키다. */
             code: string;
@@ -4033,73 +6649,247 @@ export interface components {
             ri: string;
             fullName: string;
         };
+        /**
+         * @description 법정동 지역 목록 페이지의 다음 페이지 커서 정보입니다.
+         * @example {
+         *       "nextCursor": null
+         *     }
+         */
         RegionPageInfo: {
             nextCursor: string | null;
         };
+        /**
+         * @description 법정동 지역 목록의 signed cursor 페이지입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "code": "1168010100",
+         *           "sido": "서울특별시",
+         *           "sigungu": "강남구",
+         *           "eupmyeondong": "역삼동",
+         *           "ri": "",
+         *           "fullName": "서울특별시 강남구 역삼동"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": null
+         *       }
+         *     }
+         */
         RegionPage: {
             items: components["schemas"]["Region"][];
             page: components["schemas"]["RegionPageInfo"];
         };
+        /**
+         * @description 매장에 법정동 지역을 지정하는 요청입니다.
+         * @example {
+         *       "regionCode": "1168010100",
+         *       "reason": "사업자등록증상 소재지 기준으로 지역 배정"
+         *     }
+         */
         AssignStoreRegionRequest: {
             regionCode: string;
             reason: components["schemas"]["OperationReason"];
         };
+        /**
+         * @description 매장에 지정된 법정동 지역입니다.
+         * @example {
+         *       "storeId": "01J8Z3QK2N5R7X9V6W4T8Y1B0C",
+         *       "regionCode": "1168010100",
+         *       "regionFullName": "서울특별시 강남구 역삼동"
+         *     }
+         */
         StoreRegion: {
             storeId: components["schemas"]["Identifier"];
             regionCode: string;
             regionFullName: string;
         };
+        /**
+         * @description 매장별 정산 요약입니다. 정산일과 상태, 총 결제액, 수수료, 쿠폰·포인트 비용, 조정액, 최종 정산액을 계산 당시 값으로 저장합니다.
+         * @example {
+         *       "settlementBatchId": "4d2654c0-17aa-5f8d-84c8-b3d8677fabad",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "settlementDate": "2026-08-14",
+         *       "state": "CONFIRMED",
+         *       "grossPaidKrw": 185000,
+         *       "feeKrw": 9250,
+         *       "benefitCostKrw": 4500,
+         *       "adjustmentKrw": -3000,
+         *       "netSettlementKrw": 168250,
+         *       "currency": "KRW",
+         *       "confirmedAt": "2026-08-15T08:00:00+09:00"
+         *     }
+         */
         SettlementBatch: {
+            /** @description 해당 정산 배치 자원을 가리키는 UUID 식별자입니다. */
             settlementBatchId: components["schemas"]["Identifier"];
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
             /**
              * Format: date
-             * @description Completion date in Asia/Seoul
+             * @description Asia/Seoul 기준 주문 완료일을 집계한 정산 날짜입니다.
              */
             settlementDate: string;
-            /** @enum {string} */
+            /**
+             * @description 정산 배치의 계산 또는 확정 상태입니다.
+             * @enum {string}
+             */
             state: "CALCULATED" | "CONFIRMED";
+            /** @description 정산 대상의 총 현금 결제 금액입니다. */
             grossPaidKrw: components["schemas"]["MoneyKrw"];
+            /** @description 정산에서 차감하는 수수료 금액입니다. */
             feeKrw: components["schemas"]["MoneyKrw"];
+            /** @description 쿠폰·포인트 등 혜택 비용으로 배분된 금액입니다. */
             benefitCostKrw: components["schemas"]["MoneyKrw"];
+            /** @description 기존 정산에 더하거나 차감하는 부호 있는 조정 금액입니다. */
             adjustmentKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 수수료·혜택 비용·조정을 반영한 최종 부호 있는 정산 금액입니다. */
             netSettlementKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
+            /** @description 정산 배치가 확정된 시각입니다. */
             confirmedAt?: components["schemas"]["DateTime"];
         };
+        /**
+         * @description 매장의 정산 배치 목록과 다음 페이지 커서를 담는 페이지 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "settlementBatchId": "4d2654c0-17aa-5f8d-84c8-b3d8677fabad",
+         *           "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *           "settlementDate": "2026-08-14",
+         *           "state": "CONFIRMED",
+         *           "grossPaidKrw": 185000,
+         *           "feeKrw": 9250,
+         *           "benefitCostKrw": 4500,
+         *           "adjustmentKrw": -3000,
+         *           "netSettlementKrw": 168250,
+         *           "currency": "KRW",
+         *           "confirmedAt": "2026-08-15T08:00:00+09:00"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "v1.sample.cursor.eyJkYXRlIjoiMjAyNi0wOC0xNCJ9"
+         *       }
+         *     }
+         */
         SettlementBatchPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["SettlementBatch"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * @description 정산 배치에 포함된 주문 한 건의 정산 내역입니다. 주문 완료 시각과 결제액, 수수료, 쿠폰·포인트 비용, 최종 정산액을 포함합니다.
+         * @example {
+         *       "settlementItemId": "1cb7cee2-e9d0-5e62-80b0-dc61f4153789",
+         *       "settlementBatchId": "4d2654c0-17aa-5f8d-84c8-b3d8677fabad",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "completedAt": "2026-08-14T15:20:00+09:00",
+         *       "grossPaidKrw": 12000,
+         *       "feeKrw": 600,
+         *       "benefitCostKrw": 1000,
+         *       "netSettlementKrw": 10400,
+         *       "currency": "KRW"
+         *     }
+         */
         SettlementItem: {
+            /** @description 해당 정산 항목 자원을 가리키는 UUID 식별자입니다. */
             settlementItemId: components["schemas"]["Identifier"];
+            /** @description 해당 정산 배치 자원을 가리키는 UUID 식별자입니다. */
             settlementBatchId: components["schemas"]["Identifier"];
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
+            /** @description 주문 픽업 또는 정산 대상 거래가 완료된 시각입니다. */
             completedAt: components["schemas"]["DateTime"];
+            /** @description 정산 대상의 총 현금 결제 금액입니다. */
             grossPaidKrw: components["schemas"]["MoneyKrw"];
+            /** @description 정산에서 차감하는 수수료 금액입니다. */
             feeKrw: components["schemas"]["MoneyKrw"];
+            /** @description 쿠폰·포인트 등 혜택 비용으로 배분된 금액입니다. */
             benefitCostKrw: components["schemas"]["MoneyKrw"];
+            /** @description 수수료·혜택 비용·조정을 반영한 최종 부호 있는 정산 금액입니다. */
             netSettlementKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
         };
+        /**
+         * @description 정산 배치의 항목 목록과 다음 페이지 커서를 담는 페이지 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "settlementItemId": "1cb7cee2-e9d0-5e62-80b0-dc61f4153789",
+         *           "settlementBatchId": "4d2654c0-17aa-5f8d-84c8-b3d8677fabad",
+         *           "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *           "completedAt": "2026-08-14T15:20:00+09:00",
+         *           "grossPaidKrw": 12000,
+         *           "feeKrw": 600,
+         *           "benefitCostKrw": 1000,
+         *           "netSettlementKrw": 10400,
+         *           "currency": "KRW"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "v1.sample.cursor.eyJpdGVtIjoiMDAxIn0"
+         *       }
+         *     }
+         */
         SettlementItemPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["SettlementItem"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * @description 확정된 정산 항목에 이의제기를 접수하는 요청입니다. 기대하는 조정 금액, 이의 사유, 하나 이상의 근거 자료 식별값을 포함합니다. 허용된 재접수라면 이전 이의제기 ID도 함께 보냅니다.
+         * @example {
+         *       "expectedAdjustmentKrw": 3500,
+         *       "reason": "환불 조정 금액이 정산 항목에 반영되지 않았습니다.",
+         *       "evidenceReferences": [
+         *         "support-evidence://sample/settlement-item-001"
+         *       ],
+         *       "previousDisputeId": "2ec3f04d-2449-5544-b58b-731009bb0077"
+         *     }
+         */
         CreateDisputeRequest: {
+            /** @description 점주가 기대하는 부호 있는 정산 조정 금액입니다. */
             expectedAdjustmentKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 이의제기의 근거를 확인할 수 있는 문서나 내부 기록 위치 목록입니다. 개인정보나 증거 원문을 직접 넣지 않습니다. */
             evidenceReferences: string[];
+            /** @description 해당 이전 이의제기 자원을 가리키는 UUID 식별자입니다. */
             previousDisputeId?: components["schemas"]["Identifier"];
         };
+        /**
+         * @description 정산 항목 이의제기 한 건의 현재 상태입니다. 이의제기 ID, 대상 정산 항목, 보류한 예상 조정 금액, 상태와 접수 시각을 포함합니다.
+         * @example {
+         *       "disputeId": "0f7ef3bd-ae68-5be0-88d3-269f7c331966",
+         *       "settlementItemId": "1cb7cee2-e9d0-5e62-80b0-dc61f4153789",
+         *       "previousDisputeId": "2ec3f04d-2449-5544-b58b-731009bb0077",
+         *       "state": "FILED",
+         *       "heldAmountKrw": 3500,
+         *       "currency": "KRW",
+         *       "filedAt": "2026-08-16T10:00:00+09:00"
+         *     }
+         */
         SettlementDispute: {
+            /** @description 해당 이의제기 자원을 가리키는 UUID 식별자입니다. */
             disputeId: components["schemas"]["Identifier"];
+            /** @description 해당 정산 항목 자원을 가리키는 UUID 식별자입니다. */
             settlementItemId: components["schemas"]["Identifier"];
+            /** @description 해당 이전 이의제기 자원을 가리키는 UUID 식별자입니다. */
             previousDisputeId?: components["schemas"]["Identifier"];
-            /** @enum {string} */
+            /**
+             * @description 이의제기의 현재 심사 상태입니다.
+             * @enum {string}
+             */
             state: "FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+            /** @description 이의제기 처리 중 내부적으로 보류한 부호 있는 예상 조정 금액입니다. */
             heldAmountKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 금액 필드에 적용되는 통화입니다. */
             currency: components["schemas"]["Currency"];
+            /** @description 이의제기가 접수된 시각입니다. */
             filedAt: components["schemas"]["DateTime"];
         };
         /** @enum {string} */
@@ -4113,6 +6903,19 @@ export interface components {
         SupportSearchSubjectType: "CUSTOMER" | "STORE" | "RIDER";
         /** @enum {string} */
         SupportSearchReasonCode: "CASE_INTAKE" | "ACTIVE_CASE_LOOKUP" | "DELIVERY_INCIDENT" | "PRIVACY_REQUEST";
+        /**
+         * @description 전화번호 또는 이메일 하나로 고객/점주/라이더 대상을 정확 검색하기 위한 요청. 쿼리 파라미터는 지원하지 않으며 body만 허용합니다.
+         * @example {
+         *       "criterion": {
+         *         "type": "PHONE",
+         *         "value": "01000000000"
+         *       },
+         *       "subjectTypes": [
+         *         "CUSTOMER"
+         *       ],
+         *       "reasonCode": "CASE_INTAKE"
+         *     }
+         */
         SearchSupportSubjectsRequest: {
             criterion: components["schemas"]["SupportSearchCriterion"];
             subjectTypes: components["schemas"]["SupportSearchSubjectType"][];
@@ -4126,6 +6929,24 @@ export interface components {
             matchedCriterionType: components["schemas"]["ExactSearchCriterionType"];
             maskedMatchedValue: string;
         };
+        /**
+         * @description 정확 검색으로 찾은 마스킹된 후보 목록과 모호성/절단 여부를 담은 응답. 원본 검증 조건 값은 포함하지 않습니다.
+         * @example {
+         *       "searchId": "3fbd41c1-2b34-4e2c-8f1a-2f4e7d6b9a10",
+         *       "items": [
+         *         {
+         *           "subjectType": "CUSTOMER",
+         *           "subjectId": "9f1b2c3d-4e5f-6789-abcd-ef0123456789",
+         *           "maskedDisplayName": "홍*동",
+         *           "matchedCriterionType": "PHONE",
+         *           "maskedMatchedValue": "010****0000"
+         *         }
+         *       ],
+         *       "matchedCount": 1,
+         *       "ambiguous": false,
+         *       "hasMore": false
+         *     }
+         */
         SupportSubjectSearchResult: {
             /** Format: uuid */
             searchId: string;
@@ -4139,6 +6960,17 @@ export interface components {
         SupportCaseState: "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
         /** @enum {string} */
         SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+        /**
+         * @description SupportCase 목록 조회에 쓰이는 요약 표현.
+         * @example {
+         *       "caseId": "1a2b3c4d-5e6f-7089-abcd-ef0123456789",
+         *       "state": "IN_PROGRESS",
+         *       "priority": "NORMAL",
+         *       "assigneeId": "2c5e9a10-4b3d-4f6a-9e21-0a1b2c3d4e5f",
+         *       "version": 3,
+         *       "openedAt": "2026-08-15T09:00:00Z"
+         *     }
+         */
         SupportCaseSummary: {
             caseId: components["schemas"]["Identifier"];
             state: components["schemas"]["SupportCaseState"];
@@ -4148,6 +6980,22 @@ export interface components {
             version: number;
             openedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description SupportCase 목록의 한 페이지. 다음 페이지가 있으면 nextCursor가 포함됩니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "caseId": "1a2b3c4d-5e6f-7089-abcd-ef0123456789",
+         *           "state": "IN_PROGRESS",
+         *           "priority": "NORMAL",
+         *           "assigneeId": "2c5e9a10-4b3d-4f6a-9e21-0a1b2c3d4e5f",
+         *           "version": 3,
+         *           "openedAt": "2026-08-15T09:00:00Z"
+         *         }
+         *       ],
+         *       "nextCursor": "eyJvcGVuZWRBdCI6IjIwMjYtMDgtMTVUMDk6MDA6MDBaIn0="
+         *     }
+         */
         SupportCasePage: {
             items: components["schemas"]["SupportCaseSummary"][];
             nextCursor?: string;
@@ -4156,6 +7004,17 @@ export interface components {
         SupportRequesterType: "CUSTOMER" | "STORE_OWNER" | "STORE_MEMBER" | "RIDER" | "THIRD_PARTY" | "INTERNAL_OPERATOR" | "SYSTEM" | "UNKNOWN";
         /** @enum {string} */
         SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
+        /**
+         * @description 새 SupportCase를 열기 위한 요청. 요청자 유형/참조, 문의 분류, 우선순위와 사유를 담습니다.
+         * @example {
+         *       "requesterType": "CUSTOMER",
+         *       "requesterReference": "CUST-00000001",
+         *       "category": "ORDER_CANCELLATION",
+         *       "priority": "NORMAL",
+         *       "externalReference": "TICKET-2026-0815-001",
+         *       "reason": "고객이 주문 취소 및 환불을 요청함"
+         *     }
+         */
         CreateSupportCaseRequest: {
             requesterType: components["schemas"]["SupportRequesterType"];
             /** @description Opaque requester reference; it is not expanded or validated against an owner table in S20. */
@@ -4170,6 +7029,17 @@ export interface components {
         SupportSubjectType: "CUSTOMER" | "STORE" | "ORDER" | "DELIVERY";
         /** @enum {string} */
         SupportSubjectRelationship: "REQUESTER" | "AFFECTED_CUSTOMER" | "AFFECTED_STORE" | "RELATED_ORDER" | "RELATED_DELIVERY" | "OTHER";
+        /**
+         * @description SupportCase에 연결된 opaque 식별자 한 건.
+         * @example {
+         *       "linkId": "9a8b7c6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4",
+         *       "subjectType": "ORDER",
+         *       "subjectId": "6a1e2f3c-4d5b-6c7d-8e9f-0a1b2c3d4e5f",
+         *       "relationship": "RELATED_ORDER",
+         *       "linkedAt": "2026-08-15T09:01:00Z",
+         *       "caseVersion": 2
+         *     }
+         */
         SupportSubjectLink: {
             linkId: components["schemas"]["Identifier"];
             subjectType: components["schemas"]["SupportSubjectType"];
@@ -4179,6 +7049,27 @@ export interface components {
             /** Format: int64 */
             caseVersion?: number;
         };
+        /**
+         * @description SupportCase의 현재 상태와 활성 subject 연결 목록을 담은 전체 표현.
+         * @example {
+         *       "caseId": "1a2b3c4d-5e6f-7089-abcd-ef0123456789",
+         *       "state": "IN_PROGRESS",
+         *       "priority": "NORMAL",
+         *       "assigneeId": "2c5e9a10-4b3d-4f6a-9e21-0a1b2c3d4e5f",
+         *       "version": 3,
+         *       "openedAt": "2026-08-15T09:00:00Z",
+         *       "subjectLinks": [
+         *         {
+         *           "linkId": "9a8b7c6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4",
+         *           "subjectType": "ORDER",
+         *           "subjectId": "6a1e2f3c-4d5b-6c7d-8e9f-0a1b2c3d4e5f",
+         *           "relationship": "RELATED_ORDER",
+         *           "linkedAt": "2026-08-15T09:01:00Z",
+         *           "caseVersion": 2
+         *         }
+         *       ]
+         *     }
+         */
         SupportCase: {
             caseId: components["schemas"]["Identifier"];
             state: components["schemas"]["SupportCaseState"];
@@ -4190,12 +7081,30 @@ export interface components {
             closedAt?: components["schemas"]["DateTime"];
             subjectLinks: components["schemas"]["SupportSubjectLink"][];
         };
+        /**
+         * @description SupportCase를 새 담당 운영자에게 재배정하기 위한 요청. 낙관적 잠금을 위해 현재 알고 있는 Case 버전을 함께 보냅니다.
+         * @example {
+         *       "assigneeId": "2c5e9a10-4b3d-4f6a-9e21-0a1b2c3d4e5f",
+         *       "expectedVersion": 3,
+         *       "reason": "전담 상담사에게 이관"
+         *     }
+         */
         AssignSupportCaseRequest: {
             assigneeId: components["schemas"]["Identifier"];
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
         };
+        /**
+         * @description SupportCase에 추가된 담당자 배정 이력 한 건.
+         * @example {
+         *       "assignmentId": "8b7c6d5e-4f3a-2b1c-0d9e-f8a7b6c5d4e3",
+         *       "assigneeId": "2c5e9a10-4b3d-4f6a-9e21-0a1b2c3d4e5f",
+         *       "state": "IN_PROGRESS",
+         *       "caseVersion": 4,
+         *       "assignedAt": "2026-08-15T09:05:00Z"
+         *     }
+         */
         SupportCaseAssignment: {
             assignmentId: components["schemas"]["Identifier"];
             assigneeId: components["schemas"]["Identifier"];
@@ -4204,12 +7113,30 @@ export interface components {
             caseVersion: number;
             assignedAt: components["schemas"]["DateTime"];
         };
+        /**
+         * @description SupportCase를 다음 허용된 상태로 전이하기 위한 요청.
+         * @example {
+         *       "targetState": "RESOLVED",
+         *       "expectedVersion": 5,
+         *       "reason": "환불 처리 완료로 사건 종결"
+         *     }
+         */
         TransitionSupportCaseRequest: {
             targetState: components["schemas"]["SupportCaseState"];
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
         };
+        /**
+         * @description SupportCase에 추가된 상태 전이 이력 한 건.
+         * @example {
+         *       "transitionId": "7c6d5e4f-3a2b-1c0d-9e8f-a7b6c5d4e3f2",
+         *       "previousState": "IN_PROGRESS",
+         *       "currentState": "RESOLVED",
+         *       "caseVersion": 5,
+         *       "occurredAt": "2026-08-15T10:00:00Z"
+         *     }
+         */
         SupportCaseTransition: {
             transitionId: components["schemas"]["Identifier"];
             previousState: components["schemas"]["SupportCaseState"];
@@ -4222,6 +7149,15 @@ export interface components {
         SupportInteractionChannel: "PHONE" | "CHAT" | "EMAIL" | "IN_PERSON" | "SYSTEM";
         /** @enum {string} */
         SupportInteractionDirection: "INBOUND" | "OUTBOUND" | "INTERNAL";
+        /**
+         * @description SupportCase에 고객과의 상담 이력을 비식별 요약 형태로 기록하기 위한 요청. 원문 대화 내용은 담지 않습니다.
+         * @example {
+         *       "channel": "PHONE",
+         *       "direction": "INBOUND",
+         *       "occurredAt": "2026-08-15T09:12:00Z",
+         *       "redactedSummary": "고객이 주문 지연 관련 문의로 전화함"
+         *     }
+         */
         AppendSupportInteractionRequest: {
             channel: components["schemas"]["SupportInteractionChannel"];
             direction: components["schemas"]["SupportInteractionDirection"];
@@ -4229,6 +7165,18 @@ export interface components {
             /** @description Must already exclude secrets and high-risk PII. */
             redactedSummary: string;
         };
+        /**
+         * @description SupportCase에 추가된 상담 이력 한 건. 응답에는 상담 원문 대신 고정된 요약 문구만 포함됩니다.
+         * @example {
+         *       "interactionId": "6d5e4f3a-2b1c-0d9e-8f7a-b6c5d4e3f2a1",
+         *       "channel": "PHONE",
+         *       "direction": "INBOUND",
+         *       "summary": "INTERACTION_RECORDED",
+         *       "occurredAt": "2026-08-15T09:12:00Z",
+         *       "recordedAt": "2026-08-15T09:12:05Z",
+         *       "caseVersion": 3
+         *     }
+         */
         SupportInteraction: {
             interactionId: components["schemas"]["Identifier"];
             channel: components["schemas"]["SupportInteractionChannel"];
@@ -4240,11 +7188,27 @@ export interface components {
             /** Format: int64 */
             caseVersion: number;
         };
+        /**
+         * @description SupportCase에 내부용 메모를 추가하기 위한 요청. 비밀정보/고위험 PII가 포함된 내용은 저장되지 않습니다.
+         * @example {
+         *       "content": "고객이 재배송을 원하지 않는다고 확인함",
+         *       "reason": "처리 방향 기록"
+         *     }
+         */
         AppendSupportNoteRequest: {
             /** @description Secret- and high-risk-PII-filtered internal note. The successful response never returns content. */
             content: string;
             reason: string;
         };
+        /**
+         * @description SupportCase에 추가된 내부 메모 한 건. 응답에는 메모 원문 대신 고정된 요약 문구만 포함됩니다.
+         * @example {
+         *       "noteId": "5e4f3a2b-1c0d-9e8f-7a6b-c5d4e3f2a1b0",
+         *       "summary": "NOTE_RECORDED",
+         *       "createdAt": "2026-08-15T09:20:00Z",
+         *       "caseVersion": 3
+         *     }
+         */
         SupportNote: {
             noteId: components["schemas"]["Identifier"];
             /** @constant */
@@ -4253,165 +7217,508 @@ export interface components {
             /** Format: int64 */
             caseVersion: number;
         };
+        /**
+         * @description SupportCase에 고객/매장/주문/배송 등 opaque 식별자를 연결하기 위한 요청.
+         * @example {
+         *       "subjectType": "ORDER",
+         *       "subjectId": "6a1e2f3c-4d5b-6c7d-8e9f-0a1b2c3d4e5f",
+         *       "relationship": "RELATED_ORDER",
+         *       "reason": "고객 문의 대상 주문 연결"
+         *     }
+         */
         LinkSupportSubjectRequest: {
             subjectType: components["schemas"]["SupportSubjectType"];
             subjectId: components["schemas"]["Identifier"];
             relationship: components["schemas"]["SupportSubjectRelationship"];
             reason: string;
         };
+        /**
+         * @description 활성 Support subject 연결을 해제하기 위한 요청.
+         * @example {
+         *       "expectedVersion": 4,
+         *       "reason": "잘못 연결된 주문 제거"
+         *     }
+         */
         UnlinkSupportSubjectRequest: {
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
         };
+        /**
+         * @description 해제된 Support subject 연결 한 건.
+         * @example {
+         *       "linkId": "9a8b7c6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4",
+         *       "unlinkedAt": "2026-08-15T09:30:00Z",
+         *       "caseVersion": 3
+         *     }
+         */
         SupportSubjectUnlink: {
             linkId: components["schemas"]["Identifier"];
             unlinkedAt: components["schemas"]["DateTime"];
             /** Format: int64 */
             caseVersion: number;
         };
-        /** @enum {string} */
+        /**
+         * @description 이력이 주문, 결제, 포인트, 정산, 알림 등 어느 업무 영역에서 왔는지 나타냅니다.
+         * @example ORDERING
+         * @enum {string}
+         */
         SupportTimelineSource: "SUPPORT" | "ORDERING" | "PAYMENT" | "LOYALTY" | "PROMOTION" | "FULFILLMENT" | "SETTLEMENT" | "NOTIFICATION" | "OPERATIONS";
-        /** @enum {string} */
+        /**
+         * @description 타임라인에 표시할 주문, 결제, 환불, 포인트, 정산, 알림 등의 이력 종류입니다.
+         * @example ORDER_STATE
+         * @enum {string}
+         */
         SupportTimelineType: "CASE_STATE" | "CASE_ASSIGNMENT" | "CASE_INTERACTION" | "CASE_NOTE" | "SUBJECT_LINK" | "ORDER_STATE" | "PAYMENT_STATE" | "REFUND_STATE" | "POINT_RESERVATION" | "COUPON_RESERVATION" | "PICKUP_RESERVATION" | "SETTLEMENT_ITEM" | "SETTLEMENT_ADJUSTMENT" | "NOTIFICATION_DELIVERY" | "OPERATION_AUDIT";
-        /** @enum {string} */
+        /**
+         * @description 타임라인에 표시할 API 표준 상태입니다. 내부 세부 상태는 노출하지 않습니다.
+         * @example COMPLETED
+         * @enum {string}
+         */
         SupportTimelineState: "OPEN" | "PENDING_CUSTOMER" | "PENDING_STORE" | "ESCALATED" | "RESOLVED" | "CLOSED" | "ASSIGNED" | "INBOUND" | "OUTBOUND" | "INTERNAL" | "RECORDED" | "LINKED" | "UNLINKED" | "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED" | "APPROVING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW" | "REQUESTED" | "PROCESSING" | "SUCCEEDED" | "RESERVED" | "USED" | "RELEASED" | "CONFIRMED" | "ITEM_CREATED" | "ADJUSTMENT_RECORDED" | "PENDING" | "RETRY_SCHEDULED";
+        /**
+         * @description 고객센터 상담 건에 연결된 주문·결제·환불·포인트·쿠폰·정산·알림 이력 한 건입니다. 개인정보와 자유 입력 원문은 제외하고, 발생 시각과 출처, 종류, 상태, 짧은 설명만 제공합니다.
+         * @example {
+         *       "itemId": "6d0062a4-4ee7-58ca-97d7-ef779a4ee97b",
+         *       "source": "ORDERING",
+         *       "type": "ORDER_STATE",
+         *       "state": "COMPLETED",
+         *       "summary": "주문 픽업이 완료됨",
+         *       "amountKrw": 7500,
+         *       "occurredAt": "2026-08-15T10:15:00+09:00"
+         *     }
+         */
         SupportTimelineItem: {
+            /** @description 해당 항목 자원을 가리키는 UUID 식별자입니다. */
             itemId: components["schemas"]["Identifier"];
+            /** @description 이 이력이 주문, 결제, 포인트, 정산, 알림 등 어느 업무 영역에서 발생했는지 나타냅니다. */
             source: components["schemas"]["SupportTimelineSource"];
+            /** @description 타임라인에 표시하는 사실 유형입니다. */
             type: components["schemas"]["SupportTimelineType"];
+            /** @description 개인정보와 내부 세부 상태를 제외하고 API에 미리 정의한 상태만 제공합니다. */
             state: components["schemas"]["SupportTimelineState"];
-            /** @description Server-generated closed type/state label; never owner free text or PII. */
+            /** @description 서버가 생성한 짧은 설명입니다. 담당 시스템의 자유 입력 문구나 개인정보를 포함하지 않습니다. */
             summary: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 해당 사실과 관련된 선택적 정수 원 금액이며 금액이 없으면 null입니다.
+             */
             amountKrw: number | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 이력이 발생한 시각입니다.
+             */
             occurredAt: string;
         };
+        /**
+         * @description 고객센터 상담 건의 처리 이력 페이지입니다. 여러 담당 시스템의 항목을 하나의 시간순 목록으로 합치고 다음 페이지 커서를 함께 제공합니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "itemId": "6d0062a4-4ee7-58ca-97d7-ef779a4ee97b",
+         *           "source": "ORDERING",
+         *           "type": "ORDER_STATE",
+         *           "state": "COMPLETED",
+         *           "summary": "주문 픽업이 완료됨",
+         *           "amountKrw": 7500,
+         *           "occurredAt": "2026-08-15T10:15:00+09:00"
+         *         }
+         *       ],
+         *       "nextCursor": "v1.sample.support.timeline.cursor"
+         *     }
+         */
         SupportTimelinePage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
             items: components["schemas"]["SupportTimelineItem"][];
+            /** @description 다음 페이지가 있을 때 서버가 반환하는 문자열입니다. 다음 요청의 `cursor`에 그대로 사용합니다. */
             nextCursor: string | null;
         };
-        /** @enum {string} */
+        /**
+         * @description 고객센터가 요청할 수 있는 주문 취소, 픽업 시간 변경, 수락 후 문제 해결 작업입니다.
+         * @example ORDER_CANCELLATION
+         * @enum {string}
+         */
         SupportActionType: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION";
+        /**
+         * @description 현재 주문 상태에서 고객센터 주문 변경이 가능한지 확인하는 요청입니다. 작업 종류, 주문 ID, 현재 버전, 본인 확인 세션을 포함합니다.
+         * @example {
+         *       "action": "ORDER_CANCELLATION",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "expectedTargetVersion": 7,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a"
+         *     }
+         */
         EvaluateSupportActionRequest: {
+            /** @description 요청하거나 수행한 작업 유형입니다. */
             action: components["schemas"]["SupportActionType"];
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
         };
-        /** @enum {string} */
+        /**
+         * @description 현재 상태에서 주문 변경 작업을 바로 실행할 수 있는지 나타냅니다.
+         * @example APPROVAL_REQUIRED
+         * @enum {string}
+         */
         SupportActionDecision: "ALLOWED" | "APPROVAL_REQUIRED" | "DENIED";
-        /** @enum {string} */
+        /**
+         * @description 주문 변경 가능 여부의 이유를 나타내는 API 사유 코드입니다.
+         * @example POLICY_APPROVAL_REQUIRED
+         * @enum {string}
+         */
         SupportActionReasonCode: "POLICY_ALLOWED" | "POLICY_APPROVAL_REQUIRED" | "UNSUPPORTED_TARGET_STATE" | "CASE_NOT_ELIGIBLE" | "TARGET_RELATIONSHIP_MISMATCH" | "MISSING_PERMISSION" | "VERIFICATION_SCOPE_MISMATCH" | "VERIFICATION_PURPOSE_MISMATCH" | "INSUFFICIENT_VERIFICATION" | "STALE_TARGET_VERSION";
-        /** @enum {string} */
+        /**
+         * @description 고객센터 주문 변경 작업에 필요한 권한 코드입니다.
+         * @example SUPPORT_ACTION_REQUEST
+         * @enum {string}
+         */
         SupportActionPermission: "SUPPORT_ACTION_REQUEST" | "SUPPORT_ORDER_CANCEL" | "SUPPORT_PICKUP_RESCHEDULE" | "SUPPORT_RESOLUTION_REQUEST";
-        /** @enum {string} */
+        /**
+         * @description 주문 변경 작업을 실행하기 전에 필요한 승인 조직입니다.
+         * @example SUPPORT_MANAGER
+         * @enum {string}
+         */
         SupportActionApprovalRequirement: "SUPPORT_MANAGER";
+        /**
+         * @description 고객센터가 요청한 주문 변경을 현재 상태에서 진행할 수 있는지 보여 주는 사전 판단 결과입니다. 허용·승인 필요·거절 여부, 사유, 필요한 권한·본인 확인·승인, 대상 버전과 유효 시간을 포함합니다. 이 응답만으로 주문을 바꿀 수는 없습니다.
+         * @example {
+         *       "action": "ORDER_CANCELLATION",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "decision": "APPROVAL_REQUIRED",
+         *       "reasonCodes": [
+         *         "POLICY_APPROVAL_REQUIRED"
+         *       ],
+         *       "requiredPermissions": [
+         *         "SUPPORT_ACTION_REQUEST",
+         *         "SUPPORT_ORDER_CANCEL"
+         *       ],
+         *       "requiredVerificationLevel": "ENHANCED",
+         *       "approvalRequirements": [
+         *         "SUPPORT_MANAGER"
+         *       ],
+         *       "policyVersion": "support-action-policy/2026-08-12/v1",
+         *       "targetVersion": 7,
+         *       "evaluatedAt": "2026-08-15T15:00:00+09:00",
+         *       "expiresAt": "2026-08-15T15:02:00+09:00"
+         *     }
+         */
         SupportActionEvaluationResource: {
+            /** @description 요청하거나 수행한 작업 유형입니다. */
             action: components["schemas"]["SupportActionType"];
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
+            /** @description 현재 상태에 대한 안내용 허용·승인 필요·거절 결정입니다. */
             decision: components["schemas"]["SupportActionDecision"];
+            /** @description 허용·승인 필요·거절 판단의 이유를 API에 미리 정의된 코드 목록으로 제공합니다. */
             reasonCodes: components["schemas"]["SupportActionReasonCode"][];
+            /** @description 요청과 실행에 필요한 지속 권한 두 개입니다. */
             requiredPermissions: components["schemas"]["SupportActionPermission"][];
-            /** @enum {string} */
+            /**
+             * @description 작업에 필요한 고객 확인 수준입니다.
+             * @enum {string}
+             */
             requiredVerificationLevel: "BASIC" | "ENHANCED";
+            /** @description 실행 전에 필요한 승인 단계 목록입니다. */
             approvalRequirements: components["schemas"]["SupportActionApprovalRequirement"][];
-            /** @constant */
+            /**
+             * @description 평가에 사용한 생성 후 바뀌지 않는 정책 버전입니다.
+             * @constant
+             */
             policyVersion: "support-action-policy/2026-08-12/v1";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 평가 당시 확인한 대상 버전입니다.
+             */
             targetVersion: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 서버가 정책 평가를 수행한 시각입니다.
+             */
             evaluatedAt: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스, 요청, 권한 또는 정책 판단이 만료되는 시각입니다.
+             */
             expiresAt: string;
         };
+        /**
+         * @description 고객센터 주문 변경의 승인 요청을 만드는 본문입니다. 실제 주문을 바꾸지 않으며 대상 주문, 현재 버전, 본인 확인 세션, 사유, 요청 내용·증거 해시를 저장합니다.
+         * @example {
+         *       "action": "ORDER_CANCELLATION",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "expectedTargetVersion": 7,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
+         *       "amountKrw": 9000,
+         *       "reason": "고객 본인 확인 후 취소 승인을 요청함",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         CreateSupportActionRequest: {
+            /** @description 승인 후 실행하려는 고객센터 주문 변경 작업입니다. */
             action: components["schemas"]["SupportActionType"];
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw?: number;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 주문 변경 요청이 승인·실행 과정에서 현재 어느 단계인지 나타냅니다.
+         * @example READY_FOR_EXECUTION
+         * @enum {string}
+         */
         SupportActionRequestState: "AWAITING_SUPPORT_MANAGER" | "AWAITING_OPERATIONS" | "READY_FOR_EXECUTION" | "REASSIGNMENT_REQUIRED" | "REVISION_REQUIRED" | "DENIED" | "EXPIRED" | "STALE" | "MANUAL_REVIEW" | "EXECUTED" | "RESOLUTION_REQUIRED";
-        /** @enum {string} */
+        /**
+         * @description 주문 변경 또는 고객 보상 요청이 거쳐야 하는 승인 순서입니다. 승인 없음, 고객센터 관리자, 운영팀 또는 순차 승인을 구분합니다.
+         * @example SUPPORT_MANAGER
+         * @enum {string}
+         */
         SupportActionApprovalRoute: "NONE" | "SUPPORT_MANAGER" | "OPERATIONS" | "SUPPORT_MANAGER_THEN_OPERATIONS";
-        /** @enum {string} */
+        /**
+         * @description 승인을 담당하는 고객센터 관리자 또는 운영팀을 구분합니다.
+         * @example SUPPORT_MANAGER
+         * @enum {string}
+         */
         SupportApprovalStepType: "SUPPORT_MANAGER" | "OPERATIONS";
-        /** @enum {string} */
+        /**
+         * @description 승인 단계가 대기, 승인, 반려, 수정 요청, 만료 중 어디에 있는지 나타냅니다.
+         * @example APPROVED
+         * @enum {string}
+         */
         SupportApprovalStepState: "PENDING" | "APPROVED" | "DENIED" | "RETURNED" | "EXPIRED" | "STALE" | "ESCALATED";
+        /**
+         * @description 고객센터 관리자 또는 운영팀 승인 단계의 현재 상태입니다. 결정자와 결정 시각이 있으면 함께 제공합니다.
+         * @example {
+         *       "stepType": "SUPPORT_MANAGER",
+         *       "state": "APPROVED",
+         *       "decidedByActorId": "2aea279d-0121-5ff0-a3c5-981e7074bfbd",
+         *       "decidedAt": "2026-08-15T15:10:00+09:00"
+         *     }
+         */
         SupportApprovalStepResource: {
+            /** @description 승인 단계를 담당하는 조직 유형입니다. */
             stepType: components["schemas"]["SupportApprovalStepType"];
+            /** @description 승인 단계의 현재 상태입니다. */
             state: components["schemas"]["SupportApprovalStepState"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 결정자 자원을 가리키는 UUID 식별자입니다.
+             */
             decidedByActorId: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 승인·조사 결정이 확정된 시각이며 아직 결정되지 않았으면 null입니다.
+             */
             decidedAt: string | null;
         };
+        /**
+         * @description 고객센터 주문 변경 요청의 현재 상태입니다. 요청자·실행 담당자, 요청 내용 버전, 승인 경로와 단계, 대상 주문 버전, 만료 시각, 최종 실행 결과를 포함합니다.
+         * @example {
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *       "action": "ORDER_CANCELLATION",
+         *       "targetId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "requesterActorId": "ada402dd-641a-56cd-813b-6cdb4e480aba",
+         *       "executorActorId": "da65f7ad-15b2-5ed0-a6b8-c6d24b0340b1",
+         *       "revisionNumber": 2,
+         *       "state": "READY_FOR_EXECUTION",
+         *       "approvalRoute": "SUPPORT_MANAGER",
+         *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "policyVersion": "support-action-policy/2026-08-12/v1",
+         *       "targetVersion": 7,
+         *       "amountKrw": 9000,
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3",
+         *       "expiresAt": "2026-08-15T15:30:00+09:00",
+         *       "requestVersion": 4,
+         *       "approvalSteps": [
+         *         {
+         *           "stepType": "SUPPORT_MANAGER",
+         *           "state": "APPROVED",
+         *           "decidedByActorId": "2aea279d-0121-5ff0-a3c5-981e7074bfbd",
+         *           "decidedAt": "2026-08-15T15:10:00+09:00"
+         *         }
+         *       ],
+         *       "terminalExecutionId": null,
+         *       "terminalResolutionId": null
+         *     }
+         */
         SupportActionRequestResource: {
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId: components["schemas"]["Identifier"];
+            /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
             caseId: components["schemas"]["Identifier"];
+            /** @description 요청하거나 수행한 작업 유형입니다. */
             action: components["schemas"]["SupportActionType"];
+            /** @description 해당 작업 대상 자원을 가리키는 UUID 식별자입니다. */
             targetId: components["schemas"]["Identifier"];
+            /** @description 해당 요청자 자원을 가리키는 UUID 식별자입니다. */
             requesterActorId: components["schemas"]["Identifier"];
+            /** @description 해당 실행자 자원을 가리키는 UUID 식별자입니다. */
             executorActorId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
+            /** @description 요청의 현재 승인·실행 상태입니다. */
             state: components["schemas"]["SupportActionRequestState"];
+            /** @description 현재 승인안 버전이 거쳐야 하는 승인 경로입니다. */
             approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 요청 생성·평가에 사용한 생성 후 바뀌지 않는 정책 버전입니다. */
             policyVersion: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청이 연결된 주문 대상 버전입니다.
+             */
             targetVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw: number | null;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스, 요청, 권한 또는 정책 판단이 만료되는 시각입니다.
+             */
             expiresAt: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 동시 변경 확인에 사용하는 요청 리소스 버전입니다.
+             */
             requestVersion: number;
+            /** @description 현재 승인안 버전의 승인 단계 목록입니다. */
             approvalSteps: components["schemas"]["SupportApprovalStepResource"][];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 주문 변경 작업이 완료됐을 때 생성된 실행 ID입니다. 아직 실행되지 않았으면 `null`입니다.
+             */
             terminalExecutionId: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 수락 후 주문 문제 해결 계획이 만들어졌을 때의 ID입니다. 해당하지 않으면 `null`입니다.
+             */
             terminalResolutionId: string | null;
         };
+        /**
+         * @description 수정이 필요한 주문 변경 요청을 새 승인안 버전으로 다시 제출하는 본문입니다. 이전 승인안 번호, 현재 버전, 본인 확인, 새 요청 내용·증거 해시, 사유를 포함합니다.
+         * @example {
+         *       "expectedRevisionNumber": 1,
+         *       "expectedRequestVersion": 3,
+         *       "expectedTargetVersion": 7,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
+         *       "amountKrw": 9000,
+         *       "reason": "추가 본인 확인 결과를 반영해 요청을 다시 제출함",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         ReviseSupportActionRequest: {
+            /** @description 수정하려는 현재 승인 요청 번호입니다. 서버의 현재 번호와 다르면 409를 반환합니다. */
             expectedRevisionNumber: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw?: number;
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 승인 담당자가 선택할 수 있는 승인, 반려 또는 수정 요청 결정입니다.
+         * @example APPROVE
+         * @enum {string}
+         */
         SupportApprovalDecision: "APPROVE" | "DENY" | "RETURN_FOR_REVISION";
+        /**
+         * @description 고객센터 관리자가 주문 변경 요청을 승인, 반려 또는 수정 요청으로 결정하는 본문입니다. 승인안 번호, 현재 요청 버전, 결정과 사유를 포함합니다.
+         * @example {
+         *       "revisionNumber": 2,
+         *       "expectedRequestVersion": 4,
+         *       "decision": "APPROVE",
+         *       "reason": "검증 세션과 주문 상태를 다시 확인해 승인함"
+         *     }
+         */
         DecideSupportManagerApprovalRequest: {
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
+            /** @description 검토자가 선택하거나 정책이 계산한 결정입니다. */
             decision: components["schemas"]["SupportApprovalDecision"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
+        /**
+         * @description 실행 준비된 주문 변경 요청과 상담 건를 다른 담당자에게 넘기는 요청입니다. 현재 승인안·요청·케이스 버전, 새 담당자와 사유를 포함합니다.
+         * @example {
+         *       "revisionNumber": 2,
+         *       "expectedRequestVersion": 4,
+         *       "expectedCaseVersion": 6,
+         *       "assigneeId": "33994a90-0041-54b6-8b83-f24efbc0383a",
+         *       "reason": "현재 담당자의 근무 종료로 실행 권한 보유자에게 재배정함"
+         *     }
+         */
         ReassignSupportActionRequest: {
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 상담 건를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedCaseVersion: number;
+            /** @description 해당 새 담당자 자원을 가리키는 UUID 식별자입니다. */
             assigneeId: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };
         ExecuteSupportOrderCancellationRequest: {
@@ -4479,264 +7786,796 @@ export interface components {
             /** Format: int64 */
             requestVersion: number;
         };
-        /** @enum {string} */
+        /**
+         * @description 특정 요청 한 건만 승인하는지, 시간·횟수 제한 범위에서 여러 요청을 허용하는지 구분합니다.
+         * @example CONFIRMATION
+         * @enum {string}
+         */
         SupportOrderChangeAuthorizationType: "CONFIRMATION" | "DELEGATION";
-        /** @constant */
+        /**
+         * @description 고객센터 주문 변경 위임 규칙을 식별하는 고정 정책 버전 문자열입니다.
+         * @example support-order-change-policy/2026-08-12/v1
+         * @constant
+         */
         SupportOrderChangePolicyVersion: "support-order-change-policy/2026-08-12/v1";
         /**
-         * @description CONFIRMATION requires requestId, revisionNumber and expectedRequestVersion.
-         *     DELEGATION forbids all three request-specific properties.
+         * @description 스토어가 고객센터 주문 변경을 승인하는 요청입니다. 특정 요청 한 건만 승인하는 `CONFIRMATION`과 시간·횟수 제한을 둔 `DELEGATION` 중 하나를 선택합니다.
+         * @example {
+         *       "authorizationType": "CONFIRMATION",
+         *       "action": "ORDER_CANCELLATION",
+         *       "policyVersion": "support-order-change-policy/2026-08-12/v1",
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "revisionNumber": 2,
+         *       "expectedRequestVersion": 4,
+         *       "costResponsibility": "STORE"
+         *     }
          */
         CreateSupportOrderChangeAuthorizationRequest: {
+            /** @description 정확한 요청 확인(CONFIRMATION) 또는 제한된 위임(DELEGATION)입니다. */
             authorizationType: components["schemas"]["SupportOrderChangeAuthorizationType"];
-            /** @enum {string} */
+            /**
+             * @description 권한이 허용하는 주문 변경 작업입니다.
+             * @enum {string}
+             */
             action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            /** @description 권한의 유효기간과 사용 횟수를 정의하는 고정 정책 버전입니다. */
             policyVersion: components["schemas"]["SupportOrderChangePolicyVersion"];
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId?: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion?: number;
-            /** @constant */
+            /**
+             * @description 매장이 비용 책임을 수락했음을 나타내며 항상 STORE입니다.
+             * @constant
+             */
             costResponsibility: "STORE";
         };
+        /**
+         * @description 스토어가 고객센터에 부여한 주문 변경 승인입니다. 특정 요청 승인인지 제한된 위임인지, 허용 작업, 만료 시각, 사용 가능 횟수와 사용 내역을 포함합니다.
+         * @example {
+         *       "authorizationId": "6e75d822-f7a9-557c-8572-9ad67ba2262f",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "authorizationType": "CONFIRMATION",
+         *       "action": "ORDER_CANCELLATION",
+         *       "policyVersion": "support-order-change-policy/2026-08-12/v1",
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "revisionNumber": 2,
+         *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
+         *       "targetVersion": 7,
+         *       "authorizedByActorId": "c187e743-7bf2-5d21-b1f0-1fdf18dfc106",
+         *       "authorizedAt": "2026-08-15T15:05:00+09:00",
+         *       "expiresAt": "2026-08-15T15:15:00+09:00",
+         *       "maxSuccessfulUses": 1,
+         *       "successfulUses": 0,
+         *       "costResponsibility": "STORE"
+         *     }
+         */
         SupportOrderChangeAuthorizationResource: {
+            /** @description 해당 주문 변경 권한 자원을 가리키는 UUID 식별자입니다. */
             authorizationId: components["schemas"]["Identifier"];
+            /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
+            /** @description 정확한 요청 확인 또는 제한된 위임 유형입니다. */
             authorizationType: components["schemas"]["SupportOrderChangeAuthorizationType"];
-            /** @enum {string} */
+            /**
+             * @description 요청하거나 수행한 작업 유형입니다.
+             * @enum {string}
+             */
             action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            /** @description 유효기간과 성공 사용 한도를 결정한 정책 버전입니다. */
             policyVersion: components["schemas"]["SupportOrderChangePolicyVersion"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 요청 자원을 가리키는 UUID 식별자입니다.
+             */
             requestId: string | null;
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number | null;
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description CONFIRMATION이 연결된 대상 버전이며 DELEGATION이면 null입니다.
+             */
             targetVersion: number | null;
+            /** @description 해당 승인자 자원을 가리키는 UUID 식별자입니다. */
             authorizedByActorId: components["schemas"]["Identifier"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 매장 주문 변경 권한이 생성된 시각입니다.
+             */
             authorizedAt: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스, 요청, 권한 또는 정책 판단이 만료되는 시각입니다.
+             */
             expiresAt: string;
+            /** @description 만료 전 허용되는 최대 성공 사용 횟수입니다. */
             maxSuccessfulUses: number;
-            /** @description Creation response snapshot. Exact creation replay returns the same zero-use snapshot. */
+            /** @description 응답 시점까지 실제로 사용된 횟수입니다. 같은 생성 요청을 다시 보내면 최초 생성 당시 결과를 반환할 수 있습니다. */
             successfulUses: number;
-            /** @constant */
+            /**
+             * @description 매장이 비용 책임을 수락했음을 나타내며 항상 STORE입니다.
+             * @constant
+             */
             costResponsibility: "STORE";
         };
-        /** @enum {string} */
+        /**
+         * @description 수락 후 주문 문제의 해결 결과 유형입니다.
+         * @example PARTIAL_REFUND
+         * @enum {string}
+         */
         PostAcceptanceResolutionOutcome: "FULL_REFUND" | "PARTIAL_REFUND" | "NO_MONETARY_RESOLUTION" | "MANUAL_SETTLEMENT_REVIEW";
-        /** @enum {string} */
+        /**
+         * @description 수락 후 주문 문제의 비용 책임 주체를 나타내는 열거형입니다.
+         * @example STORE
+         * @enum {string}
+         */
         PostAcceptanceResolutionResponsibility: "CUSTOMER" | "STORE" | "PLATFORM" | "SHARED" | "UNDETERMINED";
         /**
-         * @description FULL_REFUND/PARTIAL_REFUND require positive cashRefundKrw. Non-refund
-         *     outcomes require zero cash and no benefit restoration. STORE/SHARED require
-         *     an exact negative settlementAdjustmentKrw except MANUAL_SETTLEMENT_REVIEW.
-         *     CUSTOMER/PLATFORM/UNDETERMINED forbid an automatic Settlement adjustment.
+         * @description 매장이 수락한 뒤 발생한 주문 문제의 해결 계획을 등록하는 요청입니다. 승인 요청 버전과 주문 버전, 책임 주체, 환불액, 포인트·쿠폰 복원 여부, 정산 조정액, 증거 해시를 포함합니다.
+         * @example {
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "revisionNumber": 2,
+         *       "expectedRequestVersion": 4,
+         *       "expectedOrderVersion": 9,
+         *       "outcome": "PARTIAL_REFUND",
+         *       "responsibility": "STORE",
+         *       "cashRefundKrw": 4500,
+         *       "restorePoints": true,
+         *       "restoreCoupon": false,
+         *       "settlementAdjustmentKrw": -4500,
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
          */
         CreatePostAcceptanceResolutionRequest: {
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 주문을 확인했을 때의 버전입니다. 현재 주문 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedOrderVersion: number;
+            /** @description 계획하는 최종 해결 결과입니다. */
             outcome: components["schemas"]["PostAcceptanceResolutionOutcome"];
+            /** @description 문제와 비용의 책임 주체입니다. */
             responsibility: components["schemas"]["PostAcceptanceResolutionResponsibility"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 수락 후 해결 계획에서 환불하도록 계획한 현금 금액입니다.
+             */
             cashRefundKrw: number;
+            /** @description 원주문에서 사용된 포인트 복원 단계를 계획하는지 여부입니다. */
             restorePoints: boolean;
+            /** @description 원주문에서 사용된 쿠폰 복원 단계를 계획하는지 여부입니다. */
             restoreCoupon: boolean;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 매장 또는 공동 책임을 정산에 반영하는 음수 조정 금액이며 자동 조정이 없으면 null입니다.
+             */
             settlementAdjustmentKrw?: number | null;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 수락 후 해결 계획의 전체 진행 상태를 나타냅니다.
+         * @example PARTIALLY_RESOLVED
+         * @enum {string}
+         */
         PostAcceptanceResolutionState: "PLANNED" | "EXECUTING" | "PARTIALLY_RESOLVED" | "RECONCILING" | "RESOLVED" | "MANUAL_REVIEW";
-        /** @enum {string} */
+        /**
+         * @description 수락 후 주문 문제 해결을 구성하는 단계 종류입니다.
+         * @example PAYMENT_REFUND
+         * @enum {string}
+         */
         PostAcceptanceResolutionStepType: "PAYMENT_REFUND" | "POINT_RESTORATION" | "COUPON_RESTORATION" | "SETTLEMENT_ADJUSTMENT" | "CUSTOMER_NOTIFICATION";
-        /** @enum {string} */
+        /**
+         * @description 수락 후 해결 계획의 개별 단계 상태를 나타내는 열거형입니다.
+         * @example SUCCEEDED
+         * @enum {string}
+         */
         PostAcceptanceResolutionStepState: "PENDING" | "PROCESSING" | "RETRY_SCHEDULED" | "SUCCEEDED" | "NOT_REQUIRED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW" | "BLOCKED";
+        /**
+         * @description 결제 환불, 포인트 복원, 쿠폰 복원, 정산 조정, 고객 알림 중 한 단계의 처리 상태와 재시도 정보를 나타냅니다.
+         * @example {
+         *       "type": "PAYMENT_REFUND",
+         *       "state": "SUCCEEDED",
+         *       "attemptCount": 1,
+         *       "resultReference": "refund:747692bd-c322-529a-8cc7-e5290aa342b7",
+         *       "failureCode": null,
+         *       "nextAttemptAt": null,
+         *       "ownerState": null
+         *     }
+         */
         PostAcceptanceResolutionStepResource: {
+            /** @description 결제 환불, 포인트 복원, 쿠폰 복원, 정산 조정, 고객 알림 중 어떤 단계인지 나타냅니다. */
             type: components["schemas"]["PostAcceptanceResolutionStepType"];
+            /** @description 해결 단계의 현재 처리 상태입니다. */
             state: components["schemas"]["PostAcceptanceResolutionStepState"];
+            /** @description 이 단계의 처리 시도 횟수입니다. */
             attemptCount: number;
+            /** @description 성공한 처리 결과를 가리키는 내부 식별값입니다. 아직 결과가 없으면 null입니다. */
             resultReference: string | null;
+            /** @description 최근 처리 실패의 API 오류 코드입니다. 실패가 없으면 `null`입니다. */
             failureCode: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 다음 자동 재시도를 예약한 시각이며 예정이 없으면 null입니다.
+             */
             nextAttemptAt: string | null;
-            /** @description Current Notification delivery state for CUSTOMER_NOTIFICATION; null for financial owner steps. */
+            /** @description 고객 알림 단계의 실제 발송 상태입니다. 환불·포인트·쿠폰·정산 단계에서는 null입니다. */
             ownerState: string | null;
         };
+        /**
+         * @description 매장 수락 후 주문 문제에 대한 해결 계획과 실행 상태입니다. 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림 계획과 단계별 진행 상황을 포함합니다.
+         * @example {
+         *       "resolutionId": "3ecc1563-a107-59e3-8398-96750e938087",
+         *       "supportCaseId": "1dd90c33-a153-5c9c-895b-1ae00f028d1b",
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "revisionNumber": 2,
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "triggerOrderState": "COMPLETED",
+         *       "triggerOrderVersion": 9,
+         *       "outcome": "PARTIAL_REFUND",
+         *       "responsibility": "STORE",
+         *       "cashRefundKrw": 4500,
+         *       "restorePoints": true,
+         *       "restoreCoupon": false,
+         *       "settlementAdjustmentKrw": -4500,
+         *       "state": "PARTIALLY_RESOLVED",
+         *       "version": 3,
+         *       "createdAt": "2026-08-15T16:00:00+09:00",
+         *       "updatedAt": "2026-08-15T16:02:00+09:00",
+         *       "steps": [
+         *         {
+         *           "type": "PAYMENT_REFUND",
+         *           "state": "SUCCEEDED",
+         *           "attemptCount": 1,
+         *           "resultReference": "refund:747692bd-c322-529a-8cc7-e5290aa342b7",
+         *           "failureCode": null,
+         *           "nextAttemptAt": null,
+         *           "ownerState": null
+         *         },
+         *         {
+         *           "type": "POINT_RESTORATION",
+         *           "state": "PROCESSING",
+         *           "attemptCount": 1,
+         *           "resultReference": null,
+         *           "failureCode": null,
+         *           "nextAttemptAt": null,
+         *           "ownerState": null
+         *         },
+         *         {
+         *           "type": "COUPON_RESTORATION",
+         *           "state": "NOT_REQUIRED",
+         *           "attemptCount": 0,
+         *           "resultReference": null,
+         *           "failureCode": null,
+         *           "nextAttemptAt": null,
+         *           "ownerState": null
+         *         },
+         *         {
+         *           "type": "SETTLEMENT_ADJUSTMENT",
+         *           "state": "PENDING",
+         *           "attemptCount": 0,
+         *           "resultReference": null,
+         *           "failureCode": null,
+         *           "nextAttemptAt": null,
+         *           "ownerState": null
+         *         },
+         *         {
+         *           "type": "CUSTOMER_NOTIFICATION",
+         *           "state": "PENDING",
+         *           "attemptCount": 0,
+         *           "resultReference": null,
+         *           "failureCode": null,
+         *           "nextAttemptAt": null,
+         *           "ownerState": "PENDING"
+         *         }
+         *       ]
+         *     }
+         */
         PostAcceptanceResolutionResource: {
+            /** @description 해당 수락 후 해결 계획 자원을 가리키는 UUID 식별자입니다. */
             resolutionId: components["schemas"]["Identifier"];
+            /** @description 해당 고객센터 케이스 자원을 가리키는 UUID 식별자입니다. */
             supportCaseId: components["schemas"]["Identifier"];
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
+            /** @description 해당 주문 자원을 가리키는 UUID 식별자입니다. */
             orderId: components["schemas"]["Identifier"];
-            /** @enum {string} */
+            /**
+             * @description 해결 계획을 만들 때 주문이 있던 수락 이후 상태입니다.
+             * @enum {string}
+             */
             triggerOrderState: "PREPARING" | "READY" | "COMPLETED";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 해결 계획이 연결된 주문 버전입니다.
+             */
             triggerOrderVersion: number;
+            /** @description 해결 또는 처리 결과의 유형입니다. */
             outcome: components["schemas"]["PostAcceptanceResolutionOutcome"];
+            /** @description 비용 또는 문제의 책임 주체입니다. */
             responsibility: components["schemas"]["PostAcceptanceResolutionResponsibility"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 수락 후 해결 계획에서 환불하도록 계획한 현금 금액입니다.
+             */
             cashRefundKrw: number;
+            /** @description 포인트 복원 단계를 수행할지 여부입니다. */
             restorePoints: boolean;
+            /** @description 쿠폰 복원 단계를 수행할지 여부입니다. */
             restoreCoupon: boolean;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 매장 또는 공동 책임을 정산에 반영하는 음수 조정 금액이며 자동 조정이 없으면 null입니다.
+             */
             settlementAdjustmentKrw: number | null;
+            /** @description 해결 계획 전체의 현재 진행 상태입니다. */
             state: components["schemas"]["PostAcceptanceResolutionState"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 동시에 다른 담당자가 해결 계획을 바꾸지 않았는지 확인하는 버전입니다.
+             */
             version: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스가 생성된 시각입니다.
+             */
             createdAt: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스가 마지막으로 변경된 시각입니다.
+             */
             updatedAt: string;
+            /** @description 결제 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림의 단계별 처리 상태입니다. */
             steps: components["schemas"]["PostAcceptanceResolutionStepResource"][];
         };
+        /**
+         * @description 승인된 수락 후 주문 문제 해결 계획의 다음 단계를 실행하는 요청입니다. 화면에서 확인한 해결 계획, 승인 요청, 주문의 현재 버전을 포함합니다.
+         * @example {
+         *       "expectedResolutionVersion": 3,
+         *       "expectedRequestVersion": 5,
+         *       "expectedOrderVersion": 9
+         *     }
+         */
         ExecutePostAcceptanceResolutionRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 해결 계획을 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedResolutionVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 주문을 확인했을 때의 버전입니다. 현재 주문 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedOrderVersion: number;
         };
+        /**
+         * @description 수동 검토 중인 결제 환불 결과를 외부 결제사에 다시 조회하는 요청입니다. 새로운 환불을 보내지 않으며 해결 계획과 주문의 현재 버전을 확인합니다.
+         * @example {
+         *       "stepType": "PAYMENT_REFUND",
+         *       "expectedResolutionVersion": 3,
+         *       "expectedOrderVersion": 9
+         *     }
+         */
         ReconcilePostAcceptanceResolutionRequest: {
-            /** @constant */
+            /**
+             * @description 결과를 다시 확인할 단계입니다. 현재는 결제 환불 단계인 `PAYMENT_REFUND`만 지원합니다.
+             * @constant
+             */
             stepType: "PAYMENT_REFUND";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 해결 계획을 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedResolutionVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 주문을 확인했을 때의 버전입니다. 현재 주문 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedOrderVersion: number;
         };
-        /** @enum {string} */
+        /**
+         * @description 고객 보상으로 지급할 포인트 또는 쿠폰 종류입니다.
+         * @example POINT
+         * @enum {string}
+         */
         SupportCompensationBenefitType: "POINT" | "COUPON";
-        /** @enum {string} */
+        /**
+         * @description 고객 보상 비용을 플랫폼, 매장 또는 양쪽 중 누가 부담하는지 나타냅니다.
+         * @example SHARED
+         * @enum {string}
+         */
         SupportCompensationResponsibility: "PLATFORM" | "STORE" | "SHARED" | "UNDETERMINED";
-        /** @enum {string} */
+        /**
+         * @description 매장 또는 공동 비용 부담을 인정할 때 사용할 수 있는 근거 유형입니다.
+         * @example STORE_CONSENT
+         * @enum {string}
+         */
         SupportCompensationEvidenceBasis: "STORE_CONSENT" | "OPERATIONS_FINDING" | "CONTRACTUAL_RULE";
         /**
-         * @description POINT forbids couponTemplateId; COUPON requires an immutable template whose
-         *     fixed amount equals amountKrw. Shares must total 10000. STORE/SHARED require
-         *     explicit evidence basis and SHA-256 evidence digest. UNDETERMINED is denied.
+         * @description 현재 정책으로 포인트 또는 쿠폰 보상이 가능한지 미리 확인하는 요청입니다. 보상 종류와 금액, 비용 부담 비율, 본인 확인 정보를 보내며 실제 혜택은 발급하지 않습니다.
+         * @example {
+         *       "incidentId": "31edc1c3-4c2d-57b2-abd1-dd7badf9b274",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "expectedTargetVersion": 5,
+         *       "benefitType": "POINT",
+         *       "amountKrw": 3000,
+         *       "couponTemplateId": null,
+         *       "responsibility": "SHARED",
+         *       "evidenceBasis": "STORE_CONSENT",
+         *       "costEvidenceDigest": "d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7",
+         *       "platformShareBps": 5000,
+         *       "storeShareBps": 5000,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a"
+         *     }
          */
         EvaluateSupportCompensationRequest: {
+            /** @description 해당 사고 자원을 가리키는 UUID 식별자입니다. */
             incidentId: components["schemas"]["Identifier"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 주문 자원을 가리키는 UUID 식별자입니다.
+             */
             orderId?: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 혜택 유형입니다. */
             benefitType: components["schemas"]["SupportCompensationBenefitType"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 쿠폰 템플릿 자원을 가리키는 UUID 식별자입니다.
+             */
             couponTemplateId?: string | null;
+            /** @description 비용 또는 문제의 책임 주체입니다. */
             responsibility: components["schemas"]["SupportCompensationResponsibility"];
+            /** @description 매장 또는 공동 책임 판단을 뒷받침하는 API에 미리 정의된 근거 종류입니다. */
             evidenceBasis?: components["schemas"]["SupportCompensationEvidenceBasis"] | null;
+            /** @description 비용 부담 근거 원문 대신 저장하는 SHA-256 해시값입니다. */
             costEvidenceDigest?: string | null;
+            /** @description 플랫폼이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             platformShareBps: number;
+            /** @description 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             storeShareBps: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
         };
-        /** @enum {string} */
+        /**
+         * @description 보상 금액과 비율에 따라 나눈 정책 구간입니다.
+         * @example MEDIUM
+         * @enum {string}
+         */
         SupportCompensationBand: "LOW" | "MEDIUM" | "HIGH" | "EXCEPTIONAL";
-        /** @enum {string} */
+        /**
+         * @description 현재 정책에서 고객 보상 요청이 가능한지 나타내는 사전 판단입니다.
+         * @example APPROVAL_REQUIRED
+         * @enum {string}
+         */
         SupportCompensationDecision: "ALLOWED" | "APPROVAL_REQUIRED" | "INVESTIGATION_REQUIRED" | "DENIED";
-        /** @enum {string} */
+        /**
+         * @description 고객센터 작업 전에 필요한 본인 확인 수준입니다.
+         * @example ENHANCED
+         * @enum {string}
+         */
         VerificationLevel: "UNVERIFIED" | "BASIC" | "ENHANCED";
-        /** @enum {string} */
+        /**
+         * @description 고객 보상 사전 판단의 이유를 나타내는 API 사유 코드입니다.
+         * @example AMOUNT_ABOVE_LOW_LIMIT
+         * @enum {string}
+         */
         SupportCompensationReasonCode: "RELATED_ORDER_MISSING" | "AMOUNT_ABOVE_LOW_LIMIT" | "AMOUNT_ABOVE_HIGH_LIMIT" | "AMOUNT_ABOVE_SUPPORTED_LIMIT" | "ORDER_RATIO_ABOVE_LOW_LIMIT" | "REPEATED_CUSTOMER_COMPENSATION" | "STORE_COST_RESPONSIBILITY" | "COST_RESPONSIBILITY_UNDETERMINED" | "DUPLICATE_TERMINAL_INCIDENT" | "INSUFFICIENT_VERIFICATION" | "STALE_TARGET_VERSION";
+        /**
+         * @description 현재 보상 정책으로 포인트 또는 쿠폰 보상이 가능한지 미리 판단한 결과입니다. 금액 구간, 허용 여부, 필요한 승인과 본인 확인 수준, 판단 사유, 대상 버전과 유효 시간을 포함합니다. 실제 혜택은 아직 지급하지 않습니다.
+         * @example {
+         *       "policyVersionId": "00af5133-9c81-55d9-9fc7-b8a2db4d5c84",
+         *       "band": "MEDIUM",
+         *       "decision": "APPROVAL_REQUIRED",
+         *       "approvalRoute": "SUPPORT_MANAGER",
+         *       "requiredVerificationLevel": "ENHANCED",
+         *       "executable": false,
+         *       "reasonCodes": [
+         *         "AMOUNT_ABOVE_LOW_LIMIT"
+         *       ],
+         *       "targetVersion": 5,
+         *       "evaluatedAt": "2026-08-15T15:20:00+09:00",
+         *       "expiresAt": "2026-08-15T15:22:00+09:00"
+         *     }
+         */
         SupportCompensationEvaluationResource: {
+            /** @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다. */
             policyVersionId: components["schemas"]["Identifier"];
+            /** @description 보상 금액과 비용 부담 비율에 따라 분류한 정책 등급입니다. */
             band: components["schemas"]["SupportCompensationBand"];
+            /** @description 현재 정책에 따른 안내용 처리 결정입니다. */
             decision: components["schemas"]["SupportCompensationDecision"];
+            /** @description 요청 생성 후 필요한 승인 또는 조사 경로입니다. */
             approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
+            /** @description 혜택 요청에 필요한 고객 확인 수준입니다. */
             requiredVerificationLevel: components["schemas"]["VerificationLevel"];
+            /** @description 현재 평가만으로 즉시 실행 가능한지 여부이며 실제 실행 시 다시 검증합니다. */
             executable: boolean;
+            /** @description 보상 가능 여부와 승인 경로를 결정한 이유를 API에 미리 정의된 코드 목록으로 제공합니다. */
             reasonCodes: components["schemas"]["SupportCompensationReasonCode"][];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 평가 당시 확인한 고객 또는 주문 대상 버전입니다.
+             */
             targetVersion: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 서버가 정책 평가를 수행한 시각입니다.
+             */
             evaluatedAt: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스, 요청, 권한 또는 정책 판단이 만료되는 시각입니다.
+             */
             expiresAt: string;
         };
-        /** @description Persists only evidence digests; raw evidence and customer PII are forbidden. */
+        /**
+         * @description 고객에게 포인트 또는 쿠폰 보상을 요청하는 본문입니다. 사고, 주문, 금액, 비용 부담 주체, 본인 확인, 증거 해시를 포함하며 고객 개인정보와 증거 원문은 저장하지 않습니다.
+         * @example {
+         *       "incidentId": "31edc1c3-4c2d-57b2-abd1-dd7badf9b274",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "expectedTargetVersion": 5,
+         *       "benefitType": "POINT",
+         *       "amountKrw": 3000,
+         *       "couponTemplateId": null,
+         *       "responsibility": "SHARED",
+         *       "evidenceBasis": "STORE_CONSENT",
+         *       "costEvidenceDigest": "d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7",
+         *       "platformShareBps": 5000,
+         *       "storeShareBps": 5000,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         CreateSupportCompensationRequest: {
+            /** @description 해당 사고 자원을 가리키는 UUID 식별자입니다. */
             incidentId: components["schemas"]["Identifier"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 주문 자원을 가리키는 UUID 식별자입니다.
+             */
             orderId?: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 요청할 고객 보상 유형입니다. */
             benefitType: components["schemas"]["SupportCompensationBenefitType"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 쿠폰 템플릿 자원을 가리키는 UUID 식별자입니다.
+             */
             couponTemplateId?: string | null;
+            /** @description 혜택 비용 책임 주체입니다. */
             responsibility: components["schemas"]["SupportCompensationResponsibility"];
+            /** @description 매장 또는 공동 책임 판단을 뒷받침하는 API에 미리 정의된 근거 종류입니다. */
             evidenceBasis?: components["schemas"]["SupportCompensationEvidenceBasis"] | null;
+            /** @description 비용 부담 근거 원문 대신 저장하는 SHA-256 해시값입니다. */
             costEvidenceDigest?: string | null;
+            /** @description 플랫폼이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             platformShareBps: number;
+            /** @description 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             storeShareBps: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 고객 보상 요청이 승인, 발급, 알림 과정에서 현재 어느 단계인지 나타냅니다.
+         * @example READY_FOR_EXECUTION
+         * @enum {string}
+         */
         SupportCompensationRequestState: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "BENEFIT_ISSUED" | "NOTIFICATION_RETRY" | "NOTIFICATION_ACCEPTED";
-        /** @description Deliberately excludes customer ID, PII, evidence digests, raw provider payloads and cost evidence. */
+        /**
+         * @description 고객 불편 보상 요청과 포인트·쿠폰 지급, 고객 알림의 현재 상태입니다. 개인정보와 증거 원문, 외부 시스템에 보낸 원문 요청은 포함하지 않습니다.
+         * @example {
+         *       "compensationRequestId": "0b4d4945-83a6-5143-bc9d-dbe9d6e95c17",
+         *       "supportCaseId": "1dd90c33-a153-5c9c-895b-1ae00f028d1b",
+         *       "incidentId": "31edc1c3-4c2d-57b2-abd1-dd7badf9b274",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *       "benefitType": "POINT",
+         *       "amountKrw": 3000,
+         *       "couponTemplateId": null,
+         *       "policyVersionId": "00af5133-9c81-55d9-9fc7-b8a2db4d5c84",
+         *       "band": "MEDIUM",
+         *       "approvalRoute": "SUPPORT_MANAGER",
+         *       "actionRequestId": "1124ff76-72c2-54be-a3f4-6ac8a8a982e4",
+         *       "state": "NOTIFICATION_ACCEPTED",
+         *       "payloadDigest": "c5f3e1d9b7a5c3e2f0d8b6a4c2e1f9d7b5a3c1e0f8d6b4a2c9e7f5d3b1a0c8e6",
+         *       "terminalBenefitId": "801a3e6e-e5ec-551d-b134-0b0ad2ffa342",
+         *       "benefitIssuedAt": "2026-08-15T15:40:00+09:00",
+         *       "notificationDeliveryId": "5a1ffa75-81b1-57d4-8287-4785fcb601b6",
+         *       "notificationState": "SUCCEEDED",
+         *       "notificationFailureCode": null,
+         *       "version": 5,
+         *       "createdAt": "2026-08-15T15:20:00+09:00",
+         *       "updatedAt": "2026-08-15T15:41:00+09:00"
+         *     }
+         */
         SupportCompensationResource: {
+            /** @description 이 고객 보상 요청을 가리키는 UUID 식별자입니다. */
             compensationRequestId: components["schemas"]["Identifier"];
+            /** @description 해당 고객센터 케이스 자원을 가리키는 UUID 식별자입니다. */
             supportCaseId: components["schemas"]["Identifier"];
+            /** @description 해당 사고 자원을 가리키는 UUID 식별자입니다. */
             incidentId: components["schemas"]["Identifier"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 주문 자원을 가리키는 UUID 식별자입니다.
+             */
             orderId: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 매장 자원을 가리키는 UUID 식별자입니다.
+             */
             storeId: string | null;
+            /** @description 혜택 유형입니다. */
             benefitType: components["schemas"]["SupportCompensationBenefitType"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
             amountKrw: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 쿠폰 템플릿 자원을 가리키는 UUID 식별자입니다.
+             */
             couponTemplateId: string | null;
+            /** @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다. */
             policyVersionId: components["schemas"]["Identifier"];
+            /** @description 생성 시 정책이 판정한 혜택 구간입니다. */
             band: components["schemas"]["SupportCompensationBand"];
+            /** @description 혜택 발급 전 필요한 승인 또는 조사 경로입니다. */
             approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 작업 요청 자원을 가리키는 UUID 식별자입니다.
+             */
             actionRequestId: string | null;
+            /** @description 혜택 요청과 알림 전달의 전체 상태입니다. */
             state: components["schemas"]["SupportCompensationRequestState"];
+            /** @description 요청 생성 당시 정규 요청 내용의 SHA-256 해시값입니다. */
             payloadDigest: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 최종 혜택 자원을 가리키는 UUID 식별자입니다.
+             */
             terminalBenefitId: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 고객 보상이 실제로 발급된 시각이며 미발급이면 null입니다.
+             */
             benefitIssuedAt: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 알림 전달 자원을 가리키는 UUID 식별자입니다.
+             */
             notificationDeliveryId: string | null;
-            /** @enum {string|null} */
+            /**
+             * @description 혜택 발급 후 독립 알림 전달 상태이며 아직 요청되지 않았으면 null입니다.
+             * @enum {string|null}
+             */
             notificationState: "PENDING" | "PROCESSING" | "SUCCEEDED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW" | null;
+            /** @description 최근 고객 알림 실패를 나타내는 API에 미리 정의된 오류 코드입니다. 실패가 없으면 null입니다. */
             notificationFailureCode: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 동시에 다른 담당자가 보상 요청을 바꾸지 않았는지 확인하는 버전입니다.
+             */
             version: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스가 생성된 시각입니다.
+             */
             createdAt: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 리소스가 마지막으로 변경된 시각입니다.
+             */
             updatedAt: string;
         };
+        /**
+         * @description 승인된 고객 보상을 실제로 발급하는 요청입니다. 현재 요청·대상 버전과 승인 당시 요청 내용의 해시값이 일치해야 합니다.
+         * @example {
+         *       "expectedRequestVersion": 4,
+         *       "expectedTargetVersion": 5,
+         *       "expectedPayloadDigest": "c5f3e1d9b7a5c3e2f0d8b6a4c2e1f9d7b5a3c1e0f8d6b4a2c9e7f5d3b1a0c8e6"
+         *     }
+         */
         ExecuteSupportCompensationRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 요청을 읽었을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
+             */
             expectedTargetVersion: number;
+            /** @description 실행하려는 요청 내용이 승인 당시와 같은지 확인하는 SHA-256 해시값입니다. */
             expectedPayloadDigest: string;
         };
+        /**
+         * @description 프로필 변경 요청에 공통으로 필요한 정보입니다. 변경 대상 ID, 화면에서 본 현재 프로필 버전, 본인 확인 세션, 변경 사유와 증거 원문의 SHA-256 해시값을 담습니다. 증거 원문은 저장하지 않습니다.
+         * @example {
+         *       "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *       "expectedProfileVersion": 4,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "reason": "고객이 제출한 정보와 현재 프로필의 오타를 정정함",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         ProfileChangeBinding: {
+            /** @description 변경할 고객, 매장 또는 외부 배달원 프로필의 식별자입니다. */
             subjectId: components["schemas"]["Identifier"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 변경하지 않습니다.
+             */
             expectedProfileVersion: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
+        /**
+         * @description 고객에게 표시되는 이름을 정정하는 요청입니다. 기본 확인과 현재 프로필 버전을 검사한 뒤 별도 승인 없이 바로 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "고객 화면 표시 이름의 오타 정정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "displayName": "홍길동"
+         *     }
+         */
         CustomerDisplayNameProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName: string;
         };
@@ -4788,163 +8627,645 @@ export interface components {
             updatedAt: string;
             notifications: components["schemas"]["SupportProfileChangeNotificationResource"][];
         };
+        /**
+         * @description 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 요청입니다. 강화 본인 확인과 전문 담당자 권한을 검사한 뒤 바로 반영하며 새 실명은 응답에 원문으로 노출하지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "본인 확인용 실명 표기의 단순 오타 정정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "legalName": "홍길동"
+         *     }
+         */
         CustomerLegalNameProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 정정할 고객 실명입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             legalName: string;
         };
+        /**
+         * @description 고객 전화번호 변경 요청입니다. 새 번호만으로는 계정 소유를 확인할 수 없으므로 기존 등록 채널을 이용한 강화 본인 확인과 관리자·운영팀 승인이 필요합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "기존 등록 채널로 본인 확인 후 휴대전화 번호 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "primaryPhone": "010-0000-0000"
+         *     }
+         */
         CustomerPrimaryPhoneProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
         };
+        /**
+         * @description 고객 로그인 정보 재설정 요청입니다. 비밀번호, 인증코드, 재설정 토큰 같은 비밀값은 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "고객이 로그인 정보를 잊어 계정 재설정 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       }
+         *     }
+         */
         CustomerCredentialResetProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
+        /**
+         * @description 고객에게 공개되는 매장 이름, 전화번호, 소개, 픽업 안내 중 하나 이상을 정정하는 요청입니다. 기본 확인 후 바로 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "고객에게 공개되는 매장 정보의 오타와 안내 문구 정정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "displayName": "빈플로우 성수점",
+         *       "publicPhone": "010-0000-0000",
+         *       "description": "샘플 매장 소개입니다.",
+         *       "pickupInstructions": "매장 오른쪽 픽업 선반에서 번호를 확인해 주세요."
+         *     }
+         */
         StorePublicProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName?: string | null;
             publicPhone?: string | null;
             description?: string | null;
             pickupInstructions?: string | null;
         };
+        /**
+         * @description 매장 내부 운영용 전화번호 또는 이메일을 정정하는 요청입니다. 하나 이상의 연락처를 보내야 하며 강화된 확인 후 바로 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "매장 내부 운영 연락처 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "phone": "010-0000-0000",
+         *       "email": "store.sample@example.invalid"
+         *     }
+         */
         StoreOperationsContactProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             phone?: string | null;
             /** Format: email */
             email?: string | null;
         };
+        /**
+         * @description 매장 대표자 변경 요청입니다. 강화 본인 확인과 고객센터 관리자·운영팀 승인을 거친 뒤 별도 실행 API에서 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "사업자 정보 변경에 따른 매장 대표자 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "representativeName": "홍길동"
+         *     }
+         */
         StoreRepresentativeProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
         };
+        /**
+         * @description 매장 정산 계정 식별값 변경 요청입니다. 정산 시스템용 식별값을 사용하며 실제 계좌번호는 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "정산 시스템에서 새 매장 정산 식별값이 발급되어 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "accountReference": "sample:settlement:account-ref-001"
+         *     }
+         */
         StoreSettlementAccountProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
         };
+        /**
+         * @description 매장 계정 접근을 다시 설정해 달라는 요청입니다. 새 비밀번호나 인증키 같은 비밀값은 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "매장 계정 접근 정보를 사용할 수 없어 재설정 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       }
+         *     }
+         */
         StoreAccessReregistrationProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
+        /**
+         * @description 배달원 표시 이름을 정정하는 요청입니다. 기본 확인과 현재 프로필 버전을 검사한 뒤 별도 승인 없이 바로 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "외부 배달원 화면 표시 이름의 오타 정정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "displayName": "샘플 배달원"
+         *     }
+         */
         CourierDisplayNameProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName: string;
         };
+        /**
+         * @description 배달원에게 연락을 전달할 전화번호 또는 이메일을 정정하는 요청입니다. 하나 이상의 연락처를 보내야 하며 강화된 확인 후 바로 반영합니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "외부 배달원 중계 연락처가 변경되어 정정 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "phone": "010-0000-0000",
+         *       "email": "courier.sample@example.invalid"
+         *     }
+         */
         CourierRelayContactProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             phone?: string | null;
             /** Format: email */
             email?: string | null;
         };
+        /**
+         * @description 외부 배달 서비스가 배달원을 구분하는 식별값 변경을 등록하는 요청입니다. 주민등록번호 같은 실제 신원정보는 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "외부 배달 서비스의 배달원 연동 식별값 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "providerReference": "sample:provider:courier-001"
+         *     }
+         */
         CourierProviderIdentityProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
         };
+        /**
+         * @description 배달원 정산 식별값 변경을 등록하는 요청입니다. 외부 배달 서비스가 발급한 식별값을 사용하며 실제 계좌번호는 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "외부 배달 서비스에서 새 정산 식별값이 발급되어 변경 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "payoutReference": "sample:payout:ref-001"
+         *     }
+         */
         CourierPayoutReferenceProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
+            /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
         };
+        /**
+         * @description 외부 배달원 계정의 연동을 다시 설정해 달라는 요청입니다. 외부 서비스 비밀번호, 인증키, 토큰 같은 비밀값은 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "외부 배달 서비스 계정 연동이 해제되어 재설정 요청",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       }
+         *     }
+         */
         CourierProviderReregistrationProfileChangeRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
+        /**
+         * @description 수정 요청을 받은 프로필 변경 승인 요청을 다시 제출할 때 필요한 정보입니다. 현재 처리 건·승인 요청·프로필 버전, 새 본인 확인 세션, 수정 사유와 증거 해시를 담습니다.
+         * @example {
+         *       "expectedProfileChangeVersion": 1,
+         *       "expectedActionRequestVersion": 2,
+         *       "expectedProfileVersion": 4,
+         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "reason": "추가 본인 확인과 새 근거를 반영해 승인안을 수정함",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         ProfileChangeRevisionBinding: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 프로필 변경 처리 건의 버전입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedProfileChangeVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 승인 요청의 버전입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedActionRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 승인안을 수정하지 않습니다.
+             */
             expectedProfileVersion: number;
+            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
             verificationSessionId: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
+        /**
+         * @description 고객 전화번호 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 번호와 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "기존 등록 채널의 추가 확인 결과를 반영해 휴대전화 변경 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "primaryPhone": "010-0000-0000"
+         *     }
+         */
         CustomerPrimaryPhoneProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
         };
+        /**
+         * @description 비밀번호나 인증키를 받지 않는 계정 재설정·연동 재설정 승인 요청을 수정할 때 보내는 본문입니다. 현재 버전, 새 본인 확인 세션, 수정 사유와 증거 해시만 포함합니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "추가 본인 확인과 새 증빙을 반영해 계정 재설정 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       }
+         *     }
+         */
         EmptyProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
         };
+        /**
+         * @description 매장 대표자 변경 승인안을 새 버전으로 다시 제출하는 요청입니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "추가 증빙을 반영해 매장 대표자 변경 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "representativeName": "홍길동"
+         *     }
+         */
         StoreRepresentativeProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
         };
+        /**
+         * @description 매장 정산 계정 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "추가 증빙을 반영해 매장 정산 식별값 변경 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "accountReference": "sample:settlement:account-ref-002"
+         *     }
+         */
         StoreSettlementAccountProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
         };
+        /**
+         * @description 배달원 외부 서비스 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "추가 본인 확인과 새 증빙을 반영해 연동 식별값 변경 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "providerReference": "sample:provider:courier-002"
+         *     }
+         */
         CourierProviderIdentityProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
         };
+        /**
+         * @description 배달원 정산 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 식별값과 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+         * @example {
+         *       "binding": {
+         *         "expectedProfileChangeVersion": 1,
+         *         "expectedActionRequestVersion": 2,
+         *         "expectedProfileVersion": 4,
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "reason": "추가 본인 확인과 새 증빙을 반영해 정산 식별값 변경 요청 수정",
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *       },
+         *       "payoutReference": "sample:payout:ref-002"
+         *     }
+         */
         CourierPayoutReferenceProfileChangeRevisionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
+            /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
         };
+        /**
+         * @description 승인된 프로필 변경을 실제로 반영할 때 필요한 버전 확인 정보입니다. 승인 요청 번호, 처리 건·승인 요청·프로필 버전이 모두 현재 값과 일치해야 실행합니다.
+         * @example {
+         *       "revisionNumber": 2,
+         *       "expectedActionRequestVersion": 3,
+         *       "expectedProfileChangeVersion": 2,
+         *       "expectedProfileVersion": 4
+         *     }
+         */
         ProfileChangeExecutionBinding: {
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 승인 요청을 확인했을 때의 버전입니다. 현재 버전이 다르면 실행하지 않습니다.
+             */
             expectedActionRequestVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 프로필 변경 요청을 확인했을 때의 버전입니다. 현재 버전이 다르면 실행하지 않습니다.
+             */
             expectedProfileChangeVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 실행하지 않습니다.
+             */
             expectedProfileVersion: number;
         };
+        /**
+         * @description 승인된 고객 전화번호 변경을 실행하는 요청입니다. 승인안과 현재 프로필 버전, 기존 등록 채널을 통한 본인 확인을 다시 검사합니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       },
+         *       "primaryPhone": "010-0000-0000"
+         *     }
+         */
         CustomerPrimaryPhoneProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
         };
+        /**
+         * @description 승인된 고객 계정 재설정, 매장 계정 접근 재설정 또는 외부 배달원 연동 재설정을 실행하는 요청입니다. 비밀번호, 인증코드, 토큰, 인증키 같은 비밀값은 포함하지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       }
+         *     }
+         */
         EmptyProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
         };
+        /**
+         * @description 승인된 매장 대표자 변경을 실행하는 요청입니다. 승인 당시 대표자 이름과 현재 매장 프로필 버전을 다시 확인합니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       },
+         *       "representativeName": "홍길동"
+         *     }
+         */
         StoreRepresentativeProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
         };
+        /**
+         * @description 승인된 매장 정산 계정 식별값 변경을 실행하는 요청입니다. 정산 시스템용 식별값을 사용하며 실제 계좌번호는 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       },
+         *       "accountReference": "sample:settlement:account-ref-002"
+         *     }
+         */
         StoreSettlementAccountProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
         };
+        /**
+         * @description 승인된 배달원 외부 서비스 식별값 변경을 실행하는 요청입니다. 승인 당시 값과 현재 프로필 버전을 다시 확인합니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       },
+         *       "providerReference": "sample:provider:courier-002"
+         *     }
+         */
         CourierProviderIdentityProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
         };
+        /**
+         * @description 승인된 배달원 정산 식별값 변경을 실행하는 요청입니다. 실행에 필요한 버전 정보와 외부 배달 서비스용 식별값을 포함하며 실제 계좌번호는 받지 않습니다.
+         * @example {
+         *       "binding": {
+         *         "revisionNumber": 2,
+         *         "expectedActionRequestVersion": 3,
+         *         "expectedProfileChangeVersion": 2,
+         *         "expectedProfileVersion": 4
+         *       },
+         *       "payoutReference": "sample:payout:ref-002"
+         *     }
+         */
         CourierPayoutReferenceProfileChangeExecutionRequest: {
+            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
+            /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
         };
+        /**
+         * @description 프로필 변경 뒤 실패한 알림을 다시 보낼 때 현재 요청 버전을 확인하는 본문입니다. 프로필 변경 자체는 다시 실행하지 않습니다.
+         * @example {
+         *       "expectedProfileChangeVersion": 2
+         *     }
+         */
         RetrySupportProfileChangeNotificationsRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 화면에서 확인한 프로필 변경 처리 건의 버전입니다. 서버의 현재 버전과 다르면 409를 반환합니다.
+             */
             expectedProfileChangeVersion: number;
         };
-        /** @enum {string} */
+        /**
+         * @description 고객센터 요청에 대한 운영 조사 결정 유형입니다.
+         * @example APPROVE
+         * @enum {string}
+         */
         OperationsSupportInvestigationDecision: "APPROVE" | "DENY" | "RETURN_FOR_REVISION" | "ESCALATE";
+        /**
+         * @description 운영팀이 고객센터 요청을 승인하거나 반려할 때 보내는 요청입니다. 현재 버전, 결정, 사유, 증거 원문의 SHA-256 해시값을 포함합니다.
+         * @example {
+         *       "expectedVersion": 2,
+         *       "decision": "APPROVE",
+         *       "reason": "제출된 근거와 주문 이력을 확인해 요청을 승인함",
+         *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
+         *     }
+         */
         DecideOperationsSupportInvestigationRequest: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 운영팀 심사 내용을 확인했을 때의 버전입니다. 현재 버전이 다르면 충돌로 처리합니다.
+             */
             expectedVersion: number;
+            /** @description 운영 검토자가 선택한 조사 결정입니다. */
             decision: components["schemas"]["OperationsSupportInvestigationDecision"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 운영 조사의 현재 생명주기 상태를 나타내는 열거형입니다.
+         * @example APPROVED
+         * @enum {string}
+         */
         OperationsSupportInvestigationState: "OPEN" | "APPROVED" | "DENIED" | "RETURNED" | "ESCALATED" | "EXPIRED" | "STALE";
+        /**
+         * @description 운영팀의 승인·반려 결과와 이에 따라 바뀐 고객센터 요청 상태를 함께 보여 주는 응답입니다. 대상 요청, 현재 버전, 결정자와 결정 시각을 포함합니다.
+         * @example {
+         *       "investigationId": "816021d1-14bd-511a-96d6-e39d193e9ba9",
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "revisionId": "f66dc115-011e-5807-ac75-6bbd129ac355",
+         *       "revisionNumber": 2,
+         *       "state": "APPROVED",
+         *       "supportRequestState": "READY_FOR_EXECUTION",
+         *       "supportRequestVersion": 4,
+         *       "decidedByActorId": "2aea279d-0121-5ff0-a3c5-981e7074bfbd",
+         *       "decidedAt": "2026-08-15T14:00:00+09:00",
+         *       "version": 3
+         *     }
+         */
         OperationsSupportInvestigationDecisionResource: {
+            /** @description 해당 운영 조사 자원을 가리키는 UUID 식별자입니다. */
             investigationId: components["schemas"]["Identifier"];
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId: components["schemas"]["Identifier"];
+            /** @description 해당 승인안 버전 자원을 가리키는 UUID 식별자입니다. */
             revisionId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
             revisionNumber: number;
+            /** @description 운영 조사 결정 후 상태입니다. */
             state: components["schemas"]["OperationsSupportInvestigationState"];
+            /** @description 콜백 저장 후 고객센터 주문 변경 작업 요청 상태입니다. */
             supportRequestState: components["schemas"]["SupportActionRequestState"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 콜백 저장 후 고객센터 주문 변경 작업 요청 버전입니다.
+             */
             supportRequestVersion: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 해당 결정자 자원을 가리키는 UUID 식별자입니다.
+             */
             decidedByActorId: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 승인·조사 결정이 확정된 시각이며 아직 결정되지 않았으면 null입니다.
+             */
             decidedAt: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 결정 저장 후 운영 조사 리소스 버전입니다.
+             */
             version: number;
         };
         /** @enum {string} */
         VerificationPurpose: "CONTACT_CONFIRMATION" | "CASE_RESOLUTION" | "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT";
         /** @enum {string} */
         VerificationActionScope: "PERSONAL_DATA_REVEAL" | "SUPPORT_ACTION";
+        /**
+         * @description 담당 Case의 활성 subject link에 대해 새 본인확인 세션을 시작하기 위한 요청입니다.
+         * @example {
+         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *       "requestedLevel": "ENHANCED",
+         *       "purpose": "CONTACT_CONFIRMATION",
+         *       "actionScope": "PERSONAL_DATA_REVEAL"
+         *     }
+         */
         CreateVerificationSessionRequest: {
             subjectLinkId: components["schemas"]["Identifier"];
             /** @enum {string} */
@@ -4961,6 +9282,17 @@ export interface components {
         VerificationChannel: "IN_APP" | "REGISTERED_PHONE" | "REGISTERED_EMAIL";
         /** @enum {string} */
         VerificationChallengeState: "PENDING_ISSUE" | "ISSUED" | "ISSUE_UNKNOWN" | "VERIFYING" | "VERIFIED" | "INVALID" | "VERIFICATION_UNKNOWN" | "EXPIRED" | "REVOKED";
+        /**
+         * @description 발급된 opaque challenge의 상태와 메타데이터입니다. secret이나 provider reference는 포함하지 않습니다.
+         * @example {
+         *       "challengeId": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2190",
+         *       "sessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *       "channel": "REGISTERED_PHONE",
+         *       "state": "ISSUED",
+         *       "requestedAt": "2026-08-15T09:12:00Z",
+         *       "expiresAt": "2026-08-15T09:17:00Z"
+         *     }
+         */
         VerificationChallengeResource: {
             challengeId: components["schemas"]["Identifier"];
             sessionId: components["schemas"]["Identifier"];
@@ -4971,6 +9303,35 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        /**
+         * @description 본인확인 세션의 현재 상태, 진행된 opaque challenge 목록과 달성 등급을 담은 리소스입니다.
+         * @example {
+         *       "sessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *       "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *       "subjectType": "CUSTOMER",
+         *       "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *       "purpose": "CONTACT_CONFIRMATION",
+         *       "actionScope": "PERSONAL_DATA_REVEAL",
+         *       "requestedLevel": "ENHANCED",
+         *       "achievedLevel": "BASIC",
+         *       "state": "PENDING",
+         *       "invalidAttempts": 0,
+         *       "startedAt": "2026-08-15T09:10:00Z",
+         *       "expiresAt": "2026-08-15T09:25:00Z",
+         *       "version": 2,
+         *       "challenges": [
+         *         {
+         *           "challengeId": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2190",
+         *           "sessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *           "channel": "REGISTERED_PHONE",
+         *           "state": "ISSUED",
+         *           "requestedAt": "2026-08-15T09:12:00Z",
+         *           "expiresAt": "2026-08-15T09:17:00Z"
+         *         }
+         *       ]
+         *     }
+         */
         VerificationSessionResource: {
             sessionId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
@@ -4991,13 +9352,42 @@ export interface components {
             version: number;
             challenges: components["schemas"]["VerificationChallengeResource"][];
         };
+        /**
+         * @description 등록된 채널로 opaque challenge 발급을 요청합니다.
+         * @example {
+         *       "channel": "REGISTERED_PHONE"
+         *     }
+         */
         IssueVerificationChallengeRequest: {
             channel: components["schemas"]["VerificationChannel"];
         };
+        /**
+         * @description challenge에 대한 1회성 proof를 제출해 검증을 요청합니다. proof는 저장되지 않는 write-only 값입니다.
+         * @example {
+         *       "proof": "000000"
+         *     }
+         */
         VerifyVerificationChallengeRequest: {
             /** @description Transient one-time answer or proof; never persisted, logged, audited, or returned. */
             proof: string;
         };
+        /**
+         * @description 하나의 challenge 검증 결과와 세션의 최신 상태를 담은 응답입니다. proof나 provider reference는 포함하지 않습니다.
+         * @example {
+         *       "challenge": {
+         *         "challengeId": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2190",
+         *         "sessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *         "channel": "REGISTERED_PHONE",
+         *         "state": "VERIFIED",
+         *         "requestedAt": "2026-08-15T09:12:00Z",
+         *         "expiresAt": "2026-08-15T09:17:00Z"
+         *       },
+         *       "sessionState": "VERIFIED",
+         *       "achievedLevel": "BASIC",
+         *       "invalidAttempts": 0,
+         *       "lockedUntil": null
+         *     }
+         */
         VerificationResultResource: {
             challenge: components["schemas"]["VerificationChallengeResource"];
             sessionState: components["schemas"]["VerificationState"];
@@ -5010,6 +9400,17 @@ export interface components {
         SupportPersonalDataField: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_PRIMARY_EMAIL" | "STORE_LEGAL_DISPLAY_NAME" | "STORE_SUPPORT_PHONE" | "STORE_SUPPORT_EMAIL" | "COURIER_DISPLAY_NAME" | "COURIER_PROVIDER_REFERENCE" | "COURIER_RELAY_PHONE" | "COURIER_RELAY_EMAIL";
         /** @enum {string} */
         DataAccessReasonCode: "CASE_HANDLING" | "CONTACT_CONFIRMATION" | "FRAUD_INVESTIGATION" | "SAFETY_RESPONSE" | "PRIVACY_INCIDENT";
+        /**
+         * @description 검증된 본인확인 세션을 근거로 특정 필드에 대한 개인정보 열람 승인(Grant)을 요청합니다.
+         * @example {
+         *       "verificationSessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *       "purpose": "CONTACT_CONFIRMATION",
+         *       "fields": [
+         *         "CUSTOMER_PRIMARY_PHONE"
+         *       ],
+         *       "reasonCode": "CONTACT_CONFIRMATION"
+         *     }
+         */
         RequestDataAccessGrantRequest: {
             verificationSessionId: components["schemas"]["Identifier"];
             purpose: components["schemas"]["VerificationPurpose"];
@@ -5020,6 +9421,27 @@ export interface components {
         DataAccessRisk: "BASIC" | "SENSITIVE";
         /** @enum {string} */
         DataAccessGrantState: "REQUESTED" | "APPROVAL_PENDING" | "ACTIVE" | "DENIED" | "CONSUMED" | "EXPIRED" | "REVOKED";
+        /**
+         * @description 필드 범위, 위험 등급, 상태와 reveal 예산을 담은 개인정보 열람 승인(Grant) 리소스입니다.
+         * @example {
+         *       "grantId": "e1d2c3b4-a5f6-4788-9a0b-1c2d3e4f5a6b",
+         *       "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *       "subjectType": "CUSTOMER",
+         *       "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *       "purpose": "CONTACT_CONFIRMATION",
+         *       "fields": [
+         *         "CUSTOMER_PRIMARY_PHONE"
+         *       ],
+         *       "risk": "SENSITIVE",
+         *       "state": "ACTIVE",
+         *       "maxReveals": 1,
+         *       "reservedReveals": 0,
+         *       "requestedAt": "2026-08-15T09:20:00Z",
+         *       "expiresAt": "2026-08-15T09:25:00Z",
+         *       "version": 2
+         *     }
+         */
         DataAccessGrantResource: {
             grantId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
@@ -5039,6 +9461,14 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        /**
+         * @description SENSITIVE 등급 DataAccessGrant에 대한 승인 또는 거부 결정을 담은 요청입니다.
+         * @example {
+         *       "decision": "APPROVE",
+         *       "expectedVersion": 1,
+         *       "reasonCode": "CASE_HANDLING"
+         *     }
+         */
         DecideDataAccessGrantRequest: {
             /** @enum {string} */
             decision: "APPROVE" | "DENY";
@@ -5046,6 +9476,14 @@ export interface components {
             expectedVersion: number;
             reasonCode: components["schemas"]["DataAccessReasonCode"];
         };
+        /**
+         * @description 활성 Grant가 허용한 필드 중 실제로 열람할 필드 부분집합을 지정하는 요청입니다.
+         * @example {
+         *       "fields": [
+         *         "CUSTOMER_PRIMARY_PHONE"
+         *       ]
+         *     }
+         */
         RevealGrantedPersonalDataRequest: {
             fields: components["schemas"]["SupportPersonalDataField"][];
         };
@@ -5061,6 +9499,19 @@ export interface components {
             COURIER_RELAY_PHONE?: string;
             COURIER_RELAY_EMAIL?: string;
         };
+        /**
+         * @description Grant가 허용한 필드에 대해 실제로 열람된 값을 담은 응답입니다. 이 응답은 저장되지 않으며 클라이언트도 캐시하거나 영속화해서는 안 됩니다.
+         * @example {
+         *       "revealAttemptId": "c9d8e7f6-a5b4-4392-8c1d-0e9f8a7b6c5d",
+         *       "grantId": "e1d2c3b4-a5f6-4788-9a0b-1c2d3e4f5a6b",
+         *       "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *       "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *       "values": {
+         *         "CUSTOMER_PRIMARY_PHONE": "010-0000-0000"
+         *       },
+         *       "revealedAt": "2026-08-15T09:21:00Z"
+         *     }
+         */
         RevealedPersonalDataResource: {
             revealAttemptId: components["schemas"]["Identifier"];
             grantId: components["schemas"]["Identifier"];
@@ -5072,6 +9523,15 @@ export interface components {
         };
         /** @enum {string} */
         BreakGlassReasonCode: "IMMEDIATE_SAFETY" | "ACTIVE_FRAUD" | "PRIVACY_INCIDENT";
+        /**
+         * @description 비상 상황에서 개인정보 필드 1건에 대한 break-glass 접근을 요청합니다.
+         * @example {
+         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *       "field": "CUSTOMER_PRIMARY_PHONE",
+         *       "purpose": "SAFETY_RESPONSE",
+         *       "reasonCode": "IMMEDIATE_SAFETY"
+         *     }
+         */
         RequestBreakGlassRequest: {
             subjectLinkId: components["schemas"]["Identifier"];
             field: components["schemas"]["SupportPersonalDataField"];
@@ -5081,6 +9541,23 @@ export interface components {
         };
         /** @enum {string} */
         BreakGlassState: "APPROVAL_PENDING" | "ACTIVE" | "DENIED" | "REVIEW_PENDING" | "REVIEWED" | "EXPIRED" | "REVOKED";
+        /**
+         * @description break-glass 요청의 승인 상태, 대상 필드와 만료 정보를 담은 리소스입니다.
+         * @example {
+         *       "requestId": "a1b2c3d4-e5f6-4708-8a9b-0c1d2e3f4a5b",
+         *       "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *       "subjectType": "CUSTOMER",
+         *       "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *       "field": "CUSTOMER_PRIMARY_PHONE",
+         *       "purpose": "SAFETY_RESPONSE",
+         *       "reasonCode": "IMMEDIATE_SAFETY",
+         *       "state": "APPROVAL_PENDING",
+         *       "requestedAt": "2026-08-15T09:30:00Z",
+         *       "expiresAt": null,
+         *       "version": 0
+         *     }
+         */
         BreakGlassResource: {
             requestId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
@@ -5098,15 +9575,40 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        /**
+         * @description break-glass 요청에 대한 사전 승인 또는 거부 결정을 담은 요청입니다.
+         * @example {
+         *       "decision": "APPROVE",
+         *       "expectedVersion": 0
+         *     }
+         */
         DecideBreakGlassRequest: {
             /** @enum {string} */
             decision: "APPROVE" | "DENY";
             /** Format: int64 */
             expectedVersion: number;
         };
+        /**
+         * @description 사전 승인된 필드 1건의 열람을 요청합니다.
+         * @example {
+         *       "field": "CUSTOMER_PRIMARY_PHONE"
+         *     }
+         */
         RevealBreakGlassRequest: {
             field: components["schemas"]["SupportPersonalDataField"];
         };
+        /**
+         * @description 사전 승인된 필드 1건에 대해 단 한 번 열람된 값을 담은 응답입니다.
+         * @example {
+         *       "revealAttemptId": "c9d8e7f6-a5b4-4392-8c1d-0e9f8a7b6c5d",
+         *       "requestId": "a1b2c3d4-e5f6-4708-8a9b-0c1d2e3f4a5b",
+         *       "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *       "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *       "field": "CUSTOMER_PRIMARY_PHONE",
+         *       "value": "010-0000-0000",
+         *       "revealedAt": "2026-08-15T09:31:00Z"
+         *     }
+         */
         BreakGlassRevealResource: {
             revealAttemptId: components["schemas"]["Identifier"];
             requestId: components["schemas"]["Identifier"];
@@ -5118,6 +9620,14 @@ export interface components {
             /** Format: date-time */
             revealedAt: string;
         };
+        /**
+         * @description break-glass reveal에 대한 필수 사후 검토 결정을 담은 요청입니다.
+         * @example {
+         *       "decision": "CONFIRMED",
+         *       "expectedVersion": 1,
+         *       "reasonCode": "REVIEWED_NO_ISSUE"
+         *     }
+         */
         ReviewBreakGlassRequest: {
             /** @enum {string} */
             decision: "CONFIRMED" | "ESCALATED";
@@ -5264,13 +9774,22 @@ export interface components {
             };
         };
         /**
-         * @description The Idempotency-Key was already bound to another normalized reason, or the same rebuild
-         *     command is still RUNNING. IDEMPOTENCY_REQUEST_IN_PROGRESS includes Retry-After;
-         *     IDEMPOTENCY_KEY_REUSED does not.
+         * @description 같은 Idempotency-Key가 이미 다른 정규화 reason에 묶였거나(IDEMPOTENCY_KEY_REUSED), 같은
+         *     command가 아직 실행 중이거나(IDEMPOTENCY_REQUEST_IN_PROGRESS), 자동 재실행이 금지된
+         *     상태입니다(IDEMPOTENCY_MANUAL_REVIEW_REQUIRED).
+         *
+         *     실패한 command의 원장 row는 삭제되지 않으므로 실패 뒤에도 그 key는 원래 payload에
+         *     묶여 있습니다. 같은 key에 다른 reason을 보내면 계속 IDEMPOTENCY_KEY_REUSED입니다.
+         *     같은 payload의 재요청은 재시도가 안전한 경우에만 같은 row에서 다시 실행하며, 결과를
+         *     확인하지 못한 command와 재시도 상한을 넘긴 command는 다시 실행하지 않고
+         *     IDEMPOTENCY_MANUAL_REVIEW_REQUIRED로 운영자 확인을 요구합니다.
+         *
+         *     Retry-After는 IDEMPOTENCY_REQUEST_IN_PROGRESS에만 있습니다. 나머지 두 코드에는 넣지
+         *     않습니다. 자동 재시도가 결과 불명이나 부분 결과를 성공으로 바꾸면 안 되기 때문입니다.
          */
         SearchIndexRebuildConflict: {
             headers: {
-                /** @description Present only for IDEMPOTENCY_REQUEST_IN_PROGRESS; it is a retry pace, not a completion estimate. */
+                /** @description IDEMPOTENCY_REQUEST_IN_PROGRESS에만 존재하며, 완료 예상 시각이 아니라 재시도 간격입니다. */
                 "Retry-After"?: number;
                 [name: string]: unknown;
             };
@@ -5324,38 +9843,46 @@ export interface components {
     parameters: {
         /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
         CustomerCsrfToken: string;
-        /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+        /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
         MerchantCsrfToken: string;
         StoreId: components["schemas"]["Identifier"];
         CompactLimit: number;
-        Latitude: number;
-        Longitude: number;
-        /** @description Search radius in meters. Maximum 10000. */
-        RadiusMeters: number;
         /**
-         * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-         *     bound to this endpoint, its filters and stable sort tuple, expires within
-         *     24 hours, and cannot be reused for another scope. Malformed, expired or
-         *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-         *     characters.
+         * @description 검색 기준점의 위도(WGS84).
+         * @example 37.5665
          */
+        Latitude: number;
+        /**
+         * @description 검색 기준점의 경도(WGS84).
+         * @example 126.978
+         */
+        Longitude: number;
+        /**
+         * @description 검색 반경(미터). 최대 10000.
+         * @example 1500
+         */
+        RadiusMeters: number;
+        /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
         Cursor: string;
         DiscoveryLimit: number;
-        /** @description Unique within actor ID and API operation */
+        /**
+         * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+         * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+         */
         IdempotencyKey: string;
         /** @description Terminal Order whose immutable menu and option selections are reused */
         SourceOrderId: components["schemas"]["Identifier"];
         OrderId: components["schemas"]["Identifier"];
-        /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+        /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
         Limit: number;
-        /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+        /**
+         * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+         * @example BF-7K4M-Q2XZ
+         */
         OrderReference: string;
         PaymentId: components["schemas"]["Identifier"];
         PaymentMethodId: components["schemas"]["Identifier"];
-        /**
-         * @description Purpose for an audited privileged policy read. The server trims the value,
-         *     requires 1 to 200 characters after trimming, and rejects control characters.
-         */
+        /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
         AccessReason: string;
         MerchantAccountId: components["schemas"]["Identifier"];
         PointAccountId: components["schemas"]["Identifier"];
@@ -5364,17 +9891,13 @@ export interface components {
         SettlementItemId: components["schemas"]["Identifier"];
         SupportCaseId: components["schemas"]["Identifier"];
         SupportSubjectLinkId: components["schemas"]["Identifier"];
-        /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+        /** @description 조회할 이력의 출처를 제한하는 필터입니다. 생략하면 주문, 결제, 환불, 포인트, 쿠폰, 정산, 알림 등 이 API가 지원하는 모든 출처를 조회합니다. */
         SupportTimelineSources: components["schemas"]["SupportTimelineSource"][];
-        /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+        /** @description 조회할 이력 종류를 제한하는 필터입니다. 생략하면 이 API가 지원하는 모든 종류를 조회합니다. */
         SupportTimelineTypes: components["schemas"]["SupportTimelineType"][];
-        /**
-         * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
-         *     canonical source/type filters. It expires after 15 minutes; malformed,
-         *     expired or scope-mismatched values return 400 INVALID_REQUEST.
-         */
+        /** @description 이전 타임라인 페이지의 `nextCursor` 값을 그대로 보내는 문자열입니다. 같은 상담 건와 같은 필터에서만 사용할 수 있고 15분 뒤 만료됩니다. 형식이 잘못됐거나 범위·필터가 다르면 400을 반환합니다. */
         SupportTimelineCursor: string;
-        /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+        /** @description 한 페이지에 반환할 최대 이력 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
         SupportTimelineLimit: number;
         /** @description SupportCase that currently has the target Order linked as RELATED_ORDER. */
         SupportOrderTimelineCaseId: components["schemas"]["Identifier"];
@@ -5406,7 +9929,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description BEANFLOW_CUSTOMER_XSRF cookie issued; the response has no body */
+            /** @description BEANFLOW_CUSTOMER_XSRF 쿠키가 발급됨; 응답 본문 없음 */
             204: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -5433,7 +9956,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description CustomerAccount and PointAccount committed atomically */
+            /** @description CustomerAccount와 PointAccount가 원자적으로 커밋됨 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5464,7 +9987,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Customer session created */
+            /** @description 고객 세션 생성됨 */
             200: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -5493,7 +10016,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current customer session deleted */
+            /** @description 현재 고객 세션 삭제됨 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5514,7 +10037,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description BEANFLOW_MERCHANT_XSRF cookie issued; the response has no body */
+            /** @description BEANFLOW_MERCHANT_XSRF 쿠키가 발급됨; 응답 본문 없음 */
             204: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -5529,7 +10052,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path?: never;
@@ -5541,7 +10064,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Merchant session created; INITIAL_PASSWORD is still gated */
+            /** @description 점주 세션 생성됨; INITIAL_PASSWORD 상태는 여전히 게이팅됨 */
             200: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -5562,7 +10085,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path?: never;
@@ -5574,7 +10097,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Password changed, credential version increased, and new session issued */
+            /** @description 비밀번호가 변경되고 credential version이 증가했으며 새 세션이 발급됨 */
             204: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -5592,7 +10115,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path?: never;
@@ -5600,7 +10123,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current merchant session deleted */
+            /** @description 현재 점주 세션 삭제됨 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5621,7 +10144,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current operator actor */
+            /** @description 현재 운영자 actor */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5644,7 +10167,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current customer actor */
+            /** @description 현재 고객 actor */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5703,6 +10226,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -5794,7 +10318,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current merchant actor */
+            /** @description 현재 점주 actor */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5833,18 +10357,24 @@ export interface operations {
     searchNearbyStores: {
         parameters: {
             query: {
-                latitude: components["parameters"]["Latitude"];
-                longitude: components["parameters"]["Longitude"];
-                /** @description Search radius in meters. Maximum 10000. */
-                radiusMeters: components["parameters"]["RadiusMeters"];
-                pickupAvailable?: boolean;
                 /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
+                 * @description 검색 기준점의 위도(WGS84).
+                 * @example 37.5665
                  */
+                latitude: components["parameters"]["Latitude"];
+                /**
+                 * @description 검색 기준점의 경도(WGS84).
+                 * @example 126.978
+                 */
+                longitude: components["parameters"]["Longitude"];
+                /**
+                 * @description 검색 반경(미터). 최대 10000.
+                 * @example 1500
+                 */
+                radiusMeters: components["parameters"]["RadiusMeters"];
+                /** @description true로 지정하면 7일 창 안에 예약 가능한 슬롯이 남아 있는 매장만 반환합니다. 픽업 설정만으로는 충족되지 않습니다. */
+                pickupAvailable?: boolean;
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["DiscoveryLimit"];
             };
@@ -5854,7 +10384,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Nearby stores ordered by distance and store ID */
+            /** @description 거리순, 동률 시 매장 ID순으로 정렬된 인근 매장 목록 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5878,13 +10408,7 @@ export interface operations {
                 radiusMeters?: number;
                 openOnly?: boolean;
                 pickupAvailable?: boolean;
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["DiscoveryLimit"];
             };
@@ -5919,7 +10443,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Visible menus and options */
+            /** @description 노출 중인 메뉴와 옵션 목록 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5944,7 +10468,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pickup slots with current remaining capacity */
+            /** @description 현재 잔여 수용량을 포함한 픽업 슬롯 목록 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5962,7 +10486,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5974,7 +10501,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Order creation committed */
+            /** @description 주문 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5994,7 +10521,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6012,8 +10542,8 @@ export interface operations {
         };
         responses: {
             /**
-             * @description The new Order, every required reservation and immutable snapshot, the
-             *     price comparison and the first idempotent response are committed.
+             * @description 새 Order, 필요한 모든 예약(reservation)과 불변 스냅샷, 가격 비교
+             *     결과, 최초 멱등 응답이 모두 커밋됐습니다.
              */
             201: {
                 headers: {
@@ -6042,7 +10572,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Order visible to the authenticated owner */
+            /** @description 주문 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6061,7 +10591,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6075,7 +10608,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description PENDING_PAYMENT cancellation completed synchronously */
+            /** @description 주문 취소 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6084,7 +10617,7 @@ export interface operations {
                     "application/json": components["schemas"]["Cancellation"];
                 };
             };
-            /** @description PAID cancellation committed with durable compensation work */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6104,19 +10637,13 @@ export interface operations {
     listCurrentCustomerOrders: {
         parameters: {
             query?: {
-                /** @description Omit for all orders in the date range; ACTIVE and PAST are server-owned classifications. */
+                /** @description 생략하면 기간 내 모든 주문을 반환합니다. ACTIVE/PAST는 서버가 부여하는 분류입니다. */
                 status?: "ACTIVE" | "PAST";
                 from?: string;
                 to?: string;
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6125,7 +10652,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Stable page ordered by createdAt and internal tie-breaker descending */
+            /** @description createdAt과 내부 tie-breaker 기준 내림차순으로 정렬된, 안정적인 페이지 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6144,14 +10671,17 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
                 orderReference: components["parameters"]["OrderReference"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Customer-facing order without internal order UUID */
+            /** @description 내부 주문 UUID를 노출하지 않는 고객용 주문 표현 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6171,11 +10701,17 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
-                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
                 orderReference: components["parameters"]["OrderReference"];
             };
             cookie?: never;
@@ -6186,7 +10722,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description PENDING_PAYMENT cancellation committed synchronously */
+            /** @description 공개 주문번호 주문 취소 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6195,7 +10731,7 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerCancellationResult"];
                 };
             };
-            /** @description PAID cancellation committed while recovery continues independently */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6221,7 +10757,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Public client configuration for the active payment Provider */
+            /** @description 현재 활성화된 결제 Provider의 공개 클라이언트 설정 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6237,7 +10773,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6249,7 +10788,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description New or idempotently replayed one-time payment attempt */
+            /** @description 새로 생성됐거나 멱등하게 재생된 1회성 결제 attempt */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6277,7 +10816,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Approved payment state */
+            /** @description Provider 승인이 확정된 결제 상태 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6286,7 +10825,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaymentConfirmation"];
                 };
             };
-            /** @description Provider outcome remains unknown or under reconciliation */
+            /** @description Provider 결과가 아직 확정되지 않았거나 정합성 재확인(reconciliation)이 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6307,7 +10846,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6323,7 +10865,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider approval and Order transition committed */
+            /** @description Provider 승인과 Order 상태 전이가 함께 커밋됨 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6332,7 +10874,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaymentConfirmation"];
                 };
             };
-            /** @description Provider outcome remains unknown and recovery is durable */
+            /** @description Provider 결과가 아직 확정되지 않았으며, 복구 처리가 durable하게 진행됨 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6353,15 +10895,9 @@ export interface operations {
     listPaymentMethods: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6370,7 +10906,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Owned payment methods visible in the customer list */
+            /** @description 고객에게 노출되는 본인 소유 결제수단 목록 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6389,7 +10925,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6403,7 +10942,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider issuance resolved to the exact existing active binding */
+            /** @description Provider 발급 결과가 기존에 존재하는 활성 결제수단과 정확히 일치하여 재사용됨 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6412,7 +10951,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaymentMethod"];
                 };
             };
-            /** @description Provider issuance and local PaymentMethod commit are confirmed */
+            /** @description Provider 발급과 로컬 PaymentMethod 커밋이 모두 확정됨 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6422,8 +10961,8 @@ export interface operations {
                 };
             };
             /**
-             * @description Registration outcome is unresolved or under manual investigation.
-             *     This is not a registered payment method and does not permit payment.
+             * @description 등록 결과가 아직 확정되지 않았거나 수동 조사 대상이다.
+             *     이 상태는 등록 완료된 결제수단이 아니며 결제에 사용할 수 없다.
              */
             202: {
                 headers: {
@@ -6445,7 +10984,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6457,7 +10999,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Provider detachment is unresolved; the method already rejects new payments */
+            /** @description Provider 측 해제가 아직 확정되지 않음. 다만 해당 결제수단은 이미 신규 결제에 사용할 수 없음 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6466,7 +11008,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaymentMethodDeactivation"];
                 };
             };
-            /** @description Provider detachment and local terminal deactivation are confirmed */
+            /** @description Provider 해제와 로컬 종결 비활성화가 모두 확정됨 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6485,7 +11027,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
                 "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
@@ -6497,7 +11042,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Default preference committed */
+            /** @description 기본 결제수단 지정이 커밋됨 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6518,9 +11063,12 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
@@ -6534,7 +11082,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Synchronous cash result confirmed; Loyalty may still be processing */
+            /** @description 결제 전액·부분 환불 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6543,7 +11091,7 @@ export interface operations {
                     "application/json": components["schemas"]["Refund"];
                 };
             };
-            /** @description Provider result unknown or retry/reconciliation remains durable */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6564,7 +11112,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6578,7 +11129,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Refund resource creation and the synchronous result are confirmed */
+            /** @description 결제 전액·부분 환불 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6587,7 +11138,7 @@ export interface operations {
                     "application/json": components["schemas"]["Refund"];
                 };
             };
-            /** @description Refund result is unknown or reconciliation is in progress */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6616,7 +11167,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Store order visible to an authorized active member */
+            /** @description 주문 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6635,7 +11186,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6649,7 +11203,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Synchronous store transition */
+            /** @description 주문 상태 변경 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6658,7 +11212,7 @@ export interface operations {
                     "application/json": components["schemas"]["RuntimeStoreOrderTransitionResult"];
                 };
             };
-            /** @description REJECTED committed while order compensation continues separately */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6690,10 +11244,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Per-lane bounded board snapshot with a weak semantic ETag and explicit overflow queue cursors */
+            /** @description 약한(weak) 의미론적 ETag와 명시적 overflow 큐 커서를 포함한 레인별 bounded 보드 스냅샷 */
             200: {
                 headers: {
-                    /** @description Weak validator for board content only; 304 does not extend an overflow cursor TTL. */
+                    /** @description 보드 내용에 대해서만 유효한 약한(weak) validator입니다. 304 응답은 overflow 커서의 TTL을 연장하지 않습니다. */
                     ETag?: string;
                     [name: string]: unknown;
                 };
@@ -6701,7 +11255,7 @@ export interface operations {
                     "application/json": components["schemas"]["StoreOrderBoard"];
                 };
             };
-            /** @description Board content has not changed for the supplied If-None-Match value; it does not renew an overflow cursor */
+            /** @description 전달한 If-None-Match 값 기준으로 보드 내용에 변경이 없습니다. overflow 커서를 갱신하지 않습니다. */
             304: {
                 headers: {
                     [name: string]: unknown;
@@ -6728,7 +11282,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Next bounded overflow queue page */
+            /** @description 다음 bounded overflow 큐 페이지 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6749,14 +11303,17 @@ export interface operations {
             header?: never;
             path: {
                 storeId: components["parameters"]["StoreId"];
-                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
                 orderReference: components["parameters"]["OrderReference"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Store-facing order without customer-only cancellation or refund data */
+            /** @description 공개 주문번호 주문 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6776,14 +11333,20 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
-                /** @description Human-readable public order reference; input is case-insensitive and canonicalized to uppercase, and it is not an authorization token. */
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
                 orderReference: components["parameters"]["OrderReference"];
             };
             cookie?: never;
@@ -6794,7 +11357,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Transition committed or exact idempotent result returned */
+            /** @description 공개 주문번호 주문 상태 변경 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6803,7 +11366,7 @@ export interface operations {
                     "application/json": components["schemas"]["StoreOrderBoardItem"];
                 };
             };
-            /** @description Rejection committed while compensation continues independently */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6825,10 +11388,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path: {
@@ -6838,7 +11398,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Compensation case for the order */
+            /** @description 주문 취소·거절 후 처리 상태 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6860,10 +11420,7 @@ export interface operations {
                 loginId: components["schemas"]["LoginId"];
             };
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path?: never;
@@ -6871,7 +11428,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Merchant credential administration view; never contains a password */
+            /** @description 점주 계정 조회 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -6892,7 +11449,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -6904,7 +11464,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Secret-bearing first response; the temporary password is never persisted for replay */
+            /** @description 점주 계정 생성 생성 결과 */
             201: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -6925,7 +11485,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6939,7 +11502,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Secret-bearing first response; same-key replay returns 409 and never reproduces the password */
+            /** @description 점주 임시 비밀번호 재발급 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -6961,7 +11524,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6975,7 +11541,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Account and matching attempt lock released atomically, or exact replay returned */
+            /** @description 요청 처리 완료, 응답 본문 없음 */
             204: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -6995,7 +11561,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7009,7 +11578,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description LOOKUP scheduled or replayed from the first identical command */
+            /** @description 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7029,7 +11598,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7043,7 +11615,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pending proposal or replayed first response */
+            /** @description 누락된 고객 취소 환불 복구 제안 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7064,7 +11636,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7078,7 +11653,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Terminal proposal or replayed first response */
+            /** @description 고객 취소 환불 복구 승인·반려 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7099,10 +11674,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path?: never;
@@ -7110,7 +11682,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current policy heads ordered by trigger and benefit type */
+            /** @description 만료 혜택 복원 정책 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7129,7 +11701,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7144,7 +11719,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description New policy head or the replayed first response */
+            /** @description 만료 혜택 복원 정책 변경 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7165,7 +11740,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7179,7 +11757,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Applied adjustment or the replayed first response */
+            /** @description 포인트 수동 조정 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7207,7 +11785,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Point account visible to its owner or an authorized operator */
+            /** @description 소유자 또는 권한 있는 오퍼레이터에게 노출되는 포인트 계정 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7226,15 +11804,9 @@ export interface operations {
     listPointTransactions: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7245,7 +11817,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Point transactions in stable ledger order */
+            /** @description 안정적인 원장 순서로 정렬된 포인트 거래 내역 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7265,10 +11837,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path: {
@@ -7278,7 +11847,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Point account visible to an authorized operator */
+            /** @description 포인트 계정 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7297,22 +11866,13 @@ export interface operations {
     listOperationsPointTransactions: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path: {
@@ -7322,7 +11882,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Point transactions visible to an authorized operator */
+            /** @description 포인트 거래내역 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7342,10 +11902,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path?: never;
@@ -7353,7 +11910,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current complete GLOBAL policy version */
+            /** @description 기본 포인트 적립 정책 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7372,7 +11929,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -7384,7 +11944,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Newly activated or replayed GLOBAL policy version */
+            /** @description 기본 포인트 적립 정책 변경 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7403,22 +11963,13 @@ export interface operations {
     listGlobalOrdinaryPointAccrualPolicyVersions: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path?: never;
@@ -7426,7 +11977,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description GLOBAL versions newest first */
+            /** @description 기본 포인트 적립 정책 이력 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7445,22 +11996,13 @@ export interface operations {
         parameters: {
             query?: {
                 state?: "OVERRIDE" | "INHERIT_GLOBAL";
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path?: never;
@@ -7468,7 +12010,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Explicit STORE heads including inheritance markers */
+            /** @description 매장별 포인트 정책 목록 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7487,10 +12029,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path: {
@@ -7500,7 +12039,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Explicit head when present and complete effective policy */
+            /** @description 매장 포인트 정책 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7520,7 +12059,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7534,7 +12076,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Newly activated or replayed STORE version */
+            /** @description 매장 포인트 정책 변경 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7554,22 +12096,13 @@ export interface operations {
     listStoreOrdinaryPointAccrualPolicyVersions: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header: {
-                /**
-                 * @description Purpose for an audited privileged policy read. The server trims the value,
-                 *     requires 1 to 200 characters after trimming, and rejects control characters.
-                 */
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
                 "X-Access-Reason": components["parameters"]["AccessReason"];
             };
             path: {
@@ -7579,7 +12112,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description STORE versions newest first */
+            /** @description 매장 포인트 정책 이력 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7598,15 +12131,9 @@ export interface operations {
     listBrands: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7615,7 +12142,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Brand page */
+            /** @description 브랜드 목록 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7634,7 +12161,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -7646,7 +12176,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created brand */
+            /** @description 브랜드 생성 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7673,7 +12203,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Brand */
+            /** @description 브랜드 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7693,7 +12223,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7707,7 +12240,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated brand */
+            /** @description 브랜드 수정·보관 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7728,7 +12261,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -7740,7 +12276,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Stored complete or partial rebuild result, including exact idempotent replay */
+            /** @description 저장된 완료 또는 부분 재색인 결과이며, 멱등 재생 응답도 동일한 본문입니다. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7760,7 +12296,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7774,7 +12313,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Store brand assignment */
+            /** @description 매장 브랜드 지정 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7795,7 +12334,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -7809,7 +12351,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Store brand assignment after removal */
+            /** @description 매장 브랜드 지정 해제 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7829,15 +12371,9 @@ export interface operations {
         parameters: {
             query?: {
                 query?: string;
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7846,7 +12382,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Signed-cursor region page */
+            /** @description signed cursor로 페이징된 법정동 지역 목록 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7865,9 +12401,12 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
@@ -7881,7 +12420,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Store region after assignment */
+            /** @description 지정 완료 후의 매장 법정동 지역 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7901,15 +12440,9 @@ export interface operations {
     listStoreSettlements: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7920,7 +12453,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Settlement batches ordered by settlement date and ID */
+            /** @description 정산 목록 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7939,15 +12472,9 @@ export interface operations {
     listStoreSettlementItems: {
         parameters: {
             query?: {
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7959,7 +12486,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Settlement items in stable ledger order */
+            /** @description 정산 항목 조회 결과 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7979,9 +12506,12 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Token copied from the BEANFLOW_MERCHANT_XSRF cookie. */
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
                 "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
@@ -7995,7 +12525,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Dispute filed and its expected adjustment amount held internally */
+            /** @description 정산 이의제기 접수 생성 결과 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8047,15 +12577,9 @@ export interface operations {
             query?: {
                 state?: components["schemas"]["SupportCaseState"];
                 assigneeId?: components["schemas"]["Identifier"];
-                /**
-                 * @description Opaque versioned HMAC-signed cursor returned by the previous page. It is
-                 *     bound to this endpoint, its filters and stable sort tuple, expires within
-                 *     24 hours, and cannot be reused for another scope. Malformed, expired or
-                 *     scope-mismatched cursors return 400 INVALID_REQUEST. Maximum length is 2048
-                 *     characters.
-                 */
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Maximum items to return. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8084,7 +12608,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -8144,7 +12671,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8180,7 +12710,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8216,7 +12749,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8252,7 +12788,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8288,7 +12827,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8324,7 +12866,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8360,17 +12905,13 @@ export interface operations {
     listSupportCaseTimeline: {
         parameters: {
             query?: {
-                /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+                /** @description 조회할 이력의 출처를 제한하는 필터입니다. 생략하면 주문, 결제, 환불, 포인트, 쿠폰, 정산, 알림 등 이 API가 지원하는 모든 출처를 조회합니다. */
                 sources?: components["parameters"]["SupportTimelineSources"];
-                /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+                /** @description 조회할 이력 종류를 제한하는 필터입니다. 생략하면 이 API가 지원하는 모든 종류를 조회합니다. */
                 types?: components["parameters"]["SupportTimelineTypes"];
-                /**
-                 * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
-                 *     canonical source/type filters. It expires after 15 minutes; malformed,
-                 *     expired or scope-mismatched values return 400 INVALID_REQUEST.
-                 */
+                /** @description 이전 타임라인 페이지의 `nextCursor` 값을 그대로 보내는 문자열입니다. 같은 상담 건와 같은 필터에서만 사용할 수 있고 15분 뒤 만료됩니다. 형식이 잘못됐거나 범위·필터가 다르면 400을 반환합니다. */
                 cursor?: components["parameters"]["SupportTimelineCursor"];
-                /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 이력 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["SupportTimelineLimit"];
             };
             header?: never;
@@ -8381,7 +12922,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Globally ordered masked transaction facts */
+            /** @description 상담 건 처리 이력 조회 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8404,17 +12945,13 @@ export interface operations {
             query: {
                 /** @description SupportCase that currently has the target Order linked as RELATED_ORDER. */
                 caseId: components["parameters"]["SupportOrderTimelineCaseId"];
-                /** @description Closed source filter. Omission selects every source valid for the endpoint. */
+                /** @description 조회할 이력의 출처를 제한하는 필터입니다. 생략하면 주문, 결제, 환불, 포인트, 쿠폰, 정산, 알림 등 이 API가 지원하는 모든 출처를 조회합니다. */
                 sources?: components["parameters"]["SupportTimelineSources"];
-                /** @description Closed fact-type filter. Omission selects every type valid for the endpoint. */
+                /** @description 조회할 이력 종류를 제한하는 필터입니다. 생략하면 이 API가 지원하는 모든 종류를 조회합니다. */
                 types?: components["parameters"]["SupportTimelineTypes"];
-                /**
-                 * @description Opaque HMAC-signed cursor bound to the exact endpoint, Case/Order scope and
-                 *     canonical source/type filters. It expires after 15 minutes; malformed,
-                 *     expired or scope-mismatched values return 400 INVALID_REQUEST.
-                 */
+                /** @description 이전 타임라인 페이지의 `nextCursor` 값을 그대로 보내는 문자열입니다. 같은 상담 건와 같은 필터에서만 사용할 수 있고 15분 뒤 만료됩니다. 형식이 잘못됐거나 범위·필터가 다르면 400을 반환합니다. */
                 cursor?: components["parameters"]["SupportTimelineCursor"];
-                /** @description Maximum globally merged facts. Defaults to 20 and may not exceed 100. */
+                /** @description 한 페이지에 반환할 최대 이력 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
                 limit?: components["parameters"]["SupportTimelineLimit"];
             };
             header?: never;
@@ -8457,7 +12994,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Current advisory decision, including closed denial reasons */
+            /** @description 주문 변경 가능 여부 확인 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8478,7 +13015,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8492,7 +13032,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Action request created or the first identical response replayed */
+            /** @description 주문 변경 승인 요청 등록 생성 결과 */
             201: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8521,7 +13061,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current request revision, approval lineage and execution readiness */
+            /** @description 주문 변경 승인 요청 조회 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8541,7 +13081,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8555,7 +13098,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description New revision created or the first identical response replayed */
+            /** @description 주문 변경 승인안 수정 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8577,7 +13120,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8591,7 +13137,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Decision committed or the first identical response replayed */
+            /** @description 주문 변경 요청 승인·반려 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8613,7 +13159,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8627,7 +13176,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Case and request reassigned atomically, or the first response replayed */
+            /** @description 주문 변경 요청 담당자 변경 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8649,7 +13198,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8685,7 +13237,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8699,7 +13254,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Store authorization created or the first exact creation response replayed */
+            /** @description 고객센터 주문 변경 승인 생성 결과 */
             201: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8721,7 +13276,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8735,7 +13293,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Immutable resolution plan created or the first exact response replayed */
+            /** @description 수락 후 주문 문제 해결안 등록 생성 결과 */
             201: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8764,7 +13322,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current resolution plan and explicit partial, unknown or terminal owner states */
+            /** @description 수락 후 주문 문제 해결 조회 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8784,7 +13342,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8798,7 +13359,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Latest durable partial, unknown, manual-review or resolved state */
+            /** @description 수락 후 주문 문제 해결 실행 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8820,7 +13381,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8834,7 +13398,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Latest durable reconciliation outcome */
+            /** @description 결제 환불 결과 재확인 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8867,7 +13431,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Advisory evaluation with the exact immutable policy version */
+            /** @description 고객 보상 가능 여부 확인 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8889,7 +13453,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8903,7 +13470,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Exact request created or its first idempotent response replayed */
+            /** @description 고객 보상 요청 등록 생성 결과 */
             201: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8932,7 +13499,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current request, terminal benefit and notification state */
+            /** @description 고객 보상 요청 조회 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8952,7 +13519,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8966,7 +13536,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Durable terminal benefit and independent notification state, or exact replay */
+            /** @description 고객 보상 발급 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -8988,7 +13558,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -8998,7 +13571,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current durable request and notification owner state */
+            /** @description 고객 보상 알림 재시도 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -9020,7 +13593,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9047,7 +13623,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9074,7 +13653,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9101,7 +13683,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9128,7 +13713,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9155,7 +13743,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9182,7 +13773,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9209,7 +13803,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9236,7 +13833,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9263,7 +13863,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9290,7 +13893,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9317,7 +13923,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9344,7 +13953,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9371,7 +13983,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9416,7 +14031,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9443,7 +14061,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9470,7 +14091,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9497,7 +14121,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9524,7 +14151,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9551,7 +14181,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9578,7 +14211,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9605,7 +14241,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9632,7 +14271,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9659,7 +14301,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9686,7 +14331,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9713,7 +14361,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9740,7 +14391,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9767,7 +14421,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9794,7 +14451,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9821,7 +14481,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9848,7 +14511,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9875,7 +14541,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9889,7 +14558,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Investigation decision and Support callback committed, or exact replay */
+            /** @description 고객센터 요청 심사 결과 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -9911,7 +14580,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -9975,7 +14647,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10011,7 +14686,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10048,7 +14726,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10080,7 +14761,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10116,7 +14800,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10152,7 +14839,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10188,7 +14878,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10224,7 +14917,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10260,7 +14956,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -10296,7 +14995,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique within actor ID and API operation */
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
