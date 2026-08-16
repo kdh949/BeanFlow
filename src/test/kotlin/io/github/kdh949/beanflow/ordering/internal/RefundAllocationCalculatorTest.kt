@@ -148,6 +148,7 @@ internal class RefundAllocationCalculatorTest {
         return RefundableOrderLineSnapshot(
             orderLineId = orderLineId,
             lineSequence = lineSequence,
+            menuName = "아메리카노",
             unitPriceKrw = unitPriceKrw,
             quantity = quantity,
             grossKrw = gross,

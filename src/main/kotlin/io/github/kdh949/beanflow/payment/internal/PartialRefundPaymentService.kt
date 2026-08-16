@@ -11,6 +11,7 @@ import io.github.kdh949.beanflow.payment.api.LockPartialRefundPaymentCommand
 import io.github.kdh949.beanflow.payment.api.PartialRefundAuditActorType
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentLock
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentOperations
+import io.github.kdh949.beanflow.payment.api.PartialRefundPreviewPayment
 import io.github.kdh949.beanflow.payment.api.PartialRefundProviderCompletion
 import io.github.kdh949.beanflow.payment.api.PartialRefundProviderMode
 import io.github.kdh949.beanflow.payment.api.PartialRefundProviderOutcome
@@ -61,6 +62,26 @@ internal class PartialRefundPaymentService(
         paymentRepository.findById(paymentId).orElse(null)?.orderId
             ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
 
+    @Transactional(readOnly = true)
+    override fun previewSnapshot(orderId: UUID): PartialRefundPreviewPayment {
+        val payment =
+            paymentRepository.findByOrderId(orderId)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
+        if (payment.type != PaymentType.EXTERNAL || payment.approvalState != PaymentApprovalState.APPROVED) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Payment is not an approved external payment")
+        }
+        return PartialRefundPreviewPayment(
+            paymentId = payment.id,
+            paymentVersion = payment.version,
+            approvedAmountKrw =
+                payment.approvedAmountKrw
+                    ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Approved payment amount is missing"),
+            succeededRefundAmountKrw = payment.succeededRefundAmountKrw,
+            unresolvedRefundCount = refundRepository.findUnresolvedByPaymentId(payment.id).size,
+            consumedQuantityByOrderLine = successfulLineConsumption(payment.id),
+        )
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun lock(command: LockPartialRefundPaymentCommand): PartialRefundPaymentLock {
         jdbcTemplate.query(
@@ -82,6 +103,7 @@ internal class PartialRefundPaymentService(
         return PartialRefundPaymentLock.Ready(
             paymentId = payment.id,
             orderId = payment.orderId,
+            paymentVersion = payment.version,
             approvedAmountKrw =
                 payment.approvedAmountKrw
                     ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Approved payment amount is missing"),
@@ -480,6 +502,20 @@ internal class PartialRefundPaymentService(
             )
         }
     }
+
+    private fun successfulLineConsumption(paymentId: UUID): Map<UUID, Long> =
+        jdbcTemplate
+            .query(
+                """
+                SELECT allocation.order_line_id, allocation.quantity
+                  FROM payment_refund_line_allocation allocation
+                  JOIN payment_refund refund ON refund.id = allocation.refund_id
+                 WHERE refund.payment_id = ?
+                """.trimIndent(),
+                { rs, _ -> UUID.fromString(rs.getString(1)) to rs.getLong(2) },
+                paymentId,
+            ).groupBy({ it.first }, { it.second })
+            .mapValues { (_, amounts) -> amounts.sum() }
 
     private fun successfulLineConsumptionLocked(paymentId: UUID): Map<UUID, Long> =
         jdbcTemplate

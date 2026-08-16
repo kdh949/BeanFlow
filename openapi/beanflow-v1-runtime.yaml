@@ -472,6 +472,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}"
   /stores/{storeId}/orders/{orderReference}/transitions:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1transitions"
+  /stores/{storeId}/orders/{orderReference}/refund-previews:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1refund-previews"
+  /stores/{storeId}/orders/{orderReference}/refunds:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1refunds"
   /operations/orders/{orderId}/compensation:
     get:
       tags:

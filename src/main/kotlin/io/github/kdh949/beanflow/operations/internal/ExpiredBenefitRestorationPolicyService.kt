@@ -48,6 +48,21 @@ internal class ExpiredBenefitRestorationPolicyService(
             version(head).toSnapshot()
         }
 
+    @Transactional(readOnly = true)
+    override fun currentUnlocked(
+        trigger: ExpiredBenefitRestorationTrigger,
+        benefitType: ExpiredBenefitType,
+    ): ExpiredBenefitRestorationPolicySnapshot =
+        persistenceBoundary {
+            if (!isAllowedKey(trigger, benefitType)) notFound()
+            val head =
+                headRepository
+                    .findById(ExpiredBenefitPolicyHeadId(trigger, benefitType))
+                    .orElse(null)
+                    ?: dependency("Expired benefit restoration policy head is missing")
+            version(head).toSnapshot()
+        }
+
     @Transactional
     override fun listCurrent(command: ListExpiredBenefitRestorationPoliciesCommand): List<ExpiredBenefitRestorationPolicyHead> =
         observedRead {

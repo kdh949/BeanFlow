@@ -18,14 +18,24 @@ internal class OrderRefundSnapshotService(
     private val lineRepository: OrderLineJpaRepository,
 ) : OrderRefundSnapshotOperations {
     @Transactional(propagation = Propagation.MANDATORY)
-    override fun lockRefundableSnapshot(orderId: UUID): RefundableOrderSnapshot {
-        val order =
+    override fun lockRefundableSnapshot(orderId: UUID): RefundableOrderSnapshot =
+        refundableSnapshot(
             orderRepository.findLockedById(orderId)
-                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Order was not found"),
+        )
+
+    @Transactional(readOnly = true)
+    override fun readRefundableSnapshot(orderId: UUID): RefundableOrderSnapshot =
+        refundableSnapshot(
+            orderRepository.findById(orderId).orElse(null)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Order was not found"),
+        )
+
+    private fun refundableSnapshot(order: OrderEntity): RefundableOrderSnapshot {
         if (order.state !in REFUNDABLE_STATES) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Order state does not allow an item refund")
         }
-        val lines = lineRepository.findAllByOrderIdOrderByLineSequence(orderId)
+        val lines = lineRepository.findAllByOrderIdOrderByLineSequence(order.id)
         if (lines.isEmpty()) {
             fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Refundable OrderLine snapshot is missing")
         }
@@ -42,6 +52,7 @@ internal class OrderRefundSnapshotService(
                     RefundableOrderLineSnapshot(
                         orderLineId = it.id,
                         lineSequence = it.lineSequence,
+                        menuName = it.menuName,
                         unitPriceKrw = it.unitPriceKrw,
                         quantity = it.quantity,
                         grossKrw = it.grossKrw,

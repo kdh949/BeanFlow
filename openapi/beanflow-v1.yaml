@@ -2667,7 +2667,7 @@ paths:
         - $ref: "#/components/parameters/OrderReference"
         - $ref: "#/components/parameters/MerchantCsrfToken"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema: { $ref: "#/components/schemas/MerchantRefundPreviewRequest" }
@@ -7689,7 +7689,8 @@ components:
     MerchantRefundPreviewRequest:
       type: object
       additionalProperties: false
-      required: [lines]
+      description: |
+        환불 preview 요청입니다. `lines`를 생략하면 아직 아무 품목도 고르지 않은 상태를 뜻하며, 응답은 환불 가능한 모든 품목과 잔여 수량만 담고 금액 합계는 0입니다. 생략은 전체 환불을 뜻하지 않습니다. 전체 잔여 환불도 모든 품목의 잔여 수량을 명시해야 합니다.
       properties:
         lines:
           type: array
@@ -7716,10 +7717,12 @@ components:
       type: object
       additionalProperties: false
       required: [lineSequence, menuName, selectedQuantity, remainingQuantity, grossAttributionKrw, couponAttributionKrw, pointsRestorationKrw, cashRefundKrw]
+      description: |
+        환불 preview의 품목 한 줄입니다. 응답은 환불 가능한 모든 품목을 담으므로 고르지 않은 품목은 `selectedQuantity`가 0이고 금액도 0입니다.
       properties:
         lineSequence: { type: integer, minimum: 0 }
         menuName: { type: string, minLength: 1, maxLength: 200 }
-        selectedQuantity: { type: integer, minimum: 1 }
+        selectedQuantity: { type: integer, minimum: 0 }
         remainingQuantity: { type: integer, minimum: 0 }
         grossAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
         couponAttributionKrw: { $ref: "#/components/schemas/MoneyKrw" }
