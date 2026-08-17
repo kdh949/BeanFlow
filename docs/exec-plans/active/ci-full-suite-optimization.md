@@ -190,6 +190,10 @@ hosted full suite를 required evidence로 삼는다.
 - LPT 4-shard SHA `2bc6ad3`의 run `32055006148`은 backend test 269개 class를 정확히 한 번 실행했고
   failure/error가 0이었다. shard wall time은 `15m20s`, `17m43s`, `20m01s`, `18m42s`, critical path는
   `20m35s`, total runner-minute는 `75.68`이다. 목표를 넘겨 계획대로 5-shard로 증가한다.
+- LPT 5-shard SHA `c39d035`의 run `32057022984`는 backend test 269개 class와 1,334개 test를 정확히
+  한 번 실행했고 failure/error가 0이었다. shard wall time은 `17m09s`, `13m47s`, `17m21s`,
+  `13m44s`, `12m37s`, critical path는 `17m55s`, total runner-minute는 `78.57`이다. 목표를 넘겨
+  계획의 마지막 단계인 6-shard로 증가한다. workflow 전체 결론은 upstream frontend 회귀 때문에 실패했다.
 
 ## Decision Log
 
