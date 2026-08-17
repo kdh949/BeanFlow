@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +49,7 @@ function renderAt(url: string) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("customer order list", () => {
@@ -146,6 +147,48 @@ describe("customer order detail", () => {
     ["EXPIRED", "terminal", null],
   ] as const)("maps %s to presentation-only timeline metadata", (state, kind, activeIndex) => {
     expect(customerOrderTimelineModel(state)).toMatchObject({ kind, activeIndex });
+  });
+
+  it("discards a stale scheduled poll response that answers after a manual reload returns fresher data", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    type Resolver = (value: unknown) => void;
+    const resolvers: Resolver[] = [];
+    vi.spyOn(customerApi, "GET").mockImplementation(
+      () => new Promise((resolve) => { resolvers.push(resolve as Resolver); }),
+    );
+
+    renderAt("/app/orders/BF-7K3M-9Q2P");
+    await act(async () => {
+      resolvers[0]?.(response({ ...detail, status: "PAID" }));
+    });
+    expect(await screen.findByText("준비가 끝나면 이 번호로 알려드릴게요.")).toBeInTheDocument();
+
+    // PAID is live, so it schedules another read 5s later. Let that fire and
+    // sit in flight as the second request.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(resolvers).toHaveLength(2);
+
+    // Before that scheduled poll answers, the customer manually refreshes.
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "새로고침" }));
+    });
+    expect(resolvers).toHaveLength(3);
+
+    // The manual refresh answers first with the freshest status ...
+    await act(async () => {
+      resolvers[2]?.(response({ ...detail, status: "READY" }));
+    });
+    expect(await screen.findByText("픽업대에서 번호를 확인해 주세요.")).toBeInTheDocument();
+
+    // ... and the stale scheduled poll (still PAID) answers late. It must not
+    // roll the screen back to an earlier status.
+    await act(async () => {
+      resolvers[1]?.(response({ ...detail, status: "PAID" }));
+    });
+    expect(screen.getByText("픽업대에서 번호를 확인해 주세요.")).toBeInTheDocument();
+    expect(screen.queryByText("준비가 끝나면 이 번호로 알려드릴게요.")).not.toBeInTheDocument();
   });
 });
 
