@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
+import { runCustomerLogoutHandlers } from "../shared/customerLogout";
 import { CART_STORAGE_KEY, type CartLine, cart } from "./cart";
 import { CartPage } from "./CartPage";
 import { StoreDetailPage } from "./StoreDetailPage";
@@ -110,6 +111,20 @@ describe("client cart", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "장바구니 비우기" }));
     expect(localStorage.getItem(CART_STORAGE_KEY)).toBeNull();
+  });
+
+  it("drops the in-memory cache on customer logout so the next customer never sees the previous cart", () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, line("menu-1"));
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { storeId: "store-1" } });
+
+    // Logout removes the storage key directly, without going through cart.clear(),
+    // so the module-level cache is still serving the previous customer's cart.
+    localStorage.removeItem(CART_STORAGE_KEY);
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { storeId: "store-1" } });
+
+    runCustomerLogoutHandlers();
+
+    expect(cart.read()).toEqual({ status: "empty" });
   });
 });
 

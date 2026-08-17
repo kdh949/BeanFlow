@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { components } from "../../../api/schema";
 import { ApiRequestError, unwrap } from "../../../api/client";
 import { customerApi, customerCsrfHeader, forgetCustomerCsrfToken } from "../../../api/customerClient";
+import { runCustomerLogoutHandlers } from "../../shared/customerLogout";
 
 export type CustomerActor = components["schemas"]["CustomerActor"];
 
@@ -36,7 +37,11 @@ function classify(failure: unknown): CustomerSessionState {
 
 /**
  * Removes only customer-owned browser state. Operator OIDC state and any
- * merchant Session cookie belong to other actors and stay untouched.
+ * merchant Session cookie belong to other actors and stay untouched. Storage
+ * keys are cleared directly, but any in-memory cache a feature module (like
+ * the cart) keeps on top of storage needs its own reset: this module runs the
+ * shared customer-logout registry rather than importing those modules, so a
+ * stale in-memory snapshot cannot outlive the customer who owned it.
  */
 export function clearCustomerBrowserState() {
   const localPrefixes = ["beanflow.customer."];
@@ -50,6 +55,7 @@ export function clearCustomerBrowserState() {
     removable.forEach((key) => storage.removeItem(key));
   }
   forgetCustomerCsrfToken();
+  runCustomerLogoutHandlers();
 }
 
 export const customerSession = {

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { onCustomerLogout } from "../shared/customerLogout";
 
 export const CART_STORAGE_KEY = "beanflow.customer.cart.v1";
 const CART_SCHEMA_VERSION = 1;
@@ -40,6 +41,11 @@ function emit() {
   cached = null;
   listeners.forEach((listener) => listener());
 }
+
+// Logout removes the storage key directly (it never imports this module), so
+// the in-memory `cached` snapshot must be dropped here or the next customer to
+// sign in on the same tab would see the previous customer's cart.
+onCustomerLogout(emit);
 
 function isCartLine(value: unknown): value is CartLine {
   if (typeof value !== "object" || value === null) return false;
