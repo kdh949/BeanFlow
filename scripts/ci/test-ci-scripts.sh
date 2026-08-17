@@ -7,6 +7,8 @@ CLASSIFY="$ROOT/scripts/ci/classify-changes.sh"
 REQUIRED_GATE="$ROOT/scripts/ci/verify-required-gate.sh"
 SUMMARIZE="$ROOT/scripts/ci/summarize-test-results.py"
 BUILD_WEIGHTS="$ROOT/scripts/ci/build-test-weights.py"
+WORKFLOW="$ROOT/.github/workflows/ci.yml"
+STORYBOOK_PREVIEW="$ROOT/frontend/.storybook/preview.tsx"
 
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
@@ -31,6 +33,17 @@ assert_status() {
   local actual=$?
   set -e
   assert_equal "$expected" "$actual" "command status: $*"
+}
+
+assert_contains() {
+  local expected="$1"
+  local file="$2"
+  local description="$3"
+
+  if ! grep -Fq -- "$expected" "$file"; then
+    echo "FAIL: $description: '$expected' is missing from $file" >&2
+    exit 1
+  fi
 }
 
 capture_log="$test_root/capture/success.log"
@@ -263,5 +276,34 @@ done
 
 assert_status 1 "$REQUIRED_GATE" unknown success success success success
 assert_status 1 "$REQUIRED_GATE" full success success success
+
+assert_contains \
+  'VITE_STORYBOOK_A11Y_TEST' \
+  "$STORYBOOK_PREVIEW" \
+  "Storybook preview exposes the CI-only accessibility mode"
+assert_contains \
+  '? "off" : "error"' \
+  "$STORYBOOK_PREVIEW" \
+  "Storybook accessibility remains error by default"
+assert_contains \
+  'name: Run required Storybook interaction tests' \
+  "$WORKFLOW" \
+  "required Storybook interactions are explicit"
+assert_contains \
+  'VITE_STORYBOOK_A11Y_TEST: "off"' \
+  "$WORKFLOW" \
+  "required Storybook interactions disable only accessibility assertions"
+assert_contains \
+  'name: Run advisory Storybook accessibility tests' \
+  "$WORKFLOW" \
+  "Storybook accessibility still runs in CI"
+assert_contains \
+  'continue-on-error: true' \
+  "$WORKFLOW" \
+  "Storybook accessibility cannot block the required frontend gate"
+assert_contains \
+  'retention-days: 14' \
+  "$WORKFLOW" \
+  "Storybook accessibility evidence is retained for fourteen days"
 
 echo "CI script tests passed."

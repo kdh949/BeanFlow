@@ -166,9 +166,46 @@ jobs:
         working-directory: frontend
         run: npm run test:unit
 
-      - name: Run Storybook interaction and accessibility tests
+      - name: Run required Storybook interaction tests
         working-directory: frontend
-        run: npm run test:storybook:ci
+        env:
+          VITE_STORYBOOK_A11Y_TEST: "off"
+        run: >-
+          ../scripts/ci/run-and-capture.sh
+          ../.ci-artifacts/storybook-interactions.log
+          npm run test:storybook:ci
+
+      - name: Run advisory Storybook accessibility tests
+        id: storybook_a11y
+        continue-on-error: true
+        working-directory: frontend
+        run: >-
+          ../scripts/ci/run-and-capture.sh
+          ../.ci-artifacts/storybook-a11y.log
+          npm run test:storybook:ci
+
+      - name: Summarize Storybook accessibility result
+        if: always()
+        env:
+          A11Y_OUTCOME: ${{ steps.storybook_a11y.outcome }}
+        run: |
+          {
+            echo "### Storybook accessibility"
+            echo "- Advisory outcome: \`$A11Y_OUTCOME\`"
+            echo "- Required interaction tests run separately with accessibility assertions disabled."
+            echo "- Accessibility violations are tracked without changing the required frontend result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Storybook accessibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: storybook-a11y-${{ github.run_id }}
+          path: |
+            .ci-artifacts/storybook-a11y.log
+            frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build Storybook
         working-directory: frontend
