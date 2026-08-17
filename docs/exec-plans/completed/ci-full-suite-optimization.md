@@ -1,11 +1,11 @@
 # CI 전체 테스트 게이트를 17분 안에 완료한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-18`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -153,7 +153,7 @@ hosted full suite를 required evidence로 삼는다.
 - [x] (2026-08-17) Spring integration과 direct container test 46개를 JVM singleton PostGIS + class DB runtime으로 통합
 - [x] (2026-08-18) 세 hosted success run의 class median과 p95 fallback을 사용하는 deterministic LPT shard 구현
 - [x] (2026-08-18) 사용자가 hosted critical path 기준을 17분으로 개정하고 Storybook a11y를 advisory로 분리하기로 결정
-- [ ] local/hosted validation과 17분 gate 완료
+- [x] (2026-08-18) 동일 candidate SHA 세 full run 성공, 각 17분 이내, 269개 class 누락·중복 0으로 완료
 
 ## Surprises & Discoveries
 
@@ -208,6 +208,20 @@ hosted full suite를 required evidence로 삼는다.
   대비 critical path는 `26m08s`에서 `15m15s`로 `41.6%` 줄었지만, runner-minute는 `66.83`에서
   `85.02`로 `27.2%` 늘었다. 2026-08-18 사용자 결정으로 수용 기준은 17분으로 개정됐으며, 최종
   candidate SHA에서 세 run을 다시 측정한다.
+- 최신 `origin/main`에서 `OpsRefundPage.stories.tsx`가 제거됐지만 Docs smoke의 expected/stateful 목록에는
+  해당 ID가 남아 있었다. 존재하지 않는 Story의 두 잔여 항목을 제거했고, local 검증은 29개 docs entry,
+  14개 stateful docs, 48개 state surface를 모두 통과했다.
+- 최종 candidate SHA `a06d0e788a470fea5d9891397afc4c73d99c69fd`의 full run `32066052957`,
+  `32067577856`, `32069008538`은 모두 workflow와 required `build`가 성공했다. critical path는 각각
+  `15m26s`, `15m14s`, `16m18s`, total runner-minute는 `83.15`, `86.87`, `87.38`이다. shard 0→5
+  wall time은 각각 `[13m08s, 13m06s, 14m10s, 14m26s, 8m27s, 14m54s]`,
+  `[14m07s, 14m43s, 12m41s, 13m25s, 12m00s, 14m38s]`,
+  `[15m51s, 13m45s, 13m20s, 13m38s, 14m58s, 10m59s]`다. 각 timing artifact는 269개
+  class와 1,334개 test를 포함했고 class 누락·중복, failure, error는 모두 0이었다. 기존 skipped test
+  1개는 세 run에서 동일했다.
+- 세 frontend job은 required interaction 99개를 성공시킨 뒤 기존 `StoreSettlementsPage`의 4.2:1
+  color-contrast 위반을 advisory a11y 단계에서 탐지했다. 위반 로그와 coverage artifact는 14일 보관되며
+  frontend와 aggregate `build` 결과는 성공했다.
 
 ## Decision Log
 
@@ -230,11 +244,18 @@ hosted full suite를 required evidence로 삼는다.
 
 ## Outcomes & Retrospective
 
-전체 테스트 의미와 269개 class coverage를 유지하면서 baseline median `26m08s`를 6-shard candidate
-`15m15s`까지 줄였다. 개정된 17분 기준의 동일 candidate SHA 세 run과 advisory a11y를 포함한 full workflow
-성공 증거를 수집한 뒤 최종 결과를 작성한다.
+전체 테스트 의미와 269개 class coverage를 유지하면서 final candidate의 critical path median은
+`15m26s`로 baseline median `26m08s`보다 `41.0%` 줄었다. 세 run은 모두 17분 안에 required `build`까지
+성공했다. runner-minute median은 `66.83`에서 `86.87`로 `30.0%` 늘어 latency와 비용의 교환을 명시적으로
+남긴다. rollback은 workflow test matrix를 3개 shard로 되돌리고 기존 class-count 배정을 복원한 뒤 shared
+PostGIS runtime을 class-owned container로 되돌리는 순서이며, test 선택 실행이나 실패 fallback은 필요하지 않다.
+
+Storybook interaction, typecheck, unit, build, Docs isolation은 required frontend에 남아 있다. 기존 a11y
+color-contrast 위반은 별도 advisory 실행과 14일 artifact로 관측되며, 실제 색상 수정은 후속 PR 범위다.
+제품 API, DB schema, Aggregate와 production transaction 경계는 변경하지 않았다.
 
 ## Revision Notes
 
 - 2026-08-17: 최신 main 조사와 사용자가 확정한 coverage, 15분, 최대 6 runner, Draft PR 결정을 반영해 초안 작성.
 - 2026-08-18: 사용자 승인에 따라 시간 기준을 17분으로 개정하고 Storybook a11y를 advisory로 분리하는 완료 조건을 반영.
+- 2026-08-18: final candidate 동일 SHA 세 run의 시간·coverage·비용 증적을 기록하고 계획을 완료 처리.
