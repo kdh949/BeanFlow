@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
@@ -6,7 +6,6 @@ import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../compone
 import { PageTitle } from "../../components/Shells";
 import { Button } from "../../design-system";
 import { compactId, shortDateTime, won } from "../../lib/format";
-import { useResource } from "../shared/useResource";
 import { useMerchantStores } from "./useMerchantStores";
 import { StoreSelector } from "./StoreSelector";
 import { DisputeFilingPanel } from "./DisputeFilingPanel";
@@ -23,11 +22,37 @@ export function StoreSettlementsPage() {
   const [openBatch, setOpenBatch] = useState<SettlementBatch | null>(null);
 
   const storeId = selected?.storeId ?? null;
-  const load = useCallback(async (): Promise<SettlementBatchPage> => {
-    if (!storeId) return { items: [], page: {} };
-    return unwrap(await merchantApi.GET("/stores/{storeId}/settlements", { params: { path: { storeId } } }));
+  const [page, setPage] = useState<SettlementBatchPage | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // A store change starts a new request before the previous one settles; this
+  // discards a stale response instead of letting it overwrite the answer for
+  // the store the operator has since switched to.
+  const requestGeneration = useRef(0);
+
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (!storeId) {
+      setPage({ items: [], page: {} });
+      return;
+    }
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    const generation = ++requestGeneration.current;
+    try {
+      const next = unwrap(
+        await merchantApi.GET("/stores/{storeId}/settlements", { params: { path: { storeId }, query: { cursor } } }),
+      );
+      if (generation !== requestGeneration.current) return;
+      setPage((current) => (append && current ? { items: [...current.items, ...next.items], page: next.page } : next));
+    } catch (failure) {
+      if (generation === requestGeneration.current) setError(failure);
+    } finally {
+      if (generation === requestGeneration.current) setLoadingMore(false);
+    }
   }, [storeId]);
-  const { state, reload: reloadBatches } = useResource<SettlementBatchPage>(load);
+
+  useEffect(() => { void load(); }, [load]);
 
   if (storesState.status === "loading") return <LoadingState label="매장 목록을 불러오는 중" />;
   if (storesState.status === "failed") {
@@ -48,64 +73,110 @@ export function StoreSettlementsPage() {
           title="정산을 볼 수 있는 매장이 없습니다"
           description="정산 내역은 매장 소유자 권한이 있는 계정만 조회할 수 있습니다."
         />
-      ) : state.status === "loading" ? (
+      ) : !page && !error ? (
         <LoadingState label="정산 내역을 불러오는 중" />
-      ) : state.status === "failed" ? (
-        <ErrorState error={state.error} retry={reloadBatches} />
-      ) : state.value.items.length === 0 ? (
+      ) : error ? (
+        <ErrorState error={error} retry={() => void load()} />
+      ) : page?.items.length === 0 ? (
         <EmptyState title="아직 확정된 정산이 없습니다" description="정산은 주문 완료일 기준으로 집계된 뒤 확정됩니다." />
       ) : (
-        <section className="settlement-list">
-          {state.value.items.map((batch) => (
-            <article className="surface-card settlement-card" key={batch.settlementBatchId}>
-              <header>
-                <div>
-                  <span className="eyebrow">{settlementDate.format(new Date(batch.settlementDate))}</span>
-                  <strong className="bf-num">{won.format(batch.netSettlementKrw)}</strong>
-                </div>
-                <StatusBadge state={batch.state} />
-              </header>
-              <dl className="detail-list">
-                <div><dt>결제 총액</dt><dd className="bf-num">{won.format(batch.grossPaidKrw)}</dd></div>
-                <div><dt>수수료</dt><dd className="bf-num">{won.format(batch.feeKrw)}</dd></div>
-                <div><dt>혜택 비용</dt><dd className="bf-num">{won.format(batch.benefitCostKrw)}</dd></div>
-                <div><dt>조정</dt><dd className="bf-num">{won.format(batch.adjustmentKrw)}</dd></div>
-              </dl>
-              <Button
-                variant="secondary"
-                onClick={() => setOpenBatch(openBatch?.settlementBatchId === batch.settlementBatchId ? null : batch)}
-              >
-                {openBatch?.settlementBatchId === batch.settlementBatchId ? "명세 닫기" : "주문별 명세"}
-              </Button>
-              {openBatch?.settlementBatchId === batch.settlementBatchId && storeId ? (
-                <SettlementItems storeId={storeId} batch={batch} />
-              ) : null}
-            </article>
-          ))}
-        </section>
+        <>
+          <section className="settlement-list">
+            {page?.items.map((batch) => (
+              <article className="surface-card settlement-card" key={batch.settlementBatchId}>
+                <header>
+                  <div>
+                    <span className="eyebrow">{settlementDate.format(new Date(batch.settlementDate))}</span>
+                    <strong className="bf-num">{won.format(batch.netSettlementKrw)}</strong>
+                  </div>
+                  <StatusBadge state={batch.state} />
+                </header>
+                <dl className="detail-list">
+                  <div><dt>결제 총액</dt><dd className="bf-num">{won.format(batch.grossPaidKrw)}</dd></div>
+                  <div><dt>수수료</dt><dd className="bf-num">{won.format(batch.feeKrw)}</dd></div>
+                  <div><dt>혜택 비용</dt><dd className="bf-num">{won.format(batch.benefitCostKrw)}</dd></div>
+                  <div><dt>조정</dt><dd className="bf-num">{won.format(batch.adjustmentKrw)}</dd></div>
+                </dl>
+                <Button
+                  variant="secondary"
+                  onClick={() => setOpenBatch(openBatch?.settlementBatchId === batch.settlementBatchId ? null : batch)}
+                >
+                  {openBatch?.settlementBatchId === batch.settlementBatchId ? "명세 닫기" : "주문별 명세"}
+                </Button>
+                {openBatch?.settlementBatchId === batch.settlementBatchId && storeId ? (
+                  <SettlementItems storeId={storeId} batch={batch} />
+                ) : null}
+              </article>
+            ))}
+          </section>
+          {page?.page.nextCursor ? (
+            <Button variant="secondary" block loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+              {loadingMore ? "더 불러오는 중" : "정산 더 보기"}
+            </Button>
+          ) : null}
+        </>
       )}
     </div>
   );
 }
 
 function SettlementItems({ storeId, batch }: { storeId: string; batch: SettlementBatch }) {
-  const load = useCallback(async (): Promise<SettlementItemPage> => unwrap(
-    await merchantApi.GET("/stores/{storeId}/settlements/{settlementBatchId}/items", {
-      params: { path: { storeId, settlementBatchId: batch.settlementBatchId } },
-    }),
-  ), [storeId, batch.settlementBatchId]);
-  const { state, reload } = useResource<SettlementItemPage>(load);
+  const [page, setPage] = useState<SettlementItemPage | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestGeneration = useRef(0);
+
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    const generation = ++requestGeneration.current;
+    try {
+      const next = unwrap(
+        await merchantApi.GET("/stores/{storeId}/settlements/{settlementBatchId}/items", {
+          params: { path: { storeId, settlementBatchId: batch.settlementBatchId }, query: { cursor } },
+        }),
+      );
+      if (generation !== requestGeneration.current) return;
+      setPage((current) => (append && current ? { items: [...current.items, ...next.items], page: next.page } : next));
+    } catch (failure) {
+      if (generation === requestGeneration.current) setError(failure);
+    } finally {
+      if (generation === requestGeneration.current) setLoadingMore(false);
+    }
+  }, [storeId, batch.settlementBatchId]);
+
+  useEffect(() => { void load(); }, [load]);
+
   const [filing, setFiling] = useState<string | null>(null);
 
-  if (state.status === "loading") return <LoadingState label="주문별 명세를 불러오는 중" />;
-  if (state.status === "failed") return <ErrorState error={state.error} retry={reload} />;
-  if (state.value.items.length === 0) {
+  /**
+   * A background refresh after filing, not a `load()` call: `load()` clears
+   * `page` first and would flash the whole list back to its loading state,
+   * unmounting the just-filed confirmation this panel stays open to show.
+   */
+  async function refreshQuietly() {
+    try {
+      const next = unwrap(
+        await merchantApi.GET("/stores/{storeId}/settlements/{settlementBatchId}/items", {
+          params: { path: { storeId, settlementBatchId: batch.settlementBatchId }, query: {} },
+        }),
+      );
+      setPage(next);
+    } catch {
+      // Best-effort: a failed background refresh must not hide the confirmation above.
+    }
+  }
+
+  if (!page && !error) return <LoadingState label="주문별 명세를 불러오는 중" />;
+  if (error) return <ErrorState error={error} retry={() => void load()} />;
+  if (page?.items.length === 0) {
     return <EmptyState title="명세가 비어 있습니다" description="이 정산에는 포함된 주문이 없습니다." />;
   }
 
   return (
     <div className="settlement-items">
-      {state.value.items.map((item) => (
+      {page?.items.map((item) => (
         <div className="settlement-item" key={item.settlementItemId}>
           <div>
             <strong>{shortDateTime.format(new Date(item.completedAt))} 완료</strong>
@@ -128,10 +199,19 @@ function SettlementItems({ storeId, batch }: { storeId: string; batch: Settlemen
             <p className="form-footnote">확정 전 정산에는 이의를 제기할 수 없습니다.</p>
           )}
           {filing === item.settlementItemId ? (
-            <DisputeFilingPanel settlementItemId={item.settlementItemId} onFiled={() => setFiling(null)} />
+            <DisputeFilingPanel
+              settlementItemId={item.settlementItemId}
+              onFiled={() => void refreshQuietly()}
+              onClose={() => setFiling(null)}
+            />
           ) : null}
         </div>
       ))}
+      {page?.page.nextCursor ? (
+        <Button variant="secondary" block loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+          {loadingMore ? "더 불러오는 중" : "명세 더 보기"}
+        </Button>
+      ) : null}
     </div>
   );
 }

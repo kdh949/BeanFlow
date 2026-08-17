@@ -1,11 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { components, paths } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
+import { Button } from "../../design-system";
 import { compactId, shortDateTime, won } from "../../lib/format";
-import { useResource } from "../shared/useResource";
 import { useMerchantStores } from "./useMerchantStores";
 import { StoreSelector } from "./StoreSelector";
 
@@ -29,15 +29,39 @@ export function StoreDisputesPage() {
   const [filter, setFilter] = useState<DisputeState | "ALL">("ALL");
 
   const storeId = selected?.storeId ?? null;
-  const load = useCallback(async (): Promise<DisputePage> => {
-    if (!storeId) return { items: [], page: {} };
-    return unwrap(
-      await merchantApi.GET("/stores/{storeId}/disputes", {
-        params: { path: { storeId }, query: filter === "ALL" ? {} : { state: filter } },
-      }),
-    );
+  const [page, setPage] = useState<DisputePage | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // A store or filter change starts a new request before the previous one
+  // settles; this discards a stale response instead of letting it overwrite
+  // the answer for the filter the operator is now looking at.
+  const requestGeneration = useRef(0);
+
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (!storeId) {
+      setPage({ items: [], page: {} });
+      return;
+    }
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    const generation = ++requestGeneration.current;
+    try {
+      const next = unwrap(
+        await merchantApi.GET("/stores/{storeId}/disputes", {
+          params: { path: { storeId }, query: { ...(filter === "ALL" ? {} : { state: filter }), cursor } },
+        }),
+      );
+      if (generation !== requestGeneration.current) return;
+      setPage((current) => (append && current ? { items: [...current.items, ...next.items], page: next.page } : next));
+    } catch (failure) {
+      if (generation === requestGeneration.current) setError(failure);
+    } finally {
+      if (generation === requestGeneration.current) setLoadingMore(false);
+    }
   }, [storeId, filter]);
-  const { state, reload: reloadDisputes } = useResource<DisputePage>(load);
+
+  useEffect(() => { void load(); }, [load]);
 
   if (storesState.status === "loading") return <LoadingState label="매장 목록을 불러오는 중" />;
   if (storesState.status === "failed") {
@@ -74,18 +98,17 @@ export function StoreDisputesPage() {
             ))}
           </div>
 
-          {state.status === "loading" ? (
-            <LoadingState label="이의제기를 불러오는 중" />
-          ) : state.status === "failed" ? (
-            <ErrorState error={state.error} retry={reloadDisputes} />
-          ) : state.value.items.length === 0 ? (
+          {!page && !error ? <LoadingState label="이의제기를 불러오는 중" /> : null}
+          {error ? <ErrorState error={error} retry={() => void load()} /> : null}
+          {page?.items.length === 0 ? (
             <EmptyState
               title="접수한 이의제기가 없습니다"
               description="정산 명세에서 금액이 다른 주문을 찾아 이의를 제기할 수 있습니다."
             />
-          ) : (
+          ) : null}
+          {page?.items.length ? (
             <section className="dispute-list">
-              {state.value.items.map((dispute) => (
+              {page.items.map((dispute) => (
                 <article className="surface-card dispute-card" key={dispute.disputeId}>
                   <header>
                     <div>
@@ -105,7 +128,12 @@ export function StoreDisputesPage() {
                 </article>
               ))}
             </section>
-          )}
+          ) : null}
+          {page?.page.nextCursor ? (
+            <Button variant="secondary" block loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+              {loadingMore ? "더 불러오는 중" : "이의제기 더 보기"}
+            </Button>
+          ) : null}
         </>
       )}
     </div>

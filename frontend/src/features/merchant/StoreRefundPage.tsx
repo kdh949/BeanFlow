@@ -46,18 +46,30 @@ export function StoreRefundPage() {
   const [failure, setFailure] = useState<unknown>(null);
   const [staleNotice, setStaleNotice] = useState(false);
   const refundIntent = useRef(new SubmissionIntent());
+  const previewGeneration = useRef(0);
 
   const load = useCallback(() => requestPreview(storeId, orderReference, {}), [storeId, orderReference]);
   const { state, reload } = useResource<Preview>(load);
   const [preview, setPreview] = useState<Preview | null>(null);
   const current = preview ?? (state.status === "ready" ? state.value : null);
 
+  /**
+   * Quantity edits fire one preview request per keystroke with nothing to
+   * cancel the previous one, so an older response can land after a newer one.
+   * The generation guard keeps only the most recently started request's
+   * answer, so a slow response for a superseded selection never overwrites
+   * the amount and previewVersion the operator is about to submit.
+   */
   async function reprice(next: Selection) {
     setSelection(next);
     setFailure(null);
+    const generation = ++previewGeneration.current;
     try {
-      setPreview(await requestPreview(storeId, orderReference, next));
+      const result = await requestPreview(storeId, orderReference, next);
+      if (generation !== previewGeneration.current) return;
+      setPreview(result);
     } catch (error) {
+      if (generation !== previewGeneration.current) return;
       setFailure(error);
     }
   }
@@ -219,24 +231,59 @@ export function StoreRefundPage() {
   );
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled refund state: ${String(value)}`);
+}
+
 /**
- * A definitive success and an unresolved Provider outcome are different answers,
- * so the screen never renders "환불 완료" for a state the server has not confirmed.
+ * A definitive success, a definitive failure, a case that needs a human, and an
+ * unresolved Provider outcome are four different answers. Collapsing them into
+ * one "확인 중" message would tell an operator to wait forever on a refund that
+ * has already failed or needs manual follow-up, so every contract state gets
+ * its own heading and body. The `never` branch below fails the build if the
+ * contract ever adds a state this screen has not been taught to show.
  */
+function refundOutcomeCopy(result: RefundResult): { heading: string; body: string } {
+  switch (result.state) {
+    case "SUCCEEDED":
+      return {
+        heading: "현금 환불이 확인되었습니다",
+        body: `${won.format(result.cashRefundedKrw ?? result.cashRefundRequestedKrw)} 환불이 확정되었습니다.`,
+      };
+    case "FAILED":
+      return {
+        heading: "환불에 실패했습니다",
+        body: "환불을 처리하지 못했습니다. 문의 코드를 남기고 운영팀에 알려 주세요. 같은 요청을 다시 보내도 새 환불이 만들어지지 않습니다.",
+      };
+    case "MANUAL_REVIEW":
+      return {
+        heading: "운영팀 확인이 필요합니다",
+        body: "자동 처리로는 결과를 확정하지 못해 운영팀이 확인하고 있습니다. 같은 요청을 다시 보내지 않아도 됩니다.",
+      };
+    case "REQUESTED":
+    case "PROCESSING":
+    case "RETRY_SCHEDULED":
+    case "UNKNOWN":
+    case "RECONCILING":
+      return {
+        heading: "환불 결과를 확인하고 있습니다",
+        body: "아직 성공도 실패도 아닙니다. 같은 요청을 다시 보내도 새 환불이 만들어지지 않습니다.",
+      };
+    default:
+      return assertNever(result.state);
+  }
+}
+
 export function RefundOutcome({ result }: { result: RefundResult }) {
-  const settled = result.state === "SUCCEEDED";
+  const { heading, body } = refundOutcomeCopy(result);
   return (
     <section className="surface-card result-card">
       <div>
         <span className="eyebrow">REFUND {result.orderReference}</span>
         <StatusBadge state={result.state} />
       </div>
-      <h2>{settled ? "현금 환불이 확인되었습니다" : "환불 결과를 확인하고 있습니다"}</h2>
-      <p>
-        {settled
-          ? `${won.format(result.cashRefundedKrw ?? result.cashRefundRequestedKrw)} 환불이 확정되었습니다.`
-          : "아직 성공도 실패도 아닙니다. 같은 요청을 다시 보내도 새 환불이 만들어지지 않습니다."}
-      </p>
+      <h2>{heading}</h2>
+      <p>{body}</p>
       <dl className="detail-list">
         <div><dt>요청 현금</dt><dd className="bf-num">{won.format(result.cashRefundRequestedKrw)}</dd></div>
         <div><dt>포인트 복원</dt><dd>{result.pointsRestorationState}</dd></div>

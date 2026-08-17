@@ -22,9 +22,13 @@ const REASONS: Record<string, string> = {
 export function DisputeFilingPanel({
   settlementItemId,
   onFiled,
+  onClose,
 }: {
   settlementItemId: string;
+  /** Fired once, right after a successful submit, so the caller can refresh its own data. */
   onFiled: () => void;
+  /** The operator dismisses the confirmation explicitly; this panel never unmounts itself. */
+  onClose: () => void;
 }) {
   const [expectedAdjustmentKrw, setExpectedAdjustmentKrw] = useState(0);
   const [reason, setReason] = useState("");
@@ -64,9 +68,12 @@ export function DisputeFilingPanel({
 
   if (filed) {
     return (
-      <p className="form-footnote" role="status">
-        이의제기를 접수했습니다. 보류 금액 {won.format(filed.heldAmountKrw)}은 판정 전까지 정산에 반영되지 않습니다.
-      </p>
+      <div className="dispute-form-filed">
+        <p className="form-footnote" role="status">
+          이의제기를 접수했습니다. 보류 금액 {won.format(filed.heldAmountKrw)}은 판정 전까지 정산에 반영되지 않습니다.
+        </p>
+        <Button variant="ghost" type="button" onClick={onClose}>확인</Button>
+      </div>
     );
   }
 
