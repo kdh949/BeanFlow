@@ -83,6 +83,9 @@ function PointsSummary({ summary }: { summary: CustomerPointSummary }) {
             ))}
           </dl>
         )}
+        {summary.expiringHasMore ? (
+          <p className="inline-note" role="status">이후에 만료되는 포인트가 더 있어요. 포인트 내역에서 전체 적립·사용 이력을 확인하세요.</p>
+        ) : null}
       </section>
     </>
   );

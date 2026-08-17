@@ -68,6 +68,7 @@ internal class CustomerPointFacadeIntegrationTest
                 .andExpect(jsonPath("$.recoveryPendingKrw").value(0))
                 .andExpect(jsonPath("$.currency").value("KRW"))
                 .andExpect(jsonPath("$.expiring").isEmpty)
+                .andExpect(jsonPath("$.expiringHasMore").value(false))
                 .andExpect(jsonPath("$.accountId").doesNotExist())
                 .andExpect(jsonPath("$.pointAccountId").doesNotExist())
         }
@@ -87,6 +88,22 @@ internal class CustomerPointFacadeIntegrationTest
                 .andExpect(jsonPath("$.expiring.length()").value(2))
                 .andExpect(jsonPath("$.expiring[0].amountKrw").value(1_000))
                 .andExpect(jsonPath("$.expiring[1].amountKrw").value(500))
+                .andExpect(jsonPath("$.expiringHasMore").value(false))
+        }
+
+        @Test
+        fun `expiring lots beyond the public limit are reported as truncated instead of silently dropped`() {
+            val customerId = UUID.randomUUID()
+            val accountId = insertAccount(customerId, available = 2_100)
+            (1..21).forEach { day ->
+                insertLot(accountId, available = 100, expiresAt = Instant.parse("2027-01-01T00:00:00Z").plusSeconds(day * 86_400L))
+            }
+
+            mockMvc
+                .perform(get("/api/v1/me/points").with(customerJwt(customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.expiring.length()").value(20))
+                .andExpect(jsonPath("$.expiringHasMore").value(true))
         }
 
         @Test

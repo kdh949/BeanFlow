@@ -72,6 +72,23 @@ describe("customer points", () => {
     expect(screen.getByText("1,000P")).toBeInTheDocument();
   });
 
+  it("tells the customer when the expiring list was truncated instead of silently dropping later dates", async () => {
+    routeGet({
+      "/me/points": ok({
+        availablePointsKrw: 2_000,
+        recoveryPendingKrw: 0,
+        currency: "KRW",
+        expiring: [{ expiresAt: "2026-09-01T00:00:00Z", amountKrw: 100 }],
+        expiringHasMore: true,
+      }),
+      "/me/point-transactions": ok({ items: [], page: {} }),
+    });
+
+    renderPoints();
+
+    expect(await screen.findByText(/이후에 만료되는 포인트가 더 있어요/)).toBeInTheDocument();
+  });
+
   it("keeps a ledger failure visible instead of showing an empty ledger", async () => {
     routeGet({
       "/me/points": ok({ availablePointsKrw: 500, recoveryPendingKrw: 0, currency: "KRW", expiring: [] }),
