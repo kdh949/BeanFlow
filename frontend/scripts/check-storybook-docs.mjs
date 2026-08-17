@@ -17,7 +17,6 @@ const expectedDocs = new Set([
   "components-feedback-feedbackstate--docs",
   "pages-operations-dashboard--docs",
   "pages-operations-compensationlookup--docs",
-  "pages-operations-refundadjustment--docs",
   "pages-store-orderboard--docs",
   "pages-customer-checkout--docs",
   "pages-customer-help--docs",
@@ -43,14 +42,6 @@ const statefulDocs = {
     "pages-operations-compensationlookup--successful-lookup": "완료",
     "pages-operations-compensationlookup--recoverable-error": "서비스 연결을 확인하고 있습니다.",
     "pages-operations-compensationlookup--loading": "보상 상태를 조회하는 중",
-  },
-  "pages-operations-refundadjustment--docs": {
-    "pages-operations-refundadjustment--full-refund-form": "결제 번호",
-    "pages-operations-refundadjustment--partial-refund-form": "주문 상품 번호",
-    "pages-operations-refundadjustment--successful-refund": "현금 환불이 확인되었습니다",
-    "pages-operations-refundadjustment--unknown-reconciliation": "환불 결과를 확인 중입니다",
-    "pages-operations-refundadjustment--recoverable-error": "서비스 연결을 확인하고 있습니다.",
-    "pages-operations-refundadjustment--loading": "환불 요청 중",
   },
   "pages-store-orderboard--docs": {
     "pages-store-orderboard--active-orders": "A-142",
