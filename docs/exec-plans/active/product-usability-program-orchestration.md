@@ -13,8 +13,9 @@
 ## Purpose / Big Picture
 
 BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN` reconciliation, 부분 환불,
-포인트 원장, 정산 조정과 이의제기까지 갖춘 거래 코어를 가지고 있다. 그러나 **그 코어를 쓸 수 있는
-사람이 없다.** 계정도, 로그인도, 목록도, 사람이 읽을 수 있는 주문번호도 없다.
+포인트 원장, 정산 조정과 이의제기까지 갖춘 거래 코어를 가지고 있다. M0~M9를 거치며 고객·점주
+계정과 Session, 사람용 주문번호, 조회 Projection, 탐색과 고객·점주 frontend도 현재 소스에
+추가됐다. 이 문서는 그 완료 기록과 남은 운영·release gate를 함께 관리한다.
 
 이 프로그램은 거래 코어를 재작성하지 않고, 그 위에 다음 경계를 얹어 제품으로 만든다.
 
@@ -31,18 +32,21 @@ BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN`
 
 ## Current State
 
-- 거래 코어는 구현·검증됐다. 상세는 [README](../../../README.md)의 현재 상태 절을 따른다.
-- `SecurityConfiguration.kt`는 단일 FilterChain, `STATELESS`, `csrf disable`이며 외부 JWK로 검증한
-  JWT만 받는다. 토큰을 발급하는 주체가 저장소에 없다.
-- `identity_store_membership`은 있으나 계정·자격증명 테이블이 없다.
-- `ordering_order`에 `public_reference`, `pickup_business_date`, `pickup_sequence`와 매장명·픽업
-  시간 스냅샷이 없다.
-- 공개 API 43 path 중 목록 조회는 정산 Item과 포인트 거래뿐이다. "내 주문", "이 매장의 오늘 주문",
-  "실패 작업 목록"이 없다.
-- 프론트엔드는 `CustomerPages.tsx`, `ConsolePages.tsx`에 화면이 집중돼 있고 Access Token 입력 UI와
-  UUID 입력창을 사용한다.
+- M0~M9는 completed ExecPlan으로 남아 있다. 고객·점주 Session/CSRF, account, public order reference,
+  customer order projection, store board, discovery, customer P0 integration과 merchant financial workflow가
+  현재 source baseline에 있다. M10 operations work queue만 이 orchestration의 대기 slice다.
+- runtime OpenAPI는 150 path, target OpenAPI는 161 path다. runtime은 target의 의도적인 구현 부분집합이며
+  동일 path 수를 요구하지 않는다. 대응 검증은 `RuntimeOpenApiParityTest`가 소유한다.
+- 고객 frontend는 `/app` 아래 로그인·가입·탐색·매장/메뉴/픽업·장바구니·결제·주문·포인트·마이를,
+  점주 frontend는 `/store` 아래 로그인·최초 비밀번호 변경·매장 주문보드·부분 환불·정산·이의제기를
+  route로 가진다. 이 사실은 현재 source inventory이며 새로운 browser 실행 증거는 아니다.
+- 현재 core journey의 알려진 기능 공백은 customer coupon wallet query/selection이다. 이미 발급된 쿠폰의
+  actor-scoped read만 Goal Stage 05가 소유하며, Campaign 관리·발급·history와 wallet balance는 범위 밖이다.
+  주문 생성은 계속 coupon의 소유권·상태·만료·적용 조건·동시 소비를 최종 재검증한다.
+- 정식 여정, source evidence와 release 상태는 [Core User Journey Contract](../../product/core-user-journey.md)와
+  [Core Journey Release Gate](../../quality/core-journey-release-gate.md)에 분리해 기록한다.
 - 디자인 48화면의 요구와 계약 충돌은 [Design Contract Conflicts](../../product/design-contract-conflicts.md)에
-  정리됐고 화면별 우선순위는 [Design to Capability Map](../../product/design-to-capability-map.md)에 있다.
+  정리됐고 화면별 capability와 우선순위는 [Design to Capability Map](../../product/design-to-capability-map.md)에 있다.
 
 ## Definitions
 
@@ -75,7 +79,8 @@ BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN`
 - 검색을 위한 Elasticsearch 도입
 - Session을 위한 Redis 즉시 도입
 - 실제 정산 지급·가맹점 KYC
-- Wallet·AI·POS·배달 동시 착수
+- Wallet balance·AI·POS·배달 동시 착수. 단, 이미 발급된 쿠폰의 actor-scoped 조회·선택은 Goal Stage 05의
+  좁은 core-journey 예외이며 wallet balance나 Campaign 관리로 확장하지 않는다.
 
 ## Business Rules and Invariants
 
@@ -170,9 +175,8 @@ Stack A는 P0 Core 중간 통합점인 Plan 60까지만 다음 고정 순서로 
 00 → 10 → 20 → 30 → 40 → 50 → 60
 ```
 
-현재 checkpoint는 `00 → 10` 완료 뒤 Support 통합 기준으로 Plan 10을 재검증하는 resume 상태다.
-Plan 20은 다음 논리적 단계지만 Plan 10 V50/V51과 전체 검증이 끝나기 전까지
-`Implementation-Ready=false`다.
+아래 Stack A topology와 checkpoint 설명은 당시의 실행 기록이다. 현재 source에서는 M0~M9가 completed이고,
+후속 작업의 readiness는 이 절의 옛 queue가 아니라 각 active ExecPlan·dependency·release gate로 판단한다.
 
 Plan 00의 verified completion head를 provisional baseline으로 기록한다. Support 구현 commit
 `35d662d0deb5808c0df12b3ae822d9ec128aa28e`와 완료 commit
@@ -218,9 +222,10 @@ force-push는 하지 않는다. 상세 규칙은 ADR-111을 따른다.
 | 100 | 있음 | 운영 read permission vocabulary와 검증된 query index |
 
 migration writer lease는 한 번에 하나만 보유한다. Productization 10 최초 완료 → Support
-S70 → S80 → S90 → S100 → PR #63 remediation까지 V45~V49를 사용하고 release했다. 현재 순서는
-Productization 10 V50/V51 재검증 → 20 → 30 → 40 → 50 → 60 → 70 → 100이다. Productization 80과
-90은 migration을 쓰지 않으며 선행 dependency가 끝나면 lease 없이 실행할 수 있다.
+S70 → S80 → S90 → S100 → PR #63 remediation까지 V45~V49를 사용하고 release했다. 이어서
+Productization 10 V50/V51, 20→70 migration이 historical execution record로 완료됐다. Productization 80과
+90은 migration을 쓰지 않았고, 새 schema work는 현재 Flyway inventory·writer lease·실제 query evidence를
+다시 확인한 뒤에만 시작한다.
 Plan 90의 기존 dispute index가 측정 결과 부족해 schema 변경이 필요해지면 문서와 lease 순서를 먼저
 갱신한다.
 
@@ -301,6 +306,8 @@ git diff --cached --check
 
 - [Design to Capability Map](../../product/design-to-capability-map.md)
 - [Design Contract Conflicts](../../product/design-contract-conflicts.md)
+- [Core User Journey Contract](../../product/core-user-journey.md)
+- [Core Journey Release Gate](../../quality/core-journey-release-gate.md)
 - [Actors and Goals](../../product/actors-and-goals.md)
 - [Non-goals](../../product/non-goals.md)
 - [Authorization Matrix](../../security/authorization-matrix.md)
