@@ -50,7 +50,7 @@ Feature는 다음 조건을 충족해야 완료다.
 - [ ] `npm run check:design`, `npm run test:unit`, `npm run build-storybook`, `npm run test:storybook:docs`가 통과했다.
 - [ ] 여러 MSW 상태를 가진 Autodocs는 story iframe으로 격리되며 각 Docs Canvas가 자기 상태를 실제 browser에서 표시한다.
 - [ ] Storybook MCP `get-changed-stories`, `preview-stories`, `run-story-tests(a11y=true)`를 실제 실행했다.
-- [ ] a11y는 `error` gate이며 좁은 예외는 linked decision 없이는 추가하지 않았다.
+- [ ] canonical Storybook의 a11y 기본값은 `error`이며 CI에서 advisory로 실행한다. 알려진 위반은 후속 변경으로 추적하고, story별 `off` 예외는 linked decision 없이는 추가하지 않았다.
 - [ ] visual regression이 없다면 `Not configured`로 보고했고 coverage를 주장하지 않았다.
 
 ## Decisions and documentation

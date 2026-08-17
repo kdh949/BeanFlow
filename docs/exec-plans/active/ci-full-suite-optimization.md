@@ -1,4 +1,4 @@
-# CI 전체 테스트 게이트를 15분 안에 완료한다
+# CI 전체 테스트 게이트를 17분 안에 완료한다
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
@@ -14,7 +14,8 @@
 BeanFlow의 backend PR은 267개 test class와 1,328개 test method를 실행하며, 최근
 GitHub-hosted runner의 required CI가 약 26~28분 걸린다. 이 계획은 전체 backend test coverage를
 유지하면서 변경 경로 분리, JVM 당 PostGIS server 공유, 실행 시간 기반 shard 배정으로
-required `build` gate를 15분 안에 종료한다.
+required `build` gate를 17분 안에 종료한다. Storybook interaction은 required로 유지하고
+접근성 검사는 advisory로 분리해 알려진 위반을 후속 변경에서 처리할 수 있게 한다.
 
 ## Current State
 
@@ -62,8 +63,10 @@ required `build` gate를 15분 안에 종료한다.
 
 ## Architecture and Transaction Boundaries
 
-Workflow는 `preflight`, `frontend`, `backend-build`, `test`, aggregate `build`로 나눈다. aggregate
-`build`는 `always()`로 실행하고 scope별 allowed result matrix를 검증한다. test JVM은 하나의
+Workflow는 `preflight`, `frontend`, `backend-build`, `test`, aggregate `build`로 나눈다. `frontend`는
+interaction을 접근성 검사 없이 required로 실행한 뒤, 기본 `error` 접근성 검사를 advisory step으로
+다시 실행한다. aggregate `build`는 `always()`로 실행하고 scope별 allowed result matrix를 검증한다.
+test JVM은 하나의
 manual-lifecycle PostGIS server를 소유하고 Spring context와 direct test가 같은 runtime을 쓴다.
 production transaction과 runtime bean graph는 변경하지 않는다.
 
@@ -80,6 +83,8 @@ production transaction과 runtime bean graph는 변경하지 않는다.
 - classifier 입력 누락, unknown status/path, empty compare는 `full`.
 - required gate는 scope에 필요한 job의 `failure`, `cancelled`, `skipped`, empty result를 모두 실패로 처리한다.
 - scope에 필요 없는 job의 `skipped`만 성공으로 허용한다.
+- Storybook interaction failure는 required frontend failure다. a11y advisory step의 위반은 step outcome과
+  artifact로 남기되 `continue-on-error`로 required frontend result를 실패시키지 않는다.
 - timing XML이 없거나 malformed면 timing step을 실패시켜 증적 누락을 숨기지 않는다.
 - shared server/database create/drop failure는 test failure로 전파하고 다른 DB로 대체하지 않는다.
 
@@ -99,12 +104,13 @@ required `build` result다.
 3. shared PostGIS runtime을 추가하고 direct container test 46개를 이전한다.
 4. candidate timing median으로 LPT shard를 구현한다.
 5. 3개 shard부터 동일 SHA 3회를 측정하고 필요할 때 4, 5, 6개로 늘린다.
-6. 15분 목표와 모든 validation을 통과하면 plan을 completed로 이동한다.
+6. 17분 목표와 모든 validation을 통과하면 plan을 completed로 이동한다.
 
 ## Required Tests
 
 - classifier docs/frontend/backend/full, mixed, rename/copy, unknown/malformed
 - required gate의 scope별 success 및 failure/cancelled/skipped/empty matrix
+- required Storybook interaction과 advisory a11y failure의 분리
 - timing XML success, test failure, partial, empty, malformed
 - shared server identity, database isolation, create/drop
 - representative migration, Spring integration, concurrency
@@ -146,10 +152,8 @@ hosted full suite를 required evidence로 삼는다.
 - [x] (2026-08-17) `docs | frontend | backend | full` scope와 required `build` aggregate gate 구현
 - [x] (2026-08-17) Spring integration과 direct container test 46개를 JVM singleton PostGIS + class DB runtime으로 통합
 - [x] (2026-08-18) 세 hosted success run의 class median과 p95 fallback을 사용하는 deterministic LPT shard 구현
-- [ ] local/hosted validation과 15분 gate 완료
-  - Blocked (2026-08-18): 계획상 최대인 6-shard 첫 candidate run이 `15m15s`로 목표를 넘었고,
-    upstream frontend failure 때문에 required `build`도 실패했다. 이 run 하나로도 "동일 SHA 세 run 각각
-    성공하고 15분 이내" 조건을 충족할 수 없어 나머지 두 run과 Draft PR을 진행하지 않는다.
+- [x] (2026-08-18) 사용자가 hosted critical path 기준을 17분으로 개정하고 Storybook a11y를 advisory로 분리하기로 결정
+- [ ] local/hosted validation과 17분 gate 완료
 
 ## Surprises & Discoveries
 
@@ -200,15 +204,16 @@ hosted full suite를 required evidence로 삼는다.
 - LPT 6-shard SHA `eaa072f`의 run `32058946545`는 backend test 269개 class와 1,334개 test를 정확히
   한 번 실행했고 failure/error가 0이었다. shard wall time은 `10m18s`, `14m26s`, `13m24s`,
   `13m31s`, `14m31s`, `14m38s`, critical path는 `15m15s`, total runner-minute는 `85.02`다.
-  6-shard에서도 목표를 `15s` 넘었고 workflow 전체는 동일 upstream frontend 회귀로 실패했다. 최대 shard
-  수와 동일 SHA 세 run 각각 15분 이내 조건을 동시에 위반하므로 더 실행하지 않고 이 ExecPlan을 ACTIVE
-  상태로 유지한다. baseline median 대비 critical path는 `26m08s`에서 `15m15s`로 `41.6%` 줄었지만,
-  runner-minute는 `66.83`에서 `85.02`로 `27.2%` 늘었다.
+  당시 15분 목표는 `15s` 넘었고 workflow 전체는 동일 upstream frontend 회귀로 실패했다. baseline median
+  대비 critical path는 `26m08s`에서 `15m15s`로 `41.6%` 줄었지만, runner-minute는 `66.83`에서
+  `85.02`로 `27.2%` 늘었다. 2026-08-18 사용자 결정으로 수용 기준은 17분으로 개정됐으며, 최종
+  candidate SHA에서 세 run을 다시 측정한다.
 
 ## Decision Log
 
 - 2026-08-17: backend change는 전체 test를 유지하고 선택 실행을 도입하지 않는다.
-- 2026-08-17: 15분을 hard target으로 두고 runner는 측정 후 최대 6개까지 허용한다.
+- 2026-08-17: 15분을 hard target으로 두고 runner는 측정 후 최대 6개까지 허용한다. 이 시간 기준은
+  2026-08-18 결정으로 17분에 supersede됐다.
 - 2026-08-17: required context 이름 `build`를 유지하고 aggregate semantics로 바꾼 ruleset write를 피한다.
 - 2026-08-17: success artifact도 14일 보관하여 duration weight와 후속 회귀를 재현한다.
 - 2026-08-17: upstream frontend failure가 backend 증적 수집까지 막지 않도록 frontend를 독립 job으로
@@ -217,17 +222,19 @@ hosted full suite를 required evidence로 삼는다.
   context cache key와 after-class cleanup listener를 사용한다. production bean graph에는 관여하지 않는다.
 - 2026-08-18: 계획상 최대인 6-shard에서 첫 candidate run이 15분을 넘었으므로 테스트 생략이나 추가 runner를
   도입하지 않는다. 동일 SHA 세 run 각각 15분 이내가 이미 불가능하고 upstream frontend gate도 실패하므로
-  추가 hosted run과 Draft PR 생성을 중단하고 실제 증거와 함께 ACTIVE/blocked로 남긴다.
+  추가 hosted run과 Draft PR 생성을 중단하고 실제 증거와 함께 ACTIVE/blocked로 남겼다. 이후 사용자가
+  17분 기준과 a11y advisory 분리를 승인해 이 차단 결정은 supersede됐다.
+- 2026-08-18: 동일 candidate SHA 세 run 각각 17분 이내를 완료 기준으로 사용한다. Storybook interaction은
+  required로 유지하고 a11y는 기본 `error` 검사를 advisory step에서 실행해 위반 신호를 보존하되 required
+  `build`를 막지 않는다. 기존 색상 대비 수정은 후속 PR 범위다.
 
 ## Outcomes & Retrospective
 
 전체 테스트 의미와 269개 class coverage를 유지하면서 baseline median `26m08s`를 6-shard candidate
-`15m15s`까지 줄였다. 그러나 hard target보다 `15s` 느리고 runner 비용은 `27.2%` 증가했다. 더 큰 runner,
-추가 shard, 테스트 선택 실행은 이 계획의 범위 밖이며 upstream frontend 접근성 failure도 이 변경에서 수정할 수
-없다. 따라서 완료를 주장하거나 `completed/`로 이동하지 않고 Draft PR도 만들지 않는다. 재개 조건은
-`origin/main`의 frontend gate 복구와, 같은 제약 안에서 최소 `15s` 이상의 critical path 여유를 만드는 후속
-최적화 결정이다.
+`15m15s`까지 줄였다. 개정된 17분 기준의 동일 candidate SHA 세 run과 advisory a11y를 포함한 full workflow
+성공 증거를 수집한 뒤 최종 결과를 작성한다.
 
 ## Revision Notes
 
 - 2026-08-17: 최신 main 조사와 사용자가 확정한 coverage, 15분, 최대 6 runner, Draft PR 결정을 반영해 초안 작성.
+- 2026-08-18: 사용자 승인에 따라 시간 기준을 17분으로 개정하고 Storybook a11y를 advisory로 분리하는 완료 조건을 반영.
