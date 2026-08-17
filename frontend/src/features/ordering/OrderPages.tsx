@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
@@ -43,8 +43,14 @@ export function CustomerOrdersPage() {
   const [page, setPage] = useState<CustomerOrderPage | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A filter change starts a new request without waiting for an older one still
+  // in flight. Only the response whose generation is still current is allowed
+  // to reach state, so a slow ACTIVE response cannot land after a faster PAST
+  // response and overwrite the tab the customer is now looking at.
+  const generation = useRef(0);
 
   const load = useCallback(async (cursor?: string, append = false) => {
+    const requestGeneration = ++generation.current;
     if (append) setLoadingMore(true);
     else setPage(null);
     setError(null);
@@ -52,14 +58,16 @@ export function CustomerOrdersPage() {
       const result = await customerApi.GET("/me/orders", {
         params: { query: { status, from, to, cursor, limit: 20 } },
       });
+      if (generation.current !== requestGeneration) return;
       const next = unwrap(result);
       setPage((current) => append && current
         ? { items: [...current.items, ...next.items], page: next.page }
         : next);
     } catch (failure) {
+      if (generation.current !== requestGeneration) return;
       setError(failure);
     } finally {
-      setLoadingMore(false);
+      if (generation.current === requestGeneration) setLoadingMore(false);
     }
   }, [from, status, to]);
 

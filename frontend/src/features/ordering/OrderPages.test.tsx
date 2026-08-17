@@ -88,6 +88,34 @@ describe("customer order list", () => {
       );
     });
   });
+
+  it("discards a slower ACTIVE response that resolves after the customer has switched to PAST", async () => {
+    type Resolver = (value: unknown) => void;
+    let resolveActive: Resolver = () => {};
+    let resolvePast: Resolver = () => {};
+    vi.spyOn(customerApi, "GET").mockImplementation((_path: string, options?: { params?: { query?: { status?: string } } }) => {
+      const status = options?.params?.query?.status;
+      if (status === "PAST") return new Promise((resolve) => { resolvePast = resolve as Resolver; });
+      return new Promise((resolve) => { resolveActive = resolve as Resolver; });
+    });
+    const user = userEvent.setup();
+
+    renderAt("/app/orders");
+    await screen.findByRole("heading", { name: "주문" });
+    await user.click(screen.getByRole("tab", { name: "지난 주문" }));
+
+    // The PAST tab the customer is now looking at answers first.
+    resolvePast(response({ items: [{ ...summary, storeName: "패스트 매장" }], page: {} }));
+    expect(await screen.findByText("패스트 매장")).toBeInTheDocument();
+
+    // The stale ACTIVE request from before the tab switch answers late and
+    // must not overwrite the PAST tab that is now on screen.
+    resolveActive(response({ items: [{ ...summary, storeName: "액티브 매장" }], page: {} }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("액티브 매장")).not.toBeInTheDocument();
+    expect(screen.getByText("패스트 매장")).toBeInTheDocument();
+  });
 });
 
 describe("customer order detail", () => {
