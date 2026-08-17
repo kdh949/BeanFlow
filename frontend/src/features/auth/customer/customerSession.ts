@@ -98,20 +98,25 @@ export const customerSession = {
   },
 
   /**
-   * Clears customer credential state even when the server call fails: a browser
-   * that already showed "logged out" must never keep an active client cart or an
-   * unresolved submit intent from the previous customer.
+   * Clears local-only customer state (cart, idempotency keys, CSRF token) even
+   * when the server call fails, but only publishes "unauthenticated" once the
+   * server has confirmed the Session cookie is gone (204, or 401 meaning there
+   * was nothing to delete). Customer auth is an HttpOnly Session Cookie the
+   * browser cannot clear itself: a network error, a 503, or a rejected CSRF
+   * token (403) means the server-side session may still be live, so the caller
+   * must see the failure and be able to retry rather than have the screen show
+   * "logged out" while the cookie is still valid.
    */
   async logOut(): Promise<void> {
     try {
       const result = await customerApi.DELETE("/auth/customer/sessions/current", {
         params: { header: await customerCsrfHeader() },
       });
-      if (!result.response.ok) unwrap(result);
+      if (!result.response.ok && result.response.status !== 401) unwrap(result);
     } finally {
       clearCustomerBrowserState();
-      publish({ status: "unauthenticated" });
     }
+    publish({ status: "unauthenticated" });
   },
 
   /** Test seam only. */
