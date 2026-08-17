@@ -23,6 +23,11 @@ export type MerchantSessionState =
 const listeners = new Set<() => void>();
 let state: MerchantSessionState = { status: "loading" };
 let inFlight: Promise<MerchantSessionState> | null = null;
+/**
+ * Bumped by every login/logout so a `refresh()` that was already in flight
+ * cannot publish a stale answer over a newer, explicit session change.
+ */
+let sessionGeneration = 0;
 
 function publish(next: MerchantSessionState) {
   state = next;
@@ -49,13 +54,16 @@ function classify(failure: unknown): MerchantSessionState {
 }
 
 /**
- * Removes only merchant-owned browser state. Customer Session cookies and
- * operator OIDC state belong to other actors and stay untouched.
+ * Removes only merchant-owned browser state. Customer Session cookies, the
+ * customer payment flow's `beanflow.idempotency.*` submit keys, and operator
+ * OIDC state belong to other actors and stay untouched: the merchant console
+ * never writes that prefix itself, so clearing it here could drop another
+ * actor's unresolved submit intent in the same browser tab.
  */
 export function clearMerchantBrowserState() {
-  const prefixes = ["beanflow.merchant.", "beanflow.idempotency."];
+  const prefix = "beanflow.merchant.";
   const removable = Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.key(index))
-    .filter((key): key is string => key !== null && prefixes.some((prefix) => key.startsWith(prefix)));
+    .filter((key): key is string => key !== null && key.startsWith(prefix));
   removable.forEach((key) => sessionStorage.removeItem(key));
   forgetMerchantCsrfToken();
 }
@@ -70,14 +78,21 @@ export const merchantSession = {
     };
   },
 
-  /** Resolves the actor from the server. Concurrent callers share one request. */
+  /**
+   * Resolves the actor from the server. Concurrent callers share one request.
+   * A response that arrives after a login, logout or password change moved the
+   * session to a newer generation is discarded instead of publishing a stale
+   * answer over it.
+   */
   async refresh(): Promise<MerchantSessionState> {
     if (inFlight) return inFlight;
+    const generation = sessionGeneration;
     inFlight = (async () => {
       try {
-        publish(resolved(unwrap(await merchantApi.GET("/merchant/me"))));
+        const next = resolved(unwrap(await merchantApi.GET("/merchant/me")));
+        if (generation === sessionGeneration) publish(next);
       } catch (failure) {
-        publish(classify(failure));
+        if (generation === sessionGeneration) publish(classify(failure));
       } finally {
         inFlight = null;
       }
@@ -87,6 +102,7 @@ export const merchantSession = {
   },
 
   async logIn(input: { loginId: string; password: string }): Promise<MerchantActor> {
+    sessionGeneration += 1;
     const result = await merchantApi.POST("/auth/merchant/sessions", {
       params: { header: await merchantCsrfHeader() },
       body: { loginId: input.loginId, password: input.password },
@@ -106,31 +122,33 @@ export const merchantSession = {
       body: { currentPassword: input.currentPassword, newPassword: input.newPassword },
     });
     if (!result.response.ok) unwrap(result);
+    sessionGeneration += 1;
     forgetMerchantCsrfToken();
     publish({ status: "loading" });
     return this.refresh();
   },
 
   /**
-   * Clears merchant credential state even when the server call fails: a console
-   * that already showed "logged out" must never keep an unresolved submit intent
-   * from the previous operator.
+   * Clears merchant credential state only once the server confirms the Session
+   * cookie is gone. The cookie is HttpOnly, so the browser cannot clear it
+   * itself: publishing "unauthenticated" ahead of that confirmation would show
+   * a logged-out console while the server session, and the actor's access to
+   * it, is still live.
    */
   async logOut(): Promise<void> {
-    try {
-      const result = await merchantApi.DELETE("/auth/merchant/sessions/current", {
-        params: { header: await merchantCsrfHeader() },
-      });
-      if (!result.response.ok) unwrap(result);
-    } finally {
-      clearMerchantBrowserState();
-      publish({ status: "unauthenticated" });
-    }
+    sessionGeneration += 1;
+    const result = await merchantApi.DELETE("/auth/merchant/sessions/current", {
+      params: { header: await merchantCsrfHeader() },
+    });
+    if (!result.response.ok) unwrap(result);
+    clearMerchantBrowserState();
+    publish({ status: "unauthenticated" });
   },
 
   /** Test seam only. */
   reset() {
     inFlight = null;
+    sessionGeneration += 1;
     publish({ status: "loading" });
   },
 };

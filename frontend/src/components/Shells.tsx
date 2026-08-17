@@ -64,6 +64,16 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
   // 정산·이의제기는 ACTIVE OWNER만 쓸 수 있다. 이 gate는 표시 편의일 뿐이고
   // 모든 endpoint가 요청 시점의 membership을 다시 검증한다.
   const ownsAnyStore = useOwnerMembership(kind === "store");
+  const [storeLogoutFailed, setStoreLogoutFailed] = useState(false);
+
+  async function logOutOfStore() {
+    setStoreLogoutFailed(false);
+    try {
+      await merchantSession.logOut();
+    } catch {
+      setStoreLogoutFailed(true);
+    }
+  }
   const storeItems = [
     { to: "/store", label: "주문 보드", icon: PackageCheck, end: true },
     ...(ownsAnyStore
@@ -97,9 +107,14 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
           <Link to="/app">
             <Coffee size={18} /> 고객 앱
           </Link>
-          <button type="button" onClick={kind === "store" ? () => void merchantSession.logOut() : authToken.clear}>
+          <button type="button" onClick={kind === "store" ? () => void logOutOfStore() : authToken.clear}>
             <LogOut size={18} /> 로그아웃
           </button>
+          {kind === "store" && storeLogoutFailed ? (
+            <p className="form-error" role="alert">
+              로그아웃에 실패했습니다. 세션이 남아 있을 수 있으니 다시 시도해 주세요.
+            </p>
+          ) : null}
         </div>
       </aside>
       <section className="console-main">
