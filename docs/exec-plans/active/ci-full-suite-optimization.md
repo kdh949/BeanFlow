@@ -187,6 +187,9 @@ hosted full suite를 required evidence로 삼는다.
   실패해 test 시작 전에 종료됐다. 공식 status가 Actions/API major outage와 archive download 약 50%
   오류율을 공지한 infrastructure failure라 측정 표본에서 제외하고 남은 job은 취소했다. Actions/API가
   operational이고 codeload가 HTTP 200으로 회복된 뒤 위 세 run을 새로 순차 실행했다.
+- LPT 4-shard SHA `2bc6ad3`의 run `32055006148`은 backend test 269개 class를 정확히 한 번 실행했고
+  failure/error가 0이었다. shard wall time은 `15m20s`, `17m43s`, `20m01s`, `18m42s`, critical path는
+  `20m35s`, total runner-minute는 `75.68`이다. 목표를 넘겨 계획대로 5-shard로 증가한다.
 
 ## Decision Log
 
