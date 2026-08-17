@@ -105,16 +105,31 @@ export function CustomerSignupPage() {
   const [displayName, setDisplayName] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The account is already committed once register() resolves. A later logIn()
+  // failure (network hiccup, auth dependency outage) must never be shown as a
+  // signup failure: resubmitting would then hit LOGIN_ID_UNAVAILABLE and leave
+  // the customer unsure whether an account exists at all.
+  const [registered, setRegistered] = useState(false);
 
   if (session.status === "authenticated") return <Navigate replace to={returnPath} />;
+
+  const normalizedLoginId = loginId.trim().toLowerCase();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setFailure(null);
-    const normalizedLoginId = loginId.trim().toLowerCase();
+    if (!registered) {
+      try {
+        await customerSession.register({ loginId: normalizedLoginId, password, displayName: displayName.trim() });
+        setRegistered(true);
+      } catch (error) {
+        setFailure(error);
+        setSubmitting(false);
+        return;
+      }
+    }
     try {
-      await customerSession.register({ loginId: normalizedLoginId, password, displayName: displayName.trim() });
       await customerSession.logIn({ loginId: normalizedLoginId, password });
       navigate(returnPath, { replace: true });
     } catch (error) {
@@ -125,12 +140,17 @@ export function CustomerSignupPage() {
   }
 
   const code = codeOf(failure);
-  const duplicateLoginId = code === "LOGIN_ID_UNAVAILABLE";
+  const duplicateLoginId = !registered && code === "LOGIN_ID_UNAVAILABLE";
   const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="customer-page auth-page">
       <PageTitle eyebrow="SIGN UP" title="회원가입" description="아이디와 비밀번호만으로 가입하고 바로 주문할 수 있어요." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+        {registered ? (
+          <p className="inline-note" role="status">
+            회원가입은 완료됐어요. 아이디는 <strong>{normalizedLoginId}</strong>입니다.
+          </p>
+        ) : null}
         <label htmlFor="customer-signup-id">아이디</label>
         <input
           id="customer-signup-id"
@@ -140,6 +160,7 @@ export function CustomerSignupPage() {
           autoCapitalize="none"
           spellCheck={false}
           required
+          readOnly={registered}
           aria-invalid={duplicateLoginId}
           aria-describedby="customer-signup-id-hint"
           onChange={(event) => {
@@ -155,6 +176,7 @@ export function CustomerSignupPage() {
           value={displayName}
           autoComplete="nickname"
           required
+          readOnly={registered}
           onChange={(event) => setDisplayName(event.target.value)}
         />
         <label htmlFor="customer-signup-password">비밀번호</label>
@@ -172,9 +194,11 @@ export function CustomerSignupPage() {
         <small id="customer-signup-password-hint">{PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.</small>
         {failure ? (
           <p className="form-error" id="customer-signup-error" role="alert">
-            {duplicateLoginId
-              ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요."
-              : messageFor(failure, "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.")}
+            {registered
+              ? "가입은 완료됐지만 로그인하지 못했습니다. 비밀번호를 확인한 뒤 다시 시도해 주세요."
+              : duplicateLoginId
+                ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요."
+                : messageFor(failure, "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.")}
           </p>
         ) : null}
         <Button
@@ -182,9 +206,9 @@ export function CustomerSignupPage() {
           block
           type="submit"
           loading={submitting}
-          disabled={!loginId.trim() || !displayName.trim() || password.length < PASSWORD_MIN_LENGTH}
+          disabled={registered ? password.length < PASSWORD_MIN_LENGTH : (!loginId.trim() || !displayName.trim() || password.length < PASSWORD_MIN_LENGTH)}
         >
-          {submitting ? "가입 중" : "가입하고 시작하기"}
+          {submitting ? (registered ? "로그인 중" : "가입 중") : (registered ? "다시 로그인" : "가입하고 시작하기")}
         </Button>
       </form>
       <p className="auth-switch">

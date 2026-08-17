@@ -1,18 +1,17 @@
-import { LocateFixed, Search } from "lucide-react";
-import { type FormEvent, useCallback, useState } from "react";
+import { LocateFixed, RefreshCw, Search } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
-import { useResource } from "../shared/useResource";
 import { StoreCard } from "./StoreCards";
 import { coordinatesOf, useBrowserLocation } from "./useBrowserLocation";
 import { Button } from "../../design-system";
 
-type StoreSearchItem = components["schemas"]["StoreSearchItem"];
-type NearbyStore = components["schemas"]["NearbyStore"];
+type StoreSearchPage = components["schemas"]["StoreSearchPage"];
+type NearbyStorePage = components["schemas"]["NearbyStorePage"];
 
 const MIN_QUERY_LENGTH = 2;
 
@@ -71,67 +70,110 @@ export function StoreSearchPage() {
 }
 
 function SearchResults({ query, coordinates }: { query: string; coordinates: { latitude: number; longitude: number } | null }) {
-  const load = useCallback(
-    async () =>
-      unwrap(
+  const [page, setPage] = useState<StoreSearchPage | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    try {
+      const next = unwrap(
         await customerApi.GET("/stores/search", {
           params: {
             query: {
               query,
               limit: 20,
+              cursor,
               ...(coordinates ? { ...coordinates, sort: "distance" as const } : {}),
             },
           },
         }),
-      ).items,
-    [coordinates, query],
-  );
-  const { state, reload } = useResource<StoreSearchItem[]>(load);
+      );
+      setPage((current) => (append && current ? { ...next, items: [...current.items, ...next.items] } : next));
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [coordinates, query]);
 
-  if (state.status === "loading") return <LoadingState label="매장을 찾는 중" />;
-  if (state.status === "failed") return <ErrorState error={state.error} retry={reload} />;
-  if (state.value.length === 0) {
+  useEffect(() => { void load(); }, [load]);
+
+  if (!page && !error) return <LoadingState label="매장을 찾는 중" />;
+  if (!page) return <ErrorState error={error} retry={() => void load()} />;
+  if (page.items.length === 0) {
     return <EmptyState title={`'${query}' 검색 결과가 없어요`} description="다른 매장, 브랜드, 지역 또는 메뉴 이름으로 찾아보세요." />;
   }
   return (
-    <section className="store-result-list" aria-label="검색 결과">
-      {state.value.map((store) => (
-        <StoreCard
-          key={store.storeId}
-          store={{
-            storeId: store.storeId,
-            name: store.name,
-            open: store.open,
-            pickupAvailable: store.pickupAvailable,
-            distanceMeters: store.distanceMeters,
-            caption: store.matchedMenus.length ? store.matchedMenus.map((menu) => menu.name).join(" · ") : store.brandName ?? store.regionName,
-          }}
-        />
-      ))}
-    </section>
+    <>
+      <section className="store-result-list" aria-label="검색 결과">
+        {page.items.map((store) => (
+          <StoreCard
+            key={store.storeId}
+            store={{
+              storeId: store.storeId,
+              name: store.name,
+              open: store.open,
+              pickupAvailable: store.pickupAvailable,
+              distanceMeters: store.distanceMeters,
+              caption: store.matchedMenus.length ? store.matchedMenus.map((menu) => menu.name).join(" · ") : store.brandName ?? store.regionName,
+            }}
+          />
+        ))}
+      </section>
+      {error ? <ErrorState error={error} retry={() => void load(page.page.nextCursor, true)} /> : null}
+      {page.page.nextCursor ? (
+        <Button block variant="secondary" type="button" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+          <RefreshCw size={16} className={loadingMore ? "spin" : undefined} /> {loadingMore ? "더 불러오는 중" : "매장 더 보기"}
+        </Button>
+      ) : null}
+    </>
   );
 }
 
 function NearbyResults({ coordinates }: { coordinates: { latitude: number; longitude: number } }) {
-  const load = useCallback(
-    async () =>
-      unwrap(
-        await customerApi.GET("/stores/nearby", {
-          params: { query: { ...coordinates, radiusMeters: 10_000, limit: 20 } },
-        }),
-      ).items,
-    [coordinates],
-  );
-  const { state, reload } = useResource<NearbyStore[]>(load);
+  const [page, setPage] = useState<NearbyStorePage | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  if (state.status === "loading") return <LoadingState label="가까운 매장을 찾는 중" />;
-  if (state.status === "failed") return <ErrorState error={state.error} retry={reload} />;
-  if (state.value.length === 0) {
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    try {
+      const next = unwrap(
+        await customerApi.GET("/stores/nearby", {
+          params: { query: { ...coordinates, radiusMeters: 10_000, limit: 20, cursor } },
+        }),
+      );
+      setPage((current) => (append && current ? { ...next, items: [...current.items, ...next.items] } : next));
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [coordinates]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (!page && !error) return <LoadingState label="가까운 매장을 찾는 중" />;
+  if (!page) return <ErrorState error={error} retry={() => void load()} />;
+  if (page.items.length === 0) {
     return <EmptyState title="가까운 매장이 없어요" description="반경 10km 안에 픽업 가능한 매장이 없습니다." />;
   }
   return (
-    <section className="store-result-list" aria-label="가까운 매장">
-      {state.value.map((store) => <StoreCard key={store.storeId} store={store} />)}
-    </section>
+    <>
+      <section className="store-result-list" aria-label="가까운 매장">
+        {page.items.map((store) => <StoreCard key={store.storeId} store={store} />)}
+      </section>
+      {error ? <ErrorState error={error} retry={() => void load(page.page.nextCursor, true)} /> : null}
+      {page.page.nextCursor ? (
+        <Button block variant="secondary" type="button" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>
+          <RefreshCw size={16} className={loadingMore ? "spin" : undefined} /> {loadingMore ? "더 불러오는 중" : "매장 더 보기"}
+        </Button>
+      ) : null}
+    </>
   );
 }

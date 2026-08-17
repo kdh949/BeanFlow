@@ -5233,7 +5233,10 @@ export interface components {
             availablePointsKrw: components["schemas"]["MoneyKrw"];
             recoveryPendingKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
+            /** @description 만료 시점(expiresAt)별로 묶은 만료 예정 포인트로, 만료가 가장 이른 시점부터 최대 20개까지 반환합니다. */
             expiring: components["schemas"]["ExpiringPointAmount"][];
+            /** @description expiring이 20개 시점에서 잘렸는지 여부입니다. true면 이후 시점의 만료 예정 포인트가 이 응답에 포함되지 않았습니다. */
+            expiringHasMore: boolean;
         };
         /**
          * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.

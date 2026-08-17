@@ -126,6 +126,33 @@ describe("customer login and signup states", () => {
     expect(screen.getByLabelText("아이디")).toHaveAttribute("aria-invalid", "true");
   });
 
+  it("keeps the newly created account visible when the automatic login after signup fails", async () => {
+    const post = vi.spyOn(customerApi, "POST")
+      .mockResolvedValueOnce(ok({ loginId: "customer01" }) as never)
+      .mockResolvedValueOnce(failure(503, "DEPENDENCY_UNAVAILABLE", "인증 의존성을 사용할 수 없습니다.") as never);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
+
+    renderApp("/app/signup");
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("아이디"), "customer01");
+    await user.type(screen.getByLabelText("표시 이름"), "도현");
+    await user.type(screen.getByLabelText("비밀번호"), "correct-horse-battery");
+    await user.click(screen.getByRole("button", { name: "가입하고 시작하기" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("가입은 완료됐지만 로그인하지 못했습니다.");
+    expect(screen.getByText(/회원가입은 완료됐어요/)).toBeInTheDocument();
+    expect(screen.getByLabelText("아이디")).toHaveValue("customer01");
+    expect(screen.getByLabelText("아이디")).toHaveAttribute("readonly");
+
+    post.mockResolvedValueOnce(ok(actor) as never);
+    await user.click(screen.getByRole("button", { name: "다시 로그인" }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
+    // The retry must log in, never register again with the already-taken ID.
+    expect(post.mock.calls[2]?.[0]).toBe("/auth/customer/sessions");
+    expect(customerSession.get().status).toBe("authenticated");
+  });
+
   it("sends the CSRF header on the session command", async () => {
     const post = vi.spyOn(customerApi, "POST").mockResolvedValue(ok(actor) as never);
     vi.spyOn(customerApi, "GET").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
@@ -173,6 +200,32 @@ describe("customer logout", () => {
     await customerSession.logOut();
 
     renderApp("/app/orders");
+    expect(await screen.findByRole("heading", { name: "로그인" })).toBeInTheDocument();
+  });
+
+  it("keeps the browser authenticated when the server logout fails, so the customer can retry", async () => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    const remove = vi.spyOn(customerApi, "DELETE")
+      .mockResolvedValue(failure(503, "DEPENDENCY_UNAVAILABLE", "인증 의존성을 사용할 수 없습니다.") as never);
+
+    renderApp("/app/me");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "로그아웃" }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalled());
+    expect(await screen.findByText("요청을 완료하지 못했습니다")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "내 정보" })).toBeInTheDocument();
+    expect(customerSession.get().status).toBe("authenticated");
+  });
+
+  it("treats a 401 on session delete as already logged out server-side", async () => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    vi.spyOn(customerApi, "DELETE").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
+
+    renderApp("/app/me");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "로그아웃" }));
+
     expect(await screen.findByRole("heading", { name: "로그인" })).toBeInTheDocument();
   });
 });

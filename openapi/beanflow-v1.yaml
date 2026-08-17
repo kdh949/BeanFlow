@@ -7393,14 +7393,19 @@ components:
     CustomerPointSummary:
       type: object
       additionalProperties: false
-      required: [availablePointsKrw, recoveryPendingKrw, currency, expiring]
+      required: [availablePointsKrw, recoveryPendingKrw, currency, expiring, expiringHasMore]
       properties:
         availablePointsKrw: { $ref: "#/components/schemas/MoneyKrw" }
         recoveryPendingKrw: { $ref: "#/components/schemas/MoneyKrw" }
         currency: { $ref: "#/components/schemas/Currency" }
         expiring:
           type: array
+          maxItems: 20
+          description: 만료 시점(expiresAt)별로 묶은 만료 예정 포인트로, 만료가 가장 이른 시점부터 최대 20개까지 반환합니다.
           items: { $ref: "#/components/schemas/ExpiringPointAmount" }
+        expiringHasMore:
+          type: boolean
+          description: expiring이 20개 시점에서 잘렸는지 여부입니다. true면 이후 시점의 만료 예정 포인트가 이 응답에 포함되지 않았습니다.
     ExpiringPointAmount:
       type: object
       additionalProperties: false

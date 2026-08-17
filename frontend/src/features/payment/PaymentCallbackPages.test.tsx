@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,6 +152,35 @@ describe("payment confirmation recovery", () => {
     expect(post).toHaveBeenCalledTimes(1);
     expect(get.mock.calls.length).toBeGreaterThan(1);
     expect(get.mock.calls.every((call) => call[0] === "/payments/{paymentId}")).toBe(true);
+  });
+
+  it("keeps the confirmation retryable when the CSRF token cannot be prepared before it is sent", async () => {
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
+    vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
+      if (path !== "/auth/customer/csrf") throw new Error(`unexpected GET ${path}`);
+      return {
+        error: { code: "DEPENDENCY_UNAVAILABLE", message: "인증 의존성을 사용할 수 없습니다." },
+        response: new Response(null, { status: 503 }),
+      } as never;
+    });
+    const post = vi.spyOn(customerApi, "POST").mockResolvedValue(response(payment("APPROVED")) as never);
+
+    renderAt("/app/payments/payment-id/success?paymentKey=provider-key&orderId=provider-order&amount=4500");
+
+    expect(await screen.findByText("인증 의존성을 사용할 수 없습니다.")).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+
+    // The CSRF cookie becomes available again (e.g. the dependency recovered);
+    // retrying must still send the confirmation, not just re-read a status
+    // that was never asked to change.
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+
+    await screen.findByText("결제가 완료됐어요");
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
+      params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } },
+    });
   });
 
   it("keeps one polling loop when the browser reports coming back online", async () => {

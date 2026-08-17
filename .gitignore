@@ -4,6 +4,8 @@ HELP.md
 .ci-artifacts/
 .venv/
 build/
+node_modules/
+.vite/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

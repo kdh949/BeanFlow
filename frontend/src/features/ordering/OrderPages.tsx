@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
@@ -43,8 +43,14 @@ export function CustomerOrdersPage() {
   const [page, setPage] = useState<CustomerOrderPage | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A filter change starts a new request without waiting for an older one still
+  // in flight. Only the response whose generation is still current is allowed
+  // to reach state, so a slow ACTIVE response cannot land after a faster PAST
+  // response and overwrite the tab the customer is now looking at.
+  const generation = useRef(0);
 
   const load = useCallback(async (cursor?: string, append = false) => {
+    const requestGeneration = ++generation.current;
     if (append) setLoadingMore(true);
     else setPage(null);
     setError(null);
@@ -52,14 +58,16 @@ export function CustomerOrdersPage() {
       const result = await customerApi.GET("/me/orders", {
         params: { query: { status, from, to, cursor, limit: 20 } },
       });
+      if (generation.current !== requestGeneration) return;
       const next = unwrap(result);
       setPage((current) => append && current
         ? { items: [...current.items, ...next.items], page: next.page }
         : next);
     } catch (failure) {
+      if (generation.current !== requestGeneration) return;
       setError(failure);
     } finally {
-      setLoadingMore(false);
+      if (generation.current === requestGeneration) setLoadingMore(false);
     }
   }, [from, status, to]);
 
@@ -147,36 +155,61 @@ export function pickupNumberNote(status: CustomerOrderDetail["status"]): string 
   return null;
 }
 
+function orderRefundInProgress(order: Pick<CustomerOrderDetail, "paymentRecovery">): boolean {
+  return order.paymentRecovery ? ["REQUESTED", "PROCESSING"].includes(order.paymentRecovery.state) : false;
+}
+
 export function CustomerOrderDetailPage() {
   const { orderReference = "" } = useParams();
   const [order, setOrder] = useState<CustomerOrderDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
-  const load = useCallback(async () => {
+  // A different order reference is a different resource: its stale order must
+  // not stay on screen (with the previous order's cancel/reorder actions)
+  // while the new one is still loading.
+  useEffect(() => {
+    setOrder(null);
     setError(null);
-    try {
-      const result = await customerApi.GET("/me/orders/{orderReference}", {
-        params: { path: { orderReference } },
-      });
-      setOrder(unwrap(result));
-    } catch (failure) {
-      setError(failure);
-    }
   }, [orderReference]);
 
-  useEffect(() => { void load(); }, [load]);
-  const refundInProgress = order?.paymentRecovery
-    ? ["REQUESTED", "PROCESSING"].includes(order.paymentRecovery.state)
-    : false;
-  const polling = order ? isLive(order.status) || refundInProgress : false;
   useEffect(() => {
-    if (!polling) return;
-    const timer = window.setInterval(() => void load(), 5_000);
-    return () => window.clearInterval(timer);
-  }, [load, polling]);
+    let cancelled = false;
+    let timer = 0;
+
+    // Polling reschedules itself only after the previous read finishes, and
+    // every read is discarded once `cancelled` is set - by an order reference
+    // change or a manual reload - so a slow response can never land after a
+    // newer one and roll the screen's status or allowedActions backwards.
+    async function load() {
+      try {
+        const result = await customerApi.GET("/me/orders/{orderReference}", {
+          params: { path: { orderReference } },
+        });
+        if (cancelled) return;
+        const next = unwrap(result);
+        setOrder(next);
+        setError(null);
+        if (isLive(next.status) || orderRefundInProgress(next)) {
+          timer = window.setTimeout(() => void load(), 5_000);
+        }
+      } catch (failure) {
+        if (cancelled) return;
+        setError(failure);
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [orderReference, reloadToken]);
 
   if (!order && !error) return <LoadingState label="주문 상태를 확인하는 중" />;
-  if (error && !order) return <ErrorState error={error} retry={() => void load()} />;
+  if (error && !order) return <ErrorState error={error} retry={reload} />;
   if (!order) return null;
 
   const canCancel = order.allowedActions.includes("CANCEL");
@@ -214,19 +247,19 @@ export function CustomerOrderDetailPage() {
       </section>
 
       {canViewRefund && order.paymentRecovery ? <RefundProgress recovery={order.paymentRecovery} /> : null}
-      {error ? <ErrorState error={error} retry={() => void load()} /> : null}
+      {error ? <ErrorState error={error} retry={reload} /> : null}
 
       {canCancel ? (
         <CancelOrderPanel
           orderReference={order.orderReference}
           preview={order.cancellationPreview}
-          onCancelled={() => void load()}
+          onCancelled={reload}
         />
       ) : null}
 
       {canReorder ? <ReorderPanel orderReference={order.orderReference} storeId={order.storeId} storeName={order.storeName} /> : null}
 
-      <Button block variant="ghost" type="button" onClick={() => void load()}><RefreshCw size={16} /> 새로고침</Button>
+      <Button block variant="ghost" type="button" onClick={reload}><RefreshCw size={16} /> 새로고침</Button>
     </div>
   );
 }

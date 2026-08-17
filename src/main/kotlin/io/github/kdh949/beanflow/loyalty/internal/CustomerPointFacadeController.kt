@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.dao.DataAccessException
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Isolation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
@@ -37,6 +38,12 @@ internal data class CustomerPointSummaryResponse(
     val recoveryPendingKrw: Long,
     val currency: String,
     val expiring: List<ExpiringPointAmountResponse>,
+    val expiringHasMore: Boolean,
+)
+
+internal data class ExpiringPointAmounts(
+    val items: List<ExpiringPointAmountProjection>,
+    val hasMore: Boolean,
 )
 
 /**
@@ -65,13 +72,15 @@ internal class CustomerPointAccountLocator(
             )
     }
 
+    /** Requests one lot beyond the public limit so truncation can be reported instead of hidden. */
     @Transactional(readOnly = true)
     fun expiring(
         accountId: UUID,
         now: Instant,
-    ): List<ExpiringPointAmountProjection> =
+    ): ExpiringPointAmounts =
         try {
-            repository.findExpiringLots(accountId, now, EXPIRING_LOT_LIMIT)
+            val fetched = repository.findExpiringLots(accountId, now, EXPIRING_LOT_LIMIT + 1)
+            ExpiringPointAmounts(items = fetched.take(EXPIRING_LOT_LIMIT), hasMore = fetched.size > EXPIRING_LOT_LIMIT)
         } catch (failure: DataAccessException) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Point expiration lookup is unavailable").also {
                 it.initCause(failure)
@@ -83,38 +92,59 @@ internal class CustomerPointAccountLocator(
     }
 }
 
+/**
+ * Reads the balance and expiring lots within one PostgreSQL snapshot. Under the
+ * default READ COMMITTED isolation, separate statements — even inside one
+ * default-isolation transaction — can each see a different commit: a point use
+ * committed between reading the balance and reading expiring lots could report
+ * availablePointsKrw=0 together with an expiring amount that was never actually
+ * available at any single instant. REPEATABLE READ pins one snapshot for every
+ * read below. This is a separate bean so the transactional proxy is not
+ * bypassed by self-invocation.
+ */
+@Component
+internal class CustomerPointSummaryReader(
+    private val accounts: CustomerPointAccountLocator,
+    private val queries: PointAccountQueryOperations,
+) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    fun read(
+        customerId: UUID,
+        now: Instant,
+    ): CustomerPointSummaryResponse {
+        val accountId = accounts.locate(customerId)
+        val account =
+            queries.get(
+                ReadPointAccountCommand(
+                    actor = PointAccountReadActor(customerId, PointAccountReadActorType.CUSTOMER),
+                    accountId = accountId,
+                    accessReason = null,
+                    now = now,
+                ),
+            )
+        val expiring = accounts.expiring(accountId, now)
+        return CustomerPointSummaryResponse(
+            availablePointsKrw = account.availablePointsKrw,
+            recoveryPendingKrw = account.recoveryPendingKrw,
+            currency = "KRW",
+            expiring = expiring.items.map { ExpiringPointAmountResponse(it.expiresAt, it.amountKrw) },
+            expiringHasMore = expiring.hasMore,
+        )
+    }
+}
+
 @Validated
 @RestController
 @RequestMapping("/api/v1/me")
 internal class CustomerPointFacadeController(
     private val accounts: CustomerPointAccountLocator,
     private val queries: PointAccountQueryOperations,
+    private val summaries: CustomerPointSummaryReader,
     private val clock: Clock,
 ) {
     @GetMapping("/points")
     @PreAuthorize("hasRole('CUSTOMER')")
-    fun points(actor: CustomerActor): CustomerPointSummaryResponse {
-        val now = clock.instant()
-        val accountId = accounts.locate(actor.actorId)
-        val account =
-            queries.get(
-                ReadPointAccountCommand(
-                    actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.CUSTOMER),
-                    accountId = accountId,
-                    accessReason = null,
-                    now = now,
-                ),
-            )
-        return CustomerPointSummaryResponse(
-            availablePointsKrw = account.availablePointsKrw,
-            recoveryPendingKrw = account.recoveryPendingKrw,
-            currency = "KRW",
-            expiring =
-                accounts.expiring(accountId, now).map {
-                    ExpiringPointAmountResponse(it.expiresAt, it.amountKrw)
-                },
-        )
-    }
+    fun points(actor: CustomerActor): CustomerPointSummaryResponse = summaries.read(actor.actorId, clock.instant())
 
     @GetMapping("/point-transactions")
     @PreAuthorize("hasRole('CUSTOMER')")

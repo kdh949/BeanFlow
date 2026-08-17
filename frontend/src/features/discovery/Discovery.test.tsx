@@ -171,4 +171,75 @@ describe("store search", () => {
     expect(await screen.findByText(/위치 권한이 꺼져 있어/)).toBeInTheDocument();
     expect(screen.getByLabelText("검색어")).toBeEnabled();
   });
+
+  it("loads the next page with the server's nextCursor instead of stopping at the first 20", async () => {
+    const get = vi.spyOn(customerApi, "GET").mockImplementation(async (path: string, options?: { params?: { query?: { cursor?: string } } }) => {
+      if (path !== "/stores/search") throw new Error(`unexpected GET ${path}`);
+      const cursor = options?.params?.query?.cursor;
+      if (cursor === undefined) {
+        return ok({
+          items: [{ storeId: "store-1", name: "성수 로스터리", matchReason: ["MENU_NAME"], open: true, pickupAvailable: true, matchedMenus: [] }],
+          page: { nextCursor: "cursor-1" },
+          distanceAvailable: false,
+        }) as never;
+      }
+      if (cursor === "cursor-1") {
+        return ok({
+          items: [{ storeId: "store-2", name: "합정 로스터리", matchReason: ["MENU_NAME"], open: true, pickupAvailable: true, matchedMenus: [] }],
+          page: {},
+          distanceAvailable: false,
+        }) as never;
+      }
+      throw new Error(`unexpected cursor ${cursor}`);
+    });
+
+    renderSearch("/app/stores?query=라떼");
+
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.queryByText("합정 로스터리")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "매장 더 보기" }));
+
+    expect(await screen.findByText("합정 로스터리")).toBeInTheDocument();
+    expect(screen.getByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "매장 더 보기" })).not.toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith("/stores/search", expect.objectContaining({
+      params: expect.objectContaining({ query: expect.objectContaining({ cursor: "cursor-1" }) }),
+    }));
+  });
+
+  it("loads the next page of nearby stores with the server's nextCursor", async () => {
+    const getCurrentPosition = vi.fn((success) => success({ coords: { latitude: 37.5, longitude: 127 } }));
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } });
+    const get = vi.spyOn(customerApi, "GET").mockImplementation(async (path: string, options?: { params?: { query?: { cursor?: string } } }) => {
+      if (path !== "/stores/nearby") throw new Error(`unexpected GET ${path}`);
+      const cursor = options?.params?.query?.cursor;
+      if (cursor === undefined) {
+        return ok({
+          items: [{ storeId: "store-1", name: "성수 로스터리", distanceMeters: 100, open: true, pickupAvailable: true }],
+          page: { nextCursor: "cursor-1" },
+        }) as never;
+      }
+      if (cursor === "cursor-1") {
+        return ok({
+          items: [{ storeId: "store-2", name: "합정 로스터리", distanceMeters: 900, open: true, pickupAvailable: true }],
+          page: {},
+        }) as never;
+      }
+      throw new Error(`unexpected cursor ${cursor}`);
+    });
+
+    renderSearch();
+    await userEvent.click(screen.getByRole("button", { name: "현재 위치로 찾기" }));
+
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.queryByText("합정 로스터리")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "매장 더 보기" }));
+
+    expect(await screen.findByText("합정 로스터리")).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith("/stores/nearby", expect.objectContaining({
+      params: expect.objectContaining({ query: expect.objectContaining({ cursor: "cursor-1" }) }),
+    }));
+  });
 });
