@@ -147,6 +147,9 @@ hosted full suite를 required evidence로 삼는다.
 - [x] (2026-08-17) Spring integration과 direct container test 46개를 JVM singleton PostGIS + class DB runtime으로 통합
 - [x] (2026-08-18) 세 hosted success run의 class median과 p95 fallback을 사용하는 deterministic LPT shard 구현
 - [ ] local/hosted validation과 15분 gate 완료
+  - Blocked (2026-08-18): 계획상 최대인 6-shard 첫 candidate run이 `15m15s`로 목표를 넘었고,
+    upstream frontend failure 때문에 required `build`도 실패했다. 이 run 하나로도 "동일 SHA 세 run 각각
+    성공하고 15분 이내" 조건을 충족할 수 없어 나머지 두 run과 Draft PR을 진행하지 않는다.
 
 ## Surprises & Discoveries
 
@@ -194,6 +197,13 @@ hosted full suite를 required evidence로 삼는다.
   한 번 실행했고 failure/error가 0이었다. shard wall time은 `17m09s`, `13m47s`, `17m21s`,
   `13m44s`, `12m37s`, critical path는 `17m55s`, total runner-minute는 `78.57`이다. 목표를 넘겨
   계획의 마지막 단계인 6-shard로 증가한다. workflow 전체 결론은 upstream frontend 회귀 때문에 실패했다.
+- LPT 6-shard SHA `eaa072f`의 run `32058946545`는 backend test 269개 class와 1,334개 test를 정확히
+  한 번 실행했고 failure/error가 0이었다. shard wall time은 `10m18s`, `14m26s`, `13m24s`,
+  `13m31s`, `14m31s`, `14m38s`, critical path는 `15m15s`, total runner-minute는 `85.02`다.
+  6-shard에서도 목표를 `15s` 넘었고 workflow 전체는 동일 upstream frontend 회귀로 실패했다. 최대 shard
+  수와 동일 SHA 세 run 각각 15분 이내 조건을 동시에 위반하므로 더 실행하지 않고 이 ExecPlan을 ACTIVE
+  상태로 유지한다. baseline median 대비 critical path는 `26m08s`에서 `15m15s`로 `41.6%` 줄었지만,
+  runner-minute는 `66.83`에서 `85.02`로 `27.2%` 늘었다.
 
 ## Decision Log
 
@@ -205,10 +215,18 @@ hosted full suite를 required evidence로 삼는다.
   분리하되, `full` aggregate gate는 frontend failure를 그대로 실패로 유지한다.
 - 2026-08-17: Spring context 하나가 datasource 하나를 소유하므로 class별 DB를 보장하기 위해 test-only
   context cache key와 after-class cleanup listener를 사용한다. production bean graph에는 관여하지 않는다.
+- 2026-08-18: 계획상 최대인 6-shard에서 첫 candidate run이 15분을 넘었으므로 테스트 생략이나 추가 runner를
+  도입하지 않는다. 동일 SHA 세 run 각각 15분 이내가 이미 불가능하고 upstream frontend gate도 실패하므로
+  추가 hosted run과 Draft PR 생성을 중단하고 실제 증거와 함께 ACTIVE/blocked로 남긴다.
 
 ## Outcomes & Retrospective
 
-Implementation과 hosted evidence 완료 후 작성한다. 측정 전에 성능 결과를 주장하지 않는다.
+전체 테스트 의미와 269개 class coverage를 유지하면서 baseline median `26m08s`를 6-shard candidate
+`15m15s`까지 줄였다. 그러나 hard target보다 `15s` 느리고 runner 비용은 `27.2%` 증가했다. 더 큰 runner,
+추가 shard, 테스트 선택 실행은 이 계획의 범위 밖이며 upstream frontend 접근성 failure도 이 변경에서 수정할 수
+없다. 따라서 완료를 주장하거나 `completed/`로 이동하지 않고 Draft PR도 만들지 않는다. 재개 조건은
+`origin/main`의 frontend gate 복구와, 같은 제약 안에서 최소 `15s` 이상의 critical path 여유를 만드는 후속
+최적화 결정이다.
 
 ## Revision Notes
 
