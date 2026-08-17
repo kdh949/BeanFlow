@@ -250,7 +250,7 @@ force-push를 하지 않는다.
 | M6 | [productization-60](../completed/productization-60-store-order-board.md) | 매장 주문보드, 주문번호 기반 상태 전이 | 완료 |
 | M7 | [productization-70](../completed/productization-70-customer-store-discovery.md) | 검색·즐겨찾기·최근 매장·추천 | 완료 |
 | M8 | [productization-80](../completed/productization-80-customer-web-p0-integration.md) | 고객 P0 13화면 Session/API 통합 | 완료 |
-| M9 | [productization-90](productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 대기 |
+| M9 | [productization-90](../completed/productization-90-merchant-financial-workflows.md) | 점주 부분 환불·정산·이의제기 | 완료 |
 | M10 | [productization-100](productization-100-operations-work-queues.md) | 운영자 PKCE, 실패 큐·정산 대사·감사·Support·점주 발급 UI | 대기 |
 
 M6 완료 시점은 다음 수직 흐름이 연결되는 **P0 Core 통합 지점**이다.

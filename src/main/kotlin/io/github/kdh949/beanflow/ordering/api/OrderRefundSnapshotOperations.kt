@@ -6,6 +6,7 @@ import java.util.UUID
 data class RefundableOrderLineSnapshot(
     val orderLineId: UUID,
     val lineSequence: Int,
+    val menuName: String,
     val unitPriceKrw: Long,
     val quantity: Long,
     val grossKrw: Long,
@@ -42,6 +43,13 @@ interface OrderRefundSnapshotOperations {
      * Order -> Payment -> sorted allocation lock order.
      */
     fun lockRefundableSnapshot(orderId: UUID): RefundableOrderSnapshot
+
+    /**
+     * Reads the same snapshot without any lock, for the refund preview
+     * projection. A preview never reserves units, so its amounts are only a
+     * projection of this instant.
+     */
+    fun readRefundableSnapshot(orderId: UUID): RefundableOrderSnapshot
 
     /** Locks the Order before Payment records a Provider result, regardless of current Order state. */
     fun lockResultSnapshot(orderId: UUID): RefundResultOrderSnapshot

@@ -51,12 +51,28 @@ internal data class PartialRefundActor(
     val actorTypes: Set<PartialRefundActorType>,
 )
 
+internal data class PartialRefundLineSelection(
+    val lineSequence: Int,
+    val quantity: Long,
+)
+
+/**
+ * The merchant contract selects order-scoped line sequences and carries the
+ * previewVersion the operator saw. Sequences become internal OrderLine IDs and
+ * the version is recomputed only under the refund locks.
+ */
+internal data class MerchantRefundSelection(
+    val lines: List<PartialRefundLineSelection>,
+    val previewVersion: String,
+)
+
 internal data class PartialRefundCommand(
     val paymentId: UUID,
     val actor: PartialRefundActor,
     val idempotencyKey: String,
     val lines: List<PartialRefundLineInput>?,
     val reason: String,
+    val merchantSelection: MerchantRefundSelection? = null,
 )
 
 internal data class PartialRefundHttpResult(
@@ -70,24 +86,6 @@ internal data class PreparedPartialRefund(
     val existingResponse: PartialRefundHttpResult? = null,
     val inProgress: Boolean = false,
 )
-
-private data class RequestedLineAllocation(
-    val line: RefundableOrderLineSnapshot,
-    val firstUnitIndex: Long,
-    val quantity: Long,
-    val grossKrw: Long,
-    val couponKrw: Long,
-    val pointsKrw: Long,
-    val cashKrw: Long,
-)
-
-private data class UnitAllocation(
-    val grossKrw: Long,
-    val couponKrw: Long,
-    val pointsKrw: Long,
-) {
-    val cashKrw: Long = grossKrw - couponKrw - pointsKrw
-}
 
 @Service
 internal class PartialRefundService(
@@ -154,7 +152,17 @@ internal class PartialRefundPreparationTransaction(
         if (locked.orderId != order.orderId) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Payment does not belong to the locked order")
         }
-        val requestedLines = requestedLines(command.lines, order.lines, locked.consumedQuantityByOrderLine)
+        val policy =
+            policyOperations.current(
+                ExpiredBenefitRestorationTrigger.PARTIAL_REFUND,
+                ExpiredBenefitType.POINTS,
+            )
+        val selectedLines =
+            command.merchantSelection?.let { selection ->
+                requireCurrentPreview(selection.previewVersion, order, locked, policy.policyVersion)
+                selection.lines.map { PartialRefundLineInput(order.orderLineId(it.lineSequence), it.quantity) }
+            } ?: command.lines
+        val requestedLines = requestedLines(selectedLines, order.lines, locked.consumedQuantityByOrderLine)
         if (requestedLines.isEmpty()) {
             fail(FailureCode.ORDER_STATE_CONFLICT, "Payment has no remaining refundable OrderLine units")
         }
@@ -170,11 +178,6 @@ internal class PartialRefundPreparationTransaction(
         if (pointsRequested > 0 && pointSource.pointReservationId == null) {
             fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Point source snapshot is missing")
         }
-        val policy =
-            policyOperations.current(
-                ExpiredBenefitRestorationTrigger.PARTIAL_REFUND,
-                ExpiredBenefitType.POINTS,
-            )
         val pointRequests =
             pointRequests(
                 requestedLines,
@@ -218,84 +221,60 @@ internal class PartialRefundPreparationTransaction(
             settlement = settlement,
         )
 
+    /**
+     * Recomputes the canonical refund state under the Order and Payment locks.
+     * A preview is only a projection, so anything that moved since it was taken
+     * invalidates the amounts the operator approved.
+     */
+    private fun requireCurrentPreview(
+        previewVersion: String,
+        order: RefundableOrderSnapshot,
+        locked: PartialRefundPaymentLock.Ready,
+        policyVersionId: Long,
+    ) {
+        val current =
+            RefundPreviewVersion.compute(
+                RefundPreviewState(
+                    orderId = order.orderId,
+                    orderAggregateVersion = order.aggregateVersion,
+                    paymentId = locked.paymentId,
+                    paymentVersion = locked.paymentVersion,
+                    approvedAmountKrw = locked.approvedAmountKrw,
+                    succeededRefundAmountKrw = locked.succeededRefundAmountKrw,
+                    // lock() rejects a Payment that still has an unresolved Refund,
+                    // so a locked execution can only ever see the resolved state.
+                    unresolvedRefundCount = 0,
+                    restorationPolicyVersionId = policyVersionId,
+                    remainingByLineSequence =
+                        order.lines.associate { line ->
+                            line.lineSequence to
+                                RefundAllocationCalculator.remainingQuantity(line, locked.consumedQuantityByOrderLine)
+                        },
+                ),
+            )
+        if (current != previewVersion) {
+            fail(FailureCode.REFUND_PREVIEW_STALE, "Refund preview no longer matches the current refund state")
+        }
+    }
+
+    private fun RefundableOrderSnapshot.orderLineId(lineSequence: Int): UUID =
+        lines.firstOrNull { it.lineSequence == lineSequence }?.orderLineId
+            ?: fail(FailureCode.INVALID_REQUEST, "Refund contains an unknown line sequence")
+
     private fun requestedLines(
         commandLines: List<PartialRefundLineInput>?,
         allLines: List<RefundableOrderLineSnapshot>,
         consumed: Map<UUID, Long>,
-    ): List<RequestedLineAllocation> {
-        val inputById = commandLines?.associateBy { it.orderLineId }
+    ): List<RefundLineAllocation> {
+        val inputById = commandLines?.associate { it.orderLineId to it.quantity }
         if (commandLines != null && inputById!!.size != commandLines.size) {
             fail(FailureCode.INVALID_REQUEST, "Refund OrderLine IDs must be unique")
         }
-        if (inputById != null && inputById.keys.any { id -> allLines.none { it.orderLineId == id } }) {
-            fail(FailureCode.INVALID_REQUEST, "Refund contains an OrderLine from another order")
-        }
-        return allLines.mapNotNull { line ->
-            val first = consumed[line.orderLineId] ?: 0L
-            if (first > line.quantity) {
-                fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Successful Refund quantity exceeds OrderLine snapshot")
-            }
-            val remaining = line.quantity - first
-            val requested = inputById?.get(line.orderLineId)?.quantity ?: remaining.takeIf { inputById == null } ?: 0L
-            if (requested == 0L) return@mapNotNull null
-            if (requested < 1 || requested > remaining) {
-                fail(FailureCode.ORDER_STATE_CONFLICT, "Refund quantity exceeds remaining OrderLine units")
-            }
-            val units = allocateUnits(line).subList(first.toInt(), Math.addExact(first, requested).toInt())
-            RequestedLineAllocation(
-                line = line,
-                firstUnitIndex = first,
-                quantity = requested,
-                grossKrw = units.sumOf { it.grossKrw },
-                couponKrw = units.sumOf { it.couponKrw },
-                pointsKrw = units.sumOf { it.pointsKrw },
-                cashKrw = units.sumOf { it.cashKrw },
-            )
-        }
-    }
-
-    private fun allocateUnits(line: RefundableOrderLineSnapshot): List<UnitAllocation> {
-        if (line.quantity > Int.MAX_VALUE) fail(FailureCode.INVALID_REQUEST, "OrderLine quantity is too large")
-        if (Math.multiplyExact(line.unitPriceKrw, line.quantity) != line.grossKrw) {
-            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine gross snapshot is inconsistent")
-        }
-        val quantity = line.quantity.toInt()
-        val couponBase = line.couponDiscountKrw / quantity
-        val couponRemainder = (line.couponDiscountKrw % quantity).toInt()
-        val coupons = List(quantity) { index -> couponBase + if (index < couponRemainder) 1 else 0 }
-        val balances = coupons.map { line.unitPriceKrw - it }
-        val balanceTotal = balances.sum()
-        if (balanceTotal < line.pointsAppliedKrw) {
-            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine points exceed its post-coupon balance")
-        }
-        val points = LongArray(quantity)
-        if (line.pointsAppliedKrw > 0) {
-            balances.forEachIndexed { index, balance ->
-                points[index] = Math.multiplyExact(line.pointsAppliedKrw, balance) / balanceTotal
-            }
-            var remainder = line.pointsAppliedKrw - points.sum()
-            balances.indices.sortedWith(compareByDescending<Int> { balances[it] }.thenBy { it }).forEach { index ->
-                if (remainder > 0 && points[index] < balances[index]) {
-                    points[index]++
-                    remainder--
-                }
-            }
-            if (remainder != 0L) fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine point remainder did not tie out")
-        }
-        return balances.indices
-            .map { index -> UnitAllocation(line.unitPriceKrw, coupons[index], points[index]) }
-            .also { units ->
-                if (units.sumOf { it.couponKrw } != line.couponDiscountKrw ||
-                    units.sumOf { it.pointsKrw } != line.pointsAppliedKrw ||
-                    units.sumOf { it.cashKrw } != line.cashPayableKrw
-                ) {
-                    fail(FailureCode.DEPENDENCY_UNAVAILABLE, "OrderLine unit allocation did not tie out")
-                }
-            }
+        return RefundAllocationCalculator.allocate(allLines, consumed, inputById)
     }
 
     private fun pointRequests(
-        lines: List<RequestedLineAllocation>,
+        lines: List<RefundLineAllocation>,
         sources: List<PartialRefundPointSourceAllocation>,
         consumed: Map<UUID, Long>,
     ): List<PartialRefundPointRequestSnapshot> {
@@ -338,7 +317,7 @@ internal class PartialRefundPreparationTransaction(
         return requests
     }
 
-    private fun RequestedLineAllocation.toPaymentSnapshot() =
+    private fun RefundLineAllocation.toPaymentSnapshot() =
         PartialRefundLineRequestSnapshot(
             orderLineId = line.orderLineId,
             lineSequence = line.lineSequence,
@@ -375,13 +354,32 @@ internal class PartialRefundPreparationTransaction(
         if (command.lines?.isEmpty() == true || command.lines?.any { it.quantity < 1 } == true) {
             fail(FailureCode.INVALID_REQUEST, "Refund line quantity must be positive")
         }
+        command.merchantSelection?.let { selection ->
+            if (command.lines != null) {
+                fail(FailureCode.INVALID_REQUEST, "A refund uses either line IDs or line sequences")
+            }
+            if (selection.lines.isEmpty() || selection.lines.any { it.quantity < 1 }) {
+                fail(FailureCode.INVALID_REQUEST, "Refund line quantity must be positive")
+            }
+            if (selection.lines.distinctBy { it.lineSequence }.size != selection.lines.size) {
+                fail(FailureCode.INVALID_REQUEST, "Refund line sequences must be unique")
+            }
+            if (!selection.previewVersion.matches(PREVIEW_VERSION_FORMAT)) {
+                fail(FailureCode.INVALID_REQUEST, "previewVersion is invalid")
+            }
+        }
     }
 
     private fun payloadHash(command: PartialRefundCommand): String {
         val linePart =
-            command.lines
-                ?.sortedBy { it.orderLineId }
-                ?.joinToString(",") { "${it.orderLineId}:${it.quantity}" } ?: "FULL"
+            command.merchantSelection
+                ?.lines
+                ?.sortedBy { it.lineSequence }
+                ?.joinToString(",", prefix = "SEQ:") { "${it.lineSequence}:${it.quantity}" }
+                ?: command.lines
+                    ?.sortedBy { it.orderLineId }
+                    ?.joinToString(",") { "${it.orderLineId}:${it.quantity}" }
+                ?: "FULL"
         val canonical = "${command.paymentId}|$linePart|${command.reason.trim()}"
         return MessageDigest
             .getInstance("SHA-256")
@@ -400,6 +398,10 @@ internal class PartialRefundPreparationTransaction(
         code: FailureCode,
         message: String,
     ): Nothing = throw DomainFailure(code, message)
+
+    private companion object {
+        val PREVIEW_VERSION_FORMAT = Regex("[0-9a-f]{64}")
+    }
 }
 
 @Service

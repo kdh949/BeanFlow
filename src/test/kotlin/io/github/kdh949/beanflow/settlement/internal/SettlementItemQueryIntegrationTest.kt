@@ -130,7 +130,7 @@ internal class SettlementItemQueryIntegrationTest
         @Test
         fun `default page is twenty and limit over one hundred is rejected`() {
             val storeId = insertStore()
-            val actorId = insertMembership(storeId, "STAFF", "ACTIVE")
+            val actorId = insertMembership(storeId, "OWNER", "ACTIVE")
             val batchId = insertBatch(storeId)
             repeat(21) { index ->
                 insertItem(
@@ -142,43 +142,45 @@ internal class SettlementItemQueryIntegrationTest
             }
 
             mockMvc
-                .perform(get(path(storeId, batchId)).with(storeJwt(actorId, "STORE_STAFF")))
+                .perform(get(path(storeId, batchId)).with(storeJwt(actorId, "STORE_OWNER")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.items.length()").value(20))
                 .andExpect(jsonPath("$.page.nextCursor").isString)
             mockMvc
                 .perform(
-                    get(path(storeId, batchId)).param("limit", "101").with(storeJwt(actorId, "STORE_STAFF")),
+                    get(path(storeId, batchId)).param("limit", "101").with(storeJwt(actorId, "STORE_OWNER")),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
 
         @Test
-        fun `active DB membership wins while missing revoked and other-store memberships are forbidden`() {
+        fun `only the active owner reads the settlement item ledger`() {
             val storeId = insertStore()
             val batchId = insertBatch(storeId)
             val ownerId = insertMembership(storeId, "OWNER", "ACTIVE")
             val staffId = insertMembership(storeId, "STAFF", "ACTIVE")
-            val revokedId = insertMembership(storeId, "STAFF", "REVOKED")
-            val otherStoreActor = insertMembership(insertStore(), "STAFF", "ACTIVE")
+            val revokedOwnerId = insertMembership(storeId, "OWNER", "REVOKED")
+            val otherStoreOwner = insertMembership(insertStore(), "OWNER", "ACTIVE")
 
             mockMvc
                 .perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_OWNER")))
                 .andExpect(status().isOk)
+            // 명세는 수수료·혜택 원가·실지급액이라 STAFF에게는 열지 않는다.
             mockMvc
                 .perform(get(path(storeId, batchId)).with(storeJwt(staffId, "STORE_STAFF")))
-                .andExpect(status().isOk)
-            mockMvc
-                .perform(get(path(storeId, batchId)).with(storeJwt(UUID.randomUUID(), "STORE_STAFF")))
                 .andExpect(status().isForbidden)
             mockMvc
-                .perform(get(path(storeId, batchId)).with(storeJwt(revokedId, "STORE_STAFF")))
+                .perform(get(path(storeId, batchId)).with(storeJwt(UUID.randomUUID(), "STORE_OWNER")))
                 .andExpect(status().isForbidden)
+            mockMvc
+                .perform(get(path(storeId, batchId)).with(storeJwt(revokedOwnerId, "STORE_OWNER")))
+                .andExpect(status().isForbidden)
+            // JWT role은 인가 근거가 아니다. 현재 DB membership이 OWNER이면 허용한다.
             mockMvc
                 .perform(get(path(storeId, batchId)).with(storeJwt(ownerId, "STORE_STAFF")))
                 .andExpect(status().isOk)
             mockMvc
-                .perform(get(path(storeId, batchId)).with(storeJwt(otherStoreActor, "STORE_STAFF")))
+                .perform(get(path(storeId, batchId)).with(storeJwt(otherStoreOwner, "STORE_OWNER")))
                 .andExpect(status().isForbidden)
         }
 

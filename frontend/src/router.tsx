@@ -15,7 +15,12 @@ import { CustomerOrderDetailPage, CustomerOrdersPage } from "./features/ordering
 import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
 import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
-import { OpsDashboardPage, OpsOrderPage, OpsRefundPage } from "./pages/console/ConsolePages";
+import { MerchantLoginPage, MerchantPasswordChangePage } from "./features/auth/merchant/MerchantAuthPages";
+import { MerchantSessionGate } from "./features/auth/merchant/MerchantSessionGate";
+import { StoreRefundPage } from "./features/merchant/StoreRefundPage";
+import { StoreSettlementsPage } from "./features/merchant/StoreSettlementsPage";
+import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
+import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
 
@@ -47,7 +52,20 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  { path: "/store", element: <ConsoleShell kind="store" />, children: [{ index: true, element: <StoreOrderBoardPage /> }] },
-  { path: "/ops", element: <ConsoleShell kind="ops" />, children: [{ index: true, element: <OpsDashboardPage /> }, { path: "refunds", element: <OpsRefundPage /> }, { path: "orders", element: <OpsOrderPage /> }] },
+  {
+    path: "/store", element: <ConsoleShell kind="store" />, children: [
+      { path: "login", element: <MerchantLoginPage /> },
+      { path: "password", element: <MerchantPasswordChangePage /> },
+      {
+        element: <MerchantSessionGate />, children: [
+          { index: true, element: <StoreOrderBoardPage /> },
+          { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
+          { path: "settlements", element: <StoreSettlementsPage /> },
+          { path: "disputes", element: <StoreDisputesPage /> },
+        ],
+      },
+    ],
+  },
+  { path: "/ops", element: <ConsoleShell kind="ops" />, children: [{ index: true, element: <OpsDashboardPage /> }, { path: "orders", element: <OpsOrderPage /> }] },
   { path: "*", element: <NotFoundPage /> },
 ]);

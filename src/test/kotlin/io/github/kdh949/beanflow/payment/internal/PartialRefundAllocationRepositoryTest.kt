@@ -626,7 +626,7 @@ internal class PartialRefundAllocationRepositoryTest
             assertThatThrownBy {
                 service.create(command(fixture, "refund-key-0009", fixture.firstLineId, 1))
             }.isInstanceOfSatisfying(DomainFailure::class.java) {
-                assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+                assertThat(it.code).isEqualTo(FailureCode.REFUND_OUTCOME_UNRESOLVED)
             }
 
             block.release()

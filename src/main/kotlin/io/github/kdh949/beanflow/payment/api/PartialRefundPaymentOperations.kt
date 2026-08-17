@@ -35,12 +35,26 @@ sealed interface PartialRefundPaymentLock {
     data class Ready(
         val paymentId: UUID,
         val orderId: UUID,
+        val paymentVersion: Long,
         val approvedAmountKrw: Long,
         val succeededRefundAmountKrw: Long,
         val consumedQuantityByOrderLine: Map<UUID, Long>,
         val consumedPointsByReservationAllocation: Map<UUID, Long>,
     ) : PartialRefundPaymentLock
 }
+
+/**
+ * Unlocked refund state of an approved Payment, for the merchant refund
+ * preview. It reserves nothing and must never be used as an execution input.
+ */
+data class PartialRefundPreviewPayment(
+    val paymentId: UUID,
+    val paymentVersion: Long,
+    val approvedAmountKrw: Long,
+    val succeededRefundAmountKrw: Long,
+    val unresolvedRefundCount: Int,
+    val consumedQuantityByOrderLine: Map<UUID, Long>,
+)
 
 data class LockPartialRefundPaymentCommand(
     val paymentId: UUID,
@@ -180,6 +194,9 @@ data class PartialRefundRestorationCommandSnapshot(
 
 interface PartialRefundPaymentOperations {
     fun orderId(paymentId: UUID): UUID
+
+    /** Reads the approved Payment of [orderId] without taking any lock. */
+    fun previewSnapshot(orderId: UUID): PartialRefundPreviewPayment
 
     /** Must run after the owning Order row has been locked by the coordinating transaction. */
     fun lock(command: LockPartialRefundPaymentCommand): PartialRefundPaymentLock

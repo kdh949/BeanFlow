@@ -2,9 +2,9 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
-> **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`, `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/active/productization-90-merchant-financial-workflows.md`, `docs/exec-plans/completed/customer-support-s40-verification-data-access-grant.md`
+> **Depends-On:** `docs/exec-plans/completed/productization-20-authentication-foundation.md`, `docs/exec-plans/completed/productization-10-public-order-reference.md`, `docs/exec-plans/completed/productization-40-merchant-account-and-initial-password.md`, `docs/exec-plans/completed/productization-90-merchant-financial-workflows.md`, `docs/exec-plans/completed/customer-support-s40-verification-data-access-grant.md`
 > **Completed-At:** `—`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
@@ -372,8 +372,9 @@ PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
 
 ## Progress
 
-아직 시작하지 않았다. 선행 CurrentActor/merchant finance/Support S40과 migration writer lease 후 준비
-상태를 전환한다.
+아직 시작하지 않았다. 2026-08-17에 마지막 direct dependency였던 productization-90이 완료되어
+`Implementation-Ready=true`로 전환했다. `Writes-Migration=true`이므로 시작 전에 ADR-072의
+repository-wide migration-writer lease가 필요하다.
 
 ## Surprises & Discoveries
 

@@ -2,11 +2,11 @@ import { AlertTriangle, CalendarDays, Clock3, PackageCheck, RefreshCw, Store } f
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
-import { merchantApi, merchantCsrfToken } from "../../api/consoleClient";
+import { merchantApi, merchantCsrfToken } from "../../api/merchantClient";
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime } from "../../lib/format";
-import { Button, FeedbackState } from "../../design-system";
+import { Button, ButtonLink, FeedbackState } from "../../design-system";
 
 type MerchantStore = components["schemas"]["MerchantStore"];
 type Board = components["schemas"]["StoreOrderBoard"];
@@ -342,7 +342,7 @@ export function StoreOrderBoardPage() {
         <EmptyState title="접근 가능한 매장이 없습니다" description="ACTIVE 상태의 매장 멤버십이 필요합니다." />
       ) : null}
 
-      {board ? (
+      {board && selectedStoreId ? (
         <section className="order-board" aria-label={`${selectedStore?.storeName ?? "선택한 매장"} 실행 주문`}>
           {columns.map((column) => {
             const items = allItems.filter((item) => item.lane && (column.lanes as readonly string[]).includes(item.lane));
@@ -359,6 +359,7 @@ export function StoreOrderBoardPage() {
                     <OrderCard
                       key={item.orderReference}
                       item={item}
+                      storeId={selectedStoreId}
                       busy={busyReference === item.orderReference}
                       rejecting={rejectingReference === item.orderReference}
                       rejectionReason={rejectionReason}
@@ -393,6 +394,7 @@ export function StoreOrderBoardPage() {
                               <OrderCard
                                 key={item.orderReference}
                                 item={item}
+                                storeId={selectedStoreId}
                                 busy={busyReference === item.orderReference}
                                 rejecting={rejectingReference === item.orderReference}
                                 rejectionReason={rejectionReason}
@@ -427,8 +429,9 @@ export function StoreOrderBoardPage() {
   );
 }
 
-function OrderCard({ item, busy, rejecting, rejectionReason, onRejectStart, onRejectCancel, onReasonChange, onAction }: {
+function OrderCard({ item, storeId, busy, rejecting, rejectionReason, onRejectStart, onRejectCancel, onReasonChange, onAction }: {
   item: BoardItem;
+  storeId: string;
   busy: boolean;
   rejecting: boolean;
   rejectionReason: string;
@@ -456,6 +459,7 @@ function OrderCard({ item, busy, rejecting, rejectionReason, onRejectStart, onRe
         ) : (
           <Button key={action} type="button" loading={busy} onClick={() => onAction(action)}>{busy ? "처리 중" : actionLabels[action]}</Button>
         ))}
+        <ButtonLink variant="ghost" to={`/store/refunds/${storeId}/${item.orderReference}`}>부분 환불</ButtonLink>
       </div>
       {rejecting ? (
         <form className="order-reject-form" onSubmit={(event) => { event.preventDefault(); onAction("REJECT", rejectionReason.trim()); }}>

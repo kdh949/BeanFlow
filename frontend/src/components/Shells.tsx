@@ -5,16 +5,17 @@ import {
   LogOut,
   PackageCheck,
   ReceiptText,
+  WalletCards,
   Search,
   Settings,
   ShieldCheck,
   Store,
   UserRound,
-  WalletCards,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { authToken, useAuthToken } from "../auth/session";
+import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { Button, ButtonLink } from "../design-system";
 
 export function CustomerShell() {
@@ -60,12 +61,30 @@ type ConsoleShellProps = {
 };
 
 export function ConsoleShell({ kind }: ConsoleShellProps) {
+  // 정산·이의제기는 ACTIVE OWNER만 쓸 수 있다. 이 gate는 표시 편의일 뿐이고
+  // 모든 endpoint가 요청 시점의 membership을 다시 검증한다.
+  const ownsAnyStore = useOwnerMembership(kind === "store");
+  const [storeLogoutFailed, setStoreLogoutFailed] = useState(false);
+
+  async function logOutOfStore() {
+    setStoreLogoutFailed(false);
+    try {
+      await merchantSession.logOut();
+    } catch {
+      setStoreLogoutFailed(true);
+    }
+  }
   const storeItems = [
     { to: "/store", label: "주문 보드", icon: PackageCheck, end: true },
+    ...(ownsAnyStore
+      ? [
+          { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
+          { to: "/store/disputes", label: "이의제기", icon: ReceiptText, end: false },
+        ]
+      : []),
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
-    { to: "/ops/refunds", label: "환불 조정", icon: WalletCards },
     { to: "/ops/orders", label: "주문 조회", icon: Search },
   ];
   const items = kind === "store" ? storeItems : opsItems;
@@ -88,9 +107,14 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
           <Link to="/app">
             <Coffee size={18} /> 고객 앱
           </Link>
-          <button type="button" onClick={authToken.clear}>
+          <button type="button" onClick={kind === "store" ? () => void logOutOfStore() : authToken.clear}>
             <LogOut size={18} /> 로그아웃
           </button>
+          {kind === "store" && storeLogoutFailed ? (
+            <p className="form-error" role="alert">
+              로그아웃에 실패했습니다. 세션이 남아 있을 수 있으니 다시 시도해 주세요.
+            </p>
+          ) : null}
         </div>
       </aside>
       <section className="console-main">
@@ -100,13 +124,13 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
             <strong>{kind === "store" ? "매장 운영" : "플랫폼 운영"}</strong>
           </div>
           <div className="topbar-actions">
-            <AuthStatus />
+            {kind === "store" ? <MerchantAuthStatus /> : <AuthStatus />}
             <button className="icon-action" type="button" aria-label="설정">
               <Settings size={19} />
             </button>
           </div>
         </header>
-        <ConsoleTokenStrip />
+        {kind === "store" ? null : <ConsoleTokenStrip />}
         <main className="console-content">
           <Outlet />
         </main>
@@ -135,9 +159,55 @@ function ConsoleTokenStrip() {
   );
 }
 
+/**
+ * Reads the current memberships to decide which console entries to show. A read
+ * failure hides the owner-only entries rather than guessing that the actor owns
+ * a store; the endpoints answer 403 either way.
+ */
+function useOwnerMembership(enabled: boolean): boolean {
+  const [ownsAnyStore, setOwnsAnyStore] = useState(false);
+  const session = useMerchantSession();
+  const signedIn = session.status === "authenticated";
+
+  useEffect(() => {
+    if (!enabled || !signedIn) {
+      setOwnsAnyStore(false);
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const stores = await requestMerchantStores();
+        if (!disposed) setOwnsAnyStore(stores.some((store) => store.membershipRole === "OWNER"));
+      } catch {
+        if (!disposed) setOwnsAnyStore(false);
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [enabled, signedIn]);
+
+  return ownsAnyStore;
+}
+
 function AuthStatus() {
   const token = useAuthToken();
   return <span className={`auth-status ${token ? "is-ready" : ""}`}>{token ? "인증됨" : "인증 필요"}</span>;
+}
+
+/**
+ * The store console authenticates with a Session Cookie, so it shows who the
+ * server says is signed in rather than whether a token was pasted.
+ */
+function MerchantAuthStatus() {
+  const session = useMerchantSession();
+  const signedIn = session.status === "authenticated" || session.status === "initialPassword";
+  return (
+    <span className={`auth-status ${signedIn ? "is-ready" : ""}`}>
+      {signedIn ? session.actor.displayName : "인증 필요"}
+    </span>
+  );
 }
 
 function TokenEditor({ onClose }: { onClose: () => void }) {

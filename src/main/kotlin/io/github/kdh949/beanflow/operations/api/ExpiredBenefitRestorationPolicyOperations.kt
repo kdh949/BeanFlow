@@ -72,7 +72,21 @@ interface ExpiredBenefitRestorationPolicyOperations {
     fun current(): ExpiredBenefitRestorationPolicySnapshot =
         current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, ExpiredBenefitType.POINTS)
 
+    /**
+     * Reads the active policy under a row lock, for a command that must decide
+     * with a policy version that cannot change under it.
+     */
     fun current(
+        trigger: ExpiredBenefitRestorationTrigger,
+        benefitType: ExpiredBenefitType,
+    ): ExpiredBenefitRestorationPolicySnapshot
+
+    /**
+     * Reads the active policy without locking it, for read-only projections such
+     * as the merchant refund preview. The value is a projection of this instant
+     * and the executing command re-reads it under its own lock.
+     */
+    fun currentUnlocked(
         trigger: ExpiredBenefitRestorationTrigger,
         benefitType: ExpiredBenefitType,
     ): ExpiredBenefitRestorationPolicySnapshot

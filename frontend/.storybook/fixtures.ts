@@ -196,6 +196,30 @@ export const signedInHandlers = [
   http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
 ];
 
+export const merchantIdentity = {
+  actorType: "MERCHANT",
+  merchantId: "80000000-0000-4000-8000-000000000001",
+  displayName: "시청점 점주",
+  accountState: "ACTIVE",
+};
+
+/**
+ * `GET /merchant/me` is what every guarded store route waits for before it
+ * renders, and the CSRF endpoint issues the JS-readable cookie that every
+ * unsafe merchant request copies into its header.
+ */
+export const merchantSignedInHandlers = [
+  http.get("/api/v1/merchant/me", () => HttpResponse.json(merchantIdentity)),
+  http.get(
+    "/api/v1/auth/merchant/csrf",
+    () =>
+      new HttpResponse(null, {
+        status: 204,
+        headers: { "Set-Cookie": "BEANFLOW_MERCHANT_XSRF=storybook-merchant-csrf; path=/" },
+      }),
+  ),
+];
+
 export const customerStore = { storeId: ids.store, name: "시청점", pickupAvailable: true };
 
 export const storeIdentityHandlers = [

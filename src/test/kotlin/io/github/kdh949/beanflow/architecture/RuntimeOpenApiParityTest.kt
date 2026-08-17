@@ -8,6 +8,7 @@ import io.github.kdh949.beanflow.discovery.api.StoreRecommendationOperations
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.discovery.internal.CustomerStoreHydrator
 import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeFilingService
+import io.github.kdh949.beanflow.dispute.internal.SettlementDisputeQueryService
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountApplicationService
 import io.github.kdh949.beanflow.identity.internal.CustomerSourceIpResolver
 import io.github.kdh949.beanflow.identity.internal.MerchantAccountApplicationService
@@ -32,6 +33,7 @@ import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.CustomerCancellationService
 import io.github.kdh949.beanflow.ordering.internal.CustomerOrderQueryService
 import io.github.kdh949.beanflow.ordering.internal.GetOrderService
+import io.github.kdh949.beanflow.ordering.internal.MerchantRefundService
 import io.github.kdh949.beanflow.ordering.internal.OneTimeCheckoutService
 import io.github.kdh949.beanflow.ordering.internal.PartialRefundService
 import io.github.kdh949.beanflow.ordering.internal.PublicOrderReferenceService
@@ -100,6 +102,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var partialRefundService: PartialRefundService
+
+    @MockitoBean
+    private lateinit var merchantRefundService: MerchantRefundService
 
     @MockitoBean
     private lateinit var storeOrderTransitionService: StoreOrderTransitionService
@@ -172,6 +177,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var settlementDisputeFilingService: SettlementDisputeFilingService
+
+    @MockitoBean
+    private lateinit var settlementDisputeQueryService: SettlementDisputeQueryService
 
     @MockitoBean
     private lateinit var supportCaseApplicationService: SupportCaseApplicationService

@@ -32,7 +32,8 @@ internal class SettlementItemController(
         service.list(
             ListSettlementItemsQuery(
                 actor.actorId,
-                setOf(StoreActorRole.OWNER, StoreActorRole.STAFF),
+                // 정산 명세는 수수료·혜택 원가·실지급액이라 batch 목록과 같은 ACTIVE OWNER 전용이다.
+                setOf(StoreActorRole.OWNER),
                 storeId,
                 settlementBatchId,
                 cursor,
