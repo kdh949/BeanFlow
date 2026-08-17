@@ -143,7 +143,7 @@ hosted full suite를 required evidence로 삼는다.
 - [x] (2026-08-17) 최신 `origin/main` `32bbc6a` 기준 clean worktree 준비
 - [x] (2026-08-17) 현재 workflow, ruleset, test inventory와 최근 hosted run 시간 조사
 - [ ] timing evidence와 baseline 3회 수집
-- [ ] scope/required gate 구현
+- [x] (2026-08-17) `docs | frontend | backend | full` scope와 required `build` aggregate gate 구현
 - [ ] shared PostGIS runtime 구현
 - [ ] duration-weighted shard 구현
 - [ ] local/hosted validation과 15분 gate 완료
@@ -153,6 +153,9 @@ hosted full suite를 required evidence로 삼는다.
 - main ruleset은 `build`만 required이지만 현재 `build` job은 test matrix와 독립이다.
 - 이미 runner-level 3-way shard를 사용해도 최근 성공 run의 critical path는 26~28분이다.
 - direct PostgreSQLContainer test class가 46개이며, 이 중 39개는 migration test다.
+- instrumentation-only SHA `0ae00f9`의 첫 baseline run `32008419922`는 test matrix 전에
+  `origin/main`에서 유입된 Storybook color-contrast 회귀로 실패했다. 동일 main SHA의 push run
+  `32007692607`도 같은 단계에서 실패했으므로 계측 변경의 회귀가 아니다.
 
 ## Decision Log
 
@@ -160,6 +163,8 @@ hosted full suite를 required evidence로 삼는다.
 - 2026-08-17: 15분을 hard target으로 두고 runner는 측정 후 최대 6개까지 허용한다.
 - 2026-08-17: required context 이름 `build`를 유지하고 aggregate semantics로 바꾼 ruleset write를 피한다.
 - 2026-08-17: success artifact도 14일 보관하여 duration weight와 후속 회귀를 재현한다.
+- 2026-08-17: upstream frontend failure가 backend 증적 수집까지 막지 않도록 frontend를 독립 job으로
+  분리하되, `full` aggregate gate는 frontend failure를 그대로 실패로 유지한다.
 
 ## Outcomes & Retrospective
 

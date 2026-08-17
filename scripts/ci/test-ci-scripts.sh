@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CAPTURE="$ROOT/scripts/ci/run-and-capture.sh"
 CLASSIFY="$ROOT/scripts/ci/classify-changes.sh"
+REQUIRED_GATE="$ROOT/scripts/ci/verify-required-gate.sh"
 SUMMARIZE="$ROOT/scripts/ci/summarize-test-results.py"
 
 test_root="$(mktemp -d)"
@@ -112,7 +113,7 @@ printf "class App\n" >"$repo/src/main/kotlin/App.kt"
 git -C "$repo" add src
 git -C "$repo" commit -q -m code
 code_head="$(git -C "$repo" rev-parse HEAD)"
-assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$docs_head" "$code_head")" "Kotlin changes use full scope"
+assert_equal "backend" "$(cd "$repo" && "$CLASSIFY" "$docs_head" "$code_head")" "Kotlin changes use backend scope"
 
 mkdir -p "$repo/docs/archive"
 cp "$repo/src/main/kotlin/App.kt" "$repo/docs/archive/AppCopy.md"
@@ -131,13 +132,40 @@ printf "SELECT 1;\n" >"$repo/src/main/resources/db/migration/V1__test.sql"
 git -C "$repo" add src/main/resources/db/migration
 git -C "$repo" commit -q -m migration
 migration_head="$(git -C "$repo" rev-parse HEAD)"
-assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$rename_head" "$migration_head")" "SQL migration changes use full scope"
+assert_equal "backend" "$(cd "$repo" && "$CLASSIFY" "$rename_head" "$migration_head")" "SQL migration changes use backend scope"
 
 printf "plugins {}\n" >"$repo/build.gradle.kts"
 git -C "$repo" add build.gradle.kts
 git -C "$repo" commit -q -m gradle
 gradle_head="$(git -C "$repo" rev-parse HEAD)"
-assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$migration_head" "$gradle_head")" "Gradle changes use full scope"
+assert_equal "backend" "$(cd "$repo" && "$CLASSIFY" "$migration_head" "$gradle_head")" "Gradle changes use backend scope"
+
+mkdir -p "$repo/frontend/src"
+printf "export const app = true;\n" >"$repo/frontend/src/app.ts"
+git -C "$repo" add frontend/src/app.ts
+git -C "$repo" commit -q -m frontend
+frontend_head="$(git -C "$repo" rev-parse HEAD)"
+assert_equal "frontend" "$(cd "$repo" && "$CLASSIFY" "$gradle_head" "$frontend_head")" "frontend changes use frontend scope"
+
+printf "frontend docs\n" >"$repo/docs/frontend.md"
+git -C "$repo" add docs/frontend.md
+git -C "$repo" commit -q -m frontend-docs
+frontend_docs_head="$(git -C "$repo" rev-parse HEAD)"
+assert_equal "frontend" "$(cd "$repo" && "$CLASSIFY" "$gradle_head" "$frontend_docs_head")" "docs plus frontend changes use frontend scope"
+
+printf "class BackendWithDocs\n" >"$repo/src/main/kotlin/BackendWithDocs.kt"
+printf "backend docs\n" >"$repo/docs/backend.md"
+git -C "$repo" add src/main/kotlin/BackendWithDocs.kt docs/backend.md
+git -C "$repo" commit -q -m backend-docs
+backend_docs_head="$(git -C "$repo" rev-parse HEAD)"
+assert_equal "backend" "$(cd "$repo" && "$CLASSIFY" "$frontend_docs_head" "$backend_docs_head")" "docs plus backend changes use backend scope"
+
+printf "class MoreBackend\n" >"$repo/src/main/kotlin/MoreBackend.kt"
+printf "export const more = true;\n" >"$repo/frontend/src/more.ts"
+git -C "$repo" add src/main/kotlin/MoreBackend.kt frontend/src/more.ts
+git -C "$repo" commit -q -m mixed
+mixed_head="$(git -C "$repo" rev-parse HEAD)"
+assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$backend_docs_head" "$mixed_head")" "mixed frontend and backend changes use full scope"
 
 mkdir -p "$repo/.github/workflows"
 printf "name: test\n" >"$repo/.github/workflows/ci.yml"
@@ -160,5 +188,32 @@ unknown_head="$(git -C "$repo" rev-parse HEAD)"
 assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$ci_script_head" "$unknown_head")" "unknown paths use full scope"
 assert_equal "full" "$(cd "$repo" && "$CLASSIFY" "$unknown_head" "$unknown_head")" "empty ranges use full scope"
 assert_equal "full" "$(cd "$repo" && "$CLASSIFY" missing "$unknown_head")" "missing revisions use full scope"
+
+scopes=(docs frontend backend full)
+expected_rows=(
+  "success skipped skipped skipped"
+  "success success skipped skipped"
+  "success skipped success success"
+  "success success success success"
+)
+statuses=(success failure cancelled skipped)
+
+for index in "${!scopes[@]}"; do
+  scope="${scopes[$index]}"
+  read -r -a expected <<<"${expected_rows[$index]}"
+  assert_status 0 "$REQUIRED_GATE" "$scope" "${expected[@]}"
+
+  for position in 0 1 2 3; do
+    for status in "${statuses[@]}"; do
+      [[ "$status" == "${expected[$position]}" ]] && continue
+      actual=("${expected[@]}")
+      actual[$position]="$status"
+      assert_status 1 "$REQUIRED_GATE" "$scope" "${actual[@]}"
+    done
+  done
+done
+
+assert_status 1 "$REQUIRED_GATE" unknown success success success success
+assert_status 1 "$REQUIRED_GATE" full success success success
 
 echo "CI script tests passed."
