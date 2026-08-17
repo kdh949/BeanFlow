@@ -179,6 +179,14 @@ hosted full suite를 required evidence로 삼는다.
 - 위 세 run의 class별 median을 `scripts/ci/test-class-weights.tsv`에 기록했다. LPT estimated class-time은
   3개 shard `23m38s`, 4개 `17m44s`, 5개 `14m11s`, 6개 `11m49s`이고 각 경우 269개 class가
   정확히 한 번 배정된다. hosted wall time은 계획대로 3개부터 순서대로 측정한다.
+- LPT 3-shard SHA `5349b26`의 run `32048400652`, `32050473251`, `32052563076`은 모두 backend
+  test 269개 class를 정확히 한 번 실행했고 failure/error가 0이었다. critical path는 `25m32s`,
+  `26m41s`, `26m45s`로 median `26m41s`, total runner-minute는 `78.30`, `75.27`, `79.57`로
+  median `78.30`이다. 목표를 넘겨 계획대로 4-shard로 증가한다.
+- 같은 SHA의 run `32042924499`는 GitHub incident 중 action archive 다운로드가 429/503으로 세 번
+  실패해 test 시작 전에 종료됐다. 공식 status가 Actions/API major outage와 archive download 약 50%
+  오류율을 공지한 infrastructure failure라 측정 표본에서 제외하고 남은 job은 취소했다. Actions/API가
+  operational이고 codeload가 HTTP 200으로 회복된 뒤 위 세 run을 새로 순차 실행했다.
 
 ## Decision Log
 
