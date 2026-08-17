@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -10,21 +10,14 @@ import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
-@Testcontainers(disabledWithoutDocker = true)
-internal class AuditRetentionPolicyMigrationTest {
+internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         val databaseSequence = AtomicInteger()
     }
 
@@ -221,8 +214,11 @@ internal class AuditRetentionPolicyMigrationTest {
 
     private fun database(prefix: String): DataSource {
         val name = "s10_${prefix}_${databaseSequence.incrementAndGet()}"
-        JdbcTemplate(dataSource(postgres.databaseName)).execute("""CREATE DATABASE "$name" TEMPLATE template1""")
-        return dataSource(name)
+        return DriverManagerDataSource(
+            postgres.createAdditionalDatabase(name),
+            postgres.username,
+            postgres.password,
+        )
     }
 
     private fun dataSource(databaseName: String): DataSource {

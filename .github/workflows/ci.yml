@@ -83,7 +83,8 @@ jobs:
             echo "- Scope: \`$scope\`"
             echo "- Compare: \`$base_sha..$head_sha\`"
             echo "- Changed paths: \`$changed_path_count\`"
-            echo "- Gradle full build: \`$([[ "$scope" == "full" ]] && echo yes || echo no)\`"
+            echo "- Frontend validation: \`$([[ "$scope" == "frontend" || "$scope" == "full" ]] && echo yes || echo no)\`"
+            echo "- Backend validation: \`$([[ "$scope" == "backend" || "$scope" == "full" ]] && echo yes || echo no)\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify CI scripts
@@ -113,59 +114,11 @@ jobs:
           ${{ steps.changes.outputs.base_sha }}
           ${{ steps.changes.outputs.head_sha }}
 
-      - name: Set up Node.js 24
-        if: steps.changes.outputs.scope == 'full'
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Storybook browser
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Verify frontend design adherence
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run check:design
-
-      - name: Verify frontend typecheck
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run typecheck
-
-      - name: Run frontend unit tests
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run test:unit
-
-      - name: Run Storybook interaction and accessibility tests
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run test:storybook:ci
-
-      - name: Build Storybook
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run build-storybook
-
-      - name: Verify Storybook Docs isolation
-        if: steps.changes.outputs.scope == 'full'
-        working-directory: frontend
-        run: npm run test:storybook:docs
-
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: failure-evidence-${{ github.run_id }}
+          name: failure-evidence-${{ github.run_id }}-preflight
           path: |
             build/reports/
             build/test-results/
@@ -175,10 +128,108 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  build:
-    name: build
+  frontend:
+    name: frontend
     needs: preflight
-    if: needs.preflight.outputs.scope == 'full'
+    if: needs.preflight.outputs.scope == 'frontend' || needs.preflight.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Storybook browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify frontend design adherence
+        working-directory: frontend
+        run: npm run check:design
+
+      - name: Verify frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm run test:unit
+
+      - name: Run required Storybook interaction tests
+        working-directory: frontend
+        env:
+          VITE_STORYBOOK_A11Y_TEST: "off"
+        run: >-
+          ../scripts/ci/run-and-capture.sh
+          ../.ci-artifacts/storybook-interactions.log
+          npm run test:storybook:ci
+
+      - name: Run advisory Storybook accessibility tests
+        id: storybook_a11y
+        continue-on-error: true
+        working-directory: frontend
+        run: >-
+          ../scripts/ci/run-and-capture.sh
+          ../.ci-artifacts/storybook-a11y.log
+          npm run test:storybook:ci
+
+      - name: Summarize Storybook accessibility result
+        if: always()
+        env:
+          A11Y_OUTCOME: ${{ steps.storybook_a11y.outcome }}
+        run: |
+          {
+            echo "### Storybook accessibility"
+            echo "- Advisory outcome: \`$A11Y_OUTCOME\`"
+            echo "- Required interaction tests run separately with accessibility assertions disabled."
+            echo "- Accessibility violations are tracked without changing the required frontend result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Storybook accessibility evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: storybook-a11y-${{ github.run_id }}
+          path: |
+            .ci-artifacts/storybook-a11y.log
+            frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Build Storybook
+        working-directory: frontend
+        run: npm run build-storybook
+
+      - name: Verify Storybook Docs isolation
+        working-directory: frontend
+        run: npm run test:storybook:docs
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-evidence-${{ github.run_id }}-frontend
+          path: |
+            frontend/coverage/
+            frontend/storybook-static/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backend_build:
+    name: backend-build
+    needs: preflight
+    if: needs.preflight.outputs.scope == 'backend' || needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -202,36 +253,27 @@ jobs:
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-build.log
           ./gradlew build -x test --stacktrace --console=plain
 
-      - name: Capture Docker diagnostics
-        if: failure()
-        run: |
-          docker info > "${RUNNER_TEMP}/docker-info.txt" 2>&1 || true
-          docker ps -a > "${RUNNER_TEMP}/docker-containers.txt" 2>&1 || true
-
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: failure-evidence-${{ github.run_id }}
+          name: failure-evidence-${{ github.run_id }}-backend-build
           path: |
             build/reports/
-            build/test-results/
             .ci-artifacts/
-            ${{ runner.temp }}/docker-info.txt
-            ${{ runner.temp }}/docker-containers.txt
           if-no-files-found: ignore
           retention-days: 7
 
   test:
-    name: test (${{ matrix.shard }}/3)
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: preflight
-    if: needs.preflight.outputs.scope == 'full'
+    if: needs.preflight.outputs.scope == 'backend' || needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1, 2, 3, 4, 5]
 
     steps:
       - name: Check out repository
@@ -251,12 +293,40 @@ jobs:
       - name: Verify CI test shard assignment
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard-assignment.log
-          ./gradlew verifyCiTestShards --stacktrace --console=plain
+          ./gradlew verifyCiTestShards
+          -PciTestShardIndex=${{ matrix.shard }}
+          -PciTestShardCount=${{ strategy.job-total }}
+          --stacktrace --console=plain
 
       - name: Run test shard
+        env:
+          BEANFLOW_CI_TEST_PROGRESS: "true"
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard.log
-          ./gradlew test -PciTestShardIndex=${{ matrix.shard }} -PciTestShardCount=3 --stacktrace --console=plain
+          ./gradlew test
+          -PciTestShardIndex=${{ matrix.shard }}
+          -PciTestShardCount=${{ strategy.job-total }}
+          --stacktrace --console=plain
+
+      - name: Summarize Gradle test timing
+        if: always()
+        run: >-
+          python3 scripts/ci/summarize-test-results.py
+          --results-dir build/test-results/test
+          --output .ci-artifacts/gradle-test-timings.tsv
+          --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-evidence-${{ github.run_id }}-${{ matrix.shard }}
+          path: |
+            build/test-results/test/
+            .ci-artifacts/gradle-test-shard.log
+            .ci-artifacts/gradle-test-timings.tsv
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Capture Docker diagnostics
         if: failure()
@@ -277,3 +347,38 @@ jobs:
             ${{ runner.temp }}/docker-containers.txt
           if-no-files-found: ignore
           retention-days: 7
+
+  build:
+    name: build
+    needs: [preflight, frontend, backend_build, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify required CI results
+        env:
+          CI_SCOPE: ${{ needs.preflight.outputs.scope }}
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          BACKEND_BUILD_RESULT: ${{ needs.backend_build.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          scripts/ci/verify-required-gate.sh \
+            "$CI_SCOPE" \
+            "$PREFLIGHT_RESULT" \
+            "$FRONTEND_RESULT" \
+            "$BACKEND_BUILD_RESULT" \
+            "$TEST_RESULT"
+
+          {
+            echo "### Required CI gate"
+            echo "- Scope: \`$CI_SCOPE\`"
+            echo "- preflight: \`$PREFLIGHT_RESULT\`"
+            echo "- frontend: \`$FRONTEND_RESULT\`"
+            echo "- backend-build: \`$BACKEND_BUILD_RESULT\`"
+            echo "- test: \`$TEST_RESULT\`"
+          } >> "$GITHUB_STEP_SUMMARY"

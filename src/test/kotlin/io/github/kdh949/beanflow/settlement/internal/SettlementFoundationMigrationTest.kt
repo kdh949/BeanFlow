@@ -2,7 +2,7 @@
 
 package io.github.kdh949.beanflow.settlement.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -13,19 +13,11 @@ import org.springframework.dao.DataAccessException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.time.LocalDate
 import java.util.UUID
 
-@Testcontainers
-internal class SettlementFoundationMigrationTest {
+internal class SettlementFoundationMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> =
-            PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
     }
 
     private val jdbcTemplate by lazy {

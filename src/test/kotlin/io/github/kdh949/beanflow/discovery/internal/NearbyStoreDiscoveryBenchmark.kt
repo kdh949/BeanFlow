@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
 import io.github.kdh949.beanflow.merchant.internal.StoreDiscoveryProfileQueryRepository
 import org.assertj.core.api.Assertions.assertThat
@@ -10,9 +10,6 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.springframework.jdbc.datasource.SingleConnectionDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
@@ -27,13 +24,9 @@ import kotlin.math.ceil
  * produced on every machine and every run. The query point, radius, page limit, warm-up count and
  * measured iteration count are all fixed below.
  */
-@Testcontainers(disabledWithoutDocker = true)
 @EnabledIfEnvironmentVariable(named = "BEANFLOW_BENCHMARK", matches = "true")
-internal class NearbyStoreDiscoveryBenchmark {
+internal class NearbyStoreDiscoveryBenchmark : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         const val SMALL_SCALE = 10_000
         const val LARGE_SCALE = 100_000
         const val RADIUS_METERS = 1_000

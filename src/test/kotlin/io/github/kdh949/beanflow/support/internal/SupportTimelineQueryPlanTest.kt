@@ -2,27 +2,19 @@
 
 package io.github.kdh949.beanflow.support.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.UUID
 
-@Testcontainers(disabledWithoutDocker = true)
-internal class SupportTimelineQueryPlanTest {
+internal class SupportTimelineQueryPlanTest : IsolatedPostgresSupport() {
     companion object {
         private const val ROW_COUNT = 20_000
         private const val LIMIT = 20
-
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
     }
 
     private val jdbcTemplate by lazy {

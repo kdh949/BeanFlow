@@ -26,20 +26,54 @@ if ! git diff --name-status -z --find-renames --find-copies-harder "$base_sha" "
   exit 0
 fi
 
-is_docs_path() {
+path_category() {
   local path="$1"
 
   case "$path" in
     docs/* | openapi/* | .agent/* | .github/pull_request_template.md)
-      return 0
+      echo "docs"
+      return
+      ;;
+    frontend/*)
+      echo "frontend"
+      return
+      ;;
+    src/* | build.gradle.kts | settings.gradle.kts | gradle.properties | gradle/* | gradlew | gradlew.bat)
+      echo "backend"
+      return
       ;;
   esac
 
-  [[ "$path" != */* && "$path" == *.md ]]
+  if [[ "$path" != */* && "$path" == *.md ]]; then
+    echo "docs"
+  else
+    echo "full"
+  fi
 }
 
-scope="docs"
 path_count=0
+has_frontend=false
+has_backend=false
+force_full=false
+
+record_category() {
+  case "$1" in
+    docs)
+      ;;
+    frontend)
+      has_frontend=true
+      ;;
+    backend)
+      has_backend=true
+      ;;
+    full)
+      force_full=true
+      ;;
+    *)
+      force_full=true
+      ;;
+  esac
+}
 
 exec 3<"$changes_file"
 while IFS= read -r -d '' status <&3; do
@@ -57,6 +91,11 @@ while IFS= read -r -d '' status <&3; do
         exit 0
       }
       paths=("$source_path" "$destination_path")
+      source_category="$(path_category "$source_path")"
+      destination_category="$(path_category "$destination_path")"
+      if [[ "$source_category" != "$destination_category" ]]; then
+        force_full=true
+      fi
       ;;
     A | D | M | T | U | X | B)
       IFS= read -r -d '' path <&3 || {
@@ -75,9 +114,7 @@ while IFS= read -r -d '' status <&3; do
 
   for path in "${paths[@]}"; do
     path_count=$((path_count + 1))
-    if ! is_docs_path "$path"; then
-      scope="full"
-    fi
+    record_category "$(path_category "$path")"
   done
 done
 
@@ -87,4 +124,12 @@ if [[ "$path_count" -eq 0 ]]; then
   exit 0
 fi
 
-echo "$scope"
+if [[ "$force_full" == true || ("$has_frontend" == true && "$has_backend" == true) ]]; then
+  echo "full"
+elif [[ "$has_frontend" == true ]]; then
+  echo "frontend"
+elif [[ "$has_backend" == true ]]; then
+  echo "backend"
+else
+  echo "docs"
+fi

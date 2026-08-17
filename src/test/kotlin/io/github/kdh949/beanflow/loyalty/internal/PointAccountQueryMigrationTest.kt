@@ -1,24 +1,17 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-@Testcontainers(disabledWithoutDocker = true)
-internal class PointAccountQueryMigrationTest {
+internal class PointAccountQueryMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         const val FIXTURE_TRANSACTION_COUNT = 5_000
         const val LIMIT = 101
         val FIXTURE_START: Instant = Instant.parse("2026-08-01T00:00:00Z")
