@@ -144,7 +144,7 @@ hosted full suite를 required evidence로 삼는다.
 - [x] (2026-08-17) 현재 workflow, ruleset, test inventory와 최근 hosted run 시간 조사
 - [ ] timing evidence와 baseline 3회 수집
 - [x] (2026-08-17) `docs | frontend | backend | full` scope와 required `build` aggregate gate 구현
-- [ ] shared PostGIS runtime 구현
+- [x] (2026-08-17) Spring integration과 direct container test 46개를 JVM singleton PostGIS + class DB runtime으로 통합
 - [ ] duration-weighted shard 구현
 - [ ] local/hosted validation과 15분 gate 완료
 
@@ -156,6 +156,11 @@ hosted full suite를 required evidence로 삼는다.
 - instrumentation-only SHA `0ae00f9`의 첫 baseline run `32008419922`는 test matrix 전에
   `origin/main`에서 유입된 Storybook color-contrast 회귀로 실패했다. 동일 main SHA의 push run
   `32007692607`도 같은 단계에서 실패했으므로 계측 변경의 회귀가 아니다.
+- class-specific Spring context가 cache에 남으면 Hikari connection과 database cleanup이 class 종료보다
+  늦어진다. test class identity를 context key에 넣고 after-class listener가 context를 dirty-close한 뒤
+  실제 database 부재까지 확인하도록 했다.
+- shared runtime local full suite는 267개 기존 class와 runtime regression class를 단일 PostGIS server에서
+  모두 통과했지만 단일 JVM wall time은 `51m 5s`였다. hosted acceptance는 runner-level shard로 판단한다.
 
 ## Decision Log
 
@@ -165,6 +170,8 @@ hosted full suite를 required evidence로 삼는다.
 - 2026-08-17: success artifact도 14일 보관하여 duration weight와 후속 회귀를 재현한다.
 - 2026-08-17: upstream frontend failure가 backend 증적 수집까지 막지 않도록 frontend를 독립 job으로
   분리하되, `full` aggregate gate는 frontend failure를 그대로 실패로 유지한다.
+- 2026-08-17: Spring context 하나가 datasource 하나를 소유하므로 class별 DB를 보장하기 위해 test-only
+  context cache key와 after-class cleanup listener를 사용한다. production bean graph에는 관여하지 않는다.
 
 ## Outcomes & Retrospective
 

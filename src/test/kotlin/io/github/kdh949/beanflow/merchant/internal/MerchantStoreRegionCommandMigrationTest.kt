@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
@@ -9,9 +9,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -24,13 +21,8 @@ import java.util.UUID
  * ledger even though the two have the same shape: `(actor_id, idempotency_key)` uniqueness only
  * means something within one set of actors.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class MerchantStoreRegionCommandMigrationTest {
+internal class MerchantStoreRegionCommandMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         private const val HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
 

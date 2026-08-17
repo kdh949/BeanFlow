@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.fulfillment.internal.PICKUP_SLOT_QUERY_HORIZON
 import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotQueryRepository
 import io.github.kdh949.beanflow.merchant.internal.StoreMenuQueryRepository
@@ -10,9 +10,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.sql.Connection
@@ -32,94 +29,87 @@ import javax.sql.DataSource
  * These are per-repository counts, not endpoint totals: a request also verifies store identity and
  * availability. `DiscoveryStoreCatalogEndpointQueryCountTest` pins what a whole HTTP request issues.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class DiscoveryStoreCatalogQueryCountTest {
-    companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
+internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
+    private lateinit var countingDataSource: StatementCountingDataSource
+    private lateinit var menuRepository: StoreMenuQueryRepository
+    private lateinit var slotRepository: PickupSlotQueryRepository
+    private lateinit var fixtures: JdbcTemplate
 
-        private lateinit var countingDataSource: StatementCountingDataSource
-        private lateinit var menuRepository: StoreMenuQueryRepository
-        private lateinit var slotRepository: PickupSlotQueryRepository
-        private lateinit var fixtures: JdbcTemplate
+    private val smallStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000001")
+    private val largeStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000002")
+    private val now: Instant = Instant.parse("2026-08-07T00:00:00Z")
+    private val horizonEnd: Instant = now.plus(PICKUP_SLOT_QUERY_HORIZON)
 
-        private val smallStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000001")
-        private val largeStore: UUID = UUID.fromString("40000000-0000-0000-0000-000000000002")
-        private val now: Instant = Instant.parse("2026-08-07T00:00:00Z")
-        private val horizonEnd: Instant = now.plus(PICKUP_SLOT_QUERY_HORIZON)
+    @BeforeAll
+    fun migrateAndSeed() {
+        val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .load()
+            .migrate()
+        fixtures = JdbcTemplate(dataSource)
+        countingDataSource = StatementCountingDataSource(dataSource)
+        val countedTemplate = JdbcTemplate(countingDataSource)
+        menuRepository = StoreMenuQueryRepository(countedTemplate)
+        slotRepository = PickupSlotQueryRepository(countedTemplate)
 
-        @BeforeAll
-        @JvmStatic
-        fun migrateAndSeed() {
-            val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            Flyway
-                .configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate()
-            fixtures = JdbcTemplate(dataSource)
-            countingDataSource = StatementCountingDataSource(dataSource)
-            val countedTemplate = JdbcTemplate(countingDataSource)
-            menuRepository = StoreMenuQueryRepository(countedTemplate)
-            slotRepository = PickupSlotQueryRepository(countedTemplate)
+        seedStore(smallStore, menus = 1, optionsPerMenu = 1, slots = 1)
+        seedStore(largeStore, menus = 50, optionsPerMenu = 4, slots = 40)
+    }
 
-            seedStore(smallStore, menus = 1, optionsPerMenu = 1, slots = 1)
-            seedStore(largeStore, menus = 50, optionsPerMenu = 4, slots = 40)
-        }
-
-        private fun seedStore(
-            storeId: UUID,
-            menus: Int,
-            optionsPerMenu: Int,
-            slots: Int,
-        ) {
+    private fun seedStore(
+        storeId: UUID,
+        menus: Int,
+        optionsPerMenu: Int,
+        slots: Int,
+    ) {
+        fixtures.update(
+            "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
+            storeId,
+        )
+        repeat(menus) { menuIndex ->
+            val menuId = UUID.nameUUIDFromBytes("catalog-count:$storeId:menu:$menuIndex".toByteArray())
             fixtures.update(
-                "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
+                """
+                INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
+                VALUES (?, ?, ?, ?, ?, 0)
+                """.trimIndent(),
+                menuId,
                 storeId,
+                "Menu %03d".format(menuIndex),
+                1_000L + menuIndex,
+                menuIndex % 3 != 0,
             )
-            repeat(menus) { menuIndex ->
-                val menuId = UUID.nameUUIDFromBytes("catalog-count:$storeId:menu:$menuIndex".toByteArray())
+            repeat(optionsPerMenu) { optionIndex ->
                 fixtures.update(
                     """
-                    INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
-                    VALUES (?, ?, ?, ?, ?, 0)
+                    INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available)
+                    VALUES (?, ?, ?, ?, ?)
                     """.trimIndent(),
+                    UUID.nameUUIDFromBytes("catalog-count:$menuId:option:$optionIndex".toByteArray()),
                     menuId,
-                    storeId,
-                    "Menu %03d".format(menuIndex),
-                    1_000L + menuIndex,
-                    menuIndex % 3 != 0,
-                )
-                repeat(optionsPerMenu) { optionIndex ->
-                    fixtures.update(
-                        """
-                        INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available)
-                        VALUES (?, ?, ?, ?, ?)
-                        """.trimIndent(),
-                        UUID.nameUUIDFromBytes("catalog-count:$menuId:option:$optionIndex".toByteArray()),
-                        menuId,
-                        "Option %03d".format(optionIndex),
-                        100L * optionIndex,
-                        optionIndex % 2 == 0,
-                    )
-                }
-            }
-            repeat(slots) { slotIndex ->
-                fixtures.update(
-                    """
-                    INSERT INTO fulfillment_pickup_slot (
-                        id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
-                    ) VALUES (?, ?, ?, ?, ?, 0, 0, 0)
-                    """.trimIndent(),
-                    UUID.nameUUIDFromBytes("catalog-count:$storeId:slot:$slotIndex".toByteArray()),
-                    storeId,
-                    // Every slot starts after `now`, which is the window findOpenSlots projects.
-                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 5))),
-                    Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 25))),
-                    4L,
+                    "Option %03d".format(optionIndex),
+                    100L * optionIndex,
+                    optionIndex % 2 == 0,
                 )
             }
+        }
+        repeat(slots) { slotIndex ->
+            fixtures.update(
+                """
+                INSERT INTO fulfillment_pickup_slot (
+                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+                ) VALUES (?, ?, ?, ?, ?, 0, 0, 0)
+                """.trimIndent(),
+                UUID.nameUUIDFromBytes("catalog-count:$storeId:slot:$slotIndex".toByteArray()),
+                storeId,
+                // Every slot starts after `now`, which is the window findOpenSlots projects.
+                Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 5))),
+                Timestamp.from(now.plus(Duration.ofMinutes(30L * slotIndex + 25))),
+                4L,
+            )
         }
     }
 

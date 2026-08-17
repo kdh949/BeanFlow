@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
@@ -11,9 +11,6 @@ import org.junit.jupiter.api.TestInstance
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.math.BigDecimal
 import java.util.UUID
 
@@ -25,14 +22,9 @@ import java.util.UUID
  * initial load belongs to `StoreSearchIndexRebuildService`, covered by
  * `StoreSearchIndexRebuildIntegrationTest`.
  */
-@Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-internal class StoreSearchTermIndexMigrationTest {
+internal class StoreSearchTermIndexMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         private val STORE_NAME_WEIGHT = BigDecimal("1.00")
         private val MENU_NAME_WEIGHT = BigDecimal("0.70")
         private val REGION_WEIGHT = BigDecimal("0.80")

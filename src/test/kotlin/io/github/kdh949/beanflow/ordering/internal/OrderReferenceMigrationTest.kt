@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -15,17 +15,13 @@ import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
-@Testcontainers(disabledWithoutDocker = true)
-internal class OrderReferenceMigrationTest {
+internal class OrderReferenceMigrationTest : IsolatedPostgresSupport() {
     @Test
     fun `Plan 10 migrations follow the completed Support V43 through V49 inventory`() {
         val migrations =
@@ -343,11 +339,9 @@ internal class OrderReferenceMigrationTest {
 
     private fun database(name: String): DataSource {
         val databaseName = "${name}_${UUID.randomUUID().toString().replace("-", "")}"
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { it.execute("CREATE DATABASE $databaseName TEMPLATE template1") }
-        }
+        val jdbcUrl = postgres.createAdditionalDatabase(databaseName)
         return DriverManagerDataSource(
-            "jdbc:postgresql://${postgres.host}:${postgres.firstMappedPort}/$databaseName",
+            jdbcUrl,
             postgres.username,
             postgres.password,
         )
@@ -387,9 +381,6 @@ internal class OrderReferenceMigrationTest {
     )
 
     private companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         val FIXED_NOW: Instant = Instant.parse("2026-08-12T00:00:00Z")
         val SLOT_START: Instant = Instant.parse("2030-01-01T00:10:00Z")
         val SLOT_END: Instant = Instant.parse("2030-01-01T00:20:00Z")

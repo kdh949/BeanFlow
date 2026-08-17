@@ -27,10 +27,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import org.testcontainers.postgresql.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicInteger
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
@@ -46,34 +43,30 @@ class TestcontainersConfiguration {
      * https://docs.spring.io/spring-boot/reference/testing/testcontainers.html#testing.testcontainers.lifecycle
      */
     @Bean
-    internal fun isolatedTestDatabase(): IsolatedTestDatabase =
-        IsolatedTestDatabase(
-            postgres = POSTGRES,
-            databaseName = "beanflow_test_${DATABASE_SEQUENCE.incrementAndGet()}",
-        )
+    internal fun isolatedTestDatabase(): IsolatedTestDatabase = BeanflowPostgresTestRuntime.createDatabase("spring")
 
     @Bean
     internal fun testJdbcConnectionDetails(database: IsolatedTestDatabase): JdbcConnectionDetails =
         object : JdbcConnectionDetails {
-            override fun getUsername(): String = POSTGRES.username
+            override fun getUsername(): String = database.username
 
-            override fun getPassword(): String = POSTGRES.password
+            override fun getPassword(): String = database.password
 
             override fun getJdbcUrl(): String = database.jdbcUrl
 
-            override fun getDriverClassName(): String = POSTGRES.driverClassName
+            override fun getDriverClassName(): String = database.driverClassName
         }
 
     @Bean
     internal fun testFlywayConnectionDetails(database: IsolatedTestDatabase): FlywayConnectionDetails =
         object : FlywayConnectionDetails {
-            override fun getUsername(): String = POSTGRES.username
+            override fun getUsername(): String = database.username
 
-            override fun getPassword(): String = POSTGRES.password
+            override fun getPassword(): String = database.password
 
             override fun getJdbcUrl(): String = database.jdbcUrl
 
-            override fun getDriverClassName(): String = POSTGRES.driverClassName
+            override fun getDriverClassName(): String = database.driverClassName
         }
 
     @Bean
@@ -141,38 +134,5 @@ class TestcontainersConfiguration {
 
     private companion object {
         const val TEST_POLICY_HASH = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-
-        val DATABASE_SEQUENCE = AtomicInteger()
-
-        val POSTGRES: PostgreSQLContainer =
-            PostgreSQLContainer(
-                DockerImageName.parse("postgis/postgis:17-3.5").asCompatibleSubstituteFor("postgres"),
-            ).withUrlParam("sslmode", "disable").also(PostgreSQLContainer::start)
-    }
-}
-
-internal class IsolatedTestDatabase(
-    private val postgres: PostgreSQLContainer,
-    private val databaseName: String,
-) : AutoCloseable {
-    val jdbcUrl: String =
-        postgres.jdbcUrl.substringBeforeLast('/') +
-            "/$databaseName" +
-            postgres.jdbcUrl.substringAfter(postgres.databaseName)
-
-    init {
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { statement ->
-                statement.execute("CREATE DATABASE $databaseName")
-            }
-        }
-    }
-
-    override fun close() {
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { statement ->
-                statement.execute("DROP DATABASE $databaseName WITH (FORCE)")
-            }
-        }
     }
 }

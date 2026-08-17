@@ -2,16 +2,13 @@
 
 package io.github.kdh949.beanflow.dispute.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.UUID
 
 /**
@@ -20,16 +17,11 @@ import java.util.UUID
  * serve with a backward scan. This measures that on real PostgreSQL so no
  * duplicate DESC index is added on assumption.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class SettlementDisputeQueryPlanTest {
+internal class SettlementDisputeQueryPlanTest : IsolatedPostgresSupport() {
     companion object {
         private const val ROW_COUNT = 20_000
         private const val LIMIT = 20
         private const val INDEX_NAME = "idx_settlement_dispute_store_filed"
-
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
     }
 
     private val jdbcTemplate by lazy {

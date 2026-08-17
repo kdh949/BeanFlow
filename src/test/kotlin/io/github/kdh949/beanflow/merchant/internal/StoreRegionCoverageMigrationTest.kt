@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
@@ -9,9 +9,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.UUID
 
 /**
@@ -21,13 +18,8 @@ import java.util.UUID
  * migration against a database that has a store with no region and assert the failure, rather than
  * asserting the column's nullability after a clean run where there was nothing to catch.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class StoreRegionCoverageMigrationTest {
+internal class StoreRegionCoverageMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         /** 서울특별시 강남구 역삼동. */
         private const val YEOKSAM = "1168010100"
     }

@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
@@ -10,9 +10,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.sql.Connection
@@ -30,106 +27,99 @@ import javax.sql.DataSource
  * matches what `listOpenSlots` publishes, and the statement count does not grow with the number of
  * candidates. A per-store loop would satisfy the first and fail the second.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class PickupAvailabilityQueryTest {
-    companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
+internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
+    private lateinit var countingDataSource: StatementCountingDataSource
+    private lateinit var service: PickupAvailabilityQueryService
+    private lateinit var fixtures: JdbcTemplate
 
-        private lateinit var countingDataSource: StatementCountingDataSource
-        private lateinit var service: PickupAvailabilityQueryService
-        private lateinit var fixtures: JdbcTemplate
+    private val now: Instant = Instant.parse("2026-08-07T00:00:00Z")
 
-        private val now: Instant = Instant.parse("2026-08-07T00:00:00Z")
+    /** One reservable slot tomorrow. */
+    private val availableStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000001")
 
-        /** One reservable slot tomorrow. */
-        private val availableStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000001")
+    /** Slots exist but every seat is taken. */
+    private val fullStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000002")
 
-        /** Slots exist but every seat is taken. */
-        private val fullStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000002")
+    /** The only slot already started, so it is no longer reservable (BR-05). */
+    private val startedStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000003")
 
-        /** The only slot already started, so it is no longer reservable (BR-05). */
-        private val startedStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000003")
+    /** The only slot is beyond the seven-day window. */
+    private val beyondHorizonStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000004")
 
-        /** The only slot is beyond the seven-day window. */
-        private val beyondHorizonStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000004")
+    /** No slot row at all. */
+    private val slotlessStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000005")
 
-        /** No slot row at all. */
-        private val slotlessStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000005")
+    /** Never passed as a candidate; proves the port answers only about what it was asked. */
+    private val unaskedStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000006")
 
-        /** Never passed as a candidate; proves the port answers only about what it was asked. */
-        private val unaskedStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000006")
+    /** Owns many slots, so a per-slot or per-store statement count would show up. */
+    private val busyStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000007")
 
-        /** Owns many slots, so a per-slot or per-store statement count would show up. */
-        private val busyStore: UUID = UUID.fromString("50000000-0000-0000-0000-000000000007")
+    @BeforeAll
+    fun migrateAndSeed() {
+        val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .load()
+            .migrate()
+        fixtures = JdbcTemplate(dataSource)
+        countingDataSource = StatementCountingDataSource(dataSource)
+        service = PickupAvailabilityQueryService(PickupAvailabilityQueryRepository(JdbcTemplate(countingDataSource)))
 
-        @BeforeAll
-        @JvmStatic
-        fun migrateAndSeed() {
-            val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            Flyway
-                .configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate()
-            fixtures = JdbcTemplate(dataSource)
-            countingDataSource = StatementCountingDataSource(dataSource)
-            service = PickupAvailabilityQueryService(PickupAvailabilityQueryRepository(JdbcTemplate(countingDataSource)))
+        listOf(
+            availableStore,
+            fullStore,
+            startedStore,
+            beyondHorizonStore,
+            slotlessStore,
+            unaskedStore,
+            busyStore,
+        ).forEach(::seedStore)
 
-            listOf(
-                availableStore,
-                fullStore,
-                startedStore,
-                beyondHorizonStore,
-                slotlessStore,
-                unaskedStore,
-                busyStore,
-            ).forEach(::seedStore)
-
-            insertSlot(availableStore, startsIn = Duration.ofDays(1), capacity = 2, reserved = 1, confirmed = 0)
-            insertSlot(fullStore, startsIn = Duration.ofDays(1), capacity = 2, reserved = 1, confirmed = 1)
-            // The reservable lower bound is `startsAt > now`, so a slot that already began is out.
-            insertSlot(startedStore, startsIn = Duration.ofMinutes(-30), capacity = 5, reserved = 0, confirmed = 0)
-            insertSlot(beyondHorizonStore, startsIn = Duration.ofDays(8), capacity = 5, reserved = 0, confirmed = 0)
-            insertSlot(unaskedStore, startsIn = Duration.ofDays(1), capacity = 5, reserved = 0, confirmed = 0)
-            repeat(60) { index ->
-                insertSlot(busyStore, startsIn = Duration.ofHours(index + 1L), capacity = 3, reserved = 3, confirmed = 0)
-            }
-            // Exactly one reservable slot hides at the end of a long, fully booked list.
-            insertSlot(busyStore, startsIn = Duration.ofHours(70), capacity = 3, reserved = 2, confirmed = 0)
+        insertSlot(availableStore, startsIn = Duration.ofDays(1), capacity = 2, reserved = 1, confirmed = 0)
+        insertSlot(fullStore, startsIn = Duration.ofDays(1), capacity = 2, reserved = 1, confirmed = 1)
+        // The reservable lower bound is `startsAt > now`, so a slot that already began is out.
+        insertSlot(startedStore, startsIn = Duration.ofMinutes(-30), capacity = 5, reserved = 0, confirmed = 0)
+        insertSlot(beyondHorizonStore, startsIn = Duration.ofDays(8), capacity = 5, reserved = 0, confirmed = 0)
+        insertSlot(unaskedStore, startsIn = Duration.ofDays(1), capacity = 5, reserved = 0, confirmed = 0)
+        repeat(60) { index ->
+            insertSlot(busyStore, startsIn = Duration.ofHours(index + 1L), capacity = 3, reserved = 3, confirmed = 0)
         }
+        // Exactly one reservable slot hides at the end of a long, fully booked list.
+        insertSlot(busyStore, startsIn = Duration.ofHours(70), capacity = 3, reserved = 2, confirmed = 0)
+    }
 
-        private fun seedStore(storeId: UUID) {
-            fixtures.update(
-                "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
-                storeId,
-            )
-        }
+    private fun seedStore(storeId: UUID) {
+        fixtures.update(
+            "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
+            storeId,
+        )
+    }
 
-        private fun insertSlot(
-            storeId: UUID,
-            startsIn: Duration,
-            capacity: Long,
-            reserved: Long,
-            confirmed: Long,
-        ) {
-            val startsAt = now.plus(startsIn)
-            fixtures.update(
-                """
-                INSERT INTO fulfillment_pickup_slot (
-                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-                """.trimIndent(),
-                UUID.randomUUID(),
-                storeId,
-                Timestamp.from(startsAt),
-                Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
-                capacity,
-                reserved,
-                confirmed,
-            )
-        }
+    private fun insertSlot(
+        storeId: UUID,
+        startsIn: Duration,
+        capacity: Long,
+        reserved: Long,
+        confirmed: Long,
+    ) {
+        val startsAt = now.plus(startsIn)
+        fixtures.update(
+            """
+            INSERT INTO fulfillment_pickup_slot (
+                id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            storeId,
+            Timestamp.from(startsAt),
+            Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
+            capacity,
+            reserved,
+            confirmed,
+        )
     }
 
     private val allCandidates =

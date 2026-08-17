@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
-import io.github.kdh949.beanflow.BEANFLOW_POSTGRES_IMAGE
+import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
@@ -11,9 +11,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.DefaultApplicationArguments
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.UUID
 import javax.sql.DataSource
 
@@ -23,12 +20,8 @@ import javax.sql.DataSource
  * Every case migrates a database created from `template1`, so `CREATE EXTENSION postgis` really has
  * to run and the migration would fail if the role could not create the extension.
  */
-@Testcontainers(disabledWithoutDocker = true)
-internal class StoreDiscoveryProfileMigrationTest {
+internal class StoreDiscoveryProfileMigrationTest : IsolatedPostgresSupport() {
     companion object {
-        @Container
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(BEANFLOW_POSTGRES_IMAGE)
-
         const val FIXTURE_STORE_COUNT = 5_000
         const val IN_RADIUS_STORE_COUNT = 50
         const val RADIUS_METERS = 1_000
@@ -432,10 +425,12 @@ internal class StoreDiscoveryProfileMigrationTest {
      * Creates an isolated database from `template1`, so the PostGIS extension is not inherited from
      * the image-initialised default database and the migration has to create it.
      */
-    private fun database(name: String): DataSource {
-        JdbcTemplate(dataSource(postgres.databaseName)).execute("""CREATE DATABASE "$name" TEMPLATE template1""")
-        return dataSource(name)
-    }
+    private fun database(name: String): DataSource =
+        DriverManagerDataSource(
+            postgres.createAdditionalDatabase(name),
+            postgres.username,
+            postgres.password,
+        )
 
     private fun dataSource(databaseName: String): DataSource {
         val withoutQuery = postgres.jdbcUrl.substringBefore('?')
