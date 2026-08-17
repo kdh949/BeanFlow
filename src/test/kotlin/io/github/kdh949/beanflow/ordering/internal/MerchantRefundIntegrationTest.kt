@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.GatewayRefundResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -53,6 +54,7 @@ internal class MerchantRefundIntegrationTest
         private val confirmationService: PaymentConfirmationService,
         private val paymentGateway: ScriptedTestPaymentGateway,
         private val objectMapper: ObjectMapper,
+        private val meterRegistry: MeterRegistry,
     ) {
         private val now = Instant.parse("2026-08-17T03:00:00Z")
 
@@ -117,6 +119,46 @@ internal class MerchantRefundIntegrationTest
 
             assertThat(remainingQuantity(owner, order)).isEqualTo(1)
             assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(2)
+        }
+
+        @Test
+        fun `a refund executed by staff is audited as staff, never blended with owner`() {
+            val order = paidOrder()
+            val staff = merchantActor(order.storeId, "STAFF", "ACTIVE")
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-staff-audit"))
+
+            refund(staff, order, selection(1), previewVersion(staff, order), "staff-audit-key-0001")
+                .andExpect(status().isOk)
+
+            assertThat(lastRefundAuditActorType()).isEqualTo("STORE_STAFF")
+        }
+
+        @Test
+        fun `a refund executed by owner is audited as owner`() {
+            val order = paidOrder()
+            val owner = merchantActor(order.storeId, "OWNER", "ACTIVE")
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-refund-owner-audit"))
+
+            refund(owner, order, selection(1), previewVersion(owner, order), "owner-audit-key-0001")
+                .andExpect(status().isOk)
+
+            assertThat(lastRefundAuditActorType()).isEqualTo("STORE_OWNER")
+        }
+
+        @Test
+        fun `an unresolved Provider outcome is metered under its own state, not as a false success`() {
+            val order = paidOrder()
+            val owner = merchantActor(order.storeId, "OWNER", "ACTIVE")
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Unknown("PROVIDER_TIMEOUT"))
+            val unknownBefore = executionMetric("UNKNOWN")
+            val succeededBefore = executionMetric("SUCCEEDED")
+
+            refund(owner, order, selection(1), previewVersion(owner, order), "unresolved-key-0001")
+                .andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.state").value("UNKNOWN"))
+
+            assertThat(executionMetric("UNKNOWN")).isEqualTo(unknownBefore + 1)
+            assertThat(executionMetric("SUCCEEDED")).isEqualTo(succeededBefore)
         }
 
         @Test
@@ -377,6 +419,24 @@ internal class MerchantRefundIntegrationTest
         private fun refundCount(): Long = jdbcTemplate.queryForObject("select count(*) from payment_refund", Long::class.java) ?: 0
 
         private fun auditCount(): Long = jdbcTemplate.queryForObject("select count(*) from operations_audit_record", Long::class.java) ?: 0
+
+        private fun lastRefundAuditActorType(): String =
+            jdbcTemplate.queryForObject(
+                """
+                select actor_type from operations_audit_record
+                 where action = 'PARTIAL_REFUND_REQUESTED'
+                 order by occurred_at desc, id desc
+                 limit 1
+                """.trimIndent(),
+                String::class.java,
+            ) ?: error("No PARTIAL_REFUND_REQUESTED audit record was written")
+
+        private fun executionMetric(outcome: String): Double =
+            meterRegistry
+                .find("beanflow.refund.merchant_execution.count")
+                .tag("outcome", outcome)
+                .counter()
+                ?.count() ?: 0.0
 
         private fun json(actions: ResultActions): JsonNode = objectMapper.readTree(actions.andReturn().response.contentAsString)
 

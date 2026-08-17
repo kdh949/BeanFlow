@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
@@ -175,7 +176,7 @@ internal class MerchantRefundService(
                         actor =
                             PartialRefundActor(
                                 command.actorId,
-                                setOf(PartialRefundActorType.STORE_OWNER, PartialRefundActorType.STORE_STAFF),
+                                setOf(resolved.actorRole.toPartialRefundActorType()),
                             ),
                         idempotencyKey = command.idempotencyKey,
                         lines = null,
@@ -188,27 +189,37 @@ internal class MerchantRefundService(
                 metrics.recordExecution(failure.code.name)
                 throw failure
             }
-        metrics.recordExecution("SUCCEEDED")
+        val stored = objectMapper.readTree(result.body)
+        metrics.recordExecution(stored["state"].asText())
         // The merchant contract exposes no created Refund resource, so a definitive
         // outcome is 200 while an unresolved Provider outcome stays 202.
         val status = if (result.status == HttpStatus.CREATED.value()) HttpStatus.OK.value() else result.status
-        return PartialRefundHttpResult(status, merchantBody(result.body, resolved.orderReference))
+        return PartialRefundHttpResult(status, merchantBody(stored, resolved.orderReference))
     }
 
     /**
      * Resolves the store-scoped order reference before the refund transaction so
      * that a foreign or unknown reference never reaches the payment lock. The
-     * transaction itself re-reads and re-authorizes every input.
+     * transaction itself re-reads and re-authorizes every input. The actor's role
+     * is carried through to [execute] so the audit trail reflects who actually
+     * has access, not every role the store endpoint accepts.
      */
     @Transactional(readOnly = true)
     fun resolvedOrder(command: MerchantRefundCommand): ResolvedMerchantRefundTarget {
-        storeAccess.requireOrderManagementAccess(command.actorId, command.storeId, REFUND_ROLES)
+        val actor = storeAccess.requireOrderManagementAccess(command.actorId, command.storeId, REFUND_ROLES)
         val resolved = orderReferences.resolveStore(command.storeId, command.orderReference)
         return ResolvedMerchantRefundTarget(
             orderReference = resolved.reference.value,
             paymentId = paymentOperations.previewSnapshot(resolved.orderId).paymentId,
+            actorRole = actor.role,
         )
     }
+
+    private fun StoreActorRole.toPartialRefundActorType(): PartialRefundActorType =
+        when (this) {
+            StoreActorRole.OWNER -> PartialRefundActorType.STORE_OWNER
+            StoreActorRole.STAFF -> PartialRefundActorType.STORE_STAFF
+        }
 
     private fun previewVersion(
         order: RefundableOrderSnapshot,
@@ -244,10 +255,9 @@ internal class MerchantRefundService(
      * internal payment identifier and names the order the way the operator does.
      */
     private fun merchantBody(
-        storedBody: String,
+        stored: JsonNode,
         orderReference: String,
     ): String {
-        val stored = objectMapper.readTree(storedBody)
         val response =
             MerchantRefundResponse(
                 orderReference = orderReference,
@@ -273,6 +283,7 @@ internal class MerchantRefundService(
 internal data class ResolvedMerchantRefundTarget(
     val orderReference: String,
     val paymentId: UUID,
+    val actorRole: StoreActorRole,
 )
 
 internal enum class MerchantRefundPreviewOutcome {
