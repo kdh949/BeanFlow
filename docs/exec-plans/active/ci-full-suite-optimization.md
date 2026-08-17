@@ -1,0 +1,170 @@
+# CI 전체 테스트 게이트를 15분 안에 완료한다
+
+> **Status:** `ACTIVE`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `false`
+> **Depends-On:** —
+> **Completed-At:** `—`
+
+이 ExecPlan은 `.agent/PLANS.md`를 따른다.
+
+## Purpose / Big Picture
+
+BeanFlow의 backend PR은 267개 test class와 1,328개 test method를 실행하며, 최근
+GitHub-hosted runner의 required CI가 약 26~28분 걸린다. 이 계획은 전체 backend test coverage를
+유지하면서 변경 경로 분리, JVM 당 PostGIS server 공유, 실행 시간 기반 shard 배정으로
+required `build` gate를 15분 안에 종료한다.
+
+## Current State
+
+- `origin/main` baseline: `32bbc6a864a86cc25081efc15986802d7466eb3f`.
+- test inventory: 267 classes, `@SpringBootTest` 113 classes, direct PostgreSQLContainer 46 classes.
+- CI는 `docs | full`만 구분해 backend-only 변경도 frontend/Storybook을 모두 실행한다.
+- ruleset은 `build`만 required context로 지정하지만, 현재 `build` job은 test matrix 성공을
+  집계하지 않는다.
+- 3개 shard는 class count modulo로 배정하며 실행 시간을 반영하지 않는다.
+- 성공한 run의 JUnit XML과 class timing을 보관하지 않는다.
+
+## Definitions
+
+- **required gate**: main ruleset이 요구하는 GitHub check context `build`.
+- **critical path**: 첫 job의 `started_at`부터 required `build`의 `completed_at`까지.
+- **direct container test**: test class가 `@Container PostgreSQLContainer`를 직접 소유하는 test.
+- **LPT**: 실행 시간이 긴 class부터 현재 누적 weight가 가장 작은 shard에 배정하는
+  Longest Processing Time first algorithm.
+
+## Scope
+
+### In Scope
+
+- CI scope를 `docs | frontend | backend | full`로 분리
+- required `build` aggregate gate
+- JUnit XML과 class timing 증적
+- JVM 당 PostGIS server 하나와 class 당 독립 database
+- deterministic duration-weighted sharding, 필요 시 최대 6 runner
+
+### Non-goals
+
+- test 삭제, skip, affected-context만 선택 실행
+- `maxParallelForks > 1`, larger/self-hosted runner
+- `@DirtiesContext` 제거나 test layer 재설계
+- production dependency, API, schema, Aggregate, transaction 변경
+- H2, local DB, stale cache, fake/no-op fallback
+
+## Business Rules and Invariants
+
+- backend scope는 모든 compiled `*Test`, `*Tests`, `*Benchmark` class를 정확히 한 shard에 배정한다.
+- test failure, Docker failure, DB create/drop failure, malformed timing evidence를 success로 바꾸지 않는다.
+- PostgreSQL/PostGIS image는 `postgis/postgis:17-3.5`를 유지한다.
+- 하나의 server process를 공유해도 database state는 test class별로 격리한다.
+- push와 `workflow_dispatch`는 항상 `full`이다. unknown/malformed compare도 `full`이다.
+
+## Architecture and Transaction Boundaries
+
+Workflow는 `preflight`, `frontend`, `backend-build`, `test`, aggregate `build`로 나눈다. aggregate
+`build`는 `always()`로 실행하고 scope별 allowed result matrix를 검증한다. test JVM은 하나의
+manual-lifecycle PostGIS server를 소유하고 Spring context와 direct test가 같은 runtime을 쓴다.
+production transaction과 runtime bean graph는 변경하지 않는다.
+
+## Alternatives Considered
+
+- test 삭제/targeted backend: 금융·동시성 회귀 범위를 줄여 기각.
+- timeout만 증가: feedback latency를 해결하지 못해 기각.
+- Gradle worker 병렬: worker별 container가 늘어 hosted runner를 정체시킬 수 있어 기각.
+- Actions service database: local/Testcontainers parity와 class isolation을 없애 기각.
+- runner만 증가: 고정 startup 비용을 먼저 줄인 뒤 3→6개 범위에서만 사용.
+
+## Failure Semantics
+
+- classifier 입력 누락, unknown status/path, empty compare는 `full`.
+- required gate는 scope에 필요한 job의 `failure`, `cancelled`, `skipped`, empty result를 모두 실패로 처리한다.
+- scope에 필요 없는 job의 `skipped`만 성공으로 허용한다.
+- timing XML이 없거나 malformed면 timing step을 실패시켜 증적 누락을 숨기지 않는다.
+- shared server/database create/drop failure는 test failure로 전파하고 다른 DB로 대체하지 않는다.
+
+## Data and Migration
+
+Production migration은 없다. timing weight TSV는 test class FQCN과 median seconds만 담는다.
+
+## API and Event Contracts
+
+Public API/event 변경은 없다. 내부 CI contract는 scope enum, timing TSV, Gradle shard properties,
+required `build` result다.
+
+## Milestones
+
+1. timing evidence helper와 artifact를 추가하고 동일 SHA baseline run 3회를 수집한다.
+2. scope classifier와 required aggregate gate를 regression fixture로 구현한다.
+3. shared PostGIS runtime을 추가하고 direct container test 46개를 이전한다.
+4. candidate timing median으로 LPT shard를 구현한다.
+5. 3개 shard부터 동일 SHA 3회를 측정하고 필요할 때 4, 5, 6개로 늘린다.
+6. 15분 목표와 모든 validation을 통과하면 plan을 completed로 이동한다.
+
+## Required Tests
+
+- classifier docs/frontend/backend/full, mixed, rename/copy, unknown/malformed
+- required gate의 scope별 success 및 failure/cancelled/skipped/empty matrix
+- timing XML success, test failure, partial, empty, malformed
+- shared server identity, database isolation, create/drop
+- representative migration, Spring integration, concurrency
+- `verifyCiTestShards`, backend full suite, build, docs verification
+
+## Validation Commands
+
+```bash
+bash scripts/ci/test-ci-scripts.sh
+./gradlew verifyCiTestShards --stacktrace --console=plain
+./gradlew test --tests '*PostgresTestRuntimeTest' --stacktrace --console=plain
+./gradlew test --tests '*CustomerOrderQueryMigrationTest' --tests '*ApplicationContextTests' --tests '*CreateOrderConcurrencyTest' --stacktrace --console=plain
+./gradlew build -x test --stacktrace --console=plain
+bash scripts/verify-docs.sh
+git diff --check origin/main...HEAD
+```
+
+Docker가 있으면 local full `./gradlew test`를 실행한다. 없으면 Blocked로 기록하고
+hosted full suite를 required evidence로 삼는다.
+
+## Observability
+
+- workflow summary: scope, compare, applicable jobs, test totals, top 20 slow classes, unmeasured classes
+- 14-day artifact: raw JUnit XML, class timing TSV, Gradle log
+- failure artifact: Docker info/container list와 Gradle reports
+- ExecPlan: baseline/candidate critical path, shard duration, total runner-minute
+
+## Documentation Updates
+
+- `docs/decisions/minor-decisions.md`: MD-2026-032
+- 이 ExecPlan의 Progress, Surprises, Decision Log, Outcomes
+- 성공 시 active에서 completed로 이동
+
+## Progress
+
+- [x] (2026-08-17) 최신 `origin/main` `32bbc6a` 기준 clean worktree 준비
+- [x] (2026-08-17) 현재 workflow, ruleset, test inventory와 최근 hosted run 시간 조사
+- [ ] timing evidence와 baseline 3회 수집
+- [ ] scope/required gate 구현
+- [ ] shared PostGIS runtime 구현
+- [ ] duration-weighted shard 구현
+- [ ] local/hosted validation과 15분 gate 완료
+
+## Surprises & Discoveries
+
+- main ruleset은 `build`만 required이지만 현재 `build` job은 test matrix와 독립이다.
+- 이미 runner-level 3-way shard를 사용해도 최근 성공 run의 critical path는 26~28분이다.
+- direct PostgreSQLContainer test class가 46개이며, 이 중 39개는 migration test다.
+
+## Decision Log
+
+- 2026-08-17: backend change는 전체 test를 유지하고 선택 실행을 도입하지 않는다.
+- 2026-08-17: 15분을 hard target으로 두고 runner는 측정 후 최대 6개까지 허용한다.
+- 2026-08-17: required context 이름 `build`를 유지하고 aggregate semantics로 바꾼 ruleset write를 피한다.
+- 2026-08-17: success artifact도 14일 보관하여 duration weight와 후속 회귀를 재현한다.
+
+## Outcomes & Retrospective
+
+Implementation과 hosted evidence 완료 후 작성한다. 측정 전에 성능 결과를 주장하지 않는다.
+
+## Revision Notes
+
+- 2026-08-17: 최신 main 조사와 사용자가 확정한 coverage, 15분, 최대 6 runner, Draft PR 결정을 반영해 초안 작성.

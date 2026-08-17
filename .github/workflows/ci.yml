@@ -254,9 +254,31 @@ jobs:
           ./gradlew verifyCiTestShards --stacktrace --console=plain
 
       - name: Run test shard
+        env:
+          BEANFLOW_CI_TEST_PROGRESS: "true"
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard.log
           ./gradlew test -PciTestShardIndex=${{ matrix.shard }} -PciTestShardCount=3 --stacktrace --console=plain
+
+      - name: Summarize Gradle test timing
+        if: always()
+        run: >-
+          python3 scripts/ci/summarize-test-results.py
+          --results-dir build/test-results/test
+          --output .ci-artifacts/gradle-test-timings.tsv
+          --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-evidence-${{ github.run_id }}-${{ matrix.shard }}
+          path: |
+            build/test-results/test/
+            .ci-artifacts/gradle-test-shard.log
+            .ci-artifacts/gradle-test-timings.tsv
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Capture Docker diagnostics
         if: failure()

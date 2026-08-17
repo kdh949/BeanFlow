@@ -150,6 +150,10 @@ tasks.withType<Test> {
 	// Each JVM fork starts its own PostGIS Testcontainers singleton. Keep the hosted-runner
 	// suite serial so parallel containers do not stall the full integration-test gate.
 	maxParallelForks = 1
+	if (System.getenv("BEANFLOW_CI_TEST_PROGRESS") == "true") {
+		// Keep hosted timeout evidence actionable without making local output noisy.
+		testLogging.events("started", "failed")
+	}
 	ciTestShardClassNames?.let { classNames ->
 		inputs.property("ciTestShardIndex", ciTestShard!!.index)
 		inputs.property("ciTestShardCount", ciTestShard.count)

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CAPTURE="$ROOT/scripts/ci/run-and-capture.sh"
 CLASSIFY="$ROOT/scripts/ci/classify-changes.sh"
+SUMMARIZE="$ROOT/scripts/ci/summarize-test-results.py"
 
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
@@ -19,6 +20,17 @@ assert_equal() {
   fi
 }
 
+assert_status() {
+  local expected="$1"
+  shift
+
+  set +e
+  "$@"
+  local actual=$?
+  set -e
+  assert_equal "$expected" "$actual" "command status: $*"
+}
+
 capture_log="$test_root/capture/success.log"
 "$CAPTURE" "$capture_log" bash -c 'printf "captured-success\\n"'
 assert_equal "captured-success" "$(tr -d '\r\n' <"$capture_log")" "capture helper writes successful output"
@@ -29,6 +41,41 @@ capture_status=$?
 set -e
 assert_equal "23" "$capture_status" "capture helper preserves command failure"
 assert_equal "captured-failure" "$(tr -d '\r\n' <"$test_root/capture/failure.log")" "capture helper writes failed output"
+
+mkdir -p "$test_root/test-results"
+printf '%s\n' \
+  '<testsuite name="example.SlowTest" tests="2" failures="1" errors="0" skipped="0" time="2.5"></testsuite>' \
+  >"$test_root/test-results/TEST-example.SlowTest.xml"
+printf '%s\n' \
+  '<testsuite name="example.FastTest" tests="1" failures="0" errors="0" skipped="1" time="0.125"></testsuite>' \
+  >"$test_root/test-results/TEST-example.FastTest.xml"
+python3 "$SUMMARIZE" \
+  --results-dir "$test_root/test-results" \
+  --output "$test_root/timings.tsv" \
+  --summary "$test_root/summary.md"
+assert_equal \
+  $'example.SlowTest\t2\t1\t0\t0\t2.500' \
+  "$(sed -n '2p' "$test_root/timings.tsv")" \
+  "timing summary sorts slow classes first and preserves failures"
+assert_equal \
+  $'example.FastTest\t1\t0\t0\t1\t0.125' \
+  "$(sed -n '3p' "$test_root/timings.tsv")" \
+  "timing summary preserves skipped tests"
+grep -Fq 'Classes: `2`; tests: `3`; failures: `1`' "$test_root/summary.md" || {
+  echo "FAIL: timing Markdown totals are missing" >&2
+  exit 1
+}
+
+mkdir -p "$test_root/empty-results"
+assert_status 1 python3 "$SUMMARIZE" \
+  --results-dir "$test_root/empty-results" \
+  --output "$test_root/empty.tsv"
+
+mkdir -p "$test_root/malformed-results"
+printf '%s\n' '<testsuite' >"$test_root/malformed-results/TEST-broken.xml"
+assert_status 1 python3 "$SUMMARIZE" \
+  --results-dir "$test_root/malformed-results" \
+  --output "$test_root/malformed.tsv"
 
 repo="$test_root/repo"
 mkdir -p "$repo"
