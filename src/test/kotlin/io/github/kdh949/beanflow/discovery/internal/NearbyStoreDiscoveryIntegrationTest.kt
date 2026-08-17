@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
+import java.util.Base64
 import java.util.UUID
 
 /**
@@ -411,7 +412,12 @@ internal class NearbyStoreDiscoveryIntegrationTest
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             }
-            assertThat(cursor).doesNotContain("37.5", "127.0", "1000")
+            val cursorPayload =
+                cursor
+                    .split('.')
+                    .also { assertThat(it).hasSize(4) }
+                    .let { String(Base64.getUrlDecoder().decode(it[2]), Charsets.UTF_8) }
+            assertThat(cursorPayload).doesNotContain("\"latitude\"", "\"longitude\"", "\"radiusMeters\"")
         }
 
         @Test
