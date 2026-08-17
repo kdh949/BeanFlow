@@ -210,7 +210,7 @@ internal class SecurityConfiguration {
                         response,
                         chain,
                         HttpServletResponse.SC_FORBIDDEN,
-                        "ACCESS_DENIED",
+                        if (failure is CsrfException) "CSRF_TOKEN_INVALID" else "ACCESS_DENIED",
                         "Required actor, CSRF token, role, or resource ownership is missing",
                         if (failure is CsrfException) "csrf" else "authorization",
                     )

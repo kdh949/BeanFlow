@@ -56,6 +56,16 @@ export async function customerCsrfHeader(): Promise<{ "X-BEANFLOW-CSRF": string 
   return { [CSRF_HEADER]: await customerCsrfToken() } as { "X-BEANFLOW-CSRF": string };
 }
 
+/**
+ * Discards the browser's stale CSRF value before asking the customer CSRF
+ * endpoint for one new token. Callers must use this only after the server has
+ * explicitly returned `CSRF_TOKEN_INVALID`, never as a generic retry path.
+ */
+export async function reissueCustomerCsrfHeader(): Promise<{ "X-BEANFLOW-CSRF": string }> {
+  forgetCustomerCsrfToken();
+  return customerCsrfHeader();
+}
+
 export function forgetCustomerCsrfToken() {
   document.cookie = `${CSRF_COOKIE}=; Max-Age=0; path=/`;
 }

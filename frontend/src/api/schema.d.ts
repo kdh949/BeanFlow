@@ -214,7 +214,8 @@ export interface paths {
         /**
          * 현재 로그인한 고객 정보를 조회합니다
          * @description 현재 세션 쿠키가 가리키는 고객 actor를 반환합니다. 세션이 없거나 만료되었으면
-         *     401을 반환합니다.
+         *     401을 반환합니다. Bearer 또는 Merchant 전용 credential처럼 다른 인증 chain의
+         *     credential을 보내면 재해석하거나 fallback하지 않고 `403 ACCESS_DENIED`를 반환합니다.
          */
         get: operations["getCurrentCustomer"];
         put?: never;
@@ -9862,7 +9863,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Role, ownership, store membership, actor-chain, or CSRF validation failed */
+        /** @description Role, ownership, store membership, or actor-chain validation fails with `ACCESS_DENIED`; missing, stale, or invalid CSRF validation fails with `CSRF_TOKEN_INVALID`. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -10384,6 +10385,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

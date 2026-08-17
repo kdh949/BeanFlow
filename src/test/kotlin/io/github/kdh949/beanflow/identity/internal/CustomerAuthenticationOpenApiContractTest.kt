@@ -16,5 +16,17 @@ internal class CustomerAuthenticationOpenApiContractTest {
             "/me:",
         ).forEach { route -> assertThat(runtime).contains("  $route") }
         assertThat(runtime).contains("name: BEANFLOW_CUSTOMER_SESSION")
+        assertThat(runtime).contains("  /me:\n    \$ref: \"./beanflow-v1.yaml#/paths/~1me\"")
+    }
+
+    @Test
+    fun `current customer contract documents actor credential mismatch as forbidden`() {
+        val target = Path.of("openapi/beanflow-v1.yaml").readText()
+        val currentCustomer = target.substringAfter("  /me:\n").substringBefore("  /merchant/me:\n")
+
+        assertThat(currentCustomer)
+            .contains("Bearer 또는 Merchant 전용 credential처럼 다른 인증 chain의")
+            .contains("`403 ACCESS_DENIED`")
+            .contains("\"403\": { \$ref: \"#/components/responses/Forbidden\" }")
     }
 }

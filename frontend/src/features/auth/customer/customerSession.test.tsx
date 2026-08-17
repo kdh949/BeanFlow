@@ -93,6 +93,85 @@ describe("customer session route boundary", () => {
 });
 
 describe("customer login and signup states", () => {
+  it.each([
+    {
+      name: "registration",
+      method: "POST" as const,
+      path: "/auth/customer/registrations",
+      invoke: () => customerSession.register({ loginId: "customer01", password: "correct-horse-battery", displayName: "도현" }),
+      success: ok({ loginId: "customer01" }),
+    },
+    {
+      name: "login",
+      method: "POST" as const,
+      path: "/auth/customer/sessions",
+      invoke: () => customerSession.logIn({ loginId: "customer01", password: "correct-horse-battery" }),
+      success: ok(actor),
+    },
+    {
+      name: "logout",
+      method: "DELETE" as const,
+      path: "/auth/customer/sessions/current",
+      invoke: () => customerSession.logOut(),
+      success: { response: new Response(null, { status: 204 }) },
+    },
+  ])("reissues the customer CSRF token and replays $name exactly once", async ({ name, method, path, invoke, success }) => {
+    const command =
+      method === "POST"
+        ? vi.spyOn(customerApi, "POST")
+          .mockResolvedValueOnce(failure(403, "CSRF_TOKEN_INVALID", "보안 토큰이 만료되었습니다.") as never)
+          .mockResolvedValueOnce(success as never)
+        : vi.spyOn(customerApi, "DELETE")
+          .mockResolvedValueOnce(failure(403, "CSRF_TOKEN_INVALID", "보안 토큰이 만료되었습니다.") as never)
+          .mockResolvedValueOnce(success as never);
+    const get = vi.spyOn(customerApi, "GET").mockImplementation(async (requestedPath: string) => {
+      expect(requestedPath).toBe("/auth/customer/csrf");
+      document.cookie = "BEANFLOW_CUSTOMER_XSRF=reissued-csrf-token; path=/";
+      return { response: new Response(null, { status: 204 }) } as never;
+    });
+
+    const result = await invoke();
+    if (name === "logout") {
+      expect(result).toBeUndefined();
+    } else {
+      expect(result).toBeDefined();
+    }
+
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(command.mock.calls[0]?.[0]).toBe(path);
+    expect(command.mock.calls[0]?.[1]).toMatchObject({ params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } } });
+    expect(command.mock.calls[1]?.[0]).toBe(path);
+    expect(command.mock.calls[1]?.[1]).toMatchObject({ params: { header: { "X-BEANFLOW-CSRF": "reissued-csrf-token" } } });
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay an actor credential mismatch as though it were a stale CSRF token", async () => {
+    const post = vi.spyOn(customerApi, "POST").mockResolvedValue(failure(403, "ACCESS_DENIED", "고객 권한이 필요합니다.") as never);
+    const get = vi.spyOn(customerApi, "GET");
+
+    await expect(customerSession.logIn({ loginId: "customer01", password: "correct-horse-battery" }))
+      .rejects.toMatchObject({ status: 403, code: "ACCESS_DENIED" });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("propagates the final replay failure after one CSRF reissue", async () => {
+    const post = vi.spyOn(customerApi, "POST")
+      .mockResolvedValueOnce(failure(403, "CSRF_TOKEN_INVALID", "보안 토큰이 만료되었습니다.") as never)
+      .mockResolvedValueOnce(failure(503, "DEPENDENCY_UNAVAILABLE", "인증 의존성을 사용할 수 없습니다.") as never);
+    const get = vi.spyOn(customerApi, "GET").mockImplementation(async () => {
+      document.cookie = "BEANFLOW_CUSTOMER_XSRF=reissued-csrf-token; path=/";
+      return { response: new Response(null, { status: 204 }) } as never;
+    });
+
+    await expect(customerSession.logIn({ loginId: "customer01", password: "correct-horse-battery" }))
+      .rejects.toMatchObject({ status: 503, code: "DEPENDENCY_UNAVAILABLE" });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it("separates invalid credentials from a rate limit", async () => {
     const post = vi.spyOn(customerApi, "POST")
       .mockResolvedValueOnce(failure(401, "AUTHENTICATION_FAILED") as never)
