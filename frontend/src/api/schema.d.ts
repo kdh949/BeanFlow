@@ -9863,7 +9863,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Role, ownership, store membership, or actor-chain validation fails with `ACCESS_DENIED`; missing, stale, or invalid CSRF validation fails with `CSRF_TOKEN_INVALID`. */
+        /** @description Role, ownership, store membership, actor-chain validation, or a missing CSRF token fails with `ACCESS_DENIED`; a presented but stale or invalid CSRF token fails with `CSRF_TOKEN_INVALID`. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

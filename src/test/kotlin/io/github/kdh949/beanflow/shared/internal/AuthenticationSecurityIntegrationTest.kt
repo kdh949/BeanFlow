@@ -114,10 +114,21 @@ internal class AuthenticationSecurityIntegrationTest(
     }
 
     @Test
-    fun `csrf rejection is distinguishable from an actor credential mismatch`() {
+    fun `only a presented invalid csrf token is distinguishable from missing csrf and actor credential mismatch`() {
         mockMvc
             .perform(
                 post("/api/v1/auth/customer/registrations")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{}"),
+            ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+        val customer = issueCsrf("customer", "BEANFLOW_CUSTOMER_XSRF")
+        mockMvc
+            .perform(
+                post("/api/v1/auth/customer/registrations")
+                    .cookie(customer)
+                    .header("X-BEANFLOW-CSRF", "presented-but-invalid-token")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{}"),
             ).andExpect(status().isForbidden)

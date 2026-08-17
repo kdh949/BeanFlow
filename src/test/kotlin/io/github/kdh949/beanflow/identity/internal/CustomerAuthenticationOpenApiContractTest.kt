@@ -29,4 +29,14 @@ internal class CustomerAuthenticationOpenApiContractTest {
             .contains("`403 ACCESS_DENIED`")
             .contains("\"403\": { \$ref: \"#/components/responses/Forbidden\" }")
     }
+
+    @Test
+    fun `forbidden contract keeps a missing csrf token distinct from a presented invalid token`() {
+        val target = Path.of("openapi/beanflow-v1.yaml").readText()
+        val forbidden = target.substringAfter("    Forbidden:\n").substringBefore("    DependencyUnavailable:\n")
+
+        assertThat(forbidden)
+            .contains("missing CSRF token fails with `ACCESS_DENIED`")
+            .contains("presented but stale or invalid CSRF token fails with `CSRF_TOKEN_INVALID`")
+    }
 }
