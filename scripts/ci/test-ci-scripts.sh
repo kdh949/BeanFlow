@@ -6,6 +6,7 @@ CAPTURE="$ROOT/scripts/ci/run-and-capture.sh"
 CLASSIFY="$ROOT/scripts/ci/classify-changes.sh"
 REQUIRED_GATE="$ROOT/scripts/ci/verify-required-gate.sh"
 SUMMARIZE="$ROOT/scripts/ci/summarize-test-results.py"
+BUILD_WEIGHTS="$ROOT/scripts/ci/build-test-weights.py"
 
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
@@ -67,6 +68,17 @@ grep -Fq 'Classes: `2`; tests: `3`; failures: `1`' "$test_root/summary.md" || {
   exit 1
 }
 
+mkdir -p "$test_root/partial-results"
+cp "$test_root/test-results/TEST-example.SlowTest.xml" "$test_root/partial-results/"
+assert_status 0 python3 "$SUMMARIZE" \
+  --results-dir "$test_root/partial-results" \
+  --output "$test_root/partial-timings.tsv" \
+  --summary "$test_root/partial-summary.md"
+grep -Fq 'Classes: `1`; tests: `2`; failures: `1`' "$test_root/partial-summary.md" || {
+  echo "FAIL: partial timing evidence was not summarized" >&2
+  exit 1
+}
+
 mkdir -p "$test_root/empty-results"
 assert_status 1 python3 "$SUMMARIZE" \
   --results-dir "$test_root/empty-results" \
@@ -77,6 +89,42 @@ printf '%s\n' '<testsuite' >"$test_root/malformed-results/TEST-broken.xml"
 assert_status 1 python3 "$SUMMARIZE" \
   --results-dir "$test_root/malformed-results" \
   --output "$test_root/malformed.tsv"
+
+mkdir -p "$test_root/non-finite-results"
+printf '%s\n' '<testsuite name="example.InvalidTest" tests="1" time="nan"></testsuite>' \
+  >"$test_root/non-finite-results/TEST-example.InvalidTest.xml"
+assert_status 1 python3 "$SUMMARIZE" \
+  --results-dir "$test_root/non-finite-results" \
+  --output "$test_root/non-finite.tsv"
+
+for run in 1 2 3; do
+  mkdir -p "$test_root/weights/run-$run/shard-0/.ci-artifacts"
+  {
+    printf 'class_name\ttests\tfailures\terrors\tskipped\tseconds\n'
+    printf 'example.AlphaTest\t1\t0\t0\t0\t%s\n' "$run"
+    printf 'example.BetaTest\t1\t0\t0\t0\t%s\n' "$((run * 2))"
+  } >"$test_root/weights/run-$run/shard-0/.ci-artifacts/gradle-test-timings.tsv"
+done
+python3 "$BUILD_WEIGHTS" \
+  --run-dir "$test_root/weights/run-1" \
+  --run-dir "$test_root/weights/run-2" \
+  --run-dir "$test_root/weights/run-3" \
+  --output "$test_root/weights/median.tsv"
+assert_equal \
+  $'example.AlphaTest\t2.000' \
+  "$(sed -n '2p' "$test_root/weights/median.tsv")" \
+  "weight builder records the class median"
+assert_equal \
+  $'example.BetaTest\t4.000' \
+  "$(sed -n '3p' "$test_root/weights/median.tsv")" \
+  "weight builder sorts class names deterministically"
+
+sed -i.bak '/example.BetaTest/d' "$test_root/weights/run-3/shard-0/.ci-artifacts/gradle-test-timings.tsv"
+assert_status 1 python3 "$BUILD_WEIGHTS" \
+  --run-dir "$test_root/weights/run-1" \
+  --run-dir "$test_root/weights/run-2" \
+  --run-dir "$test_root/weights/run-3" \
+  --output "$test_root/weights/partial.tsv"
 
 repo="$test_root/repo"
 mkdir -p "$repo"

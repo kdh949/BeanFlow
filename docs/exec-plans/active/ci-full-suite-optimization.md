@@ -142,10 +142,10 @@ hosted full suite를 required evidence로 삼는다.
 
 - [x] (2026-08-17) 최신 `origin/main` `32bbc6a` 기준 clean worktree 준비
 - [x] (2026-08-17) 현재 workflow, ruleset, test inventory와 최근 hosted run 시간 조사
-- [ ] timing evidence와 baseline 3회 수집
+- [x] (2026-08-17) timing evidence와 instrumentation-only baseline 3회 순차 수집
 - [x] (2026-08-17) `docs | frontend | backend | full` scope와 required `build` aggregate gate 구현
 - [x] (2026-08-17) Spring integration과 direct container test 46개를 JVM singleton PostGIS + class DB runtime으로 통합
-- [ ] duration-weighted shard 구현
+- [x] (2026-08-18) 세 hosted success run의 class median과 p95 fallback을 사용하는 deterministic LPT shard 구현
 - [ ] local/hosted validation과 15분 gate 완료
 
 ## Surprises & Discoveries
@@ -156,11 +156,29 @@ hosted full suite를 required evidence로 삼는다.
 - instrumentation-only SHA `0ae00f9`의 첫 baseline run `32008419922`는 test matrix 전에
   `origin/main`에서 유입된 Storybook color-contrast 회귀로 실패했다. 동일 main SHA의 push run
   `32007692607`도 같은 단계에서 실패했으므로 계측 변경의 회귀가 아니다.
+- scope/gate 분리까지 적용한 동일 SHA `1cf706a`의 baseline run `32008907327`, `32011485748`,
+  `32013956298`은 세 test shard와 backend build가 모두 성공했다. workflow 전체 결론은 세 번 모두
+  위와 같은 upstream frontend 회귀 때문에 실패했다.
+- baseline critical path는 `26m00s`, `26m08s`, `26m36s`이고 median은 `26m08s`다. shard wall time은
+  run별로 `[20m11s, 17m13s, 25m32s]`, `[15m41s, 15m42s, 25m36s]`,
+  `[26m06s, 20m59s, 25m19s]`이며 total runner-minute는 각각 `66.83`, `60.57`, `75.85`다.
+  각 run의 timing TSV는 동일한 기존 267개 class를 정확히 한 번씩 포함했다.
 - class-specific Spring context가 cache에 남으면 Hikari connection과 database cleanup이 class 종료보다
   늦어진다. test class identity를 context key에 넣고 after-class listener가 context를 dirty-close한 뒤
   실제 database 부재까지 확인하도록 했다.
-- shared runtime local full suite는 267개 기존 class와 runtime regression class를 단일 PostGIS server에서
+- shared runtime local full suite는 267개 기존 class와 runtime regression class 2개를 단일 PostGIS server에서
   모두 통과했지만 단일 JVM wall time은 `51m 5s`였다. hosted acceptance는 runner-level shard로 판단한다.
+- 첫 hosted shared-runtime run `32016311338`의 shard 0은 DB/runtime 문제가 아니라 opaque cursor
+  Base64/HMAC 문자열에 우연히 `1000`이 포함돼 기존 privacy assertion이 실패했다. payload의 민감 필드명
+  부재를 검증하도록 `1286b9a`에서 결정화했고 대상 통합 테스트를 local에서 3회 연속 통과시켰다. 이 run은
+  weight 근거에서 제외하고 새 SHA의 세 run을 다시 수집한다.
+- shared-runtime SHA `1286b9a`의 성공한 backend test run `32037866754`, `32039618297`,
+  `32041233952`는 모두 269개 class를 정확히 한 번 실행했고 failure/error가 0이었다. critical path는
+  `28m39s`, `28m07s`, `28m31s`로 median `28m31s`, total runner-minute는 `83.13`, `81.97`,
+  `76.07`로 median `81.97`이다. workflow 전체 결론은 upstream frontend 회귀 때문에 실패했다.
+- 위 세 run의 class별 median을 `scripts/ci/test-class-weights.tsv`에 기록했다. LPT estimated class-time은
+  3개 shard `23m38s`, 4개 `17m44s`, 5개 `14m11s`, 6개 `11m49s`이고 각 경우 269개 class가
+  정확히 한 번 배정된다. hosted wall time은 계획대로 3개부터 순서대로 측정한다.
 
 ## Decision Log
 

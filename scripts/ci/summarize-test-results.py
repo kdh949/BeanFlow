@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -32,9 +33,12 @@ def integer_attr(root: ET.Element, name: str, source: Path) -> int:
 def float_attr(root: ET.Element, name: str, source: Path) -> float:
     raw = root.attrib.get(name, "0")
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError as exc:
         raise ValueError(f"{source}: invalid {name}={raw!r}") from exc
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{source}: invalid {name}={raw!r}")
+    return value
 
 
 def load_timings(results_dir: Path) -> list[SuiteTiming]:

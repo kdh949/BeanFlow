@@ -228,7 +228,7 @@ jobs:
           retention-days: 7
 
   test:
-    name: test (${{ matrix.shard }}/3)
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: preflight
     if: needs.preflight.outputs.scope == 'backend' || needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
@@ -256,14 +256,20 @@ jobs:
       - name: Verify CI test shard assignment
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard-assignment.log
-          ./gradlew verifyCiTestShards --stacktrace --console=plain
+          ./gradlew verifyCiTestShards
+          -PciTestShardIndex=${{ matrix.shard }}
+          -PciTestShardCount=${{ strategy.job-total }}
+          --stacktrace --console=plain
 
       - name: Run test shard
         env:
           BEANFLOW_CI_TEST_PROGRESS: "true"
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/gradle-test-shard.log
-          ./gradlew test -PciTestShardIndex=${{ matrix.shard }} -PciTestShardCount=3 --stacktrace --console=plain
+          ./gradlew test
+          -PciTestShardIndex=${{ matrix.shard }}
+          -PciTestShardCount=${{ strategy.job-total }}
+          --stacktrace --console=plain
 
       - name: Summarize Gradle test timing
         if: always()

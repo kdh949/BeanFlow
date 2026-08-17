@@ -28,6 +28,17 @@ data class CiTestShard(
 	val count: Int,
 )
 
+data class CiTestWeightProfile(
+	val measuredSeconds: Map<String, Double>,
+	val unmeasuredClassNames: List<String>,
+	val fallbackSeconds: Double,
+)
+
+data class CiTestShardAssignment(
+	val classNames: List<String>,
+	val estimatedSeconds: Double,
+)
+
 private fun parseCiTestShard(
 	indexValue: String?,
 	countValue: String?,
@@ -62,15 +73,68 @@ private fun Project.testClassNamesFromSources(): List<String> =
 		}
 		.sorted()
 
+private fun Project.ciTestWeightProfile(classNames: List<String>): CiTestWeightProfile {
+	val weightFile = file("scripts/ci/test-class-weights.tsv")
+	check(weightFile.isFile) { "CI test weight file is missing: $weightFile" }
+	val lines = weightFile.readLines()
+	check(lines.firstOrNull() == "class_name\tmedian_seconds") {
+		"CI test weight header must be class_name<TAB>median_seconds"
+	}
+
+	val measuredSeconds = linkedMapOf<String, Double>()
+	lines.drop(1).filter(String::isNotBlank).forEachIndexed { index, line ->
+		val columns = line.split('\t')
+		check(columns.size == 2 && columns[0].isNotBlank()) { "Invalid CI test weight row ${index + 2}: $line" }
+		val seconds = columns[1].toDoubleOrNull()
+		check(seconds != null && seconds.isFinite() && seconds >= 0) {
+			"Invalid CI test weight seconds on row ${index + 2}: ${columns[1]}"
+		}
+		check(measuredSeconds.put(columns[0], seconds) == null) { "Duplicate CI test weight: ${columns[0]}" }
+	}
+	check(measuredSeconds.isNotEmpty()) { "CI test weight file must contain at least one class" }
+
+	val sortedSeconds = measuredSeconds.values.sorted()
+	val p95Index = ((sortedSeconds.size * 95 + 99) / 100 - 1).coerceIn(sortedSeconds.indices)
+	val fallbackSeconds = sortedSeconds[p95Index]
+	val unmeasuredClassNames = classNames.filterNot(measuredSeconds::containsKey)
+	return CiTestWeightProfile(measuredSeconds, unmeasuredClassNames, fallbackSeconds)
+}
+
+private fun assignCiTestShards(
+	classNames: List<String>,
+	shardCount: Int,
+	weights: CiTestWeightProfile,
+): List<CiTestShardAssignment> {
+	require(shardCount > 0) { "CI test shard count must be greater than zero" }
+	val shardClassNames = List(shardCount) { mutableListOf<String>() }
+	val shardSeconds = DoubleArray(shardCount)
+
+	classNames
+		.map { className -> className to (weights.measuredSeconds[className] ?: weights.fallbackSeconds) }
+		.sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first })
+		.forEach { (className, seconds) ->
+			val shardIndex = shardSeconds.indices.minWith(compareBy<Int> { shardSeconds[it] }.thenBy { it })
+			shardClassNames[shardIndex] += className
+			shardSeconds[shardIndex] += seconds
+		}
+
+	return shardClassNames.indices.map { index ->
+		CiTestShardAssignment(shardClassNames[index].toList(), shardSeconds[index])
+	}
+}
+
 val ciTestShard =
 	parseCiTestShard(
 		providers.gradleProperty("ciTestShardIndex").orNull,
 		providers.gradleProperty("ciTestShardCount").orNull,
 	)
 val ciTestClassNames = testClassNamesFromSources()
+val ciTestWeights = ciTestWeightProfile(ciTestClassNames)
+val configuredCiTestShardCount = ciTestShard?.count ?: CI_TEST_SHARD_COUNT
+val ciTestShardAssignments = assignCiTestShards(ciTestClassNames, configuredCiTestShardCount, ciTestWeights)
 val ciTestShardClassNames =
 	ciTestShard?.let { shard ->
-		ciTestClassNames.filterIndexed { classIndex, _ -> classIndex % shard.count == shard.index }
+		ciTestShardAssignments[shard.index].classNames
 	}
 
 extra["snippetsDir"] = file("build/generated-snippets")
@@ -162,10 +226,21 @@ tasks.withType<Test> {
 			classNames.forEach { includeTestsMatching(it) }
 		}
 		doFirst {
+			val assignment = ciTestShardAssignments[ciTestShard.index]
 			logger.lifecycle(
 				"Running CI test shard ${ciTestShard.index + 1}/${ciTestShard.count}: " +
-					"${classNames.size}/${ciTestClassNames.size} test classes",
+					"${classNames.size}/${ciTestClassNames.size} test classes, " +
+					"estimated ${"%.3f".format(assignment.estimatedSeconds)}s",
 			)
+			if (ciTestWeights.unmeasuredClassNames.isNotEmpty()) {
+				val message =
+					"Unmeasured CI test classes use p95 ${"%.3f".format(ciTestWeights.fallbackSeconds)}s: " +
+						ciTestWeights.unmeasuredClassNames.joinToString(", ")
+				logger.warn(message)
+				System.getenv("GITHUB_STEP_SUMMARY")?.let { summaryPath ->
+					file(summaryPath).appendText("\n### Unmeasured Gradle test classes\n\n$message\n")
+				}
+			}
 		}
 	}
 	systemProperty("spring.test.context.cache.maxSize", "8")
@@ -175,6 +250,8 @@ tasks.register("verifyCiTestShards") {
 	group = "verification"
 	description = "Verify that deterministic CI test shards cover every compiled test class exactly once"
 	dependsOn(tasks.named("testClasses"))
+	inputs.file(file("scripts/ci/test-class-weights.tsv"))
+	inputs.property("ciTestShardCount", configuredCiTestShardCount)
 
 	doLast {
 		val testTask = tasks.named<Test>("test").get()
@@ -200,15 +277,20 @@ tasks.register("verifyCiTestShards") {
 				"unexpected compiled classes: ${(compiledTestClassNames - ciTestClassNames.toSet()).sorted()}"
 		}
 
-		val assignedClassNames =
-			(0 until CI_TEST_SHARD_COUNT).flatMap { shardIndex ->
-				ciTestClassNames.filterIndexed { classIndex, _ -> classIndex % CI_TEST_SHARD_COUNT == shardIndex }
-			}
-		check(assignedClassNames.size == ciTestClassNames.size) { "CI test shards assigned duplicate classes" }
+		val assignedClassNames = ciTestShardAssignments.flatMap(CiTestShardAssignment::classNames)
+		val duplicateClassNames =
+			assignedClassNames.groupingBy { it }.eachCount().filterValues { count -> count != 1 }.keys.sorted()
+		check(duplicateClassNames.isEmpty()) { "CI test shards assigned classes other than once: $duplicateClassNames" }
 		check(assignedClassNames.toSet() == ciTestClassNames.toSet()) { "CI test shards omitted a test class" }
+		ciTestShardAssignments.forEachIndexed { index, assignment ->
+			logger.lifecycle(
+				"CI test shard ${index + 1}/$configuredCiTestShardCount: ${assignment.classNames.size} classes, " +
+					"estimated ${"%.3f".format(assignment.estimatedSeconds)}s",
+			)
+		}
 
 		logger.lifecycle(
-			"Verified $CI_TEST_SHARD_COUNT CI test shards cover ${ciTestClassNames.size} test classes exactly once",
+			"Verified $configuredCiTestShardCount CI test shards cover ${ciTestClassNames.size} test classes exactly once",
 		)
 	}
 }
