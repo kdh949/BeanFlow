@@ -104,15 +104,25 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
         await readOnce();
         return;
       }
+      // CSRF token preparation can fail before any request reaches the network.
+      // That is a pre-dispatch failure, not an unanswered confirmation: the
+      // guard below must stay open so a later retry can still send it, instead
+      // of the screen converging on a status read that will never resolve
+      // because the Provider was never told.
+      let csrfHeader: Awaited<ReturnType<typeof customerCsrfHeader>>;
+      try {
+        csrfHeader = await customerCsrfHeader();
+      } catch (error) {
+        if (cancelled) return;
+        setResolution({ phase: "failed", error });
+        return;
+      }
       confirmationsStarted.add(paymentId);
       try {
         const result = await customerApi.POST("/payments/{paymentId}/confirmations", {
           params: {
             path: { paymentId },
-            header: {
-              "Idempotency-Key": idempotencyKey(`payment-confirm.${paymentId}`),
-              ...(await customerCsrfHeader()),
-            },
+            header: { "Idempotency-Key": idempotencyKey(`payment-confirm.${paymentId}`), ...csrfHeader },
           },
           body: { paymentKey: callback.paymentKey, orderId: callback.providerOrderId, amount: callback.amount },
         });
@@ -132,7 +142,10 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
     wake.current = () => {
       if (cancelled) return;
       window.clearTimeout(timer);
-      void readOnce();
+      // start() re-checks confirmationsStarted itself, so a wake after a
+      // dispatched confirmation still just reads status; a wake after a
+      // pre-dispatch failure gets to actually send the confirmation.
+      void start();
     };
     const onOnline = () => wake.current?.();
     window.addEventListener("online", onOnline);
