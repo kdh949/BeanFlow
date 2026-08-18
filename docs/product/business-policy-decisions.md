@@ -2196,8 +2196,11 @@
   store-scoped read projection으로 조회한다. `storeId`는 필수이고 cursor/limit은 목록 계약에 따라
   받는다. 이 endpoint는 Stage 05가 target OpenAPI, runtime OpenAPI, generated client와 UI를 함께
   구현하기 전에는 존재하는 API로 취급하지 않는다.
-- **Eligibility:** 결과 후보는 query 시점에 `AVAILABLE` 또는 `RESTORED` 상태이고 issuance와 Campaign이
-  active이며 만료되지 않은 항목뿐이다. `RESERVED`, `USED`, `EXPIRED` issuance는 customer history로
+- **Eligibility:** 결과 후보는 query 시점에 `AVAILABLE` 또는 `RESTORED` 상태여야 한다. 일반 issuance와
+  원 issuance가 `RESTORED`된 경우에는 live Campaign이 active이고 issuance가 만료되지 않아야 한다.
+  compensation issuance는 완전한 issuance-owned immutable terms snapshot과 미만료 issuance만 요구하며
+  live Campaign lifecycle과 독립적이다. compensation snapshot이 없거나 불완전하면 live Campaign으로
+  fallback하지 않고 typed 5xx로 실패한다. `RESERVED`, `USED`, `EXPIRED` issuance는 customer history로
   대신 반환하지 않는다. 고객이 아닌 actor 또는 다른 customer의 issuance는 403/404 차이를 통해
   존재를 드러내지 않고 해당 actor의 목록에서 제외한다.
 - **Store/Brand Applicability:** 각 후보는 요청 `storeId`와 coupon의 store 또는 brand scope를 비교한다.
@@ -2225,8 +2228,10 @@
 - **Affected Aggregates:** CouponIssuance, Campaign, Order
 - **Required Tests:**
   - 다른 customer issuance가 목록 또는 cursor를 통해 보이지 않음
-  - `AVAILABLE`/`RESTORED`와 active/unexpired 경계의 포함, `RESERVED`/`USED`/`EXPIRED`와 inactive/expired
-    Campaign의 제외
+  - 일반 `AVAILABLE`/원 issuance `RESTORED`의 active Campaign·미만료 경계 포함과 inactive Campaign 제외
+  - compensation issuance의 immutable snapshot·미만료 경계 포함, inactive Campaign과 독립된 포함,
+    손상 snapshot의 typed 5xx 및 live Campaign fallback 부재
+  - `RESERVED`/`USED`/`EXPIRED` issuance의 제외
   - store scope·brand scope의 `applicable=true`와 `STORE_NOT_APPLICABLE`의 visible false 결과
   - minimum amount가 response에 정보로 남고 order amount 없는 query가 invented minimum failure를 내지 않음
   - projection failure 503이 empty 200, stale cache 또는 fake data로 대체되지 않음

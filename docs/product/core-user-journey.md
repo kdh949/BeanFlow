@@ -74,7 +74,10 @@ Stage 05 owns only the following read-and-select capability. It does not reopen 
 coupon issuance, wallet balance, or coupon history.
 
 1. The current customer may query only their own coupon issuances in `AVAILABLE` or `RESTORED` state.
-   The issuance and Campaign must be active and unexpired at the query instant.
+   A normal issuance, including a restored original issuance, requires a live active Campaign and an
+   unexpired issuance. A compensation issuance instead requires its complete issuance-owned immutable
+   terms snapshot and an unexpired issuance; it does not require the live Campaign to remain active.
+   Missing or incomplete compensation terms fail with a typed 5xx and never fall back to live Campaign terms.
 2. `storeId` is required. The response decides only current store/brand applicability. An applicable item has
    `applicable=true`; a non-applicable item has `applicable=false` and `reasonCode=STORE_NOT_APPLICABLE`.
    The item remains visible instead of being silently omitted.
