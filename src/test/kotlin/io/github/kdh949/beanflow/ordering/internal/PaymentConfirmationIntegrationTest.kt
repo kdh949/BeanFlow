@@ -422,6 +422,16 @@ internal class PaymentConfirmationIntegrationTest
                     orderId,
                 ),
             ).isEqualTo(1)
+            val orderReference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            val replayBody =
+                value<String>(
+                    "SELECT response_body FROM payment_idempotency_record WHERE payment_id = " +
+                        "(SELECT id FROM payment_payment WHERE order_id = ?)",
+                    orderId,
+                )
+            assertThat(replayBody)
+                .contains("\"orderReference\":\"$orderReference\"")
+                .doesNotContain("\"orderId\"")
             assertThat(reconciliationWorker.runOnce()).isZero()
             assertThat(gateway.lookupCalls.get()).isEqualTo(5)
         }

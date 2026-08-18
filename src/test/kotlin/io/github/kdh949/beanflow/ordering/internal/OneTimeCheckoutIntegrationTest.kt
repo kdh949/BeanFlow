@@ -136,10 +136,14 @@ internal class OneTimeCheckoutIntegrationTest
 
             val first = checkoutService.confirm(fixture.customerId, prepared.paymentId, "callback-key-1", request)
             val replay = checkoutService.confirm(fixture.customerId, prepared.paymentId, "callback-key-1", request)
+            val orderReference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
 
             assertThat(first.status).isEqualTo(200)
             assertThat(replay.status).isEqualTo(200)
             assertThat(replay.replay).isTrue()
+            assertPublicPaymentBody(first.body, orderReference)
+            assertPublicPaymentBody(replay.body, orderReference)
+            assertPublicPaymentBody(checkoutService.current(fixture.customerId, prepared.paymentId).body, orderReference)
             assertThat(gateway.oneTimeConfirmationCalls.get()).isOne()
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PAID")
             assertThat(value<String>("SELECT state FROM payment_one_time_attempt WHERE payment_id = ?", prepared.paymentId))
@@ -223,9 +227,17 @@ internal class OneTimeCheckoutIntegrationTest
                 )
 
             val response = checkoutService.confirm(fixture.customerId, prepared.paymentId, "callback-unknown-1", request)
+            val orderReference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
 
             assertThat(response.status).isEqualTo(202)
-            assertThat(checkoutService.current(fixture.customerId, prepared.paymentId).status).isEqualTo(202)
+            assertPublicPaymentBody(response.body, orderReference)
+            val current = checkoutService.current(fixture.customerId, prepared.paymentId)
+            assertThat(current.status).isEqualTo(202)
+            assertPublicPaymentBody(current.body, orderReference)
+            assertPublicPaymentBody(
+                value("SELECT response_body FROM payment_idempotency_record WHERE payment_id = ?", prepared.paymentId),
+                orderReference,
+            )
             assertThat(value<String>("SELECT state FROM payment_one_time_attempt WHERE payment_id = ?", prepared.paymentId))
                 .isEqualTo("UNKNOWN")
             jdbcTemplate.update(
@@ -269,6 +281,15 @@ internal class OneTimeCheckoutIntegrationTest
             assertThat(gateway.refundCalls.get()).isZero()
             assertThat(gateway.rejectionRefundCalls.get()).isZero()
             assertThat(gateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        private fun assertPublicPaymentBody(
+            body: String,
+            orderReference: String,
+        ) {
+            assertThat(body)
+                .contains("\"orderReference\":\"$orderReference\"")
+                .doesNotContain("\"orderId\"")
         }
 
         private inline fun <reified T : Any> value(

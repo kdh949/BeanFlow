@@ -247,10 +247,9 @@ Toss sandbox and full Gradle validation are **Not run** until their correspondin
 
 - [ADR-080](../../adr/ADR-080-toss-v2-one-time-payment-window.md) records public payment response and
   `MANUAL_REVIEW` terminal behavior.
-- This ExecPlan records Stage 05 backend/API dependency evidence and the Storybook-specific UI block.
-- The later SHARED_CONTRACT_WRITER slice updates target/runtime OpenAPI, generated client and exact contract
-  evidence. Program orchestration, core journey and release-gate documents are integrator-owned and are not
-  modified by this worker.
+- This ExecPlan records Stage 05 backend/API dependency evidence and the completed Stage 06 contract, backend and
+  customer UI slices. Program orchestration, core journey and release-gate documents remain integrator-owned and
+  are not modified by this worker.
 
 ## Progress
 
@@ -262,6 +261,31 @@ Toss sandbox and full Gradle validation are **Not run** until their correspondin
   migration, test fixture or Storybook source changed in this slice.
 - 2026-08-18: Storybook MCP remains unavailable. UI implementation and corresponding story/a11y/browser proof
   are **Not run**; this does not authorize a fake/manual-review fallback surface.
+- 2026-08-18: Backend/API slice changed `PaymentConfirmation` in the target contract and generated client from
+  internal `orderId` to `orderReference`. Runtime OpenAPI continues to delegate these paths to the target contract.
+  Ordering now re-renders status and replay responses from the current Order-owned reference, and supplies public
+  response bodies for reconciliation persistence; no migration or frontend UI source changed. The host-isolated RED
+  contract test executed and failed as expected on the predecessor `orderId` schema. The corrected Stage 6-local
+  focused Gradle suite then passed: OpenAPI 1, checkout 7, public-tracking 1, order-controller 12,
+  payment-confirmation 19 and auth-registry 3 tests, all with zero failures/errors.
+- 2026-08-18: `scripts/verify-docs.sh` passed target/runtime local-contract validation and documentation checks.
+  After lockfile-consistent dependencies were restored, the frontend typecheck regenerated the authoritative schema
+  successfully, then `tsc --noEmit` failed only at `PaymentResultPages.tsx` lines 91, 110 and 168 because that
+  Storybook-governed UI still reads removed `payment.orderId` instead of the public `orderReference`. The required
+  UI correction and its story/a11y/browser proof are **Blocked** while Storybook MCP is unavailable; no UI source,
+  dependency or compatibility-field change is authorized in this backend/API slice.
+- 2026-08-18: Storybook MCP was restored for the Stage 6 worktree. Customer payment result pages now render and
+  track only `orderReference` at `/app/orders/{orderReference}`; payment-result fixtures, focused callback tests and
+  success/fail stories no longer supply a compatibility `orderId`. `MANUAL_REVIEW` is a distinct terminal client phase that
+  suppresses automatic confirmation/polling (including online wake) and shows only the documented tracking/help
+  actions. Typecheck, 142 frontend unit tests, design adherence, static Storybook build, product build and Sites
+  tests passed; the elevated focused browser Storybook run passed 8 affected stories with a11y enabled. The MCP
+  `run-story-tests` runner is **Blocked** after Vitest initialization failed and its state remained "Tests are already
+  running" without a runner process. The controller compared the static Docs smoke against the clean Stage 05
+  baseline: the same `ENOENT` requests are non-fatal, while Stage 06 had moved a lazy-loaded dependency-error
+  iframe below the Docs viewport. The smoke harness now activates every isolated iframe before reading it; a fresh
+  static build then passed 29 Docs entries, 14 stateful Docs and 49 state surfaces. No fake handler or fallback was
+  added.
 
 ## Surprises & Discoveries
 
@@ -283,9 +307,10 @@ Toss sandbox and full Gradle validation are **Not run** until their correspondin
 
 ## Outcomes & Retrospective
 
-This documentation-first slice records the public API/failure boundary only. It is not an implementation,
-validation, publication or release completion claim. All code, OpenAPI, generated-client, frontend, Storybook,
-browser, sandbox and full-suite evidence remains **Not run**.
+The Stage 06 contract, backend/API and customer payment-result UI slices are locally implemented and validated.
+This ExecPlan remains ACTIVE until the stacked Draft PR receives remote evidence and the Goal's release-level gates
+run; full Gradle and a healthy Storybook MCP `run-story-tests` execution remain **Not run/Blocked** as recorded
+above.
 
 ## Revision Notes
 

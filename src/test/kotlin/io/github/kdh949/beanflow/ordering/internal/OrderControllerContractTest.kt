@@ -215,6 +215,14 @@ internal class OrderControllerContractTest
 
             val paymentId = preparePayment(orderId, fixture.customerId, "contract-payment-prepare")
             val providerOrderId = providerOrderId(paymentId)
+            val orderReference =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT public_reference FROM ordering_order WHERE id = ?",
+                        String::class.java,
+                        orderId,
+                    ),
+                )
 
             mockMvc
                 .perform(
@@ -225,7 +233,8 @@ internal class OrderControllerContractTest
                         .content("""{"paymentKey":"contract-approved","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.paymentId").isString)
-                .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                .andExpect(jsonPath("$.orderReference").value(orderReference))
+                .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.type").value("EXTERNAL"))
                 .andExpect(jsonPath("$.approvalState").value("APPROVED"))
                 .andExpect(jsonPath("$.approvedAmountKrw").value(1_000))
@@ -249,6 +258,8 @@ internal class OrderControllerContractTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"paymentKey":"contract-unknown","orderId":"$providerOrderId","amount":1000}"""),
                 ).andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.orderReference").isString)
+                .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.approvalState").value("UNKNOWN"))
                 .andExpect(jsonPath("$.recovery.state").value("REQUESTED"))
 
@@ -289,6 +300,35 @@ internal class OrderControllerContractTest
             org.assertj.core.api.Assertions
                 .assertThat(paymentGateway.oneTimeConfirmationCalls.get())
                 .isZero()
+        }
+
+        @Test
+        fun `customer payment status is owner scoped and exposes only a public order reference`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            createThroughHttp(fixture, "contract-payment-status-order")
+            val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
+            val paymentId = preparePayment(orderId, fixture.customerId, "contract-payment-status-prepare")
+            val orderReference =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT public_reference FROM ordering_order WHERE id = ?",
+                        String::class.java,
+                        orderId,
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/payments/{paymentId}", paymentId).with(customerJwt(fixture.customerId)))
+                .andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.paymentId").value(paymentId.toString()))
+                .andExpect(jsonPath("$.orderReference").value(orderReference))
+                .andExpect(jsonPath("$.orderId").doesNotExist())
+
+            mockMvc
+                .perform(get("/api/v1/payments/{paymentId}", paymentId).with(customerJwt(UUID.randomUUID())))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
         }
 
         private fun requestBody(

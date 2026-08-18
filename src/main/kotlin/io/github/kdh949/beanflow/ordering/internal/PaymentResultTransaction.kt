@@ -14,6 +14,7 @@ import io.github.kdh949.beanflow.payment.api.ApplyExternalPaymentResultCommand
 import io.github.kdh949.beanflow.payment.api.ClaimedPaymentReconciliation
 import io.github.kdh949.beanflow.payment.api.ExternalPaymentOperations
 import io.github.kdh949.beanflow.payment.api.PaymentReconciliationOperations
+import io.github.kdh949.beanflow.payment.api.PaymentReconciliationResponseBodies
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -38,6 +39,7 @@ internal class PaymentResultTransaction(
     private val reconciliationOperations: PaymentReconciliationOperations,
     private val auditOperations: AuditRecordOperations,
     private val responseFactory: PaymentConfirmationResponseFactory,
+    private val orderReferenceProjection: PaymentOrderReferenceProjection,
     private val meterRegistry: MeterRegistry,
 ) {
     @Transactional
@@ -70,10 +72,21 @@ internal class PaymentResultTransaction(
                 "RECONCILING",
                 now,
             )
+        val manualReviewBody =
+            confirmationBody(
+                work.paymentId,
+                work.orderId,
+                "MANUAL_REVIEW",
+                paymentOperations.current(work.paymentId).approvedAmountKrw,
+                work.currency,
+                "MANUAL_REVIEW",
+                now,
+            )
         reconciliationOperations.recordUnknown(
             work = work,
             responseStatus = 202,
             responseBody = body,
+            manualReviewResponseBody = manualReviewBody,
             code = result.code,
             now = now,
         )
@@ -95,13 +108,57 @@ internal class PaymentResultTransaction(
                 "RECONCILING",
                 now,
             )
+        val manualReviewBody =
+            confirmationBody(
+                work.paymentId,
+                work.orderId,
+                "MANUAL_REVIEW",
+                paymentOperations.current(work.paymentId).approvedAmountKrw,
+                work.currency,
+                "MANUAL_REVIEW",
+                now,
+            )
         reconciliationOperations.recordUnknown(
             work = work,
             responseStatus = 202,
             responseBody = body,
+            manualReviewResponseBody = manualReviewBody,
             code = if (result.currency != work.currency) "CURRENCY_MISMATCH" else "AMOUNT_MISMATCH",
             now = now,
         )
+    }
+
+    @Transactional
+    fun reconcileRecovery(
+        work: ClaimedPaymentReconciliation,
+        result: io.github.kdh949.beanflow.payment.api.ProviderRecoveryResult,
+        now: Instant,
+    ) {
+        val payment = paymentOperations.current(work.paymentId)
+        val responseBodies =
+            PaymentReconciliationResponseBodies(
+                completedResponseBody =
+                    confirmationBody(
+                        work.paymentId,
+                        work.orderId,
+                        "RECONCILING",
+                        payment.approvedAmountKrw,
+                        payment.currency,
+                        "SUCCEEDED",
+                        now,
+                    ),
+                manualReviewResponseBody =
+                    confirmationBody(
+                        work.paymentId,
+                        work.orderId,
+                        "MANUAL_REVIEW",
+                        payment.approvedAmountKrw,
+                        payment.currency,
+                        "MANUAL_REVIEW",
+                        now,
+                    ),
+            )
+        reconciliationOperations.recordRecovery(work, result, responseBodies, now)
     }
 
     private fun unknown(
@@ -330,7 +387,7 @@ internal class PaymentResultTransaction(
     ): String =
         responseFactory.confirmationBody(
             paymentId,
-            orderId,
+            orderReferenceProjection.resolve(orderId),
             approvalState,
             approvedAmountKrw,
             currency,

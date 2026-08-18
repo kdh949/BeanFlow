@@ -24,6 +24,7 @@ internal class PaymentConfirmationService(
     private val resultTransaction: PaymentResultTransaction,
     private val paymentOperations: ExternalPaymentOperations,
     private val responseFactory: PaymentConfirmationResponseFactory,
+    private val orderReferenceProjection: PaymentOrderReferenceProjection,
     private val correlationIdSource: CorrelationIdSource,
     private val meterRegistry: MeterRegistry,
     private val clock: Clock,
@@ -74,11 +75,11 @@ internal class PaymentConfirmationService(
             }
 
             PaymentPreparationState.CURRENT -> {
-                preparation.responseStatus?.let { status ->
-                    preparation.responseBody?.let { body ->
-                        StoredHttpResponse(status, body, replay = true)
-                    }
-                } ?: responseFactory.current(requireNotNull(preparation.current), replay = true)
+                responseFactory.current(
+                    requireNotNull(preparation.current),
+                    orderReferenceProjection.resolveOwned(customerId, orderId),
+                    replay = true,
+                )
             }
 
             PaymentPreparationState.ACQUIRED -> {

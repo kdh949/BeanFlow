@@ -10362,7 +10362,7 @@ components:
       additionalProperties: false
       required:
         - paymentId
-        - orderId
+        - orderReference
         - type
         - approvalState
         - currency
@@ -10371,8 +10371,10 @@ components:
       properties:
         paymentId:
           $ref: "#/components/schemas/Identifier"
-        orderId:
-          $ref: "#/components/schemas/Identifier"
+        orderReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+          description: 사람이 읽는 주문 추적용 공개 참조번호입니다.
         type:
           type: string
           enum: [EXTERNAL, BENEFIT_ONLY]

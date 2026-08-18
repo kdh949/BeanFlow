@@ -4,7 +4,7 @@ import { Link, Navigate, useParams, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../api/client";
 import { ErrorState, LoadingState, StatusBadge, SuccessMark } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
-import { compactId, won } from "../../lib/format";
+import { won } from "../../lib/format";
 import { ButtonLink } from "../../design-system";
 import { checkCallback, hasCallbackQuery, type PaymentCallback } from "./paymentAttempt";
 import { type Payment, type PaymentResolution, usePaymentResolution } from "./usePaymentResolution";
@@ -75,6 +75,9 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
   }
 
   const { payment } = resolution;
+  if (resolution.phase === "manual-review") {
+    return <ManualReviewPaymentView payment={payment} />;
+  }
   // Returning to the success URL does not make the payment approved. A declined
   // or still-unpaid payment is reported as such; only APPROVED says "완료".
   if (resolution.phase === "declined" || resolution.phase === "retryable") {
@@ -85,11 +88,11 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
         <span className="eyebrow">PAYMENT STOPPED</span>
         <h1>{retryable ? "아직 결제가 끝나지 않았어요" : "결제를 완료하지 못했어요"}</h1>
         <p>{retryable
-          ? "결제창이 닫혔거나 결제가 진행되지 않았어요. 주문서에서 다시 결제할 수 있어요."
-          : "결제가 승인되지 않았습니다. 주문서에서 다른 수단으로 다시 시도해 주세요."}</p>
+          ? "결제창이 닫혔거나 결제가 진행되지 않았어요. 주문 상태를 확인해 주세요."
+          : "결제가 승인되지 않았습니다. 주문 상태를 확인해 주세요."}</p>
         <StatusBadge state={payment.approvalState} label={retryable ? "결제 전" : undefined} />
-        <ButtonLink size="xl" block to={`/app/checkout/${payment.orderId}`}>
-          주문서로 돌아가기
+        <ButtonLink size="xl" block to={orderTrackingPath(payment.orderReference)}>
+          주문 상태 보기
         </ButtonLink>
         <Link className="text-link" to="/app/help">도움이 필요해요</Link>
       </div>
@@ -107,7 +110,7 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
         : "매장에서 주문을 확인하면 픽업 준비 상태를 알려드릴게요."}</p>
       <StatusBadge state={payment.approvalState} />
       <div className="result-summary surface-card">
-        <div><span>주문 번호</span><code>{compactId(payment.orderId)}</code></div>
+        <div><span>주문 번호</span><code>{payment.orderReference}</code></div>
         <div><span>승인 금액</span><strong>{payment.approvedAmountKrw == null ? "확인 중" : won.format(payment.approvedAmountKrw)}</strong></div>
         {payment.recovery ? (
           <div>
@@ -116,7 +119,7 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
           </div>
         ) : null}
       </div>
-      <ButtonLink size="xl" block to="/app/orders">주문 상태 보기</ButtonLink>
+      <ButtonLink size="xl" block to={orderTrackingPath(payment.orderReference)}>주문 상태 보기</ButtonLink>
     </div>
   );
 }
@@ -141,6 +144,9 @@ export function PaymentFailPage() {
   if (resolution.phase === "approved") {
     return <Navigate replace to={`/app/payments/${paymentId}/success`} />;
   }
+  if (resolution.phase === "manual-review") {
+    return <ManualReviewPaymentView payment={resolution.payment} />;
+  }
   if (resolution.phase === "pending") {
     return (
       <div className="customer-page result-page">
@@ -149,12 +155,11 @@ export function PaymentFailPage() {
         <h1>결제 결과를 확인하고 있어요</h1>
         <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
         <StatusBadge state={resolution.payment.approvalState} />
-        <ButtonLink variant="secondary" block to="/app/orders">주문 상태 보기</ButtonLink>
+        <ButtonLink variant="secondary" block to={orderTrackingPath(resolution.payment.orderReference)}>주문 상태 보기</ButtonLink>
       </div>
     );
   }
 
-  const retryable = resolution.phase === "retryable";
   return (
     <div className="customer-page result-page">
       <span className="failure-mark"><XCircle size={36} /></span>
@@ -165,13 +170,34 @@ export function PaymentFailPage() {
       <ButtonLink
         size="xl"
         block
-        to={retryable ? `/app/checkout/${resolution.payment.orderId}` : "/app/orders"}
+        to={orderTrackingPath(resolution.payment.orderReference)}
       >
-        {retryable ? "주문서로 돌아가기" : "주문 상태 보기"}
+        주문 상태 보기
       </ButtonLink>
       <Link className="text-link" to="/app/help">도움이 필요해요</Link>
     </div>
   );
+}
+
+function ManualReviewPaymentView({ payment }: { payment: Payment }) {
+  return (
+    <div className="customer-page result-page">
+      <span className="pending-mark"><RefreshCw size={30} /></span>
+      <span className="eyebrow">PAYMENT REVIEW</span>
+      <h1>결제 확인에 시간이 더 필요해요</h1>
+      <p>같은 결제를 다시 시도하지 마세요. 주문 상태를 확인하거나 도움이 필요하면 문의해 주세요.</p>
+      <StatusBadge state={payment.approvalState} />
+      <div className="result-summary surface-card">
+        <div><span>주문 번호</span><code>{payment.orderReference}</code></div>
+      </div>
+      <ButtonLink size="xl" block to={orderTrackingPath(payment.orderReference)}>주문 상태 보기</ButtonLink>
+      <Link className="text-link" to="/app/help">도움이 필요해요</Link>
+    </div>
+  );
+}
+
+function orderTrackingPath(orderReference: string): string {
+  return `/app/orders/${orderReference}`;
 }
 
 export function failureMessage(code: string) {

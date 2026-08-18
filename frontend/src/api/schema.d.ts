@@ -4898,7 +4898,8 @@ export interface components {
         };
         PaymentConfirmation: {
             paymentId: components["schemas"]["Identifier"];
-            orderId: components["schemas"]["Identifier"];
+            /** @description 사람이 읽는 주문 추적용 공개 참조번호입니다. */
+            orderReference: string;
             /** @enum {string} */
             type: "EXTERNAL" | "BENEFIT_ONLY";
             approvalState: components["schemas"]["PaymentApprovalState"];

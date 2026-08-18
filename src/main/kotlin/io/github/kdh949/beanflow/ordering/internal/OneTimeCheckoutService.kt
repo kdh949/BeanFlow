@@ -43,6 +43,7 @@ internal class OneTimeCheckoutService(
     private val payments: OneTimePaymentOperations,
     private val resultTransaction: PaymentResultTransaction,
     private val responseFactory: PaymentConfirmationResponseFactory,
+    private val orderReferenceProjection: PaymentOrderReferenceProjection,
     private val correlationIdSource: CorrelationIdSource,
     private val clock: Clock,
     @Value("\${beanflow.checkout.frontend-base-url:http://localhost:5173}")
@@ -97,7 +98,7 @@ internal class OneTimeCheckoutService(
                 ),
             )
         if (claim.state == OneTimePaymentConfirmationClaimState.CURRENT) {
-            return responseFactory.current(claim.payment, replay = true)
+            return customerResponse(customerId, claim.payment, replay = true)
         }
 
         val result =
@@ -125,7 +126,18 @@ internal class OneTimeCheckoutService(
     fun current(
         customerId: UUID,
         paymentId: UUID,
-    ): StoredHttpResponse = responseFactory.current(payments.current(customerId, paymentId), replay = false)
+    ): StoredHttpResponse = customerResponse(customerId, payments.current(customerId, paymentId), replay = false)
+
+    private fun customerResponse(
+        customerId: UUID,
+        payment: io.github.kdh949.beanflow.payment.api.ExternalPaymentView,
+        replay: Boolean,
+    ): StoredHttpResponse =
+        responseFactory.current(
+            payment,
+            orderReferenceProjection.resolveOwned(customerId, payment.orderId),
+            replay,
+        )
 }
 
 @Service
