@@ -172,7 +172,7 @@ io.github.kdh949.beanflow.payment.RefundStateTest	0.004
 io.github.kdh949.beanflow.payment.internal.CustomerCancellationPaymentServiceTest	22.466
 io.github.kdh949.beanflow.payment.internal.LocalPaymentGatewayConfigurationTest	0.296
 io.github.kdh949.beanflow.payment.internal.OneTimePaymentMigrationTest	29.835
-io.github.kdh949.beanflow.payment.internal.PartialRefundAllocationRepositoryTest	24.101
+io.github.kdh949.beanflow.payment.internal.PartialRefundAllocationRepositoryTest	14.893
 io.github.kdh949.beanflow.payment.internal.PartialRefundMigrationTest	15.542
 io.github.kdh949.beanflow.payment.internal.PaymentMethodAggregateTest	0.006
 io.github.kdh949.beanflow.payment.internal.PaymentMethodApplicationServiceIntegrationTest	21.902
