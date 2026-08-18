@@ -121,6 +121,24 @@ Tx C  Payment result + Order/resource transition + idempotent response + Audit c
   한 번 요청한 다음 Payment status를 refetch한다. reload/back/multi-tab은 같은 Payment와
   idempotency key에 수렴한다.
 
+### Customer payment public-boundary amendment (2026-08-18)
+
+- Customer status와 confirmation response는 내부 UUID `orderId`를 포함하지 않는다. 해당 응답은
+  사람이 표시·문의·추적에 쓰는 `orderReference`를 반환하며, 고객 UI는 이를 주문 번호와
+  `/app/orders/{orderReference}` 추적 경로에만 사용한다. 이는 [ADR-096](ADR-096-public-order-reference.md)의
+  human-facing API boundary를 Payment 결과에도 적용한다.
+- `paymentId`는 owner authorization을 거친 payment status/confirmation correlation locator로만
+  유지한다. 고객에게 주문 번호·문의 번호·입력 필드로 표시하지 않으며, possession 자체는
+  authorization이 아니다.
+- Toss의 callback parameter `orderId`와 서버 snapshot의 `providerOrderId`는 BeanFlow 내부
+  `ordering_order.id`가 아니다. provider order binding, amount verification, confirm/query와
+  idempotency를 위해서만 사용하고 customer-visible order tracking 값으로 재사용하지 않는다.
+- `MANUAL_REVIEW`는 bounded reconciliation이 자동 처리 가능한 결과를 더 이상 판단할 수 없음을
+  뜻하는 terminal recovery state다. 고객 client는 해당 state에서 automatic confirmation retry와
+  automatic polling을 중지하고, raw Provider code·payment key·internal UUID·operator case reason 없이
+  safe order tracking과 help behavior만 제공한다. 이 state를 `APPROVED`, `FAILED`, `READY` 또는
+  indefinitely polling인 success-like 화면으로 바꾸지 않는다.
+
 ## Alternatives Considered
 
 ### Payment Widget
@@ -174,6 +192,10 @@ Payment는 이미 주문별 승인·불명·reconciliation·late approval과 Ref
 - one-time path의 PaymentMethod repository/Port 호출 0회
 - profile/key guard, Basic colon auth, secret/paymentKey redaction과 HTTP fault matrix
 - mobile/keyboard/focus/status announcement, reload/back과 console/network audit
+- customer status/confirmation response가 `orderReference`를 반환하고 internal `orderId`를 노출하지
+  않는지, status read와 idempotent confirmation replay 및 reconciliation-produced response마다 검증
+- `MANUAL_REVIEW` customer surface가 automatic polling/confirmation을 중지하고 safe tracking/help만
+  제공하는지 검증
 
 ## Implementation Evidence (2026-08-10)
 
