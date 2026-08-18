@@ -181,7 +181,7 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: PR 1 full suite 1차 통과와 부분 환불 nested class timing 합계 weight 갱신
 - [x] 2026-08-19: 동일 checkout 환경 baseline/head full-suite 시간과 Spring database/Hikari pool 수 비교
 - [x] 2026-08-19: 11개 shared Spring test를 JUnit random seed 11/29로 반복해 두 실행 모두 통과
-- [ ] PR 1 최종 backend gate
+- [x] 2026-08-19: PR 1 최종 backend gate 통과, Draft PR #97 생성
 - [ ] PR 2 migration assertion inventory와 중앙 검증
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
@@ -228,8 +228,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 
 ## Outcomes & Retrospective
 
-아직 구현 중이다. 완료 시 각 PR URL, commit range, local/remote validation, 전후 측정과 남은 isolated
-test 사유를 기록한다. Draft 생성이나 stack 내부 `COMPLETED`는 merge/release를 뜻하지 않는다.
+PR 1은 [Draft PR #97](https://github.com/kdh949/BeanFlow/pull/97)로 제출했다. local full suite와
+backend/document gate는 통과했고 remote CI는 아직 pending이다. 나머지 PR URL, commit range,
+local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
+`COMPLETED`는 merge/release를 뜻하지 않는다.
 
 ## Revision Notes
 
