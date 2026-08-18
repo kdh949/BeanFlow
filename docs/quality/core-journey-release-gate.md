@@ -24,7 +24,7 @@ remote가 끝나지 않았거나 required scenario가 `Not run`/`Blocked`이면 
 
 | Check | Command | Status | Boundary |
 |---|---|---|---|
-| Documentation integrity | `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh` | Passed (current) | target 161 paths/170 operations, runtime 150 paths/159 operations, 325 schemas; this validates documentation and local contract structure only. |
+| Documentation integrity | `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh` | Passed (current) | target 162 paths/171 operations, runtime 151 paths/160 operations, 329 schemas; this validates documentation and local contract structure only. |
 
 ## 12-item release gate
 

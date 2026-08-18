@@ -35,7 +35,7 @@ BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN`
 - M0~M9는 completed ExecPlan으로 남아 있다. 고객·점주 Session/CSRF, account, public order reference,
   customer order projection, store board, discovery, customer P0 integration과 merchant financial workflow가
   현재 source baseline에 있다. M10 operations work queue만 이 orchestration의 대기 slice다.
-- runtime OpenAPI는 150 path, target OpenAPI는 161 path다. runtime은 target의 의도적인 구현 부분집합이며
+- runtime OpenAPI는 151 path, target OpenAPI는 162 path다. runtime은 target의 의도적인 구현 부분집합이며
   동일 path 수를 요구하지 않는다. 대응 검증은 `RuntimeOpenApiParityTest`가 소유한다.
 - 고객 frontend는 `/app` 아래 로그인·가입·탐색·매장/메뉴/픽업·장바구니·결제·주문·포인트·마이를,
   점주 frontend는 `/store` 아래 로그인·최초 비밀번호 변경·매장 주문보드·부분 환불·정산·이의제기를
