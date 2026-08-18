@@ -9,13 +9,13 @@
 services:
   beanflow-demo-postgres:
     image: postgis/postgis:17-3.5
-    container_name: beanflow-demo-postgres
+    container_name: ${DEMO_CONTAINER:?set by scripts/demo/lib/common.sh}
     environment:
       POSTGRES_DB: beanflow_demo
       POSTGRES_USER: beanflow_demo
       POSTGRES_PASSWORD: beanflow_demo_local_only
     ports:
-      - "55432:5432"
+      - "${DEMO_DB_PORT:?set by scripts/demo/lib/common.sh}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U beanflow_demo -d beanflow_demo"]
       interval: 2s

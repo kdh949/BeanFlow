@@ -344,6 +344,9 @@ internal class LocalDemoScriptGuardTest {
               */stores/d1000000-0000-4000-8000-000000000001/menus)
                 respond 200 '{"items":[{"menuId":"d2000000-0000-4000-8000-000000000001","available":true},{"menuId":"d2000000-0000-4000-8000-000000000002","available":false}]}'
                 ;;
+              */me/coupons*)
+                respond 200 '{"items":[{"state":"AVAILABLE","applicable":true}]}'
+                ;;
               */stores/d1000000-0000-4000-8000-000000000001/pickup-slots)
                 respond 200 '{"items":[{"pickupSlotId":"d6000000-0000-4000-8000-000000000001"}]}'
                 ;;
@@ -354,7 +357,7 @@ internal class LocalDemoScriptGuardTest {
                 respond 200 '{"availablePointsKrw":0}'
                 ;;
               */orders/*/payment-attempts)
-                respond 200 '{"paymentId":"payment-1","providerOrderId":"provider-order-1","amount":{"value":10000},"state":"READY","method":"CARD","successUrl":"http://127.0.0.1:4173/app/payments/payment-1/success","failUrl":"http://127.0.0.1:4173/app/payments/payment-1/fail"}'
+                respond 200 "{\"paymentId\":\"payment-1\",\"providerOrderId\":\"provider-order-1\",\"amount\":{\"value\":10000},\"state\":\"READY\",\"method\":\"CARD\",\"successUrl\":\"${'$'}DEMO_FRONTEND_BASE_URL/app/payments/payment-1/success\",\"failUrl\":\"${'$'}DEMO_FRONTEND_BASE_URL/app/payments/payment-1/fail\"}"
                 ;;
               */orders)
                 if [[ "${'$'}body" == *'"optionIds":[]'* ]]; then
@@ -370,11 +373,11 @@ internal class LocalDemoScriptGuardTest {
                 if [[ "${'$'}body" == *'"amount":10001'* ]]; then
                   respond 409 '{"code":"IDEMPOTENCY_KEY_REUSED"}'
                 else
-                  respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED"}'
+                  respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED","orderReference":"BF-D3M2-S9F4"}'
                 fi
                 ;;
               */payments/payment-1)
-                respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED"}'
+                respond 200 '{"paymentId":"payment-1","approvalState":"APPROVED","orderReference":"BF-D3M2-S9F4"}'
                 ;;
               */store-orders/*)
                 respond 599 '{"code":"MERCHANT_OPERATION_MUST_NOT_RUN"}'
@@ -388,10 +391,10 @@ internal class LocalDemoScriptGuardTest {
 
         val result = run("smoke.sh", "--customer-checkpoint")
 
-        assertThat(result.exitCode).isZero()
+        assertThat(result.exitCode).withFailMessage(result.output).isZero()
         assertThat(result.output).contains("approved payment query", "customer checkpoint completed")
         assertThat(result.output).doesNotContain("store fulfilment", "core smoke flow completed")
-        assertThat(curlLog.readText()).contains("GET http://127.0.0.1:18080/api/v1/payments/payment-1")
+        assertThat(curlLog.readText()).contains("/api/v1/payments/payment-1")
         assertThat(curlLog.readText()).doesNotContain("/store-orders/")
     }
 
@@ -430,7 +433,11 @@ internal class LocalDemoScriptGuardTest {
                 printf 'Error: No such object: %s\n' "${'$'}{@: -1}" >&2
                 exit 1
               fi
-              printf 'POSTGRES_DB=%s\n' "$reportedDatabase"
+              if [ "${'$'}2" = "--format" ] && [[ "${'$'}3" == *"com.docker.compose.project"* ]]; then
+                printf '%s\n' "${'$'}DEMO_COMPOSE_PROJECT"
+              else
+                printf 'POSTGRES_DB=%s\n' "$reportedDatabase"
+              fi
               exit 0
             fi
             if [ "${'$'}1" = "compose" ]; then

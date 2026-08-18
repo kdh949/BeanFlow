@@ -138,6 +138,35 @@ internal class LocalDemoSeedIntegrationTest
         }
 
         @Test
+        fun `the seed provides a confirmed financial tail with a partial-refund adjustment ready for an owner dispute`() {
+            transactions.execute { seeder.seed() }
+
+            val row =
+                jdbcTemplate.queryForMap(
+                    """
+                    SELECT batch.state, batch.adjustment_krw, item.net_settlement_krw, adjustment.reason_code
+                      FROM settlement_batch batch
+                      JOIN settlement_item item ON item.settlement_batch_id = batch.id
+                      JOIN settlement_adjustment adjustment ON adjustment.id = batch.adjustment_cursor_id
+                     WHERE batch.id = ?
+                    """.trimIndent(),
+                    LocalDemoFixture.ADJUSTED_SETTLEMENT_BATCH_ID,
+                )
+
+            assertThat(row["state"]).isEqualTo("CONFIRMED")
+            assertThat(row["adjustment_krw"]).isEqualTo(-LocalDemoFixture.HISTORICAL_REFUND_KRW)
+            assertThat(row["net_settlement_krw"]).isEqualTo(9_700L)
+            assertThat(row["reason_code"]).isEqualTo("REFUND_SUCCEEDED")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT succeeded_amount_krw FROM payment_refund WHERE id = ?",
+                    Long::class.java,
+                    LocalDemoFixture.HISTORICAL_REFUND_ID,
+                ),
+            ).isEqualTo(LocalDemoFixture.HISTORICAL_REFUND_KRW)
+        }
+
+        @Test
         fun `the seed links merchant accounts to memberships with an expiring initial credential`() {
             transactions.execute { seeder.seed() }
 
@@ -216,6 +245,18 @@ internal class LocalDemoSeedIntegrationTest
                     "promotion_campaign_eligible_menu",
                     "promotion_coupon_issuance",
                     "promotion_campaign",
+                    "settlement_adjustment",
+                    "settlement_item",
+                    "settlement_batch",
+                    "payment_refund",
+                    "payment_payment",
+                    "ordering_order_settlement_input_snapshot",
+                    "ordering_order_point_accrual_unit",
+                    "ordering_order_point_accrual_snapshot",
+                    "ordering_order_point_accrual_source",
+                    "ordering_order_line",
+                    "ordering_order",
+                    "ordering_public_reference_registry",
                     "merchant_store",
                 )
         }

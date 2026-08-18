@@ -13,10 +13,28 @@ cd "$DEMO_ROOT"
 mkdir -p "$DEMO_RUNTIME_DIR"
 chmod 700 "$DEMO_RUNTIME_DIR"
 
-log "1/6 starting PostgreSQL 17 / PostGIS 3.5"
+port_is_busy() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+assert_port_is_safe_to_start() {
+  local port="$1" label="$2" record="${3:-}"
+  if ! port_is_busy "$port"; then return 0; fi
+  if [ -n "$record" ] && owned_process_record_is_live "$record" "$label"; then return 0; fi
+  fail "Port ${port} for ${label} is already in use by an unowned process; refusing to share a checkout-local demo port."
+}
+
+# Check the database port too, so a collision cannot leave a partially-created compose stack. This
+# also prevents starting the rest of the stack after an unowned process claims a derived port.
+assert_port_is_safe_to_start "$DEMO_DB_PORT" "database"
+assert_port_is_safe_to_start "$DEMO_IDENTITY_PORT" "identity server" "$DEMO_IDENTITY_PID_FILE"
+assert_port_is_safe_to_start "$DEMO_APP_PORT" "application" "$DEMO_APP_PID_FILE"
+assert_port_is_safe_to_start "$DEMO_FRONTEND_PORT" "frontend" "$DEMO_FRONTEND_PID_FILE"
+
+log "1/6 starting checkout-isolated PostgreSQL 17 / PostGIS 3.5"
 compose up -d
 wait_until 180 "PostgreSQL to accept connections" postgres_ready
-ok "database ready on port ${DEMO_DB_PORT} (database ${DEMO_DB_NAME})"
+ok "database ready in compose project ${DEMO_COMPOSE_PROJECT}"
 
 log "2/6 starting the ephemeral identity server"
 if owned_process_record_is_live "$DEMO_IDENTITY_PID_FILE" "identity server"; then
@@ -96,11 +114,10 @@ ok "frontend ready on ${DEMO_FRONTEND_BASE_URL}"
 log "6/6 environment ready"
 cat <<EOF
 
-  database    ${DEMO_DB_URL}
   application ${DEMO_APP_BASE_URL}
   frontend    ${DEMO_FRONTEND_BASE_URL}/app
-  jwk set     ${BEANFLOW_DEMO_JWKS_URI}
-  runtime dir ${DEMO_RUNTIME_DIR}  (untracked; holds the run-time key material)
+  aliases     demo.customer / demo.merchant / demo.othermerchant
+  resources   checkout-isolated compose project and runtime directory (untracked key material)
 
   next: bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
 EOF

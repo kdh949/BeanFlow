@@ -1,7 +1,8 @@
 # Local Demo Runbook
 
 `scripts/demo/`의 네 script로 BeanFlow API와 React frontend를 로컬에서 기동하고, 결정적 fixture를
-넣고, 고객 → 일회성 결제 checkpoint와 고객 → 매장 → 포인트 적립 → 부분/전액 환불 전체 흐름을
+넣고, 고객 → 일회성 결제 checkpoint와 고객 → 공개 주문번호 매장 처리 → 포인트 적립 → 공개 환불 →
+확정 정산·부분 환불 조정·owner 이의제기 전체 흐름을
 실제 HTTP로 확인하는 방법과 실패 진단을 다룬다.
 
 이 환경은 **데모와 로컬 확인 전용**이다. 실제 배포, 운영 규모, SLA를 증명하지 않는다.
@@ -28,7 +29,9 @@
 ## 2. 사전 요구사항
 
 - Java 21, Node.js/npm, Docker daemon, `curl`, `python3`, `lsof`, `ps`
-- 사용 포트: `55432`(PostgreSQL), `18081`(JWK set), `18080`(애플리케이션), `4173`(React frontend)
+- Docker daemon, `curl`, `python3`, `lsof`, `ps`는 필수다. 포트·compose project·container 이름은
+  checkout 절대 경로의 안정된 hash로 유도한다. 두 checkout은 서로 다른 리소스 블록을 사용하고,
+  선택된 포트를 unowned process가 사용 중이면 `start.sh`가 중단한다.
 
 ## 3. 실행
 
@@ -56,10 +59,16 @@ bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전
 
 인자 없는 `smoke.sh`는 같은 고객 checkpoint에 이어 `demo.merchant`의 임시 비밀번호 로그인,
 `INITIAL_PASSWORD` gate, 비밀번호 변경과 Session 회전을 먼저 검증한 뒤 매장 완료, 부분/전액 remaining 환불과 두 번째
-결제의 `UNKNOWN → APPROVED` query 복구까지 확인하는 기본 전체 흐름이다. 첫 주문은 10,000 KRW이고
+결제의 `UNKNOWN → APPROVED` query 복구까지 확인하는 기본 전체 흐름이다. 매장 처리와 환불은 internal UUID가 아니라
+`BF-XXXX-XXXX` 공개 주문번호와 Stage 6/8 public API로 수행한다. 첫 주문은 10,000 KRW이고
 완료 뒤 해당 order의 `ACCRUAL` 원장 source와 100 KRW balance delta를 deadline 안에 검증한다. 이 전체
 흐름은 실제 Merchant 계정과 Merchant Session만 사용한다. Plan 30 branch에서 legacy 점주 JWT로 2xx를
 만들거나 customer checkpoint를 전체 smoke 성공으로 부르지 않는다.
+
+전체 smoke는 fixture의 과거 확정 batch를 public settlement API로 조회해 5,000 KRW 부분 환불 조정이
+반영됐음을 확인하고, 해당 batch의 item에 owner Session으로 `FILED` dispute를 접수·조회한다. 이 데이터는
+live 주문과 분리된 immutable history다. seed는 현재 GLOBAL accrual policy와 settlement terms를 snapshot으로
+참조하므로, policy나 terms가 없을 때 임의 기본값을 만들지 않고 transaction 전체를 rollback한다.
 
 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`다. API smoke의 고객
 흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web은
@@ -96,8 +105,9 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 있는 것 | 없는 것 |
 |---|---|
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
-| 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
+| 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, AVAILABLE 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
 | local-only scripted payment config와 paymentKey 상태 규칙 | 실제 개인정보, 실제 Toss credential |
+| 과거 완료 주문 2건, 승인 결제, 5,000 KRW 부분 환불, immutable 정산 item·confirmed batch 2건·환불 조정 1건 | paymentKey, provider secret, PAN/CVC 또는 실제 고객 결제 자료 |
 | — | 매장 검색 색인(`discovery_store_search_term`) — seed는 색인을 만들지 않는다 |
 
 seed가 매장을 직접 SQL로 넣으므로 검색 색인을 채우는 event가 발생하지 않는다. 그래서 고객 화면의
@@ -113,11 +123,12 @@ bash scripts/demo/stop.sh            # 프로세스와 컨테이너 정지, 데�
 bash scripts/demo/stop.sh --reset    # 데모 DB와 실행 시 키 자료까지 삭제
 ```
 
-`--reset`은 두 개의 guard를 모두 통과해야 실행된다.
+`--reset`은 세 guard를 모두 통과해야 실행된다.
 
 1. 컨테이너가 서비스하는 `POSTGRES_DB`가 정확히 `beanflow_demo`여야 한다. 다르면 거절하고
    아무것도 지우지 않는다.
 2. 삭제 대상 runtime 디렉터리 경로가 정확히 `${DEMO_ROOT}/.demo-runtime`이어야 한다.
+3. 컨테이너의 Docker compose ownership label이 현재 checkout에서 유도한 project와 일치해야 한다.
 
 임의 DB에 `DROP`을 실행하지 않으며 다른 compose stack을 건드리지 않는다.
 
@@ -149,6 +160,7 @@ non-zero로 끝나며 key material을 보존한다.
 | smoke `[fail] ... expected 200 got 500` | 해당 단계의 실제 응답이 계약과 다르다 | 출력된 `correlationId`로 `.demo-runtime/app.log`를 조회한다 |
 | `Timed out waiting for the completion accrual transaction` | 완료 event consumer가 deadline 안에 적립 원장을 만들지 않았거나 source/금액이 정책과 다르다 | `.demo-runtime/app.log`에서 order ID와 event publication/retry state를 확인한다. smoke는 성공으로 끝나지 않는다 |
 | `unknown confirmation`이 수렴하지 않음 | local paymentKey가 유지되지 않았거나 lookup worker가 deadline 안에 실행되지 않았다 | smoke의 recovered payment ID와 correlation ID로 `.demo-runtime/app.log`를 확인한다. confirm을 새로 보내 성공으로 만들지 않는다 |
+| `Port ... is already in use by an unowned process` | 해당 checkout의 결정적 포트 블록을 다른 process가 사용 중 | 해당 process를 확인·정리하거나 다른 checkout에서 실행한다. demo는 기존 process를 kill하지 않는다 |
 | 재컴파일이 `build/classes/kotlin/test` 잠금으로 실패 | identity server JVM이 test classpath를 잡고 있다 | `stop.sh`를 먼저 실행한 뒤 컴파일한다 |
 | Flyway `checksum mismatch` | 기존 데모 DB가 이전 migration 내용으로 만들어졌다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다 |
 
@@ -156,5 +168,4 @@ non-zero로 끝나며 key material을 보존한다.
 
 - 실제 Toss PG·외부 JWK·알림 provider 연동
 - non-local 배포, 운영 규모, 성능 또는 SLA
-- 정산 Batch 생성 조건이 충족되는 시나리오 — core smoke의 계약에는 포함하지 않는다. 재현 가능한
-  batch fixture와 별도 mandatory probe가 생기기 전에는 정산 성공을 주장하지 않는다
+- 운영 scheduler가 실제 production 시간에 batch를 생성·지급하는 조건, Toss provider 또는 외부 운영 절차
