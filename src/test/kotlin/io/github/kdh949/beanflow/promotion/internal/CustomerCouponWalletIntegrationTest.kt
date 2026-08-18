@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ExpiredCouponRestorationMode
+import io.github.kdh949.beanflow.promotion.api.ListCustomerCouponWalletCommand
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.promotion.api.RestoreCouponAfterTerminationCommand
 import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
@@ -57,6 +58,8 @@ internal class CustomerCouponWalletIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val couponOperations: CouponReservationOperations,
+        private val walletRepository: CustomerCouponWalletQueryRepository,
+        private val walletValidation: CustomerCouponWalletQueryValidation,
         private val clock: CustomerCouponWalletMutableClock,
         transactionManager: PlatformTransactionManager,
     ) {
@@ -278,40 +281,41 @@ internal class CustomerCouponWalletIntegrationTest
             mockMvc
                 .perform(get("/api/v1/me/coupons").param("storeId", storeId.toString()).with(customerJwt(customerId)))
                 .andExpect(status().isServiceUnavailable)
-                .andExpect(jsonPath("$.code").value("SETTLEMENT_INPUT_UNAVAILABLE"))
+                .andExpect(jsonPath("$.code").value("COUPON_TERMS_INTEGRITY_FAILURE"))
                 .andExpect(jsonPath("$.items").doesNotExist())
         }
 
         @Test
-        fun `wallet projection query records an executable explain plan without assuming an index`() {
+        fun `wallet projection records the actual production explain plan for a representative fixture`() {
             val customerId = UUID.randomUUID()
             val storeId = UUID.randomUUID()
-            insertCoupon(customerId, storeId, expiresAt = now.plusSeconds(3_600))
-
-            val plan =
-                jdbcTemplate.query(
-                    """
-                    EXPLAIN (ANALYZE, BUFFERS)
-                    SELECT ci.id
-                      FROM promotion_coupon_issuance ci
-                      LEFT JOIN promotion_campaign campaign ON campaign.id = ci.campaign_id
-                      LEFT JOIN promotion_compensation_coupon_terms_snapshot snapshot
-                        ON snapshot.coupon_issuance_id = ci.id
-                     WHERE ci.customer_id = ?
-                       AND ci.state IN ('AVAILABLE', 'RESTORED')
-                       AND ci.coupon_expires_at > ?
-                       AND (ci.original_issuance_id IS NOT NULL OR campaign.active = true)
-                     ORDER BY ci.coupon_expires_at ASC, ci.id ASC
-                     LIMIT ?
-                    """.trimIndent(),
-                    { resultSet, _ -> resultSet.getString(1) },
-                    customerId,
-                    Timestamp.from(now),
-                    21,
+            val original = insertCoupon(customerId, storeId, expiresAt = now.plusSeconds(7_200))
+            insertCompensationProjectionFixture(customerId, storeId, original)
+            insertProjectionPlanNoise(customerId, storeId)
+            val prepared =
+                walletValidation.prepare(
+                    ListCustomerCouponWalletCommand(
+                        customerId = customerId,
+                        storeId = storeId.toString(),
+                        cursor = null,
+                        limit = "100",
+                        now = now,
+                    ),
                 )
+            val plan = walletRepository.explainCandidates(prepared)
+            val planText = plan.joinToString("\n")
 
-            assertThat(plan).isNotEmpty().anySatisfy { line -> assertThat(line).contains("Execution Time") }
-            println("Customer coupon wallet EXPLAIN (ANALYZE, BUFFERS):\\n${plan.joinToString("\\n")}")
+            assertThat(planText)
+                .contains(
+                    "promotion_coupon_issuance",
+                    "promotion_campaign",
+                    "promotion_compensation_coupon_terms_snapshot",
+                    "Sort Key: ci.coupon_expires_at, ci.id",
+                    "actual time",
+                    "Buffers:",
+                    "Execution Time",
+                ).containsPattern("actual time=.* rows=[0-9]+ loops=[0-9]+")
+            println("Customer coupon wallet production EXPLAIN (ANALYZE, BUFFERS):\\n$planText")
         }
 
         @Test
@@ -371,6 +375,81 @@ internal class CustomerCouponWalletIntegrationTest
                 storeId,
                 active,
             )
+        }
+
+        private fun insertProjectionPlanNoise(
+            customerId: UUID,
+            storeId: UUID,
+        ) {
+            val activeCampaignId = UUID.randomUUID()
+            val inactiveCampaignId = UUID.randomUUID()
+            val otherCustomerId = UUID.randomUUID()
+            insertCampaign(activeCampaignId, storeId, active = true)
+            insertCampaign(inactiveCampaignId, storeId, active = false)
+            jdbcTemplate.update(
+                """
+                INSERT INTO promotion_coupon_issuance (
+                    id, campaign_id, customer_id, state, coupon_expires_at, reserved_order_id,
+                    original_issuance_id, restoration_source_reference, restoration_trigger,
+                    restoration_policy_version_id, version
+                )
+                SELECT gen_random_uuid(),
+                       CASE WHEN n % 7 = 0 THEN ? ELSE ? END,
+                       CASE WHEN n % 5 = 1 THEN ? ELSE ? END,
+                       CASE WHEN n % 5 = 2 THEN 'RESERVED'
+                            WHEN n % 5 = 3 THEN 'USED'
+                            ELSE 'AVAILABLE' END,
+                       CASE WHEN n % 5 = 4 THEN CAST(? AS timestamptz) - INTERVAL '1 day'
+                            ELSE CAST(? AS timestamptz) + INTERVAL '1 day' + n * INTERVAL '1 second' END,
+                       CASE WHEN n % 5 IN (2, 3) THEN gen_random_uuid() ELSE NULL END,
+                       NULL, NULL, NULL, NULL, 0
+                  FROM generate_series(1, 2000) AS n
+                """.trimIndent(),
+                inactiveCampaignId,
+                activeCampaignId,
+                otherCustomerId,
+                customerId,
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+        }
+
+        private fun insertCompensationProjectionFixture(
+            customerId: UUID,
+            storeId: UUID,
+            original: CouponFixture,
+        ) {
+            val compensationId = UUID.randomUUID()
+            transactions.executeWithoutResult {
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO promotion_coupon_issuance (
+                        id, campaign_id, customer_id, state, coupon_expires_at, reserved_order_id,
+                        original_issuance_id, restoration_source_reference, restoration_trigger,
+                        restoration_policy_version_id, version
+                    ) VALUES (?, ?, ?, 'RESTORED', ?, NULL, ?, ?, 'CUSTOMER_CANCELLATION', 1, 0)
+                    """.trimIndent(),
+                    compensationId,
+                    original.campaignId,
+                    customerId,
+                    Timestamp.from(now.plusSeconds(14_400)),
+                    original.issuanceId,
+                    "wallet-explain-compensation-$compensationId",
+                )
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO promotion_compensation_coupon_terms_snapshot (
+                        coupon_issuance_id, campaign_id, campaign_version, store_id, discount_type,
+                        fixed_amount_krw, rate_bps, minimum_eligible_subtotal_krw, maximum_discount_krw,
+                        all_menus_eligible, cost_bearer, platform_share_bps, store_share_bps, created_at
+                    ) VALUES (?, ?, 0, ?, 'FIXED_KRW', 500, NULL, 2000, NULL, true, 'STORE', 0, 10000, ?)
+                    """.trimIndent(),
+                    compensationId,
+                    original.campaignId,
+                    storeId,
+                    Timestamp.from(now),
+                )
+            }
         }
 
         private fun customerJwt(customerId: UUID): RequestPostProcessor =

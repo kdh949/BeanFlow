@@ -23,7 +23,9 @@ internal class CustomerCouponWalletOpenApiContractTest {
                 "\"401\"",
                 "\"403\"",
                 "\"503\"",
-            )
+                "DEPENDENCY_UNAVAILABLE",
+                "COUPON_TERMS_INTEGRITY_FAILURE",
+            ).doesNotContain("SETTLEMENT_INPUT_UNAVAILABLE")
         assertThat(pathItem(runtime, "/me/coupons"))
             .contains("./beanflow-v1.yaml#/paths/~1me~1coupons")
         assertThat(schema(target, "CustomerCouponWalletItem"))
