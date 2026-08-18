@@ -177,7 +177,8 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: 다섯 개 선형 Draft PR과 수치 비강제 성능 evidence를 사용자 결정으로 고정
 - [x] 2026-08-19: 115개 Spring test를 shared 11개, isolated 104개로 분류하고 raw marker와 직접
   `@DirtiesContext`를 제거
-- [ ] PR 1 부분 환불 test 분리와 전체 순서·반복 검증
+- [x] 2026-08-19: 부분 환불 19개 시나리오를 다섯 nested 책임으로 분리하고 공통 DB fixture support 추출
+- [ ] PR 1 전체 순서·반복 검증과 timing weight 갱신
 - [ ] PR 2 migration assertion inventory와 중앙 검증
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
@@ -195,6 +196,9 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   후속 SQL을 실행할 수 없다. DDL·강제 실패 테스트는 isolated 대상이다.
 - 2026-08-19: 동일 구성을 가진 운영 Controller shared 테스트는 한 번 시작한 Context/database를 재사용한
   상태에서 순서 묶음 실행을 통과했다.
+- 2026-08-19: 부분 환불을 다섯 top-level isolated class로 나눈 최초 형태는 class별 Context/database가
+  1개에서 5개로 늘어 targeted 실행이 약 24초 기준에서 74초가 됐다. 다섯 책임은 `@Nested`로 분리하고
+  Spring 격리 단위는 하나로 유지해 같은 실행이 29초에 통과했다.
 
 ## Decision Log
 
