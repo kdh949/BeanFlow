@@ -42,6 +42,9 @@ tags:
     description: |
       서버 소유 장바구니 없이 즉시 주문을 생성하고, 조회·취소·빠른 재주문까지 처리하는
       고객용 주문 API입니다.
+  - name: Promotion
+    description: |
+      고객이 자신의 활성 쿠폰과 현재 매장 적용 가능성을 확인하는 읽기 API입니다.
   - name: Payment
     description: |
       Toss Payments 연동을 통한 결제 승인·확인과 결제 결과 조회를 다루는 API입니다.
@@ -74,7 +77,7 @@ tags:
       고객센터 상담원이 신원 확인, 계정 조사, 주문 변경 승인 등을 수행하는 API입니다.
 x-tagGroups:
   - name: 고객용 API
-    tags: [Identity, Discovery, Ordering, Payment, Payment Methods, Loyalty]
+    tags: [Identity, Discovery, Ordering, Promotion, Payment, Payment Methods, Loyalty]
   - name: 가맹점(점주)용 API
     tags: [Merchant, Store Orders, Settlement, Dispute]
   - name: 운영자·내부 API
@@ -251,6 +254,8 @@ paths:
           $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
   /me/orders:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders"
+  /me/coupons:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1coupons"
   /me/orders/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
   /me/orders/{orderReference}/cancellations:

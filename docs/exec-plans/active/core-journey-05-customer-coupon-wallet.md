@@ -7,10 +7,10 @@
 > **Depends-On:** —
 > **Completed-At:** `—`
 
-이 ExecPlan은 `.agent/PLANS.md`를 따른다. 이 plan은 현재 source에 없는 customer coupon wallet을
+이 ExecPlan은 `.agent/PLANS.md`를 따른다. 이 plan은 source에 없던 customer coupon wallet을
 OpenAPI-first로 구현하기 위한 계약과 검증 경계를 기록한다. Stage 03 no-op outcome과 Stage 04
-customer Session/CSRF contract integration이 확인되어 backend/API slice는 구현 가능하다. Storybook MCP
-resource는 wallet UI와 Storybook proof만 차단하며, backend/API slice의 prerequisite가 아니다.
+customer Session/CSRF contract integration 위에서 backend/API slice가 구현되었다. Storybook MCP resource는
+wallet UI와 Storybook proof만 차단하며, backend/API slice의 prerequisite가 아니었다.
 
 ## Purpose / Big Picture
 
@@ -20,14 +20,22 @@ resource는 wallet UI와 Storybook proof만 차단하며, backend/API slice의 p
 
 ## Current State
 
-- `GET /api/v1/me/coupons`와 wallet frontend route는 target/runtime OpenAPI와 현재 source에 없다.
-- 주문 생성은 선택된 `couponIssuanceId`를 받을 수 있지만, customer-facing wallet read projection은 없다.
+- Customer Session의 `GET /api/v1/me/coupons`가 target/runtime OpenAPI, generated frontend schema와
+  Promotion read projection으로 구현되었다. Customer actor와 store-bound signed cursor만 받아
+  `AVAILABLE`/`RESTORED` row를 DTO projection으로 반환한다.
+- normal issuance는 live active Campaign과 issuance expiry를, restored compensation issuance는 complete
+  immutable snapshot과 issuance expiry를 각각 사용한다. 다른 매장 row는 제외하지 않고
+  `STORE_NOT_APPLICABLE`로 표시한다.
 - [BR-09 amendment](../../product/business-policy-decisions.md)와
   [ADR-070 amendment](../../adr/ADR-070-signed-cursor-and-pagination-contract.md)가 일반 issuance와
   restored compensation issuance의 eligibility, store-only scope와 cursor binding을 고정한다.
 - `CouponReservationService`는 ownership, issuance state, expiry, store scope, 실제 minimum order,
   one-coupon rule과 concurrent consumption의 final authority다.
-- Storybook MCP는 현재 사용할 수 없으므로 UI work와 Storybook proof를 대체 도구로 우회하지 않는다.
+- representative PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)`는 issuance seq scan, Campaign primary-key lookup과
+  sort를 보였고 execution time은 0.199 ms였다. 이 fixture는 새 index 필요성을 입증하지 않았으므로 migration과
+  index는 추가하지 않았다.
+- Storybook MCP는 계속 사용할 수 없으므로 wallet route/UI와 Storybook proof는 **Not run**이며, 대체 도구로
+  우회하지 않는다.
 
 ## Definitions
 
@@ -236,8 +244,20 @@ Storybook, browser, `EXPLAIN`과 migration validation은 implementation 뒤에�
 
 ## Progress
 
-- 2026-08-18: documentation prerequisite created. No endpoint, runtime OpenAPI, generated client, frontend,
-  migration, query measurement or Storybook validation has been added or claimed by this plan.
+- 2026-08-18: documentation prerequisite created.
+- 2026-08-18: backend/API vertical slice implemented: target/runtime OpenAPI, generated frontend schema,
+  Customer authorization, Promotion JDBC DTO projection, normal/restored eligibility, store-only visible
+  inapplicability, ADR-070 `(couponExpiresAt, couponIssuanceId)` cursor, typed dependency/snapshot 503 and
+  closed outcome observability.
+- 2026-08-18: focused green evidence: wallet integration/contract, runtime parity, authentication registry,
+  `CouponReservationRepositoryTest`, `CustomerPointFacadeIntegrationTest`, `ModularityTests` and `spotlessCheck`
+  passed; `npm run typecheck` regenerated the schema and passed; `scripts/verify-docs.sh` and `git diff --check`
+  passed.
+- 2026-08-18: representative PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` recorded 0.199 ms with no evidence requiring
+  a new index; no migration was added.
+- 2026-08-18: wallet UI route, Storybook build/docs tests, browser interaction and a11y proof remain **Not run**
+  because Storybook MCP is unavailable. No frontend UI source changed in this backend/API slice, so wallet frontend
+  unit tests were not added or run.
 
 ## Surprises & Discoveries
 
@@ -255,8 +275,13 @@ Storybook, browser, `EXPLAIN`과 migration validation은 implementation 뒤에�
 
 ## Outcomes & Retrospective
 
-Not complete. This plan records a prerequisite contract only; implementation, current validation, integration,
-Draft PR publication, and release-gate closure remain outstanding.
+The backend/API vertical slice is locally complete with its focused contract, security, integration, modularity,
+formatting, generated-schema and documentation evidence. It does not create a migration or index, and order
+reservation remains the authority.
+
+This ExecPlan remains `ACTIVE`: wallet route/UI, Storybook build/docs tests, browser interaction and a11y proof are
+**Not run** while Storybook MCP is unavailable. No wallet frontend unit test was added or run because this slice
+changed no frontend UI source. Draft PR publication, remote CI and release-gate closure are also outstanding.
 
 ## Revision Notes
 
