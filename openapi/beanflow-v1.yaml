@@ -380,7 +380,14 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+        "503":
+          description: |
+            Coupon read dependency가 일시적으로 unavailable하면 `DEPENDENCY_UNAVAILABLE`, compensation
+            coupon의 issuance-owned immutable terms snapshot이 없거나 손상됐으면
+            `COUPON_TERMS_INTEGRITY_FAILURE`를 반환합니다. 빈 목록이나 live Campaign fallback은 없습니다.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /me/orders/{orderReference}:
     get:
       tags: [Ordering]

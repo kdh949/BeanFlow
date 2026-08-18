@@ -31,9 +31,11 @@ wallet UI와 Storybook proof만 차단하며, backend/API slice의 prerequisite�
   restored compensation issuance의 eligibility, store-only scope와 cursor binding을 고정한다.
 - `CouponReservationService`는 ownership, issuance state, expiry, store scope, 실제 minimum order,
   one-coupon rule과 concurrent consumption의 final authority다.
-- representative PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)`는 issuance seq scan, Campaign primary-key lookup과
-  sort를 보였고 execution time은 0.199 ms였다. 이 fixture는 새 index 필요성을 입증하지 않았으므로 migration과
-  index는 추가하지 않았다.
+- PostgreSQL evidence는 production projection SQL 자체를 `EXPLAIN (ANALYZE, BUFFERS)`하는 test hook과
+  actor/state/expiry/Campaign/snapshot 분포를 가진 2,002-row fixture로 다시 수집했다. plan은 issuance seq scan,
+  Campaign/snapshot primary-key lookup과 top-N sort를 보였고 402 rows가 owner/state/expiry filter를, 345 rows가
+  Campaign eligibility까지 통과했다. fixture execution time은 1.331 ms였지만 production workload·latency
+  threshold가 없어 index 필요성은 **Not measured**이며 migration과 index를 추측으로 추가하지 않는다.
 - Storybook MCP는 계속 사용할 수 없으므로 wallet route/UI와 Storybook proof는 **Not run**이며, 대체 도구로
   우회하지 않는다.
 
@@ -247,14 +249,16 @@ Storybook, browser, `EXPLAIN`과 migration validation은 implementation 뒤에�
 - 2026-08-18: documentation prerequisite created.
 - 2026-08-18: backend/API vertical slice implemented: target/runtime OpenAPI, generated frontend schema,
   Customer authorization, Promotion JDBC DTO projection, normal/restored eligibility, store-only visible
-  inapplicability, ADR-070 `(couponExpiresAt, couponIssuanceId)` cursor, typed dependency/snapshot 503 and
+  inapplicability, ADR-070 `(couponExpiresAt, couponIssuanceId)` cursor, typed dependency/coupon-integrity 503 and
   closed outcome observability.
 - 2026-08-18: focused green evidence: wallet integration/contract, runtime parity, authentication registry,
   `CouponReservationRepositoryTest`, `CustomerPointFacadeIntegrationTest`, `ModularityTests` and `spotlessCheck`
   passed; `npm run typecheck` regenerated the schema and passed; `scripts/verify-docs.sh` and `git diff --check`
   passed.
-- 2026-08-18: representative PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` recorded 0.199 ms with no evidence requiring
-  a new index; no migration was added.
+- 2026-08-18: 기존 1-row 축약 query EXPLAIN은 production projection·representative workload 증거가 아니므로
+  폐기했다. actual production SQL과 2,002-row mixed fixture에서 issuance seq scan, Campaign/snapshot PK lookup,
+  top-N sort, shared buffer 1,180 hits와 1.331 ms fixture execution을 기록했다. 이 값은 production workload
+  목표가 아니므로 index 판단은 **Not measured**로 유지하며 migration은 추가하지 않았다.
 - 2026-08-18: wallet UI route, Storybook build/docs tests, browser interaction and a11y proof remain **Not run**
   because Storybook MCP is unavailable. No frontend UI source changed in this backend/API slice, so wallet frontend
   unit tests were not added or run.

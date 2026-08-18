@@ -78,7 +78,7 @@ internal class CustomerCouponWalletQueryService(
 internal enum class CustomerCouponWalletQueryOutcome {
     SUCCEEDED,
     INVALID_REQUEST,
-    SETTLEMENT_INPUT_UNAVAILABLE,
+    COUPON_TERMS_INTEGRITY_FAILURE,
     DEPENDENCY_UNAVAILABLE,
     UNEXPECTED_FAILURE,
 }
@@ -109,7 +109,7 @@ internal class CustomerCouponWalletQueryMetrics(
 private fun DomainFailure.toCouponWalletOutcome(): CustomerCouponWalletQueryOutcome =
     when (code) {
         FailureCode.INVALID_REQUEST -> CustomerCouponWalletQueryOutcome.INVALID_REQUEST
-        FailureCode.SETTLEMENT_INPUT_UNAVAILABLE -> CustomerCouponWalletQueryOutcome.SETTLEMENT_INPUT_UNAVAILABLE
+        FailureCode.COUPON_TERMS_INTEGRITY_FAILURE -> CustomerCouponWalletQueryOutcome.COUPON_TERMS_INTEGRITY_FAILURE
         else -> CustomerCouponWalletQueryOutcome.DEPENDENCY_UNAVAILABLE
     }
 
@@ -252,8 +252,22 @@ internal class CustomerCouponWalletQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     fun findCandidates(prepared: PreparedCustomerCouponWalletQuery): List<CustomerCouponWalletProjection> {
+        val query = prepared.toQuery()
+        return jdbcTemplate.query(query.statement, { resultSet, _ -> resultSet.toProjection() }, *query.parameters)
+    }
+
+    internal fun explainCandidates(prepared: PreparedCustomerCouponWalletQuery): List<String> {
+        val query = prepared.toQuery()
+        return jdbcTemplate.query(
+            "EXPLAIN (ANALYZE, BUFFERS) ${query.statement}",
+            { resultSet, _ -> resultSet.getString(1) },
+            *query.parameters,
+        )
+    }
+
+    private fun PreparedCustomerCouponWalletQuery.toQuery(): CustomerCouponWalletSqlQuery {
         val keyset =
-            prepared.after
+            after
                 ?.let {
                     """
                     AND (
@@ -264,16 +278,16 @@ internal class CustomerCouponWalletQueryRepository(
                 }.orEmpty()
         val parameters =
             buildList<Any> {
-                add(prepared.customerId)
-                add(Timestamp.from(prepared.now))
-                prepared.after?.let {
+                add(customerId)
+                add(Timestamp.from(now))
+                after?.let {
                     add(Timestamp.from(it.couponExpiresAt))
                     add(Timestamp.from(it.couponExpiresAt))
                     add(it.couponIssuanceId)
                 }
-                add(prepared.limit + 1)
+                add(limit + 1)
             }.toTypedArray()
-        return jdbcTemplate.query(SQL.replace("/* keyset */", keyset), { resultSet, _ -> resultSet.toProjection() }, *parameters)
+        return CustomerCouponWalletSqlQuery(SQL.replace("/* keyset */", keyset), parameters)
     }
 
     private fun ResultSet.toProjection() =
@@ -362,6 +376,11 @@ internal class CustomerCouponWalletQueryRepository(
             """
     }
 }
+
+private data class CustomerCouponWalletSqlQuery(
+    val statement: String,
+    val parameters: Array<Any>,
+)
 
 internal data class CustomerCouponWalletProjection(
     val couponIssuanceId: UUID,
@@ -512,7 +531,10 @@ internal data class CustomerCouponWalletProjection(
     }
 
     private fun snapshotUnavailable(): Nothing =
-        throw DomainFailure(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "Compensation coupon terms snapshot is missing or invalid")
+        throw DomainFailure(
+            FailureCode.COUPON_TERMS_INTEGRITY_FAILURE,
+            "Compensation coupon terms snapshot is missing or invalid",
+        )
 
     private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)
 }
