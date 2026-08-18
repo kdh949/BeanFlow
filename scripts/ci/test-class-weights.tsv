@@ -29,7 +29,6 @@ io.github.kdh949.beanflow.discovery.internal.StoreSearchIndexRebuildIntegrationT
 io.github.kdh949.beanflow.discovery.internal.StoreSearchIndexRebuildServiceTest	0.006
 io.github.kdh949.beanflow.discovery.internal.StoreSearchQueryIntegrationTest	23.535
 io.github.kdh949.beanflow.discovery.internal.StoreSearchQueryPlanTest	32.733
-io.github.kdh949.beanflow.discovery.internal.StoreSearchTermIndexMigrationTest	2.529
 io.github.kdh949.beanflow.dispute.internal.SettlementDisputeIntegrationTest	23.009
 io.github.kdh949.beanflow.dispute.internal.SettlementDisputePersistenceTest	0.004
 io.github.kdh949.beanflow.dispute.internal.SettlementDisputeQueryPlanTest	19.080
@@ -43,11 +42,9 @@ io.github.kdh949.beanflow.eventing.internal.SettlementItemCreatedEventContractTe
 io.github.kdh949.beanflow.fulfillment.internal.PickupAvailabilityQueryTest	15.321
 io.github.kdh949.beanflow.fulfillment.internal.PickupReservationRepositoryTest	20.037
 io.github.kdh949.beanflow.fulfillment.internal.PickupSlotReservationWindowUnitTest	0.425
-io.github.kdh949.beanflow.identity.internal.CustomerAccountMigrationTest	3.016
 io.github.kdh949.beanflow.identity.internal.CustomerAuthenticationIntegrationTest	24.182
 io.github.kdh949.beanflow.identity.internal.CustomerAuthenticationOpenApiContractTest	0.001
 io.github.kdh949.beanflow.identity.internal.CustomerCredentialSecurityTest	0.969
-io.github.kdh949.beanflow.identity.internal.MerchantAccountMigrationTest	30.168
 io.github.kdh949.beanflow.identity.internal.MerchantAccountTest	0.003
 io.github.kdh949.beanflow.identity.internal.MerchantAuthenticationIntegrationTest	37.316
 io.github.kdh949.beanflow.identity.internal.MerchantAuthenticationOpenApiContractTest	0.002
@@ -83,7 +80,7 @@ io.github.kdh949.beanflow.operations.internal.AuditPermissionBoundaryConcurrency
 io.github.kdh949.beanflow.operations.internal.AuditRecordContractTest	0.004
 io.github.kdh949.beanflow.operations.internal.AuditRecordTest	21.981
 io.github.kdh949.beanflow.operations.internal.AuditRetentionPolicyIntegrationTest	21.999
-io.github.kdh949.beanflow.operations.internal.AuditRetentionPolicyMigrationTest	33.159
+io.github.kdh949.beanflow.operations.internal.AuditRetentionPolicyMigrationTest	20.000
 io.github.kdh949.beanflow.operations.internal.BenefitPolicyIntegrationTest	21.339
 io.github.kdh949.beanflow.operations.internal.LocalDemoSafetyConfigurationTest	0.008
 io.github.kdh949.beanflow.operations.internal.MerchantCredentialAdministrationApplicationServiceTest	0.458
@@ -115,7 +112,7 @@ io.github.kdh949.beanflow.ordering.internal.CompensationPublicationTargetRegistr
 io.github.kdh949.beanflow.ordering.internal.CreateOrderConcurrencyTest	21.361
 io.github.kdh949.beanflow.ordering.internal.CreateOrderServiceTest	22.426
 io.github.kdh949.beanflow.ordering.internal.CustomerCancellationCommandIntegrationTest	29.841
-io.github.kdh949.beanflow.ordering.internal.CustomerCancellationMigrationTest	61.072
+io.github.kdh949.beanflow.ordering.internal.CustomerCancellationMigrationTest	15.000
 io.github.kdh949.beanflow.ordering.internal.CustomerOrderPagingTest	0.009
 io.github.kdh949.beanflow.ordering.internal.CustomerOrderPresentationPolicyTest	0.005
 io.github.kdh949.beanflow.ordering.internal.CustomerOrderQueryIntegrationTest	28.292
@@ -171,7 +168,6 @@ io.github.kdh949.beanflow.payment.PaymentStateTest	0.004
 io.github.kdh949.beanflow.payment.RefundStateTest	0.004
 io.github.kdh949.beanflow.payment.internal.CustomerCancellationPaymentServiceTest	22.466
 io.github.kdh949.beanflow.payment.internal.LocalPaymentGatewayConfigurationTest	0.296
-io.github.kdh949.beanflow.payment.internal.OneTimePaymentMigrationTest	29.835
 io.github.kdh949.beanflow.payment.internal.PartialRefundAllocationRepositoryTest	14.893
 io.github.kdh949.beanflow.payment.internal.PartialRefundMigrationTest	15.542
 io.github.kdh949.beanflow.payment.internal.PaymentMethodAggregateTest	0.006
@@ -187,13 +183,19 @@ io.github.kdh949.beanflow.payment.internal.TossOneTimePaymentGatewayConfiguratio
 io.github.kdh949.beanflow.payment.internal.TossOneTimePaymentGatewayTest	0.537
 io.github.kdh949.beanflow.promotion.internal.CouponBurdenMigrationTest	30.730
 io.github.kdh949.beanflow.promotion.internal.CouponReservationRepositoryTest	20.889
+io.github.kdh949.beanflow.schema.CurrentSchemaMetadataContractTest	9.841
+io.github.kdh949.beanflow.schema.DiscoverySettlementSchemaInvariantTest	15.585
+io.github.kdh949.beanflow.schema.FlywayMigrationSmokeTest	10.611
+io.github.kdh949.beanflow.schema.IdentitySchemaInvariantTest	10.786
+io.github.kdh949.beanflow.schema.PaymentOrderingSchemaInvariantTest	11.578
+io.github.kdh949.beanflow.schema.SupportOperationsSchemaInvariantTest	13.150
 io.github.kdh949.beanflow.settlement.internal.CustomerCancellationRefundExclusionIntegrationTest	22.251
 io.github.kdh949.beanflow.settlement.internal.SettlementBatchLifecycleIntegrationTest	21.355
 io.github.kdh949.beanflow.settlement.internal.SettlementBatchQueryIntegrationTest	20.981
 io.github.kdh949.beanflow.settlement.internal.SettlementFoundationMigrationTest	46.562
 io.github.kdh949.beanflow.settlement.internal.SettlementItemCreationIntegrationTest	21.611
 io.github.kdh949.beanflow.settlement.internal.SettlementItemQueryIntegrationTest	21.380
-io.github.kdh949.beanflow.settlement.internal.SettlementLifecycleMigrationTest	31.047
+io.github.kdh949.beanflow.settlement.internal.SettlementLifecycleMigrationTest	10.000
 io.github.kdh949.beanflow.settlement.internal.SettlementPersistenceTest	0.006
 io.github.kdh949.beanflow.settlement.internal.SettlementRefundAdjustmentIntegrationTest	22.232
 io.github.kdh949.beanflow.shared.api.PersonalDataMaskerTest	0.021
@@ -228,7 +230,6 @@ io.github.kdh949.beanflow.support.internal.SupportActionRequestIntegrationTest	2
 io.github.kdh949.beanflow.support.internal.SupportActionRequestMigrationTest	74.840
 io.github.kdh949.beanflow.support.internal.SupportActionRequestOpenApiContractTest	0.068
 io.github.kdh949.beanflow.support.internal.SupportCaseIntegrationTest	22.230
-io.github.kdh949.beanflow.support.internal.SupportCaseMigrationTest	44.871
 io.github.kdh949.beanflow.support.internal.SupportCaseOpenApiContractTest	0.086
 io.github.kdh949.beanflow.support.internal.SupportCompensationIntegrationTest	26.386
 io.github.kdh949.beanflow.support.internal.SupportCompensationMigrationTest	59.482

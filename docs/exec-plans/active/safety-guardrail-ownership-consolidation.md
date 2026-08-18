@@ -237,7 +237,9 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: PR 1 최종 backend gate 통과, Draft PR #97 생성
 - [x] 2026-08-19: PR #97 remote shard 0의 settlement snapshot 시간 정밀도 실패 원인
   확인과 PostgreSQL microsecond 반올림 회귀 수정
-- [ ] PR 2 migration assertion inventory와 중앙 검증
+- [x] 2026-08-19: PR 2의 39개 migration assertion inventory를 유지 전용·중앙 이동·중복 삭제로 매핑
+- [x] 2026-08-19: fresh Flyway smoke, 중앙 metadata와 네 Context current-schema invariant 검증 추가
+- [x] 2026-08-19: 대응 위치가 확인된 반복 clean migration과 단순 metadata assertion만 제거하고 full suite 통과
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
 - [ ] PR 5 Store Order Board 분리, 전체 검증과 plan completion
@@ -282,6 +284,11 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   이름과 `Sort` 부재를 정확히 강제했다. 같은 commit을 새 isolated DB에서 단독 재실행하면
   21초에 통과했고, 기준선·초기 PR 1·PR 2·PR 3 full suite에서도 통과했다. 현재는
   PR 1 회귀로 분류하지 않고 PR 2 planner 계약의 과도한 표현 고정 후보로 기록한다.
+- 2026-08-19: 기준선 39개 migration class의 assertion을 모두 표로 추적한 뒤, 독립 upgrade/backfill과
+  deployment gate 34개 class는 유지했다. 반복 clean migration만 소유하던 5개 class를 제거하고 fresh smoke,
+  current metadata, payment/ordering, identity, support/operations, discovery/settlement의 6개 중앙 class로 옮겼다.
+- 2026-08-19: PR 2 full suite는 44분 1초에 1,359 tests, failure/error 0, skipped 1로 통과했고 class
+  time 합은 2,619.208초였다. 이는 동일 machine의 관측값일 뿐 성능 acceptance나 개선율 주장에 사용하지 않는다.
 
 ## Decision Log
 
@@ -300,7 +307,8 @@ backend/document gate는 통과했다. 첫 remote CI의 shard 0은 PostgreSQL �
 실패했고, 승인된 정밀도 수정과 회귀 검증을 적용했다. 수정 head remote CI는 재실행 전이다.
 수정 head full suite의 정밀도 관련 테스트는 모두 통과했지만 기존 planner-shape test 1건이
 비결정적으로 실패한 후 단독 재실행은 통과했다. 따라서 PR 1은 Draft를 유지한다.
-나머지 PR URL, commit range,
+PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 소유권을 6개 중앙
+검증으로 옮겼고 full suite를 통과했다. 나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
 
