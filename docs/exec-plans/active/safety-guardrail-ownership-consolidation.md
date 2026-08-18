@@ -279,7 +279,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: ActionRequest facade를 생성·수정·결정·재배정·조회·profile approval handler로 분리
 - [x] 2026-08-19: Compensation facade를 평가·생성·실행·알림 재시도/복구·조회 handler로 분리
 - [x] 2026-08-19: ProfileChange facade를 제출·수정·실행·알림 재시도/복구·조회 handler로 분리
-- [ ] PR 5 Store Order Board 분리, 전체 검증과 plan completion
+- [x] 2026-08-19: live Storybook MCP에서 OrderBoard·Button·FeedbackState·StatusBadge 계약 재확인
+- [x] 2026-08-19: board 정렬/reconcile 모델, 조회·polling·ETag·명령 hook, column/overflow/card 분리
+- [x] 2026-08-19: 기존 3개 Storybook 상태 보존과 loading/conflict/overflow/transition busy 4개 추가
+- [ ] PR 5 전체 stack 검증, remote CI terminal 판정과 plan completion
 
 ## Surprises & Discoveries
 
@@ -345,6 +348,14 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   `REQUIRES_NEW`, read-only 경계를 바꾸지 않았고 provider 호출 순서도 transaction 안으로 이동하지 않았다.
 - 2026-08-19: SHA 공통화는 byte digest의 lowercase hex encoding까지만 적용했다. payload field 순서,
   idempotency repository/replay, audit category/action과 실패 code는 각 Support 도메인 경로에 남겼다.
+- 2026-08-19: live Storybook MCP가 정상 동작한 뒤 기존 공용 Button, FeedbackState, StatusBadge를 재사용했다.
+  새로운 token/variant/style은 추가하지 않았고 `StoreOrderBoardPage` export와 route는 유지했다.
+- 2026-08-19: 주문 보드 focused Storybook 7개는 interaction/a11y를 모두 통과했다. broad story interaction은
+  모두 통과했지만 이번 diff 밖의 `StoreSettlementsPage`에 기존 foreground/background 4.2:1 대비 위반 5건이
+  검출됐다. 범위 밖 style 변경을 stack에 섞지 않고 final status에서 별도 실패 증거로 유지한다.
+- 2026-08-19: frontend typecheck, 16 files/145 unit tests, design adherence, production/Storybook build,
+  Sites 4 tests는 통과했다. Storybook docs smoke는 sandbox Chromium Mach port 권한으로 1회 실패한 뒤
+  동일 산출물을 sandbox 밖에서 재실행해 29 docs entries, 14 stateful docs, 49 state surfaces로 통과했다.
 
 ## Decision Log
 
@@ -367,7 +378,8 @@ PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 �
 옮겼고 full suite를 통과했다. PR 3은 12개
 validator fixture test와 100 operation·102 schema semantic contract로 문서/OpenAPI hard gate를 집중화했다.
 PR 4는 기존 facade/controller 주입 호환성을 유지하면서 세 서비스의 유스케이스 routing과 transaction
-implementation을 분리했다. 나머지 PR URL, commit range,
+implementation을 분리했다. PR 5는 page export/route와 시각 계약을 유지한 채 model, hook과 세 표현
+책임을 분리하고 7개 focused Storybook 계약을 통과했다. 나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
 
