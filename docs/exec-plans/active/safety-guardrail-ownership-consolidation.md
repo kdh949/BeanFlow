@@ -275,7 +275,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: 17개 OpenAPI 문자열 test의 고유 assertion을 100 operation·102 schema semantic contract로 이전
 - [x] 2026-08-19: runtime parity를 실제 shared Spring context의 mapping 비교로 좁히고 62개 mock 선언 제거
 - [x] 2026-08-19: PR 3 full suite 1,340 tests와 문서·OpenAPI validator 검증 통과
-- [ ] PR 4 세 Support Application Service 분리
+- [x] 2026-08-19: Support SHA-256 byte-to-lowercase-hex 구현만 `SupportSha256`으로 집중화
+- [x] 2026-08-19: ActionRequest facade를 생성·수정·결정·재배정·조회·profile approval handler로 분리
+- [x] 2026-08-19: Compensation facade를 평가·생성·실행·알림 재시도/복구·조회 handler로 분리
+- [x] 2026-08-19: ProfileChange facade를 제출·수정·실행·알림 재시도/복구·조회 handler로 분리
 - [ ] PR 5 Store Order Board 분리, 전체 검증과 plan completion
 
 ## Surprises & Discoveries
@@ -337,6 +340,11 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - 2026-08-19: PR 3 full suite는 43분 12초에 1,340 tests, failure/error 0, skipped 1로
   통과했고 class time 합은 2,570.058초였다. 17개 문자열 계약 test 제거를 반영한 실제 통합 head
   검증 결과이며, 성능 개선율 근거로 사용하지 않는다.
+- 2026-08-19: 기존 controller 주입 facade는 각각 156, 141, 166줄의 유스케이스 routing 역할로 남겼다.
+  기존 persistence와 transaction annotation은 별도 transaction service에 그대로 이동해 `MANDATORY`,
+  `REQUIRES_NEW`, read-only 경계를 바꾸지 않았고 provider 호출 순서도 transaction 안으로 이동하지 않았다.
+- 2026-08-19: SHA 공통화는 byte digest의 lowercase hex encoding까지만 적용했다. payload field 순서,
+  idempotency repository/replay, audit category/action과 실패 code는 각 Support 도메인 경로에 남겼다.
 
 ## Decision Log
 
@@ -358,7 +366,8 @@ backend/document gate는 통과했다. 첫 remote CI의 shard 0은 PostgreSQL �
 PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 소유권을 6개 중앙 검증으로
 옮겼고 full suite를 통과했다. PR 3은 12개
 validator fixture test와 100 operation·102 schema semantic contract로 문서/OpenAPI hard gate를 집중화했다.
-나머지 PR URL, commit range,
+PR 4는 기존 facade/controller 주입 호환성을 유지하면서 세 서비스의 유스케이스 routing과 transaction
+implementation을 분리했다. 나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
 
