@@ -2233,8 +2233,10 @@
 - **Affected Aggregates:** CouponIssuance, Campaign, Order
 - **Required Tests:**
   - 다른 customer issuance가 목록 또는 cursor를 통해 보이지 않음
-  - `AVAILABLE`/`RESTORED`와 active/unexpired 경계의 포함, `RESERVED`/`USED`/`EXPIRED`와 inactive/expired
-    Campaign의 제외
+  - 일반 `AVAILABLE`/원 issuance `RESTORED`의 active Campaign·미만료 경계 포함과 inactive Campaign 제외
+  - compensation issuance의 immutable snapshot·미만료 경계 포함, inactive Campaign과 독립된 포함,
+    손상 snapshot의 typed 5xx 및 live Campaign fallback 부재
+  - `RESERVED`/`USED`/`EXPIRED` issuance의 제외
   - store scope·brand scope의 `applicable=true`와 `STORE_NOT_APPLICABLE`의 visible false 결과
   - minimum amount가 response에 정보로 남고 order amount 없는 query가 invented minimum failure를 내지 않음
   - projection failure 503이 empty 200, stale cache 또는 fake data로 대체되지 않음

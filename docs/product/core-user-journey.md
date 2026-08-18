@@ -77,9 +77,9 @@ coupon issuance, wallet balance, or coupon history.
 
 1. The current customer may query only their own coupon issuances in `AVAILABLE` or `RESTORED` state. A normal
    issuance, including an original issuance restored after reservation, requires `Campaign.active=true` and an
-   unexpired issuance. A restored compensation issuance requires its complete immutable terms snapshot and an
-   unexpired issuance, not a live Campaign check; missing snapshot data is a typed failure and is never completed
-   from Campaign data. Campaign expiry or title is not invented for this query.
+   unexpired issuance. A restored compensation issuance requires its complete issuance-owned immutable terms
+   snapshot and an unexpired issuance, not a live Campaign check; missing or incomplete snapshot data fails with
+   a typed 5xx and is never completed from Campaign data. Campaign expiry or title is not invented for this query.
 2. `storeId` is required. The current slice decides only current store applicability. An applicable item has
    `applicable=true`; a non-applicable item has `applicable=false` and `reasonCode=STORE_NOT_APPLICABLE`.
    The item remains visible instead of being silently omitted. Brand-scope matching and brand hierarchy are deferred.
