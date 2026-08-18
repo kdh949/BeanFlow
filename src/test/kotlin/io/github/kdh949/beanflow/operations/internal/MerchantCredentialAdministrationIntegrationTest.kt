@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.AuthenticationScopeHmac
 import io.github.kdh949.beanflow.identity.internal.LoginAttemptActorType
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.authentication.attempt-retention-initial-delay-ms=3600000",
