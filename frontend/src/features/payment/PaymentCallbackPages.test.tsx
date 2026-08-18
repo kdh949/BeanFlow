@@ -12,7 +12,7 @@ type ApprovalState = "READY" | "APPROVING" | "APPROVED" | "FAILED" | "UNKNOWN" |
 
 const payment = (approvalState: ApprovalState) => ({
   paymentId: "payment-id",
-  orderId: "order-id",
+  orderReference: "BF-7K3M-9Q2P",
   type: "EXTERNAL" as const,
   approvalState,
   approvedAmountKrw: approvalState === "APPROVED" ? 4_500 : undefined,
@@ -90,6 +90,9 @@ describe("payment success callback sequencing", () => {
     renderAt("/app/payments/payment-id/success");
 
     await screen.findByText("결제가 완료됐어요");
+    expect(screen.getByText("BF-7K3M-9Q2P")).toBeInTheDocument();
+    expect(screen.queryByText("order-id")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
     expect(get).toHaveBeenCalledTimes(1);
     expect(post).not.toHaveBeenCalled();
   });
@@ -103,7 +106,8 @@ describe("payment success callback sequencing", () => {
     expect(screen.queryByText("결제가 완료됐어요")).not.toBeInTheDocument();
     expect(screen.getByText("결제 전")).toBeInTheDocument();
     expect(screen.queryByText("준비 완료")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "주문서로 돌아가기" })).toHaveAttribute("href", "/app/checkout/order-id");
+    expect(screen.queryByText("order-id")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
     expect(get).toHaveBeenCalled();
   });
 
@@ -234,6 +238,29 @@ describe("payment confirmation recovery", () => {
 
     expect(get).toHaveBeenCalledTimes(1);
   });
+
+  it("stops automatic confirmation and polling at manual review and offers only public tracking and help", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("MANUAL_REVIEW")) as never);
+    const post = vi.spyOn(customerApi, "POST");
+
+    renderAt("/app/payments/payment-id/success");
+
+    await screen.findByText("결제 확인에 시간이 더 필요해요");
+    expect(screen.getByText("BF-7K3M-9Q2P")).toBeInTheDocument();
+    expect(screen.queryByText("order-id")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
+    expect(screen.getByRole("link", { name: "도움이 필요해요" })).toHaveAttribute("href", "/app/help");
+    expect(screen.queryByRole("link", { name: "주문서로 돌아가기" })).not.toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("payment fail callback reconciliation", () => {
@@ -246,7 +273,7 @@ describe("payment fail callback reconciliation", () => {
     await screen.findByText("결제를 완료하지 못했어요");
     expect(get).toHaveBeenCalledTimes(1);
     expect(post).not.toHaveBeenCalled();
-    expect(screen.getByRole("link", { name: "주문서로 돌아가기" })).toHaveAttribute("href", "/app/checkout/order-id");
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
   });
 
   it("does not offer a new payment while the server is reconciling", async () => {
@@ -258,13 +285,32 @@ describe("payment fail callback reconciliation", () => {
     expect(screen.queryByRole("link", { name: "주문서로 돌아가기" })).not.toBeInTheDocument();
   });
 
-  it("offers the order list only on an explicit decline", async () => {
+  it("keeps manual review terminal and exposes only public tracking and help", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("MANUAL_REVIEW")) as never);
+
+    renderAt("/app/payments/payment-id/fail?code=PAY_PROCESS_ABORTED");
+
+    await screen.findByText("결제 확인에 시간이 더 필요해요");
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
+    expect(screen.getByRole("link", { name: "도움이 필요해요" })).toHaveAttribute("href", "/app/help");
+    expect(screen.queryByRole("link", { name: "주문서로 돌아가기" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers public order tracking only on an explicit decline", async () => {
     vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("FAILED")) as never);
 
     renderAt("/app/payments/payment-id/fail?code=REJECT_CARD_COMPANY");
 
     await screen.findByText("결제를 완료하지 못했어요");
-    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders");
+    expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
   });
 
   it("redirects an already approved payment to the clean success status route", async () => {

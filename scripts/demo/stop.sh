@@ -80,7 +80,11 @@ if [ "$DEMO_CONTAINER_STATE" = "present" ]; then
     fail "Reset refused: could not read the demo container database identity."
   [ "$actual_database" = "$DEMO_DB_NAME" ] || fail \
     "Reset refused: container ${DEMO_CONTAINER} serves database '${actual_database}', not '${DEMO_DB_NAME}'."
-  ok "reset guard passed: ${DEMO_CONTAINER} serves ${DEMO_DB_NAME}"
+  actual_project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$DEMO_CONTAINER")" || \
+    fail "Reset refused: could not read the demo container compose ownership."
+  [ "$actual_project" = "$DEMO_COMPOSE_PROJECT" ] || fail \
+    "Reset refused: container ${DEMO_CONTAINER} belongs to compose project '${actual_project}', not this checkout."
+  ok "reset guard passed for this checkout-local demo container"
 else
   log "demo container is not present; nothing to remove"
 fi

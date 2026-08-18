@@ -10,6 +10,7 @@
 | 운영자 현재 actor 조회 (`/operations/me`) | No | No | No | Own JWT | Own JWT |
 | 접근 가능 매장 목록 (`/merchant/me/stores`) | No | ACTIVE membership만 | ACTIVE membership만 | No | No |
 | 내 주문 목록·상세 (`/me/orders`, 주문번호) | Customer Session의 own 주문만 | No | No | 별도 Support 경로만 | No |
+| 내 쿠폰 지갑 (`/me/coupons`) | Customer Session의 own AVAILABLE/RESTORED, customer/store-bound signed cursor; 다른 매장 쿠폰은 `STORE_NOT_APPLICABLE`로만 표시 | No | No | No direct endpoint | No |
 | 매장 주문보드 목록·상세 (`/stores/{storeId}/orders`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
 | 매장 주문 상태 전이 (`/stores/{storeId}/orders/{orderReference}/transitions`) | No | ACTIVE owned store | ACTIVE assigned store | No | No |
 | 내 주문 생성·조회 | Own | No | No | Read for support | No |

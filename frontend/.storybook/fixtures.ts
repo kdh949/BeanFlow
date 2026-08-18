@@ -68,7 +68,7 @@ export const checkoutOrder = {
 export function payment(approvalState: string) {
   return {
     paymentId: ids.payment,
-    orderId: ids.order,
+    orderReference: orderSummary.orderReference,
     type: "EXTERNAL",
     approvalState,
     approvedAmountKrw: approvalState === "APPROVED" ? 12_800 : undefined,

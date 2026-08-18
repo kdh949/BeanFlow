@@ -20,8 +20,8 @@ import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.context.SecurityContextHolderFilter
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository
-import org.springframework.security.web.csrf.CsrfException
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler
+import org.springframework.security.web.csrf.InvalidCsrfTokenException
 import java.time.Clock
 
 @Configuration(proxyBeanMethods = false)
@@ -206,13 +206,18 @@ internal class SecurityConfiguration {
                 },
             accessDeniedHandler =
                 AccessDeniedHandler { _, response, failure ->
+                    val invalidCsrfToken = failure is InvalidCsrfTokenException
                     errorWriter.write(
                         response,
                         chain,
                         HttpServletResponse.SC_FORBIDDEN,
-                        "ACCESS_DENIED",
-                        "Required actor, CSRF token, role, or resource ownership is missing",
-                        if (failure is CsrfException) "csrf" else "authorization",
+                        if (invalidCsrfToken) "CSRF_TOKEN_INVALID" else "ACCESS_DENIED",
+                        if (invalidCsrfToken) {
+                            "Presented CSRF token is invalid"
+                        } else {
+                            "Required actor, CSRF token, role, or resource ownership is missing"
+                        },
+                        if (invalidCsrfToken) "csrf" else "authorization",
                     )
                 },
         )

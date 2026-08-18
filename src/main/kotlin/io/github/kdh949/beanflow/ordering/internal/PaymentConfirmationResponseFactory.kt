@@ -14,6 +14,7 @@ internal class PaymentConfirmationResponseFactory(
 ) {
     fun current(
         view: ExternalPaymentView,
+        orderReference: String,
         replay: Boolean,
     ): StoredHttpResponse {
         val status =
@@ -33,7 +34,7 @@ internal class PaymentConfirmationResponseFactory(
         }
         return StoredHttpResponse(
             status = status,
-            body = objectMapper.writeValueAsString(view.toResponse()),
+            body = objectMapper.writeValueAsString(view.toResponse(orderReference)),
             replay = replay,
         )
     }
@@ -56,7 +57,7 @@ internal class PaymentConfirmationResponseFactory(
 
     fun confirmationBody(
         paymentId: UUID,
-        orderId: UUID,
+        orderReference: String,
         approvalState: String,
         approvedAmountKrw: Long?,
         currency: String,
@@ -67,7 +68,7 @@ internal class PaymentConfirmationResponseFactory(
         objectMapper.writeValueAsString(
             PaymentConfirmationResponse(
                 paymentId,
-                orderId,
+                orderReference,
                 "EXTERNAL",
                 approvalState,
                 approvedAmountKrw,
@@ -79,10 +80,10 @@ internal class PaymentConfirmationResponseFactory(
         )
 }
 
-private fun ExternalPaymentView.toResponse(): PaymentConfirmationResponse =
+private fun ExternalPaymentView.toResponse(orderReference: String): PaymentConfirmationResponse =
     PaymentConfirmationResponse(
         paymentId = paymentId,
-        orderId = orderId,
+        orderReference = orderReference,
         type = type,
         approvalState = approvalState,
         approvedAmountKrw = approvedAmountKrw,

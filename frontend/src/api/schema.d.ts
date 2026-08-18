@@ -214,7 +214,8 @@ export interface paths {
         /**
          * 현재 로그인한 고객 정보를 조회합니다
          * @description 현재 세션 쿠키가 가리키는 고객 actor를 반환합니다. 세션이 없거나 만료되었으면
-         *     401을 반환합니다.
+         *     401을 반환합니다. Bearer 또는 Merchant 전용 credential처럼 다른 인증 chain의
+         *     credential을 보내면 재해석하거나 fallback하지 않고 `403 ACCESS_DENIED`를 반환합니다.
          */
         get: operations["getCurrentCustomer"];
         put?: never;
@@ -617,6 +618,30 @@ export interface paths {
          *     과거 기간을 직접 지정하면 해당 범위에는 건수 상한이 없습니다.
          */
         get: operations["listCurrentCustomerOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/coupons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객의 활성 쿠폰 지갑 조회
+         * @description 현재 Customer actor가 소유한 AVAILABLE 또는 RESTORED 쿠폰 중 발급 만료 전인 항목을
+         *     만료 시각과 발급 ID 오름차순으로 반환합니다. 일반 발급은 현재 active Campaign만
+         *     포함하지만, 보상 발급은 immutable terms snapshot을 사용하므로 Campaign이 비활성이어도
+         *     포함됩니다. `applicable`은 요청 매장 범위만 안내하며 주문 금액과 실제 사용 가능 여부는
+         *     주문 생성 트랜잭션이 다시 검증합니다.
+         */
+        get: operations["listCurrentCustomerCoupons"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4873,7 +4898,8 @@ export interface components {
         };
         PaymentConfirmation: {
             paymentId: components["schemas"]["Identifier"];
-            orderId: components["schemas"]["Identifier"];
+            /** @description 사람이 읽는 주문 추적용 공개 참조번호입니다. */
+            orderReference: string;
             /** @enum {string} */
             type: "EXTERNAL" | "BENEFIT_ONLY";
             approvalState: components["schemas"]["PaymentApprovalState"];
@@ -5185,6 +5211,27 @@ export interface components {
         };
         CustomerOrderPage: {
             items: components["schemas"]["CustomerOrderSummary"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        CustomerCouponWalletBenefit: {
+            /** @enum {string} */
+            discountType: "FIXED_KRW" | "RATE_BPS";
+            fixedAmountKrw?: components["schemas"]["MoneyKrw"];
+            rateBps?: number;
+            maximumDiscountKrw?: components["schemas"]["MoneyKrw"];
+        } & (unknown & unknown);
+        /** @enum {string} */
+        CouponWalletInapplicableReason: "STORE_NOT_APPLICABLE";
+        CustomerCouponWalletItem: {
+            couponIssuanceId: components["schemas"]["Identifier"];
+            benefit: components["schemas"]["CustomerCouponWalletBenefit"];
+            minimumOrderKrw: components["schemas"]["MoneyKrw"];
+            couponExpiresAt: components["schemas"]["DateTime"];
+            applicable: boolean;
+            reasonCode?: components["schemas"]["CouponWalletInapplicableReason"];
+        } & (unknown & unknown);
+        CustomerCouponWalletPage: {
+            items: components["schemas"]["CustomerCouponWalletItem"][];
             page: components["schemas"]["PageInfo"];
         };
         CustomerOrderLine: {
@@ -9862,7 +9909,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Role, ownership, store membership, actor-chain, or CSRF validation failed */
+        /** @description Role, ownership, store membership, actor-chain validation, or a missing CSRF token fails with `ACCESS_DENIED`; a presented but stale or invalid CSRF token fails with `CSRF_TOKEN_INVALID`. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -10384,6 +10431,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -10896,6 +10944,49 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerCoupons: {
+        parameters: {
+            query: {
+                /** @description 적용 가능성을 계산할 현재 매장 식별자입니다. */
+                storeId: components["schemas"]["Identifier"];
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description customer/store 범위 signed cursor에 묶인 쿠폰 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerCouponWalletPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Coupon read dependency가 일시적으로 unavailable하면 `DEPENDENCY_UNAVAILABLE`, compensation
+             *     coupon의 issuance-owned immutable terms snapshot이 없거나 손상됐으면
+             *     `COUPON_TERMS_INTEGRITY_FAILURE`를 반환합니다. 빈 목록이나 live Campaign fallback은 없습니다.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getCurrentCustomerOrder: {

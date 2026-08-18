@@ -1582,6 +1582,7 @@ else:
     expected_cursor_limits = {
         'GET /stores/nearby': '#/components/parameters/DiscoveryLimit',
         'GET /stores/search': '#/components/parameters/DiscoveryLimit',
+        'GET /me/coupons': '#/components/parameters/Limit',
         'GET /me/orders': '#/components/parameters/Limit',
         'GET /me/point-transactions': '#/components/parameters/Limit',
         'GET /point-accounts/{accountId}/transactions': '#/components/parameters/Limit',

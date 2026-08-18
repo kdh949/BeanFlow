@@ -7,7 +7,7 @@ import type { PaymentCallback } from "./paymentAttempt";
 export type Payment = components["schemas"]["PaymentConfirmation"];
 export type ApprovalState = Payment["approvalState"];
 
-const PENDING_STATES: ApprovalState[] = ["APPROVING", "UNKNOWN", "RECONCILING", "MANUAL_REVIEW"];
+const PENDING_STATES: ApprovalState[] = ["APPROVING", "UNKNOWN", "RECONCILING"];
 const POLL_DELAYS_MS = [2_000, 4_000, 8_000, 15_000];
 
 export function isPendingApproval(state: ApprovalState): boolean {
@@ -25,6 +25,7 @@ export function isTerminalFailure(state: ApprovalState): boolean {
 export type PaymentResolution =
   | { phase: "confirming" }
   | { phase: "pending"; payment: Payment; polls: number }
+  | { phase: "manual-review"; payment: Payment }
   | { phase: "approved"; payment: Payment }
   | { phase: "declined"; payment: Payment }
   | { phase: "retryable"; payment: Payment }
@@ -34,6 +35,7 @@ function classify(payment: Payment, polls: number): PaymentResolution {
   if (payment.approvalState === "APPROVED") return { phase: "approved", payment };
   if (isTerminalFailure(payment.approvalState)) return { phase: "declined", payment };
   if (payment.approvalState === "READY") return { phase: "retryable", payment };
+  if (payment.approvalState === "MANUAL_REVIEW") return { phase: "manual-review", payment };
   return { phase: "pending", payment, polls };
 }
 
@@ -68,9 +70,10 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
     // up on its first read, which strands the screen on "confirming" forever.
     let running = false;
     let polls = 0;
+    let manualReview = false;
 
     async function readOnce() {
-      if (running) return;
+      if (running || manualReview) return;
       running = true;
       try {
         const payment = await readStatus();
@@ -78,6 +81,7 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
         polls += 1;
         const next = classify(payment, polls);
         setResolution(next);
+        manualReview = next.phase === "manual-review";
         if (next.phase === "pending") {
           timer = window.setTimeout(() => void readOnce(), POLL_DELAYS_MS[Math.min(polls - 1, POLL_DELAYS_MS.length - 1)]);
         }
@@ -130,6 +134,7 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
         if (cancelled) return;
         const next = classify(payment, polls);
         setResolution(next);
+        manualReview = next.phase === "manual-review";
         if (next.phase === "pending") await readOnce();
       } catch {
         if (cancelled) return;
@@ -140,7 +145,7 @@ export function usePaymentResolution(paymentId: string, callback: PaymentCallbac
     }
 
     wake.current = () => {
-      if (cancelled) return;
+      if (cancelled || manualReview) return;
       window.clearTimeout(timer);
       // start() re-checks confirmationsStarted itself, so a wake after a
       // dispatched confirmation still just reads status; a wake after a

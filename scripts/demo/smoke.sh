@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Customer -> one-time payment -> store -> points -> refund smoke over the real HTTP API.
+# Customer -> one-time payment -> public store workflow -> points -> refund -> settlement/dispute
+# smoke over the real HTTP API.
 #
 # Only runtime OpenAPI operations are called; nothing here reads or writes the database directly.
 # Every asynchronous step uses a bounded poll and a missed deadline is a failure, never a pass.
@@ -86,7 +87,7 @@ call() {
   if [[ "|${expected}|" != *"|${status}|"* ]]; then
     printf '\033[0;31m[fail]\033[0m %-46s expected %s got %s (correlationId=%s)\n' \
       "$name" "$expected" "$status" "$correlation" >&2
-    head -c 600 "$BODY_FILE" >&2; echo >&2
+    printf '       response body retained locally at %s (not printed: it can contain internal identifiers)\n' "$BODY_FILE" >&2
     exit 1
   fi
   printf '\033[0;32m[ ok ]\033[0m %-46s %s  correlationId=%s\n' "$name" "$status" "$correlation"
@@ -125,13 +126,15 @@ assert names.get('$MENU_ID') is True, 'demo menu must be available'
 assert False in names.values(), 'fixture should include an unavailable menu'
 print('       menus returned %d item(s) including an unavailable one' % len(d['items']))
 "
+call "available coupon wallet" 200 GET "/me/coupons?storeId=${STORE_ID}&limit=20" "$CUSTOMER_AUTH"
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['items'];assert any(i['applicable'] for i in d['items']);print('       available applicable coupon present')"
 call "store pickup slots"   200 GET  "/stores/${STORE_ID}/pickup-slots" "$CUSTOMER_AUTH"
 SLOT_ID="$(python3 -c "
 import json;d=json.load(open('$BODY_FILE'))
 assert d['items'], 'no open pickup slot; run stop.sh --reset then start.sh + seed.sh'
 print(d['items'][0]['pickupSlotId'])
 ")"
-log "using pickup slot ${SLOT_ID}"
+ok "future pickup slot selected"
 
 log "loyalty baseline"
 call "point account baseline" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_AUTH"
@@ -147,13 +150,11 @@ ORDER_KEY="demo-order-${RUN_ID}"
 ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":2}],\"pointsToUseKrw\":0}"
 call "create order"         201 POST "/orders" "$CUSTOMER_AUTH" "$ORDER_BODY" "$ORDER_KEY"
 ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['orderId'])")"
-ORDER_LINE_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['lines'][0]['orderLineId'])")"
-log "order ${ORDER_ID}"
 
 # Idempotency: the exact same key and payload must replay the stored response, not create a second order.
 call "exact replay is idempotent" 201 POST "/orders" "$CUSTOMER_AUTH" "$ORDER_BODY" "$ORDER_KEY"
 REPLAY_ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['orderId'])")"
-[ "$REPLAY_ORDER_ID" = "$ORDER_ID" ] || fail "Replay returned a different order: ${REPLAY_ORDER_ID}"
+same_resource_or_fail "$REPLAY_ORDER_ID" "$ORDER_ID" "Order replay returned a different resource."
 ok "replay returned the original order"
 
 CHANGED_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[],\"quantity\":2}],\"pointsToUseKrw\":0}"
@@ -185,6 +186,10 @@ call "altered callback rejected" 409 POST "/payments/${PAYMENT_ID}/confirmations
   "{\"paymentKey\":\"${PAYMENT_KEY}\",\"orderId\":\"${PROVIDER_ORDER_ID}\",\"amount\":$((PAYMENT_AMOUNT + 1))}" "demo-confirm-tamper-${RUN_ID}"
 call "approved payment query" 200 GET "/payments/${PAYMENT_ID}" "$CUSTOMER_AUTH"
 [ "$(json "d['approvalState']")" = "APPROVED" ] || fail "Payment query did not return APPROVED."
+ORDER_REFERENCE="$(json "d['orderReference']")"
+[[ "$ORDER_REFERENCE" =~ ^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$ ]] || \
+  fail "Payment tracking did not provide a public order reference."
+ok "approved payment is linked to a public order reference"
 
 if [ "$SMOKE_CHECKPOINT" = "customer" ]; then
   rm -f "$BODY_FILE" "$HEADERS_FILE"
@@ -192,11 +197,8 @@ if [ "$SMOKE_CHECKPOINT" = "customer" ]; then
   ok "customer checkpoint completed"
   cat <<EOF
 
-  order            ${ORDER_ID}
-  payment          ${PAYMENT_ID}
-  store            ${STORE_ID}
-  point account    ${POINT_ACCOUNT_ID}
-  correlation ids  local-demo-${RUN_ID}-1 .. -${STEP}
+  customer alias   ${CUSTOMER_LOGIN_ID}
+  checkpoint       approved payment and public order reference verified
 
 EOF
   exit 0
@@ -209,7 +211,7 @@ call "merchant initial Session login" 200 POST "/auth/merchant/sessions" "$MERCH
   "{\"loginId\":\"${MERCHANT_LOGIN_ID}\",\"password\":\"${MERCHANT_INITIAL_PASSWORD}\"}"
 MERCHANT_SESSION="$(cookie_from_headers BEANFLOW_MERCHANT_SESSION)"
 python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['actorType']=='MERCHANT';assert d['accountState']=='INITIAL_PASSWORD'"
-call "initial password gate blocks store order" 403 GET "/store-orders/${ORDER_ID}" "$MERCHANT_AUTH"
+call "initial password gate blocks public store order" 403 GET "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}" "$MERCHANT_AUTH"
 [ "$(json "d['code']")" = "INITIAL_PASSWORD_CHANGE_REQUIRED" ] || fail "Initial merchant gate returned the wrong error code."
 call "initial merchant me remains available" 200 GET "/merchant/me" "$MERCHANT_AUTH"
 call "merchant password change" 204 POST "/auth/merchant/password-changes" "$MERCHANT_AUTH" \
@@ -219,19 +221,20 @@ call "active merchant stores" 200 GET "/merchant/me/stores" "$MERCHANT_AUTH"
 python3 -c "import json;d=json.load(open('$BODY_FILE'));assert len(d)==1;assert d[0]['storeId']=='$STORE_ID';assert d[0]['membershipRole']=='OWNER'"
 ok "merchant Session activated without JWT"
 
-log "store fulfilment"
-for target in ACCEPTED PREPARING READY COMPLETED; do
-  call "store transition ${target}" 200 PATCH "/store-orders/${ORDER_ID}/status" "$MERCHANT_AUTH" \
-    "{\"targetState\":\"${target}\",\"reason\":null}" "demo-${target}-${RUN_ID}"
+log "public store fulfilment"
+for transition in "ACCEPT PAID" "START_PREPARING ACCEPTED" "MARK_READY PREPARING" "COMPLETE READY"; do
+  action="${transition% *}"
+  expected="${transition#* }"
+  call "public store transition ${action}" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/transitions" "$MERCHANT_AUTH" \
+    "{\"action\":\"${action}\",\"expectedStatus\":\"${expected}\",\"reason\":null}" "demo-${action}-${RUN_ID}"
 done
 
 log "customer read-back"
-call "customer order read"  200 GET  "/orders/${ORDER_ID}" "$CUSTOMER_AUTH"
+call "customer public order read"  200 GET  "/me/orders/${ORDER_REFERENCE}" "$CUSTOMER_AUTH"
 python3 -c "
 import json;d=json.load(open('$BODY_FILE'))
-# GET /orders/{id} returns the order representation directly, unlike the creation envelope.
 order=d.get('order', d)
-state=order['state']
+state=order['status']
 assert state=='COMPLETED', 'expected COMPLETED, got %s' % state
 print('       order state %s' % state)
 "
@@ -245,28 +248,45 @@ while (( SECONDS < ACCRUAL_DEADLINE )); do
   ACCRUAL_STATE="$(python3 -c "import json;d=json.load(open('$BODY_FILE'));matches=[item for item in d['items'] if item['sourceReference']=='$ACCRUAL_SOURCE'];print('FOUND' if len(matches)==1 and matches[0]['type']=='ACCRUAL' and matches[0]['amountKrw']==$EXPECTED_ACCRUAL_KRW else ('MISSING' if not matches else 'INVALID'))")"
   case "$ACCRUAL_STATE" in
     FOUND) ACCRUAL_FOUND="yes"; break ;;
-    INVALID) fail "Completion accrual ledger row for ${ORDER_ID} had an unexpected type or amount." ;;
+    INVALID) fail "Completion accrual ledger row had an unexpected type or amount." ;;
     MISSING) sleep 2 ;;
-    *) fail "Could not classify completion accrual for ${ORDER_ID}." ;;
+    *) fail "Could not classify the completion accrual." ;;
   esac
 done
-[ "$ACCRUAL_FOUND" = "yes" ] || fail "Timed out waiting for the completion accrual transaction for ${ORDER_ID}."
+[ "$ACCRUAL_FOUND" = "yes" ] || fail "Timed out waiting for the completion accrual transaction."
 
 call "point account after accrual" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_AUTH"
 python3 -c "import json;after=json.load(open('$BODY_FILE'))['availablePointsKrw'];expected=int('$POINT_BALANCE_BEFORE') + $EXPECTED_ACCRUAL_KRW;assert after == expected, 'expected availablePointsKrw %d after accrual, got %d' % (expected, after);print('       completion accrual ${EXPECTED_ACCRUAL_KRW} KRW and point balance delta verified')"
 
-log "partial and full remaining refund"
-PARTIAL_REFUND_BODY="{\"lineItems\":[{\"orderLineId\":\"${ORDER_LINE_ID}\",\"quantity\":1}],\"reason\":\"local demo partial refund\"}"
-call "partial refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+log "public refund preview and execution"
+PARTIAL_SELECTION="{\"lines\":[{\"lineSequence\":0,\"quantity\":1}]}"
+call "public partial refund preview" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/refund-previews" "$MERCHANT_AUTH" "$PARTIAL_SELECTION"
+PREVIEW_VERSION="$(json "d['previewVersion']")"
+[ "$(json "d['totals']['cashRefundKrw']")" = "5000" ] || fail "Partial preview amount was not one 5,000 KRW unit."
+PARTIAL_REFUND_BODY="{\"lines\":[{\"lineSequence\":0,\"quantity\":1}],\"previewVersion\":\"${PREVIEW_VERSION}\",\"reason\":\"local demo public partial refund\"}"
+call "public partial refund" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
 [ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Partial refund cash state was not SUCCEEDED."
 [ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund amount was not one 5,000 KRW unit."
-
-call "partial refund replay" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
+call "public partial refund replay" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/refunds" "$MERCHANT_AUTH" "$PARTIAL_REFUND_BODY" "demo-partial-refund-${RUN_ID}"
 [ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Partial refund replay changed the amount."
-call "full remaining refund" 201 POST "/payments/${PAYMENT_ID}/refunds" "$MERCHANT_AUTH" \
-  "{\"reason\":\"local demo full remaining refund\"}" "demo-full-refund-${RUN_ID}"
-[ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Full remaining refund cash state was not SUCCEEDED."
-[ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Full remaining refund amount was not 5,000 KRW."
+call "public remaining refund preview" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/refund-previews" "$MERCHANT_AUTH" "$PARTIAL_SELECTION"
+REMAINING_PREVIEW_VERSION="$(json "d['previewVersion']")"
+call "public remaining refund" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/refunds" "$MERCHANT_AUTH" \
+  "{\"lines\":[{\"lineSequence\":0,\"quantity\":1}],\"previewVersion\":\"${REMAINING_PREVIEW_VERSION}\",\"reason\":\"local demo public remaining refund\"}" "demo-full-refund-${RUN_ID}"
+[ "$(json "d['state']")" = "SUCCEEDED" ] || fail "Remaining refund cash state was not SUCCEEDED."
+[ "$(json "d['cashRefundedKrw']")" = "5000" ] || fail "Remaining refund amount was not 5,000 KRW."
+
+log "confirmed settlement, refund adjustment and owner dispute"
+call "public confirmed settlements" 200 GET "/stores/${STORE_ID}/settlements?limit=20" "$MERCHANT_AUTH"
+SETTLEMENT_BATCH_ID="$(python3 -c "import json;d=json.load(open('$BODY_FILE'));matches=[i for i in d['items'] if i['state']=='CONFIRMED' and i['adjustmentKrw']==-5000];assert matches, 'missing confirmed partial-refund adjustment';print(matches[0]['settlementBatchId'])")"
+call "public settlement items" 200 GET "/stores/${STORE_ID}/settlements/${SETTLEMENT_BATCH_ID}/items?limit=20" "$MERCHANT_AUTH"
+SETTLEMENT_ITEM_ID="$(python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['items'];print(d['items'][0]['settlementItemId'])")"
+call "owner files settlement dispute" 201 POST "/settlement-items/${SETTLEMENT_ITEM_ID}/disputes" "$MERCHANT_AUTH" \
+  "{\"expectedAdjustmentKrw\":-5000,\"reason\":\"local demo verifies the historical partial-refund adjustment\",\"evidenceReferences\":[\"local-demo://settlement/partial-refund-adjustment\"]}" "demo-dispute-${RUN_ID}"
+[ "$(json "d['state']")" = "FILED" ] || fail "Settlement dispute was not FILED."
+call "owner lists filed dispute" 200 GET "/stores/${STORE_ID}/disputes?state=FILED&limit=20" "$MERCHANT_AUTH"
+python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['items'];assert any(i['state']=='FILED' for i in d['items'])"
+ok "public settlement adjustment and dispute tail verified"
 
 log "unknown confirmation query recovery"
 RECOVERY_ORDER_KEY="demo-recovery-order-${RUN_ID}"
@@ -302,19 +322,16 @@ call "customer path rejects bearer" 403 GET "/stores/${STORE_ID}/menus" "not-a-r
 call "other merchant Session login" 200 POST "/auth/merchant/sessions" "$MERCHANT_CSRF_AUTH" \
   "{\"loginId\":\"${OTHER_MERCHANT_LOGIN_ID}\",\"password\":\"${OTHER_MERCHANT_PASSWORD}\"}"
 OTHER_MERCHANT_SESSION="$(cookie_from_headers BEANFLOW_MERCHANT_SESSION)"
-call "other store owner denied"   403 GET "/store-orders/${ORDER_ID}" "$OTHER_MERCHANT_AUTH"
+call "other store owner denied"   403 GET "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}" "$OTHER_MERCHANT_AUTH"
 
 rm -f "$BODY_FILE" "$HEADERS_FILE"
 echo
 ok "core smoke flow completed"
 cat <<EOF
 
-  order            ${ORDER_ID}
-  payment          ${PAYMENT_ID}
-  recovered order  ${RECOVERY_ORDER_ID}
-  recovered payment ${RECOVERY_PAYMENT_ID}
-  store            ${STORE_ID}
-  point account    ${POINT_ACCOUNT_ID}
-  correlation ids  local-demo-${RUN_ID}-1 .. -${STEP}
+  customer alias   ${CUSTOMER_LOGIN_ID}
+  merchant alias   ${MERCHANT_LOGIN_ID}
+  journey          coupon, option, slot, points, public payment, refund, settlement, dispute
+  outcome          completed (runtime IDs and provider keys were not printed)
 
 EOF

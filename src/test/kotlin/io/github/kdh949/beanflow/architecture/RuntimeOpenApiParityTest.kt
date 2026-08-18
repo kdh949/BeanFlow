@@ -41,6 +41,7 @@ import io.github.kdh949.beanflow.ordering.internal.StoreOrderBoardQueryService
 import io.github.kdh949.beanflow.ordering.internal.StoreOrderTransitionService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodApplicationService
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodQueryService
+import io.github.kdh949.beanflow.promotion.api.CustomerCouponWalletQueryOperations
 import io.github.kdh949.beanflow.settlement.internal.SettlementBatchQueryService
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemQueryService
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
@@ -99,6 +100,9 @@ internal class RuntimeOpenApiParityTest(
 
     @MockitoBean
     private lateinit var customerOrderQueryService: CustomerOrderQueryService
+
+    @MockitoBean
+    private lateinit var customerCouponWalletQueryOperations: CustomerCouponWalletQueryOperations
 
     @MockitoBean
     private lateinit var partialRefundService: PartialRefundService

@@ -84,10 +84,11 @@ const statefulDocs = {
     "pages-customer-paymentsuccess--not-paid-yet": "아직 결제가 끝나지 않았어요",
     "pages-customer-paymentsuccess--declined": "결제를 완료하지 못했어요",
     "pages-customer-paymentsuccess--dependency-error": "서비스 연결을 확인하고 있습니다.",
+    "pages-customer-paymentsuccess--manual-review": "결제 확인에 시간이 더 필요해요",
   },
   "pages-customer-paymentfailure--docs": {
-    "pages-customer-paymentfailure--retryable-failure": "주문서로 돌아가기",
-    "pages-customer-paymentfailure--manual-review": "결제 결과를 확인하고 있어요",
+    "pages-customer-paymentfailure--retryable-failure": "주문 상태 보기",
+    "pages-customer-paymentfailure--manual-review": "결제 확인에 시간이 더 필요해요",
   },
   "pages-customer-store-search--docs": {
     "pages-customer-store-search--results": "시청점",
@@ -161,6 +162,7 @@ async function waitForStorySurfaces(page, storyId, marker) {
     const frames = page.frameLocator("#storybook-preview-iframe").locator(`iframe#iframe--${storyId}`);
     const frameCount = await frames.count();
     if (frameCount) {
+      await Promise.all(Array.from({ length: frameCount }, (_, index) => frames.nth(index).scrollIntoViewIfNeeded()));
       lastTexts = await Promise.all(Array.from({ length: frameCount }, async (_, index) => {
         try {
           return await frames.nth(index).contentFrame().locator("body").innerText({ timeout: 1_000 });

@@ -21,6 +21,7 @@ tags:
   - name: Identity
   - name: Discovery
   - name: Ordering
+  - name: Promotion
   - name: Payment
   - name: Payment Methods
   - name: Store Orders
@@ -242,7 +243,8 @@ paths:
       summary: 현재 로그인한 고객 정보를 조회합니다
       description: |
         현재 세션 쿠키가 가리키는 고객 actor를 반환합니다. 세션이 없거나 만료되었으면
-        401을 반환합니다.
+        401을 반환합니다. Bearer 또는 Merchant 전용 credential처럼 다른 인증 chain의
+        credential을 보내면 재해석하거나 fallback하지 않고 `403 ACCESS_DENIED`를 반환합니다.
       x-beanflow-contract-status: TARGET
       security: [{ customerSession: [] }]
       responses:
@@ -252,6 +254,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CustomerActor" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /merchant/me:
     get:
@@ -347,6 +350,44 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/coupons:
+    get:
+      tags: [Promotion]
+      operationId: listCurrentCustomerCoupons
+      summary: 현재 고객의 활성 쿠폰 지갑 조회
+      description: |
+        현재 Customer actor가 소유한 AVAILABLE 또는 RESTORED 쿠폰 중 발급 만료 전인 항목을
+        만료 시각과 발급 ID 오름차순으로 반환합니다. 일반 발급은 현재 active Campaign만
+        포함하지만, 보상 발급은 immutable terms snapshot을 사용하므로 Campaign이 비활성이어도
+        포함됩니다. `applicable`은 요청 매장 범위만 안내하며 주문 금액과 실제 사용 가능 여부는
+        주문 생성 트랜잭션이 다시 검증합니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          description: 적용 가능성을 계산할 현재 매장 식별자입니다.
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: customer/store 범위 signed cursor에 묶인 쿠폰 페이지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerCouponWalletPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503":
+          description: |
+            Coupon read dependency가 일시적으로 unavailable하면 `DEPENDENCY_UNAVAILABLE`, compensation
+            coupon의 issuance-owned immutable terms snapshot이 없거나 손상됐으면
+            `COUPON_TERMS_INTEGRITY_FAILURE`를 반환합니다. 빈 목록이나 live Campaign fallback은 없습니다.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /me/orders/{orderReference}:
     get:
       tags: [Ordering]
@@ -6586,7 +6627,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Forbidden:
-      description: Role, ownership, store membership, actor-chain, or CSRF validation failed
+      description: Role, ownership, store membership, actor-chain validation, or a missing CSRF token fails with `ACCESS_DENIED`; a presented but stale or invalid CSRF token fails with `CSRF_TOKEN_INVALID`.
       content:
         application/json:
           schema:
@@ -7267,6 +7308,60 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/CustomerOrderSummary" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    CouponWalletInapplicableReason:
+      type: string
+      enum: [STORE_NOT_APPLICABLE]
+    CustomerCouponWalletBenefit:
+      type: object
+      additionalProperties: false
+      required: [discountType]
+      properties:
+        discountType: { type: string, enum: [FIXED_KRW, RATE_BPS] }
+        fixedAmountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        rateBps: { type: integer, minimum: 1, maximum: 10000 }
+        maximumDiscountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+      allOf:
+        - if:
+            properties: { discountType: { const: FIXED_KRW } }
+            required: [discountType]
+          then:
+            required: [fixedAmountKrw]
+        - if:
+            properties: { discountType: { const: RATE_BPS } }
+            required: [discountType]
+          then:
+            required: [rateBps, maximumDiscountKrw]
+    CustomerCouponWalletItem:
+      type: object
+      additionalProperties: false
+      required: [couponIssuanceId, benefit, minimumOrderKrw, couponExpiresAt, applicable]
+      properties:
+        couponIssuanceId: { $ref: "#/components/schemas/Identifier" }
+        benefit: { $ref: "#/components/schemas/CustomerCouponWalletBenefit" }
+        minimumOrderKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        couponExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        applicable: { type: boolean }
+        reasonCode: { $ref: "#/components/schemas/CouponWalletInapplicableReason" }
+      allOf:
+        - if:
+            properties: { applicable: { const: false } }
+            required: [applicable]
+          then:
+            required: [reasonCode]
+        - if:
+            properties: { applicable: { const: true } }
+            required: [applicable]
+          then:
+            not: { required: [reasonCode] }
+    CustomerCouponWalletPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerCouponWalletItem" }
         page: { $ref: "#/components/schemas/PageInfo" }
     CustomerOrderLine:
       type: object
@@ -10274,7 +10369,7 @@ components:
       additionalProperties: false
       required:
         - paymentId
-        - orderId
+        - orderReference
         - type
         - approvalState
         - currency
@@ -10283,8 +10378,10 @@ components:
       properties:
         paymentId:
           $ref: "#/components/schemas/Identifier"
-        orderId:
-          $ref: "#/components/schemas/Identifier"
+        orderReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+          description: 사람이 읽는 주문 추적용 공개 참조번호입니다.
         type:
           type: string
           enum: [EXTERNAL, BENEFIT_ONLY]

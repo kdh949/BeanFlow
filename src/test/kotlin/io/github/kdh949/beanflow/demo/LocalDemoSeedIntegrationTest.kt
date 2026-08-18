@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.demo
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -19,7 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate
  * duplicate anything, a failure part way through must leave nothing behind, and the seed must
  * refuse to run when the required GLOBAL accrual policy is absent instead of inventing one.
  */
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, OrderSettlementInputSnapshotService::class)
 @SpringBootTest(
     classes = [LocalDemoSeedApplication::class],
     properties = [
@@ -35,6 +37,7 @@ internal class LocalDemoSeedIntegrationTest
     constructor(
         private val seeder: LocalDemoSeeder,
         private val jdbcTemplate: JdbcTemplate,
+        private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -138,6 +141,50 @@ internal class LocalDemoSeedIntegrationTest
         }
 
         @Test
+        fun `the seed provides a confirmed financial tail with a partial-refund adjustment ready for an owner dispute`() {
+            transactions.execute { seeder.seed() }
+
+            val settlementInput = settlementInputSnapshots.read(LocalDemoFixture.HISTORICAL_ORDER_ID)
+            assertThat(settlementInput.orderId).isEqualTo(LocalDemoFixture.HISTORICAL_ORDER_ID)
+            assertThat(settlementInput.storeId).isEqualTo(LocalDemoFixture.STORE_ID)
+            assertThat(settlementInput.grossPaidKrw).isEqualTo(LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW)
+            assertThat(settlementInput.feeKrw).isEqualTo(300)
+            assertThat(settlementInput.netSettlementKrw).isEqualTo(9_700)
+            assertThat(settlementInput.canonicalSnapshotHash).matches("^[0-9a-f]{64}$")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT canonical_snapshot_hash FROM ordering_order_settlement_input_snapshot WHERE order_id = ?",
+                    String::class.java,
+                    LocalDemoFixture.HISTORICAL_ORDER_ID,
+                ),
+            ).isEqualTo(settlementInput.canonicalSnapshotHash)
+
+            val row =
+                jdbcTemplate.queryForMap(
+                    """
+                    SELECT batch.state, batch.adjustment_krw, item.net_settlement_krw, adjustment.reason_code
+                      FROM settlement_batch batch
+                      JOIN settlement_item item ON item.settlement_batch_id = batch.id
+                      JOIN settlement_adjustment adjustment ON adjustment.id = batch.adjustment_cursor_id
+                     WHERE batch.id = ?
+                    """.trimIndent(),
+                    LocalDemoFixture.ADJUSTED_SETTLEMENT_BATCH_ID,
+                )
+
+            assertThat(row["state"]).isEqualTo("CONFIRMED")
+            assertThat(row["adjustment_krw"]).isEqualTo(-LocalDemoFixture.HISTORICAL_REFUND_KRW)
+            assertThat(row["net_settlement_krw"]).isEqualTo(9_700L)
+            assertThat(row["reason_code"]).isEqualTo("REFUND_SUCCEEDED")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT succeeded_amount_krw FROM payment_refund WHERE id = ?",
+                    Long::class.java,
+                    LocalDemoFixture.HISTORICAL_REFUND_ID,
+                ),
+            ).isEqualTo(LocalDemoFixture.HISTORICAL_REFUND_KRW)
+        }
+
+        @Test
         fun `the seed links merchant accounts to memberships with an expiring initial credential`() {
             transactions.execute { seeder.seed() }
 
@@ -216,6 +263,18 @@ internal class LocalDemoSeedIntegrationTest
                     "promotion_campaign_eligible_menu",
                     "promotion_coupon_issuance",
                     "promotion_campaign",
+                    "settlement_adjustment",
+                    "settlement_item",
+                    "settlement_batch",
+                    "payment_refund",
+                    "payment_payment",
+                    "ordering_order_settlement_input_snapshot",
+                    "ordering_order_point_accrual_unit",
+                    "ordering_order_point_accrual_snapshot",
+                    "ordering_order_point_accrual_source",
+                    "ordering_order_line",
+                    "ordering_order",
+                    "ordering_public_reference_registry",
                     "merchant_store",
                 )
         }

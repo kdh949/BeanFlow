@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { components } from "../../../api/schema";
 import { ApiRequestError, unwrap } from "../../../api/client";
-import { customerApi, customerCsrfHeader, forgetCustomerCsrfToken } from "../../../api/customerClient";
+import { customerApi, customerCsrfHeader, forgetCustomerCsrfToken, reissueCustomerCsrfHeader } from "../../../api/customerClient";
 import { runCustomerLogoutHandlers } from "../../shared/customerLogout";
 
 export type CustomerActor = components["schemas"]["CustomerActor"];
@@ -33,6 +33,25 @@ function classify(failure: unknown): CustomerSessionState {
     if (failure.status === 403) return { status: "forbidden", error: failure };
   }
   return { status: "unavailable", error: failure };
+}
+
+function isInvalidCustomerCsrfToken(failure: unknown): failure is ApiRequestError {
+  return failure instanceof ApiRequestError && failure.status === 403 && failure.code === "CSRF_TOKEN_INVALID";
+}
+
+/**
+ * An auth command may replay once only after its own response proves the CSRF
+ * token stale or invalid. Actor mismatch, authorization, transport, and
+ * dependency failures deliberately remain final errors.
+ */
+async function withCustomerCsrfReplay<T>(command: (header: Awaited<ReturnType<typeof customerCsrfHeader>>) => Promise<T>): Promise<T> {
+  const header = await customerCsrfHeader();
+  try {
+    return await command(header);
+  } catch (failure) {
+    if (!isInvalidCustomerCsrfToken(failure)) throw failure;
+    return command(await reissueCustomerCsrfHeader());
+  }
 }
 
 /**
@@ -86,19 +105,23 @@ export const customerSession = {
   },
 
   async register(input: { loginId: string; password: string; displayName: string }): Promise<string> {
-    const result = await customerApi.POST("/auth/customer/registrations", {
-      params: { header: await customerCsrfHeader() },
-      body: { loginId: input.loginId, password: input.password, displayName: input.displayName },
+    return withCustomerCsrfReplay(async (header) => {
+      const result = await customerApi.POST("/auth/customer/registrations", {
+        params: { header },
+        body: { loginId: input.loginId, password: input.password, displayName: input.displayName },
+      });
+      return unwrap(result).loginId;
     });
-    return unwrap(result).loginId;
   },
 
   async logIn(input: { loginId: string; password: string }): Promise<CustomerActor> {
-    const result = await customerApi.POST("/auth/customer/sessions", {
-      params: { header: await customerCsrfHeader() },
-      body: { loginId: input.loginId, password: input.password },
+    const actor = await withCustomerCsrfReplay(async (header) => {
+      const result = await customerApi.POST("/auth/customer/sessions", {
+        params: { header },
+        body: { loginId: input.loginId, password: input.password },
+      });
+      return unwrap(result);
     });
-    const actor = unwrap(result);
     publish({ status: "authenticated", actor });
     return actor;
   },
@@ -115,10 +138,12 @@ export const customerSession = {
    */
   async logOut(): Promise<void> {
     try {
-      const result = await customerApi.DELETE("/auth/customer/sessions/current", {
-        params: { header: await customerCsrfHeader() },
+      await withCustomerCsrfReplay(async (header) => {
+        const result = await customerApi.DELETE("/auth/customer/sessions/current", {
+          params: { header },
+        });
+        if (!result.response.ok && result.response.status !== 401) unwrap(result);
       });
-      if (!result.response.ok && result.response.status !== 401) unwrap(result);
     } finally {
       clearCustomerBrowserState();
     }

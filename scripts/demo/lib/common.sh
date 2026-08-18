@@ -12,21 +12,26 @@ export DEMO_ROOT
 export DEMO_DB_NAME="beanflow_demo"
 export DEMO_DB_USER="beanflow_demo"
 export DEMO_DB_PASSWORD="beanflow_demo_local_only"
-export DEMO_DB_PORT="55432"
+# A checkout owns an isolated compose project, container and port block.  The stable key is derived
+# from its canonical path, never supplied by a user, so a second checkout cannot reset this one.
+DEMO_INSTANCE_CHECKSUM="$(printf '%s' "$DEMO_ROOT" | cksum | awk '{print $1}')"
+export DEMO_INSTANCE_KEY="${DEMO_INSTANCE_CHECKSUM}"
+DEMO_PORT_OFFSET=$(( DEMO_INSTANCE_CHECKSUM % 1000 ))
+export DEMO_DB_PORT="$(( 55000 + DEMO_PORT_OFFSET ))"
 export DEMO_DB_URL="jdbc:postgresql://127.0.0.1:${DEMO_DB_PORT}/${DEMO_DB_NAME}"
 
 export DEMO_COMPOSE_FILE="${DEMO_ROOT}/docker-compose.demo.yml"
-export DEMO_COMPOSE_PROJECT="beanflow-demo"
-export DEMO_CONTAINER="beanflow-demo-postgres"
+export DEMO_COMPOSE_PROJECT="beanflow-demo-${DEMO_INSTANCE_KEY}"
+export DEMO_CONTAINER="${DEMO_COMPOSE_PROJECT}-postgres"
 
 export DEMO_RUNTIME_DIR="${DEMO_ROOT}/.demo-runtime"
 export DEMO_IDENTITY_ENV="${DEMO_RUNTIME_DIR}/demo-identity.env"
 export DEMO_JWKS_FILE="${DEMO_RUNTIME_DIR}/jwks.json"
 export DEMO_WORKLOAD_TOKEN_FILE="${DEMO_RUNTIME_DIR}/workload-token.txt"
-export DEMO_IDENTITY_PORT="18081"
-export DEMO_APP_PORT="18080"
+export DEMO_IDENTITY_PORT="$(( 18000 + DEMO_PORT_OFFSET ))"
+export DEMO_APP_PORT="$(( 19000 + DEMO_PORT_OFFSET ))"
 export DEMO_APP_BASE_URL="http://127.0.0.1:${DEMO_APP_PORT}/api/v1"
-export DEMO_FRONTEND_PORT="4173"
+export DEMO_FRONTEND_PORT="$(( 4000 + DEMO_PORT_OFFSET ))"
 export DEMO_FRONTEND_BASE_URL="http://127.0.0.1:${DEMO_FRONTEND_PORT}"
 export DEMO_IDENTITY_PID_FILE="${DEMO_RUNTIME_DIR}/identity.pid"
 export DEMO_APP_PID_FILE="${DEMO_RUNTIME_DIR}/app.pid"
@@ -39,6 +44,11 @@ log()  { printf '\033[0;36m[demo]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[0;32m[ ok ]\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[0;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
+
+same_resource_or_fail() {
+  local actual="$1" expected="$2" message="$3"
+  [ "$actual" = "$expected" ] || fail "$message"
+}
 
 require_cmd() {
   for cmd in "$@"; do

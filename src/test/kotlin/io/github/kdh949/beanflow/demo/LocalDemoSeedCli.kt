@@ -28,9 +28,38 @@ import io.github.kdh949.beanflow.merchant.internal.StoreEntity
 import io.github.kdh949.beanflow.merchant.internal.StoreJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.StoreSettlementTermsEntity
 import io.github.kdh949.beanflow.merchant.internal.StoreSettlementTermsJpaRepository
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualExpiryRule
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySelectionSource
+import io.github.kdh949.beanflow.operations.api.PointAccrualIssuerType
+import io.github.kdh949.beanflow.operations.api.PointAccrualRoundingMode
+import io.github.kdh949.beanflow.ordering.api.OrderPointAccrualSourceState
+import io.github.kdh949.beanflow.ordering.internal.OptionSelectionSnapshotState
+import io.github.kdh949.beanflow.ordering.internal.OrderEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderLineEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderLineJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSnapshotEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSnapshotJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSourceEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSourceJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualUnitEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualUnitJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotCanonicalizer
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotEntity
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
+import io.github.kdh949.beanflow.payment.internal.PaymentEntity
+import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodEntity
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodJpaRepository
 import io.github.kdh949.beanflow.payment.internal.PaymentMethodStatus
+import io.github.kdh949.beanflow.payment.internal.RefundEntity
+import io.github.kdh949.beanflow.payment.internal.RefundJpaRepository
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
+import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
+import io.github.kdh949.beanflow.payment.internal.domain.RefundState
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.internal.CampaignEligibleMenuEntity
@@ -40,6 +69,14 @@ import io.github.kdh949.beanflow.promotion.internal.CampaignJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceEntity
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceState
+import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentEntity
+import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentJpaRepository
+import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentReason
+import io.github.kdh949.beanflow.settlement.internal.SettlementBatchCalculation
+import io.github.kdh949.beanflow.settlement.internal.SettlementBatchEntity
+import io.github.kdh949.beanflow.settlement.internal.SettlementBatchJpaRepository
+import io.github.kdh949.beanflow.settlement.internal.SettlementItemEntity
+import io.github.kdh949.beanflow.settlement.internal.SettlementItemJpaRepository
 import io.github.kdh949.beanflow.shared.api.MerchantAccountState
 import org.springframework.boot.SpringApplication
 import org.springframework.boot.WebApplicationType
@@ -54,9 +91,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import kotlin.system.exitProcess
 
@@ -104,6 +144,17 @@ internal class LocalDemoSeeder(
     private val campaigns: CampaignJpaRepository,
     private val campaignMenus: CampaignEligibleMenuJpaRepository,
     private val couponIssuances: CouponIssuanceJpaRepository,
+    private val orders: OrderJpaRepository,
+    private val orderLines: OrderLineJpaRepository,
+    private val payments: PaymentJpaRepository,
+    private val refunds: RefundJpaRepository,
+    private val settlementBatches: SettlementBatchJpaRepository,
+    private val settlementItems: SettlementItemJpaRepository,
+    private val settlementAdjustments: SettlementAdjustmentJpaRepository,
+    private val pointAccrualSources: OrderPointAccrualSourceJpaRepository,
+    private val pointAccrualSnapshots: OrderPointAccrualSnapshotJpaRepository,
+    private val pointAccrualUnits: OrderPointAccrualUnitJpaRepository,
+    private val settlementInputSnapshots: OrderSettlementInputSnapshotJpaRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val clock: Clock,
 ) {
@@ -146,6 +197,7 @@ internal class LocalDemoSeeder(
         seedSettlementTerms(now, created)
         seedPaymentMethod(now, created)
         seedCoupon(now, created)
+        seedFinancialTail(now, created)
         return created
     }
 
@@ -429,7 +481,9 @@ internal class LocalDemoSeeder(
                 storeId = LocalDemoFixture.STORE_ID,
                 sourceReference = "local-demo:settlement-terms:v1",
                 feeRateBps = LocalDemoFixture.SETTLEMENT_FEE_RATE_BPS,
-                effectiveFrom = now.minus(Duration.ofDays(1)),
+                // The deterministic financial tail is three days old, so its immutable order
+                // snapshot must reference terms already effective on that historical order date.
+                effectiveFrom = now.minus(Duration.ofDays(10)),
                 effectiveTo = null,
                 createdAt = now,
             ),
@@ -506,13 +560,445 @@ internal class LocalDemoSeeder(
             created += "couponIssuance=${LocalDemoFixture.COUPON_ISSUANCE_ID}"
         }
     }
+
+    /**
+     * Creates a closed, historical financial trail only through the owning persistence entities.
+     * It is deliberately separate from the live customer smoke order: settlement is immutable
+     * history, so the smoke reads it through the public merchant APIs and files its dispute there.
+     */
+    private fun seedFinancialTail(
+        now: Instant,
+        created: MutableList<String>,
+    ) {
+        val seoul = ZoneId.of("Asia/Seoul")
+        val firstCompletedAt = now.minus(Duration.ofDays(3)).minus(Duration.ofMinutes(5))
+        val secondCompletedAt = now.minus(Duration.ofDays(2)).minus(Duration.ofMinutes(5))
+        val firstDate = firstCompletedAt.atZone(seoul).toLocalDate()
+        val secondDate = secondCompletedAt.atZone(seoul).toLocalDate()
+
+        seedHistoricalOrder(
+            orderId = LocalDemoFixture.HISTORICAL_ORDER_ID,
+            lineId = LocalDemoFixture.HISTORICAL_ORDER_LINE_ID,
+            paymentId = LocalDemoFixture.HISTORICAL_PAYMENT_ID,
+            publicReference = LocalDemoFixture.HISTORICAL_ORDER_REFERENCE,
+            completedAt = firstCompletedAt,
+            pickupBusinessDate = firstDate,
+            pickupSequence = 1,
+            created = created,
+        )
+        seedHistoricalOrder(
+            orderId = LocalDemoFixture.ADJUSTED_ORDER_ID,
+            lineId = LocalDemoFixture.ADJUSTED_ORDER_LINE_ID,
+            paymentId = LocalDemoFixture.ADJUSTED_PAYMENT_ID,
+            publicReference = LocalDemoFixture.ADJUSTED_ORDER_REFERENCE,
+            completedAt = secondCompletedAt,
+            pickupBusinessDate = secondDate,
+            pickupSequence = 1,
+            created = created,
+        )
+
+        if (!refunds.existsById(LocalDemoFixture.HISTORICAL_REFUND_ID)) {
+            refunds.save(
+                RefundEntity(
+                    id = LocalDemoFixture.HISTORICAL_REFUND_ID,
+                    paymentId = LocalDemoFixture.HISTORICAL_PAYMENT_ID,
+                    orderId = LocalDemoFixture.HISTORICAL_ORDER_ID,
+                    requestedAmountKrw = LocalDemoFixture.HISTORICAL_REFUND_KRW,
+                    succeededAmountKrw = LocalDemoFixture.HISTORICAL_REFUND_KRW,
+                    reason = "SETTLEMENT_DEMO_PARTIAL_REFUND",
+                    state = RefundState.SUCCEEDED,
+                    providerRefundReference = "local-demo-historical-refund",
+                    providerIdempotencyKey = "local-demo-historical-refund-key",
+                    sourceReference = "local-demo:historical-partial-refund",
+                    attemptCount = 0,
+                    nextAction = RefundClaimMode.REQUEST,
+                    nextAttemptAt = null,
+                    createdAt = firstCompletedAt.plus(Duration.ofHours(2)),
+                    updatedAt = firstCompletedAt.plus(Duration.ofHours(2)),
+                ),
+            )
+            created += "historicalRefund=${LocalDemoFixture.HISTORICAL_REFUND_ID}"
+        }
+
+        if (!settlementBatches.existsById(LocalDemoFixture.HISTORICAL_SETTLEMENT_BATCH_ID)) {
+            val batch =
+                settlementBatches.saveAndFlush(
+                    SettlementBatchEntity(
+                        id = LocalDemoFixture.HISTORICAL_SETTLEMENT_BATCH_ID,
+                        storeId = LocalDemoFixture.STORE_ID,
+                        settlementDate = firstDate,
+                        createdAt = firstCompletedAt.plus(Duration.ofHours(3)),
+                    ),
+                )
+            settlementItems.saveAndFlush(
+                settlementItem(
+                    id = LocalDemoFixture.HISTORICAL_SETTLEMENT_ITEM_ID,
+                    batchId = batch.id,
+                    orderId = LocalDemoFixture.HISTORICAL_ORDER_ID,
+                    completedAt = firstCompletedAt,
+                    settlementDate = firstDate,
+                ),
+            )
+            val calculatedAt = firstCompletedAt.plus(Duration.ofHours(4))
+            batch.calculate(
+                settlementCalculation(
+                    itemCount = 1,
+                    adjustmentKrw = 0,
+                    adjustmentCursorEffectiveAt = null,
+                    adjustmentCursorId = null,
+                ),
+                calculatedAt,
+            )
+            // The database transition guard intentionally rejects OPEN -> CONFIRMED in one
+            // flush, even when the aggregate has performed both valid in-memory transitions.
+            // Persist CALCULATED first so this CLI follows the same immutable lifecycle.
+            settlementBatches.saveAndFlush(batch)
+            batch.confirm(calculatedAt.plus(Duration.ofMinutes(1)))
+            settlementBatches.saveAndFlush(batch)
+            created += "settlementBatch=${batch.id}"
+            created += "settlementItem=${LocalDemoFixture.HISTORICAL_SETTLEMENT_ITEM_ID}"
+        }
+
+        if (!settlementAdjustments.existsById(LocalDemoFixture.REFUND_SETTLEMENT_ADJUSTMENT_ID)) {
+            settlementAdjustments.saveAndFlush(
+                SettlementAdjustmentEntity(
+                    id = LocalDemoFixture.REFUND_SETTLEMENT_ADJUSTMENT_ID,
+                    storeId = LocalDemoFixture.STORE_ID,
+                    settlementItemId = LocalDemoFixture.HISTORICAL_SETTLEMENT_ITEM_ID,
+                    sourceSettlementBatchId = LocalDemoFixture.HISTORICAL_SETTLEMENT_BATCH_ID,
+                    adjustmentSource = "local-demo:historical-partial-refund-adjustment",
+                    reasonCode = SettlementAdjustmentReason.REFUND_SUCCEEDED,
+                    effectiveAt = secondCompletedAt.minus(Duration.ofHours(1)),
+                    orderCompletedAt = firstCompletedAt,
+                    settlementDate = firstDate,
+                    currency = "KRW",
+                    amountKrw = -LocalDemoFixture.HISTORICAL_REFUND_KRW,
+                    createdAt = secondCompletedAt.minus(Duration.ofHours(1)),
+                ),
+            )
+            created += "settlementAdjustment=${LocalDemoFixture.REFUND_SETTLEMENT_ADJUSTMENT_ID}"
+        }
+
+        if (!settlementBatches.existsById(LocalDemoFixture.ADJUSTED_SETTLEMENT_BATCH_ID)) {
+            val batch =
+                settlementBatches.saveAndFlush(
+                    SettlementBatchEntity(
+                        id = LocalDemoFixture.ADJUSTED_SETTLEMENT_BATCH_ID,
+                        storeId = LocalDemoFixture.STORE_ID,
+                        settlementDate = secondDate,
+                        createdAt = secondCompletedAt.plus(Duration.ofHours(2)),
+                    ),
+                )
+            settlementItems.saveAndFlush(
+                settlementItem(
+                    id = LocalDemoFixture.ADJUSTED_SETTLEMENT_ITEM_ID,
+                    batchId = batch.id,
+                    orderId = LocalDemoFixture.ADJUSTED_ORDER_ID,
+                    completedAt = secondCompletedAt,
+                    settlementDate = secondDate,
+                ),
+            )
+            val calculatedAt = secondCompletedAt.plus(Duration.ofHours(3))
+            batch.calculate(
+                settlementCalculation(
+                    itemCount = 1,
+                    adjustmentKrw = -LocalDemoFixture.HISTORICAL_REFUND_KRW,
+                    adjustmentCursorEffectiveAt = secondCompletedAt.minus(Duration.ofHours(1)),
+                    adjustmentCursorId = LocalDemoFixture.REFUND_SETTLEMENT_ADJUSTMENT_ID,
+                ),
+                calculatedAt,
+            )
+            settlementBatches.saveAndFlush(batch)
+            batch.confirm(calculatedAt.plus(Duration.ofMinutes(1)))
+            settlementBatches.saveAndFlush(batch)
+            created += "adjustedSettlementBatch=${batch.id}"
+            created += "adjustedSettlementItem=${LocalDemoFixture.ADJUSTED_SETTLEMENT_ITEM_ID}"
+        }
+    }
+
+    private fun seedHistoricalOrder(
+        orderId: UUID,
+        lineId: UUID,
+        paymentId: UUID,
+        publicReference: String,
+        completedAt: Instant,
+        pickupBusinessDate: LocalDate,
+        pickupSequence: Long,
+        created: MutableList<String>,
+    ) {
+        if (!orders.existsById(orderId)) {
+            val orderCreatedAt = completedAt.minus(Duration.ofMinutes(10))
+            jdbcTemplate.update(
+                "INSERT INTO ordering_public_reference_registry (public_reference, allocated_at) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                publicReference,
+                Timestamp.from(orderCreatedAt),
+            )
+            val order =
+                orders.save(
+                    OrderEntity(
+                        id = orderId,
+                        customerId = LocalDemoFixture.CUSTOMER_ID,
+                        storeId = LocalDemoFixture.STORE_ID,
+                        pickupSlotId = LocalDemoFixture.PICKUP_SLOT_IDS.first(),
+                        publicReference = publicReference,
+                        pickupBusinessDate = pickupBusinessDate,
+                        pickupSequence = pickupSequence,
+                        storeNameSnapshot = LocalDemoFixture.STORE_NAME,
+                        pickupWindowStartSnapshot = completedAt.minus(Duration.ofMinutes(30)),
+                        pickupWindowEndSnapshot = completedAt,
+                        state = OrderState.PENDING_PAYMENT,
+                        subtotalKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                        couponDiscountKrw = 0,
+                        pointsAppliedKrw = 0,
+                        payableKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                        reservationExpiresAt = orderCreatedAt.plus(Duration.ofMinutes(5)),
+                        createdAt = orderCreatedAt,
+                        updatedAt = orderCreatedAt,
+                    ),
+                )
+            order.markPaid(orderCreatedAt.plusSeconds(10))
+            order.accept(orderCreatedAt.plusSeconds(20))
+            order.startPreparing(orderCreatedAt.plusSeconds(30))
+            order.markReady(orderCreatedAt.plusSeconds(40))
+            order.complete(completedAt)
+            orderLines.save(
+                OrderLineEntity(
+                    id = lineId,
+                    orderId = orderId,
+                    lineSequence = 0,
+                    menuId = LocalDemoFixture.AMERICANO_MENU_ID,
+                    menuName = "Demo Americano",
+                    optionNamesJson = "[]",
+                    optionSelectionSnapshotState = OptionSelectionSnapshotState.SNAPSHOTTED,
+                    normalizedOptionIds = emptyList(),
+                    sellableRequirementsJson = "[]",
+                    unitPriceKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                    quantity = 1,
+                    grossKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                    couponDiscountKrw = 0,
+                    pointsAppliedKrw = 0,
+                    cashPayableKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                ),
+            )
+            seedHistoricalPointAccrualSnapshot(orderId, lineId, orderCreatedAt)
+            seedHistoricalSettlementInputSnapshot(orderId, orderCreatedAt)
+            created += "historicalOrder=$orderId"
+            created += "historicalOrderReference=$publicReference"
+            created += "historicalOrderLine=$lineId"
+            created += "historicalOrderPointAccrualSource=$orderId"
+            created += "historicalOrderPointAccrualSnapshot=$orderId"
+            created += "historicalOrderPointAccrualUnit=$lineId"
+            created += "historicalOrderSettlementInputSnapshot=$orderId"
+        }
+        if (!payments.existsById(paymentId)) {
+            payments.save(
+                PaymentEntity(
+                    id = paymentId,
+                    orderId = orderId,
+                    customerId = LocalDemoFixture.CUSTOMER_ID,
+                    paymentMethodId = LocalDemoFixture.PAYMENT_METHOD_ID,
+                    type = PaymentType.EXTERNAL,
+                    approvalState = PaymentApprovalState.APPROVED,
+                    requestedAmountKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                    approvedAmountKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                    succeededRefundAmountKrw =
+                        if (paymentId ==
+                            LocalDemoFixture.HISTORICAL_PAYMENT_ID
+                        ) {
+                            LocalDemoFixture.HISTORICAL_REFUND_KRW
+                        } else {
+                            0
+                        },
+                    currency = "KRW",
+                    sourceReference = "local-demo:historical-payment:$orderId",
+                    providerTransactionReference = "local-demo-historical-payment-$paymentId",
+                    correlationId = "local-demo:historical-payment",
+                    approvedAt = completedAt.minus(Duration.ofMinutes(1)),
+                    createdAt = completedAt.minus(Duration.ofMinutes(8)),
+                    updatedAt = completedAt.minus(Duration.ofMinutes(1)),
+                ),
+            )
+            created += "historicalPayment=$paymentId"
+        }
+    }
+
+    private fun settlementItem(
+        id: UUID,
+        batchId: UUID,
+        orderId: UUID,
+        completedAt: Instant,
+        settlementDate: LocalDate,
+    ) = SettlementItemEntity(
+        id = id,
+        settlementBatchId = batchId,
+        orderId = orderId,
+        storeId = LocalDemoFixture.STORE_ID,
+        itemSource = "local-demo:settlement-item:$orderId",
+        completedAt = completedAt,
+        settlementDate = settlementDate,
+        currency = "KRW",
+        grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+        feeRateBps = LocalDemoFixture.SETTLEMENT_FEE_RATE_BPS,
+        feeKrw = 300,
+        couponCostKrw = 0,
+        pointCostKrw = 0,
+        benefitCostKrw = 0,
+        netSettlementKrw = 9_700,
+        createdAt = completedAt.plus(Duration.ofMinutes(1)),
+    )
+
+    private fun settlementCalculation(
+        itemCount: Int,
+        adjustmentKrw: Long,
+        adjustmentCursorEffectiveAt: Instant?,
+        adjustmentCursorId: UUID?,
+    ) = SettlementBatchCalculation(
+        itemCount = itemCount,
+        grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+        feeKrw = 300,
+        benefitCostKrw = 0,
+        itemNetSettlementKrw = 9_700,
+        adjustmentKrw = adjustmentKrw,
+        carryForwardInKrw = 0,
+        carryForwardSourceBatchId = null,
+        adjustmentCursorEffectiveAt = adjustmentCursorEffectiveAt,
+        adjustmentCursorId = adjustmentCursorId,
+    )
+
+    /** Uses the explicitly bootstrapped GLOBAL policy; it never manufactures a default policy. */
+    private fun seedHistoricalPointAccrualSnapshot(
+        orderId: UUID,
+        lineId: UUID,
+        createdAt: Instant,
+    ) {
+        if (pointAccrualSources.existsById(orderId)) return
+        val policy = currentGlobalAccrualPolicy()
+        val grossAccrual = Math.floorDiv(LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW * policy.rateBps, 10_000)
+        pointAccrualSources.save(
+            OrderPointAccrualSourceEntity(
+                orderId = orderId,
+                sourceState = OrderPointAccrualSourceState.SNAPSHOTTED,
+                createdAt = createdAt,
+            ),
+        )
+        pointAccrualSnapshots.save(
+            OrderPointAccrualSnapshotEntity(
+                orderId = orderId,
+                policyVersionId = policy.versionId,
+                selectedScopeType = OrdinaryPointAccrualPolicyScopeType.GLOBAL,
+                selectedScopeReference = GLOBAL_SCOPE_REFERENCE,
+                selectionSource = OrdinaryPointAccrualPolicySelectionSource.GLOBAL_NO_OVERRIDE,
+                accrualRateBps = policy.rateBps,
+                roundingMode = PointAccrualRoundingMode.valueOf(policy.roundingMode),
+                issuerType = PointAccrualIssuerType.valueOf(policy.issuerType),
+                issuerReference = policy.issuerReference,
+                expiryRule = OrdinaryPointAccrualExpiryRule.valueOf(policy.expiryRule),
+                validityDays = policy.validityDays,
+                canonicalPolicyHash = policy.payloadHash,
+                orderPayableKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                grossAccrualAmountKrw = grossAccrual,
+                createdAt = createdAt,
+            ),
+        )
+        pointAccrualUnits.save(
+            OrderPointAccrualUnitEntity(
+                orderId = orderId,
+                orderLineId = lineId,
+                lineSequence = 0,
+                unitPosition = 0,
+                cashPayableKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                accruedAmountKrw = grossAccrual,
+                createdAt = createdAt,
+            ),
+        )
+    }
+
+    private fun currentGlobalAccrualPolicy(): LocalDemoAccrualPolicy {
+        val row =
+            jdbcTemplate.queryForMap(
+                """
+                SELECT version.policy_version_id, version.accrual_rate_bps, version.rounding_mode,
+                       version.issuer_type, version.issuer_reference, version.expiry_rule,
+                       version.validity_days, version.payload_hash
+                  FROM operations_point_accrual_policy_head head
+                  JOIN operations_point_accrual_policy_version version
+                    ON version.policy_version_id = head.policy_version_id
+                   AND version.scope_type = head.scope_type
+                   AND version.scope_reference = head.scope_reference
+                 WHERE head.scope_type = 'GLOBAL'
+                """.trimIndent(),
+            )
+        return LocalDemoAccrualPolicy(
+            versionId = (row["policy_version_id"] as Number).toLong(),
+            rateBps = (row["accrual_rate_bps"] as Number).toInt(),
+            roundingMode = row["rounding_mode"] as String,
+            issuerType = row["issuer_type"] as String,
+            issuerReference = row["issuer_reference"] as String,
+            expiryRule = row["expiry_rule"] as String,
+            validityDays = (row["validity_days"] as Number).toInt(),
+            payloadHash = row["payload_hash"] as String,
+        )
+    }
+
+    private fun seedHistoricalSettlementInputSnapshot(
+        orderId: UUID,
+        orderCreatedAt: Instant,
+    ) {
+        if (settlementInputSnapshots.existsById(orderId)) return
+        val snapshotWithoutHash =
+            OrderSettlementInputSnapshotEntity(
+                orderId = orderId,
+                storeId = LocalDemoFixture.STORE_ID,
+                storeSettlementTermsVersionId = LocalDemoFixture.SETTLEMENT_TERMS_ID,
+                storeSettlementTermsSourceReference = "local-demo:settlement-terms:v1",
+                couponReservationId = null,
+                couponCampaignId = null,
+                couponCampaignVersion = null,
+                couponCostBearer = null,
+                couponPlatformShareBps = null,
+                couponStoreShareBps = null,
+                couponDiscountKrw = 0,
+                platformCouponCostKrw = 0,
+                couponCostKrw = 0,
+                pointReservationId = null,
+                pointAllocationHash = null,
+                pointsAppliedKrw = 0,
+                pointCostKrw = 0,
+                grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                feeBaseKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+                feeRateBps = LocalDemoFixture.SETTLEMENT_FEE_RATE_BPS,
+                feeKrw = 300,
+                benefitCostKrw = 0,
+                netSettlementKrw = 9_700,
+                currency = "KRW",
+                snapshotSchemaVersion = 1,
+                canonicalSnapshotHash = "",
+                createdAt = orderCreatedAt,
+            )
+        settlementInputSnapshots.save(OrderSettlementInputSnapshotCanonicalizer.canonicalize(snapshotWithoutHash))
+    }
+
+    private data class LocalDemoAccrualPolicy(
+        val versionId: Long,
+        val rateBps: Int,
+        val roundingMode: String,
+        val issuerType: String,
+        val issuerReference: String,
+        val expiryRule: String,
+        val validityDays: Int,
+        val payloadHash: String,
+    )
+
+    private companion object {
+        val GLOBAL_SCOPE_REFERENCE: UUID = UUID.fromString("00000000-0000-0000-0000-000000000000")
+    }
 }
 
 /**
  * Usage: `LocalDemoSeedCliKt`
  *
  * Requires the `local-demo` profile, which cannot run with `prod` (see LocalDemoSafetyConfiguration).
- * Prints the identifiers the smoke flow needs and exits non-zero on any failure.
+ * Prints only semantic aliases the operator needs and exits non-zero on any failure.
  */
 fun main() {
     val application =
@@ -539,17 +1025,11 @@ fun main() {
     try {
         val created = context.getBean(LocalDemoSeeder::class.java).seed()
         println("LOCAL_DEMO_SEED_RESULT inserted=${created.size}")
-        created.forEach { println("LOCAL_DEMO_SEED_CREATED $it") }
-        println("LOCAL_DEMO_SEED_STORE_ID ${LocalDemoFixture.STORE_ID}")
-        println("LOCAL_DEMO_SEED_OTHER_STORE_ID ${LocalDemoFixture.OTHER_STORE_ID}")
-        println("LOCAL_DEMO_SEED_MENU_ID ${LocalDemoFixture.AMERICANO_MENU_ID}")
-        println("LOCAL_DEMO_SEED_OPTION_ID ${LocalDemoFixture.EXTRA_SHOT_OPTION_ID}")
-        println("LOCAL_DEMO_SEED_POINT_ACCOUNT_ID ${LocalDemoFixture.POINT_ACCOUNT_ID}")
-        println("LOCAL_DEMO_SEED_CUSTOMER_LOGIN_ID ${LocalDemoFixture.CUSTOMER_LOGIN_ID}")
-        println("LOCAL_DEMO_SEED_MERCHANT_LOGIN_ID ${LocalDemoFixture.MERCHANT_LOGIN_ID}")
-        println("LOCAL_DEMO_SEED_OTHER_MERCHANT_LOGIN_ID ${LocalDemoFixture.OTHER_MERCHANT_LOGIN_ID}")
-        println("LOCAL_DEMO_SEED_PAYMENT_METHOD_ID ${LocalDemoFixture.PAYMENT_METHOD_ID}")
-        println("LOCAL_DEMO_SEED_COUPON_ISSUANCE_ID ${LocalDemoFixture.COUPON_ISSUANCE_ID}")
+        println("LOCAL_DEMO_SEED_ALIAS customer=${LocalDemoFixture.CUSTOMER_LOGIN_ID}")
+        println("LOCAL_DEMO_SEED_ALIAS merchant=${LocalDemoFixture.MERCHANT_LOGIN_ID}")
+        println("LOCAL_DEMO_SEED_ALIAS otherMerchant=${LocalDemoFixture.OTHER_MERCHANT_LOGIN_ID}")
+        println("LOCAL_DEMO_SEED_ALIAS store=BeanFlow Demo Roastery")
+        println("LOCAL_DEMO_SEED_ALIAS financialTail=confirmed-settlement,partial-refund-adjustment,dispute-ready")
         println("LOCAL_DEMO_SEED_STATUS OK")
     } catch (failure: Exception) {
         // The seed transaction rolled back; nothing partial remains.

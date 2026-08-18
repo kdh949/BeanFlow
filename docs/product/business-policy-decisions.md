@@ -2189,6 +2189,68 @@
 
 ---
 
+### BR-09 Amendment (2026-08-18) — 고객 보유 쿠폰 조회와 주문 적용 경계
+
+- **Status:** Accepted for Goal core journey Stage 05
+- **Decision:** 고객 Session의 actor는 자신이 보유한 coupon issuance만 `GET /api/v1/me/coupons`의
+  store-scoped read projection으로 조회한다. `storeId`는 필수이고 cursor/limit은 목록 계약에 따라
+  받는다. endpoint의 backend/API contract는 target OpenAPI, runtime OpenAPI와 generated client가 같은
+  slice에서 구현할 때 존재한다. 고객 selection UI는 별도 Storybook MCP 검증이 필요한 후속 경계이며,
+  UI가 없다고 endpoint를 fake/stale/empty 성공으로 대체하지 않는다.
+- **Eligibility:** 결과 후보는 query 시점에 현재 customer가 소유하고 `AVAILABLE` 또는 `RESTORED` 상태인
+  issuance뿐이다. 일반 issuance(예약 복원으로 `RESTORED`가 된 원 issuance 포함)는
+  `Campaign.active=true`와 issuance 자체의 미만료를 함께 요구한다. 복원 보상 issuance는
+  [ADR-043](../adr/ADR-043-compensation-coupon-terms-snapshot.md)의 완전한
+  issuance-owned immutable terms snapshot과 issuance 자체의 미만료를 요구하며, live `Campaign.active`를
+  조회하거나 요구하지 않는다. snapshot이 없거나 불완전한 보상 issuance를 일반 issuance처럼 처리하거나
+  live Campaign으로 보완하지 않으며, projection은 typed 5xx로 실패한다. Campaign의 만료 시각이나 title은
+  이 조회의 새 eligibility 또는 response 필드로 발명하지 않는다. `RESERVED`, `USED`, `EXPIRED` issuance는
+  customer history로 대신 반환하지 않는다. 고객이 아닌 actor 또는 다른 customer의 issuance는 403/404
+  차이를 통해 존재를 드러내지 않고 해당 actor의 목록에서 제외한다.
+- **Store Applicability:** 현재 Stage 05는 요청 `storeId`와 coupon의 store scope만 비교한다. 적용 가능하면
+  `applicable=true`와 reason 없음으로, 적용 불가하면 `applicable=false`와
+  `reasonCode=STORE_NOT_APPLICABLE`로 반환한다. 적용 불가 항목을 조용히 빼지 않아 고객이 보유 사실과
+  매장 제한을 구분할 수 있게 한다. brand scope와 brand hierarchy의 매칭은 이 slice에서 해석하거나
+  구현하지 않고 별도 제품 결정을 기다린다. 이 query는 메뉴·cart나 주문금액을 받지 않으므로
+  `minimumOrderKrw`는 정보로만 제공하고 `MINIMUM_ORDER_NOT_MET`를 만들지 않는다.
+- **Response Minimum:** contract는 coupon issuance 식별자, 표시 가능한 혜택 요약, `minimumOrderKrw`,
+  issuance `couponExpiresAt`, `applicable`과 그 reason code를 포함한다. Campaign 관리·한정 발급·발급 이력·사용/만료 history,
+  선불 wallet balance는 이 endpoint와 Stage 05의 non-goal이다.
+- **Checkout Authority:** 조회·선택 결과는 quote나 예약이 아니다. `POST /orders`의 기존
+  `CouponReservationService`가 customer ownership, issuance state, expiry, store scope, 실제
+  minimum order, BR-08/BR-09의 계산·한 주문 한 coupon 및 concurrent consumption을 transaction 안에서
+  최종 재검증한다. query 성공을 근거로 client가 할인을 확정하거나 coupon을 사용 처리해서는 안 된다.
+- **Failure Policy:** Projection 또는 Promotion dependency 실패는 typed 5xx(통상 503)로 종료하고 빈
+  목록, cached/stale list, fake coupon이나 success fallback으로 대체하지 않는다. frontend는 loading,
+  empty, unavailable를 구분한다. empty 200은 모든 eligibility 조건을 만족하는 issuance가 없을 때만
+  반환한다.
+- **Performance Boundary:** 필요한 index는 projection SQL과 representative data의 `EXPLAIN`으로 입증한
+  뒤에만 migration writer lease 하에 추가한다. 이 policy는 migration 번호·index 또는 cache를
+  선승인하지 않는다.
+- **Rationale:** 고객이 선택할 수 있는 혜택을 checkout 직전까지 숨기지 않되, 조회 시점의 가용성을
+  주문 transaction의 금전·재고·동시성 결정으로 오해하지 않기 위함이다.
+- **Affected Contexts:** Promotion, Ordering, Customer frontend
+- **Affected Aggregates:** CouponIssuance, Campaign, Order
+- **Required Tests:**
+  - 다른 customer issuance가 목록 또는 cursor를 통해 보이지 않음
+  - 일반 `AVAILABLE`/원 issuance `RESTORED`의 active Campaign·미만료 경계 포함과 inactive Campaign 제외
+  - compensation issuance의 immutable snapshot·미만료 경계 포함, inactive Campaign과 독립된 포함,
+    손상 snapshot의 typed 5xx 및 live Campaign fallback 부재
+  - `RESERVED`/`USED`/`EXPIRED` issuance의 제외
+  - store scope·brand scope의 `applicable=true`와 `STORE_NOT_APPLICABLE`의 visible false 결과
+  - minimum amount가 response에 정보로 남고 order amount 없는 query가 invented minimum failure를 내지 않음
+  - projection failure 503이 empty 200, stale cache 또는 fake data로 대체되지 않음
+  - checkout에서 query 후 state/expiry/store/minimum/concurrent consume이 바뀐 coupon을 거절하고 BR-08/09를
+    다시 적용함
+  - cursor/limit 결정성, customer ownership filter와 필요한 index의 EXPLAIN evidence
+- **ADR Required:** No — Promotion ownership과 checkout reservation transaction을 변경하지 않는 좁은
+  actor-scoped read projection이다. query가 Campaign lifecycle, coupon reservation, cross-context write나
+  cache/fallback policy를 바꾸려 하면 ADR을 먼저 추가한다.
+- **Revisit Conditions:** coupon history, Campaign self-service issuance, multi-coupon stack, order quote
+  reservation, brand hierarchy, cross-store wallet 또는 measured query bottleneck이 실제 제품 요구가 될 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2204,19 +2266,21 @@
 11. 분석 Read Model은 `BR-31`, `BR-32`를 따른다.
 12. 고객·점주 사용자명과 고객 가입·로그인 응답은 `BR-34`를 따른다.
 13. 매장 통합 검색은 `BR-47`을 따르고 위치 보존은 `BR-28`, 추천·최근 매장은 `BR-40`을 따른다.
-13. 고객·점주 비밀번호와 로그인 제한은 `BR-35`를 따른다.
-14. 고객·점주 Session 수명과 동시 한도는 `BR-36`을 따른다.
-15. 고객 알림함 보존은 `BR-37`을 따른다.
-16. 매장 부분 환불 권한과 사용자 계약은 `BR-38`을 따르고 금액 계산에는 `BR-12`, `BR-13`,
+14. 고객·점주 비밀번호와 로그인 제한은 `BR-35`를 따른다.
+15. 고객·점주 Session 수명과 동시 한도는 `BR-36`을 따른다.
+16. 고객 알림함 보존은 `BR-37`을 따른다.
+17. 매장 부분 환불 권한과 사용자 계약은 `BR-38`을 따르고 금액 계산에는 `BR-12`, `BR-13`,
     `BR-15`, `BR-18`, `BR-21`을 함께 적용한다.
-17. P0 운영 조회는 `BR-39`의 세 explicit permission을 서로 대체하지 않고 적용한다.
-18. 홈의 최근 주문 매장과 추천 병합은 `BR-40`을 따른다.
-19. 운영자 웹 로그인과 token 저장 경계는 `BR-41`을 따른다.
-20. 고객 가입은 `BR-42`에 따라 0원 PointAccount까지 원자 생성한다.
-21. 운영 실패 큐는 `BR-43`의 유형별 source-owned Projection을 사용한다.
-22. 운영자 감사 로그 조회는 `BR-44`의 30일 기본·90일 요청 상한과 접근 Audit를 적용한다.
-23. 운영자 정산 대사 목록은 `BR-45`의 서울 정산일 기준 30일 기본·90일 요청 상한을 적용한다.
-24. 점주 계정 발급·초기화는 `BR-46`의 최초 membership 원자 생성과 임시 비밀번호 1회 표시를 따른다.
+18. P0 운영 조회는 `BR-39`의 세 explicit permission을 서로 대체하지 않고 적용한다.
+19. 홈의 최근 주문 매장과 추천 병합은 `BR-40`을 따른다.
+20. 운영자 웹 로그인과 token 저장 경계는 `BR-41`을 따른다.
+21. 고객 가입은 `BR-42`에 따라 0원 PointAccount까지 원자 생성한다.
+22. 운영 실패 큐는 `BR-43`의 유형별 source-owned Projection을 사용한다.
+23. 운영자 감사 로그 조회는 `BR-44`의 30일 기본·90일 요청 상한과 접근 Audit를 적용한다.
+24. 운영자 정산 대사 목록은 `BR-45`의 서울 정산일 기준 30일 기본·90일 요청 상한을 적용한다.
+25. 점주 계정 발급·초기화는 `BR-46`의 최초 membership 원자 생성과 임시 비밀번호 1회 표시를 따른다.
+26. 고객 보유 쿠폰 조회는 `BR-09`의 2026-08-18 amendment를 따르며, 주문 적용은 계속 `BR-08`, `BR-09`와
+    주문 transaction의 최종 재검증을 따른다.
 
 ---
 

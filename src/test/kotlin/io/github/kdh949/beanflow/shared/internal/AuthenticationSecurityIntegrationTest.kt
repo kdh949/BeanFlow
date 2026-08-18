@@ -114,6 +114,33 @@ internal class AuthenticationSecurityIntegrationTest(
     }
 
     @Test
+    fun `only a presented invalid csrf token is distinguishable from missing csrf and actor credential mismatch`() {
+        mockMvc
+            .perform(
+                post("/api/v1/auth/customer/registrations")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{}"),
+            ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+        val customer = issueCsrf("customer", "BEANFLOW_CUSTOMER_XSRF")
+        mockMvc
+            .perform(
+                post("/api/v1/auth/customer/registrations")
+                    .cookie(customer)
+                    .header("X-BEANFLOW-CSRF", "presented-but-invalid-token")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{}"),
+            ).andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"))
+
+        mockMvc
+            .perform(get("/api/v1/me").header("Authorization", "Bearer operator-token"))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+    }
+
+    @Test
     fun `unsafe browser request accepts only its actor csrf cookie and header`() {
         val customer = issueCsrf("customer", "BEANFLOW_CUSTOMER_XSRF")
         val merchant = issueCsrf("merchant", "BEANFLOW_MERCHANT_XSRF")
