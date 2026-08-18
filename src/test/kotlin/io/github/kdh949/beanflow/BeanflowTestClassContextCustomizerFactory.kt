@@ -11,20 +11,34 @@ import org.springframework.test.context.MergedContextConfiguration
 import org.springframework.test.context.TestContext
 import org.springframework.test.context.support.AbstractTestExecutionListener
 
-/**
- * A cached Spring context owns one datasource, so its cache key must include the test class in order
- * for every integration-test class to receive a separate database from [TestcontainersConfiguration].
- */
+/** Adds test-class identity to the cache key only when the test requires a private database. */
 internal class BeanflowTestClassContextCustomizerFactory : ContextCustomizerFactory {
     override fun createContextCustomizer(
         testClass: Class<*>,
         configAttributes: List<ContextConfigurationAttributes>,
-    ): ContextCustomizer? =
-        if (AnnotatedElementUtils.hasAnnotation(testClass, SpringBootTest::class.java)) {
-            TestClassIdentityContextCustomizer(testClass.name)
-        } else {
-            null
+    ): ContextCustomizer? {
+        if (!AnnotatedElementUtils.hasAnnotation(testClass, SpringBootTest::class.java)) {
+            return null
         }
+        val shared = AnnotatedElementUtils.hasAnnotation(testClass, BeanflowSharedDatabaseTest::class.java)
+        val isolated = AnnotatedElementUtils.hasAnnotation(testClass, BeanflowIsolatedSpringContext::class.java)
+        check(!(shared && isolated)) {
+            "${testClass.name} must declare exactly one Spring test isolation marker"
+        }
+        if (isolated) {
+            val reason =
+                AnnotatedElementUtils
+                    .findMergedAnnotation(testClass, BeanflowIsolatedSpringContext::class.java)
+                    ?.reason
+                    .orEmpty()
+            check(reason.isNotBlank()) {
+                "${testClass.name} must explain why its Spring context is isolated"
+            }
+        }
+
+        // Raw @SpringBootTest classes remain class-isolated until the classification slices finish.
+        return if (shared) null else TestClassIdentityContextCustomizer(testClass.name)
+    }
 }
 
 private data class TestClassIdentityContextCustomizer(
@@ -36,10 +50,24 @@ private data class TestClassIdentityContextCustomizer(
     ) = Unit
 }
 
-/** Close the class-specific context immediately so its Hikari pool closes before database drop. */
+/** Resets shared doubles and closes only class-specific contexts before their database is dropped. */
 internal class BeanflowDatabaseCleanupTestExecutionListener : AbstractTestExecutionListener() {
+    override fun afterTestMethod(testContext: TestContext) {
+        if (
+            AnnotatedElementUtils.hasAnnotation(testContext.testClass, BeanflowSharedDatabaseTest::class.java) &&
+            testContext.hasApplicationContext()
+        ) {
+            testContext.applicationContext
+                .getBeansOfType(ResettableTestDouble::class.java)
+                .values
+                .forEach(ResettableTestDouble::reset)
+        }
+    }
+
     override fun afterTestClass(testContext: TestContext) {
-        if (AnnotatedElementUtils.hasAnnotation(testContext.testClass, SpringBootTest::class.java)) {
+        val springBootTest = AnnotatedElementUtils.hasAnnotation(testContext.testClass, SpringBootTest::class.java)
+        val shared = AnnotatedElementUtils.hasAnnotation(testContext.testClass, BeanflowSharedDatabaseTest::class.java)
+        if (springBootTest && !shared) {
             val databaseName =
                 if (testContext.hasApplicationContext()) {
                     testContext.applicationContext
