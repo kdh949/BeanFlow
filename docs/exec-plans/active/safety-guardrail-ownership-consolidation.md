@@ -179,7 +179,9 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   `@DirtiesContext`를 제거
 - [x] 2026-08-19: 부분 환불 19개 시나리오를 다섯 nested 책임으로 분리하고 공통 DB fixture support 추출
 - [x] 2026-08-19: PR 1 full suite 1차 통과와 부분 환불 nested class timing 합계 weight 갱신
-- [ ] PR 1 baseline 비교, 반복 검증과 최종 backend gate
+- [x] 2026-08-19: 동일 checkout 환경 baseline/head full-suite 시간과 Spring database/Hikari pool 수 비교
+- [x] 2026-08-19: 11개 shared Spring test를 JUnit random seed 11/29로 반복해 두 실행 모두 통과
+- [ ] PR 1 최종 backend gate
 - [ ] PR 2 migration assertion inventory와 중앙 검증
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
@@ -201,8 +203,15 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   1개에서 5개로 늘어 targeted 실행이 약 24초 기준에서 74초가 됐다. 다섯 책임은 `@Nested`로 분리하고
   Spring 격리 단위는 하나로 유지해 같은 실행이 29초에 통과했다.
 - 2026-08-19: 변경 head의 첫 full suite는 44분 29초, 1,354 tests, failure/error 0, skipped 1이었다.
-  XML에서 확인한 Spring database 이름은 111개, Hikari pool 이름은 113개였다. 성능 개선 주장은 baseline
-  동일 환경 실행 전까지 보류한다.
+  XML에서 확인한 Spring database 이름은 111개, Hikari pool 이름은 113개였다.
+- 2026-08-19: 기준선 `94f6787`의 동일 환경 full suite는 45분 36초, 1,348 tests, failure/error 0,
+  skipped 1, class time 합 2,703.272초였다. XML의 Spring database 이름은 115개, Hikari pool 이름은
+  117개였다. 변경 head는 44분 29초, 1,354 tests, class time 합 2,647.593초, database 111개,
+  pool 113개였다. 관측 차이는 wall time -67초, database/pool -4개지만 환경 노이즈를 배제할 수 없고
+  성능 수치가 acceptance gate도 아니므로 개선율로 일반화하지 않는다.
+- 2026-08-19: shared marker가 붙은 11개 Spring class를 JUnit class order random seed 11과 29로
+  각각 실행해 1분 45초와 1분 38초에 모두 통과했다. 구성별로 7개 cached context/pool이 만들어졌고,
+  같은 cache key의 class는 database와 context를 재사용한 상태에서도 persistent/fake state를 누출하지 않았다.
 - 2026-08-19: `@BeanflowSharedDatabaseTest` annotation class 이름도 compiled `*Test.class` glob에 걸렸다.
   exact coverage verifier는 이름 예외 대신 annotation/interface/abstract class를 제외하고 concrete top-level
   test만 비교하도록 좁혔다.
