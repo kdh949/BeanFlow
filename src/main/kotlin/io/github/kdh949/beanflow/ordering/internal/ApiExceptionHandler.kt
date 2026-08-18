@@ -144,6 +144,7 @@ internal class ApiExceptionHandler(
             FailureCode.REFUND_QUANTITY_UNAVAILABLE,
             -> HttpStatus.UNPROCESSABLE_ENTITY
 
+            FailureCode.COUPON_TERMS_INTEGRITY_FAILURE,
             FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
             FailureCode.DEPENDENCY_UNAVAILABLE,
             FailureCode.PAYMENT_METHOD_PROVIDER_UNAVAILABLE,

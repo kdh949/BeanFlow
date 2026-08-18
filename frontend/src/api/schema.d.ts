@@ -10974,7 +10974,19 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            503: components["responses"]["DependencyUnavailable"];
+            /**
+             * @description Coupon read dependency가 일시적으로 unavailable하면 `DEPENDENCY_UNAVAILABLE`, compensation
+             *     coupon의 issuance-owned immutable terms snapshot이 없거나 손상됐으면
+             *     `COUPON_TERMS_INTEGRITY_FAILURE`를 반환합니다. 빈 목록이나 live Campaign fallback은 없습니다.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getCurrentCustomerOrder: {

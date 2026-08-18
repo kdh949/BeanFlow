@@ -50,6 +50,7 @@
 | REPROCESSING_APPROVER_MUST_DIFFER | 409 | Yes, with a different operator | 복구 제안자와 같은 actor가 승인·거절을 시도함 |
 | REPROCESSING_PROPOSAL_EXPIRED | 409 | Yes, create a new proposal | 30분 승인 유효 구간 종료 |
 | REPROCESSING_PROPOSAL_STALE | 409 | Yes, after reviewing current state | 제안 뒤 case·snapshot·Refund 상태가 바뀌어 fingerprint 재검증 실패 |
+| COUPON_TERMS_INTEGRITY_FAILURE | 503 | Yes, after Promotion owner data is corrected | compensation coupon의 issuance-owned immutable terms snapshot이 누락·손상됨. live Campaign terms나 빈 목록 fallback 없음 |
 | SETTLEMENT_INPUT_UNAVAILABLE | 503 | Yes, after owner source/setup is corrected | 주문 생성 또는 완료 event의 immutable 정산 입력 source·version·금액 tie-out을 검증할 수 없음. fee/cost default나 현재 값 fallback 없음 |
 | DEPENDENCY_UNAVAILABLE | 503 | Yes | 필수 외부·DB 의존성 일시 장애 |
 | NOTIFICATION_DELIVERY_FAILED | operation-specific | Operator | 주문과 독립된 발송 실패 |
