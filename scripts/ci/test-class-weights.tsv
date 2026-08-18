@@ -6,7 +6,7 @@ io.github.kdh949.beanflow.PostgresSpringTestRuntimeTest	19.828
 io.github.kdh949.beanflow.PostgresTestRuntimeTest	15.183
 io.github.kdh949.beanflow.architecture.AuthenticationArchUnitTest	10.997
 io.github.kdh949.beanflow.architecture.ModularityTests	1.184
-io.github.kdh949.beanflow.architecture.RuntimeOpenApiParityTest	9.106
+io.github.kdh949.beanflow.architecture.RuntimeOpenApiParityTest	26.588
 io.github.kdh949.beanflow.architecture.SupportArchitectureTest	2.198
 io.github.kdh949.beanflow.demo.LocalDemoRepositorySafetyTest	0.643
 io.github.kdh949.beanflow.demo.LocalDemoScriptGuardTest	1.927

@@ -187,6 +187,36 @@ invalid write·upgrade 결과 assertion은 전용 시나리오에 남긴다는 �
 discovery·settlement current-schema invariant 계약, 그리고 한 번만 실행되는 metadata inventory다.
 전용 유지 항목은 실제 이전 version 데이터를 요구하므로 class 전용 database를 계속 사용한다.
 
+## OpenAPI Assertion Transfer Inventory
+
+기준선의 17개 문자열 기반 `*OpenApiContractTest`는 아래 semantic contract로 대응시켰다. 모든 행의
+path/method/operationId, security, parameter, response code는 `OPERATION_CONTRACTS`가 소유하고,
+required/property/enum/명시적 실패 상태와 금지 필드는 `SCHEMA_CONTRACTS`, `CLOSED_OBJECT_SCHEMAS`,
+`FORBIDDEN_OPERATIONS`가 소유한다. indentation, prose와 YAML substring은 이전하지 않는다.
+
+| 기존 test | 이전한 고유 계약 | 중앙 목적지 |
+|---|---|---|
+| `StoreCatalogOpenApiContractTest` | store/menu/pickup 조회 operation과 customer session | operation contract |
+| `CustomerAuthenticationOpenApiContractTest` | registration/session/current customer와 공개·session security | operation contract |
+| `MerchantAuthenticationOpenApiContractTest` | merchant session/password/current membership와 actor security | operation contract |
+| `CustomerOrderQueryOpenApiContractTest` | order list/detail/cancel cursor·공개 reference·금지 내부 ID | operation + schema contract |
+| `OneTimePaymentPublicTrackingOpenApiContractTest` | payment 조회/confirm 상태·idempotency·공개 order reference | operation + schema contract |
+| `PublicOrderReferenceOpenApiContractTest` | 공개 reference response와 내부 order ID 비노출 | schema contract |
+| `StoreOrderBoardOpenApiContractTest` | board/overflow/transition, ETag, idempotency, lane·action schema | operation + schema contract |
+| `CustomerCouponWalletOpenApiContractTest` | coupon wallet query와 적용 불가 enum, 내부 owner ID 비노출 | operation + schema contract |
+| `PostAcceptanceResolutionOpenApiContractTest` | create/get/execute/reconcile와 resolution/step/responsibility 상태 | operation + schema contract |
+| `SupportActionRequestOpenApiContractTest` | evaluate/create/revise/decision/reassign/investigation과 approval 상태 | operation + schema contract |
+| `SupportCaseOpenApiContractTest` | case CRUD/assignment/history/link operation과 closed request/response | operation + closed schema contract |
+| `SupportCompensationOpenApiContractTest` | evaluate/create/get/execute/retry와 band/request 상태 | operation + schema contract |
+| `SupportOrderChangeOpenApiContractTest` | execute/authorization operation과 recovery·binding 필드 | operation + schema contract |
+| `SupportProfileChangeOpenApiContractTest` | 14 create, 8 revise, 8 execute, get/retry와 write-only PII | generated operation + schema contract |
+| `SupportSubjectSearchOpenApiContractTest` | search rate/failure responses와 masked-only result | operation + schema contract |
+| `SupportTimelineOpenApiContractTest` | case/order timeline cursor와 source/action/decision enum | operation + schema contract |
+| `SupportVerificationOpenApiContractTest` | verification/grant/break-glass lifecycle와 write-only proof | operation + closed schema contract |
+
+`RuntimeOpenApiParityTest`에는 중앙 계약표를 복제하지 않고 실제 shared Spring context의
+`RequestMappingHandlerMapping`과 runtime OpenAPI의 method/path 집합 비교만 남긴다.
+
 ## Validation Commands
 
 각 backend PR:
@@ -240,7 +270,11 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: PR 2의 39개 migration assertion inventory를 유지 전용·중앙 이동·중복 삭제로 매핑
 - [x] 2026-08-19: fresh Flyway smoke, 중앙 metadata와 네 Context current-schema invariant 검증 추가
 - [x] 2026-08-19: 대응 위치가 확인된 반복 clean migration과 단순 metadata assertion만 제거하고 full suite 통과
-- [ ] PR 3 docs/OpenAPI validator 단일화
+- [x] 2026-08-19: PR 3 문서 validator를 thin Bash wrapper와 link/ExecPlan/policy/OpenAPI Python 모듈로 분리
+- [x] 2026-08-19: 현재 canonical link, ExecPlan graph, policy ID, OpenAPI 3.1/ref만 hard gate로 유지
+- [x] 2026-08-19: 17개 OpenAPI 문자열 test의 고유 assertion을 100 operation·102 schema semantic contract로 이전
+- [x] 2026-08-19: runtime parity를 실제 shared Spring context의 mapping 비교로 좁히고 62개 mock 선언 제거
+- [x] 2026-08-19: PR 3 full suite 1,340 tests와 문서·OpenAPI validator 검증 통과
 - [ ] PR 4 세 Support Application Service 분리
 - [ ] PR 5 Store Order Board 분리, 전체 검증과 plan completion
 
@@ -295,6 +329,14 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   current metadata, payment/ordering, identity, support/operations, discovery/settlement의 6개 중앙 class로 옮겼다.
 - 2026-08-19: PR 2 full suite는 44분 1초에 1,359 tests, failure/error 0, skipped 1로 통과했고 class
   time 합은 2,619.208초였다. 이는 동일 machine의 관측값일 뿐 성능 acceptance나 개선율 주장에 사용하지 않는다.
+- 2026-08-19: 2,356줄 Bash embedded validator를 분리한 뒤 wrapper는 작업 경로 설정과 Python entry 호출만
+  남았다. 임시 repository fixture 12개가 broken link, ExecPlan metadata/dependency/cycle, policy duplicate,
+  OpenAPI 구조 실패와 정상 경로를 검증한다.
+- 2026-08-19: 실제 Spring context의 runtime parity는 62개 `@MockitoBean` 없이 targeted 실행 35초,
+  XML class time 26.588초에 통과했다. Controller dependency 추가가 mapping 계약과 무관한 mock 수정을 요구하지 않는다.
+- 2026-08-19: PR 3 full suite는 43분 12초에 1,340 tests, failure/error 0, skipped 1로
+  통과했고 class time 합은 2,570.058초였다. 17개 문자열 계약 test 제거를 반영한 실제 통합 head
+  검증 결과이며, 성능 개선율 근거로 사용하지 않는다.
 
 ## Decision Log
 
@@ -313,8 +355,10 @@ backend/document gate는 통과했다. 첫 remote CI의 shard 0은 PostgreSQL �
 실패했고, 승인된 정밀도 수정과 회귀 검증을 적용했다. 수정 head remote CI는 재실행 전이다.
 수정 head full suite의 정밀도 관련 테스트는 모두 통과했지만 기존 planner-shape test 1건이
 비결정적으로 실패한 후 단독 재실행은 통과했다. 따라서 PR 1은 Draft를 유지한다.
-PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 소유권을 6개 중앙
-검증으로 옮겼고 full suite를 통과했다. 나머지 PR URL, commit range,
+PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 소유권을 6개 중앙 검증으로
+옮겼고 full suite를 통과했다. PR 3은 12개
+validator fixture test와 100 operation·102 schema semantic contract로 문서/OpenAPI hard gate를 집중화했다.
+나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
 
