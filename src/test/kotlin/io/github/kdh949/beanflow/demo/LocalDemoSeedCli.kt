@@ -28,17 +28,12 @@ import io.github.kdh949.beanflow.merchant.internal.StoreEntity
 import io.github.kdh949.beanflow.merchant.internal.StoreJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.StoreSettlementTermsEntity
 import io.github.kdh949.beanflow.merchant.internal.StoreSettlementTermsJpaRepository
-import io.github.kdh949.beanflow.payment.internal.PaymentMethodEntity
-import io.github.kdh949.beanflow.payment.internal.PaymentMethodJpaRepository
-import io.github.kdh949.beanflow.payment.internal.PaymentMethodStatus
-import io.github.kdh949.beanflow.payment.internal.PaymentEntity
-import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
-import io.github.kdh949.beanflow.payment.internal.RefundEntity
-import io.github.kdh949.beanflow.payment.internal.RefundJpaRepository
-import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
-import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
-import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
-import io.github.kdh949.beanflow.payment.internal.domain.RefundState
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualExpiryRule
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySelectionSource
+import io.github.kdh949.beanflow.operations.api.PointAccrualIssuerType
+import io.github.kdh949.beanflow.operations.api.PointAccrualRoundingMode
+import io.github.kdh949.beanflow.ordering.api.OrderPointAccrualSourceState
 import io.github.kdh949.beanflow.ordering.internal.OptionSelectionSnapshotState
 import io.github.kdh949.beanflow.ordering.internal.OrderEntity
 import io.github.kdh949.beanflow.ordering.internal.OrderJpaRepository
@@ -53,12 +48,17 @@ import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualUnitJpaRepos
 import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotEntity
 import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotJpaRepository
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
-import io.github.kdh949.beanflow.ordering.api.OrderPointAccrualSourceState
-import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualExpiryRule
-import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
-import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySelectionSource
-import io.github.kdh949.beanflow.operations.api.PointAccrualIssuerType
-import io.github.kdh949.beanflow.operations.api.PointAccrualRoundingMode
+import io.github.kdh949.beanflow.payment.internal.PaymentEntity
+import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
+import io.github.kdh949.beanflow.payment.internal.PaymentMethodEntity
+import io.github.kdh949.beanflow.payment.internal.PaymentMethodJpaRepository
+import io.github.kdh949.beanflow.payment.internal.PaymentMethodStatus
+import io.github.kdh949.beanflow.payment.internal.RefundEntity
+import io.github.kdh949.beanflow.payment.internal.RefundJpaRepository
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentApprovalState
+import io.github.kdh949.beanflow.payment.internal.domain.PaymentType
+import io.github.kdh949.beanflow.payment.internal.domain.RefundClaimMode
+import io.github.kdh949.beanflow.payment.internal.domain.RefundState
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.internal.CampaignEligibleMenuEntity
@@ -68,7 +68,6 @@ import io.github.kdh949.beanflow.promotion.internal.CampaignJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceEntity
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceJpaRepository
 import io.github.kdh949.beanflow.promotion.internal.CouponIssuanceState
-import io.github.kdh949.beanflow.shared.api.MerchantAccountState
 import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentEntity
 import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentJpaRepository
 import io.github.kdh949.beanflow.settlement.internal.SettlementAdjustmentReason
@@ -77,6 +76,7 @@ import io.github.kdh949.beanflow.settlement.internal.SettlementBatchEntity
 import io.github.kdh949.beanflow.settlement.internal.SettlementBatchJpaRepository
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemEntity
 import io.github.kdh949.beanflow.settlement.internal.SettlementItemJpaRepository
+import io.github.kdh949.beanflow.shared.api.MerchantAccountState
 import org.springframework.boot.SpringApplication
 import org.springframework.boot.WebApplicationType
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
@@ -90,12 +90,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.sql.Timestamp
 import java.util.UUID
 import kotlin.system.exitProcess
 
@@ -800,7 +800,14 @@ internal class LocalDemoSeeder(
                     approvalState = PaymentApprovalState.APPROVED,
                     requestedAmountKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
                     approvedAmountKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
-                    succeededRefundAmountKrw = if (paymentId == LocalDemoFixture.HISTORICAL_PAYMENT_ID) LocalDemoFixture.HISTORICAL_REFUND_KRW else 0,
+                    succeededRefundAmountKrw =
+                        if (paymentId ==
+                            LocalDemoFixture.HISTORICAL_PAYMENT_ID
+                        ) {
+                            LocalDemoFixture.HISTORICAL_REFUND_KRW
+                        } else {
+                            0
+                        },
                     currency = "KRW",
                     sourceReference = "local-demo:historical-payment:$orderId",
                     providerTransactionReference = "local-demo-historical-payment-$paymentId",
@@ -820,44 +827,42 @@ internal class LocalDemoSeeder(
         orderId: UUID,
         completedAt: Instant,
         settlementDate: LocalDate,
-    ) =
-        SettlementItemEntity(
-            id = id,
-            settlementBatchId = batchId,
-            orderId = orderId,
-            storeId = LocalDemoFixture.STORE_ID,
-            itemSource = "local-demo:settlement-item:$orderId",
-            completedAt = completedAt,
-            settlementDate = settlementDate,
-            currency = "KRW",
-            grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
-            feeRateBps = LocalDemoFixture.SETTLEMENT_FEE_RATE_BPS,
-            feeKrw = 300,
-            couponCostKrw = 0,
-            pointCostKrw = 0,
-            benefitCostKrw = 0,
-            netSettlementKrw = 9_700,
-            createdAt = completedAt.plus(Duration.ofMinutes(1)),
-        )
+    ) = SettlementItemEntity(
+        id = id,
+        settlementBatchId = batchId,
+        orderId = orderId,
+        storeId = LocalDemoFixture.STORE_ID,
+        itemSource = "local-demo:settlement-item:$orderId",
+        completedAt = completedAt,
+        settlementDate = settlementDate,
+        currency = "KRW",
+        grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+        feeRateBps = LocalDemoFixture.SETTLEMENT_FEE_RATE_BPS,
+        feeKrw = 300,
+        couponCostKrw = 0,
+        pointCostKrw = 0,
+        benefitCostKrw = 0,
+        netSettlementKrw = 9_700,
+        createdAt = completedAt.plus(Duration.ofMinutes(1)),
+    )
 
     private fun settlementCalculation(
         itemCount: Int,
         adjustmentKrw: Long,
         adjustmentCursorEffectiveAt: Instant?,
         adjustmentCursorId: UUID?,
-    ) =
-        SettlementBatchCalculation(
-            itemCount = itemCount,
-            grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
-            feeKrw = 300,
-            benefitCostKrw = 0,
-            itemNetSettlementKrw = 9_700,
-            adjustmentKrw = adjustmentKrw,
-            carryForwardInKrw = 0,
-            carryForwardSourceBatchId = null,
-            adjustmentCursorEffectiveAt = adjustmentCursorEffectiveAt,
-            adjustmentCursorId = adjustmentCursorId,
-        )
+    ) = SettlementBatchCalculation(
+        itemCount = itemCount,
+        grossPaidKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
+        feeKrw = 300,
+        benefitCostKrw = 0,
+        itemNetSettlementKrw = 9_700,
+        adjustmentKrw = adjustmentKrw,
+        carryForwardInKrw = 0,
+        carryForwardSourceBatchId = null,
+        adjustmentCursorEffectiveAt = adjustmentCursorEffectiveAt,
+        adjustmentCursorId = adjustmentCursorId,
+    )
 
     /** Uses the explicitly bootstrapped GLOBAL policy; it never manufactures a default policy. */
     private fun seedHistoricalPointAccrualSnapshot(
