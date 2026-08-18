@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.CurrentMenuLineQuoteResult
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
@@ -16,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowSharedDatabaseTest
 @SpringBootTest(properties = ["spring.jpa.properties.hibernate.generate_statistics=true"])
 internal class JpaMenuQuoteServiceQueryCountTest
     @Autowired

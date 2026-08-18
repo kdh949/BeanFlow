@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountEntity
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountJpaRepository
@@ -45,6 +46,7 @@ import java.util.UUID
     BrowserSessionProbeConfiguration::class,
 )
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(properties = ["beanflow.toss.client-key=test_ck_auth_foundation"])
 internal class AuthenticationSecurityIntegrationTest(
     @Autowired private val mockMvc: MockMvc,

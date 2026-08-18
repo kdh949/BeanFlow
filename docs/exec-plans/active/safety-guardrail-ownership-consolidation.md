@@ -175,7 +175,9 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 
 - [x] 2026-08-19: `origin/main`과 기준선 commit, test/migration/validator/service/frontend inventory 확인
 - [x] 2026-08-19: 다섯 개 선형 Draft PR과 수치 비강제 성능 evidence를 사용자 결정으로 고정
-- [ ] PR 1 shared/isolated Spring test와 부분 환불 test 분리
+- [x] 2026-08-19: 115개 Spring test를 shared 11개, isolated 104개로 분류하고 raw marker와 직접
+  `@DirtiesContext`를 제거
+- [ ] PR 1 부분 환불 test 분리와 전체 순서·반복 검증
 - [ ] PR 2 migration assertion inventory와 중앙 검증
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
@@ -187,6 +189,12 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   customizer가 class 단위 Context reuse를 무조건 차단한다.
 - 2026-08-19: 현재 CI workflow는 여섯 runner shard를 사용하고 Gradle 기본 assignment count는 세 개다.
   remote workflow가 명시한 count가 실제 실행 source이므로 둘을 추측해 합치지 않는다.
+- 2026-08-19: 주문 생성·재주문 테스트를 test transaction으로 감싸면 `REQUIRES_NEW` 멱등 등록이
+  미커밋 fixture를 기다렸다. 해당 클래스는 교착을 숨기지 않고 isolated로 유지했다.
+- 2026-08-19: DB failure trigger가 같은 test transaction을 abort하는 테스트는 예외를 assertion한 뒤에도
+  후속 SQL을 실행할 수 없다. DDL·강제 실패 테스트는 isolated 대상이다.
+- 2026-08-19: 동일 구성을 가진 운영 Controller shared 테스트는 한 번 시작한 Context/database를 재사용한
+  상태에서 순서 묶음 실행을 통과했다.
 
 ## Decision Log
 

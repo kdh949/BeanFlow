@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -19,6 +20,7 @@ import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest
 internal class StoreSettlementTermsRepositoryTest
     @Autowired

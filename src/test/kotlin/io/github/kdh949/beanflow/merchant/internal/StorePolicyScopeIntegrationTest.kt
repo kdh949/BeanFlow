@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -18,6 +19,7 @@ import org.springframework.dao.DataAccessResourceFailureException
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowSharedDatabaseTest
 @SpringBootTest
 internal class StorePolicyScopeIntegrationTest
     @Autowired

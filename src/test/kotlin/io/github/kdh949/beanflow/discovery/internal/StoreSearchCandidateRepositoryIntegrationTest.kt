@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.SearchTextNormalizer
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
@@ -11,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
@@ -25,6 +25,7 @@ import java.util.UUID
  * `StoreSearchQueryIntegrationTest`가 맡는다.
  */
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.search-index-coverage.initial-delay-ms=3600000",
@@ -36,7 +37,6 @@ import java.util.UUID
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class StoreSearchCandidateRepositoryIntegrationTest {
     @Autowired
     private lateinit var repository: StoreSearchCandidateRepository

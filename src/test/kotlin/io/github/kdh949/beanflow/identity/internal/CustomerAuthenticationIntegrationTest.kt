@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.identity.internal
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
@@ -26,7 +27,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -52,13 +52,13 @@ import javax.sql.DataSource
 
 @Import(TestcontainersConfiguration::class, CustomerAuthenticationTestClockConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.toss.client-key=test_ck_customer_authentication",
         "beanflow.authentication.attempt-retention-initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class CustomerAuthenticationIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,

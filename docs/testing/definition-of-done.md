@@ -37,6 +37,10 @@ Feature는 다음 조건을 충족해야 완료다.
 ## Verification
 
 - [ ] 관련 단위·통합·구조 테스트가 실제 실행됐다.
+- [ ] `@SpringBootTest`는 `@BeanflowSharedDatabaseTest` 또는 사유가 있는
+      `@BeanflowIsolatedSpringContext` 중 하나만 선언한다.
+- [ ] shared database 테스트는 같은 thread의 test transaction에 참여하고 가변 test double을 method마다 reset한다.
+- [ ] 실제 commit, 다른 thread/connection, `REQUIRES_NEW`, startup, DDL 또는 migration 검증은 class별 격리를 유지한다.
 - [ ] 동시성·멱등성 위험이 있으면 해당 테스트가 있다.
 - [ ] Provider 장애·재시도 위험이 있으면 장애 테스트가 있다.
 - [ ] 빌드와 정적 분석이 통과했다.

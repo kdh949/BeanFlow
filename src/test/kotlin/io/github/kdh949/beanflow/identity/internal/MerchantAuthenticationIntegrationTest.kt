@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.identity.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
@@ -15,7 +16,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -36,13 +36,13 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class, MerchantAuthenticationTestClockConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.toss.client-key=test_ck_merchant_authentication",
         "beanflow.authentication.attempt-retention-initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class MerchantAuthenticationIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,

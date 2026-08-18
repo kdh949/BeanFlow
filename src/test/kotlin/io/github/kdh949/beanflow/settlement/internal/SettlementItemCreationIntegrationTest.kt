@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.settlement.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
@@ -13,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
@@ -25,6 +25,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -37,7 +38,6 @@ import java.util.concurrent.TimeUnit
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class SettlementItemCreationIntegrationTest
     @Autowired
     constructor(

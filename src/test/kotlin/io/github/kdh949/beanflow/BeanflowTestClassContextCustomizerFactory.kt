@@ -22,7 +22,7 @@ internal class BeanflowTestClassContextCustomizerFactory : ContextCustomizerFact
         }
         val shared = AnnotatedElementUtils.hasAnnotation(testClass, BeanflowSharedDatabaseTest::class.java)
         val isolated = AnnotatedElementUtils.hasAnnotation(testClass, BeanflowIsolatedSpringContext::class.java)
-        check(!(shared && isolated)) {
+        check(shared.xor(isolated)) {
             "${testClass.name} must declare exactly one Spring test isolation marker"
         }
         if (isolated) {
@@ -36,8 +36,7 @@ internal class BeanflowTestClassContextCustomizerFactory : ContextCustomizerFact
             }
         }
 
-        // Raw @SpringBootTest classes remain class-isolated until the classification slices finish.
-        return if (shared) null else TestClassIdentityContextCustomizer(testClass.name)
+        return if (isolated) TestClassIdentityContextCustomizer(testClass.name) else null
     }
 }
 
@@ -65,9 +64,8 @@ internal class BeanflowDatabaseCleanupTestExecutionListener : AbstractTestExecut
     }
 
     override fun afterTestClass(testContext: TestContext) {
-        val springBootTest = AnnotatedElementUtils.hasAnnotation(testContext.testClass, SpringBootTest::class.java)
-        val shared = AnnotatedElementUtils.hasAnnotation(testContext.testClass, BeanflowSharedDatabaseTest::class.java)
-        if (springBootTest && !shared) {
+        val isolated = AnnotatedElementUtils.hasAnnotation(testContext.testClass, BeanflowIsolatedSpringContext::class.java)
+        if (isolated) {
             val databaseName =
                 if (testContext.hasApplicationContext()) {
                     testContext.applicationContext

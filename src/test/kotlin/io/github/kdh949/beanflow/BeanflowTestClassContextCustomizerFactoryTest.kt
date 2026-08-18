@@ -33,8 +33,10 @@ internal class BeanflowTestClassContextCustomizerFactoryTest {
     }
 
     @Test
-    fun `raw Spring tests keep legacy isolation until classification completes`() {
-        assertThat(factory.customizerFor(LegacyTest::class.java)).isNotNull
+    fun `raw Spring tests fail instead of silently choosing an isolation mode`() {
+        assertThatIllegalStateException()
+            .isThrownBy { factory.customizerFor(LegacyTest::class.java) }
+            .withMessageContaining("exactly one")
     }
 
     private fun BeanflowTestClassContextCustomizerFactory.customizerFor(testClass: Class<*>) =
