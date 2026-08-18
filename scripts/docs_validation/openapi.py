@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .common import ValidationError
+from .openapi_contracts import validate_semantic_contracts
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,8 @@ class OpenApiStats:
     runtime_paths: int
     runtime_operations: int
     schemas: int
+    contract_operations: int
+    contract_schemas: int
 
 
 def resolve_json_pointer(document: object, fragment: str) -> object:
@@ -95,10 +98,13 @@ def load_and_validate(path: Path) -> dict:
 def validate_openapi(root: Path) -> OpenApiStats:
     target = load_and_validate(root / "openapi/beanflow-v1.yaml")
     runtime = load_and_validate(root / "openapi/beanflow-v1-runtime.yaml")
+    contract_operations, contract_schemas = validate_semantic_contracts(target)
     return OpenApiStats(
         target_paths=len(target.get("paths", {})),
         target_operations=operation_count(target, root / "openapi/beanflow-v1.yaml"),
         runtime_paths=len(runtime.get("paths", {})),
         runtime_operations=operation_count(runtime, root / "openapi/beanflow-v1-runtime.yaml"),
         schemas=len(target.get("components", {}).get("schemas", {})),
+        contract_operations=contract_operations,
+        contract_schemas=contract_schemas,
     )

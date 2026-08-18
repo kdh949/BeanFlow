@@ -12,6 +12,12 @@ from docs_validation.common import ValidationError
 from docs_validation.exec_plans import validate_exec_plans
 from docs_validation.links import CANONICAL_INDEX_TARGETS, validate_links
 from docs_validation.openapi import load_and_validate, operation_count
+from docs_validation.openapi_contracts import (
+    OperationContract,
+    SchemaContract,
+    validate_operation_contracts,
+    validate_schema_contracts,
+)
 from docs_validation.policies import validate_policy_ids
 
 
@@ -150,6 +156,43 @@ paths:
         runtime = {"paths": {"/things": {"$ref": "./target.yaml#/paths/~1things"}}}
 
         self.assertEqual(operation_count(runtime, self.root / "runtime.yaml"), 1)
+
+    def test_semantic_operation_contract_ignores_description_formatting(self) -> None:
+        document = {
+            "security": [{"customerSession": []}],
+            "paths": {
+                "/things": {
+                    "get": {
+                        "operationId": "listThings",
+                        "description": "Prose can change without breaking the contract.",
+                        "parameters": [{"$ref": "#/components/parameters/Cursor"}],
+                        "responses": {"200": {}, "503": {}},
+                    }
+                }
+            },
+        }
+        contract = OperationContract(
+            "/things", "get", "listThings", ("customerSession",), ("200", "503"), ("Cursor",)
+        )
+
+        self.assertEqual(validate_operation_contracts(document, (contract,)), 1)
+
+    def test_semantic_schema_contract_rejects_private_field_exposure(self) -> None:
+        document = {
+            "components": {
+                "schemas": {
+                    "Thing": {
+                        "type": "object",
+                        "required": ["publicId"],
+                        "properties": {"publicId": {}, "internalId": {}},
+                    }
+                }
+            }
+        }
+        contract = SchemaContract("Thing", required=("publicId",), forbidden_properties=("internalId",))
+
+        with self.assertRaisesRegex(ValidationError, "forbidden properties"):
+            validate_schema_contracts(document, (contract,))
 
 
 if __name__ == "__main__":

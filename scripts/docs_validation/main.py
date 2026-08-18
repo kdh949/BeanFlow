@@ -21,7 +21,8 @@ def validate_repository(root: Path) -> None:
         "OpenAPI YAML and semantic checks passed "
         f"(target {openapi.target_paths} paths/{openapi.target_operations} operations, "
         f"runtime {openapi.runtime_paths} paths/{openapi.runtime_operations} operations, "
-        f"{openapi.schemas} schemas)."
+        f"{openapi.schemas} schemas; semantic contracts "
+        f"{openapi.contract_operations} operations/{openapi.contract_schemas} schemas)."
     )
     print(
         f"Validated {policy_count} unique business policies, {adr_count} ADRs, "
