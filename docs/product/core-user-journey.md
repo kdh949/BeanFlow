@@ -1,7 +1,7 @@
 # 코어 사용자 여정 계약
 
-> **상태:** `CURRENT_SOURCE_BASELINE`
-> **소스 기준:** `433ed1990fdded3551d8bc1070200607904a4ac7` (2026-08-18)
+> **상태:** `CURRENT_GOAL_INTEGRATION`
+> **소스 기준:** `433ed1990fdded3551d8bc1070200607904a4ac7` 위 Goal Stage 05 integration (2026-08-18)
 > **목적:** 고객이 탐색·주문·결제를 완료하고, 점주가 매장에서 처리·환불·정산·이의제기를 수행하는
 > 현재 구현 여정과 아직 계약되지 않은 공백을 하나의 source-backed 표로 고정한다.
 
@@ -21,11 +21,12 @@
 | `Blocked` | 필요한 선행 slice 또는 release 조건이 없어서 진행할 수 없다. |
 | `Unknown` | 소스만으로 결론을 낼 수 없으며 실행 증거가 필요하다. |
 
-- target `openapi/beanflow-v1.yaml`에는 161 path, runtime
-  `openapi/beanflow-v1-runtime.yaml`에는 150 path가 있다. runtime은 target의 배포 가능한 구현 부분을
+- target `openapi/beanflow-v1.yaml`에는 162 path, runtime
+  `openapi/beanflow-v1-runtime.yaml`에는 151 path가 있다. runtime은 target의 배포 가능한 구현 부분을
   명시적으로 참조·인라인한 **의도적인 부분집합**이며, 두 파일의 path 수가 같아야 한다는 계약은 아니다.
-- `RuntimeOpenApiParityTest`가 이 대응을 검증하는 현재 테스트 경계다. 이 Stage에서 실행하지 않았으므로
-  현재 결과는 [release gate](../quality/core-journey-release-gate.md)에 `Not run`으로 남긴다.
+- `RuntimeOpenApiParityTest`가 이 대응을 검증하는 현재 테스트 경계다. Stage 05 backend/API slice에서
+  이 테스트는 통과했지만, 별도 browser user-journey release gate는
+  [release gate](../quality/core-journey-release-gate.md)에 `Not run`으로 남긴다.
 - 다음 DAG는 구현 순서 계약이다. 이 문서가 Stage 03 이상의 작업을 시작시키지 않는다.
 
 ```text
@@ -44,8 +45,9 @@
        → 부분 환불 → 정산 항목 확인 → 이의제기
 ```
 
-대괄호의 쿠폰 지갑은 현재 공백이다. 쿠폰을 사용한 주문의 금액·소유권·상태 검증은 이미 주문 생성
-transaction의 `CouponReservationService`가 최종 권한을 가진다. 조회 화면이 그 검증을 대체해서는 안 된다.
+대괄호의 쿠폰 지갑은 backend/API contract가 구현됐지만 고객 선택 UI는 아직 Storybook MCP 차단 상태다.
+쿠폰을 사용한 주문의 금액·소유권·상태 검증은 이미 주문 생성 transaction의 `CouponReservationService`가
+최종 권한을 가진다. 조회 API나 이후 UI가 그 검증을 대체해서는 안 된다.
 
 ## 현재 source-backed journey inventory
 
@@ -57,7 +59,7 @@ transaction의 `CouponReservationService`가 최종 권한을 가진다. 조회 
 | 고객 가입·로그인·세션 | 계정 생성 후 자신의 세션으로 시작 | Customer account, login, session rotation, CSRF | `POST /auth/customer/registrations`, `POST /auth/customer/sessions`, `GET /me` | `/app/signup`, `/app/login`, `/app` | `scripts/demo/seed.sh` | `frontend/src/features/auth/customer/customerSession.test.tsx`; Plan 80 validation | productization-30, -80 (completed) | Integrated | 이번 slice에서 browser 재실행 안 함 |
 | 매장 탐색 | 검색·근처·추천에서 매장 선택 | Discovery query projection | `GET /stores/search`, `/stores/nearby`, `/me/store-recommendations` | `/app`, `/app/stores` | `scripts/demo/seed.sh` | `frontend/src/features/discovery/Discovery.test.tsx`; productization-70, -80 | productization-70, -80 (completed) | Integrated | demo seed의 검색 색인 한계로 결과 화면 fresh proof 없음 |
 | 매장·메뉴·픽업 확인 | 메뉴·옵션·가능한 픽업 슬롯 확인 | public store/catalog read | `GET /stores/{storeId}`, `/stores/{storeId}/menus`, `/stores/{storeId}/pickup-slots` | `/app/stores/:storeId`, `/app/cart` | `scripts/demo/seed.sh` | `frontend/src/features/ordering/Ordering.test.tsx`; productization-80 | productization-80 (completed), ADR-076 | Integrated | 이번 slice에서 runtime 실행 안 함 |
-| 보유 쿠폰 지갑·선택 | 이미 발급된 쿠폰 중 매장에 적용 가능한 것을 확인 | Promotion read projection **(planned)** | 없음; Stage 05가 `GET /me/coupons?storeId=&cursor=&limit=`를 먼저 계약 | 없음 | 현재 wallet fixture 없음 | 주문 측 `CouponReservationService` tests는 조회 contract 증거가 아님 | **Stage 05 core-journey slice** (owner ExecPlan amendment required before code) | Missing | Stage 03·04 선행 완료, Stage 05 OpenAPI/runtime/client/UI 계약 및 EXPLAIN-backed index 판단 필요 |
+| 보유 쿠폰 지갑·선택 | 이미 발급된 쿠폰 중 매장에 적용 가능한 것을 확인 | Customer-scoped Promotion DTO projection | `GET /me/coupons?storeId=&cursor=&limit=` | 없음 (UI blocked) | `CustomerCouponWalletIntegrationTest` Testcontainers fixture | `CustomerCouponWalletIntegrationTest`, OpenAPI contract, parity, auth registry, CouponReservation regression | **Stage 05 core-journey slice** | Backend/API Integrated | Storybook MCP가 없어 selector/loading/empty/unavailable/selection browser proof가 Not run |
 | 포인트 확인 | 사용 가능 잔액·만료 예정 확인 | actor-scoped point facade | `GET /me/points`, `/me/point-transactions` | `/app/points` | `scripts/demo/seed.sh` | `frontend/src/features/loyalty/Points.test.tsx`; productization-80 | productization-80 (completed) | Integrated | fresh E2E not run |
 | 주문 생성 | 장바구니를 서버 가격으로 주문화 | order validation, reservation, coupon/point calculation | `POST /orders` | `/app/cart`, `/app/checkout/:orderId` | `scripts/demo/seed.sh` | `frontend/src/features/ordering/Ordering.test.tsx`; productization-80 | ordering core, productization-80 | Integrated | coupon wallet UI absent; order command remains authoritative |
 | 결제 시도·확인·복구 | 결제창 뒤 확정 상태 또는 UNKNOWN 복구를 본다 | payment attempt, confirmation, reconciliation | `GET /payment-config`, `POST /orders/{orderId}/payment-attempts`, `POST /payments/{paymentId}/confirmations`, `GET /payments/{paymentId}` | `/app/checkout/:orderId`, `/app/payments/:paymentId/success`, `/app/payments/:paymentId/fail` | `scripts/demo/seed.sh` | `frontend/src/features/payment/PaymentCallbackPages.test.tsx`; productization-80 smoke historical evidence | payment core, productization-80 | Integrated | Toss sandbox is optional and not current-run proof |
@@ -90,10 +92,10 @@ coupon issuance, wallet balance, or coupon history.
 6. The response is a read projection only. `POST /orders` remains the final authority for ownership, state,
    expiry, store scope, minimum order amount, the one-coupon rule, and concurrent consumption.
 
-The planned URI and response fields above are deliberately absent from current target/runtime OpenAPI. Stage 05
-must amend its owner ExecPlan, specify OpenAPI first, then add the runtime implementation and generated client
-together. A new DB index is not pre-authorized: its need must be supported by the actual projection query and
-`EXPLAIN` evidence, under the applicable migration-writer lease.
+`GET /me/coupons`와 response fields는 target/runtime OpenAPI 및 generated client에 구현됐다. 이 backend/API
+slice는 order authority를 바꾸지 않으며 UI selection completion을 주장하지 않는다. Representative
+`EXPLAIN (ANALYZE, BUFFERS)`는 새 index 필요성을 보이지 않았으므로 migration-writer lease와 index는
+추가하지 않았다.
 
 ## Release use
 

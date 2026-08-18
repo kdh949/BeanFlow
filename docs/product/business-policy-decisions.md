@@ -2194,8 +2194,9 @@
 - **Status:** Accepted for Goal core journey Stage 05
 - **Decision:** 고객 Session의 actor는 자신이 보유한 coupon issuance만 `GET /api/v1/me/coupons`의
   store-scoped read projection으로 조회한다. `storeId`는 필수이고 cursor/limit은 목록 계약에 따라
-  받는다. 이 endpoint는 Stage 05가 target OpenAPI, runtime OpenAPI, generated client와 UI를 함께
-  구현하기 전에는 존재하는 API로 취급하지 않는다.
+  받는다. endpoint의 backend/API contract는 target OpenAPI, runtime OpenAPI와 generated client가 같은
+  slice에서 구현할 때 존재한다. 고객 selection UI는 별도 Storybook MCP 검증이 필요한 후속 경계이며,
+  UI가 없다고 endpoint를 fake/stale/empty 성공으로 대체하지 않는다.
 - **Eligibility:** 결과 후보는 query 시점에 현재 customer가 소유하고 `AVAILABLE` 또는 `RESTORED` 상태인
   issuance뿐이다. 일반 issuance(예약 복원으로 `RESTORED`가 된 원 issuance 포함)는
   `Campaign.active=true`와 issuance 자체의 미만료를 함께 요구한다. 복원 보상 issuance는

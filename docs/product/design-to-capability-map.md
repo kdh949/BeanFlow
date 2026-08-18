@@ -87,7 +87,7 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 | `2b 결제 예외` | 고객 | 중복 감지·재고 변경 안내 | Payment | `GET /payments/{paymentId}` | P1 | 멱등 승인은 있음. 화면 문구를 멱등 계약에 맞춘다(충돌 C-3). |
 | `2c 결제수단 관리` | 고객 | 저장 결제수단 lifecycle | Payment | `GET/POST /payment-methods`, `PUT /{id}/default`, `DELETE /{id}` | P1 | 있음. 단 Checkout 승인 원천이 아니다(ADR-101). |
 | `2d 부분 환불 상세` | 고객 | 환불 내역·포인트 복원 확인 | Ordering, Payment | `GET /me/orders/{orderReference}` (신규) | P1 | 환불 원장·복원 있음. 고객 조회 투영 없음. |
-| `4b 쿠폰·프로모션` | 고객 | 보유 쿠폰 조회·선택, 한정 발급 | Promotion | `GET /me/coupons?storeId=&cursor=&limit=` (Goal Stage 05 planned; 현재 계약 없음), `POST /campaigns/{campaignId}/coupon-issuances` (신규) | P1 (발급); Goal core-journey Stage 05 (조회·선택) | Campaign·예약과 주문측 최종 검증은 있다. 고객 wallet query/selection은 없고, 발급 한도 컬럼과 고객 발급 endpoint도 없다(ADR-107). |
+| `4b 쿠폰·프로모션` | 고객 | 보유 쿠폰 조회·선택, 한정 발급 | Promotion | `GET /me/coupons?storeId=&cursor=&limit=` (Goal Stage 05 backend/API), `POST /campaigns/{campaignId}/coupon-issuances` (신규) | P1 (발급); Goal core-journey Stage 05 (조회·선택) | customer wallet query contract/projection은 구현됐고 UI selection은 Storybook MCP 차단 상태다. 발급 한도 컬럼과 고객 발급 endpoint는 없다(ADR-107). |
 | `4c 주문 내역` | 고객 | 과거 주문 목록 | Ordering | `GET /me/orders?from=&to=&cursor=` (신규) | P0 | 없음. Cursor 계약은 ADR-070 재사용. 기본 30일, 과거 상한 없음. |
 | `4d 주문 취소` | 고객 | 수락 전 전체 취소 | Ordering | `GET /me/orders/{orderReference}`의 `cancellationPreview`, `POST /me/orders/{orderReference}/cancellations` (신규 경로, 기존 유스케이스) | P0 | 있음(ADR-029~032). 서버가 예상 환급을 계산하고 명령 시 재검증하며, 경로는 주문번호 기반으로 바꾼다. |
 | `4e 알림` | 고객 | 알림함·수신 설정 | Notification | `GET /me/notifications`, `PATCH /me/notifications/{id}`, `GET/PUT /me/notification-preferences` (신규) | P1 | 발송·재시도 있음. 알림함 없음. 현재 6개 템플릿은 모두 거래성이다(ADR-104). |
@@ -122,14 +122,15 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 ### Goal core-journey coupon wallet scope (2026-08-18)
 
 Goal Stage 05는 **이미 발급된** 고객 쿠폰을 매장 선택 맥락에서 조회·선택하는 좁은 read surface만
-소유한다. `AVAILABLE | RESTORED`, active/unexpired issuance와 Campaign만 반환하고, 매장 또는 브랜드에
-적용되지 않는 항목은 숨기지 않고 `STORE_NOT_APPLICABLE`로 표시한다. 주문 생성은 coupon ownership,
-state, expiry, store/brand scope, minimum order, one-coupon rule과 concurrent consumption을 다시 검증하는
-최종 권한이다([BR-09](business-policy-decisions.md)의 2026-08-18 amendment).
+소유한다. normal issuance는 active Campaign과 issuance expiry를, restored compensation issuance는 immutable
+snapshot과 issuance expiry를 사용한다. store에 적용되지 않는 항목은 숨기지 않고
+`STORE_NOT_APPLICABLE`로 표시한다. 주문 생성은 coupon ownership, state, expiry, store scope, minimum order,
+one-coupon rule과 concurrent consumption을 다시 검증하는 최종 권한이다
+([BR-09](business-policy-decisions.md)의 2026-08-18 amendment).
 
 이 보완은 이 표의 P1 Campaign limited issuance·management·history 또는 `3b` 선불 wallet non-goal을
-재분류하지 않는다. Stage 05가 target OpenAPI, runtime API, generated client, UI와 tests를 함께 소유하기
-전에는 해당 URI를 구현된 것으로 표시하지 않는다.
+재분류하지 않는다. Stage 05 backend/API contract는 target OpenAPI, runtime API, generated client와 tests로
+구현됐지만, selection UI와 Storybook/browser evidence는 Storybook MCP가 복구될 때까지 구현·검증하지 않는다.
 
 ---
 

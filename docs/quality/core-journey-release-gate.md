@@ -33,7 +33,7 @@ remote가 끝나지 않았거나 required scenario가 `Not run`/`Blocked`이면 
 | 1 | P0 고객·점주 route에 Access Token 붙여넣기나 임의 UUID 입력이 없다. | productization-80/-90의 frontend source와 완료 ExecPlan evidence; 이번 slice는 UI를 실행하지 않았다. | Historical evidence | current browser smoke에서 customer·merchant route와 navigation을 다시 확인한다. |
 | 2 | 고객·점주의 unsafe mutation은 각 Session/CSRF 경계를 지키며 actor 간 token을 교차 수용하지 않는다. | `frontend/src/api/client.test.ts` 및 productization-80/-90 evidence. | Historical evidence | current backend/frontend security tests가 통과한다. |
 | 3 | 계정 생성 → 로그인 → 주문 → 점주 완료가 browser E2E로 한 번 연결된다. | 개별 customer/merchant browser evidence는 있으나 하나의 end-to-end run은 없다. | Not run | deterministic demo에서 customer와 merchant actor를 이어 420px browser E2E를 저장한다. |
-| 4 | 쿠폰·포인트가 선택 가능하고 주문 서버가 실제 cart 기준으로 다시 계산한다. | points surface와 order-side recalculation은 source-backed; customer coupon wallet/selection은 없다. | Blocked | Stage 05의 wallet OpenAPI/runtime/client/UI와 order-side recalculation contract tests를 통과한다. |
+| 4 | 쿠폰·포인트가 선택 가능하고 주문 서버가 실제 cart 기준으로 다시 계산한다. | points surface와 order-side recalculation은 source-backed; Stage 05 wallet backend/API와 order-side regression은 current evidence가 있으나 customer selector UI는 없다. | Blocked | Storybook MCP가 복구된 뒤 wallet loading/empty/unavailable/selection과 order-side recalculation browser evidence를 통과한다. |
 | 5 | scripted provider success와 `UNKNOWN → reconciliation` 자동 수렴을 보인다. | productization-80 demo smoke와 payment core tests에 이전 증거가 있다. | Historical evidence | current scripted-provider integration run을 보관한다. |
 | 6 | Toss sandbox는 선택적 실환경 확인이며 CI의 대체물이 아니다. | Toss sandbox plan/adapter 기록은 있으나 이번 release cycle에서 실행하지 않았다. | Not run | 선택적으로 sandbox receipt를 붙이고, 별도로 scripted CI gate를 통과한다. |
 | 7 | 부분 환불이 정산 조정과 포인트 복원/복구 상태를 정직하게 남긴다. | productization-90 frontend/backend validation evidence. | Historical evidence | current partial-refund recovery scenario를 다시 실행한다. |
@@ -50,14 +50,14 @@ remote가 끝나지 않았거나 required scenario가 `Not run`/`Blocked`이면 
 - `32072235507`은 exact source baseline의 remote success evidence다. 이 Stage 02 documentation commit은
   push하지 않았으므로 그 run에 포함되지 않았고, 그 성공은 full user journey의 missing/not-run gate를
   자동으로 해제하지 않는다.
-- Gate 4 is intentionally fail-closed. Coupon wallet absent does not justify an empty coupon response, a fake
-  client list, or a client-side discount decision.
+- Gate 4 is intentionally fail-closed. Wallet selector UI가 아직 없더라도 backend query failure를 empty coupon
+  response, fake client list 또는 client-side discount decision으로 바꾸지 않는다.
 
 ## Release decision
 
 **Current decision: do not release.** Gate 4 and 12 are blocked; gates 3, 6, 9, and 11 are not run. Gate 10의
 same-SHA CI success와 historical results remain useful regression context only.
 
-The first permitted implementation stack for this documentation slice is a Draft branch based on
-`main → feature/core-journey-02-contract`. It is documentation-only; downstream Stage 03/04/07 and the
-Stage 05 coupon wallet must not begin from this file alone without their dependency and lease checks.
+Stage 02 documentation stack은 `main → feature/core-journey-02-contract`에서 시작했고, Stage 05 backend/API는
+그 dependency와 lease checks 뒤 별도 Draft slice에서 구현됐다. 이 release gate 문서만으로 후속 stage를
+시작해서는 안 된다.
