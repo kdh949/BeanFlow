@@ -33,12 +33,9 @@ import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class RequestDataAccessGrantCommand(
@@ -604,8 +601,7 @@ internal class DataAccessGrantTransactions(
 
     private fun invalid(): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, "DataAccessGrant request is invalid")
 
-    private fun hash(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun hash(value: String): String = SupportSha256.utf8(value)
 
     private companion object {
         const val REQUEST_GRANT = "REQUEST_GRANT"

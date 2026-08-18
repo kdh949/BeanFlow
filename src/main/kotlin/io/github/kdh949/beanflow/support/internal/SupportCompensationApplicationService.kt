@@ -55,13 +55,10 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class EvaluateSupportCompensationCommand(
@@ -240,8 +237,7 @@ internal class SupportCompensationPayloadCanonicalizer(
         value: Any?,
     ) = SupportCommandPayloadField(name, type, value?.toString())
 
-    private fun hash(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun hash(value: String): String = SupportSha256.utf8(value)
 }
 
 @Service

@@ -37,13 +37,10 @@ import io.github.kdh949.beanflow.support.internal.domain.VerificationState
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class CreateSupportOrderChangeAuthorizationCommand(
@@ -172,8 +169,7 @@ internal class SupportOrderChangePayloadCanonicalizer(
         value: Any?,
     ) = SupportCommandPayloadField(name, type, value?.toString())
 
-    private fun sha256(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun sha256(value: String): String = SupportSha256.utf8(value)
 
     private companion object {
         const val ACTION_PAYLOAD = "SUPPORT_ORDER_CHANGE_ACTION_V1"

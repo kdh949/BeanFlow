@@ -10,9 +10,7 @@ import io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificat
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 
 internal sealed interface SupportProfileChangePayload {
@@ -316,7 +314,7 @@ internal object SupportProfilePayloadDigest {
                 }
                 buffer.toByteArray()
             }
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
+        return SupportSha256.bytes(bytes)
     }
 
     private const val NULL_FIELD = 0
