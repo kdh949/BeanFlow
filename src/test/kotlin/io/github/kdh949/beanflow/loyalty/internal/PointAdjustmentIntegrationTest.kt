@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.loyalty.api.ApplyPointAdjustmentCommand
 import io.github.kdh949.beanflow.loyalty.api.PointAdjustmentIssuer
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.loyalty-point-adjustment-retention.initial-delay-ms=3600000",

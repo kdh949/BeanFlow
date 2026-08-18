@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.payment.api.PostAcceptanceResolutionOrderState
@@ -23,6 +24,7 @@ import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.payment.refund.initial-delay-ms=3600000",

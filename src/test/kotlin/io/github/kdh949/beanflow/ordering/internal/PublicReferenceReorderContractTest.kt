@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import org.assertj.core.api.Assertions.assertThat
@@ -27,6 +28,7 @@ import java.util.UUID
  */
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("invokes REQUIRES_NEW order idempotency registration")
 @SpringBootTest
 internal class PublicReferenceReorderContractTest
     @Autowired

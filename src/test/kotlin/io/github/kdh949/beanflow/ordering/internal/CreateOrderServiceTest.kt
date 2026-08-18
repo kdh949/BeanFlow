@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.micrometer.core.instrument.MeterRegistry
@@ -15,6 +16,7 @@ import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("invokes REQUIRES_NEW order idempotency registration")
 @SpringBootTest
 internal class CreateOrderServiceTest
     @Autowired

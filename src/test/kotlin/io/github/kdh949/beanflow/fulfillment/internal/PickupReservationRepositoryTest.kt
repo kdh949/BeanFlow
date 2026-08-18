@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
@@ -31,6 +32,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class PickupReservationRepositoryTest
     @Autowired
