@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.demo
 
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -19,7 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate
  * duplicate anything, a failure part way through must leave nothing behind, and the seed must
  * refuse to run when the required GLOBAL accrual policy is absent instead of inventing one.
  */
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, OrderSettlementInputSnapshotService::class)
 @SpringBootTest(
     classes = [LocalDemoSeedApplication::class],
     properties = [
@@ -35,6 +37,7 @@ internal class LocalDemoSeedIntegrationTest
     constructor(
         private val seeder: LocalDemoSeeder,
         private val jdbcTemplate: JdbcTemplate,
+        private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -140,6 +143,21 @@ internal class LocalDemoSeedIntegrationTest
         @Test
         fun `the seed provides a confirmed financial tail with a partial-refund adjustment ready for an owner dispute`() {
             transactions.execute { seeder.seed() }
+
+            val settlementInput = settlementInputSnapshots.read(LocalDemoFixture.HISTORICAL_ORDER_ID)
+            assertThat(settlementInput.orderId).isEqualTo(LocalDemoFixture.HISTORICAL_ORDER_ID)
+            assertThat(settlementInput.storeId).isEqualTo(LocalDemoFixture.STORE_ID)
+            assertThat(settlementInput.grossPaidKrw).isEqualTo(LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW)
+            assertThat(settlementInput.feeKrw).isEqualTo(300)
+            assertThat(settlementInput.netSettlementKrw).isEqualTo(9_700)
+            assertThat(settlementInput.canonicalSnapshotHash).matches("^[0-9a-f]{64}$")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT canonical_snapshot_hash FROM ordering_order_settlement_input_snapshot WHERE order_id = ?",
+                    String::class.java,
+                    LocalDemoFixture.HISTORICAL_ORDER_ID,
+                ),
+            ).isEqualTo(settlementInput.canonicalSnapshotHash)
 
             val row =
                 jdbcTemplate.queryForMap(

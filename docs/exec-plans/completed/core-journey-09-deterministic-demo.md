@@ -124,6 +124,10 @@ runtime directory on failure rather than printed. Startup/seed logs remain check
 Implementation and the bounded diff review are complete. The actual clean checkout sequence and focused validation
 passed; the release boundary is this atomic Stage 09 change only.
 
+- 2026-08-18 review remediation: the historical settlement input now uses the Ordering owner's canonicalizer and
+  `OrderSettlementInputSnapshotOperations.read` verifies hash and amount tie-out after seeding. The runbook follows
+  the checkout-derived frontend URL printed by `start.sh`, and resource mismatch failures emit no internal UUID.
+
 ## Surprises & Discoveries
 
 - Historical Orders are protected by deferred ordinary-accrual and settlement-input snapshot guards.
@@ -136,8 +140,9 @@ passed; the release boundary is this atomic Stage 09 change only.
 
 ## Outcomes & Retrospective
 
-- Passed: forced focused Gradle tests (`LocalDemoSeedIntegrationTest` 6, `LocalDemoScriptGuardTest` 12,
-  `LocalDemoRepositorySafetyTest` 5; zero failures/errors), `bash scripts/verify-docs.sh` (47 business policies,
+- Passed: forced focused Gradle tests (`LocalDemoSeedIntegrationTest` 6, `LocalDemoScriptGuardTest` 13,
+  `LocalDemoRepositorySafetyTest` 5, `OrderSettlementInputSnapshotIntegrationTest` 8; zero failures/errors),
+  `bash scripts/verify-docs.sh` (47 business policies,
   113 ADRs, 294 Markdown files and 63 ExecPlans), shell syntax, and `git diff --check`.
 - Passed: in this checkout only, isolated `start → seed (49 rows) → seed (0 rows) → smoke → stop --reset`.
   Smoke covered applicable coupon, menu option, pickup slot, point accrual, public payment/order reference and
@@ -151,3 +156,5 @@ passed; the release boundary is this atomic Stage 09 change only.
 
 - 2026-08-18: Created for Stage 09 implementation after Goal Controller confirmed Stage 06+08 combined green.
 - 2026-08-18: Marked complete after the isolated runtime and focused/document validation evidence above.
+- 2026-08-18: Replaced the placeholder settlement hash with the owner canonicalizer, aligned dynamic frontend URL
+  documentation, and added executable UUID non-disclosure coverage after review.

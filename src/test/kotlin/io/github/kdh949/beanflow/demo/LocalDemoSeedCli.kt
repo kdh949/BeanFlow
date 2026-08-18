@@ -45,6 +45,7 @@ import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSourceEntity
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualSourceJpaRepository
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualUnitEntity
 import io.github.kdh949.beanflow.ordering.internal.OrderPointAccrualUnitJpaRepository
+import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotCanonicalizer
 import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotEntity
 import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotJpaRepository
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
@@ -944,7 +945,7 @@ internal class LocalDemoSeeder(
         orderCreatedAt: Instant,
     ) {
         if (settlementInputSnapshots.existsById(orderId)) return
-        settlementInputSnapshots.save(
+        val snapshotWithoutHash =
             OrderSettlementInputSnapshotEntity(
                 orderId = orderId,
                 storeId = LocalDemoFixture.STORE_ID,
@@ -971,10 +972,10 @@ internal class LocalDemoSeeder(
                 netSettlementKrw = 9_700,
                 currency = "KRW",
                 snapshotSchemaVersion = 1,
-                canonicalSnapshotHash = "0".repeat(64),
+                canonicalSnapshotHash = "",
                 createdAt = orderCreatedAt,
-            ),
-        )
+            )
+        settlementInputSnapshots.save(OrderSettlementInputSnapshotCanonicalizer.canonicalize(snapshotWithoutHash))
     }
 
     private data class LocalDemoAccrualPolicy(

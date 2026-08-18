@@ -295,6 +295,28 @@ internal class LocalDemoScriptGuardTest {
     }
 
     @Test
+    fun `resource mismatch failure does not print either internal identifier`() {
+        val expected = "11111111-1111-4111-8111-111111111111"
+        val actual = "22222222-2222-4222-8222-222222222222"
+        val probe = root.resolve("resource-mismatch-probe.sh")
+        writeExecutable(
+            probe,
+            """
+            #!/usr/bin/env bash
+            set -euo pipefail
+            . "${scripts.resolve("lib/common.sh").toAbsolutePath()}"
+            same_resource_or_fail "$actual" "$expected" "Order replay returned a different resource."
+            """.trimIndent() + "\n",
+        )
+
+        val result = runPath(probe)
+
+        assertThat(result.exitCode).isNotZero()
+        assertThat(result.output).contains("Order replay returned a different resource.")
+        assertThat(result.output).doesNotContain(actual, expected)
+    }
+
+    @Test
     fun `customer checkpoint verifies approved payment and stops before merchant operations`() {
         writeIdentityEnv()
         val curlLog = root.resolve("smoke-curl.log")

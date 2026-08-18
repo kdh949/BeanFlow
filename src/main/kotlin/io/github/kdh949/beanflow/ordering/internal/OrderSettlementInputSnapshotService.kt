@@ -128,7 +128,7 @@ internal class OrderSettlementInputSnapshotService(
                 canonicalSnapshotHash = "",
                 createdAt = createdAt,
             )
-        val entity = withoutHash.withCanonicalHash(canonicalHash(withoutHash))
+        val entity = OrderSettlementInputSnapshotCanonicalizer.canonicalize(withoutHash)
         validate(entity)
         return entity
     }
@@ -277,7 +277,7 @@ internal class OrderSettlementInputSnapshotService(
         if (expectedNet < 0 || entity.netSettlementKrw != expectedNet) {
             tieOutFailure("NET", "Settlement net amount does not tie out")
         }
-        if (entity.canonicalSnapshotHash != canonicalHash(entity)) {
+        if (!OrderSettlementInputSnapshotCanonicalizer.matches(entity)) {
             tieOutFailure("HASH", "Settlement input snapshot hash does not match its immutable fields")
         }
     }
@@ -343,69 +343,6 @@ internal class OrderSettlementInputSnapshotService(
         }
         return sha256(canonical.toString())
     }
-
-    private fun canonicalHash(entity: OrderSettlementInputSnapshotEntity): String {
-        val canonical = CanonicalFields()
-        canonical.add(entity.snapshotSchemaVersion)
-        canonical.add(entity.orderId)
-        canonical.add(entity.storeId)
-        canonical.add(entity.storeSettlementTermsVersionId)
-        canonical.add(entity.storeSettlementTermsSourceReference)
-        canonical.add(entity.couponReservationId)
-        canonical.add(entity.couponCampaignId)
-        canonical.add(entity.couponCampaignVersion)
-        canonical.add(entity.couponCostBearer)
-        canonical.add(entity.couponPlatformShareBps)
-        canonical.add(entity.couponStoreShareBps)
-        canonical.add(entity.couponDiscountKrw)
-        canonical.add(entity.platformCouponCostKrw)
-        canonical.add(entity.couponCostKrw)
-        canonical.add(entity.pointReservationId)
-        canonical.add(entity.pointAllocationHash)
-        canonical.add(entity.pointsAppliedKrw)
-        canonical.add(entity.pointCostKrw)
-        canonical.add(entity.grossPaidKrw)
-        canonical.add(entity.feeBaseKrw)
-        canonical.add(entity.feeRateBps)
-        canonical.add(entity.feeKrw)
-        canonical.add(entity.benefitCostKrw)
-        canonical.add(entity.netSettlementKrw)
-        canonical.add(entity.currency)
-        canonical.add(entity.createdAt.epochSecond)
-        canonical.add(entity.createdAt.nano / 1_000)
-        return sha256(canonical.toString())
-    }
-
-    private fun OrderSettlementInputSnapshotEntity.withCanonicalHash(hash: String) =
-        OrderSettlementInputSnapshotEntity(
-            orderId,
-            storeId,
-            storeSettlementTermsVersionId,
-            storeSettlementTermsSourceReference,
-            couponReservationId,
-            couponCampaignId,
-            couponCampaignVersion,
-            couponCostBearer,
-            couponPlatformShareBps,
-            couponStoreShareBps,
-            couponDiscountKrw,
-            platformCouponCostKrw,
-            couponCostKrw,
-            pointReservationId,
-            pointAllocationHash,
-            pointsAppliedKrw,
-            pointCostKrw,
-            grossPaidKrw,
-            feeBaseKrw,
-            feeRateBps,
-            feeKrw,
-            benefitCostKrw,
-            netSettlementKrw,
-            currency,
-            snapshotSchemaVersion,
-            hash,
-            createdAt,
-        )
 
     private fun OrderSettlementInputSnapshotEntity.toSnapshot() =
         OrderSettlementInputSnapshot(
@@ -480,11 +417,6 @@ internal class OrderSettlementInputSnapshotService(
             tieOutFailure(reason, "Settlement input amount overflowed", failure)
         }
 
-    private fun sha256(value: String): String =
-        HexFormat
-            .of()
-            .formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
-
     private fun databaseInstant(value: Instant): Instant =
         ((value.nano.toLong() + 500) / 1_000).let { roundedMicros ->
             if (roundedMicros == 1_000_000L) {
@@ -541,20 +473,100 @@ internal class OrderSettlementInputSnapshotService(
         }
     }
 
-    private class CanonicalFields {
-        private val value = StringBuilder()
-
-        fun add(field: Any?) {
-            val text = field?.toString() ?: "<null>"
-            value.append(text.length).append(':').append(text)
-        }
-
-        override fun toString(): String = value.toString()
-    }
-
     private companion object {
         const val SNAPSHOT_SCHEMA_VERSION = 1
         val TEN_THOUSAND: BigInteger = BigInteger.valueOf(10_000)
         val HASH_PATTERN = Regex("^[0-9a-f]{64}$")
     }
 }
+
+/**
+ * Single canonical representation for settlement input snapshot persistence and integrity reads.
+ * Local bootstrap fixtures use this owner implementation instead of manufacturing a hash that only
+ * satisfies the database shape.
+ */
+internal object OrderSettlementInputSnapshotCanonicalizer {
+    fun canonicalize(entity: OrderSettlementInputSnapshotEntity): OrderSettlementInputSnapshotEntity =
+        entity.withCanonicalHash(canonicalHash(entity))
+
+    fun matches(entity: OrderSettlementInputSnapshotEntity): Boolean = entity.canonicalSnapshotHash == canonicalHash(entity)
+
+    private fun canonicalHash(entity: OrderSettlementInputSnapshotEntity): String {
+        val canonical = CanonicalFields()
+        canonical.add(entity.snapshotSchemaVersion)
+        canonical.add(entity.orderId)
+        canonical.add(entity.storeId)
+        canonical.add(entity.storeSettlementTermsVersionId)
+        canonical.add(entity.storeSettlementTermsSourceReference)
+        canonical.add(entity.couponReservationId)
+        canonical.add(entity.couponCampaignId)
+        canonical.add(entity.couponCampaignVersion)
+        canonical.add(entity.couponCostBearer)
+        canonical.add(entity.couponPlatformShareBps)
+        canonical.add(entity.couponStoreShareBps)
+        canonical.add(entity.couponDiscountKrw)
+        canonical.add(entity.platformCouponCostKrw)
+        canonical.add(entity.couponCostKrw)
+        canonical.add(entity.pointReservationId)
+        canonical.add(entity.pointAllocationHash)
+        canonical.add(entity.pointsAppliedKrw)
+        canonical.add(entity.pointCostKrw)
+        canonical.add(entity.grossPaidKrw)
+        canonical.add(entity.feeBaseKrw)
+        canonical.add(entity.feeRateBps)
+        canonical.add(entity.feeKrw)
+        canonical.add(entity.benefitCostKrw)
+        canonical.add(entity.netSettlementKrw)
+        canonical.add(entity.currency)
+        canonical.add(entity.createdAt.epochSecond)
+        canonical.add(entity.createdAt.nano / 1_000)
+        return sha256(canonical.toString())
+    }
+
+    private fun OrderSettlementInputSnapshotEntity.withCanonicalHash(hash: String) =
+        OrderSettlementInputSnapshotEntity(
+            orderId,
+            storeId,
+            storeSettlementTermsVersionId,
+            storeSettlementTermsSourceReference,
+            couponReservationId,
+            couponCampaignId,
+            couponCampaignVersion,
+            couponCostBearer,
+            couponPlatformShareBps,
+            couponStoreShareBps,
+            couponDiscountKrw,
+            platformCouponCostKrw,
+            couponCostKrw,
+            pointReservationId,
+            pointAllocationHash,
+            pointsAppliedKrw,
+            pointCostKrw,
+            grossPaidKrw,
+            feeBaseKrw,
+            feeRateBps,
+            feeKrw,
+            benefitCostKrw,
+            netSettlementKrw,
+            currency,
+            snapshotSchemaVersion,
+            hash,
+            createdAt,
+        )
+}
+
+private class CanonicalFields {
+    private val value = StringBuilder()
+
+    fun add(field: Any?) {
+        val text = field?.toString() ?: "<null>"
+        value.append(text.length).append(':').append(text)
+    }
+
+    override fun toString(): String = value.toString()
+}
+
+private fun sha256(value: String): String =
+    HexFormat
+        .of()
+        .formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))

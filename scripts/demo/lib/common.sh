@@ -45,6 +45,11 @@ ok()   { printf '\033[0;32m[ ok ]\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[0;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+same_resource_or_fail() {
+  local actual="$1" expected="$2" message="$3"
+  [ "$actual" = "$expected" ] || fail "$message"
+}
+
 require_cmd() {
   for cmd in "$@"; do
     command -v "$cmd" >/dev/null 2>&1 || fail "'$cmd' is required but not on PATH."

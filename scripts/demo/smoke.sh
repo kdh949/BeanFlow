@@ -154,7 +154,7 @@ ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']
 # Idempotency: the exact same key and payload must replay the stored response, not create a second order.
 call "exact replay is idempotent" 201 POST "/orders" "$CUSTOMER_AUTH" "$ORDER_BODY" "$ORDER_KEY"
 REPLAY_ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['orderId'])")"
-[ "$REPLAY_ORDER_ID" = "$ORDER_ID" ] || fail "Replay returned a different order: ${REPLAY_ORDER_ID}"
+same_resource_or_fail "$REPLAY_ORDER_ID" "$ORDER_ID" "Order replay returned a different resource."
 ok "replay returned the original order"
 
 CHANGED_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[],\"quantity\":2}],\"pointsToUseKrw\":0}"
@@ -250,7 +250,7 @@ while (( SECONDS < ACCRUAL_DEADLINE )); do
     FOUND) ACCRUAL_FOUND="yes"; break ;;
     INVALID) fail "Completion accrual ledger row had an unexpected type or amount." ;;
     MISSING) sleep 2 ;;
-    *) fail "Could not classify completion accrual for ${ORDER_ID}." ;;
+    *) fail "Could not classify the completion accrual." ;;
   esac
 done
 [ "$ACCRUAL_FOUND" = "yes" ] || fail "Timed out waiting for the completion accrual transaction."

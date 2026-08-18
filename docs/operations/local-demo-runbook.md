@@ -70,7 +70,8 @@ bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전
 live 주문과 분리된 immutable history다. seed는 현재 GLOBAL accrual policy와 settlement terms를 snapshot으로
 참조하므로, policy나 terms가 없을 때 임의 기본값을 만들지 않고 transaction 전체를 rollback한다.
 
-고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`다. API smoke의 고객
+고객 UI는 `start.sh`가 현재 checkout에 할당해 출력한 `frontend` URL의 `/app` 경로다. 매장 콘솔은
+같은 base URL의 `/store`, 운영 콘솔은 `/ops`다. 고정 포트를 가정하지 않는다. API smoke의 고객
 흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web은
 `/app/login`에서 같은 계정으로 로그인한다. 화면에는 token·UUID 입력이 없고 보호 route는 `GET /me`가
 200일 때만 열린다. 401은 로그인으로, 403은 다른 actor 안내로, 503은 인증 의존성 실패로 각각 표시되므로
