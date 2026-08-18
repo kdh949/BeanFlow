@@ -134,6 +134,59 @@ inventory만 비교한다.
 - Store board sorting/reconcile, ETag/304, visibility polling, 403/409, idempotency rotation, overflow cursor
 - Storybook loading/success/empty/error/permission/conflict/overflow/busy interaction와 a11y
 
+## Migration Assertion Inventory
+
+아래 표는 기준선의 39개 `*MigrationTest`에서 각 test method 안 assertion의 이동 여부를 고정한다.
+`혼합`은 같은 method 안에서도 schema 존재·최종 version assertion만 중앙으로 옮기고, 실제
+invalid write·upgrade 결과 assertion은 전용 시나리오에 남긴다는 뜻이다. 표에 없는 assertion은
+삭제하지 않는다.
+
+| 기존 test | 전용 유지 | 중앙 이동 | 중복 삭제 |
+|---|---|---|---|
+| `StoreCatalogQueryMigrationTest` | 고정 fixture의 전후 query plan | index 이름/정의 | 없음 |
+| `StoreSearchTermIndexMigrationTest` | seed가 비어 있음, vocabulary와 cascade 동작 | table/index/extension metadata, unique/check/FK invalid write | 최종 Flyway version |
+| `CustomerAccountMigrationTest` | 없음 | account/login table의 HMAC-only metadata와 invalid lifecycle write | V53 최종 version, 빈 unrelated table count |
+| `MerchantAccountMigrationTest` | 없음 | credential table/actor vocabulary metadata와 invalid lifecycle write | V54 적용 count |
+| `PointAccountQueryMigrationTest` | 고정 fixture의 전후 query plan | keyset index metadata | 없음 |
+| `PointAdjustmentMigrationTest` | V30→V31 backfill, corrupted provenance fail-closed | current adjustment source/idempotency invalid write와 index metadata | 없음 |
+| `PointLotIssuerMigrationTest` | verified/missing/invalid legacy mapping, startup fail-fast | fresh current not-null/FK metadata | fresh schema의 반복 존재 확인 |
+| `PointRecoveryMigrationTest` | legacy snapshot activation gate | current payment/loyalty constraint invalid write | fresh table/column 존재 확인 |
+| `MerchantBrandCommandMigrationTest` | permission/audit vocabulary seed 결과 | command replay unique/check와 retention index | V60 최종 version |
+| `MerchantStoreRegionCommandMigrationTest` | audit vocabulary seed 결과 | command replay unique/check와 region cursor index | V61 최종 version |
+| `StoreDiscoveryProfileMigrationTest` | V33→V34 population gate, startup fail-fast, spatial query plan | PostGIS/table/GiST metadata와 invalid geometry write | migration history 전체 목록 |
+| `StoreRegionCoverageMigrationTest` | 미할당 store 배포 gate와 empty deployment | current region not-null constraint | V62 최종 version |
+| `StoreSearchVocabularyMigrationTest` | V58 authoritative seed 내용과 재실행, vocabulary cascade | pg_trgm/table/index metadata와 brand/favorite invalid write | V57 최종 version |
+| `AuditRetentionPolicyMigrationTest` | V38→V39 classification, compatibility bridge, unknown action fail-closed | current audit immutability/constraint/index와 permission vocabulary | V39 적용 count |
+| `OrderCompensationMigrationTest` | V7/V8/V9/V21→V22 legacy fail-closed upgrade | fresh current compensation shape metadata | zero-row별 반복 schema 존재 확인 |
+| `OrdinaryPointAccrualPolicyMigrationTest` | V15→V16 legacy marking | current policy/snapshot/permission invalid write | 없음 |
+| `CustomerCancellationMigrationTest` | V22→V23 retention backfill | current cancellation/idempotency/recovery invalid write와 metadata | fresh schema 단순 존재 확인 |
+| `CustomerOrderQueryMigrationTest` | 고정 fixture의 전후 query plan | V55 keyset index metadata | 없음 |
+| `CustomerRecentStoreQueryMigrationTest` | 고정 fixture의 전후 query plan | V63 state index metadata | 없음 |
+| `FastReorderMigrationTest` | V35→V36 legacy/retention backfill와 missing completion gate | current option/idempotency/config invalid write | 없음 |
+| `OrderReferenceMigrationTest` | V49→V50→V51 window, restartable backfill, context gate와 fail-closed | current immutable identity metadata | migration inventory 순서와 column 존재 반복 확인 |
+| `SettlementInputMigrationTest` | legacy order activation gate | current exact-one trigger/index, fee tie-out와 immutable snapshot invalid write | 단순 table/column 존재 확인 |
+| `StoreOrderBoardMigrationTest` | 고정 fixture의 전후 query plan/write cost | V56 partial index metadata | 없음 |
+| `OneTimePaymentMigrationTest` | 없음 | current one-time binding와 immutability invalid write | V37→V38 clean migration 반복 |
+| `PartialRefundMigrationTest` | legacy refund without evidence fail-closed | current allocation/restoration metadata | empty legacy schema 존재 확인 |
+| `PaymentMethodMigrationTest` | verified legacy backfill와 missing/ambiguous binding fail-closed | current provider/default/terminal invalid write | 없음 |
+| `CouponBurdenMigrationTest` | active/inactive legacy campaign activation gate | current burden share invalid write | 없음 |
+| `SettlementFoundationMigrationTest` | publication/cancellation legacy activation gates | current cancellation evidence, batch/item invalid write와 metadata | 단순 table/column/index 존재 확인 |
+| `SettlementLifecycleMigrationTest` | pre-existing closed batch gate | current transition/adjustment/dispute invalid write | 없음 |
+| `AuthenticationFoundationMigrationTest` | permission vocabulary와 no implicit grant | Spring Session schema/index metadata | V52 적용 count |
+| `ProtectedSupportProfileMigrationTest` | startup migration history guard | current protected profile/rate-window invalid write와 PII-free metadata | migration history 전체 목록 |
+| `PostAcceptanceResolutionMigrationTest` | 없음 | current resolution/owner-step metadata와 lifecycle invalid write | successor 뒤 V46 적용 count |
+| `SupportActionRequestMigrationTest` | 없음 | current approval-lineage metadata와 separation/idempotency invalid write | 없음 |
+| `SupportCaseMigrationTest` | 없음 | current support case/history/idempotency invalid write | V39→V40 clean migration 반복 |
+| `SupportCompensationMigrationTest` | immutable policy/template seed 값 | current owner/action/rolling constraint invalid write와 metadata | successor 뒤 V47 적용 count |
+| `SupportOrderChangeMigrationTest` | 없음 | current execution authorization/history metadata와 invalid write | 없음 |
+| `SupportProfileChangeMigrationTest` | R4/S60 호환 vocabulary | current workflow/history/claim metadata와 invalid write | migration history 전체 목록 |
+| `SupportTimelineMigrationTest` | verification-scope vocabulary seed | timeline partial index metadata | 없음 |
+| `SupportVerificationMigrationTest` | 없음 | current verification/grant metadata와 binding/TTL invalid write | 없음 |
+
+중앙 목적지는 `FlywayMigrationSmokeTest`, payment·ordering, support·operations,
+discovery·settlement current-schema invariant 계약, 그리고 한 번만 실행되는 metadata inventory다.
+전용 유지 항목은 실제 이전 version 데이터를 요구하므로 class 전용 database를 계속 사용한다.
+
 ## Validation Commands
 
 각 backend PR:
