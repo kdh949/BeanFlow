@@ -37,12 +37,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationDecision as PublicOperationsDecision
 import io.github.kdh949.beanflow.support.internal.domain.OperationsInvestigationDecision as DomainOperationsDecision
@@ -1417,8 +1414,7 @@ internal class SupportActionRequestTransactionService(
             if (value.length !in 1..500 || value.any(Char::isISOControl)) invalid("Support action reason is invalid")
         }
 
-    private fun hash(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun hash(value: String): String = SupportSha256.utf8(value)
 
     private fun failureMessage(code: FailureCode): String =
         when (code) {
