@@ -7,38 +7,28 @@ import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../compone
 import { PageTitle } from "../../components/Shells";
 import { shortDateTime } from "../../lib/format";
 import { Button, ButtonLink, FeedbackState } from "../../design-system";
+import {
+  reconcileBoardItem,
+  storeOrderActionLabels as actionLabels,
+  storeOrderBoardColumns as columns,
+  storeOrderBoardLaneLabels as laneLabels,
+} from "./storeOrderBoardModel";
+import type {
+  StoreOrderAction as BoardAction,
+  StoreOrderBoard as Board,
+  StoreOrderBoardItem as BoardItem,
+  StoreOrderBoardLane as BoardLane,
+  StoreOrderBoardOverflow as BoardOverflow,
+  StoreOrderBoardOverflowPage as BoardOverflowPage,
+} from "./storeOrderBoardModel";
+
+export { reconcileBoardItem } from "./storeOrderBoardModel";
 
 type MerchantStore = components["schemas"]["MerchantStore"];
-type Board = components["schemas"]["StoreOrderBoard"];
-type BoardItem = components["schemas"]["StoreOrderBoardItem"];
-type BoardOverflow = components["schemas"]["StoreOrderBoardOverflow"];
-type BoardOverflowPage = components["schemas"]["StoreOrderBoardOverflowPage"];
-type BoardAction = components["schemas"]["StoreOrderAction"];
 type ExpectedStatus = components["schemas"]["StoreOrderActionRequest"]["expectedStatus"];
-type BoardLane = BoardOverflow["lane"];
 type OverflowPageState = Pick<BoardOverflowPage, "items" | "nextCursor">;
 
 const POLL_INTERVAL_MS = 3_000;
-const columns = [
-  { key: "acceptance", title: "접수 대기", description: "결제 완료 후 매장 확인 대기", lanes: ["PENDING_ACCEPTANCE"] },
-  { key: "preparing", title: "제조 중", description: "접수 완료 및 제조 진행", lanes: ["ACCEPTED", "PREPARING"] },
-  { key: "ready", title: "준비 완료", description: "고객 픽업 대기", lanes: ["READY"] },
-] as const;
-
-const actionLabels: Record<BoardAction, string> = {
-  ACCEPT: "주문 접수",
-  REJECT: "주문 거절",
-  START_PREPARING: "제조 시작",
-  MARK_READY: "준비 완료",
-  COMPLETE: "픽업 완료",
-};
-
-const laneLabels: Record<BoardLane, string> = {
-  PENDING_ACCEPTANCE: "접수 대기",
-  ACCEPTED: "접수 완료",
-  PREPARING: "제조 중",
-  READY: "준비 완료",
-};
 
 async function requestStores(): Promise<MerchantStore[]> {
   return unwrap(await merchantApi.GET("/merchant/me/stores"));
@@ -65,33 +55,6 @@ async function requestOverflow(storeId: string, lane: BoardLane, cursor: string)
   return unwrap(await merchantApi.GET("/stores/{storeId}/orders/overflow", {
     params: { path: { storeId }, query: { lane, cursor } },
   }));
-}
-
-function sortedBoard(groups: Board["groups"], overflow: Board["overflow"]): Board {
-  return {
-    groups: [...groups]
-      .map((group) => ({
-        ...group,
-        items: [...group.items].sort((left, right) =>
-          left.pickupWindowStart.localeCompare(right.pickupWindowStart) || left.orderReference.localeCompare(right.orderReference)),
-      }))
-      .filter((group) => group.items.length > 0)
-      .sort((left, right) => left.pickupBusinessDate.localeCompare(right.pickupBusinessDate)),
-    overflow,
-  };
-}
-
-export function reconcileBoardItem(board: Board, changed: BoardItem): Board {
-  const groups = board.groups.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => item.orderReference !== changed.orderReference),
-  }));
-  if (changed.lane) {
-    const existing = groups.find((group) => group.pickupBusinessDate === changed.pickupBusinessDate);
-    if (existing) existing.items.push(changed);
-    else groups.push({ pickupBusinessDate: changed.pickupBusinessDate, items: [changed] });
-  }
-  return sortedBoard(groups, board.overflow);
 }
 
 export function StoreOrderBoardPage() {
