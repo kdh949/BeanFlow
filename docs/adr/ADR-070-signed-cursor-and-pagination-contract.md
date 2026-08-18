@@ -115,6 +115,7 @@ beanflow:
 | `GET /stores/search` (`sort=distance`) | `(distanceMicrometers ASC, storeId ASC)` | 위와 동일 |
 | `GET /operations/brands` | `(normalizedName ASC, brandId ASC)` | endpoint |
 | `GET /regions` | `(fullName ASC, code ASC)` | endpoint와 정규화 질의어 |
+| `GET /me/coupons` | `(couponExpiresAt ASC, couponIssuanceId ASC)` | endpoint, authenticated customer ID, requested store ID |
 
 새 cursor endpoint는 sort tuple과 canonical filter list를 ADR-070 amendment 또는 새 pagination ADR에
 추가한 뒤 같은 codec을 사용한다. endpoint마다 별도 unsigned codec, pagination store 또는 arbitrary
@@ -168,6 +169,14 @@ common default 20에 Discovery maximum 50이다.
 
 `GET /operations/brands`는 endpoint identifier `operations-brands`, `GET /regions`는 `regions`를
 사용하고 expiry는 모두 24시간이다.
+
+**2026-08-18 Goal Stage 05 amendment.** `GET /me/coupons`는 endpoint identifier
+`customer-coupons`, `(couponExpiresAt ASC, couponIssuanceId ASC)` typed sort와 24시간 expiry를
+사용한다. filter hash의 canonical JSON property 순서는 `endpoint`, `customerId`, `storeId`로 고정하며,
+각 값은 endpoint identifier, authenticated customer ID, requested store ID다. 따라서 customer 또는
+requested store를 바꾼 cursor는 400이고, `limit`은 common cursor 규칙대로 payload에 넣지 않는다.
+`couponExpiresAt`은 issuance의 expiry이고 Campaign의 만료 시각이나 title을 cursor tuple 또는 filter에
+추가하지 않는다.
 
 **2026-08-15 Plan 70 nearby amendment.** `GET /stores/nearby`의 filter hash canonical form에
 `pickupAvailable`을 추가해 property 순서를 `endpoint`, `pickupAvailable`, canonical latitude,

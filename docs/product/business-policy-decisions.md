@@ -2196,20 +2196,27 @@
   store-scoped read projection으로 조회한다. `storeId`는 필수이고 cursor/limit은 목록 계약에 따라
   받는다. 이 endpoint는 Stage 05가 target OpenAPI, runtime OpenAPI, generated client와 UI를 함께
   구현하기 전에는 존재하는 API로 취급하지 않는다.
-- **Eligibility:** 결과 후보는 query 시점에 `AVAILABLE` 또는 `RESTORED` 상태이고 issuance와 Campaign이
-  active이며 만료되지 않은 항목뿐이다. `RESERVED`, `USED`, `EXPIRED` issuance는 customer history로
-  대신 반환하지 않는다. 고객이 아닌 actor 또는 다른 customer의 issuance는 403/404 차이를 통해
-  존재를 드러내지 않고 해당 actor의 목록에서 제외한다.
-- **Store/Brand Applicability:** 각 후보는 요청 `storeId`와 coupon의 store 또는 brand scope를 비교한다.
-  적용 가능하면 `applicable=true`와 reason 없음으로, 적용 불가하면 `applicable=false`와
+- **Eligibility:** 결과 후보는 query 시점에 현재 customer가 소유하고 `AVAILABLE` 또는 `RESTORED` 상태인
+  issuance뿐이다. 일반 issuance(예약 복원으로 `RESTORED`가 된 원 issuance 포함)는
+  `Campaign.active=true`와 issuance 자체의 미만료를 함께 요구한다. 복원 보상 issuance는
+  [ADR-043](../adr/ADR-043-compensation-coupon-terms-snapshot.md)의 완전한
+  issuance-owned immutable terms snapshot과 issuance 자체의 미만료를 요구하며, live `Campaign.active`를
+  조회하거나 요구하지 않는다. snapshot이 없거나 불완전한 보상 issuance를 일반 issuance처럼 처리하거나
+  live Campaign으로 보완하지 않으며, projection은 typed 5xx로 실패한다. Campaign의 만료 시각이나 title은
+  이 조회의 새 eligibility 또는 response 필드로 발명하지 않는다. `RESERVED`, `USED`, `EXPIRED` issuance는
+  customer history로 대신 반환하지 않는다. 고객이 아닌 actor 또는 다른 customer의 issuance는 403/404
+  차이를 통해 존재를 드러내지 않고 해당 actor의 목록에서 제외한다.
+- **Store Applicability:** 현재 Stage 05는 요청 `storeId`와 coupon의 store scope만 비교한다. 적용 가능하면
+  `applicable=true`와 reason 없음으로, 적용 불가하면 `applicable=false`와
   `reasonCode=STORE_NOT_APPLICABLE`로 반환한다. 적용 불가 항목을 조용히 빼지 않아 고객이 보유 사실과
-  매장 제한을 구분할 수 있게 한다. 이 query는 메뉴·cart나 주문금액을 받지 않으므로
+  매장 제한을 구분할 수 있게 한다. brand scope와 brand hierarchy의 매칭은 이 slice에서 해석하거나
+  구현하지 않고 별도 제품 결정을 기다린다. 이 query는 메뉴·cart나 주문금액을 받지 않으므로
   `minimumOrderKrw`는 정보로만 제공하고 `MINIMUM_ORDER_NOT_MET`를 만들지 않는다.
 - **Response Minimum:** contract는 coupon issuance 식별자, 표시 가능한 혜택 요약, `minimumOrderKrw`,
-  expiry, `applicable`과 그 reason code를 포함한다. Campaign 관리·한정 발급·발급 이력·사용/만료 history,
+  issuance `couponExpiresAt`, `applicable`과 그 reason code를 포함한다. Campaign 관리·한정 발급·발급 이력·사용/만료 history,
   선불 wallet balance는 이 endpoint와 Stage 05의 non-goal이다.
 - **Checkout Authority:** 조회·선택 결과는 quote나 예약이 아니다. `POST /orders`의 기존
-  `CouponReservationService`가 customer ownership, issuance state, expiry, store/brand scope, 실제
+  `CouponReservationService`가 customer ownership, issuance state, expiry, store scope, 실제
   minimum order, BR-08/BR-09의 계산·한 주문 한 coupon 및 concurrent consumption을 transaction 안에서
   최종 재검증한다. query 성공을 근거로 client가 할인을 확정하거나 coupon을 사용 처리해서는 안 된다.
 - **Failure Policy:** Projection 또는 Promotion dependency 실패는 typed 5xx(통상 503)로 종료하고 빈

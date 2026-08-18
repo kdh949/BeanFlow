@@ -73,11 +73,14 @@ transaction의 `CouponReservationService`가 최종 권한을 가진다. 조회 
 Stage 05 owns only the following read-and-select capability. It does not reopen Campaign administration,
 coupon issuance, wallet balance, or coupon history.
 
-1. The current customer may query only their own coupon issuances in `AVAILABLE` or `RESTORED` state.
-   The issuance and Campaign must be active and unexpired at the query instant.
-2. `storeId` is required. The response decides only current store/brand applicability. An applicable item has
+1. The current customer may query only their own coupon issuances in `AVAILABLE` or `RESTORED` state. A normal
+   issuance, including an original issuance restored after reservation, requires `Campaign.active=true` and an
+   unexpired issuance. A restored compensation issuance requires its complete immutable terms snapshot and an
+   unexpired issuance, not a live Campaign check; missing snapshot data is a typed failure and is never completed
+   from Campaign data. Campaign expiry or title is not invented for this query.
+2. `storeId` is required. The current slice decides only current store applicability. An applicable item has
    `applicable=true`; a non-applicable item has `applicable=false` and `reasonCode=STORE_NOT_APPLICABLE`.
-   The item remains visible instead of being silently omitted.
+   The item remains visible instead of being silently omitted. Brand-scope matching and brand hierarchy are deferred.
 3. `minimumOrderKrw` is informative. Since this query has no order amount, it does not emit an invented
    `MINIMUM_ORDER_NOT_MET` result. Order creation recalculates all conditions against the actual cart.
 4. `RESERVED`, `USED`, and `EXPIRED` records are not history items for this endpoint. Campaign management,
@@ -85,7 +88,7 @@ coupon issuance, wallet balance, or coupon history.
 5. A failed query is a typed failure (normally 503), not an empty list. The UI must distinguish loading,
    empty, and unavailable. No cache, fake, or stale coupon list may be substituted as success.
 6. The response is a read projection only. `POST /orders` remains the final authority for ownership, state,
-   expiry, store/brand scope, minimum order amount, the one-coupon rule, and concurrent consumption.
+   expiry, store scope, minimum order amount, the one-coupon rule, and concurrent consumption.
 
 The planned URI and response fields above are deliberately absent from current target/runtime OpenAPI. Stage 05
 must amend its owner ExecPlan, specify OpenAPI first, then add the runtime implementation and generated client

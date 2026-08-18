@@ -41,7 +41,10 @@ BeanFlow는 주문 가격 스냅샷, 예약 lease, 결제 멱등성과 `UNKNOWN`
   점주 frontend는 `/store` 아래 로그인·최초 비밀번호 변경·매장 주문보드·부분 환불·정산·이의제기를
   route로 가진다. 이 사실은 현재 source inventory이며 새로운 browser 실행 증거는 아니다.
 - 현재 core journey의 알려진 기능 공백은 customer coupon wallet query/selection이다. 이미 발급된 쿠폰의
-  actor-scoped read만 Goal Stage 05가 소유하며, Campaign 관리·발급·history와 wallet balance는 범위 밖이다.
+  actor-scoped read만 [Goal Stage 05 ExecPlan](core-journey-05-customer-coupon-wallet.md)이 소유한다.
+  plan status는 `ACTIVE`, backend/API slice의 `Implementation-Ready=true`, `Writes-Migration=false`다.
+  Storybook MCP가 unavailable인 동안 UI slice는 blocked다. 현재 slice는 store scope만 판단하고 brand scope는
+  defer하며, Campaign 관리·발급·history와 wallet balance는 범위 밖이다.
   주문 생성은 계속 coupon의 소유권·상태·만료·적용 조건·동시 소비를 최종 재검증한다.
 - 정식 여정, source evidence와 release 상태는 [Core User Journey Contract](../../product/core-user-journey.md)와
   [Core Journey Release Gate](../../quality/core-journey-release-gate.md)에 분리해 기록한다.
