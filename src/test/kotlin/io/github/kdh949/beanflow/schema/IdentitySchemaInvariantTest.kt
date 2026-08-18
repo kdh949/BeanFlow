@@ -1,10 +1,10 @@
-package io.github.kdh949.beanflow.identity.internal
+package io.github.kdh949.beanflow.schema
 
 import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
@@ -13,20 +13,68 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-internal class MerchantAccountMigrationTest : IsolatedPostgresSupport() {
-    companion object {
+internal class IdentitySchemaInvariantTest : IsolatedPostgresSupport() {
+    private val jdbc by lazy {
+        JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password))
     }
 
-    private val jdbc by lazy { JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)) }
-
-    @BeforeEach
-    fun migrateFromCleanDatabase() {
-        flyway(false).clean()
-        flyway().migrate()
+    @BeforeAll
+    fun migrateCurrentSchema() {
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .locations("classpath:db/migration")
+            .cleanDisabled(true)
+            .load()
+            .migrate()
     }
 
     @Test
-    fun `V54 creates merchant credential contracts and extends audit actor vocabulary`() {
+    fun `customer login attempt schema stores only HMAC scope material`() {
+        assertThat(
+            jdbc.queryForList(
+                """
+                SELECT table_name FROM information_schema.tables
+                 WHERE table_schema = 'public'
+                   AND table_name IN ('identity_customer_account', 'identity_login_attempt')
+                 ORDER BY table_name
+                """.trimIndent(),
+                String::class.java,
+            ),
+        ).containsExactly("identity_customer_account", "identity_login_attempt")
+        assertThat(
+            jdbc.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'identity_login_attempt'",
+                String::class.java,
+            ),
+        ).doesNotContain("login_id", "ip_address", "raw_value")
+    }
+
+    @Test
+    fun `customer account rejects invalid login lock and raw attempt shapes`() {
+        val now = Instant.parse("2026-08-13T00:00:00Z")
+        insertCustomer("valid.user", "ACTIVE", null, now)
+        assertThatThrownBy { insertCustomer("Invalid User", "ACTIVE", null, now) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy { insertCustomer("locked.user", "LOCKED", null, now) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            jdbc.update(
+                """
+                INSERT INTO identity_login_attempt
+                    (id, actor_type, scope_type, scope_hmac, window_start, failure_count, blocked_until, updated_at)
+                VALUES (?, 'CUSTOMER', 'LOGIN_ID', ?, ?, 5, NULL, ?)
+                """.trimIndent(),
+                UUID.randomUUID(),
+                "a".repeat(64),
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
+    fun `merchant credential schema extends only the accepted audit actor vocabulary`() {
         assertThat(
             jdbc.queryForList(
                 """
@@ -46,24 +94,14 @@ internal class MerchantAccountMigrationTest : IsolatedPostgresSupport() {
         )
         assertThat(
             jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '54'",
-                Int::class.java,
-            ),
-        ).isOne()
-        assertThat(
-            jdbc.queryForObject(
-                """
-                SELECT pg_get_constraintdef(oid)
-                  FROM pg_constraint
-                 WHERE conname = 'chk_audit_actor_type'
-                """.trimIndent(),
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_audit_actor_type'",
                 String::class.java,
             ),
         ).contains("MERCHANT").contains("STORE_OWNER").doesNotContain("MERCHANT_ADMIN")
     }
 
     @Test
-    fun `database rejects invalid merchant lifecycle and protects terminal command outcomes`() {
+    fun `merchant account rejects invalid lifecycle and protects terminal command outcomes`() {
         val now = Instant.parse("2026-08-13T00:00:00Z")
         val accountId = UUID.randomUUID()
         insertMerchant(accountId, "merchant.user", "INITIAL_PASSWORD", now.plusSeconds(86_400), null, now)
@@ -99,6 +137,29 @@ internal class MerchantAccountMigrationTest : IsolatedPostgresSupport() {
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
+    private fun insertCustomer(
+        loginId: String,
+        state: String,
+        lockedUntil: Instant?,
+        now: Instant,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_customer_account
+                (id, login_id, password_hash, credential_version, display_name, state,
+                 locked_until, created_at, updated_at, version)
+            VALUES (?, ?, ?, 0, 'Migration Test', ?, ?, ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            loginId,
+            "\$argon2id\$v=19\$m=19456,t=2,p=1\$fixture\$fixture",
+            state,
+            lockedUntil?.let(Timestamp::from),
+            Timestamp.from(now),
+            Timestamp.from(now),
+        )
+    }
+
     private fun insertMerchant(
         id: UUID,
         loginId: String,
@@ -125,11 +186,4 @@ internal class MerchantAccountMigrationTest : IsolatedPostgresSupport() {
             Timestamp.from(now),
         )
     }
-
-    private fun flyway(cleanDisabled: Boolean = true): Flyway =
-        Flyway
-            .configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .cleanDisabled(cleanDisabled)
-            .load()
 }
