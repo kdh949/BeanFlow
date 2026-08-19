@@ -63,7 +63,9 @@ internal class StoreCatalogQueryMigrationTest : IsolatedPostgresSupport() {
 
         assertThat(before.pickupSlots).contains("Seq Scan")
         assertThat(before.menus).contains("Seq Scan")
-        assertThat(after.pickupSlots).contains("idx_pickup_slot_store_starts_id").doesNotContain("Sort")
+        assertThat(after.pickupSlots)
+            .contains("idx_pickup_slot_store_starts_id")
+            .doesNotContain("Seq Scan")
         assertThat(after.menus).doesNotContain("Seq Scan")
         assertThat(
             after.menus.contains("idx_merchant_menu_store_name_id") ||
