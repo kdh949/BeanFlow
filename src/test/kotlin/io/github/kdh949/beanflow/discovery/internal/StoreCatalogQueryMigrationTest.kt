@@ -16,8 +16,10 @@ import java.util.UUID
  * The test does not force a plan. It captures the normal planner's before/after shape after
  * dropping/recreating precisely the V35 indexes, so a future index or SQL change cannot silently
  * turn the published catalogue bounds back into global scans or a global option join/sort. The
- * option result may use an incremental, per-menu sort because that work is bounded by the public
- * `LIMIT 5001`; it must remain an indexed nested-loop plan rather than scanning all options.
+ * menu result may use the ordered covering index or the store index followed by a store-bounded
+ * sort. The option result may use an incremental, per-menu sort because that work is bounded by
+ * the public `LIMIT 5001`; it must remain an indexed nested-loop plan rather than scanning all
+ * options.
  */
 internal class StoreCatalogQueryMigrationTest : IsolatedPostgresSupport() {
     companion object {
@@ -62,7 +64,12 @@ internal class StoreCatalogQueryMigrationTest : IsolatedPostgresSupport() {
         assertThat(before.pickupSlots).contains("Seq Scan")
         assertThat(before.menus).contains("Seq Scan")
         assertThat(after.pickupSlots).contains("idx_pickup_slot_store_starts_id").doesNotContain("Sort")
-        assertThat(after.menus).contains("idx_merchant_menu_store_name_id").doesNotContain("Sort")
+        assertThat(after.menus).doesNotContain("Seq Scan")
+        assertThat(
+            after.menus.contains("idx_merchant_menu_store_name_id") ||
+                after.menus.contains("idx_merchant_menu_store_id"),
+        ).withFailMessage("The menu plan must stay scoped by one of the V35 store indexes\n%s", after.menus)
+            .isTrue()
         assertThat(after.options)
             .contains("idx_merchant_menu_store_id")
             .contains("idx_merchant_menu_option_menu_name_id")
