@@ -182,6 +182,8 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: 동일 checkout 환경 baseline/head full-suite 시간과 Spring database/Hikari pool 수 비교
 - [x] 2026-08-19: 11개 shared Spring test를 JUnit random seed 11/29로 반복해 두 실행 모두 통과
 - [x] 2026-08-19: PR 1 최종 backend gate 통과, Draft PR #97 생성
+- [x] 2026-08-19: PR #97 remote shard 0의 settlement snapshot 시간 정밀도 실패 원인
+  확인과 PostgreSQL microsecond 반올림 회귀 수정
 - [ ] PR 2 migration assertion inventory와 중앙 검증
 - [ ] PR 3 docs/OpenAPI validator 단일화
 - [ ] PR 4 세 Support Application Service 분리
@@ -215,6 +217,18 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - 2026-08-19: `@BeanflowSharedDatabaseTest` annotation class 이름도 compiled `*Test.class` glob에 걸렸다.
   exact coverage verifier는 이름 예외 대신 annotation/interface/abstract class를 제외하고 concrete top-level
   test만 비교하도록 좁혔다.
+- 2026-08-19: PR #97 remote `test (0/6)`에서만 `LocalDemoSeedIntegrationTest`가
+  `Settlement input snapshot hash does not match its immutable fields`로 실패했다. `Clock.systemUTC()`는
+  nanosecond를 만들지만 PostgreSQL `timestamptz`와 JDBC는 microsecond로 반올림한다. 직접 seed 경로가
+  저장 전 시각을 정규화하지 않아 hash에 실린 값과 재조회 값이 nano 나머지에 따라 달라졌다.
+  canonicalizer가 PostgreSQL과 같은 microsecond 반올림을 먼저 적용하고 hash와 저장 entity가
+  같은 시각을 쓰도록 수정했다. 순수 회귀 테스트와 실패했던 seed 통합 테스트가 함께 통과했다.
+- 2026-08-19: 정밀도 수정 head의 full suite는 52분 3초에 1,356 tests 중 diff 밖의
+  `StoreCatalogQueryMigrationTest` 1건이 실패했다. 실패 plan은 global scan이 아니라
+  `idx_merchant_menu_store_id`로 대상 store의 1,000행만 읽었지만, 테스트가 다른 복합 index
+  이름과 `Sort` 부재를 정확히 강제했다. 같은 commit을 새 isolated DB에서 단독 재실행하면
+  21초에 통과했고, 기준선·초기 PR 1·PR 2·PR 3 full suite에서도 통과했다. 현재는
+  PR 1 회귀로 분류하지 않고 PR 2 planner 계약의 과도한 표현 고정 후보로 기록한다.
 
 ## Decision Log
 
@@ -229,7 +243,11 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 ## Outcomes & Retrospective
 
 PR 1은 [Draft PR #97](https://github.com/kdh949/BeanFlow/pull/97)로 제출했다. local full suite와
-backend/document gate는 통과했고 remote CI는 아직 pending이다. 나머지 PR URL, commit range,
+backend/document gate는 통과했다. 첫 remote CI의 shard 0은 PostgreSQL 시간 정밀도 불일치로
+실패했고, 승인된 정밀도 수정과 회귀 검증을 적용했다. 수정 head remote CI는 재실행 전이다.
+수정 head full suite의 정밀도 관련 테스트는 모두 통과했지만 기존 planner-shape test 1건이
+비결정적으로 실패한 후 단독 재실행은 통과했다. 따라서 PR 1은 Draft를 유지한다.
+나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
 

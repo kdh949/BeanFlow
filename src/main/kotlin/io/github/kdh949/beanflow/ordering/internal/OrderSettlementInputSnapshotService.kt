@@ -417,15 +417,6 @@ internal class OrderSettlementInputSnapshotService(
             tieOutFailure(reason, "Settlement input amount overflowed", failure)
         }
 
-    private fun databaseInstant(value: Instant): Instant =
-        ((value.nano.toLong() + 500) / 1_000).let { roundedMicros ->
-            if (roundedMicros == 1_000_000L) {
-                Instant.ofEpochSecond(value.epochSecond + 1)
-            } else {
-                Instant.ofEpochSecond(value.epochSecond, roundedMicros * 1_000)
-            }
-        }
-
     private fun metric(outcome: String) {
         meterRegistry.counter("beanflow.settlement.input.snapshot.count", "outcome", outcome).increment()
     }
@@ -486,12 +477,18 @@ internal class OrderSettlementInputSnapshotService(
  * satisfies the database shape.
  */
 internal object OrderSettlementInputSnapshotCanonicalizer {
-    fun canonicalize(entity: OrderSettlementInputSnapshotEntity): OrderSettlementInputSnapshotEntity =
-        entity.withCanonicalHash(canonicalHash(entity))
+    fun canonicalize(entity: OrderSettlementInputSnapshotEntity): OrderSettlementInputSnapshotEntity {
+        val createdAt = databaseInstant(entity.createdAt)
+        return entity.withCanonicalHash(canonicalHash(entity, createdAt), createdAt)
+    }
 
-    fun matches(entity: OrderSettlementInputSnapshotEntity): Boolean = entity.canonicalSnapshotHash == canonicalHash(entity)
+    fun matches(entity: OrderSettlementInputSnapshotEntity): Boolean =
+        entity.canonicalSnapshotHash == canonicalHash(entity, entity.createdAt)
 
-    private fun canonicalHash(entity: OrderSettlementInputSnapshotEntity): String {
+    private fun canonicalHash(
+        entity: OrderSettlementInputSnapshotEntity,
+        createdAt: Instant,
+    ): String {
         val canonical = CanonicalFields()
         canonical.add(entity.snapshotSchemaVersion)
         canonical.add(entity.orderId)
@@ -518,42 +515,53 @@ internal object OrderSettlementInputSnapshotCanonicalizer {
         canonical.add(entity.benefitCostKrw)
         canonical.add(entity.netSettlementKrw)
         canonical.add(entity.currency)
-        canonical.add(entity.createdAt.epochSecond)
-        canonical.add(entity.createdAt.nano / 1_000)
+        canonical.add(createdAt.epochSecond)
+        canonical.add(createdAt.nano / 1_000)
         return sha256(canonical.toString())
     }
 
-    private fun OrderSettlementInputSnapshotEntity.withCanonicalHash(hash: String) =
-        OrderSettlementInputSnapshotEntity(
-            orderId,
-            storeId,
-            storeSettlementTermsVersionId,
-            storeSettlementTermsSourceReference,
-            couponReservationId,
-            couponCampaignId,
-            couponCampaignVersion,
-            couponCostBearer,
-            couponPlatformShareBps,
-            couponStoreShareBps,
-            couponDiscountKrw,
-            platformCouponCostKrw,
-            couponCostKrw,
-            pointReservationId,
-            pointAllocationHash,
-            pointsAppliedKrw,
-            pointCostKrw,
-            grossPaidKrw,
-            feeBaseKrw,
-            feeRateBps,
-            feeKrw,
-            benefitCostKrw,
-            netSettlementKrw,
-            currency,
-            snapshotSchemaVersion,
-            hash,
-            createdAt,
-        )
+    private fun OrderSettlementInputSnapshotEntity.withCanonicalHash(
+        hash: String,
+        createdAt: Instant,
+    ) = OrderSettlementInputSnapshotEntity(
+        orderId,
+        storeId,
+        storeSettlementTermsVersionId,
+        storeSettlementTermsSourceReference,
+        couponReservationId,
+        couponCampaignId,
+        couponCampaignVersion,
+        couponCostBearer,
+        couponPlatformShareBps,
+        couponStoreShareBps,
+        couponDiscountKrw,
+        platformCouponCostKrw,
+        couponCostKrw,
+        pointReservationId,
+        pointAllocationHash,
+        pointsAppliedKrw,
+        pointCostKrw,
+        grossPaidKrw,
+        feeBaseKrw,
+        feeRateBps,
+        feeKrw,
+        benefitCostKrw,
+        netSettlementKrw,
+        currency,
+        snapshotSchemaVersion,
+        hash,
+        createdAt,
+    )
 }
+
+private fun databaseInstant(value: Instant): Instant =
+    ((value.nano.toLong() + 500) / 1_000).let { roundedMicros ->
+        if (roundedMicros == 1_000_000L) {
+            Instant.ofEpochSecond(value.epochSecond + 1)
+        } else {
+            Instant.ofEpochSecond(value.epochSecond, roundedMicros * 1_000)
+        }
+    }
 
 private class CanonicalFields {
     private val value = StringBuilder()
