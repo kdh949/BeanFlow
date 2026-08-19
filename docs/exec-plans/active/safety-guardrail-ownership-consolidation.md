@@ -143,7 +143,7 @@ invalid write·upgrade 결과 assertion은 전용 시나리오에 남긴다는 �
 
 | 기존 test | 전용 유지 | 중앙 이동 | 중복 삭제 |
 |---|---|---|---|
-| `StoreCatalogQueryMigrationTest` | 고정 fixture의 전후 query plan | index 이름/정의 | 없음 |
+| `StoreCatalogQueryMigrationTest` | 고정 fixture의 전후 store-scoped query plan | index 이름/정의 | 없음 |
 | `StoreSearchTermIndexMigrationTest` | seed가 비어 있음, vocabulary와 cascade 동작 | table/index/extension metadata, unique/check/FK invalid write | 최종 Flyway version |
 | `CustomerAccountMigrationTest` | 없음 | account/login table의 HMAC-only metadata와 invalid lifecycle write | V53 최종 version, 빈 unrelated table count |
 | `MerchantAccountMigrationTest` | 없음 | credential table/actor vocabulary metadata와 invalid lifecycle write | V54 적용 count |
@@ -284,6 +284,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   이름과 `Sort` 부재를 정확히 강제했다. 같은 commit을 새 isolated DB에서 단독 재실행하면
   21초에 통과했고, 기준선·초기 PR 1·PR 2·PR 3 full suite에서도 통과했다. 현재는
   PR 1 회귀로 분류하지 않고 PR 2 planner 계약의 과도한 표현 고정 후보로 기록한다.
+- 2026-08-19: PR 2에서 store catalog menu plan의 안전 계약을 "특정 복합 index와 Sort 부재"에서
+  "V35 store index로 대상 store 범위만 읽고 global sequential scan을 하지 않음"으로 바꾸었다.
+  정렬된 covering index와 store bitmap index 후 public bound 내 정렬은 둘 다 허용하되, index가 없는
+  전체 menu scan은 계속 실패한다.
 - 2026-08-19: 기준선 39개 migration class의 assertion을 모두 표로 추적한 뒤, 독립 upgrade/backfill과
   deployment gate 34개 class는 유지했다. 반복 clean migration만 소유하던 5개 class를 제거하고 fresh smoke,
   current metadata, payment/ordering, identity, support/operations, discovery/settlement의 6개 중앙 class로 옮겼다.
