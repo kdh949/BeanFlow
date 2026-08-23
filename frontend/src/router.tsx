@@ -26,6 +26,8 @@ import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
 import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
+import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
+import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
 
 export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
@@ -72,6 +74,17 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  { path: "/ops", element: <ConsoleShell kind="ops" />, children: [{ index: true, element: <OpsDashboardPage /> }, { path: "orders", element: <OpsOrderPage /> }] },
+  {
+    path: "/ops", element: <ConsoleShell kind="ops" />, children: [
+      { path: "auth/callback", element: <OperationsSessionGate callback /> },
+      {
+        element: <OperationsSessionGate />, children: [
+          { index: true, element: <OpsDashboardPage /> },
+          { path: "orders", element: <OpsOrderPage /> },
+          { path: "merchant-accounts", element: <MerchantAccountsPage /> },
+        ],
+      },
+    ],
+  },
   { path: "*", element: <NotFoundPage /> },
 ]);

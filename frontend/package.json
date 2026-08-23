@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@tosspayments/tosspayments-sdk": "^2.7.1",
+    "keycloak-js": "26.2.4",
     "lucide-react": "^1.31.0",
     "openapi-fetch": "^0.17.0",
     "react": "19.2.0",

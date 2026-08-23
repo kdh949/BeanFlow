@@ -570,6 +570,36 @@ code {
 .region-success { border: var(--bw-hair) solid var(--success-fg); background: var(--success-bg); }
 .region-success small { color: var(--success-fg); }
 
+.operations-login-state { max-width: 680px; }
+.merchant-account-lookup { padding: var(--sp-5); display: flex; align-items: flex-end; gap: var(--sp-4); }
+.lookup-fields { min-width: 0; flex: 1; display: grid; grid-template-columns: auto minmax(180px, .7fr) auto minmax(220px, 1fr); align-items: center; gap: var(--sp-3); }
+.lookup-fields label { color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.lookup-fields input, .account-create-grid input, .account-create-grid select { width: 100%; height: var(--control-h-lg); padding: 0 var(--sp-4); border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-control); background: var(--crema-50); color: var(--text-strong); font: inherit; }
+.lookup-fields input:focus, .account-create-grid input:focus, .account-create-grid select:focus { border-color: var(--caramel-400); outline: 0; box-shadow: var(--ring-focus); }
+.merchant-account-workspace { align-items: start; }
+.merchant-account-summary { min-width: 0; }
+.merchant-memberships { margin-top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
+.merchant-memberships h3 { font-size: var(--fs-body-sm); }
+.merchant-memberships > div { padding: var(--sp-3) 0; border-top: var(--bw-hair) solid var(--divider); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.merchant-memberships code { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--fs-caption); text-overflow: ellipsis; }
+.merchant-credential-actions { display: flex; flex-direction: column; gap: var(--sp-5); }
+.operation-heading { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.operation-heading > svg { flex: none; color: var(--caramel-600); }
+.operation-heading > div { display: flex; flex-direction: column; gap: var(--sp-1); }
+.operation-heading strong { color: var(--text-strong); }
+.operation-heading small { color: var(--text-muted); font-size: var(--fs-caption); }
+.operation-success { padding: var(--sp-4); border-radius: var(--r-sm); background: var(--success-bg); color: var(--success-fg); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.merchant-account-create { max-width: 820px; }
+.account-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.account-create-grid label { display: flex; flex-direction: column; gap: var(--sp-2); color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.one-time-password { padding: var(--sp-6); border-color: var(--warning-fg); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--sp-4); background: var(--warning-bg); }
+.one-time-password > svg { color: var(--warning-fg); }
+.one-time-password > div { display: flex; flex-direction: column; gap: var(--sp-2); }
+.one-time-password h2 { color: var(--text-strong); font-size: var(--fs-title-3); }
+.one-time-password p { color: var(--text-body); font-size: var(--fs-caption); }
+.one-time-password code { margin-top: var(--sp-2); padding: var(--sp-4); overflow-wrap: anywhere; border-radius: var(--r-sm); background: var(--surface-card); color: var(--text-strong); font-size: var(--fs-body-lg); font-weight: var(--fw-bold); }
+.one-time-password small { color: var(--warning-fg); font-size: var(--fs-caption); }
+
 .refund-lines { padding: var(--sp-7); }
 .refund-lines h2 { font-size: var(--fs-title-3); }
 .refund-lines ul { margin: var(--sp-5) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-5); }

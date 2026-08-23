@@ -8,16 +8,15 @@ import {
   ReceiptText,
   WalletCards,
   Search,
-  Settings,
   ShieldCheck,
   Store,
   UserRound,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
-import { authToken, useAuthToken } from "../auth/session";
+import { operationsAuth, useOperationsAuth } from "../auth/session";
 import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
-import { Button, ButtonLink } from "../design-system";
+import { ButtonLink } from "../design-system";
 
 export function CustomerShell() {
   return (
@@ -88,6 +87,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 조회", icon: Search },
+    { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound },
   ];
   const items = kind === "store" ? storeItems : opsItems;
   return (
@@ -109,7 +109,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
           <Link to="/app">
             <Coffee size={18} /> 고객 앱
           </Link>
-          <button type="button" onClick={kind === "store" ? () => void logOutOfStore() : authToken.clear}>
+          <button type="button" onClick={kind === "store" ? () => void logOutOfStore() : () => void operationsAuth.logOut()}>
             <LogOut size={18} /> 로그아웃
           </button>
           {kind === "store" && storeLogoutFailed ? (
@@ -127,36 +127,12 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
           </div>
           <div className="topbar-actions">
             {kind === "store" ? <MerchantAuthStatus /> : <AuthStatus />}
-            <button className="icon-action" type="button" aria-label="설정">
-              <Settings size={19} />
-            </button>
           </div>
         </header>
-        {kind === "store" ? null : <ConsoleTokenStrip />}
         <main className="console-content">
           <Outlet />
         </main>
       </section>
-    </div>
-  );
-}
-
-/**
- * Console-only credential entry. Customer screens authenticate with a Session
- * Cookie and must never expose a token field.
- */
-function ConsoleTokenStrip() {
-  const token = useAuthToken();
-  const [open, setOpen] = useState(false);
-  if (token && !open) return null;
-  return (
-    <div className="auth-strip">
-      <ShieldCheck size={17} />
-      <span>{token ? "인증 토큰이 연결되었습니다." : "API를 사용하려면 액세스 토큰을 연결하세요."}</span>
-      <button type="button" onClick={() => setOpen((value) => !value)}>
-        {open ? "닫기" : token ? "변경" : "연결"}
-      </button>
-      {open ? <TokenEditor onClose={() => setOpen(false)} /> : null}
     </div>
   );
 }
@@ -194,8 +170,10 @@ function useOwnerMembership(enabled: boolean): boolean {
 }
 
 function AuthStatus() {
-  const token = useAuthToken();
-  return <span className={`auth-status ${token ? "is-ready" : ""}`}>{token ? "인증됨" : "인증 필요"}</span>;
+  const auth = useOperationsAuth();
+  const ready = auth.status === "authenticated";
+  const label = ready ? "OIDC 인증됨" : auth.status === "unavailable" ? "인증 설정 오류" : "로그인 필요";
+  return <span className={`auth-status ${ready ? "is-ready" : ""}`}>{label}</span>;
 }
 
 /**
@@ -209,37 +187,6 @@ function MerchantAuthStatus() {
     <span className={`auth-status ${signedIn ? "is-ready" : ""}`}>
       {signedIn ? session.actor.displayName : "인증 필요"}
     </span>
-  );
-}
-
-function TokenEditor({ onClose }: { onClose: () => void }) {
-  const [value, setValue] = useState(authToken.get());
-  return (
-    <form
-      className="token-editor"
-      onSubmit={(event) => {
-        event.preventDefault();
-        authToken.set(value);
-        onClose();
-      }}
-    >
-      <label htmlFor="access-token">OIDC 액세스 토큰</label>
-      <textarea
-        id="access-token"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <div>
-        <Button variant="ghost" type="button" onClick={authToken.clear}>
-          지우기
-        </Button>
-        <Button type="submit">
-          연결
-        </Button>
-      </div>
-    </form>
   );
 }
 
