@@ -32,6 +32,8 @@
 | 브랜드 조회 (`/operations/brands`, `/operations/brands/{brandId}`) | No | No | No | Active `STORE_BRAND_MANAGE` grant | No |
 | 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
+| 매장 이미지 변경 (`/stores/{storeId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | No | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
+| 메뉴 이미지 변경 (`/stores/{storeId}/menus/{menuId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | ACTIVE assigned store (`STAFF`) + CSRF + Audit | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
 | 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 단건 조회 (`/stores/{storeId}`) | Customer Session | No | No | No | No |
 | 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
@@ -141,7 +143,8 @@ P0 운영 조회는 BR-39에 따라 `REPROCESSING_CASE_READ`, `SETTLEMENT_RECONC
 S10은 기존 9개와 Support/Operations/Privacy permission을 closed vocabulary로 등록했고 V42까지 현재
 43개 값이다. productization-20은 `MERCHANT_CREDENTIAL_MANAGE`를 추가하고 productization-100은
 `REPROCESSING_CASE_READ`, `SETTLEMENT_RECONCILIATION_READ`, `AUDIT_RECORD_READ`를 추가해 P0 목표를
-47개로 만든다. 새 값은 persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만,
+47개로 만들었다. 매장·메뉴 이미지 기능은 `STORE_MEDIA_MANAGE`를 추가해 48개로 확장한다. 새 값은
+persistent grant/revoke/regrant와 동일한 lock/Audit 경계를 사용하지만,
 role bundle이나 default grant로 배포되지 않는다. S20은 `SUPPORT_CASE_READ`, `SUPPORT_CASE_WRITE`, `SUPPORT_CASE_ASSIGN`를
 active grant와 Case assignment/version 조건으로 사용한다. S30은 `SUPPORT_SUBJECT_SEARCH`를 Tx1/rate guard와
 Vault 호출 뒤 Tx2에서 모두 확인한다. S40은 verification, reveal request/approval, BASIC/SENSITIVE reveal,

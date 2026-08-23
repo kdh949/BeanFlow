@@ -2189,6 +2189,58 @@
 
 ---
 
+## BR-48 매장·메뉴 이미지 저장과 노출
+
+- **Status:** Accepted for P0
+- **Display Contract:** 고객의 매장 검색·가까운 매장·즐겨찾기·최근 주문 매장·추천·매장 상세와
+  매장별 메뉴 목록은 현재 이미지가 있을 때만 `image: { url, expiresAt }`를 반환한다. URL은 비공개
+  AIStor bucket의 512×512 thumbnail에 대한 15분 presigned GET이다. 매장 검색의 `matchedMenus`에는
+  이미지 정보를 넣지 않는다. 이미지가 없는 매장은 frontend가 제품 placeholder를 표시하고, 이미지가
+  없는 메뉴는 이미지 영역을 표시하지 않는다. backend는 placeholder URL이나 빈 `image` 객체를 만들지
+  않고 필드를 생략한다.
+- **Write Authorization:** ACTIVE StoreMembership의 `OWNER`만 자기 매장 이미지를 PUT/DELETE할 수 있다.
+  메뉴 이미지는 같은 매장의 ACTIVE `OWNER | STAFF`가 PUT/DELETE할 수 있고, URL의 `storeId`와 실제
+  Menu의 `storeId`를 다시 비교한다. 점주 경로는 Merchant Session과 기존 CSRF를 요구한다. 운영자 경로는
+  `PLATFORM_OPERATOR`, active `STORE_MEDIA_MANAGE` grant와 trim 뒤 1..200자의 control-character 없는
+  `X-Access-Reason`을 요구한다. pointer 변경과 append-only AuditRecord는 한 transaction에 commit한다.
+- **Upload Boundary:** JPEG 또는 PNG만 허용하고 multipart file 한 개의 최대 크기는 5 MiB다. 선언
+  Content-Type과 magic bytes가 일치해야 하며 실제 decoder가 읽을 수 있어야 한다. 방향 보정 전 가로·세로는
+  각각 256px 이상, 4096px 이하이고 총 pixel은 16,777,216 이하로 제한한다. JPEG EXIF orientation을
+  적용하고 metadata를 제거해 원본 비율의 정규화 이미지와 중앙 crop 512×512 thumbnail을 생성한다.
+- **Storage:** 정규화 원본과 thumbnail은 AIStor Free 단일 노드의 비공개 bucket에 저장한다. 정규화
+  원본 SHA-256과 Store/Menu ID로 서버가 immutable object key를 만든다. client 파일명과 path를 key로
+  사용하지 않는다. 현재 pointer의 SHA-256이 같으면 DB version과 updatedAt을 바꾸거나 중복 Audit를
+  만들지 않고 기존 signed thumbnail을 반환한다.
+- **Persistence:** `merchant_store`와 `merchant_menu`는 각각 `image_original_key`,
+  `image_thumbnail_key`, `image_sha256`, `image_updated_at` nullable column을 가진다. 네 값은 모두 null이거나
+  모두 non-null이어야 한다. 이미지 row·upload command·복구 상태용 새 Aggregate 또는 table은 만들지 않는다.
+- **Transaction and Failure Policy:** 짧은 사전 인가/존재 확인 뒤 DB transaction 밖에서 검증·정규화와
+  두 객체 PUT을 수행한다. PUT 결과가 불명확하면 같은 immutable key를 HEAD로 한 번 확인하고, 확인할 수
+  없으면 pointer를 바꾸지 않은 채 503으로 실패한다. commit 직전 membership/grant와 대상 소속을 다시
+  검증하고 Store/Menu row를 잠근 뒤 pointer·Audit·이전 key 정리 event를 함께 저장한다. AIStor 실행 중
+  장애는 이미지 PUT과 발급된 이미지 URL의 직접 GET에만 드러내고 주문·결제·매장 텍스트 조회와 전체
+  readiness에는 전파하지 않는다. 설정·credential·bucket 검증 실패는 startup failure다.
+- **Cleanup:** 교체·삭제된 key는 기존 Spring Modulith persistent publication listener가 commit 후
+  삭제한다. 실패 publication은 기존 recovery 관측을 따르고, 현재 DB에서 참조되지 않은 storefront prefix
+  객체는 bounded periodic sweep이 보완한다. AIStor Free가 lifecycle transition과 replication을 제공하지
+  않는 제약을 별도 media 상태 머신으로 흉내 내지 않는다.
+- **Affected Contexts:** Merchant, Identity, Operations, Discovery, Customer Web, Merchant Console
+- **Affected Aggregates:** Store, Menu, StoreMembership, OperatorPermissionGrant, AuditRecord
+- **Required Tests:**
+  - JPEG/PNG 정상 처리, signature·Content-Type 불일치, 손상 파일과 5 MiB·dimension·pixel 상한
+  - EXIF orientation 보정, metadata 제거, 원본 비율과 512×512 중앙 crop
+  - Store OWNER/STAFF/타 매장, Menu OWNER/STAFF/타 매장과 실제 Menu 소속 재검증
+  - 운영자 role/grant/revocation/access reason과 Audit 저장 실패 rollback
+  - 동일 SHA replay의 DB version·Audit·PUT 불변과 동시 교체의 row-lock 수렴
+  - 비공개 bucket unsigned GET 거부, 15분 presigned GET과 PUT 불명확 결과의 단일 HEAD 확인
+  - 이미지 없음의 optional field 생략, 모든 매장 조회 surface와 메뉴 목록의 image 계약
+  - AIStor 중단 중 이미지 PUT 503, 주문·결제·매장 텍스트 조회와 readiness 정상 유지
+- **ADR Required:** Yes — [ADR-115](../adr/ADR-115-store-and-menu-image-storage.md)
+- **Revisit Conditions:** 이미지 편집 이력·다중 이미지·moderation, CDN/변환 서비스, HA·replication,
+  대용량 direct upload 또는 실제 media latency/비용이 별도 저장 모델을 요구할 때
+
+---
+
 ### BR-09 Amendment (2026-08-18) — 고객 보유 쿠폰 조회와 주문 적용 경계
 
 - **Status:** Accepted for Goal core journey Stage 05
@@ -2281,6 +2333,8 @@
 25. 점주 계정 발급·초기화는 `BR-46`의 최초 membership 원자 생성과 임시 비밀번호 1회 표시를 따른다.
 26. 고객 보유 쿠폰 조회는 `BR-09`의 2026-08-18 amendment를 따르며, 주문 적용은 계속 `BR-08`, `BR-09`와
     주문 transaction의 최종 재검증을 따른다.
+27. 매장·메뉴 이미지 업로드와 고객 노출은 `BR-48`을 따르며, 매장 탐색의 검색·추천 의미는
+    `BR-47`과 `BR-40`을 바꾸지 않는다.
 
 ---
 
@@ -2308,6 +2362,7 @@
 | 고객 일회성 결제창·callback·승인 | [ADR-080](../adr/ADR-080-toss-v2-one-time-payment-window.md) |
 | 감사 로그 | [ADR-022](../adr/ADR-022-audit-record.md) |
 | 매출 지표와 late event 재집계 | [ADR-023](../adr/ADR-023-analytics-refund-and-late-events.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md) |
+| 매장·메뉴 이미지 저장·인가·장애 격리 | [ADR-115](../adr/ADR-115-store-and-menu-image-storage.md) |
 
 ---
 
