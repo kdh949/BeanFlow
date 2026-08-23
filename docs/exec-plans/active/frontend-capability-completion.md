@@ -190,7 +190,8 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 
 - [x] 2026-08-23: 현재 라우트, 런타임 API, Storybook 등록·상태·a11y와 Accepted 인증 정책을 조사했다.
 - [x] 2026-08-23: Storybook MCP에서 기존 Button, FeedbackState, StatusBadge와 페이지 조합 규칙을 확인했다.
-- [ ] Storybook 결함과 문서 drift를 보정한다.
+- [x] 2026-08-23: Storybook 요청 격리, 누락 상태 Story와 정산 색 대비를 보정했다. 현황 문서 수치는
+  신규 기능 Story가 모두 등록된 뒤 최종값으로 갱신한다.
 - [ ] 고객 쿠폰·즐겨찾기 수직 슬라이스를 완성한다.
 - [ ] 점주 매장 지역 수직 슬라이스를 완성한다.
 - [ ] 운영자 OIDC·점주 계정 수직 슬라이스를 완성한다.
@@ -204,6 +205,9 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
   다수 operation은 검색→Case→본인확인→grant/reveal로 이어지는 하나의 업무 흐름이다.
 - 2026-08-23: 운영 화면을 실제 API와 연결하려면 기존 수동 토큰 편집기를 유지할 수 없고,
   Accepted BR-41/ADR-092의 Keycloak PKCE 선행 조건을 같은 수직 슬라이스에서 충족해야 한다.
+- 2026-08-23: macOS sandbox 안의 Chromium은 Mach port 등록 권한으로 Storybook MCP 테스트를
+  시작하지 못했다. 권한 허용된 동일 로컬 서버로 재실행한 뒤 27개 파일·115개 Story의 interaction과
+  a11y가 모두 통과했으며, 마지막 두 full run에는 MSW unhandled API 요청이 없었다.
 
 ## Decision Log
 

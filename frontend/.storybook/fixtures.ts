@@ -3,6 +3,7 @@ import type { components } from "../src/api/schema";
 
 type CompensationSummary = components["schemas"]["CompensationSummary"];
 type Refund = components["schemas"]["Refund"];
+type StoreOrderBoard = components["schemas"]["StoreOrderBoard"];
 
 export const ids = {
   store: "10000000-0000-4000-8000-000000000001",
@@ -114,7 +115,7 @@ export const compensationSucceeded: CompensationSummary = {
   steps: compensationManualReview.steps.map((step) => ({ ...step, state: "SUCCEEDED", lastErrorCode: undefined })),
 };
 
-export const boardOrder = {
+export const boardOrder: components["schemas"]["StoreOrderBoardItem"] = {
   orderReference: orderSummary.orderReference,
   pickupNumber: orderSummary.pickupNumber,
   pickupBusinessDate: "2026-08-15",
@@ -164,7 +165,9 @@ export function orderDetailHandlers(overrides: Record<string, unknown> = {}) {
   return [http.get("/api/v1/me/orders/:orderReference", () => HttpResponse.json({ ...orderDetail, ...overrides }))];
 }
 
-export function storeBoardHandlers(board = { groups: [{ pickupBusinessDate: "2026-08-15", items: [boardOrder] }], overflow: [] }) {
+export function storeBoardHandlers(
+  board: StoreOrderBoard = { groups: [{ pickupBusinessDate: "2026-08-15", items: [boardOrder] }], overflow: [] },
+) {
   return [
     http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([{ storeId: ids.store, storeName: "시청점", membershipRole: "OWNER" }])),
     http.get("/api/v1/stores/:storeId/orders", () => HttpResponse.json(board, { headers: { ETag: '"storybook-board-v1"' } })),

@@ -63,5 +63,5 @@ export const StoreGone: Story = {
 };
 
 export const Loading: Story = {
-  parameters: { msw: { handlers: [...signedInHandlers, pending("/api/v1/stores/:storeId")] } },
+  parameters: { msw: { handlers: [...signedInHandlers, ...catalogHandlers, pending("/api/v1/stores/:storeId")] } },
 };
