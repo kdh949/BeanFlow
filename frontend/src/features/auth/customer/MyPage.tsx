@@ -1,4 +1,4 @@
-import { LifeBuoy, LogOut, ReceiptText, Sparkles } from "lucide-react";
+import { Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketPercent } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ErrorState } from "../../../components/Ui";
@@ -29,7 +29,7 @@ export function CustomerMyPage() {
 
   return (
     <div className="customer-page my-page">
-      <PageTitle eyebrow="MY" title="내 정보" description="로그인한 계정과 주문·포인트 화면으로 이동할 수 있어요." />
+      <PageTitle eyebrow="MY" title="내 정보" description="로그인한 계정과 주문·혜택 화면으로 이동할 수 있어요." />
       <section className="surface-card my-identity">
         <strong>{session.actor.displayName}</strong>
         <span>고객 계정으로 로그인되어 있습니다.</span>
@@ -37,6 +37,8 @@ export function CustomerMyPage() {
       <nav className="my-links" aria-label="내 정보 바로가기">
         <Link className="surface-card my-link" to="/app/orders"><ReceiptText size={19} /><span>주문 내역</span></Link>
         <Link className="surface-card my-link" to="/app/points"><Sparkles size={19} /><span>포인트</span></Link>
+        <Link className="surface-card my-link" to="/app/coupons"><TicketPercent size={19} /><span>쿠폰</span></Link>
+        <Link className="surface-card my-link" to="/app/favorites"><Heart size={19} /><span>즐겨찾기 매장</span></Link>
         <Link className="surface-card my-link" to="/app/help"><LifeBuoy size={19} /><span>도움말</span></Link>
       </nav>
       {failure ? <ErrorState error={failure} /> : null}

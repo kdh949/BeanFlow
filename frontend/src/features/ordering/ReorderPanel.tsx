@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
 import { useResource } from "../shared/useResource";
 import { reorderFailure } from "./reorderFailures";
 import { Button } from "../../design-system";
+import { couponSelection, useCouponSelection } from "../customer/couponSelection";
 
 type PickupSlot = components["schemas"]["PickupSlot"];
 type Order = components["schemas"]["Order"];
@@ -28,6 +29,7 @@ export function ReorderPanel({ orderReference, storeId, storeName }: {
   const [failure, setFailure] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
   const intent = useRef(new SubmissionIntent());
+  const selectedCoupon = useCouponSelection(storeId);
 
   const loadSlots = useCallback(
     async () => unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId } } })).items,
@@ -37,7 +39,11 @@ export function ReorderPanel({ orderReference, storeId, storeName }: {
 
   async function reorder() {
     if (!selectedSlot) return;
-    const body = { pickupSlotId: selectedSlot, pointsToUseKrw: 0 };
+    const body = {
+      pickupSlotId: selectedSlot,
+      pointsToUseKrw: 0,
+      ...(selectedCoupon ? { couponIssuanceId: selectedCoupon.couponIssuanceId } : {}),
+    };
     setSubmitting(true);
     setFailure(null);
     try {
@@ -54,7 +60,11 @@ export function ReorderPanel({ orderReference, storeId, storeName }: {
       const created = unwrap(result);
       const order = created.order as Order;
       intent.current.complete();
-      navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.publicReference}`);
+      couponSelection.clear(storeId);
+      navigate(
+        order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.publicReference}`,
+        { state: { reorderPriceComparison: created.priceComparison } },
+      );
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === "IDEMPOTENCY_KEY_REUSED") intent.current.rotate();
       setFailure(error);
@@ -78,6 +88,7 @@ export function ReorderPanel({ orderReference, storeId, storeName }: {
     <section className="surface-card reorder-panel" aria-label="다시 주문">
       <strong>{storeName}에서 같은 메뉴로 주문할까요?</strong>
       <p>메뉴와 옵션은 지금 판매 중인 구성으로 다시 확인해요. 금액도 현재 가격으로 계산됩니다.</p>
+      {selectedCoupon ? <p className="inline-note">{selectedCoupon.label} 쿠폰도 주문할 때 다시 확인합니다.</p> : null}
 
       {slots.state.status === "loading" ? <LoadingState label="픽업 시간을 불러오는 중" /> : null}
       {slots.state.status === "failed" ? <ErrorState error={slots.state.error} retry={slots.reload} /> : null}

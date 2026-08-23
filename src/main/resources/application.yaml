@@ -98,3 +98,11 @@ beanflow:
     initial-delay-ms: 15000
   security:
     jwk-set-uri: ${BEANFLOW_JWK_SET_URI}
+  operations-oidc:
+    issuer-uri: ${BEANFLOW_OPERATIONS_OIDC_ISSUER_URI}
+    authorization-server-url: ${BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL}
+    realm: ${BEANFLOW_OPERATIONS_OIDC_REALM}
+    client-id: ${BEANFLOW_OPERATIONS_OIDC_CLIENT_ID}
+    redirect-uri: ${BEANFLOW_OPERATIONS_OIDC_REDIRECT_URI}
+    post-logout-redirect-uri: ${BEANFLOW_OPERATIONS_OIDC_POST_LOGOUT_REDIRECT_URI}
+    scopes: ${BEANFLOW_OPERATIONS_OIDC_SCOPES}

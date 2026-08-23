@@ -12,7 +12,10 @@ const storybookA11yTestMode =
 const preview: Preview = {
   decorators: [
     (Story, context) => {
-      const routing = context.parameters["routing"] as { initialEntry?: string; path?: string } | undefined;
+      const routing = context.parameters["routing"] as {
+        initialEntry?: string | { pathname: string; state?: unknown };
+        path?: string;
+      } | undefined;
       const router = createMemoryRouter(
         [{ path: routing?.path ?? "*", element: <Story /> }],
         { initialEntries: [routing?.initialEntry ?? "/"] },

@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/auth/operations/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get public Keycloak Authorization Code and PKCE configuration */
+        get: operations["getOperationsOidcConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/customer/csrf": {
         parameters: {
             query?: never;
@@ -4208,6 +4225,19 @@ export interface components {
         RuntimeOperatorCompensationView: {
             /** @description 운영자 전용 전체 환불·혜택·재고 복구 진행 정보입니다. */
             compensation: components["schemas"]["CompensationSummary"];
+        };
+        OperationsOidcConfiguration: {
+            /** Format: uri */
+            issuerUri: string;
+            /** Format: uri */
+            authorizationServerUrl: string;
+            realm: string;
+            clientId: string;
+            /** Format: uri */
+            redirectUri: string;
+            /** Format: uri */
+            postLogoutRedirectUri: string;
+            scopes: string[];
         };
         /**
          * @description 요청 바디의 특정 필드 하나에 대한 검증 실패 사유입니다.
@@ -10174,6 +10204,27 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getOperationsOidcConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validated public OIDC client configuration without secrets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsOidcConfiguration"];
+                };
+            };
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     issueCustomerCsrfToken: {
         parameters: {
             query?: never;

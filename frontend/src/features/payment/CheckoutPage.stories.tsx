@@ -26,6 +26,39 @@ export const PendingPayment: Story = {
   },
 };
 
+export const ReorderPriceChanged: Story = {
+  parameters: {
+    routing: {
+      path: "/app/checkout/:orderId",
+      initialEntry: {
+        pathname: `/app/checkout/${ids.order}`,
+        state: {
+          reorderPriceComparison: {
+            hasPriceChanges: true,
+            sourceSubtotalKrw: 12_000,
+            currentSubtotalKrw: 12_800,
+            subtotalDifferenceKrw: 800,
+            items: [{
+              sourceOrderLineId: "70000000-0000-4000-8000-000000000001",
+              lineSequence: 0,
+              menuId: ids.menu,
+              quantity: 2,
+              sourceUnitPriceKrw: 6_000,
+              currentUnitPriceKrw: 6_400,
+              sourceLineGrossKrw: 12_000,
+              currentLineGrossKrw: 12_800,
+              lineDifferenceKrw: 800,
+            }],
+          },
+        },
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("status", { name: "재주문 가격 변경" })).toHaveTextContent("₩800 인상");
+  },
+};
+
 export const RecoverableError: Story = {
   parameters: { msw: { handlers: [apiError("/api/v1/orders/:orderId")] } },
   play: async ({ canvas }) => {

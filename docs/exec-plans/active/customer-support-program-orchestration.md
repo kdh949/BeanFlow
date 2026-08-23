@@ -42,7 +42,7 @@ PR #63 remediation에서 final authorization 재검증과 V49 notification claim
   masked `POST /api/v1/support/searches`와 PII-free committed Audit를 구현했다. PR #53 review의 production Vault
   metadata 계약, response memory bound, DB-clock quota와 24시간 retention lifecycle도 focused/full/PostgreSQL/
   documentation validation을 통과했다. plan은 completed로 복귀했고 V41 writer lease는 release됐다.
-- ADR-083 Vault Transit crypto/index는 Accepted이고 ADR-090 frontend boundary는 Proposed다.
+- ADR-083 Vault Transit crypto/index와 ADR-090 기존 frontend `/support` boundary는 Accepted다.
 - S40 completed plan은 purpose-bound verification, field/time/count-bound Grant, Audit-gated owner reveal와 distinct
   break-glass lifecycle을 기록한다. V42 migration-writer lease는 full validation 뒤 release됐다.
 - S50 completed plan은 여덟 owner public query를 fixed-count로 조합하는 Case/Order timeline, action-bound verification과
@@ -89,7 +89,7 @@ path 노출, branch/PR/deployment 생성.
 
 ## Business Rules and Invariants
 
-SP-01~SP-18, ADR-081~089와 ADR-106의 Accepted decisions를 유지한다. Proposed ADR-090을 승인된 것으로 추정하지 않는다.
+SP-01~SP-18, ADR-081~090과 ADR-106의 Accepted decisions를 유지한다.
 Owner Context만 자신의 상태와 data를 변경하며 partial/unknown은 terminal success가 아니다.
 
 ## Architecture and Transaction Boundaries
@@ -179,7 +179,7 @@ response/page/error/security와 필요 시 cursor amendment를 만든다. Runtim
 | S100 | R0-R4 purpose-specific profile change | completed S60 approval plus completed S30 owner models | COMPLETED — V48/V49/32 runtime operations/941-test validation; lease released |
 | S110 | canonical DeliveryFulfillment, Provider inbox/reconciliation | completed relevant S80/S90/S100 owner contracts only | NOT READY — S100 external-courier owner input is complete, but Provider selection/raw-body auth and canonical Delivery module remain absent |
 | S120 | LegalHold and component deletion automation | completed owner retention ports from S20~S110 | legal review and backup replay procedure required |
-| S130 | Support Console | implemented server contracts needed by selected UX and Accepted ADR-090 | credential/CORS/CSRF/trust boundary open |
+| S130 | Support Console | implemented server contracts needed by selected UX and Accepted ADR-090 | existing frontend `/support`, Keycloak PKCE, non-persistent sensitive state |
 | S140 | integrated security/resilience/retention/UI/load evidence | completed implemented capability set | environment/fixture/release owner must be fixed |
 
 This table is not a canonical `Depends-On` graph for files that do not yet exist. Each detailed plan records only the

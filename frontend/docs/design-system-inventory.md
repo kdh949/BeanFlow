@@ -1,6 +1,6 @@
 # BeanFlow Frontend Design-System Inventory
 
-> Snapshot: 2026-08-15
+> Snapshot: 2026-08-23
 > Scope: `frontend/` editable source, current router, Storybook index, generated pre-baseline snapshot, CI gates
 > Canonicality: 이 문서는 inventory와 migration 상태를 기록한다. API source of truth는 typed TSX와
 > Storybook docs이며 `_ds_bundle.js`와 `_ds_manifest.json`은 근거 자료일 뿐이다.
@@ -76,27 +76,38 @@ typed owner가 없는 selector family를 추가하면 `check:design`의 `orphan-
 
 ## 6. Route and state coverage
 
-Router의 14개 실제 path/index entry와 두 layout component는 17개 story 파일에서 직접 열 수 있다.
+Router의 39개 path/index/layout entry에 연결된 35개 element component는 같은 source를 사용하는
+35개 CSF story 파일에서 직접 열 수 있다. 인증 gate와 shell도 별도 Pattern/Page story로 검증한다.
 
 | Route | Component | Direct story states |
 |---|---|---|
-| `/` | `RootRedirect` | role choice, customer/store/operations chrome |
-| `/app` | `CustomerHomePage` | success, location-required, empty, recoverable error, loading |
-| `/app/stores/:storeId` | `StoreCatalogPage` | menu/slot success, empty, recoverable error, loading |
-| `/app/checkout/:orderId` | `CheckoutPage` | pending payment, recoverable error, loading |
-| `/app/payments/:paymentId/success` | `PaymentSuccessPage` | approved, unknown/reconciling, dependency error |
-| `/app/payments/:paymentId/fail` | `PaymentFailPage` | retryable failure, manual review |
-| `/app/orders` | `CustomerOrdersPage` | active, past, empty, recoverable error, loading |
-| `/app/orders/:orderReference` | `CustomerOrderDetailPage` | ready, recovery pending, cancelled, permission failure |
-| `/app/help` | `CustomerHelpPage` | safe support guidance |
-| `/store` | `StoreOrderBoardPage` | active, empty, permission failure |
+| `/` | `RootRedirect` | role choice, customer/store/operations/support chrome |
+| `/app/login`, `/app/signup` | `CustomerLoginPage`, `CustomerSignupPage` | success, rejected credentials, account lock, rate limit |
+| `/app` | `CustomerHomePage` | active order, empty, recommendation unavailable, loading |
+| `/app/stores` | `StoreSearchPage` | results, empty, permission denied, unavailable, loading |
+| `/app/stores/:storeId` | `StoreDetailPage` | menu/slot success, closed, unavailable, loading, favorite action |
+| `/app/cart` | `CartPage` | items, empty/corrupt, stock and price conflict |
+| `/app/checkout/:orderId` | `CheckoutPage` | pending payment, reorder price change, unavailable, loading |
+| `/app/payments/:paymentId/success`, `/fail` | `PaymentSuccessPage`, `PaymentFailPage` | approved, declined, unknown/reconciling, manual review, dependency error |
+| `/app/orders`, `/app/orders/:orderReference` | `CustomerOrdersPage`, `CustomerOrderDetailPage` | active/past/empty and all order/reorder transition states |
+| `/app/points` | `CustomerPointsPage` | balance, zero balance, integrity failure |
+| `/app/coupons` | `CouponWalletPage` | applicable/unavailable, empty, store selection, loading/error |
+| `/app/favorites` | `FavoriteStoresPage` | saved, empty, unavailable, loading |
+| `/app/me`, `/app/help` | `CustomerMyPage`, `CustomerHelpPage` | signed-in links, safe support guidance |
+| `/store/login`, `/store/password` | merchant auth pages | sign-in, initial password, rejected credentials/password |
+| `/store` | `StoreOrderBoardPage` | multi-store, overflow, transitions, 409 refresh, empty/permission failure |
+| `/store/refunds/:storeId/:orderReference` | `StoreRefundPage` | selectable/server amount, stale preview, provider unknown, empty/unavailable |
+| `/store/settlements`, `/store/disputes` | settlement/dispute pages | success, empty, owner boundary, filtered/error, dispute entry |
+| `/store/region` | `StoreRegionPage` | search, no result, assignment success/conflict, unavailable, owner boundary |
 | `/ops` | `OpsDashboardPage` | current dashboard |
-| `/ops/refunds` | `OpsRefundPage` | full/partial form, success, unknown, recoverable error, loading |
 | `/ops/orders` | `OpsOrderPage` | idle, success, loading, recoverable error, manual review |
+| `/ops/merchant-accounts` | `MerchantAccountsPage` | exact lookup, create/one-time password, unlock, conflict, not found/unavailable |
+| `/ops/policies` | `OperationsPolicyPage` | point/restoration policies, brand catalog, conflict, complete/partial/in-progress index |
+| `/support` | `SupportWorkspacePage` | masked search, Case/timeline, verified grant/reveal, locked/terminal/rate limit |
 | `*` | `NotFoundPage` | unknown route |
 
 The customer and console layout components are additionally covered by the `RoleChoice` Docs entry. Async page
-stories use deterministic MSW fixtures. Eight Autodocs files with multiple MSW states render each story in its own
+stories use deterministic MSW fixtures. Twenty-five Autodocs files with multiple MSW states render each story in its own
 iframe so one story's handler cannot overwrite another. Operations submit-result stories use static result presenters
 in Docs and keep their real form submissions in `!autodocs` interaction stories, avoiding concurrent input races.
 
@@ -104,14 +115,14 @@ in Docs and keep their real form submissions in `!autodocs` interaction stories,
 
 | Surface | Current result |
 |---|---:|
-| CSF story files | 17 |
-| Stories | 62 |
-| Static Docs entries | 19 |
-| Multi-state MSW Docs | 8 |
-| Browser-asserted stateful Docs | 10 |
-| Browser-asserted Docs state surfaces | 40 |
-| Router element components checked by guard | 16 |
-| MCP component/page entries | 17 |
+| CSF story files | 35 |
+| Stories | 156 |
+| Static Docs entries | 37 |
+| Multi-state MSW Docs | 25 |
+| Browser-asserted stateful Docs | 14 |
+| Browser-asserted Docs state surfaces | 49 |
+| Router element components checked by guard | 35 |
+| MCP component/page entries | 35 |
 | MCP foundation docs | `Foundations/Overview` |
 
 `Explorations/Workflow`은 static Storybook에서 template로 볼 수 있지만 `tags: ['!manifest']`로 MCP
@@ -125,8 +136,8 @@ component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `
 - `_ds_bundle.js`와 `_ds_manifest.json`은 여전히 historical migration input이다. Product import는 guard가 막는다.
 - formerly blocked unsafe request 세 곳은 actor별 CSRF helper로 header를 보낸다. `npm run typecheck`은
   이제 오류 없이 통과하며, 알려진 오류를 허용하는 baseline은 없다.
-- 브라우저 `Headers`는 한글 `X-Access-Reason` 값을 전송 전에 거부한다. Operations 통합 plan은 입력
-  표현과 wire encoding을 명시적으로 결정해야 하며, story는 현재 전송 가능한 ASCII 사유를 사용한다.
+- 브라우저 `Headers`는 한글 `X-Access-Reason` 값을 전송 전에 거부한다. Operations와 Support 화면은
+  한글 레이블에 대응하는 고정 ASCII 업무 코드를 전송하며 자유 입력 PII를 header에 넣지 않는다.
 - visual regression은 approved baseline과 credential이 없어 `Not configured`다.
 
 ## 9. Executable guardrails
@@ -137,18 +148,17 @@ component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `
 | `test:unit` | shared utilities와 product component behavior |
 | `test:storybook:ci` | every CSF interaction and a11y `error` in Chromium |
 | `build-storybook` | manager/preview/static asset compilation |
-| `test:storybook:docs` | all 19 Docs render; 10 stateful Docs의 40 state surfaces show their own marker |
+| `test:storybook:docs` | all 37 Docs render; 14 stateful Docs의 49 state surfaces show their own marker |
 | `typecheck` | generated runtime schema와 TypeScript 오류 0건 |
 | CI | install, adherence, typecheck, unit, Storybook browser/a11y, static build, Docs smoke |
 
-새 production dependency는 추가하지 않았다. TypeScript AST, Playwright, Storybook, MSW는 기존 lockfile의
-dependency를 사용한다.
+운영자·Support OIDC에는 Keycloak 공식 browser adapter인 `keycloak-js` 26.2.4를 고정 버전으로 추가했다.
+TypeScript AST, Playwright, Storybook, MSW는 기존 lockfile의 dependency를 사용한다.
 
 ## 10. Next migration slices
 
-1. Plan 80에서 customer Session/CSRF client와 customer P0 forms를 연결하며 실제 반복 control부터 typed
-   component로 승격한다.
-2. Plan 90에서 merchant refund/settlement UI와 UUID form을 교체하고 `X-Access-Reason` browser wire
-   표현을 결정한다.
+1. route-local form control이 둘 이상의 독립 화면에서 같은 validation·error contract를 공유하게 되면
+   typed design-system control로 승격한다.
+2. 현재 조회 계약이 없는 매장 지역 지정값은 서버 API가 추가될 때 추정이나 브라우저 저장 없이 연결한다.
 3. 중복 layout debt를 정리하고 사람이 critical page baseline을 승인한 뒤 Chromatic 또는 repository-owned
    screenshot assertion 중 하나를 별도 결정으로 활성화한다.

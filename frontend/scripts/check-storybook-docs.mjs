@@ -33,6 +33,19 @@ const expectedDocs = new Set([
   "pages-customer-points--docs",
   "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
+  "patterns-store-session-gate--docs",
+  "pages-store-sign-in--docs",
+  "pages-store-item-refund--docs",
+  "pages-store-settlements--docs",
+  "pages-store-disputes--docs",
+  "pages-store-region--docs",
+  "patterns-customer-favorite-store-action--docs",
+  "pages-customer-coupon-wallet--docs",
+  "pages-customer-favorite-stores--docs",
+  "pages-operations-authentication--docs",
+  "pages-operations-merchant-accounts--docs",
+  "pages-operations-policy-management--docs",
+  "pages-support-workspace--docs",
 ]);
 
 const statefulDocs = {

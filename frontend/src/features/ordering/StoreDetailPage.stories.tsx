@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, catalogHandlers, ids, pending, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
+import { apiError, catalogHandlers, favoriteHandlers, ids, pending, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { StoreDetailPage } from "./StoreDetailPage";
 
 const meta = {
@@ -24,7 +24,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Orderable: Story = {
-  parameters: { msw: { handlers: [...signedInHandlers, ...storeIdentityHandlers, ...catalogHandlers] } },
+  parameters: { msw: { handlers: [...signedInHandlers, ...storeIdentityHandlers, ...catalogHandlers, ...favoriteHandlers] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("heading", { name: "시청점" })).toBeVisible();
     await expect(await canvas.findByRole("button", { name: /오늘의 필터 커피/ })).toBeDisabled();
@@ -37,6 +37,7 @@ export const PickupClosed: Story = {
       handlers: [
         ...signedInHandlers,
         ...storeIdentityHandlers,
+        ...favoriteHandlers,
         http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [] })),
         http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [] })),
       ],
@@ -54,6 +55,7 @@ export const StoreGone: Story = {
         ...signedInHandlers,
         apiError("/api/v1/stores/:storeId", 404, "RESOURCE_NOT_FOUND", "Store is not available"),
         ...catalogHandlers,
+        ...favoriteHandlers,
       ],
     },
   },
@@ -63,5 +65,5 @@ export const StoreGone: Story = {
 };
 
 export const Loading: Story = {
-  parameters: { msw: { handlers: [...signedInHandlers, pending("/api/v1/stores/:storeId")] } },
+  parameters: { msw: { handlers: [...signedInHandlers, ...catalogHandlers, ...favoriteHandlers, pending("/api/v1/stores/:storeId")] } },
 };

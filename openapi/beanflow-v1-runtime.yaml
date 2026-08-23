@@ -83,6 +83,8 @@ x-tagGroups:
   - name: 운영자·내부 API
     tags: [Operations, Support]
 paths:
+  /auth/operations/config:
+    $ref: "./beanflow-v1.yaml#/paths/~1auth~1operations~1config"
   /auth/customer/csrf:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1customer~1csrf"
   /auth/customer/registrations:

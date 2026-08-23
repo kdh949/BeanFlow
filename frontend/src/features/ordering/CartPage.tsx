@@ -9,6 +9,7 @@ import { PageTitle } from "../../components/Shells";
 import { won } from "../../lib/format";
 import { useResource } from "../shared/useResource";
 import { Button, ButtonLink } from "../../design-system";
+import { couponSelection, useCouponSelection } from "../customer/couponSelection";
 import { useStore } from "../discovery/useStore";
 import { type CartLine, cart, cartDisplayTotalKrw, useCart } from "./cart";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "./orderConflicts";
@@ -67,6 +68,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
   // read leaves the saved name in place rather than blocking the order.
   const store = useStore(storeId);
   const storeName = store.state.status === "ready" ? store.state.value.name : savedStoreName;
+  const selectedCoupon = useCouponSelection(storeId);
 
   const loadSlots = useCallback(
     async () => unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId } } })).items,
@@ -81,6 +83,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
       pickupSlotId: selectedSlot,
       lines: lines.map((line) => ({ menuId: line.menuId, optionIds: line.optionIds, quantity: line.quantity })),
       pointsToUseKrw: 0,
+      ...(selectedCoupon ? { couponIssuanceId: selectedCoupon.couponIssuanceId } : {}),
     };
     setSubmitting(true);
     setFailure(null);
@@ -97,6 +100,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
       const order = unwrap(result).order as Order;
       orderIntent.current.complete();
       cart.clear();
+      couponSelection.clear(storeId);
       navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.publicReference}`);
     } catch (error) {
       if (shouldRotateIdempotencyKey(error)) orderIntent.current.rotate();
@@ -166,6 +170,18 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section className="surface-card cart-benefit" aria-label="선택한 쿠폰">
+        <div>
+          <span>쿠폰</span>
+          <strong>{selectedCoupon ? selectedCoupon.label : "선택하지 않음"}</strong>
+        </div>
+        {selectedCoupon ? (
+          <Button variant="ghost" onClick={() => couponSelection.clear(storeId)}>선택 해제</Button>
+        ) : (
+          <ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 보기</ButtonLink>
+        )}
       </section>
 
       {guidance ? (

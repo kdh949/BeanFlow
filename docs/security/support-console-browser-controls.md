@@ -1,7 +1,7 @@
 # Proposed Support Console Browser Controls
 
 Support Console은 최종 제품 범위지만 별도 app, 기존 React/TypeScript/Vite app 통합, server-rendered UI 중
-frontend/trust/deployment boundary는 ADR-090에서 Proposed다. 아래 통제는 어느 대안에서도 필요한
+frontend/trust/deployment boundary는 ADR-090에서 기존 frontend의 격리 `/support` route로 Accepted됐다. 아래 통제는
 baseline이며 browser credential, token storage, CORS, CSRF와 origin이 승인됐다는 뜻이 아니다.
 Server authorization remains authoritative.
 

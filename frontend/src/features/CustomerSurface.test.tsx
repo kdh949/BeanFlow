@@ -46,7 +46,14 @@ afterEach(() => {
 });
 
 describe("customer surface has no manual credential or identifier input", () => {
-  const files = sourceFiles("src/features");
+  const files = [
+    "src/features/auth/customer",
+    "src/features/customer",
+    "src/features/discovery",
+    "src/features/loyalty",
+    "src/features/ordering",
+    "src/features/payment",
+  ].flatMap(sourceFiles);
 
   it("never imports the console Bearer token store", () => {
     const offenders = files.filter((file) => /auth\/session"|consoleClient"/.test(readFileSync(file, "utf8")));
