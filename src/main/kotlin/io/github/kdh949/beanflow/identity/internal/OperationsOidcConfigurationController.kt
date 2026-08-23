@@ -2,7 +2,6 @@ package io.github.kdh949.beanflow.identity.internal
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.context.annotation.Configuration
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -60,10 +59,6 @@ internal data class OperationsOidcConfigurationProperties(
         Triple(uri.scheme.lowercase(), uri.host.lowercase(), uri.port)
 }
 
-@Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(OperationsOidcConfigurationProperties::class)
-internal class OperationsOidcConfigurationBinding
-
 internal data class OperationsOidcConfigurationResponse(
     val issuerUri: String,
     val authorizationServerUrl: String,
@@ -76,6 +71,7 @@ internal data class OperationsOidcConfigurationResponse(
 
 @RestController
 @RequestMapping("/api/v1/auth/operations/config")
+@EnableConfigurationProperties(OperationsOidcConfigurationProperties::class)
 internal class OperationsOidcConfigurationController(
     private val properties: OperationsOidcConfigurationProperties,
 ) {
