@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Coffee,
+  Headset,
   Home,
   LogOut,
   PackageCheck,
@@ -57,7 +58,7 @@ export function CustomerShell() {
 }
 
 type ConsoleShellProps = {
-  kind: "store" | "ops";
+  kind: "store" | "ops" | "support";
 };
 
 export function ConsoleShell({ kind }: ConsoleShellProps) {
@@ -89,15 +90,22 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
     { to: "/ops/orders", label: "주문 조회", icon: Search },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound },
   ];
-  const items = kind === "store" ? storeItems : opsItems;
+  const supportItems = [
+    { to: "/support", label: "고객지원", icon: Headset, end: true },
+  ];
+  const items = kind === "store" ? storeItems : kind === "support" ? supportItems : opsItems;
+  const basePath = kind === "store" ? "/store" : kind === "support" ? "/support" : "/ops";
+  const contextLabel = kind === "store" ? "STORE CONSOLE" : kind === "support" ? "SUPPORT CONSOLE" : "OPS CONSOLE";
+  const navigationLabel = kind === "store" ? "매장 콘솔" : kind === "support" ? "고객지원 콘솔" : "운영 콘솔";
+  const topbarLabel = kind === "store" ? "매장 운영" : kind === "support" ? "고객지원" : "플랫폼 운영";
   return (
     <div className="console-layout">
       <aside className="console-sidebar">
-        <Link to={kind === "store" ? "/store" : "/ops"}>
+        <Link to={basePath}>
           <img src="/brand/logo-full.png" alt="BeanFlow" className="sidebar-logo" />
         </Link>
-        <p className="sidebar-context">{kind === "store" ? "STORE CONSOLE" : "OPS CONSOLE"}</p>
-        <nav aria-label={kind === "store" ? "매장 콘솔" : "운영 콘솔"}>
+        <p className="sidebar-context">{contextLabel}</p>
+        <nav aria-label={navigationLabel}>
           {items.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end}>
               <Icon size={19} />
@@ -123,7 +131,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
         <header className="console-topbar">
           <div>
             <span className="eyebrow">BEANFLOW</span>
-            <strong>{kind === "store" ? "매장 운영" : "플랫폼 운영"}</strong>
+            <strong>{topbarLabel}</strong>
           </div>
           <div className="topbar-actions">
             {kind === "store" ? <MerchantAuthStatus /> : <AuthStatus />}
@@ -218,6 +226,7 @@ export function RootRedirect() {
         <ButtonLink to="/app">고객 앱</ButtonLink>
         <ButtonLink variant="secondary" to="/store"><Store size={18} /> 매장 콘솔</ButtonLink>
         <ButtonLink variant="secondary" to="/ops"><ShieldCheck size={18} /> 운영 콘솔</ButtonLink>
+        <ButtonLink variant="secondary" to="/support"><Headset size={18} /> 고객지원 콘솔</ButtonLink>
       </div>
     </div>
   );

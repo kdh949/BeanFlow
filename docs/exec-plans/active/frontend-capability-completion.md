@@ -200,7 +200,9 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
   검증하고 Keycloak Authorization Code + PKCE S256 세션으로 운영 라우트를 보호하며, 점주 계정
   exact 조회·최초 발급·임시 비밀번호 재발급·잠금 해제를 연결했다. 토큰과 일회성 비밀번호는
   브라우저 저장소에 남기지 않는다.
-- [ ] 고객지원 수직 슬라이스를 완성한다.
+- [x] 2026-08-23: 고객지원 수직 슬라이스를 완성했다. exact PII 검색, Case 생성·연결·상태 전이,
+  본인확인, 승인자 분리 Grant, route-local reveal, 타임라인과 보상 요청 진입을 하나의 업무 화면으로
+  연결했다. 검색값·본인확인 증빙·원문 PII는 URL 또는 브라우저 저장소에 남기지 않는다.
 - [ ] 운영 정책 수직 슬라이스를 완성한다.
 - [ ] 전체 검증과 ExecPlan 완료 이동을 수행한다.
 
@@ -218,6 +220,10 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 - 2026-08-23: 브라우저 `Headers`는 한글 같은 비 Latin-1 문자열을 custom header 값으로 직렬화하지
   못한다. 점주 계정 조회의 `X-Access-Reason`은 화면에서 한글 레이블을 보여 주되 감사 기록에는
   `MERCHANT_ACCOUNT_*` 영문 업무 코드를 전송하는 선택형 입력으로 제한했다.
+- 2026-08-23: Support 프론트엔드 경계에 관한 ADR-090과 SP-14는 Proposed였지만, 운영자와 Support의
+  인증 경계는 Accepted ADR-092/BR-41에서 이미 Keycloak JWT로 확정되어 있었다. 새 배포 단위를
+  추가하지 않고 기존 프론트엔드의 격리된 `/support` 라우트와 동일한 메모리 전용 OIDC 세션을
+  사용하도록 두 결정을 Accepted로 정렬했다.
 
 ## Decision Log
 
@@ -227,6 +233,8 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
   PageTitle/폼 패턴을 먼저 조합하고 Support 보호 데이터 패널만 새 도메인 패턴으로 허용한다.
 - 2026-08-23: 운영·Support API는 임시 수동 토큰 방식으로 연결하지 않고 Accepted 정책의
   Keycloak Authorization Code + PKCE S256을 포함해 구현한다.
+- 2026-08-23: Support 콘솔은 별도 앱 대신 기존 프론트엔드 안의 격리된 `/support` 라우트로 두고,
+  보호 데이터 원문은 승인된 grant 범위에서만 route-local 상태로 최대 60초 표시한다.
 - 2026-08-23: 각 수직 슬라이스는 Story·테스트를 먼저 추가해 실패를 확인한 뒤 구현하고 별도 commit한다.
 
 ## Outcomes & Retrospective

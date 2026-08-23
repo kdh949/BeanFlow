@@ -1,7 +1,7 @@
 # ADR-090: Support Console frontend boundary와 sensitive browser state
 
-- **Status:** Proposed
-- **Date:** 2026-08-10
+- **Status:** Accepted
+- **Date:** 2026-08-23
 
 ## Context
 
@@ -12,28 +12,41 @@ deployment isolation이 아직 확정되지 않았다.
 
 ## Decision
 
-**Open decision:** 다음 세 boundary 중 하나를 credential/trust model과 함께 승인하기 전에는 구현 위치를
-선택하지 않는다. 어느 대안이든 PII는 localStorage/sessionStorage/IndexedDB/service-worker/persistent
-query cache에 저장하지 않고 navigation/expiry/Case close/logout/permission loss 때 plaintext state와
-DOM에서 제거한다. Sensitive response는 no-store이고 bulk export는 초기 비목표이며 서버 권한이
-authoritative다.
+Support Console은 기존 React/TypeScript/Vite `frontend/` 안의 격리된 `/support` route로 구현한다.
+`/ops`와 같은 Keycloak Authorization Code + PKCE `S256` public-client 세션과 메모리 access token을
+재사용하며, same-origin `/api/v1/support/**`만 호출한다. 고객·점주 Session을 해석하거나 impersonation하지
+않고 Support 서버의 persistent permission과 object authorization이 모든 작업의 권위다.
+
+PII는 localStorage/sessionStorage/IndexedDB/service-worker/persistent query cache에 저장하지 않는다.
+exact 검색 criterion은 POST body로만 보내고 검색 후보는 masked DTO만 유지한다. Reveal 원문은 route-local
+메모리와 현재 DOM에만 존재하며 navigation, grant expiry, Case terminal 전이, logout, permission loss 또는
+사용자의 명시적 닫기 때 제거한다. Sensitive response는 `no-store`, bulk export/download/copy helper는 초기
+비목표다. 사용자 입력, reveal 값, token과 opaque provider reference를 client log나 telemetry에 넣지 않는다.
+
+Support route는 고객·점주 navigation에서 노출하지 않고 운영자 셸 안에 별도 업무 surface로 둔다. 같은
+origin과 release bundle을 공유하는 coupling은 수용하되, 인증 gate와 Support 전용 route-local state로
+credential/PII 경계를 분리한다. 별도 app/origin이 실제 조직·배포 격리를 요구할 때 재검토한다.
 
 ## Alternatives Considered
 
-- 별도 operator app/origin: trust, credential과 deployment isolation이 명확하지만 build, client와 운영 표면이 늘어난다.
-- 기존 `frontend/`의 격리 `/support` route: build/client 재사용이 쉽지만 customer/store/ops와 같은 origin 및 bundle의 credential·XSS·release coupling을 수용해야 한다.
-- server-rendered operator UI: browser state와 bundle을 줄일 수 있지만 별도 rendering/session/CSRF 운영 모델과 UX 구현이 필요하다.
+- 별도 operator app/origin: trust, credential과 deployment isolation이 명확하지만 현재 단일 운영자 OIDC
+  client와 build를 중복하고 별도 배포 운영 근거가 없어 보류한다.
+- 기존 `frontend/`의 격리 `/support` route: build, OIDC session과 디자인 시스템을 재사용할 수 있어 채택한다.
+  customer/store/ops와 같은 origin 및 bundle의 credential·XSS·release coupling을 수용한다.
+- server-rendered operator UI: browser state와 bundle을 줄일 수 있지만 별도 rendering/session/CSRF 운영
+  모델과 UX 구현이 필요해 채택하지 않는다.
 
 ## Rationale
 
-제품 범위와 browser-side 비저장 통제는 고정하되, repository topology만으로 trust boundary를 추론하지 않는다.
-결정에는 credential transport/storage, CORS/CSRF, origin, deployment owner와 failure behavior가 함께 필요하다.
+ADR-092와 BR-41이 운영자·고객지원의 Keycloak JWT chain, PKCE와 token 비저장 경계를 이미 확정한다.
+같은 frontend 안에서 그 인증과 디자인 시스템을 재사용하면 새 credential model을 만들지 않으면서 현재
+구현된 Support API를 사용자 여정으로 연결할 수 있다.
 
 ## Consequences
 
-S130은 이 ADR이 Accepted되기 전 `Implementation-Ready`가 될 수 없다. 선택한 대안에 따라 build/client
-재사용, CSP, CSRF/CORS, session/token handling과 E2E gate가 달라진다. 이 Proposed ADR은 기존
-`frontend/` 통합을 승인하거나 별도 app/server-rendering을 배제하지 않는다.
+Support와 Operations가 build, OIDC client와 release cadence를 공유한다. 같은-origin XSS 영향 범위가 넓어지고
+Support 변경도 frontend 전체 배포를 요구한다. 반대로 별도 client secret, CORS 또는 Support 전용 token
+저장소는 생기지 않는다. Reveal expiry/navigation 제거와 browser residue E2E 검증이 release gate가 된다.
 
 ## Verification
 
@@ -46,9 +59,9 @@ UI error/expiry clearing과 server authorization outcomes만; PII/session identi
 
 ## Revisit Conditions
 
-Browser credential과 trust/deployment boundary가 승인될 때. 구현 뒤에는 incident, deploy cadence와
-bundle/performance evidence가 재검토 조건이다.
+조직 규정이 Support의 별도 origin/배포 소유권을 요구하거나, shared-origin XSS incident, 독립 deploy
+cadence 또는 bundle/performance evidence가 현재 경계를 정당화하지 못할 때.
 
 ## Related Decisions
 
-ADR-070, ADR-081, ADR-082.
+ADR-070, ADR-081, ADR-082, ADR-092, BR-41.

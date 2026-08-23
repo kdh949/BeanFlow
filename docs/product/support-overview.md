@@ -30,7 +30,7 @@ the exact organization/permission mapping is finalized by its owning implementat
 - versioned goodwill compensation, purpose-specific profile change
 - canonical DeliveryFulfillment와 Provider reconciliation
 - retention classes, expiring LegalHold, deletion ledger
-- 최종 제품 범위의 Support Console surface; frontend/trust/deployment boundary는 ADR-090의 Proposed decision
+- 기존 frontend의 격리 `/support` route에 두는 Support Console surface; 인증·민감 browser state 경계는 ADR-090
 
 ## Product boundaries
 
