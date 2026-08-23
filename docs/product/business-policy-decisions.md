@@ -2208,9 +2208,10 @@
   각각 256px 이상, 4096px 이하이고 총 pixel은 16,777,216 이하로 제한한다. JPEG EXIF orientation을
   적용하고 metadata를 제거해 원본 비율의 정규화 이미지와 중앙 crop 512×512 thumbnail을 생성한다.
 - **Storage:** 정규화 원본과 thumbnail은 AIStor Free 단일 노드의 비공개 bucket에 저장한다. 정규화
-  원본 SHA-256과 Store/Menu ID로 서버가 immutable object key를 만든다. client 파일명과 path를 key로
-  사용하지 않는다. 현재 pointer의 SHA-256이 같으면 DB version과 updatedAt을 바꾸거나 중복 Audit를
-  만들지 않고 기존 signed thumbnail을 반환한다.
+  원본 SHA-256, Store/Menu ID와 서버 생성 upload generation으로 immutable object key를 만든다. client
+  파일명과 path를 key로 사용하지 않는다. generation은 교체 뒤 과거와 같은 bytes를 다시 선택해도 늦은
+  cleanup이 현재 객체를 지우지 않게 한다. 현재 pointer의 SHA-256이 같으면 DB version과 updatedAt을
+  바꾸거나 중복 Audit를 만들지 않고 기존 signed thumbnail을 반환한다.
 - **Persistence:** `merchant_store`와 `merchant_menu`는 각각 `image_original_key`,
   `image_thumbnail_key`, `image_sha256`, `image_updated_at` nullable column을 가진다. 네 값은 모두 null이거나
   모두 non-null이어야 한다. 이미지 row·upload command·복구 상태용 새 Aggregate 또는 table은 만들지 않는다.
@@ -2219,7 +2220,9 @@
   없으면 pointer를 바꾸지 않은 채 503으로 실패한다. commit 직전 membership/grant와 대상 소속을 다시
   검증하고 Store/Menu row를 잠근 뒤 pointer·Audit·이전 key 정리 event를 함께 저장한다. AIStor 실행 중
   장애는 이미지 PUT과 발급된 이미지 URL의 직접 GET에만 드러내고 주문·결제·매장 텍스트 조회와 전체
-  readiness에는 전파하지 않는다. 설정·credential·bucket 검증 실패는 startup failure다.
+  readiness에는 전파하지 않는다. 설정 누락·형식 오류와 AIStor가 명시적으로 반환한 credential·bucket
+  오류는 startup failure다. startup probe의 연결 실패·timeout·5xx는 media unavailable로 관측하되
+  애플리케이션 시작과 전체 readiness를 막지 않는다.
 - **Cleanup:** 교체·삭제된 key는 기존 Spring Modulith persistent publication listener가 commit 후
   삭제한다. 실패 publication은 기존 recovery 관측을 따르고, 현재 DB에서 참조되지 않은 storefront prefix
   객체는 bounded periodic sweep이 보완한다. AIStor Free가 lifecycle transition과 replication을 제공하지

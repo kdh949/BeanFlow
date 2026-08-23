@@ -72,13 +72,24 @@ internal class StoreDiscoveryProfileMigrationTest : IsolatedPostgresSupport() {
         // 목록을 통째로 고정해 새 컬럼이 조용히 늘지 않게 한다. 컬럼을 추가하려면 이 테스트를
         // 고쳐야 하고, 그때 그것이 검색 투영인지 아닌지 판단하게 된다.
         // brand_id는 검색 편의 필드가 아니라 ADR-112가 정한 Brand Aggregate 참조라 허용한다.
+        // image_*는 ADR-114가 정한 현재 매장 이미지 pointer라 허용한다.
         // 매장명과 좌표는 여전히 merchant_store_discovery_profile만 가진다.
         assertThat(
             jdbcTemplate.queryForList(
                 "SELECT attname FROM pg_attribute WHERE attrelid = 'merchant_store'::regclass AND attnum > 0",
                 String::class.java,
             ),
-        ).containsExactlyInAnyOrder("id", "accepting_orders", "pickup_enabled", "version", "brand_id")
+        ).containsExactlyInAnyOrder(
+            "id",
+            "accepting_orders",
+            "pickup_enabled",
+            "version",
+            "brand_id",
+            "image_original_key",
+            "image_thumbnail_key",
+            "image_sha256",
+            "image_updated_at",
+        )
         assertThat(
             jdbcTemplate.queryForList(
                 "SELECT attname FROM pg_attribute WHERE attrelid = 'merchant_store'::regclass AND attnum > 0",

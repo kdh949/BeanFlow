@@ -6,15 +6,10 @@ import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
-import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
-import io.github.kdh949.beanflow.shared.api.DomainFailure
-import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.doThrow
-import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
@@ -26,8 +21,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.mock.web.MockMultipartFile
-import org.springframework.security.core.authority.SimpleGrantedAuthority
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
@@ -45,7 +38,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 @AutoConfigureMockMvc
 @SpringBootTest
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-internal class StoreImageEndpointIntegrationTest(
+internal class MenuImageEndpointIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val passwords: CustomerPasswordSecurity,
@@ -59,117 +52,101 @@ internal class StoreImageEndpointIntegrationTest(
             """
             TRUNCATE TABLE spring_session_attributes, spring_session, identity_login_attempt,
                 identity_store_membership, identity_merchant_account, operations_audit_record,
-                merchant_store_discovery_profile, merchant_store CASCADE
+                merchant_menu, merchant_store CASCADE
             """.trimIndent(),
         )
         reset(storage)
     }
 
     @Test
-    fun `OWNER replaces an image and the same normalized hash writes neither object nor audit twice`() {
-        val storeId = seedStore()
-        val session = signIn("image.owner", storeId, "OWNER")
-        stubStorage(storeId)
+    fun `OWNER and STAFF can replace a menu image and same hash is a no-op`() {
+        listOf("OWNER", "STAFF").forEachIndexed { index, role ->
+            val storeId = seedStore()
+            val menuId = seedMenu(storeId)
+            val session = signIn("menu.image.$index", storeId, role)
+            stubStorage(menuId)
 
-        replace(session, storeId)
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.url").value(SIGNED_URL))
-            .andExpect(jsonPath("$.expiresAt").value("2026-08-24T00:15:00Z"))
-        replace(session, storeId).andExpect(status().isOk)
+            replace(session, storeId, menuId)
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.url").value(SIGNED_URL))
+            replace(session, storeId, menuId).andExpect(status().isOk)
 
-        assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_store WHERE id = ?", String::class.java, storeId))
-            .isEqualTo(HASH)
-        assertThat(auditActions(storeId)).containsExactly("STORE_IMAGE_UPDATED")
-        verify(storage, times(1)).store(StorefrontImageTarget.STORE, storeId, NORMALIZED)
+            assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_menu WHERE id = ?", String::class.java, menuId))
+                .isEqualTo(HASH)
+            assertThat(
+                jdbc.queryForList(
+                    "SELECT actor_type FROM operations_audit_record WHERE target_id = ?",
+                    String::class.java,
+                    menuId,
+                ),
+            ).containsExactly(if (role == "OWNER") "STORE_OWNER" else "STORE_STAFF")
+            verify(storage, times(1)).store(StorefrontImageTarget.MENU, menuId, NORMALIZED)
+        }
     }
 
     @Test
-    fun `STAFF and missing CSRF are rejected before image processing`() {
-        val staffStore = seedStore()
-        val staff = signIn("image.staff", staffStore, "STAFF")
+    fun `a menu from another store is 404 before image processing`() {
+        val requestedStore = seedStore()
+        val actualStore = seedStore()
+        val menuId = seedMenu(actualStore)
+        val session = signIn("menu.image.scope", requestedStore, "OWNER")
 
-        replace(staff, staffStore)
-            .andExpect(status().isForbidden)
-            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+        replace(session, requestedStore, menuId)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+        verify(storage, org.mockito.Mockito.never()).normalize(anyValue())
+    }
 
-        val ownerStore = seedStore()
-        val owner = signIn("image.csrf", ownerStore, "OWNER")
+    @Test
+    fun `missing merchant CSRF is rejected`() {
+        val storeId = seedStore()
+        val menuId = seedMenu(storeId)
+        val session = signIn("menu.image.csrf", storeId, "STAFF")
+
         mockMvc
             .perform(
-                multipart("/api/v1/stores/$ownerStore/image")
+                multipart("/api/v1/stores/$storeId/menus/$menuId/image")
                     .file(imagePart())
                     .with {
                         it.method = "PUT"
                         it
-                    }.cookie(owner.session),
+                    }.cookie(session.session),
             ).andExpect(status().isForbidden)
-        verify(storage, never()).normalize(anyValue())
+        verify(storage, org.mockito.Mockito.never()).normalize(anyValue())
     }
 
     @Test
-    fun `AIStor failure returns 503 without changing the pointer audit or overall health`() {
+    fun `STAFF deletes the current menu image and deleting absence is a no-op`() {
         val storeId = seedStore()
-        val session = signIn("image.failure", storeId, "OWNER")
-        `when`(storage.normalize(anyValue())).thenReturn(NORMALIZED)
-        doThrow(DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "AIStor unavailable"))
-            .`when`(storage)
-            .store(StorefrontImageTarget.STORE, storeId, NORMALIZED)
-
-        replace(session, storeId)
-            .andExpect(status().isServiceUnavailable)
-            .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
-
-        assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_store WHERE id = ?", String::class.java, storeId)).isNull()
-        assertThat(auditActions(storeId)).isEmpty()
-        mockMvc.perform(get("/actuator/health")).andExpect(status().isOk).andExpect(jsonPath("$.status").value("UP"))
-        mockMvc
-            .perform(
-                get("/api/v1/stores/$storeId")
-                    .with(
-                        jwt()
-                            .jwt { it.subject(UUID.randomUUID().toString()).claim("roles", listOf("CUSTOMER")) }
-                            .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
-                    ),
-            ).andExpect(status().isOk)
-            .andExpect(jsonPath("$.name").value("Image Store"))
-            .andExpect(jsonPath("$.image").doesNotExist())
-        verify(storage, never()).access(org.mockito.ArgumentMatchers.anyString())
-    }
-
-    @Test
-    fun `OWNER deletes the current store image and deleting absence is a no-op`() {
-        val storeId = seedStore()
-        val session = signIn("image.delete", storeId, "OWNER")
+        val menuId = seedMenu(storeId)
+        val session = signIn("menu.image.delete", storeId, "STAFF")
         jdbc.update(
             """
-            UPDATE merchant_store
+            UPDATE merchant_menu
                SET image_original_key = ?, image_thumbnail_key = ?, image_sha256 = ?, image_updated_at = now()
              WHERE id = ?
             """.trimIndent(),
             PREPARED.originalKey,
             PREPARED.thumbnailKey,
             HASH,
-            storeId,
+            menuId,
         )
 
-        delete(session, storeId).andExpect(status().isNoContent)
-        delete(session, storeId).andExpect(status().isNoContent)
+        delete(session, storeId, menuId).andExpect(status().isNoContent)
+        delete(session, storeId, menuId).andExpect(status().isNoContent)
 
-        assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_store WHERE id = ?", String::class.java, storeId)).isNull()
-        assertThat(auditActions(storeId)).containsExactly("STORE_IMAGE_DELETED")
-    }
-
-    private fun stubStorage(storeId: UUID) {
-        `when`(storage.normalize(anyValue())).thenReturn(NORMALIZED)
-        `when`(storage.store(StorefrontImageTarget.STORE, storeId, NORMALIZED)).thenReturn(PREPARED)
-        `when`(storage.access(PREPARED.thumbnailKey)).thenReturn(StorefrontImageAccess(SIGNED_URL, EXPIRES_AT))
+        assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_menu WHERE id = ?", String::class.java, menuId)).isNull()
+        assertThat(
+            jdbc.queryForList("SELECT action FROM operations_audit_record WHERE target_id = ?", String::class.java, menuId),
+        ).containsExactly("MENU_IMAGE_DELETED")
     }
 
     private fun replace(
         session: MerchantSession,
         storeId: UUID,
+        menuId: UUID,
     ) = mockMvc.perform(
-        multipart("/api/v1/stores/$storeId/image")
+        multipart("/api/v1/stores/$storeId/menus/$menuId/image")
             .file(imagePart())
             .with {
                 it.method = "PUT"
@@ -181,19 +158,35 @@ internal class StoreImageEndpointIntegrationTest(
     private fun delete(
         session: MerchantSession,
         storeId: UUID,
+        menuId: UUID,
     ) = mockMvc.perform(
-        deleteRequest("/api/v1/stores/$storeId/image")
+        deleteRequest("/api/v1/stores/$storeId/menus/$menuId/image")
             .cookie(session.session, session.csrf)
             .header(CSRF_HEADER, session.csrf.value),
     )
 
-    private fun imagePart() = MockMultipartFile("image", "store.jpg", MediaType.IMAGE_JPEG_VALUE, byteArrayOf(1, 2, 3))
-
-    @Suppress("UNCHECKED_CAST")
-    private fun <T> anyValue(): T {
-        org.mockito.Mockito.any<T>()
-        return null as T
+    private fun stubStorage(menuId: UUID) {
+        `when`(storage.normalize(anyValue())).thenReturn(NORMALIZED)
+        `when`(storage.store(StorefrontImageTarget.MENU, menuId, NORMALIZED)).thenReturn(PREPARED)
+        `when`(storage.access(PREPARED.thumbnailKey)).thenReturn(StorefrontImageAccess(SIGNED_URL, EXPIRES_AT))
     }
+
+    private fun imagePart() = MockMultipartFile("image", "menu.jpg", MediaType.IMAGE_JPEG_VALUE, byteArrayOf(1, 2, 3))
+
+    private fun seedStore(): UUID =
+        UUID.randomUUID().also { storeId ->
+            jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", storeId)
+        }
+
+    private fun seedMenu(storeId: UUID): UUID =
+        UUID.randomUUID().also { menuId ->
+            jdbc.update(
+                "INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version) " +
+                    "VALUES (?, ?, 'Latte', 5000, true, 0)",
+                menuId,
+                storeId,
+            )
+        }
 
     private fun signIn(
         loginId: String,
@@ -207,7 +200,7 @@ internal class StoreImageEndpointIntegrationTest(
                 (id, login_id, password_hash, credential_version, display_name, state,
                  temporary_password_expires_at, password_changed_at, locked_until,
                  created_at, updated_at, version)
-            VALUES (?, ?, ?, 0, 'Image Merchant', 'ACTIVE', NULL, ?, NULL, ?, ?, 0)
+            VALUES (?, ?, ?, 0, 'Menu Merchant', 'ACTIVE', NULL, ?, NULL, ?, ?, 0)
             """.trimIndent(),
             accountId,
             loginId,
@@ -254,22 +247,11 @@ internal class StoreImageEndpointIntegrationTest(
         return MerchantSession(session, csrf)
     }
 
-    private fun seedStore(): UUID =
-        UUID.randomUUID().also { storeId ->
-            jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", storeId)
-            jdbc.update(
-                "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) " +
-                    "VALUES (?, 'Image Store', ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, '1100000000')",
-                storeId,
-            )
-        }
-
-    private fun auditActions(storeId: UUID): List<String> =
-        jdbc.query(
-            "SELECT action FROM operations_audit_record WHERE target_id = ? ORDER BY action",
-            { row, _ -> row.getString(1) },
-            storeId,
-        )
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> anyValue(): T {
+        org.mockito.Mockito.any<T>()
+        return null as T
+    }
 
     private data class MerchantSession(
         val session: Cookie,
@@ -282,10 +264,10 @@ internal class StoreImageEndpointIntegrationTest(
         const val CSRF_HEADER = "X-BEANFLOW-CSRF"
         const val PASSWORD = "merchant-current-password-2026"
         const val HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-        const val SIGNED_URL = "https://media.beanflow.test/store-signed"
+        const val SIGNED_URL = "https://media.beanflow.test/menu-signed"
         val NOW: Instant = Instant.parse("2026-08-24T00:00:00Z")
         val EXPIRES_AT: Instant = NOW.plusSeconds(900)
         val NORMALIZED = NormalizedStorefrontImageUpload(byteArrayOf(1), byteArrayOf(2), "image/jpeg", "jpg", HASH)
-        val PREPARED = PreparedStorefrontImage("stores/id/$HASH/original.jpg", "stores/id/$HASH/thumbnail.jpg", HASH)
+        val PREPARED = PreparedStorefrontImage("menus/id/$HASH/original.jpg", "menus/id/$HASH/thumbnail.jpg", HASH)
     }
 }

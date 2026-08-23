@@ -2,9 +2,9 @@ package io.github.kdh949.beanflow.identity.internal
 
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.merchant.api.MenuImageChange
+import io.github.kdh949.beanflow.merchant.api.MenuImageOperations
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
-import io.github.kdh949.beanflow.merchant.api.StoreImageChange
-import io.github.kdh949.beanflow.merchant.api.StoreImageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
@@ -22,42 +22,41 @@ import java.time.Instant
 import java.util.UUID
 
 @Service
-internal class MerchantStoreImageService(
-    private val transactions: MerchantStoreImageTransaction,
-    private val images: StoreImageOperations,
+internal class MerchantMenuImageService(
+    private val transactions: MerchantMenuImageTransaction,
+    private val images: MenuImageOperations,
     private val storage: StorefrontImageStorageOperations,
     private val clock: Clock,
 ) {
     fun replace(
         actorId: UUID,
         storeId: UUID,
+        menuId: UUID,
         upload: StorefrontImageUpload,
     ): StorefrontImageAccess {
         transactions.authorize(actorId, storeId)
-        val current = images.find(storeId)
+        val current = images.find(storeId, menuId)
         val normalized = storage.normalize(upload)
         if (current?.sha256 == normalized.sha256) return storage.access(current.thumbnailKey)
-
-        val prepared = storage.store(StorefrontImageTarget.STORE, storeId, normalized)
-        // Signing is local and happens before the pointer commit, so an impossible signing result
-        // cannot turn an already-committed write into an ambiguous 503 response.
+        val prepared = storage.store(StorefrontImageTarget.MENU, menuId, normalized)
         val access = storage.access(prepared.thumbnailKey)
-        transactions.replace(actorId, storeId, prepared, clock.instant())
+        transactions.replace(actorId, storeId, menuId, prepared, clock.instant())
         return access
     }
 
     fun delete(
         actorId: UUID,
         storeId: UUID,
+        menuId: UUID,
     ) {
-        transactions.clear(actorId, storeId, clock.instant())
+        transactions.clear(actorId, storeId, menuId, clock.instant())
     }
 }
 
 @Component
-internal class MerchantStoreImageTransaction(
+internal class MerchantMenuImageTransaction(
     private val storeAccess: StoreAccessOperations,
-    private val images: StoreImageOperations,
+    private val images: MenuImageOperations,
     private val audits: AuditRecordOperations,
     private val correlationIds: CorrelationIdSource,
 ) {
@@ -66,19 +65,20 @@ internal class MerchantStoreImageTransaction(
         actorId: UUID,
         storeId: UUID,
     ) {
-        storeAccess.requireStoreAccess(actorId, storeId, setOf(StoreActorRole.OWNER))
+        storeAccess.requireStoreAccess(actorId, storeId, MENU_IMAGE_ROLES)
     }
 
     @Transactional
     fun replace(
         actorId: UUID,
         storeId: UUID,
+        menuId: UUID,
         prepared: PreparedStorefrontImage,
         now: Instant,
-    ): StoreImageChange {
-        storeAccess.requireStoreAccess(actorId, storeId, setOf(StoreActorRole.OWNER))
-        val change = images.replace(storeId, prepared, now)
-        if (change.changed) audit(actorId, storeId, "STORE_IMAGE_UPDATED", change, now)
+    ): MenuImageChange {
+        val actor = storeAccess.requireStoreAccess(actorId, storeId, MENU_IMAGE_ROLES)
+        val change = images.replace(storeId, menuId, prepared, now)
+        if (change.changed) audit(actorId, actor.role, menuId, "MENU_IMAGE_UPDATED", change, now)
         return change
     }
 
@@ -86,18 +86,20 @@ internal class MerchantStoreImageTransaction(
     fun clear(
         actorId: UUID,
         storeId: UUID,
+        menuId: UUID,
         now: Instant,
     ) {
-        storeAccess.requireStoreAccess(actorId, storeId, setOf(StoreActorRole.OWNER))
-        val change = images.clear(storeId, now)
-        if (change.changed) audit(actorId, storeId, "STORE_IMAGE_DELETED", change, now)
+        val actor = storeAccess.requireStoreAccess(actorId, storeId, MENU_IMAGE_ROLES)
+        val change = images.clear(storeId, menuId, now)
+        if (change.changed) audit(actorId, actor.role, menuId, "MENU_IMAGE_DELETED", change, now)
     }
 
     private fun audit(
         actorId: UUID,
-        storeId: UUID,
+        actorRole: StoreActorRole,
+        menuId: UUID,
         action: String,
-        change: StoreImageChange,
+        change: MenuImageChange,
         now: Instant,
     ) {
         val correlationId = correlationIds.currentOrCreate()
@@ -105,13 +107,17 @@ internal class MerchantStoreImageTransaction(
             listOf(
                 AppendAuditRecordCommand(
                     actorId = actorId.toString(),
-                    actorType = AuditActorType.STORE_OWNER,
+                    actorType =
+                        when (actorRole) {
+                            StoreActorRole.OWNER -> AuditActorType.STORE_OWNER
+                            StoreActorRole.STAFF -> AuditActorType.STORE_STAFF
+                        },
                     category = AuditCategory.OPERATIONS_POLICY,
                     action = action,
-                    targetType = "Store",
-                    targetId = storeId,
+                    targetType = "Menu",
+                    targetId = menuId,
                     occurredAt = now,
-                    reason = "MERCHANT_STORE_IMAGE_CHANGE",
+                    reason = "MERCHANT_MENU_IMAGE_CHANGE",
                     beforeSummary = imageState(change.previous != null),
                     afterSummary = imageState(change.current != null),
                     correlationId = correlationId,
@@ -122,4 +128,8 @@ internal class MerchantStoreImageTransaction(
     }
 
     private fun imageState(present: Boolean) = mapOf("imageState" to if (present) "PRESENT" else "ABSENT")
+
+    private companion object {
+        val MENU_IMAGE_ROLES = setOf(StoreActorRole.OWNER, StoreActorRole.STAFF)
+    }
 }

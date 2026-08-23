@@ -1,11 +1,11 @@
 # 매장·메뉴 이미지 업로드와 고객 조회 제공
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-24`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -59,7 +59,7 @@
 
 - BR-48과 ADR-115를 canonical source로 사용한다.
 - pointer 네 값은 전부 null 또는 전부 non-null이다.
-- object key는 server-generated Store/Menu scope와 normalized SHA-256만 포함한다.
+- object key는 server-generated Store/Menu scope, normalized SHA-256과 upload generation을 포함한다.
 - 같은 current SHA-256은 새 PUT, pointer version 변경과 Audit를 만들지 않는다.
 - Menu write는 URL store와 실제 Menu store가 같아야 하며 권한을 pointer commit 직전에 다시 확인한다.
 - 이미지 없음은 정상 optional data지만 provider 장애를 없음으로 바꾸지 않는다.
@@ -81,7 +81,8 @@ ADR-115의 DB bytea, public bucket, client direct upload, Media Aggregate, thumb
 
 ## Failure Semantics
 
-- 설정·credential·bucket 검증 실패: startup failure
+- 설정 누락·형식 오류와 AIStor의 credential·bucket 거절: startup failure
+- startup probe 연결 실패·timeout·5xx: media unavailable 관측 후 거래·텍스트 API 기동 유지
 - 이미지 검증 실패: 400 `INVALID_IMAGE`
 - AIStor PUT/HEAD 불명: pointer 불변, 503 `DEPENDENCY_UNAVAILABLE`
 - pointer/Audit commit 실패: 기존 pointer 유지, 503; 새 object는 orphan sweep 대상
@@ -105,7 +106,7 @@ ADR-115의 DB bytea, public bucket, client direct upload, Media Aggregate, thumb
 - PUT request는 `multipart/form-data`의 required `image`, response는 `200 ImageAccess`
 - DELETE는 `204`
 - 고객 Store/Menu response의 optional `image: { url, expiresAt }`
-- `StorefrontImageObjectsCleanupRequestedV1`은 이전 original/thumbnail key만 포함하고 actor/reason을 담지 않는다.
+- `StorefrontImageCleanupRequestedV1`은 이전 original/thumbnail key만 포함하고 actor/reason을 담지 않는다.
 
 ## Milestones
 
@@ -162,9 +163,9 @@ component로 등록하지 않는다.
 
 - [x] 2026-08-24 current main/PR/worktree/Flyway inventory 확인과 migration-writer lease 획득
 - [x] 2026-08-24 BR-48/ADR-115/authorization/failure contract 작성
-- [ ] Store image vertical slice
-- [ ] Menu image vertical slice
-- [ ] AIStor/전체 validation과 plan completion
+- [x] 2026-08-24 Store image vertical slice
+- [x] 2026-08-24 Menu image vertical slice
+- [x] 2026-08-24 전체 6-shard test, assemble, Spotless, OpenAPI·문서·TypeScript 검증과 plan completion
 
 ## Surprises & Discoveries
 
@@ -172,6 +173,18 @@ component로 등록하지 않는다.
   후보 표시이지 lease reservation이 아니므로 이 실행이 lease를 획득했다.
 - AIStor Free는 공식 문서상 단일 노드이고 replication/lifecycle transition/SLA가 없다. object cleanup은
   애플리케이션 persistent publication과 bounded sweep이 소유해야 한다.
+- MinIO Java presign은 region이 없으면 region 조회를 수행할 수 있어 `BEANFLOW_AISTOR_REGION`을 명시하고
+  public URL 생성이 runtime AIStor network 상태와 무관한 local 연산이 되도록 고정했다.
+- AuditRecord `source_reference`는 varchar(200)이므로 이미지 두 SHA를 연결하지 않고 검증된 요청 correlation을
+  action과 조합한다. 이미지 존재 상태만 Audit summary에 남기고 object key와 SHA는 저장하지 않는다.
+- 기존 `StoreDiscoveryProfileMigrationTest`가 `merchant_store` 컬럼 전체를 고정해 V65 이미지 pointer를
+  검색 필드 회귀로 오인했다. ADR-115의 네 pointer 컬럼만 허용 목록에 추가하고 name/location/GiST 금지는
+  유지했다.
+- 단일 JVM `./gradlew build --stacktrace` 재실행은 실행 래퍼가 약 25분에 Gradle client를 종료해 terminal
+  결과를 만들지 못했다. 저장소의 `verifyCiTestShards`로 292개 테스트 클래스의 정확히 한 번 coverage를
+  확인한 뒤 CI와 같은 6개 shard를 각각 terminal 실행하고 assemble/Spotless를 별도 검증했다.
+- SHA만으로 key를 재사용하면 `A → B → A` 재선택 뒤 지연된 첫 cleanup이 현재 A 객체를 삭제할 수 있었다.
+  server upload generation을 key에 추가하고 current same-hash no-op은 upload 전에 유지해 경합을 제거했다.
 
 ## Decision Log
 
@@ -184,8 +197,37 @@ component로 등록하지 않는다.
 
 ## Outcomes & Retrospective
 
-(완료 시 실제 validation과 남은 제약을 기록한다.)
+Store/Menu Aggregate에 nullable 현재 이미지 pointer만 추가하고 별도 Media Aggregate·upload command table·
+복구 상태 머신 없이 요구 범위를 완료했다. Merchant/Operations PUT·DELETE, actor별 재인가와 Audit, SHA와
+upload generation 기반 immutable AIStor key, normalizer, 원본·512 thumbnail, same-hash no-op, 불명확 PUT의 HEAD 확인, persistent cleanup과
+24시간 grace의 100-object orphan sweep을 구현했다. Store 탐색 전 surface와 Menu 목록은 optional 15분
+thumbnail access를 반환하며 `matchedMenus`는 변경하지 않았다.
+
+검증 결과는 다음과 같다.
+
+- `verifyCiTestShards`: 292개 테스트 클래스를 6개 shard가 누락·중복 없이 정확히 한 번씩 포함 — Passed
+- CI shard 1..6: 1,400 tests, failure 0, error 0, skipped 2 — Passed with explicit skips
+  - `AistorFreeIntegrationTest`: AIStor Free endpoint/credential/bucket 환경 부재 — Blocked
+  - 기존 `NearbyStoreDiscoveryBenchmark`: opt-in benchmark 비활성 — Not run
+- final cleanup-race hardening 뒤 `*StorefrontImage*|*StoreImage*|*MenuImage*|*Aistor*`: 18 suites,
+  48 tests, failure/error 0, AIStor environment skip 1 — Passed with the same Blocked integration
+- AIStor PUT 503 뒤 pointer/Audit 불변, readiness `UP`, 고객 매장 텍스트 상세 200을 함께 검증한
+  `StoreImageEndpointIntegrationTest` — Passed
+- `./gradlew assemble spotlessCheck` — Passed
+- `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh` — Passed; target 166 paths/179 operations,
+  runtime 156 paths/169 operations, 331 schemas, 48 policies, 115 ADRs, 297 Markdown, 65 ExecPlans
+- frontend `npm run typecheck` — Passed; runtime OpenAPI에서 schema를 재생성한 뒤 TypeScript 검사 완료
+- `git diff --check` — Passed
+- 단일 JVM `./gradlew build --stacktrace` 최종 재실행 — Not completed; 실행 래퍼가 test task 중 Gradle client를
+  종료했다. 위 exact-coverage 6-shard test와 assemble/Spotless로 구성 task를 분리 검증하고 remote CI를
+  최종 gate로 남긴다.
+
+AIStor startup probe의 명시적 credential/bucket 거절은 fail-fast하지만 연결 실패·timeout·5xx는
+`beanflow.media.startup.validation{outcome="unavailable"}`로 관측하고 애플리케이션 시작과 전체 readiness를
+유지한다. AIStor Free 단일 노드의 실제 private GET/presign/삭제는 환경이 제공되기 전까지 검증되지 않았고
+HA·replication·SLA를 제공한다고 주장하지 않는다. frontend fixture와 placeholder 배치는 후속 작업이다.
 
 ## Revision Notes
 
 - 2026-08-24: 최초 작성과 migration-writer lease evidence 기록.
+- 2026-08-24: Store/Menu 수직 슬라이스와 exact-coverage 검증 결과를 기록하고 completed로 이동.

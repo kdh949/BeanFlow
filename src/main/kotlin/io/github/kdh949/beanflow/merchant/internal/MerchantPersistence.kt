@@ -65,9 +65,36 @@ internal class MenuEntity(
     val basePriceKrw: Long,
     @Column(nullable = false)
     val available: Boolean,
+    @Column(name = "image_original_key")
+    var imageOriginalKey: String? = null,
+    @Column(name = "image_thumbnail_key")
+    var imageThumbnailKey: String? = null,
+    @Column(name = "image_sha256")
+    var imageSha256: String? = null,
+    @Column(name = "image_updated_at")
+    var imageUpdatedAt: Instant? = null,
     @Version
     var version: Long = 0,
-)
+) {
+    fun replaceImage(
+        originalKey: String,
+        thumbnailKey: String,
+        sha256: String,
+        updatedAt: Instant,
+    ) {
+        imageOriginalKey = originalKey
+        imageThumbnailKey = thumbnailKey
+        imageSha256 = sha256
+        imageUpdatedAt = updatedAt
+    }
+
+    fun clearImage() {
+        imageOriginalKey = null
+        imageThumbnailKey = null
+        imageSha256 = null
+        imageUpdatedAt = null
+    }
+}
 
 @Entity
 @Table(name = "merchant_menu_option")
@@ -118,7 +145,19 @@ internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
     fun findByIdForUpdate(storeId: UUID): StoreEntity?
 }
 
-internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID>
+internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
+    fun findByIdAndStoreId(
+        menuId: UUID,
+        storeId: UUID,
+    ): MenuEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT menu FROM MenuEntity menu WHERE menu.id = :menuId AND menu.storeId = :storeId")
+    fun findByIdAndStoreIdForUpdate(
+        menuId: UUID,
+        storeId: UUID,
+    ): MenuEntity?
+}
 
 internal interface MenuOptionJpaRepository : JpaRepository<MenuOptionEntity, UUID> {
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuOptionEntity>

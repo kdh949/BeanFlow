@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.discovery.api
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import java.time.Instant
 import java.util.UUID
 
@@ -33,6 +34,7 @@ interface StoreCatalogQueryOperations : DiscoveryApi {
     ): List<StorePickupSlotView>
 }
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class StoreMenuItemView(
     val menuId: UUID,
     val name: String,
@@ -40,6 +42,7 @@ data class StoreMenuItemView(
     val currency: String,
     val available: Boolean,
     val options: List<StoreMenuItemOptionView>,
+    val image: StorefrontImageView?,
 )
 
 data class StoreMenuItemOptionView(

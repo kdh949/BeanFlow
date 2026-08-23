@@ -504,6 +504,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/menus/{menuId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 메뉴 이미지 교체
+         * @description 해당 매장의 STORE_OWNER 또는 STORE_STAFF가 수행합니다. URL의 매장과 메뉴의 실제
+         *     소속이 다르면 404를 반환하며, 현재 이미지와 정규화 SHA-256이 같으면 다시 쓰지 않습니다.
+         */
+        put: operations["replaceMenuImage"];
+        post?: never;
+        /**
+         * 메뉴 이미지 삭제
+         * @description STORE_OWNER 또는 STORE_STAFF가 수행하며 이미지가 없어도 204를 반환합니다.
+         */
+        delete: operations["deleteMenuImage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/pickup-slots": {
         parameters: {
             query?: never;
@@ -1957,6 +1982,30 @@ export interface paths {
          * @description 이미지가 없어도 204를 반환하며 실제 변경이 있을 때만 AuditRecord를 남깁니다.
          */
         delete: operations["deleteStoreImageByOperator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/menus/{menuId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * (운영팀) 메뉴 이미지 교체
+         * @description PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
+         */
+        put: operations["replaceMenuImageByOperator"];
+        post?: never;
+        /**
+         * (운영팀) 메뉴 이미지 삭제
+         * @description URL 매장과 메뉴 소속을 검증하고 실제 변경이 있을 때만 AuditRecord를 남깁니다.
+         */
+        delete: operations["deleteMenuImageByOperator"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4652,6 +4701,7 @@ export interface components {
             currency: components["schemas"]["Currency"];
             available: boolean;
             options: components["schemas"]["MenuOption"][];
+            image?: components["schemas"]["StorefrontImage"];
         };
         /**
          * @description 매장의 현재 노출 메뉴 전체 목록입니다. 페이지가 아닌 완전한 목록입니다.
@@ -10217,6 +10267,7 @@ export interface components {
         /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
         Cursor: string;
         DiscoveryLimit: number;
+        MenuId: components["schemas"]["Identifier"];
         /**
          * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
          * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
@@ -10886,6 +10937,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -10913,6 +10965,70 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceMenuImage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["StorefrontImageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 메뉴 썸네일의 15분 presigned GET */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    deleteMenuImage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 메뉴 이미지 포인터가 없음 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
@@ -13116,6 +13232,71 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceMenuImageByOperator: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["StorefrontImageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 메뉴 썸네일의 15분 presigned GET */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    deleteMenuImageByOperator: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 메뉴 이미지 포인터가 없음 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

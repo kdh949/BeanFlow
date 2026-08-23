@@ -94,9 +94,13 @@ internal class StoreImageMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V65 is latest and does not grant store media permission`() {
-        assertThat(jdbc.queryForObject("SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Int::class.java))
-            .isEqualTo(65)
+    fun `V65 remains applied and does not grant store media permission`() {
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE version = '65' AND success",
+                Long::class.java,
+            ),
+        ).isOne()
         assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM operations_operator_permission_grant WHERE permission = 'STORE_MEDIA_MANAGE'",

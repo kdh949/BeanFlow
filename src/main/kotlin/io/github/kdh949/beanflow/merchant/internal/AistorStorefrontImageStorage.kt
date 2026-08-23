@@ -32,7 +32,7 @@ internal class AistorStorefrontImageStorage(
         targetId: UUID,
         normalized: NormalizedStorefrontImageUpload,
     ): PreparedStorefrontImage {
-        val base = "${target.objectPrefix}/$targetId/${normalized.sha256}"
+        val base = "${target.objectPrefix}/$targetId/${normalized.sha256}/${UUID.randomUUID()}"
         val originalKey = "$base/original.${normalized.extension}"
         val thumbnailKey = "$base/thumbnail.${normalized.extension}"
         putVerified(originalKey, normalized.original, normalized.contentType, normalized.sha256)
@@ -54,6 +54,26 @@ internal class AistorStorefrontImageStorage(
             client.delete(originalKey)
             client.delete(thumbnailKey)
         }
+    }
+
+    override fun listOrphanCandidates(
+        olderThan: java.time.Instant,
+        limit: Int,
+    ): List<String> {
+        require(limit > 0)
+        return external("list-orphans") {
+            StorefrontImageTarget.entries
+                .asSequence()
+                .flatMap { target -> client.list("${target.objectPrefix}/") }
+                .filter { stored -> stored.lastModifiedAt.isBefore(olderThan) }
+                .take(limit)
+                .map(AistorObjectSummary::key)
+                .toList()
+        }
+    }
+
+    override fun deleteObject(key: String) {
+        external("delete-orphan") { client.delete(key) }
     }
 
     private fun putVerified(
@@ -131,5 +151,9 @@ internal class AistorMediaMetrics(
     ) {
         if (providerObserved) availability.set(0)
         registry.counter("beanflow.media.operation", "operation", operation, "outcome", "failure").increment()
+    }
+
+    fun startup(outcome: String) {
+        registry.counter("beanflow.media.startup.validation", "outcome", outcome).increment()
     }
 }

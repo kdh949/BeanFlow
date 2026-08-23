@@ -42,6 +42,8 @@ Behavior:
 - AIStor endpoint, access key, secret key, private bucket 또는 public signing endpoint가 누락되거나
   유효하지 않으면 애플리케이션 시작을 실패시킨다. 운영 profile에서 local filesystem, in-memory,
   public bucket 또는 fake adapter로 대체하지 않는다.
+- startup probe가 연결 실패·timeout·5xx 때문에 AIStor 설정의 유효성을 판정할 수 없으면 media 상태를
+  `unavailable`로 기록하고 애플리케이션은 시작한다. 명시적인 credential·bucket 거절과 혼동하지 않는다.
 - 실행 중 AIStor 장애는 이미지 PUT과 이미 발급된 presigned URL의 직접 GET에만 영향을 준다.
   주문·결제·매장 텍스트 조회와 애플리케이션 전체 readiness는 media health 때문에 실패시키지 않는다.
   매장 조회 응답의 15분 presigned URL은 서버 내부의 로컬 서명으로 만들고 AIStor에 availability probe를

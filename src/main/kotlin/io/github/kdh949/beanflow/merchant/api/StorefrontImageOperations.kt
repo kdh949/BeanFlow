@@ -47,6 +47,12 @@ data class StoreImageChange(
     val previous: StorefrontImagePointer?,
 )
 
+data class MenuImageChange(
+    val changed: Boolean,
+    val current: StorefrontImagePointer?,
+    val previous: StorefrontImagePointer?,
+)
+
 /** External AIStor work. Callers must invoke it outside their database transaction. */
 interface StorefrontImageStorageOperations {
     fun normalize(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
@@ -64,6 +70,13 @@ interface StorefrontImageStorageOperations {
         originalKey: String,
         thumbnailKey: String,
     )
+
+    fun listOrphanCandidates(
+        olderThan: Instant,
+        limit: Int,
+    ): List<String>
+
+    fun deleteObject(key: String)
 }
 
 /** Store pointer operations. Mutations require a caller-owned local transaction. */
@@ -80,6 +93,32 @@ interface StoreImageOperations {
         storeId: UUID,
         now: Instant,
     ): StoreImageChange
+}
+
+/** Menu pointer operations. Mutations require a caller-owned local transaction. */
+interface MenuImageOperations {
+    fun find(
+        storeId: UUID,
+        menuId: UUID,
+    ): StorefrontImagePointer?
+
+    fun replace(
+        storeId: UUID,
+        menuId: UUID,
+        prepared: PreparedStorefrontImage,
+        now: Instant,
+    ): MenuImageChange
+
+    fun clear(
+        storeId: UUID,
+        menuId: UUID,
+        now: Instant,
+    ): MenuImageChange
+}
+
+/** Fresh database reference check used immediately before an orphan object is deleted. */
+interface StorefrontImageReferenceOperations {
+    fun isReferenced(key: String): Boolean
 }
 
 /** Durable cleanup request handled after the pointer transaction commits. */

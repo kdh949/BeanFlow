@@ -1,5 +1,8 @@
 beanflow:
   media:
+    orphan-sweep:
+      initial-delay-ms: 3600000
+      fixed-delay-ms: 3600000
     aistor:
       endpoint: http://127.0.0.1:19000
       public-endpoint: http://media.beanflow.test

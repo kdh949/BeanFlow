@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Implementation owner:** [Store and menu images](../exec-plans/active/store-menu-images.md)
+- **Implementation owner:** [Store and menu images](../exec-plans/completed/store-menu-images.md)
 
 ## Context
 
@@ -44,8 +44,10 @@ orientation을 적용한 뒤 metadata를 재인코딩으로 제거한다.
 - `original`: 방향이 정규화된 원본 비율 이미지
 - `thumbnail`: 중앙 crop한 512×512 이미지
 
-정규화 원본 bytes의 SHA-256을 계산하고 Store/Menu ID와 조합해 client가 제어할 수 없는 immutable key를
-만든다. 같은 현재 SHA-256 요청은 pointer, Aggregate version, updatedAt과 Audit를 바꾸지 않는다.
+정규화 원본 bytes의 SHA-256을 계산하고 Store/Menu ID, 서버 생성 upload generation과 조합해 client가
+제어할 수 없는 immutable key를 만든다. generation은 `A → B → A` 재선택 뒤 늦게 처리된 첫 cleanup이
+현재 A 객체를 삭제하는 경합을 막는다. 같은 현재 SHA-256 요청은 새 generation을 만들기 전에 no-op으로
+종료해 pointer, Aggregate version, updatedAt과 Audit를 바꾸지 않는다.
 
 bucket은 public policy를 갖지 않는다. 고객 응답은 thumbnail key를 15분 presigned GET URL과
 `expiresAt`으로 바꿔 반환한다. object key, access key와 secret은 공개 응답·log·metric·Audit에 넣지 않는다.
@@ -64,8 +66,9 @@ availability probe를 호출하지 않는다.
 5. pointer, append-only Audit와 이전 key cleanup event를 함께 commit한다.
 
 동시 교체는 row lock의 commit 순서대로 latest pointer가 된다. 늦게 commit한 요청은 바로 이전 pointer를
-cleanup 대상으로 발행한다. metadata transaction이 실패해 새 객체가 참조되지 않으면 periodic orphan
-sweep이 정리한다. 분산 transaction과 object rollback을 흉내 내지 않는다.
+cleanup 대상으로 발행한다. 각 upload generation은 다시 pointer로 선택되지 않으므로 지연된 cleanup이
+새 현재 객체와 key를 공유하지 않는다. metadata transaction이 실패해 새 객체가 참조되지 않으면 periodic
+orphan sweep이 정리한다. 분산 transaction과 object rollback을 흉내 내지 않는다.
 
 ### 4. 기존 persistent publication으로 이전 객체를 정리한다
 
@@ -89,9 +92,10 @@ permission은 closed vocabulary에 추가하되 default grant나 role fallback�
 
 ### 6. media 장애는 거래·텍스트 조회 readiness와 분리한다
 
-endpoint, credential, bucket과 signing endpoint는 필수 설정이다. 누락·잘못된 credential·bucket은 startup
-probe에서 애플리케이션 시작을 실패시킨다. 운영 profile에서 filesystem, in-memory, fake 또는 public bucket
-fallback을 허용하지 않는다.
+endpoint, credential, bucket과 signing endpoint는 필수 설정이다. 누락·형식 오류 또는 AIStor가 명시적으로
+거절한 credential·bucket은 startup probe에서 애플리케이션 시작을 실패시킨다. probe의 연결 실패·timeout·5xx는
+media unavailable metric을 남기되 애플리케이션 시작과 전체 readiness를 막지 않는다. 운영 profile에서
+filesystem, in-memory, fake 또는 public bucket fallback을 허용하지 않는다.
 
 startup 이후 AIStor 장애는 다음에만 드러난다.
 

@@ -27,9 +27,26 @@ internal class AistorStorefrontImageStorageTest {
 
         val prepared = storage.store(StorefrontImageTarget.STORE, targetId, storage.normalize(StorefrontImageUpload(jpeg(), "image/jpeg")))
 
-        assertThat(prepared.originalKey).isEqualTo("stores/$targetId/${prepared.sha256}/original.jpg")
-        assertThat(prepared.thumbnailKey).isEqualTo("stores/$targetId/${prepared.sha256}/thumbnail.jpg")
+        assertThat(prepared.originalKey)
+            .matches("stores/$targetId/${prepared.sha256}/[0-9a-f-]{36}/original\\.jpg")
+        assertThat(prepared.thumbnailKey)
+            .matches("stores/$targetId/${prepared.sha256}/[0-9a-f-]{36}/thumbnail\\.jpg")
         assertThat(client.objects.keys).containsExactlyInAnyOrder(prepared.originalKey, prepared.thumbnailKey)
+    }
+
+    @Test
+    fun `a later upload of the same bytes receives a new immutable generation`() {
+        val client = FakeAistorObjectClient()
+        val storage = storage(client)
+        val targetId = UUID.randomUUID()
+        val normalized = storage.normalize(StorefrontImageUpload(jpeg(), "image/jpeg"))
+
+        val first = storage.store(StorefrontImageTarget.STORE, targetId, normalized)
+        val second = storage.store(StorefrontImageTarget.STORE, targetId, normalized)
+
+        assertThat(first.sha256).isEqualTo(second.sha256)
+        assertThat(first.originalKey).isNotEqualTo(second.originalKey)
+        assertThat(first.thumbnailKey).isNotEqualTo(second.thumbnailKey)
     }
 
     @Test
@@ -71,6 +88,18 @@ internal class AistorStorefrontImageStorageTest {
         assertThat(client.statCalls).isEmpty()
     }
 
+    @Test
+    fun `orphan listing is prefix scoped grace filtered and batch bounded`() {
+        val client = FakeAistorObjectClient()
+        client.listed += AistorObjectSummary("stores/one/original.jpg", now.minusSeconds(200))
+        client.listed += AistorObjectSummary("menus/two/thumbnail.jpg", now.minusSeconds(150))
+        client.listed += AistorObjectSummary("other/ignored", now.minusSeconds(300))
+        client.listed += AistorObjectSummary("menus/new/thumbnail.jpg", now.minusSeconds(10))
+
+        assertThat(storage(client).listOrphanCandidates(now.minusSeconds(100), 1))
+            .containsExactly("stores/one/original.jpg")
+    }
+
     private fun storage(client: AistorObjectClient) =
         AistorStorefrontImageStorage(
             StorefrontImageNormalizer(),
@@ -96,6 +125,7 @@ internal class AistorStorefrontImageStorageTest {
 
         val objects = linkedMapOf<String, Stored>()
         val statCalls = mutableListOf<String>()
+        val listed = mutableListOf<AistorObjectSummary>()
 
         override fun put(
             key: String,
@@ -126,6 +156,8 @@ internal class AistorStorefrontImageStorageTest {
             objects.remove(key)
         }
 
-        override fun bucketExists(): Boolean = true
+        override fun list(prefix: String): Sequence<AistorObjectSummary> = listed.asSequence().filter { it.key.startsWith(prefix) }
+
+        override fun verifyBucket(): AistorBucketVerification = AistorBucketVerification.AVAILABLE
     }
 }

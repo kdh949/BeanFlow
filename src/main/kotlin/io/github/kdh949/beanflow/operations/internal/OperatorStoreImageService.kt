@@ -105,6 +105,7 @@ internal class OperatorStoreImageTransaction(
         change: StoreImageChange,
         now: Instant,
     ) {
+        val correlationId = correlationIds.currentOrCreate()
         audits.appendAll(
             listOf(
                 AppendAuditRecordCommand(
@@ -118,23 +119,14 @@ internal class OperatorStoreImageTransaction(
                     reason = reason.trim(),
                     beforeSummary = imageState(change.previous != null),
                     afterSummary = imageState(change.current != null),
-                    correlationId = correlationIds.currentOrCreate(),
-                    sourceReference = sourceReference(actorId, storeId, change, now),
+                    correlationId = correlationId,
+                    sourceReference = "$action:$correlationId",
                 ),
             ),
         )
     }
 
     private fun imageState(present: Boolean) = mapOf("imageState" to if (present) "PRESENT" else "ABSENT")
-
-    private fun sourceReference(
-        actorId: UUID,
-        storeId: UUID,
-        change: StoreImageChange,
-        now: Instant,
-    ): String =
-        "operator-store-image:$actorId:$storeId:" +
-            "${change.previous?.sha256.orEmpty()}:${change.current?.sha256.orEmpty()}:$now"
 
     private fun validReason(reason: String) {
         if (reason.trim().length !in 1..MAX_REASON_LENGTH || reason.any(Char::isISOControl)) {

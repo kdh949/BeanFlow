@@ -778,6 +778,7 @@ paths:
         - $ref: "#/components/parameters/MerchantCsrfToken"
       responses:
         "204": { description: 매장 이미지 포인터가 없음 }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -808,6 +809,52 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/menus/{menuId}/image:
+    put:
+      tags: [Merchant]
+      operationId: replaceMenuImage
+      summary: 메뉴 이미지 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        해당 매장의 STORE_OWNER 또는 STORE_STAFF가 수행합니다. URL의 매장과 메뉴의 실제
+        소속이 다르면 404를 반환하며, 현재 이미지와 정규화 SHA-256이 같으면 다시 쓰지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/StorefrontImageUploadRequest" }
+      responses:
+        "200":
+          description: 현재 메뉴 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    delete:
+      tags: [Merchant]
+      operationId: deleteMenuImage
+      summary: 메뉴 이미지 삭제
+      security: [{ merchantSession: [] }]
+      description: STORE_OWNER 또는 STORE_STAFF가 수행하며 이미지가 없어도 204를 반환합니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      responses:
+        "204": { description: 메뉴 이미지 포인터가 없음 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/pickup-slots:
     get:
       tags: [Discovery]
@@ -2347,6 +2394,49 @@ paths:
         - $ref: '#/components/parameters/AccessReason'
       responses:
         '204': { description: 매장 이미지 포인터가 없음 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/stores/{storeId}/menus/{menuId}/image:
+    put:
+      tags: [Operations]
+      operationId: replaceMenuImageByOperator
+      summary: (운영팀) 메뉴 이미지 교체
+      description: PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/MenuId'
+        - $ref: '#/components/parameters/AccessReason'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/StorefrontImageUploadRequest' }
+      responses:
+        '200':
+          description: 현재 메뉴 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontImage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Operations]
+      operationId: deleteMenuImageByOperator
+      summary: (운영팀) 메뉴 이미지 삭제
+      description: URL 매장과 메뉴 소속을 검증하고 실제 변경이 있을 때만 AuditRecord를 남깁니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/MenuId'
+        - $ref: '#/components/parameters/AccessReason'
+      responses:
+        '204': { description: 메뉴 이미지 포인터가 없음 }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -6393,6 +6483,12 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Identifier'
+    MenuId:
+      in: path
+      name: menuId
+      required: true
+      schema:
+        $ref: '#/components/schemas/Identifier'
     BrandId:
       in: path
       name: brandId
@@ -8591,6 +8687,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MenuOption"
+        image:
+          $ref: "#/components/schemas/StorefrontImage"
     MenuOption:
       type: object
       additionalProperties: false

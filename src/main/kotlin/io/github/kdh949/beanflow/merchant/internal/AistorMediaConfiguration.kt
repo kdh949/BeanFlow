@@ -3,10 +3,13 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.minio.BucketExistsArgs
 import io.minio.GetPresignedObjectUrlArgs
 import io.minio.Http
+import io.minio.ListObjectsArgs
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
 import io.minio.RemoveObjectArgs
 import io.minio.StatObjectArgs
+import io.minio.errors.ErrorResponseException
+import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -53,6 +56,17 @@ internal data class AistorObjectStatus(
     val sha256: String?,
 )
 
+internal data class AistorObjectSummary(
+    val key: String,
+    val lastModifiedAt: java.time.Instant,
+)
+
+internal enum class AistorBucketVerification {
+    AVAILABLE,
+    MISCONFIGURED,
+    UNAVAILABLE,
+}
+
 /** Narrow wrapper kept fakeable for ambiguous-PUT and cleanup tests. */
 internal interface AistorObjectClient {
     fun put(
@@ -71,7 +85,9 @@ internal interface AistorObjectClient {
 
     fun delete(key: String)
 
-    fun bucketExists(): Boolean
+    fun list(prefix: String): Sequence<AistorObjectSummary>
+
+    fun verifyBucket(): AistorBucketVerification
 }
 
 internal class MinioAistorObjectClient(
@@ -133,7 +149,37 @@ internal class MinioAistorObjectClient(
         )
     }
 
-    override fun bucketExists(): Boolean = operational.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())
+    override fun list(prefix: String): Sequence<AistorObjectSummary> =
+        operational
+            .listObjects(
+                ListObjectsArgs
+                    .builder()
+                    .bucket(bucket)
+                    .prefix(prefix)
+                    .recursive(true)
+                    .build(),
+            ).asSequence()
+            .map { result ->
+                val item = result.get()
+                AistorObjectSummary(item.objectName(), item.lastModified().toInstant())
+            }
+
+    override fun verifyBucket(): AistorBucketVerification =
+        try {
+            if (operational.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
+                AistorBucketVerification.AVAILABLE
+            } else {
+                AistorBucketVerification.MISCONFIGURED
+            }
+        } catch (failure: ErrorResponseException) {
+            if (failure.response().code in 400..499) {
+                AistorBucketVerification.MISCONFIGURED
+            } else {
+                AistorBucketVerification.UNAVAILABLE
+            }
+        } catch (_: Exception) {
+            AistorBucketVerification.UNAVAILABLE
+        }
 
     private companion object {
         const val SHA256_METADATA = "sha256"
@@ -160,14 +206,30 @@ internal class AistorMediaConfiguration {
     fun aistorStartupVerifier(
         client: AistorObjectClient,
         properties: AistorMediaProperties,
+        metrics: AistorMediaMetrics,
     ): ApplicationRunner =
         ApplicationRunner {
-            if (properties.verifyAtStartup && !client.bucketExists()) {
-                throw IllegalStateException("Configured AIStor bucket is unavailable")
+            if (properties.verifyAtStartup) {
+                when (client.verifyBucket()) {
+                    AistorBucketVerification.AVAILABLE -> {
+                        metrics.startup("success")
+                    }
+
+                    AistorBucketVerification.MISCONFIGURED -> {
+                        metrics.startup("failure")
+                        throw IllegalStateException("Configured AIStor credential or bucket is invalid")
+                    }
+
+                    AistorBucketVerification.UNAVAILABLE -> {
+                        metrics.startup("unavailable")
+                        logger.warn("AIStor startup verification is unavailable; media operations remain isolated")
+                    }
+                }
             }
         }
 
     private companion object {
+        val logger = LoggerFactory.getLogger(AistorMediaConfiguration::class.java)
         const val CONNECT_TIMEOUT_MS = 2_000L
         const val WRITE_TIMEOUT_MS = 10_000L
         const val READ_TIMEOUT_MS = 5_000L
