@@ -145,7 +145,7 @@ export const VerifiedGrantReveal: Story = {
     await openCase(canvas);
     await userEvent.click(canvas.getByRole("button", { name: "ENHANCED 본인확인 시작" }));
     await userEvent.click(await canvas.findByRole("button", { name: "등록 전화로 challenge 발급" }));
-    await userEvent.type(canvas.getByLabelText("일회성 proof"), "123456");
+    await userEvent.type(await canvas.findByLabelText("일회성 proof"), "123456");
     await userEvent.click(canvas.getByRole("button", { name: "proof 검증" }));
     await userEvent.click(await canvas.findByRole("button", { name: "전화번호 Grant 요청" }));
     await userEvent.click(await canvas.findByRole("button", { name: "승인된 전화번호 열람" }));
