@@ -74,6 +74,7 @@ data class NearbyStoreProfileProjection(
     val name: String,
     val distanceMicrometers: Long,
     val open: Boolean,
+    val imageThumbnailKey: String? = null,
 )
 
 /**
@@ -86,4 +87,5 @@ data class StoreDiscoveryDisplayProjection(
     val storeId: UUID,
     val name: String,
     val pickupCapable: Boolean,
+    val imageThumbnailKey: String? = null,
 )

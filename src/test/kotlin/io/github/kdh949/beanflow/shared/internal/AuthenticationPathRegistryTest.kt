@@ -20,6 +20,7 @@ class AuthenticationPathRegistryTest {
                 "/api/v1/auth/merchant/csrf" to AuthenticationChain.MERCHANT,
                 "/api/v1/regions" to AuthenticationChain.MERCHANT,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/region" to AuthenticationChain.MERCHANT,
+                "/api/v1/stores/00000000-0000-0000-0000-000000000001/image" to AuthenticationChain.MERCHANT,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/orders" to AuthenticationChain.MERCHANT,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/settlements" to AuthenticationChain.MERCHANT,
                 "/api/v1/stores/00000000-0000-0000-0000-000000000001/support-order-change-authorizations" to AuthenticationChain.MERCHANT,

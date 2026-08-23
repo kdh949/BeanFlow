@@ -1,0 +1,46 @@
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE merchant_store
+    ADD COLUMN image_original_key varchar(512),
+    ADD COLUMN image_thumbnail_key varchar(512),
+    ADD COLUMN image_sha256 varchar(64),
+    ADD COLUMN image_updated_at timestamptz,
+    ADD CONSTRAINT ck_merchant_store_image_pointer CHECK (
+        (
+            image_original_key IS NULL
+            AND image_thumbnail_key IS NULL
+            AND image_sha256 IS NULL
+            AND image_updated_at IS NULL
+        ) OR (
+            length(btrim(image_original_key)) BETWEEN 1 AND 512
+            AND length(btrim(image_thumbnail_key)) BETWEEN 1 AND 512
+            AND image_sha256 ~ '^[0-9a-f]{64}$'
+            AND image_updated_at IS NOT NULL
+        )
+    );
+
+-- 이미지 변경은 별도 운영 grant를 가진 PLATFORM_OPERATOR만 수행한다. 기존 grant는 자동으로
+-- 확장하지 않으며, permission vocabulary만 추가한다.
+ALTER TABLE operations_operator_permission_grant
+    DROP CONSTRAINT chk_operator_permission_vocabulary,
+    ADD CONSTRAINT chk_operator_permission_vocabulary CHECK (permission IN (
+        'EXPIRED_BENEFIT_POLICY_READ', 'EXPIRED_BENEFIT_POLICY_WRITE', 'POINT_ACCOUNT_READ', 'POINT_ADJUSTMENT',
+        'POINT_ACCRUAL_POLICY_READ', 'POINT_ACCRUAL_POLICY_WRITE', 'ORDER_COMPENSATION_READ',
+        'PAYMENT_CANCELLATION_SETUP_REPAIR', 'CUSTOMER_CANCELLATION_REFUND_RECONCILE',
+        'SUPPORT_CASE_READ', 'SUPPORT_CASE_WRITE', 'SUPPORT_CASE_ASSIGN', 'SUPPORT_SUBJECT_SEARCH',
+        'SUPPORT_VERIFICATION_MANAGE', 'SUPPORT_PII_REVEAL_REQUEST', 'SUPPORT_PII_REVEAL_APPROVE',
+        'SUPPORT_PII_REVEAL_BASIC', 'SUPPORT_PII_REVEAL_SENSITIVE', 'SUPPORT_BREAK_GLASS_REQUEST',
+        'SUPPORT_ACTION_REQUEST', 'SUPPORT_ACTION_APPROVE', 'SUPPORT_ACTION_EXECUTE', 'SUPPORT_ORDER_READ',
+        'SUPPORT_ORDER_CANCEL', 'SUPPORT_PICKUP_RESCHEDULE', 'SUPPORT_RESOLUTION_REQUEST',
+        'SUPPORT_RESOLUTION_APPROVE', 'SUPPORT_RESOLUTION_EXECUTE', 'SUPPORT_COMPENSATION_REQUEST',
+        'SUPPORT_COMPENSATION_APPROVE', 'SUPPORT_COMPENSATION_EXECUTE', 'SUPPORT_PROFILE_R1_CHANGE',
+        'SUPPORT_PROFILE_R2_CHANGE', 'SUPPORT_PROFILE_R3_REQUEST', 'SUPPORT_PROFILE_R3_APPROVE',
+        'SUPPORT_DELIVERY_READ', 'SUPPORT_DELIVERY_INCIDENT_WRITE', 'SUPPORT_DELIVERY_CHANGE',
+        'OPERATIONS_SUPPORT_INVESTIGATION', 'OPERATIONS_LEGAL_HOLD_MANAGE', 'OPERATIONS_RETENTION_MANAGE',
+        'PRIVACY_AUDIT_READ', 'PRIVACY_BREAK_GLASS_REVIEW', 'MERCHANT_CREDENTIAL_MANAGE',
+        'STORE_BRAND_MANAGE', 'STORE_MEDIA_MANAGE'
+    ));
+
+INSERT INTO operations_audit_action_category (action, audit_category) VALUES
+    ('STORE_IMAGE_UPDATED', 'OPERATIONS_POLICY'),
+    ('STORE_IMAGE_DELETED', 'OPERATIONS_POLICY');

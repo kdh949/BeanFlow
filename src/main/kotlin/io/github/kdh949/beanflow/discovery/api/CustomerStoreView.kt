@@ -1,6 +1,12 @@
 package io.github.kdh949.beanflow.discovery.api
 
+import java.time.Instant
 import java.util.UUID
+
+data class StorefrontImageView(
+    val url: String,
+    val expiresAt: Instant,
+)
 
 /**
  * The compact public store representation shared by favorites, recent stores and recommendations.
@@ -13,4 +19,5 @@ data class CustomerStoreView(
     val name: String,
     val pickupAvailable: Boolean,
     val distanceMeters: Long? = null,
+    val image: StorefrontImageView? = null,
 )

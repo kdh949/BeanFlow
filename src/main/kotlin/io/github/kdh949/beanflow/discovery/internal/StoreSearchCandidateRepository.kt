@@ -57,6 +57,7 @@ internal data class StoreSearchCandidate(
      */
     val pickupCapable: Boolean,
     val matchedKinds: Set<StoreSearchTermKind>,
+    val imageThumbnailKey: String? = null,
 )
 
 internal data class StoreSearchMenuRow(
@@ -140,6 +141,7 @@ internal class StoreSearchCandidateRepository(
                          $distance AS distance_micrometers,
                          store.accepting_orders AS accepting_orders,
                          store.pickup_enabled AS pickup_enabled,
+                         store.image_thumbnail_key AS image_thumbnail_key,
                          reason.kinds AS kinds
                     FROM scored
                     JOIN reason ON reason.store_id = scored.store_id
@@ -149,7 +151,7 @@ internal class StoreSearchCandidateRepository(
                      AND $openOnlyPredicate
                  )
             SELECT candidate.store_id, candidate.name, candidate.relevance_rank, candidate.distance_micrometers,
-                   candidate.accepting_orders, candidate.pickup_enabled, candidate.kinds
+                   candidate.accepting_orders, candidate.pickup_enabled, candidate.image_thumbnail_key, candidate.kinds
               FROM candidate
             $keyset
              ORDER BY $order
@@ -419,6 +421,7 @@ internal class StoreSearchCandidateRepository(
                         (row.getArray("kinds").array as Array<*>)
                             .map { StoreSearchTermKind.valueOf(it as String) }
                             .toSet(),
+                    imageThumbnailKey = row.getString("image_thumbnail_key"),
                 )
             }
 

@@ -54,4 +54,5 @@ data class NearbyStoreView(
     val distanceMeters: Long,
     val open: Boolean,
     val pickupAvailable: Boolean,
+    val image: StorefrontImageView? = null,
 )

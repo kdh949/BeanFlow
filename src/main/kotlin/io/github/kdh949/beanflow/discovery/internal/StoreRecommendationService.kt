@@ -51,6 +51,7 @@ internal class StoreRecommendationService(
                         name = item.name,
                         pickupAvailable = item.pickupAvailable,
                         distanceMeters = item.distanceMeters,
+                        image = item.image,
                     )
                 if (merged.size < limit) {
                     merged.putIfAbsent(item.storeId, StoreRecommendation(store, RecommendationReason.NEARBY))

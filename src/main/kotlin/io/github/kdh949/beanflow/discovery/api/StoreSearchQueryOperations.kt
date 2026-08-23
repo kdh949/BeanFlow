@@ -61,6 +61,7 @@ data class StoreSearchItemView(
      */
     val pickupAvailable: Boolean,
     val matchedMenus: List<StoreSearchMenuView>,
+    val image: StorefrontImageView? = null,
 )
 
 data class StoreSearchMenuView(

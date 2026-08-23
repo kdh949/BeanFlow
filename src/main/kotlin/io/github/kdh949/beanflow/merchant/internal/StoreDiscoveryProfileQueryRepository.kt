@@ -28,13 +28,14 @@ internal class StoreDiscoveryProfileQueryRepository(
         val sql =
             """
             SELECT candidate.store_id, candidate.name, candidate.distance_micrometers,
-                   candidate.accepting_orders
+                   candidate.accepting_orders, candidate.image_thumbnail_key
               FROM (
                     SELECT profile.store_id AS store_id,
                            profile.name AS name,
                            floor(ST_Distance(profile.location, $QUERY_POINT) * 1000000)::bigint
                                AS distance_micrometers,
-                           store.accepting_orders AS accepting_orders
+                           store.accepting_orders AS accepting_orders,
+                           store.image_thumbnail_key AS image_thumbnail_key
                       FROM merchant_store_discovery_profile profile
                       JOIN merchant_store store ON store.id = profile.store_id
                      WHERE ST_DWithin(profile.location, $QUERY_POINT, ?)
@@ -64,6 +65,7 @@ internal class StoreDiscoveryProfileQueryRepository(
                 name = resultSet.getString("name"),
                 distanceMicrometers = resultSet.getLong("distance_micrometers"),
                 open = resultSet.getBoolean("accepting_orders"),
+                imageThumbnailKey = resultSet.getString("image_thumbnail_key"),
             )
         }, *arguments.toTypedArray())
     }
@@ -80,7 +82,8 @@ internal class StoreDiscoveryProfileQueryRepository(
                     """
                     SELECT profile.store_id,
                            profile.name,
-                           (store.accepting_orders AND store.pickup_enabled) AS pickup_capable
+                           (store.accepting_orders AND store.pickup_enabled) AS pickup_capable,
+                           store.image_thumbnail_key AS image_thumbnail_key
                       FROM merchant_store_discovery_profile profile
                       JOIN merchant_store store ON store.id = profile.store_id
                      WHERE profile.store_id = ANY(?::uuid[])
@@ -93,6 +96,7 @@ internal class StoreDiscoveryProfileQueryRepository(
                 storeId = resultSet.getObject("store_id", UUID::class.java),
                 name = resultSet.getString("name"),
                 pickupCapable = resultSet.getBoolean("pickup_capable"),
+                imageThumbnailKey = resultSet.getString("image_thumbnail_key"),
             )
         })
     }

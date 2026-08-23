@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.multipart.MaxUploadSizeExceededException
 
 @RestControllerAdvice
 internal class ApiExceptionHandler(
@@ -53,6 +54,16 @@ internal class ApiExceptionHandler(
                 message = "Request validation failed",
                 correlationId = correlationIdSource.currentOrCreate(),
                 details = safeValidationDetails(failure),
+            ),
+        )
+
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun oversizedImage(): ResponseEntity<ErrorResponse> =
+        ResponseEntity.badRequest().body(
+            ErrorResponse(
+                code = FailureCode.INVALID_IMAGE.name,
+                message = "Image validation failed",
+                correlationId = correlationIdSource.currentOrCreate(),
             ),
         )
 
@@ -113,6 +124,7 @@ internal class ApiExceptionHandler(
     private fun statusOf(code: FailureCode): HttpStatus =
         when (code) {
             FailureCode.INVALID_REQUEST,
+            FailureCode.INVALID_IMAGE,
             FailureCode.PASSWORD_POLICY_VIOLATION,
             -> HttpStatus.BAD_REQUEST
 
