@@ -9,6 +9,7 @@ import {
   ReceiptText,
   WalletCards,
   Search,
+  Settings2,
   ShieldCheck,
   Store,
   UserRound,
@@ -89,6 +90,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 조회", icon: Search },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound },
+    { to: "/ops/policies", label: "정책 관리", icon: Settings2 },
   ];
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },

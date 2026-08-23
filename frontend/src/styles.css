@@ -650,6 +650,39 @@ code {
 .one-time-password code { margin-top: var(--sp-2); padding: var(--sp-4); overflow-wrap: anywhere; border-radius: var(--r-sm); background: var(--surface-card); color: var(--text-strong); font-size: var(--fs-body-lg); font-weight: var(--fw-bold); }
 .one-time-password small { color: var(--warning-fg); font-size: var(--fs-caption); }
 
+.policy-workspace-tabs button { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.policy-workspace { display: flex; flex-direction: column; gap: var(--sp-5); }
+.policy-intro-card { padding: var(--sp-6); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-6); }
+.policy-intro-card > div:first-child { display: flex; flex-direction: column; gap: var(--sp-2); }
+.policy-intro-card h2 { color: var(--text-strong); font-size: var(--fs-title-2); }
+.policy-intro-card p { max-width: 62ch; color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.6; }
+.policy-audit-read { min-width: min(100%, 24rem); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); }
+.policy-audit-read label { grid-column: 1 / -1; color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.policy-audit-read select, .policy-form input, .policy-form select, .policy-form textarea, .inline-policy-form input { width: 100%; border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-control); background: var(--crema-50); color: var(--text-strong); font: inherit; }
+.policy-audit-read select, .policy-form input, .policy-form select, .inline-policy-form input { min-height: var(--control-h-lg); padding: 0 var(--sp-4); }
+.policy-form textarea { min-height: var(--control-h-xl); padding: var(--sp-4); resize: vertical; }
+.policy-audit-read select:focus, .policy-form input:focus, .policy-form select:focus, .policy-form textarea:focus, .inline-policy-form input:focus { border-color: var(--caramel-400); outline: 0; box-shadow: var(--ring-focus); }
+.policy-detail-grid { align-items: start; }
+.policy-form { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4); }
+.policy-form h3 { color: var(--text-strong); font-size: var(--fs-title-3); }
+.policy-form label, .inline-policy-form label { display: flex; flex-direction: column; gap: var(--sp-2); color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.policy-card-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.compact-policy-card { padding: var(--sp-5); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: start; }
+.compact-policy-card.is-selected { border-color: var(--border-accent); background: var(--surface-accent-soft); }
+.compact-policy-card h3 { margin-top: var(--sp-1); overflow: hidden; color: var(--text-strong); font-size: var(--fs-body-lg); text-overflow: ellipsis; white-space: nowrap; }
+.compact-policy-card p, .compact-policy-card small { grid-column: 1 / -1; color: var(--text-muted); font-size: var(--fs-caption); }
+.compact-policy-card small { color: var(--text-faint); line-height: 1.5; }
+.compact-policy-card .bf-btn { grid-column: 1 / -1; justify-self: start; }
+.inline-policy-form { padding: var(--sp-5); display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) auto; align-items: end; gap: var(--sp-4); }
+.policy-caution { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-sm); background: var(--warning-bg); color: var(--warning-fg); font-size: var(--fs-caption); line-height: 1.5; }
+.search-index-form { max-width: 52rem; }
+.index-result { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
+.index-result.is-complete { border-color: var(--success-fg); }
+.index-result.is-partial { border-color: var(--warning-fg); background: var(--warning-bg); }
+.failed-store-list { margin: 0; padding: var(--sp-4); border-radius: var(--r-sm); display: flex; flex-direction: column; gap: var(--sp-2); background: var(--surface-card); list-style: none; }
+.failed-store-list code { color: var(--text-body); font-size: var(--fs-caption); overflow-wrap: anywhere; }
+
 .refund-lines { padding: var(--sp-7); }
 .refund-lines h2 { font-size: var(--fs-title-3); }
 .refund-lines ul { margin: var(--sp-5) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -747,6 +780,8 @@ code {
   .candidate-case-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .candidate-case-options .bf-btn { grid-column: 1 / -1; }
   .support-compensation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .policy-intro-card { align-items: stretch; flex-direction: column; }
+  .inline-policy-form { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-card { min-height: 130px; }
   .order-board { grid-template-columns: repeat(3, minmax(280px, 1fr)); }
@@ -777,6 +812,9 @@ code {
   .support-case-header > div:last-child { width: 100%; justify-content: space-between; }
   .candidate-case-options, .support-compensation-grid { grid-template-columns: 1fr; }
   .inline-fields { grid-template-columns: 1fr; }
+  .field-grid, .policy-card-list { grid-template-columns: 1fr; }
+  .policy-audit-read { grid-template-columns: 1fr; }
+  .policy-audit-read label { grid-column: auto; }
   .page-title { flex-direction: column; }
   .store-selector { align-items: stretch; flex-direction: column; }
   .store-selector select { width: 100%; min-width: 0; }
