@@ -4,6 +4,7 @@ import {
   Home,
   LogOut,
   PackageCheck,
+  MapPin,
   ReceiptText,
   WalletCards,
   Search,
@@ -80,6 +81,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
       ? [
           { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
           { to: "/store/disputes", label: "이의제기", icon: ReceiptText, end: false },
+          { to: "/store/region", label: "지역 설정", icon: MapPin, end: false },
         ]
       : []),
   ];

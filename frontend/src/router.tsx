@@ -25,6 +25,7 @@ import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
+import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
 
 export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
           { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
           { path: "settlements", element: <StoreSettlementsPage /> },
           { path: "disputes", element: <StoreDisputesPage /> },
+          { path: "region", element: <StoreRegionPage /> },
         ],
       },
     ],
