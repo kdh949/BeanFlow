@@ -47,16 +47,21 @@ internal data class OperationsOidcConfigurationProperties(
         require("offline_access" !in scopes) { "operations OIDC scopes must not include offline_access" }
     }
 
-    private fun validatedUri(name: String, value: String): URI {
-        val uri = runCatching { URI(value) }.getOrElse { throw IllegalArgumentException("operations OIDC $name is invalid", it) }
+    private fun validatedUri(
+        name: String,
+        value: String,
+    ): URI {
+        val uri =
+            runCatching { URI(value) }.getOrElse {
+                throw IllegalArgumentException("operations OIDC $name is invalid", it)
+            }
         require(uri.isAbsolute && uri.host != null && uri.scheme in setOf("https", "http")) {
             "operations OIDC $name must be an absolute HTTP(S) URI"
         }
         return uri
     }
 
-    private fun origin(uri: URI): Triple<String, String, Int> =
-        Triple(uri.scheme.lowercase(), uri.host.lowercase(), uri.port)
+    private fun origin(uri: URI): Triple<String, String, Int> = Triple(uri.scheme.lowercase(), uri.host.lowercase(), uri.port)
 }
 
 internal data class OperationsOidcConfigurationResponse(
