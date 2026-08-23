@@ -1,11 +1,11 @@
 # 프론트엔드 기능 공백을 사용자 여정으로 완결한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-23`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -162,12 +162,14 @@ BeanFlow의 런타임 API에는 고객 쿠폰·즐겨찾기, 점주 매장 지�
 작업 중 변경 범위에 맞춰 집중 테스트를 먼저 실행하고 마지막에 다음을 실행한다.
 
     cd frontend && npm test
+    cd frontend && npm run typecheck
     cd frontend && npm run build
-    cd frontend && npm run lint
-    cd frontend && npm run storybook:test
-    ./scripts/verify-openapi.sh
-    ./scripts/verify-docs.sh
-    ./gradlew test
+    cd frontend && npm run check:design
+    cd frontend && npm run build-storybook
+    cd frontend && npm run test:storybook:docs
+    bash scripts/verify-docs.sh
+    ./gradlew test --tests '*OperationsOidcConfigurationTest'
+    ./gradlew test --tests '*RuntimeOpenApiParityTest'
 
 Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-changed-stories`와
 `preview-stories` 결과를 최종 검증 증거에 기록한다.
@@ -181,8 +183,8 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 
 ## Documentation Updates
 
-- `docs/design-system-inventory.md`의 Story 파일·Story·Docs 수와 페이지 목록을 갱신한다.
-- `docs/testing/storybook-runbook.md`의 라우트, 실행·검증 절차와 현재 수치를 갱신한다.
+- `frontend/docs/design-system-inventory.md`의 Story 파일·Story·Docs 수와 페이지 목록을 갱신한다.
+- `frontend/docs/storybook-runbook.md`의 라우트, 실행·검증 절차와 현재 수치를 갱신한다.
 - 구현 중 계약 또는 제품 결정을 바꿔야 할 때만 관련 Business Policy/ADR을 먼저 갱신한다.
 - 완료 시 이 파일을 `docs/exec-plans/completed/`로 이동하고 실제 검증 결과를 기록한다.
 
@@ -206,7 +208,8 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 - [x] 2026-08-23: 운영 정책 수직 슬라이스를 완성했다. 공통 포인트 적립과 만료 혜택 복원 정책은
   감사 조회 후 현재 버전을 기준으로 새 버전을 만들고, 브랜드는 생성·이름/상태 변경·보관 제약을
   표시한다. 검색 색인 `complete=false`, 실행 중 409와 503은 전체 성공으로 축소하지 않는다.
-- [ ] 전체 검증과 ExecPlan 완료 이동을 수행한다.
+- [x] 2026-08-23: 전체 프론트·Storybook·문서 검증과 변경 백엔드 집중 검증을 수행하고,
+  Storybook 현황을 35개 CSF 파일·156개 Story·37개 Docs로 갱신한 뒤 ExecPlan을 완료 이동했다.
 
 ## Surprises & Discoveries
 
@@ -215,8 +218,8 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 - 2026-08-23: 운영 화면을 실제 API와 연결하려면 기존 수동 토큰 편집기를 유지할 수 없고,
   Accepted BR-41/ADR-092의 Keycloak PKCE 선행 조건을 같은 수직 슬라이스에서 충족해야 한다.
 - 2026-08-23: macOS sandbox 안의 Chromium은 Mach port 등록 권한으로 Storybook MCP 테스트를
-  시작하지 못했다. 권한 허용된 동일 로컬 서버로 재실행한 뒤 27개 파일·115개 Story의 interaction과
-  a11y가 모두 통과했으며, 마지막 두 full run에는 MSW unhandled API 요청이 없었다.
+  시작하지 못했다. 권한 허용된 동일 로컬 서버에서 최종 35개 파일·156개 Story의 interaction과
+  a11y가 모두 통과했으며 MSW unhandled API 요청이 없었다.
 - 2026-08-23: 런타임 계약에는 매장 지역 지정 `PUT`은 있지만 현재 지정값 `GET`은 없다. 화면은 이전
   값을 추정하거나 브라우저에 저장하지 않고 이번 지정 성공 응답만 표시한다.
 - 2026-08-23: 브라우저 `Headers`는 한글 같은 비 Latin-1 문자열을 custom header 값으로 직렬화하지
@@ -226,6 +229,11 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
   인증 경계는 Accepted ADR-092/BR-41에서 이미 Keycloak JWT로 확정되어 있었다. 새 배포 단위를
   추가하지 않고 기존 프론트엔드의 격리된 `/support` 라우트와 동일한 메모리 전용 OIDC 세션을
   사용하도록 두 결정을 Accepted로 정렬했다.
+- 2026-08-23: 전체 backend suite는 Testcontainers가 테스트 컨텍스트마다 새 DB와 Flyway migration을
+  수행해 127번째 격리 DB까지 약 35분이 걸렸다. 그 과정에서 새 OIDC controller의 설정 binding이
+  `@WebMvcTest` slice에서 누락되는 parity 실패를 발견했다. controller가 자신의 configuration
+  properties를 직접 enable하도록 수정한 뒤 OIDC 설정 테스트와 runtime OpenAPI parity 테스트를
+  각각 다시 실행해 통과시켰다. 수정 후 전체 suite 재실행은 수행하지 않았다.
 
 ## Decision Log
 
@@ -241,10 +249,20 @@ Storybook MCP의 `run-story-tests`를 각 변경 Story에 실행하고 `get-chan
 
 ## Outcomes & Retrospective
 
-구현과 검증 완료 후 사용자에게 열린 신규 여정, 재사용한 디자인 시스템, 남은 한계, 실제 실행한
-검증 결과와 Draft PR을 기록한다.
+고객 쿠폰·즐겨찾기, 점주 지역 설정, 운영자 OIDC·점주 계정·정책 관리, 고객지원 콘솔이 모두 실제
+라우트와 runtime API에 연결됐다. 기존 `Button`, `FeedbackState`, `StatusBadge`, `PageTitle`, console
+shell과 card/form 패턴을 우선 재사용했고 Support 보호 데이터와 정책 workspace만 좁은 도메인 조합으로
+추가했다.
+
+최종 검증은 frontend unit 157개, production build, typecheck, design adherence, 35개 CSF 파일의
+156개 Story interaction+a11y, Storybook static build, 37개 Docs/49개 state surface browser smoke,
+OpenAPI·문서 검증이 통과했다. backend 변경은 OIDC 설정 테스트와 runtime OpenAPI parity 집중 테스트가
+통과했다. 전체 backend suite는 위 장시간 실행에서 발견한 parity 실패를 수정한 뒤 전체로는 재실행하지
+않았으므로 Draft PR에서 명시적인 pending validation으로 남긴다. 매장 현재 지역 조회 API가 없어 이번
+지정 성공 응답만 표시하는 한계와 visual regression baseline 미구성은 후속 범위다.
 
 ## Revision Notes
 
 - 2026-08-23: 최초 작성. 선택된 Storybook 결함과 고객·점주·운영·Support 화면 공백을 하나의
   migration 없는 frontend completion plan으로 구체화했다.
+- 2026-08-23: 모든 수직 슬라이스와 최종 검증 결과를 기록하고 completed로 이동했다.
