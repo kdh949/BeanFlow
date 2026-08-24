@@ -267,6 +267,8 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: PR 1 최종 backend gate 통과, Draft PR #97 생성
 - [x] 2026-08-19: PR #97 remote shard 0의 settlement snapshot 시간 정밀도 실패 원인
   확인과 PostgreSQL microsecond 반올림 회귀 수정
+- [x] 2026-08-24: PR #97 review에서 commit된 감사 조회를 shared transaction으로 분류한 오류를 확인하고
+  `OperatorCompensationControllerTest`를 명시적 class isolation으로 복구
 - [x] 2026-08-19: PR 2의 39개 migration assertion inventory를 유지 전용·중앙 이동·중복 삭제로 매핑
 - [x] 2026-08-19: fresh Flyway smoke, 중앙 metadata와 네 Context current-schema invariant 검증 추가
 - [x] 2026-08-19: 대응 위치가 확인된 반복 clean migration과 단순 metadata assertion만 제거하고 full suite 통과
@@ -292,6 +294,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   remote workflow가 명시한 count가 실제 실행 source이므로 둘을 추측해 합치지 않는다.
 - 2026-08-19: 주문 생성·재주문 테스트를 test transaction으로 감싸면 `REQUIRES_NEW` 멱등 등록이
   미커밋 fixture를 기다렸다. 해당 클래스는 교착을 숨기지 않고 isolated로 유지했다.
+- 2026-08-24: `OperatorCompensationControllerTest`의 첫 시나리오는 요청 transaction이 끝난 뒤
+  `ORDER_COMPENSATION_READ` Audit의 commit을 검증한다고 명시했지만 shared marker가 fixture, MockMvc 요청과
+  마지막 JDBC 조회를 같은 test-managed transaction에 넣었다. 같은 미커밋 row 가시성으로 거짓 성공할 수 있어
+  ADR-114의 commit visibility 격리 기준에 따라 class-isolated database를 복구했다.
 - 2026-08-19: DB failure trigger가 같은 test transaction을 abort하는 테스트는 예외를 assertion한 뒤에도
   후속 SQL을 실행할 수 없다. DDL·강제 실패 테스트는 isolated 대상이다.
 - 2026-08-19: 동일 구성을 가진 운영 Controller shared 테스트는 한 번 시작한 Context/database를 재사용한

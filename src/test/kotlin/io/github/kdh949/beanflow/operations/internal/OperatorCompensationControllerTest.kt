@@ -1,6 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationTrigger
@@ -28,7 +28,7 @@ import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
-@BeanflowSharedDatabaseTest
+@BeanflowIsolatedSpringContext("verifies committed audit visibility across the request transaction boundary")
 @SpringBootTest
 internal class OperatorCompensationControllerTest
     @Autowired
