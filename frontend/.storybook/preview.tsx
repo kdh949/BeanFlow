@@ -2,6 +2,7 @@ import type { Preview } from "@storybook/react-vite";
 import { createMemoryRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { mswLoader } from "msw-storybook-addon/csf3";
+import { CustomerShell } from "../src/components/Shells";
 import "../src/design-system/styles.css";
 import "../src/styles.css";
 import { mswHandlers } from "./msw-handlers";
@@ -15,9 +16,12 @@ const preview: Preview = {
       const routing = context.parameters["routing"] as {
         initialEntry?: string | { pathname: string; state?: unknown };
         path?: string;
+        surface?: "customer";
       } | undefined;
       const router = createMemoryRouter(
-        [{ path: routing?.path ?? "*", element: <Story /> }],
+        routing?.surface === "customer"
+          ? [{ element: <CustomerShell />, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
+          : [{ path: routing?.path ?? "*", element: <Story /> }],
         { initialEntries: [routing?.initialEntry ?? "/"] },
       );
       return <RouterProvider router={router} />;

@@ -132,16 +132,41 @@ describe("store search", () => {
           open: true,
           pickupAvailable: true,
           matchedMenus: [{ menuId: "menu-1", name: "오트 라떼" }],
+          image: { url: "/demo/catalog/store-01.webp", expiresAt: "2099-01-01T00:00:00Z" },
         }],
         page: {},
         distanceAvailable: false,
       }),
     });
 
-    renderSearch("/app/stores?query=라떼");
+    const { container } = renderSearch("/app/stores?query=라떼");
 
     expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
     expect(screen.getByText("오트 라떼")).toBeInTheDocument();
+    expect(container.querySelector("img.store-thumbnail")).toHaveAttribute("src", "/demo/catalog/store-01.webp");
+  });
+
+  it("keeps the coffee mark for a store whose image is omitted", async () => {
+    routeGet({
+      "/stores/search": ok({
+        items: [{
+          storeId: "store-1",
+          name: "성수 로스터리",
+          matchReason: ["MENU_NAME"],
+          open: true,
+          pickupAvailable: true,
+          matchedMenus: [],
+        }],
+        page: {},
+        distanceAvailable: false,
+      }),
+    });
+
+    const { container } = renderSearch("/app/stores?query=라떼");
+
+    await screen.findByText("성수 로스터리");
+    expect(container.querySelector("img.store-thumbnail")).toBeNull();
+    expect(container.querySelector(".store-mark")).toBeInTheDocument();
   });
 
   it("shows an empty result without claiming a failure", async () => {
