@@ -1,4 +1,12 @@
 beanflow:
+  operations-oidc:
+    issuer-uri: https://id.beanflow.test/realms/operations
+    authorization-server-url: https://id.beanflow.test
+    realm: operations
+    client-id: beanflow-operations-web
+    redirect-uri: https://console.beanflow.test/ops/auth/callback
+    post-logout-redirect-uri: https://console.beanflow.test/ops
+    scopes: [openid, profile]
   acceptance-timeout-work:
     initial-delay-ms: 3600000
     retention-initial-delay-ms: 3600000

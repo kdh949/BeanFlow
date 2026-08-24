@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { apiError, searchHandlers, signedInHandlers } from "../../../.storybook/fixtures";
 import { StoreSearchPage } from "./StoreSearchPage";
@@ -59,5 +59,32 @@ export const SearchUnavailable: Story = {
   parameters: { msw: { handlers: [...signedInHandlers, apiError("/api/v1/stores/search")] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("alert")).toBeVisible();
+  },
+};
+
+export const LocationPermissionDenied: Story = {
+  tags: ["!autodocs"],
+  parameters: {
+    routing: { path: "/app/stores", initialEntry: "/app/stores" },
+    msw: { handlers: searchHandlers },
+  },
+  beforeEach: () => {
+    const descriptor = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (_success: PositionCallback, failure: PositionErrorCallback) =>
+          failure({ code: 1, PERMISSION_DENIED: 1 } as GeolocationPositionError),
+      },
+    });
+    return () => {
+      if (descriptor) Object.defineProperty(navigator, "geolocation", descriptor);
+      else Reflect.deleteProperty(navigator, "geolocation");
+    };
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "현재 위치로 찾기" }));
+    await expect(await canvas.findByText(/위치 권한이 꺼져 있어/)).toBeVisible();
+    await expect(canvas.getByLabelText("검색어")).toBeEnabled();
   },
 };

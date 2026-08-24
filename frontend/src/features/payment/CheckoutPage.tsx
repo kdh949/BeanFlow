@@ -1,6 +1,6 @@
-import { ArrowLeft, Check, Coffee, CreditCard, ShieldCheck, Timer } from "lucide-react";
+import { ArrowLeft, Check, Coffee, CreditCard, ShieldCheck, Timer, TrendingUp } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { idempotencyKey, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
@@ -13,9 +13,13 @@ import { attemptStorage } from "./paymentAttempt";
 import { Button } from "../../design-system";
 
 type Order = components["schemas"]["Order"];
+type ReorderPriceComparison = components["schemas"]["ReorderPriceComparison"];
 
 export function CheckoutPage() {
   const { orderId = "" } = useParams();
+  const location = useLocation();
+  const routeState = location.state as { reorderPriceComparison?: ReorderPriceComparison } | null;
+  const priceComparison = routeState?.reorderPriceComparison;
   const [failure, setFailure] = useState<unknown>(null);
   const [paying, setPaying] = useState(false);
 
@@ -64,6 +68,7 @@ export function CheckoutPage() {
     <div className="customer-page checkout-page">
       <Link className="back-link" to={`/app/orders/${order.publicReference}`}><ArrowLeft size={17} /> 주문 보기</Link>
       <PageTitle eyebrow="CHECKOUT" title="주문을 확인해 주세요" description="금액과 픽업 주문을 확인한 뒤 Toss 결제창에서 카드 또는 간편결제를 선택합니다." />
+      {priceComparison?.hasPriceChanges ? <ReorderPriceNotice comparison={priceComparison} /> : null}
       <section className="checkout-card surface-card">
         <div className="card-kicker"><Coffee size={18} /> 주문 메뉴</div>
         {order.lines.map((line) => (
@@ -91,5 +96,21 @@ export function CheckoutPage() {
       </Button>
       <p className="checkout-legal">결제 버튼을 누르면 주문 내용과 결제 진행에 동의합니다.</p>
     </div>
+  );
+}
+
+export function ReorderPriceNotice({ comparison }: { comparison: ReorderPriceComparison }) {
+  return (
+    <section className="surface-card reorder-price-notice" role="status" aria-label="재주문 가격 변경">
+      <TrendingUp size={20} />
+      <div>
+        <strong>현재 가격으로 다시 계산했어요</strong>
+        <span>
+          이전 {won.format(comparison.sourceSubtotalKrw)} → 현재 {won.format(comparison.currentSubtotalKrw)}
+          {comparison.subtotalDifferenceKrw > 0 ? ` · ${won.format(comparison.subtotalDifferenceKrw)} 인상` : ` · ${won.format(Math.abs(comparison.subtotalDifferenceKrw))} 인하`}
+        </span>
+        <small>가격이 달라진 주문 항목 {comparison.items.length}개가 현재 주문 금액에 반영됐습니다.</small>
+      </div>
+    </section>
   );
 }

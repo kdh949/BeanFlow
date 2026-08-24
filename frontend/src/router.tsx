@@ -23,6 +23,13 @@ import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
 import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
 import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
+import { CouponWalletPage } from "./features/customer/CouponWalletPage";
+import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
+import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
+import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
+import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
+import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
+import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
 
 export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
@@ -47,6 +54,8 @@ export const router = createBrowserRouter([
           { path: "orders", element: <CustomerOrdersPage /> },
           { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
           { path: "points", element: <CustomerPointsPage /> },
+          { path: "coupons", element: <CouponWalletPage /> },
+          { path: "favorites", element: <FavoriteStoresPage /> },
           { path: "me", element: <CustomerMyPage /> },
         ],
       },
@@ -62,10 +71,28 @@ export const router = createBrowserRouter([
           { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
           { path: "settlements", element: <StoreSettlementsPage /> },
           { path: "disputes", element: <StoreDisputesPage /> },
+          { path: "region", element: <StoreRegionPage /> },
         ],
       },
     ],
   },
-  { path: "/ops", element: <ConsoleShell kind="ops" />, children: [{ index: true, element: <OpsDashboardPage /> }, { path: "orders", element: <OpsOrderPage /> }] },
+  {
+    path: "/ops", element: <ConsoleShell kind="ops" />, children: [
+      { path: "auth/callback", element: <OperationsSessionGate callback /> },
+      {
+        element: <OperationsSessionGate />, children: [
+          { index: true, element: <OpsDashboardPage /> },
+          { path: "orders", element: <OpsOrderPage /> },
+          { path: "merchant-accounts", element: <MerchantAccountsPage /> },
+          { path: "policies", element: <OperationsPolicyPage /> },
+        ],
+      },
+    ],
+  },
+  {
+    path: "/support", element: <ConsoleShell kind="support" />, children: [
+      { element: <OperationsSessionGate />, children: [{ index: true, element: <SupportWorkspacePage /> }] },
+    ],
+  },
   { path: "*", element: <NotFoundPage /> },
 ]);

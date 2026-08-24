@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { CustomerLoginPage, CustomerSignupPage } from "./AuthPages";
 
@@ -42,6 +42,54 @@ export const RejectedCredentials: Story = {
           HttpResponse.json({ code: "AUTHENTICATION_FAILED", message: "인증에 실패했습니다." }, { status: 401 })),
       ],
     },
+  },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("아이디"), "locked-user");
+    await userEvent.type(canvas.getByLabelText("비밀번호"), "invalid-password");
+    await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
+    await expect(await canvas.findByText("아이디 또는 비밀번호를 확인해 주세요.")).toBeVisible();
+  },
+};
+
+/** 잠긴 계정도 계정 존재 여부를 숨기기 위해 일반 인증 실패와 같은 화면을 사용합니다. */
+export const AccountLockProtected: Story = {
+  tags: ["!autodocs"],
+  parameters: {
+    msw: {
+      handlers: [
+        ...unauthenticated,
+        http.post("/api/v1/auth/customer/sessions", () =>
+          HttpResponse.json({ code: "AUTHENTICATION_FAILED", message: "인증에 실패했습니다." }, { status: 401 })),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("아이디"), "locked-user");
+    await userEvent.type(canvas.getByLabelText("비밀번호"), "correct-but-protected");
+    await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
+    await expect(await canvas.findByText("아이디 또는 비밀번호를 확인해 주세요.")).toBeVisible();
+  },
+};
+
+export const RateLimited: Story = {
+  tags: ["!autodocs"],
+  parameters: {
+    msw: {
+      handlers: [
+        ...unauthenticated,
+        http.post("/api/v1/auth/customer/sessions", () =>
+          HttpResponse.json(
+            { code: "AUTHENTICATION_RATE_LIMITED", message: "로그인 시도가 너무 많습니다. 15분 뒤 다시 시도해 주세요." },
+            { status: 429, headers: { "Retry-After": "900" } },
+          )),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("아이디"), "busy-user");
+    await userEvent.type(canvas.getByLabelText("비밀번호"), "invalid-password");
+    await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
+    await expect(await canvas.findByText("로그인 시도가 너무 많습니다. 15분 뒤 다시 시도해 주세요.")).toBeVisible();
   },
 };
 

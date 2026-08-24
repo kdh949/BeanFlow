@@ -122,6 +122,13 @@ export BEANFLOW_DB_URL='jdbc:postgresql://localhost:5432/beanflow'
 export BEANFLOW_DB_USERNAME='beanflow'
 export BEANFLOW_DB_PASSWORD='beanflow'
 export BEANFLOW_JWK_SET_URI='http://localhost:8081/.well-known/jwks.json'
+export BEANFLOW_OPERATIONS_OIDC_ISSUER_URI='https://id.example.com/realms/beanflow-operations'
+export BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL='https://id.example.com'
+export BEANFLOW_OPERATIONS_OIDC_REALM='beanflow-operations'
+export BEANFLOW_OPERATIONS_OIDC_CLIENT_ID='beanflow-operations-web'
+export BEANFLOW_OPERATIONS_OIDC_REDIRECT_URI='http://localhost:5173/ops/auth/callback'
+export BEANFLOW_OPERATIONS_OIDC_POST_LOGOUT_REDIRECT_URI='http://localhost:5173/ops'
+export BEANFLOW_OPERATIONS_OIDC_SCOPES='openid,profile'
 export SPRING_PROFILES_ACTIVE='local'
 
 ./gradlew bootRun

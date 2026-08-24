@@ -45,8 +45,8 @@ npm run build-storybook
 npm run test:storybook:docs
 ```
 
-`test:storybook:docs`는 먼저 생성된 `storybook-static/`을 임시 local server로 제공하고 19개 Docs entry를
-실제 Chromium에서 연다. 모든 문서의 render error와 10개 상태 문서의 40개 state surface를 검사한다.
+`test:storybook:docs`는 먼저 생성된 `storybook-static/`을 임시 local server로 제공하고 37개 Docs entry를
+실제 Chromium에서 연다. 모든 문서의 render error와 14개 상태 문서의 49개 state surface를 검사한다.
 `check:design`은 둘 이상의 MSW 구성을 가진 Autodocs meta에 `docs.story.inline: false`가 없으면 먼저 실패한다.
 
 `npm run typecheck`은 generated runtime OpenAPI schema와 TypeScript를 직접 검증한다. 오류가 하나라도

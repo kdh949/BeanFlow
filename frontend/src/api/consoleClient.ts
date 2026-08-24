@@ -1,10 +1,10 @@
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "./schema";
 import { apiBaseUrl } from "./client";
-import { authToken } from "../auth/session";
+import { authToken, operationsAuth } from "../auth/session";
 
 /**
- * The operations console authenticates with an operator-supplied Bearer token.
+ * The operations console authenticates with the in-memory Keycloak access token.
  * It is a separate client from the customer and merchant Session clients so
  * that adding an endpoint can never route an operator token into a browser
  * Session request — the Operations Chain is the only chain that accepts one.
@@ -23,6 +23,10 @@ function bearerClient() {
       }
       request.headers.set("Accept", "application/json");
       return request;
+    },
+    async onResponse({ response }) {
+      if (response.status === 401) operationsAuth.clear();
+      return response;
     },
   };
   client.use(authentication);
