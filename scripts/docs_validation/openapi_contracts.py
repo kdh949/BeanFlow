@@ -14,6 +14,31 @@ class OperationContract:
     security: tuple[str, ...]
     responses: tuple[str, ...]
     parameters: tuple[str, ...] = ()
+    request_body_schema: str | None = None
+    response_schemas: tuple[ResponseSchemaContract, ...] = ()
+    response_headers: tuple[ResponseHeaderContract, ...] = ()
+
+
+@dataclass(frozen=True)
+class ResponseSchemaContract:
+    status: str
+    schema: str
+    media_type: str = "application/json"
+
+
+@dataclass(frozen=True)
+class ResponseHeaderContract:
+    status: str
+    name: str
+    reference: str | None = None
+
+
+@dataclass(frozen=True)
+class SecuritySchemeContract:
+    name: str
+    type: str
+    location: str | None = None
+    parameter_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +58,9 @@ def operation(
     security: str | None,
     responses: Iterable[int | str],
     *parameters: str,
+    request_body_schema: str | None = None,
+    response_schemas: tuple[ResponseSchemaContract, ...] = (),
+    response_headers: tuple[ResponseHeaderContract, ...] = (),
 ) -> OperationContract:
     return OperationContract(
         path=path,
@@ -41,11 +69,30 @@ def operation(
         security=() if security is None else (security,),
         responses=tuple(str(status) for status in responses),
         parameters=tuple(parameters),
+        request_body_schema=request_body_schema,
+        response_schemas=response_schemas,
+        response_headers=response_headers,
     )
 
 
-def support_query(path: str, operation_id: str, *parameters: str) -> OperationContract:
-    return operation(path, "get", operation_id, "bearerAuth", (200, 403, 503), *parameters)
+def support_query(
+    path: str,
+    operation_id: str,
+    *parameters: str,
+    response_schema: str | None = None,
+    response_headers: tuple[ResponseHeaderContract, ...] = (),
+) -> OperationContract:
+    response_schemas = () if response_schema is None else (ResponseSchemaContract("200", response_schema),)
+    return operation(
+        path,
+        "get",
+        operation_id,
+        "bearerAuth",
+        (200, 403, 503),
+        *parameters,
+        response_schemas=response_schemas,
+        response_headers=response_headers,
+    )
 
 
 def support_command(
@@ -54,48 +101,78 @@ def support_command(
     success: int = 200,
     *parameters: str,
     idempotent: bool = True,
+    request_body_schema: str | None = None,
+    response_schema: str | None = None,
+    response_headers: tuple[ResponseHeaderContract, ...] = (),
 ) -> OperationContract:
     expected_parameters = parameters + (("IdempotencyKey",) if idempotent else ())
     statuses = (success, 403, 503) if not idempotent else (success, 403, 409, 503)
-    return operation(path, "post", operation_id, "bearerAuth", statuses, *expected_parameters)
+    response_schemas = () if response_schema is None else (ResponseSchemaContract(str(success), response_schema),)
+    return operation(
+        path,
+        "post",
+        operation_id,
+        "bearerAuth",
+        statuses,
+        *expected_parameters,
+        request_body_schema=request_body_schema,
+        response_schemas=response_schemas,
+        response_headers=response_headers,
+    )
+
+
+def no_store_header(status: int | str) -> tuple[ResponseHeaderContract, ...]:
+    return (ResponseHeaderContract(str(status), "Cache-Control", "NoStore"),)
 
 
 def profile_change_operations() -> tuple[OperationContract, ...]:
     creates = (
-        ("customer-display-name-corrections", "createCustomerDisplayNameCorrection"),
-        ("customer-legal-name-corrections", "createCustomerLegalNameCorrection"),
-        ("customer-primary-phone-requests", "createCustomerPrimaryPhoneChange"),
-        ("customer-credential-reset-requests", "createCustomerCredentialReset"),
-        ("store-public-profile-corrections", "createStorePublicProfileCorrection"),
-        ("store-operations-contact-corrections", "createStoreOperationsContactCorrection"),
-        ("store-representative-requests", "createStoreRepresentativeChange"),
-        ("store-settlement-account-requests", "createStoreSettlementAccountChange"),
-        ("store-access-reregistration-requests", "createStoreAccessReregistration"),
-        ("courier-display-name-corrections", "createCourierDisplayNameCorrection"),
-        ("courier-relay-contact-corrections", "createCourierRelayContactCorrection"),
-        ("courier-provider-identity-requests", "createCourierProviderIdentityChange"),
-        ("courier-payout-reference-requests", "createCourierPayoutReferenceChange"),
-        ("courier-provider-reregistration-requests", "createCourierProviderReregistration"),
+        ("customer-display-name-corrections", "createCustomerDisplayNameCorrection", "CustomerDisplayNameProfileChangeRequest"),
+        ("customer-legal-name-corrections", "createCustomerLegalNameCorrection", "CustomerLegalNameProfileChangeRequest"),
+        ("customer-primary-phone-requests", "createCustomerPrimaryPhoneChange", "CustomerPrimaryPhoneProfileChangeRequest"),
+        ("customer-credential-reset-requests", "createCustomerCredentialReset", "CustomerCredentialResetProfileChangeRequest"),
+        ("store-public-profile-corrections", "createStorePublicProfileCorrection", "StorePublicProfileChangeRequest"),
+        ("store-operations-contact-corrections", "createStoreOperationsContactCorrection", "StoreOperationsContactProfileChangeRequest"),
+        ("store-representative-requests", "createStoreRepresentativeChange", "StoreRepresentativeProfileChangeRequest"),
+        ("store-settlement-account-requests", "createStoreSettlementAccountChange", "StoreSettlementAccountProfileChangeRequest"),
+        ("store-access-reregistration-requests", "createStoreAccessReregistration", "StoreAccessReregistrationProfileChangeRequest"),
+        ("courier-display-name-corrections", "createCourierDisplayNameCorrection", "CourierDisplayNameProfileChangeRequest"),
+        ("courier-relay-contact-corrections", "createCourierRelayContactCorrection", "CourierRelayContactProfileChangeRequest"),
+        ("courier-provider-identity-requests", "createCourierProviderIdentityChange", "CourierProviderIdentityProfileChangeRequest"),
+        ("courier-payout-reference-requests", "createCourierPayoutReferenceChange", "CourierPayoutReferenceProfileChangeRequest"),
+        ("courier-provider-reregistration-requests", "createCourierProviderReregistration", "CourierProviderReregistrationProfileChangeRequest"),
     )
     revisions = (
-        ("customer-primary-phone", "reviseCustomerPrimaryPhoneChange"),
-        ("customer-credential-reset", "reviseCustomerCredentialReset"),
-        ("store-representative", "reviseStoreRepresentativeChange"),
-        ("store-settlement-account", "reviseStoreSettlementAccountChange"),
-        ("store-access-reregistration", "reviseStoreAccessReregistration"),
-        ("courier-provider-identity", "reviseCourierProviderIdentityChange"),
-        ("courier-payout-reference", "reviseCourierPayoutReferenceChange"),
-        ("courier-provider-reregistration", "reviseCourierProviderReregistration"),
+        ("customer-primary-phone", "reviseCustomerPrimaryPhoneChange", "CustomerPrimaryPhoneProfileChangeRevisionRequest"),
+        ("customer-credential-reset", "reviseCustomerCredentialReset", "EmptyProfileChangeRevisionRequest"),
+        ("store-representative", "reviseStoreRepresentativeChange", "StoreRepresentativeProfileChangeRevisionRequest"),
+        ("store-settlement-account", "reviseStoreSettlementAccountChange", "StoreSettlementAccountProfileChangeRevisionRequest"),
+        ("store-access-reregistration", "reviseStoreAccessReregistration", "EmptyProfileChangeRevisionRequest"),
+        ("courier-provider-identity", "reviseCourierProviderIdentityChange", "CourierProviderIdentityProfileChangeRevisionRequest"),
+        ("courier-payout-reference", "reviseCourierPayoutReferenceChange", "CourierPayoutReferenceProfileChangeRevisionRequest"),
+        ("courier-provider-reregistration", "reviseCourierProviderReregistration", "EmptyProfileChangeRevisionRequest"),
     )
-    executions = tuple((suffix, operation_id.replace("revise", "execute", 1)) for suffix, operation_id in revisions)
+    executions = (
+        ("customer-primary-phone", "executeCustomerPrimaryPhoneChange", "CustomerPrimaryPhoneProfileChangeExecutionRequest"),
+        ("customer-credential-reset", "executeCustomerCredentialReset", "EmptyProfileChangeExecutionRequest"),
+        ("store-representative", "executeStoreRepresentativeChange", "StoreRepresentativeProfileChangeExecutionRequest"),
+        ("store-settlement-account", "executeStoreSettlementAccountChange", "StoreSettlementAccountProfileChangeExecutionRequest"),
+        ("store-access-reregistration", "executeStoreAccessReregistration", "EmptyProfileChangeExecutionRequest"),
+        ("courier-provider-identity", "executeCourierProviderIdentityChange", "CourierProviderIdentityProfileChangeExecutionRequest"),
+        ("courier-payout-reference", "executeCourierPayoutReferenceChange", "CourierPayoutReferenceProfileChangeExecutionRequest"),
+        ("courier-provider-reregistration", "executeCourierProviderReregistration", "EmptyProfileChangeExecutionRequest"),
+    )
     create_contracts = tuple(
         support_command(
             f"/support/cases/{{caseId}}/profile-changes/{suffix}",
             operation_id,
             201,
             "SupportCaseId",
+            request_body_schema=request_schema,
+            response_schema="SupportProfileChangeResource",
+            response_headers=no_store_header(201),
         )
-        for suffix, operation_id in creates
+        for suffix, operation_id, request_schema in creates
     )
     revision_contracts = tuple(
         support_command(
@@ -103,8 +180,11 @@ def profile_change_operations() -> tuple[OperationContract, ...]:
             operation_id,
             200,
             "SupportProfileChangeId",
+            request_body_schema=request_schema,
+            response_schema="SupportProfileChangeResource",
+            response_headers=no_store_header(200),
         )
-        for suffix, operation_id in revisions
+        for suffix, operation_id, request_schema in revisions
     )
     execution_contracts = tuple(
         support_command(
@@ -112,8 +192,11 @@ def profile_change_operations() -> tuple[OperationContract, ...]:
             operation_id,
             200,
             "SupportProfileChangeId",
+            request_body_schema=request_schema,
+            response_schema="SupportProfileChangeResource",
+            response_headers=no_store_header(200),
         )
-        for suffix, operation_id in executions
+        for suffix, operation_id, request_schema in executions
     )
     return (
         *create_contracts,
@@ -123,14 +206,26 @@ def profile_change_operations() -> tuple[OperationContract, ...]:
             "/support/profile-changes/{profileChangeId}",
             "getSupportProfileChange",
             "SupportProfileChangeId",
+            response_schema="SupportProfileChangeResource",
+            response_headers=no_store_header(200),
         ),
         support_command(
             "/support/profile-changes/{profileChangeId}/notification-retries",
             "retrySupportProfileChangeNotifications",
             200,
             "SupportProfileChangeId",
+            request_body_schema="RetrySupportProfileChangeNotificationsRequest",
+            response_schema="SupportProfileChangeResource",
+            response_headers=no_store_header(200),
         ),
     )
+
+
+SECURITY_SCHEME_CONTRACTS = (
+    SecuritySchemeContract("bearerAuth", "http"),
+    SecuritySchemeContract("customerSession", "apiKey", "cookie", "BEANFLOW_CUSTOMER_SESSION"),
+    SecuritySchemeContract("merchantSession", "apiKey", "cookie", "BEANFLOW_MERCHANT_SESSION"),
+)
 
 
 OPERATION_CONTRACTS = (
@@ -156,7 +251,18 @@ OPERATION_CONTRACTS = (
     operation("/payments/{paymentId}", "get", "getOneTimePayment", "customerSession", (200, 202, 403, 404, 409, 422, 503), "PaymentId"),
     operation("/payments/{paymentId}/confirmations", "post", "confirmOneTimePayment", "customerSession", (200, 202, 400, 403, 404, 409, 422, 503), "PaymentId", "IdempotencyKey"),
     operation("/me/coupons", "get", "listCurrentCustomerCoupons", "customerSession", (200, 400, 401, 403, 503), "storeId", "Cursor", "Limit"),
-    operation("/stores/{storeId}/orders", "get", "listStoreOrderBoard", "merchantSession", (200, 304, 403, 503), "StoreId", "If-None-Match", "lane"),
+    operation(
+        "/stores/{storeId}/orders",
+        "get",
+        "listStoreOrderBoard",
+        "merchantSession",
+        (200, 304, 403, 503),
+        "StoreId",
+        "If-None-Match",
+        "lane",
+        response_schemas=(ResponseSchemaContract("200", "StoreOrderBoard"),),
+        response_headers=(ResponseHeaderContract("200", "ETag"),),
+    ),
     operation("/stores/{storeId}/orders/overflow", "get", "listStoreOrderOverflowQueue", "merchantSession", (200, 400, 403, 503), "StoreId", "lane", "cursor"),
     operation("/stores/{storeId}/orders/{orderReference}", "get", "getStoreOrderByReference", "merchantSession", (200, 400, 403, 404, 503), "StoreId", "OrderReference"),
     operation("/stores/{storeId}/orders/{orderReference}/transitions", "post", "transitionStoreOrderByReference", "merchantSession", (200, 202, 400, 403, 404, 409, 422, 503), "StoreId", "OrderReference", "IdempotencyKey"),
@@ -287,6 +393,54 @@ def reference_name(value: object) -> str | None:
     return reference.rsplit("/", maxsplit=1)[-1] if isinstance(reference, str) else value.get("name")
 
 
+def resolve_local_reference(document: dict, value: object) -> object:
+    current = value
+    visited: set[str] = set()
+    while isinstance(current, dict) and "$ref" in current:
+        reference = current.get("$ref")
+        if not isinstance(reference, str) or not reference.startswith("#/"):
+            raise ValidationError(f"OpenAPI semantic contract requires a local reference: {reference!r}")
+        if reference in visited:
+            raise ValidationError(f"OpenAPI semantic contract reference cycle: {reference}")
+        visited.add(reference)
+        current = document
+        for raw_token in reference.removeprefix("#/").split("/"):
+            token = raw_token.replace("~1", "/").replace("~0", "~")
+            if not isinstance(current, dict) or token not in current:
+                raise ValidationError(f"OpenAPI semantic contract reference is missing: {reference}")
+            current = current[token]
+    return current
+
+
+def validate_security_scheme_contracts(
+    document: dict,
+    contracts: Iterable[SecuritySchemeContract],
+) -> int:
+    schemes = document.get("components", {}).get("securitySchemes", {})
+    checked = 0
+    for contract in contracts:
+        scheme = schemes.get(contract.name)
+        if not isinstance(scheme, dict):
+            raise ValidationError(f"OpenAPI security scheme is missing: {contract.name}")
+        if scheme.get("type") != contract.type:
+            raise ValidationError(
+                f"OpenAPI security scheme type mismatch for {contract.name}: "
+                f"expected {contract.type!r}, got {scheme.get('type')!r}"
+            )
+        if scheme.get("in") != contract.location:
+            raise ValidationError(
+                f"OpenAPI security scheme location mismatch for {contract.name}: "
+                f"expected {contract.location!r}, got {scheme.get('in')!r}"
+            )
+        if scheme.get("name") != contract.parameter_name:
+            raise ValidationError(
+                f"OpenAPI security scheme parameter name mismatch for {contract.name}: "
+                f"expected {contract.parameter_name!r}, got {scheme.get('name')!r}"
+            )
+        checked += 1
+    return checked
+
+
 def validate_operation_contracts(document: dict, contracts: Iterable[OperationContract]) -> int:
     paths = document.get("paths", {})
     checked = 0
@@ -326,6 +480,45 @@ def validate_operation_contracts(document: dict, contracts: Iterable[OperationCo
                 f"OpenAPI parameters missing for {contract.method.upper()} {contract.path}: "
                 f"{sorted(missing_parameters)}"
             )
+        if contract.request_body_schema is not None:
+            request_body = resolve_local_reference(document, operation_item.get("requestBody"))
+            request_schema = reference_name(
+                request_body.get("content", {}).get("application/json", {}).get("schema")
+                if isinstance(request_body, dict)
+                else None
+            )
+            if request_schema != contract.request_body_schema:
+                raise ValidationError(
+                    f"OpenAPI request body schema mismatch for {contract.method.upper()} {contract.path}: "
+                    f"expected {contract.request_body_schema!r}, got {request_schema!r}"
+                )
+        for response_contract in contract.response_schemas:
+            response = resolve_local_reference(document, operation_item.get("responses", {}).get(response_contract.status))
+            response_schema = reference_name(
+                response.get("content", {}).get(response_contract.media_type, {}).get("schema")
+                if isinstance(response, dict)
+                else None
+            )
+            if response_schema != response_contract.schema:
+                raise ValidationError(
+                    f"OpenAPI response schema mismatch for {contract.method.upper()} {contract.path} "
+                    f"status {response_contract.status}: expected {response_contract.schema!r}, got {response_schema!r}"
+                )
+        for header_contract in contract.response_headers:
+            response = resolve_local_reference(document, operation_item.get("responses", {}).get(header_contract.status))
+            headers = response.get("headers", {}) if isinstance(response, dict) else {}
+            header = headers.get(header_contract.name)
+            if not isinstance(header, dict):
+                raise ValidationError(
+                    f"OpenAPI response header missing for {contract.method.upper()} {contract.path} "
+                    f"status {header_contract.status}: {header_contract.name}"
+                )
+            if header_contract.reference is not None and reference_name(header) != header_contract.reference:
+                raise ValidationError(
+                    f"OpenAPI response header reference mismatch for {contract.method.upper()} {contract.path} "
+                    f"status {header_contract.status} {header_contract.name}: "
+                    f"expected {header_contract.reference!r}, got {reference_name(header)!r}"
+                )
         checked += 1
     return checked
 
@@ -357,6 +550,7 @@ def validate_schema_contracts(document: dict, contracts: Iterable[SchemaContract
 
 
 def validate_semantic_contracts(document: dict) -> tuple[int, int]:
+    validate_security_scheme_contracts(document, SECURITY_SCHEME_CONTRACTS)
     operation_count = validate_operation_contracts(document, OPERATION_CONTRACTS)
     schema_count = validate_schema_contracts(document, SCHEMA_CONTRACTS)
     schemas = document.get("components", {}).get("schemas", {})

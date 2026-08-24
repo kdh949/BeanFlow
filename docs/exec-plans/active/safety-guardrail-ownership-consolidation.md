@@ -277,6 +277,8 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: 17개 OpenAPI 문자열 test의 고유 assertion을 100 operation·102 schema semantic contract로 이전
 - [x] 2026-08-19: runtime parity를 실제 shared Spring context의 mapping 비교로 좁히고 62개 mock 선언 제거
 - [x] 2026-08-19: PR 3 full suite 1,340 tests와 문서·OpenAPI validator 검증 통과
+- [x] 2026-08-24: PR #99 review에서 누락된 cookie 이름, request/response schema 연결과 response header
+  계약을 중앙 validator 및 mutation characterization test로 보강
 - [x] 2026-08-19: Support SHA-256 byte-to-lowercase-hex 구현만 `SupportSha256`으로 집중화
 - [x] 2026-08-19: ActionRequest facade를 생성·수정·결정·재배정·조회·profile approval handler로 분리
 - [x] 2026-08-19: Compensation facade를 평가·생성·실행·알림 재시도/복구·조회 handler로 분리
@@ -284,6 +286,8 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
 - [x] 2026-08-19: live Storybook MCP에서 OrderBoard·Button·FeedbackState·StatusBadge 계약 재확인
 - [x] 2026-08-19: board 정렬/reconcile 모델, 조회·polling·ETag·명령 hook, column/overflow/card 분리
 - [x] 2026-08-19: 기존 3개 Storybook 상태 보존과 loading/conflict/overflow/transition busy 4개 추가
+- [x] 2026-08-24: 두 review remediation 통합 head에서 1,344 tests, failure/error 0, skipped 1의 full suite와
+  Spotless, 260개 test class shard coverage, backend build, CI script, 문서·OpenAPI 검증 통과
 - [ ] PR 5 전체 stack 검증, remote CI terminal 판정과 plan completion
 
 ## Surprises & Discoveries
@@ -346,6 +350,10 @@ PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 
   OpenAPI 구조 실패와 정상 경로를 검증한다.
 - 2026-08-19: 실제 Spring context의 runtime parity는 62개 `@MockitoBean` 없이 targeted 실행 35초,
   XML class time 26.588초에 통과했다. Controller dependency 추가가 mapping 계약과 무관한 mock 수정을 요구하지 않는다.
+- 2026-08-24: 최초 `OperationContract`는 security scheme의 사용 이름, response status와 parameter 이름만
+  확인해 실제 cookie 이름, status별 response schema, `ETag`와 `NoStore` header, profile-change request schema가
+  바뀌어도 통과했다. security scheme 자체와 operation wire 연결을 별도 semantic contract로 확장하고 각 mutation의
+  실패를 Python characterization test로 고정했다.
 - 2026-08-19: PR 3 full suite는 43분 12초에 1,340 tests, failure/error 0, skipped 1로
   통과했고 class time 합은 2,570.058초였다. 17개 문자열 계약 test 제거를 반영한 실제 통합 head
   검증 결과이며, 성능 개선율 근거로 사용하지 않는다.
@@ -388,6 +396,11 @@ implementation을 분리했다. PR 5는 page export/route와 시각 계약을 �
 책임을 분리하고 7개 focused Storybook 계약을 통과했다. 나머지 PR URL, commit range,
 local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
 `COMPLETED`는 merge/release를 뜻하지 않는다.
+
+2026-08-24 review remediation은 PR #97의 감사 commit visibility 분류와 PR #99의 wire contract 연결 누락을
+각각 독립 commit으로 보완했다. 통합 head의 local full suite는 44분 35초에 1,344 tests,
+failure/error 0, skipped 1로 통과했다. 새 child Draft PR의 remote CI terminal 판정 전에는 stack 완료나
+remote-green으로 간주하지 않는다.
 
 ## Revision Notes
 

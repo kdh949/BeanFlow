@@ -14,9 +14,13 @@ from docs_validation.links import CANONICAL_INDEX_TARGETS, validate_links
 from docs_validation.openapi import load_and_validate, operation_count
 from docs_validation.openapi_contracts import (
     OperationContract,
+    ResponseHeaderContract,
+    ResponseSchemaContract,
     SchemaContract,
+    SecuritySchemeContract,
     validate_operation_contracts,
     validate_schema_contracts,
+    validate_security_scheme_contracts,
 )
 from docs_validation.policies import validate_policy_ids
 
@@ -176,6 +180,138 @@ paths:
         )
 
         self.assertEqual(validate_operation_contracts(document, (contract,)), 1)
+
+    def test_security_scheme_contract_rejects_changed_cookie_name(self) -> None:
+        document = {
+            "components": {
+                "securitySchemes": {
+                    "customerSession": {
+                        "type": "apiKey",
+                        "in": "cookie",
+                        "name": "CHANGED_CUSTOMER_SESSION",
+                    }
+                }
+            }
+        }
+        contract = SecuritySchemeContract(
+            "customerSession",
+            "apiKey",
+            location="cookie",
+            parameter_name="BEANFLOW_CUSTOMER_SESSION",
+        )
+
+        with self.assertRaisesRegex(ValidationError, "parameter name mismatch"):
+            validate_security_scheme_contracts(document, (contract,))
+
+    def test_operation_contract_rejects_changed_response_schema(self) -> None:
+        document = self.wire_contract_document()
+        document["paths"]["/things"]["post"]["responses"]["200"]["content"]["application/json"]["schema"] = {
+            "$ref": "#/components/schemas/ChangedResponse"
+        }
+        contract = self.wire_operation_contract()
+
+        with self.assertRaisesRegex(ValidationError, "response schema mismatch"):
+            validate_operation_contracts(document, (contract,))
+
+    def test_operation_contract_rejects_missing_response_header(self) -> None:
+        document = self.wire_contract_document()
+        del document["paths"]["/things"]["post"]["responses"]["200"]["headers"]["ETag"]
+        contract = self.wire_operation_contract()
+
+        with self.assertRaisesRegex(ValidationError, "response header missing"):
+            validate_operation_contracts(document, (contract,))
+
+    def test_operation_contract_rejects_missing_referenced_no_store_header(self) -> None:
+        document = self.wire_contract_document()
+        del document["components"]["responses"]["SupportOk"]["headers"]["Cache-Control"]
+        contract = OperationContract(
+            "/support/things",
+            "get",
+            "getSupportThing",
+            (),
+            ("200",),
+            response_schemas=(ResponseSchemaContract("200", "ThingResponse"),),
+            response_headers=(ResponseHeaderContract("200", "Cache-Control", "NoStore"),),
+        )
+
+        with self.assertRaisesRegex(ValidationError, "response header missing"):
+            validate_operation_contracts(document, (contract,))
+
+    def test_operation_contract_rejects_changed_request_body_schema(self) -> None:
+        document = self.wire_contract_document()
+        document["paths"]["/things"]["post"]["requestBody"]["content"]["application/json"]["schema"] = {
+            "$ref": "#/components/schemas/ChangedRequest"
+        }
+        contract = self.wire_operation_contract()
+
+        with self.assertRaisesRegex(ValidationError, "request body schema mismatch"):
+            validate_operation_contracts(document, (contract,))
+
+    def test_operation_wire_contract_accepts_exact_schema_and_headers(self) -> None:
+        document = self.wire_contract_document()
+
+        self.assertEqual(validate_operation_contracts(document, (self.wire_operation_contract(),)), 1)
+
+    def wire_operation_contract(self) -> OperationContract:
+        return OperationContract(
+            "/things",
+            "post",
+            "createThing",
+            (),
+            ("200",),
+            request_body_schema="ThingRequest",
+            response_schemas=(ResponseSchemaContract("200", "ThingResponse"),),
+            response_headers=(ResponseHeaderContract("200", "ETag"),),
+        )
+
+    def wire_contract_document(self) -> dict:
+        return {
+            "paths": {
+                "/things": {
+                    "post": {
+                        "operationId": "createThing",
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/ThingRequest"}
+                                }
+                            }
+                        },
+                        "responses": {
+                            "200": {
+                                "headers": {"ETag": {"schema": {"type": "string"}}},
+                                "content": {
+                                    "application/json": {
+                                        "schema": {"$ref": "#/components/schemas/ThingResponse"}
+                                    }
+                                },
+                            }
+                        },
+                    }
+                },
+                "/support/things": {
+                    "get": {
+                        "operationId": "getSupportThing",
+                        "responses": {"200": {"$ref": "#/components/responses/SupportOk"}},
+                    }
+                },
+            },
+            "components": {
+                "responses": {
+                    "SupportOk": {
+                        "headers": {
+                            "Cache-Control": {"$ref": "#/components/headers/NoStore"}
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/ThingResponse"}
+                            }
+                        },
+                    }
+                },
+                "headers": {"NoStore": {"schema": {"type": "string", "const": "no-store"}}},
+            },
+        }
 
     def test_semantic_schema_contract_rejects_private_field_exposure(self) -> None:
         document = {
