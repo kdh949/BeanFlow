@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, homeHandlers, pending, signedInHandlers } from "../../../.storybook/fixtures";
+import { apiError, homeHandlers, orderListHandlers, pending, signedInHandlers } from "../../../.storybook/fixtures";
 import { CustomerHomePage } from "./HomePage";
 
 const meta = {
@@ -48,7 +48,7 @@ export const NothingInProgress: Story = {
 
 export const RecommendationsUnavailable: Story = {
   parameters: {
-    msw: { handlers: [...signedInHandlers, apiError("/api/v1/me/store-recommendations")] },
+    msw: { handlers: [...signedInHandlers, ...orderListHandlers(), apiError("/api/v1/me/store-recommendations")] },
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("alert")).toBeVisible();
@@ -56,5 +56,13 @@ export const RecommendationsUnavailable: Story = {
 };
 
 export const Loading: Story = {
-  parameters: { msw: { handlers: [...signedInHandlers, pending("/api/v1/me/orders")] } },
+  parameters: {
+    msw: {
+      handlers: [
+        ...signedInHandlers,
+        pending("/api/v1/me/orders"),
+        http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({ items: [] })),
+      ],
+    },
+  },
 };

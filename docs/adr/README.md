@@ -91,7 +91,7 @@
 | [ADR-087](ADR-087-field-risk-and-purpose-specific-profile-change.md) | Accepted | R0-R4 field risk와 목적별 profile change |
 | [ADR-088](ADR-088-canonical-delivery-provider-boundary.md) | Accepted | canonical DeliveryFulfillment, Provider ACL과 reconciliation |
 | [ADR-089](ADR-089-purpose-based-retention-legal-hold-and-deletion.md) | Accepted | 목적별 retention, expiring LegalHold와 deletion replay |
-| [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Proposed | Support Console frontend/trust boundary와 non-persistent sensitive state |
+| [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Accepted | 기존 frontend의 격리 `/support` route와 non-persistent sensitive state |
 | [ADR-091](ADR-091-support-migration-queue-metadata.md) | Rejected | queue priority를 direct ExecPlan dependency로 표현하는 metadata 제안 |
 | [ADR-092](ADR-092-hybrid-authentication.md) | Accepted | 고객·점주 Session과 운영자 Keycloak의 Hybrid 인증 |
 | [ADR-093](ADR-093-merchant-credential-lifecycle.md) | Accepted | 점주 계정 자격증명 lifecycle과 최초 비밀번호 강제 변경 |

@@ -478,17 +478,13 @@ internal class OrderSettlementInputSnapshotService(
  */
 internal object OrderSettlementInputSnapshotCanonicalizer {
     fun canonicalize(entity: OrderSettlementInputSnapshotEntity): OrderSettlementInputSnapshotEntity {
-        val createdAt = databaseInstant(entity.createdAt)
-        return entity.withCanonicalHash(canonicalHash(entity, createdAt), createdAt)
+        val databaseEntity = entity.withCanonicalHash(entity.canonicalSnapshotHash, databaseInstant(entity.createdAt))
+        return databaseEntity.withCanonicalHash(canonicalHash(databaseEntity))
     }
 
-    fun matches(entity: OrderSettlementInputSnapshotEntity): Boolean =
-        entity.canonicalSnapshotHash == canonicalHash(entity, entity.createdAt)
+    fun matches(entity: OrderSettlementInputSnapshotEntity): Boolean = entity.canonicalSnapshotHash == canonicalHash(entity)
 
-    private fun canonicalHash(
-        entity: OrderSettlementInputSnapshotEntity,
-        createdAt: Instant,
-    ): String {
+    private fun canonicalHash(entity: OrderSettlementInputSnapshotEntity): String {
         val canonical = CanonicalFields()
         canonical.add(entity.snapshotSchemaVersion)
         canonical.add(entity.orderId)
@@ -515,14 +511,14 @@ internal object OrderSettlementInputSnapshotCanonicalizer {
         canonical.add(entity.benefitCostKrw)
         canonical.add(entity.netSettlementKrw)
         canonical.add(entity.currency)
-        canonical.add(createdAt.epochSecond)
-        canonical.add(createdAt.nano / 1_000)
+        canonical.add(entity.createdAt.epochSecond)
+        canonical.add(entity.createdAt.nano / 1_000)
         return sha256(canonical.toString())
     }
 
     private fun OrderSettlementInputSnapshotEntity.withCanonicalHash(
         hash: String,
-        createdAt: Instant,
+        createdAt: Instant = this.createdAt,
     ) = OrderSettlementInputSnapshotEntity(
         orderId,
         storeId,

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
-import { apiError, orderDetailHandlers, orderSummary } from "../../../.storybook/fixtures";
+import { expect, userEvent, within } from "storybook/test";
+import { HttpResponse, http } from "msw";
+import { apiError, catalogHandlers, orderDetailHandlers, orderSummary } from "../../../.storybook/fixtures";
 import { CustomerOrderDetailPage } from "./OrderPages";
 
 const meta = {
@@ -53,9 +54,86 @@ export const CancellableBeforeAcceptance: Story = {
 
 export const ReorderableAfterPickup: Story = {
   tags: ["!autodocs"],
-  parameters: { msw: { handlers: orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }) } },
+  parameters: { msw: { handlers: [...orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }), ...catalogHandlers] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ })).toBeVisible();
+  },
+};
+
+export const ReorderUsesCurrentPrice: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: [...orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }), ...catalogHandlers] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
+    await expect(await canvas.findByText(/금액도 현재 가격으로 계산됩니다/)).toBeVisible();
+  },
+};
+
+export const ReorderPickupSlotReselection: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: [...orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }), ...catalogHandlers] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
+    const first = await canvas.findByRole("button", { name: /7잔 가능/ });
+    const second = canvas.getByRole("button", { name: /3잔 가능/ });
+    await userEvent.click(first);
+    await expect(first).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(second);
+    await expect(first).toHaveAttribute("aria-pressed", "false");
+    await expect(second).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const ReorderRemovedItemConflict: Story = {
+  tags: ["!autodocs"],
+  parameters: {
+    msw: {
+      handlers: [
+        ...orderDetailHandlers({ status: "COMPLETED", allowedActions: ["REORDER"] }),
+        ...catalogHandlers,
+        http.post("/api/v1/me/orders/:orderReference/reorders", () =>
+          HttpResponse.json({
+            code: "REORDER_ITEMS_UNAVAILABLE",
+            message: "판매 상태가 변경되었습니다.",
+            details: [{ lineSequence: 0, reason: "MENU_REMOVED" }],
+          }, { status: 409 })),
+      ],
+    },
+  },
+  beforeEach: () => {
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=storybook-customer-csrf; path=/";
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
+    await userEvent.click(await canvas.findByRole("button", { name: /7잔 가능/ }));
+    await userEvent.click(canvas.getByRole("button", { name: "이 시간으로 주문" }));
+    await expect(await canvas.findByText("메뉴가 더 이상 없어요")).toBeVisible();
+  },
+};
+
+export const PendingPayment: Story = {
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "PENDING_PAYMENT", allowedActions: [] }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("결제 금액")).toBeVisible();
+    await expect(canvas.queryByText("A-142")).not.toBeInTheDocument();
+  },
+};
+
+export const AcceptedByStore: Story = {
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "ACCEPTED", allowedActions: [] }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("준비가 끝나면 이 번호로 알려드릴게요.")).toBeVisible();
+    const timeline = within(canvas.getByRole("list", { name: "주문 진행 단계" }));
+    await expect(timeline.getByText("주문 접수").closest("li")).toHaveClass("is-active");
+  },
+};
+
+export const Preparing: Story = {
+  parameters: { msw: { handlers: orderDetailHandlers({ status: "PREPARING", allowedActions: [] }) } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("준비가 끝나면 이 번호로 알려드릴게요.")).toBeVisible();
+    const timeline = within(canvas.getByRole("list", { name: "주문 진행 단계" }));
+    await expect(timeline.getByText("제조 중").closest("li")).toHaveClass("is-active");
   },
 };
 

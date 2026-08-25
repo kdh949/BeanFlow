@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, userEvent } from "storybook/test";
+import { HttpResponse, http } from "msw";
 import { catalogHandlers, ids, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { CART_STORAGE_KEY, cart } from "./cart";
 import { CartPage } from "./CartPage";
@@ -63,3 +64,41 @@ export const Corrupt: Story = {
     await expect(await canvas.findByText("장바구니 정보를 읽지 못했어요")).toBeVisible();
   },
 };
+
+function conflictStory(code: string, message: string, expected: string): Story {
+  return {
+    tags: ["!autodocs"],
+    parameters: {
+      msw: {
+        handlers: [
+          ...signedInHandlers,
+          ...storeIdentityHandlers,
+          ...catalogHandlers,
+          http.post("/api/v1/orders", () => HttpResponse.json({ code, message }, { status: 409 })),
+        ],
+      },
+    },
+    beforeEach: () => {
+      cart.clear();
+      cart.add({ storeId: ids.store, storeName: "시청점" }, line);
+      document.cookie = "BEANFLOW_CUSTOMER_XSRF=storybook-customer-csrf; path=/";
+    },
+    play: async ({ canvas }) => {
+      await userEvent.click(await canvas.findByRole("button", { name: /7잔 가능/ }));
+      await userEvent.click(canvas.getByRole("button", { name: /주문하기/ }));
+      await expect(await canvas.findByText(expected)).toBeVisible();
+    },
+  };
+}
+
+export const PriceConfigurationChanged = conflictStory(
+  "MENU_CONFIGURATION_NOT_AVAILABLE",
+  "메뉴 가격 또는 옵션 구성이 변경되었습니다.",
+  "지금 주문할 수 없는 메뉴 구성이에요",
+);
+
+export const StockChanged = conflictStory(
+  "STOCK_NOT_AVAILABLE",
+  "오트 라떼 재고가 부족합니다.",
+  "재고가 부족한 메뉴가 있어요",
+);

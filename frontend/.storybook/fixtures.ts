@@ -230,6 +230,10 @@ export const storeIdentityHandlers = [
   http.get("/api/v1/stores/:storeId", () => HttpResponse.json(customerStore)),
 ];
 
+export const favoriteHandlers = [
+  http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [] })),
+];
+
 export const homeHandlers = [
   ...signedInHandlers,
   http.get("/api/v1/me/orders", () => HttpResponse.json({ items: [orderSummary], page: { nextCursor: null } })),

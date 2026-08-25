@@ -7,6 +7,17 @@ import java.util.UUID
 
 internal class OrderSettlementInputSnapshotCanonicalizerTest {
     @Test
+    fun `rounds created at to PostgreSQL microseconds before hashing`() {
+        val canonical =
+            OrderSettlementInputSnapshotCanonicalizer.canonicalize(
+                snapshot(Instant.parse("2026-08-23T16:00:00.123456789Z")),
+            )
+
+        assertThat(canonical.createdAt).isEqualTo(Instant.parse("2026-08-23T16:00:00.123457Z"))
+        assertThat(OrderSettlementInputSnapshotCanonicalizer.matches(canonical)).isTrue()
+    }
+
+    @Test
     fun `canonical hash rounds its timestamp exactly as PostgreSQL does`() {
         val belowHalfMicrosecond = snapshot(Instant.ofEpochSecond(100, 123_456_499))
         val acrossSecondBoundary = snapshot(Instant.ofEpochSecond(100, 999_999_500))

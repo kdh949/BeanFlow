@@ -11,6 +11,7 @@ import { useResource } from "../shared/useResource";
 import { Button, ButtonLink } from "../../design-system";
 import type { CustomerStore } from "../discovery/useStore";
 import { type CartLine, cart, cartItemCount, useCart } from "./cart";
+import { FavoriteStoreButton } from "../customer/FavoriteStoresPage";
 
 type Menu = components["schemas"]["Menu"];
 type PickupSlot = components["schemas"]["PickupSlot"];
@@ -58,7 +59,17 @@ export function StoreDetailPage() {
   return (
     <div className="customer-page catalog-page">
       <Link className="back-link" to="/app/stores"><ArrowLeft size={17} /> 매장 찾기</Link>
-      <PageTitle eyebrow="ORDER" title={storeName} description="지금 판매 중인 메뉴와 픽업 시간만 보여드려요." />
+      <PageTitle
+        eyebrow="ORDER"
+        title={storeName}
+        description="지금 판매 중인 메뉴와 픽업 시간만 보여드려요."
+        action={(
+          <div className="page-actions">
+            <FavoriteStoreButton storeId={storeId} storeName={storeName} />
+            <ButtonLink variant="secondary" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 보기</ButtonLink>
+          </div>
+        )}
+      />
 
       {!openForOrders ? (
         <p className="inline-note" role="status">지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.</p>
