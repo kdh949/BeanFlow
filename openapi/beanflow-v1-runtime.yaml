@@ -125,10 +125,14 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}"
   /stores/{storeId}/image:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1image"
+  /stores/{storeId}/customer-display:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1customer-display"
   /stores/{storeId}/menus:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
   /stores/{storeId}/menus/{menuId}/image:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1image"
+  /stores/{storeId}/menus/{menuId}/display-content:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1display-content"
   /stores/{storeId}/pickup-slots:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slots"
   /orders:

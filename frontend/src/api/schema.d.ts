@@ -481,6 +481,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/customer-display": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 고객에게 표시할 매장 정보의 현재 편집본 조회
+         * @description ACTIVE same-store STORE_OWNER에게 현재 주소, 길찾기 안내, 선택적인 7일 운영시간과
+         *     optimistic-concurrency version을 반환합니다. 아직 profile이 없으면 content와 schedule은
+         *     생략되고 version은 0입니다. 이 version은 고객 Store 응답에 노출되지 않습니다.
+         */
+        get: operations["getStoreCustomerDisplayContent"];
+        /**
+         * 고객에게 표시할 매장 정보 전체 교체
+         * @description ACTIVE same-store STORE_OWNER만 수행합니다. 운영시간을 보내면 Asia/Seoul 기준 일곱 요일을
+         *     정확히 한 번씩 보내야 하며, 생략하면 기존 schedule 전체를 제거합니다. 동일 replacement는
+         *     version, updatedAt과 AuditRecord를 바꾸지 않습니다. stale expectedVersion은 409입니다.
+         */
+        put: operations["replaceStoreCustomerDisplayContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/menus": {
         parameters: {
             query?: never;
@@ -524,6 +552,33 @@ export interface paths {
          * @description STORE_OWNER 또는 STORE_STAFF가 수행하며 이미지가 없어도 204를 반환합니다.
          */
         delete: operations["deleteMenuImage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/menus/{menuId}/display-content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 메뉴 고객 표시 content의 현재 편집본 조회
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 nullable category/description과 기존
+         *     Menu version을 반환합니다. 이 version은 고객 menu catalog에 노출되지 않습니다.
+         */
+        get: operations["getMenuDisplayContent"];
+        /**
+         * 메뉴 고객 표시 content 전체 교체
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 nullable category/description을 full
+         *     replacement합니다. 가격, availability, option과 Order snapshot은 바뀌지 않습니다. 동일
+         *     replacement는 Menu version과 AuditRecord를 바꾸지 않고 stale expectedVersion은 409입니다.
+         */
+        put: operations["replaceMenuDisplayContent"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4650,6 +4705,39 @@ export interface components {
             image: string;
         };
         /**
+         * @description Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
+         *     closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
+         */
+        StoreOperatingDay: {
+            /** @enum {string} */
+            dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            closed: boolean;
+            /** Format: time */
+            opensAt?: string;
+            /** Format: time */
+            closesAt?: string;
+        };
+        StoreWeeklyOperatingHours: {
+            /** @enum {string} */
+            timezone: "Asia/Seoul";
+            /** @description 일곱 요일을 정확히 한 번씩 포함합니다. */
+            days: components["schemas"]["StoreOperatingDay"][];
+        };
+        StoreCustomerDisplayAuthoring: {
+            addressLine?: string;
+            directionsHint?: string;
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"];
+            /** Format: int64 */
+            version: number;
+        };
+        ReplaceStoreCustomerDisplayRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            addressLine?: string | null;
+            directionsHint?: string | null;
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"] | null;
+        };
+        /**
          * Format: int64
          * @description 음수가 아닌 정수 원(KRW) 단위 금액입니다. 소수점 금액은 사용하지 않습니다.
          * @example 12500
@@ -4727,6 +4815,18 @@ export interface components {
          */
         MenuList: {
             items: components["schemas"]["Menu"][];
+        };
+        MenuDisplayContentAuthoring: {
+            displayCategory?: string;
+            description?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ReplaceMenuDisplayContentRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            displayCategory?: string | null;
+            description?: string | null;
         };
         /**
          * @description 특정 시간대에 픽업 가능한 잔여 수용량을 나타내는 슬롯입니다.
@@ -10944,6 +11044,67 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getStoreCustomerDisplayContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 Store customer-display 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreCustomerDisplayAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceStoreCustomerDisplayContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStoreCustomerDisplayRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체 후 또는 no-op인 현재 Store customer-display 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreCustomerDisplayAuthoring"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listStoreMenus: {
         parameters: {
             query?: never;
@@ -11030,6 +11191,69 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getMenuDisplayContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 Menu display-content 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuDisplayContentAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceMenuDisplayContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceMenuDisplayContentRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체 후 또는 no-op인 현재 Menu display-content 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuDisplayContentAuthoring"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

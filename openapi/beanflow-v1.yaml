@@ -783,6 +783,57 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/customer-display:
+    get:
+      tags: [Merchant]
+      operationId: getStoreCustomerDisplayContent
+      summary: 고객에게 표시할 매장 정보의 현재 편집본 조회
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER에게 현재 주소, 길찾기 안내, 선택적인 7일 운영시간과
+        optimistic-concurrency version을 반환합니다. 아직 profile이 없으면 content와 schedule은
+        생략되고 version은 0입니다. 이 version은 고객 Store 응답에 노출되지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 현재 Store customer-display 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreCustomerDisplayAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Merchant]
+      operationId: replaceStoreCustomerDisplayContent
+      summary: 고객에게 표시할 매장 정보 전체 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER만 수행합니다. 운영시간을 보내면 Asia/Seoul 기준 일곱 요일을
+        정확히 한 번씩 보내야 하며, 생략하면 기존 schedule 전체를 제거합니다. 동일 replacement는
+        version, updatedAt과 AuditRecord를 바꾸지 않습니다. stale expectedVersion은 409입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceStoreCustomerDisplayRequest" }
+      responses:
+        "200":
+          description: 교체 후 또는 no-op인 현재 Store customer-display 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreCustomerDisplayAuthoring" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus:
     get:
       tags: [Discovery]
@@ -854,6 +905,58 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/menus/{menuId}/display-content:
+    get:
+      tags: [Merchant]
+      operationId: getMenuDisplayContent
+      summary: 메뉴 고객 표시 content의 현재 편집본 조회
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 nullable category/description과 기존
+        Menu version을 반환합니다. 이 version은 고객 menu catalog에 노출되지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 Menu display-content 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuDisplayContentAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Merchant]
+      operationId: replaceMenuDisplayContent
+      summary: 메뉴 고객 표시 content 전체 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 nullable category/description을 full
+        replacement합니다. 가격, availability, option과 Order snapshot은 바뀌지 않습니다. 동일
+        replacement는 Menu version과 AuditRecord를 바꾸지 않고 stale expectedVersion은 409입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceMenuDisplayContentRequest" }
+      responses:
+        "200":
+          description: 교체 후 또는 no-op인 현재 Menu display-content 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuDisplayContentAuthoring" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/pickup-slots:
     get:
@@ -7748,6 +7851,111 @@ components:
       properties:
         menuId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
+    StoreOperatingDay:
+      type: object
+      additionalProperties: false
+      required: [dayOfWeek, closed]
+      description: |
+        Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
+        closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
+      properties:
+        dayOfWeek:
+          type: string
+          enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+        closed: { type: boolean }
+        opensAt:
+          type: string
+          format: time
+        closesAt:
+          type: string
+          format: time
+    StoreWeeklyOperatingHours:
+      type: object
+      additionalProperties: false
+      required: [timezone, days]
+      properties:
+        timezone:
+          type: string
+          enum: [Asia/Seoul]
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: 일곱 요일을 정확히 한 번씩 포함합니다.
+          items: { $ref: "#/components/schemas/StoreOperatingDay" }
+    StoreCustomerDisplayAuthoring:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        addressLine:
+          type: string
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: string
+          minLength: 1
+          maxLength: 200
+        operatingHours: { $ref: "#/components/schemas/StoreWeeklyOperatingHours" }
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    ReplaceStoreCustomerDisplayRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        addressLine:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 200
+        operatingHours:
+          anyOf:
+            - $ref: "#/components/schemas/StoreWeeklyOperatingHours"
+            - type: "null"
+    MenuDisplayContentAuthoring:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        displayCategory:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    ReplaceMenuDisplayContentRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        displayCategory:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 50
+        description:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 500
     CustomerStore:
       type: object
       additionalProperties: false

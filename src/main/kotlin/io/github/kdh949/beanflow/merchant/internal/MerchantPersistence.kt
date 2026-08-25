@@ -73,6 +73,10 @@ internal class MenuEntity(
     var imageSha256: String? = null,
     @Column(name = "image_updated_at")
     var imageUpdatedAt: Instant? = null,
+    @Column(name = "display_category")
+    var displayCategory: String? = null,
+    @Column(name = "public_description")
+    var publicDescription: String? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -93,6 +97,14 @@ internal class MenuEntity(
         imageThumbnailKey = null
         imageSha256 = null
         imageUpdatedAt = null
+    }
+
+    fun replaceDisplayContent(
+        displayCategory: String?,
+        publicDescription: String?,
+    ) {
+        this.displayCategory = displayCategory
+        this.publicDescription = publicDescription
     }
 }
 
