@@ -43,6 +43,12 @@ nullable text는 없거나 trim된 non-empty 값이어야 하고 control charact
 
 ### 2. full replacement command와 하나의 profile version을 사용한다
 
+`GET /api/v1/stores/{storeId}/customer-display`는 점주 편집 전용 current representation으로
+address, directions, optional complete seven-day schedule과 `version`을 반환한다. ACTIVE same-store
+`OWNER`만 읽을 수 있으며, 이 version은 고객 공개 Store 응답에 노출하지 않는다. profile이 아직
+없으면 nullable content와 schedule이 없는 `version=0` representation을 반환해 최초 PUT의
+`expectedVersion=0`을 명시한다.
+
 `PUT /api/v1/stores/{storeId}/customer-display`는 address, directions, optional complete seven-day
 schedule과 `expectedVersion`을 받는다. schedule 생략은 운영시간 전체 미설정이며 기존 일곱 row를
 모두 제거한다. 일부 요일만 보내는 patch는 허용하지 않는다.
@@ -149,6 +155,8 @@ customer display를 Merchant Store에 두면 공개 content의 권한·Audit·ve
 
 - customer response의 `open`이 `orderingAvailable`로 breaking rename된다. 배포된 client가 없다는
   전제 아래 deprecated alias를 두지 않고 OpenAPI/generated client/UI를 같은 PR에서 교체해야 한다.
+- 점주 편집 UI는 인증된 GET current representation으로 version을 얻는다. 고객 공개 응답이나
+  Support profile에는 optimistic concurrency version을 복제하지 않는다.
 - 주간 예외·자정 영업·24시간 매장은 이 계약으로 표현할 수 없으며 profile을 미설정으로 두거나 후속
   결정이 필요하다.
 - profile command는 새 table과 Audit write를, menu command는 기존 row version 변경을 만든다.
@@ -160,8 +168,8 @@ customer display를 Merchant Store에 두면 공개 content의 권한·Audit·ve
 
 - DB constraint로 profile text trim/control/length와 각 closed/open tuple·요일 범위를, Application과
   PostgreSQL transaction test로 정확한 seven-day full replacement를 검증한다.
-- OWNER 성공, STAFF profile 거절, OWNER/STAFF menu 성공, cross-store/revoked membership과 stale version을
-  PostgreSQL/HTTP 계약 테스트로 검증한다.
+- OWNER GET/PUT 성공, STAFF profile read/write 거절, OWNER/STAFF menu 성공,
+  cross-store/revoked membership과 stale version을 PostgreSQL/HTTP 계약 테스트로 검증한다.
 - profile·hours·Audit 원자성, identical no-op의 version/Audit 불변, partial schedule 부재를 검증한다.
 - 고정 Clock으로 `opensAt`, `closesAt`, closed day, 미설정 schedule과 Asia/Seoul 날짜 경계를 검증한다.
 - `orderingAvailable`의 Store flag 조합과 operatingStatus 독립성을 전수 검증한다.

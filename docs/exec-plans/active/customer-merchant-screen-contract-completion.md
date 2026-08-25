@@ -338,6 +338,14 @@ metadata require persistent data. Before creating migration files, the implement
 migration-writer lane and re-inventory the latest applied/committed Flyway version. `V66` is only this plan's
 planning baseline; no version number is reserved here.
 
+**Execution lease (2026-08-25):** PR #108 head `6575356`에서 child
+`feature/store-menu-display-profile`을 만들고 repository task, open PR, live worktree와 모든 local/remote
+migration inventory를 재검증했다. 실행 중인 다른 schema writer가 없고 combined committed inventory의
+마지막 번호가 V66이므로 이 ExecPlan stack이 sole migration-writer lease를 획득하고 Store/menu slice에
+`V67`을 선택했다. Notification child는 같은 linear stack과 shared lease에서 다음 combined 번호를
+사용한다. Lease는 final migration-writing child의 stack handoff/merge 전까지 unrelated writer에게
+양보하지 않으며, 원격 migration 충돌이 생기면 새 번호를 추측하지 않고 중단한다.
+
 ### New/changed data
 
 1. **Notification (ADR-104)**
@@ -434,13 +442,17 @@ StoreMenuItem
 - Add Store-owned authoring endpoints outside the customer surface:
 
 ```http
+GET /api/v1/stores/{storeId}/customer-display
 PUT /api/v1/stores/{storeId}/customer-display
 PUT /api/v1/stores/{storeId}/menus/{menuId}/display-content
 ```
 
-  Each command carries its full replacement payload and `expectedVersion`; Store `OWNER` can change display
-  profile, same-store `OWNER | STAFF` can change menu display content. Both lock, validate, write Audit and
-  return 409 on stale version. They do not change price, availability or current Order snapshots.
+  The authenticated GET returns the full authoring representation and current `version` to same-store
+  `OWNER`; an absent profile is empty content/schedule at `version=0`. The version is not added to customer
+  public Store responses. Each command carries its full replacement payload and `expectedVersion`; Store
+  `OWNER` can change display profile, same-store `OWNER | STAFF` can change menu display content. Both lock,
+  validate, write Audit and return 409 on stale version. They do not change price, availability or current
+  Order snapshots.
 
 ### 3. Non-reserving customer order quote
 
@@ -581,8 +593,9 @@ keyset batches.
 
 ### Milestone 3 — Store/menu display profile vertical slice
 
-1. Implement Store owner and menu content authoring services/controllers without Controller→Repository access;
-   enforce actor/membership/store/menu binding, expected version, Audit and no-op behavior.
+1. Implement Store owner current representation GET and profile/menu content authoring services/controllers
+   without Controller→Repository access; enforce actor/membership/store/menu binding, expected version, Audit
+   and no-op behavior.
 2. Extend Merchant public query DTOs, Discovery hydrators/search projections and Fulfillment availability batch
    contract to return display profile, operating status and earliest reservable pickup window.
 3. Replace customer response `open` with `orderingAvailable` in target/runtime OpenAPI and generated schema;
@@ -771,9 +784,18 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   idempotency response; reviewed retry uses a new fingerprint and new `Idempotency-Key`.
 - 2026-08-25: Recorded BR-49/50, ADR-116/117 and ADR-076/099/100/103/104/108 amendments. Milestone 0 now meets
   its decision gate and the plan is `Implementation-Ready: true`; production source remains unchanged in this PR.
+- 2026-08-25: PR #108 head에서 Store/menu child branch를 만들고 task/open-PR/worktree/local·remote
+  migration inventory를 검증했다. 이 stack이 sole writer lease를 획득해 V67을 선택했으며 다른 dirty
+  user worktree는 변경하지 않았다.
+- 2026-08-25: Source inventory에서 expected-version authoring을 시작할 점주 current read가 없음을
+  발견했다. 사용자 승인에 따라 same-store OWNER 전용 GET과 absent `version=0` 의미를 BR-50/ADR-117에
+  기록했으며 customer public response에는 version을 추가하지 않는다.
 
 ## Surprises & Discoveries
 
+- Existing Merchant APIs expose neither the customer-display authoring values nor their optimistic concurrency
+  version. A dedicated authenticated owner read was required; using the customer response would have leaked an
+  internal write boundary and still left actor-specific edit semantics ambiguous.
 - The current customer detail repository already reads a subset of price/lifecycle data internally, but its public
   response intentionally omits the breakdown and later timestamps. This is a projection contract gap, not a new
   Order data-model requirement.
@@ -805,6 +827,8 @@ ADR-116/117 and the related ADR amendments.
    deprecated aliases.
 9. Treat `ORDER_QUOTE_STALE` as a terminal BR-25 order-creation response: store and replay the first status/body
    for the same key·payload, and require a new fingerprint plus new `Idempotency-Key` after customer review.
+10. Add an authenticated same-store OWNER GET for the Store customer-display current representation and
+    version; keep that concurrency version out of the customer public response.
 
 ## Outcomes & Retrospective
 

@@ -2372,6 +2372,10 @@
   schedule은 ACTIVE same-store `OWNER`가 full replacement한다. profile version 하나가 text와 hours
   전체의 optimistic concurrency boundary이며 profile·hours·Audit는 한 transaction으로 commit 또는
   rollback한다. 동일 replacement는 version·updatedAt·Audit를 바꾸지 않는 no-op이다.
+- **Owner Read Contract:** ACTIVE same-store `OWNER`는 인증된
+  `GET /api/v1/stores/{storeId}/customer-display`로 full authoring representation과 현재 `version`을
+  읽는다. profile 미생성 상태는 empty content/schedule과 `version=0`으로 표현한다. 이 concurrency
+  version은 customer public Store response나 Support-purpose profile에 노출·복제하지 않는다.
 - **Menu Ownership:** same-store `OWNER | STAFF`가 기존 Menu version으로 nullable
   `displayCategory`과 `description`을 full replacement한다. 이 metadata는 가격, availability,
   option, search grammar, Order snapshot, benefit 또는 refund allocation을 바꾸지 않는다.
@@ -2402,7 +2406,8 @@
 - **Affected Aggregates:** Store, Menu, PickupSlot
 - **Required Tests:**
   - profile text·요일별 tuple DB constraint와 exact seven-day Application full replacement
-  - OWNER profile 및 OWNER/STAFF Menu 인가, cross-store/revoked/stale version
+  - OWNER profile current read/write 및 STAFF read/write 거절, OWNER/STAFF Menu 인가,
+    cross-store/revoked/stale version
   - full replacement·no-op·Audit·rollback 원자성
   - fixed Clock의 `OPEN/CLOSED/UNSPECIFIED`와 orderingAvailable 독립성
   - earliest reservable slot, absent slot/profile/image와 batch query count
