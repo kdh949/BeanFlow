@@ -62,9 +62,13 @@ internal class MenuImageMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V66 is latest and registers menu audit actions`() {
-        assertThat(jdbc.queryForObject("SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Int::class.java))
-            .isEqualTo(66)
+    fun `V66 remains applied and registers menu audit actions`() {
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE version = '66' AND success",
+                Long::class.java,
+            ),
+        ).isOne()
         assertThat(
             jdbc.queryForList(
                 """
