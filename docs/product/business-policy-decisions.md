@@ -2379,6 +2379,9 @@
 - **Menu Ownership:** same-store `OWNER | STAFF`가 기존 Menu version으로 nullable
   `displayCategory`과 `description`을 full replacement한다. 이 metadata는 가격, availability,
   option, search grammar, Order snapshot, benefit 또는 refund allocation을 바꾸지 않는다.
+- **Menu Read Contract:** ACTIVE same-store `OWNER | STAFF`는 인증된
+  `GET /api/v1/stores/{storeId}/menus/{menuId}/display-content`로 현재 nullable content와 기존 Menu
+  `version`을 읽는다. customer menu catalog에는 이 concurrency version을 노출하지 않는다.
 - **Weekly Schedule:** `Asia/Seoul`, 요일별 하나의 same-day interval만 지원한다. schedule이 있으면
   일곱 요일을 정확히 한 번씩 보내야 한다. closed day는 시간이 없고 open day는
   `opensAt < closesAt`이다. 자정 넘김, 24시간, 휴일·임시휴무, 날짜 override와 Store별 timezone은
@@ -2406,7 +2409,7 @@
 - **Affected Aggregates:** Store, Menu, PickupSlot
 - **Required Tests:**
   - profile text·요일별 tuple DB constraint와 exact seven-day Application full replacement
-  - OWNER profile current read/write 및 STAFF read/write 거절, OWNER/STAFF Menu 인가,
+  - OWNER profile current read/write 및 STAFF read/write 거절, OWNER/STAFF Menu current read/write 인가,
     cross-store/revoked/stale version
   - full replacement·no-op·Audit·rollback 원자성
   - fixed Clock의 `OPEN/CLOSED/UNSPECIFIED`와 orderingAvailable 독립성

@@ -444,15 +444,17 @@ StoreMenuItem
 ```http
 GET /api/v1/stores/{storeId}/customer-display
 PUT /api/v1/stores/{storeId}/customer-display
+GET /api/v1/stores/{storeId}/menus/{menuId}/display-content
 PUT /api/v1/stores/{storeId}/menus/{menuId}/display-content
 ```
 
   The authenticated GET returns the full authoring representation and current `version` to same-store
   `OWNER`; an absent profile is empty content/schedule at `version=0`. The version is not added to customer
-  public Store responses. Each command carries its full replacement payload and `expectedVersion`; Store
-  `OWNER` can change display profile, same-store `OWNER | STAFF` can change menu display content. Both lock,
-  validate, write Audit and return 409 on stale version. They do not change price, availability or current
-  Order snapshots.
+  public Store responses. The authenticated menu GET returns current nullable display content and the existing
+  Menu `version` to same-store `OWNER | STAFF`; the customer catalog remains version-free. Each command carries
+  its full replacement payload and `expectedVersion`; Store `OWNER` can change display profile, same-store
+  `OWNER | STAFF` can change menu display content. Both lock, validate, write Audit and return 409 on stale
+  version. They do not change price, availability or current Order snapshots.
 
 ### 3. Non-reserving customer order quote
 
@@ -593,7 +595,7 @@ keyset batches.
 
 ### Milestone 3 — Store/menu display profile vertical slice
 
-1. Implement Store owner current representation GET and profile/menu content authoring services/controllers
+1. Implement Store owner and menu content current representation GETs plus authoring services/controllers
    without Controller→Repository access; enforce actor/membership/store/menu binding, expected version, Audit
    and no-op behavior.
 2. Extend Merchant public query DTOs, Discovery hydrators/search projections and Fulfillment availability batch
@@ -790,12 +792,17 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
 - 2026-08-25: Source inventory에서 expected-version authoring을 시작할 점주 current read가 없음을
   발견했다. 사용자 승인에 따라 same-store OWNER 전용 GET과 absent `version=0` 의미를 BR-50/ADR-117에
   기록했으며 customer public response에는 version을 추가하지 않는다.
+- 2026-08-25: Menu display-content PUT에도 기존 Menu version을 제공할 merchant read가 없음을 확인했다.
+  사용자 승인으로 same-store OWNER/STAFF GET을 추가하고 customer menu catalog는 version-free로
+  유지하도록 BR-50/ADR-117에 기록했다.
 
 ## Surprises & Discoveries
 
 - Existing Merchant APIs expose neither the customer-display authoring values nor their optimistic concurrency
   version. A dedicated authenticated owner read was required; using the customer response would have leaked an
   internal write boundary and still left actor-specific edit semantics ambiguous.
+- The same missing authoring-read problem existed for Menu display content. The customer catalogue cannot safely
+  double as the edit source because it neither authenticates Merchant roles nor exposes the existing Menu version.
 - The current customer detail repository already reads a subset of price/lifecycle data internally, but its public
   response intentionally omits the breakdown and later timestamps. This is a projection contract gap, not a new
   Order data-model requirement.
@@ -829,6 +836,8 @@ ADR-116/117 and the related ADR amendments.
    for the same key·payload, and require a new fingerprint plus new `Idempotency-Key` after customer review.
 10. Add an authenticated same-store OWNER GET for the Store customer-display current representation and
     version; keep that concurrency version out of the customer public response.
+11. Add an authenticated same-store OWNER/STAFF GET for the Menu display-content current representation and
+    existing Menu version; keep that concurrency version out of the customer menu catalog.
 
 ## Outcomes & Retrospective
 

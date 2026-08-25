@@ -65,6 +65,10 @@ stale version은 409이며 partial schedule이나 Audit-only 성공을 남기지
 ### 3. Menu 표시 metadata는 기존 Menu가 소유한다
 
 `merchant_menu`에 nullable `display_category` 1..50과 `public_description` 1..500을 둔다.
+`GET /api/v1/stores/{storeId}/menus/{menuId}/display-content`는 ACTIVE same-store `OWNER | STAFF`에게
+현재 nullable display content와 기존 Menu `version`을 반환한다. 이 version은 customer menu catalog에
+노출하지 않는다.
+
 `PUT /api/v1/stores/{storeId}/menus/{menuId}/display-content`는 두 값을 full replacement하고 기존
 Menu version을 `expectedVersion`으로 사용한다. ACTIVE same-store `OWNER | STAFF`만 실행하며,
 cross-store Menu는 존재를 누설하지 않는 기존 객체 인가를 따른다.
@@ -157,6 +161,8 @@ customer display를 Merchant Store에 두면 공개 content의 권한·Audit·ve
   전제 아래 deprecated alias를 두지 않고 OpenAPI/generated client/UI를 같은 PR에서 교체해야 한다.
 - 점주 편집 UI는 인증된 GET current representation으로 version을 얻는다. 고객 공개 응답이나
   Support profile에는 optimistic concurrency version을 복제하지 않는다.
+- Menu 편집 UI도 인증된 display-content GET으로 기존 Menu version을 얻으며 customer catalog에는
+  이를 추가하지 않는다.
 - 주간 예외·자정 영업·24시간 매장은 이 계약으로 표현할 수 없으며 profile을 미설정으로 두거나 후속
   결정이 필요하다.
 - profile command는 새 table과 Audit write를, menu command는 기존 row version 변경을 만든다.
@@ -168,7 +174,7 @@ customer display를 Merchant Store에 두면 공개 content의 권한·Audit·ve
 
 - DB constraint로 profile text trim/control/length와 각 closed/open tuple·요일 범위를, Application과
   PostgreSQL transaction test로 정확한 seven-day full replacement를 검증한다.
-- OWNER GET/PUT 성공, STAFF profile read/write 거절, OWNER/STAFF menu 성공,
+- OWNER profile GET/PUT 성공, STAFF profile read/write 거절, OWNER/STAFF menu GET/PUT 성공,
   cross-store/revoked membership과 stale version을 PostgreSQL/HTTP 계약 테스트로 검증한다.
 - profile·hours·Audit 원자성, identical no-op의 version/Audit 불변, partial schedule 부재를 검증한다.
 - 고정 Clock으로 `opensAt`, `closesAt`, closed day, 미설정 schedule과 Asia/Seoul 날짜 경계를 검증한다.
