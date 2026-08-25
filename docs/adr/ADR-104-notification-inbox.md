@@ -216,6 +216,18 @@ worker가 기본 1시간마다 최대 100개를 `(retention_expires_at, id)` 순
 - 알림함 항목 수가 커져 보존·아카이빙 전략이 필요할 때
 - 분류 경계 판단이 반복적으로 어려워질 때
 
+### Global bell unread summary Amendment (2026-08-25)
+
+`GET /api/v1/me/notification-summary`는 customer Session scope에서 unread InboxItem이 하나라도 있는지만
+`{ "hasUnread": boolean }`로 반환한다. count, title/body, target와 Delivery state를 전역 shell에
+노출하지 않고 counter/cache table도 만들지 않는다. `read_at IS NULL` 존재 여부를 bounded query로
+읽으며 이를 위한 partial index를 둘 수 있다.
+
+summary query 실패는 bell이 `hasUnread=false`인 것처럼 성공하지 않고 명시적 실패 상태가 된다.
+성공한 빈 inbox만 false다. InboxItem 생성, cursor 목록, `{ read: true }` idempotent 204,
+marketing preference와 90일 retention 의미는 그대로다. read 처리 성공 뒤 client는 summary를
+재검증하되 NotificationDelivery 성공/실패를 unread 상태로 추론하지 않는다.
+
 ## Related Decisions
 
 - [ADR-019](ADR-019-notification-retry-and-manual-recovery.md)

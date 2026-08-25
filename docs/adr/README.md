@@ -117,3 +117,5 @@
 | [ADR-113](ADR-113-partner-pos-integration.md) | Accepted | 외부 POS 파트너 연동 인증과 API 범위 |
 | [ADR-114](ADR-114-shared-spring-test-context-isolation.md) | Accepted | 공유 Spring 테스트 Context와 명시적 격리 예외 |
 | [ADR-115](ADR-115-store-and-menu-image-storage.md) | Accepted | 매장·메뉴 이미지의 AIStor 저장과 조회 경계 |
+| [ADR-116](ADR-116-non-reserving-order-quote.md) | Accepted | 비예약 주문 quote와 전체 fingerprint 사전조건 |
+| [ADR-117](ADR-117-store-customer-display-profile.md) | Accepted | Store 고객 표시 profile과 주문 가능성 분리 |

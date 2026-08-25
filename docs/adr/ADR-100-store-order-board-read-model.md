@@ -208,6 +208,21 @@ replay, 409 경쟁 패자, 422 불가능 조합, 각 advertised action의 실제
 - 보드에 완료 이력과 통계를 함께 표시해야 할 때
 - 상태 전이 충돌 비율이 실제 운영에서 문제가 될 때
 
+### 보드 lifecycle timestamp와 ETag Amendment (2026-08-25)
+
+`StoreOrderBoardItem`의 normal snapshot, overflow page와 per-order detail에 실제 발생한
+`paidAt`, `acceptedAt`, `preparingAt`, `readyAt`을 optional lifecycle object로 추가한다.
+`completedAt`은 live executable lane에 없는 completed history이므로 이 board 계약에 추가하지 않는다.
+아직 발생하지 않은 timestamp는 생략하고 pickup window, `updatedAt`, server/client 현재 시각이나
+상태별 예상시간으로 만들지 않는다. state와 timestamp 순서가 모순이면 503 projection failure다.
+
+lifecycle field는 weak ETag canonical payload에 포함한다. timestamp 하나만 바뀌어도 ETag가 바뀌며
+그 변경에 304를 반환할 수 없다. 304 응답은 새 server time이나 elapsed 값을 제공하지 않으므로,
+frontend elapsed 표시는 마지막 200의 event timestamp와 client clock만 사용한다.
+
+lane, `allowedActions`, lane별 50건 bound, overflow count/cursor, 3초 conditional polling과 상태
+전이 API 의미는 변경하지 않는다.
+
 ## Related Decisions
 
 - [ADR-099](ADR-099-customer-order-read-model.md)

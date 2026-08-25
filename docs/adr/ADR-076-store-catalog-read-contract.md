@@ -205,6 +205,21 @@ production SLA 또는 쓰기 비용 측정은 아니다.
   만들지 않는다.
 - 실제 카탈로그가 published bound에 근접해 값 상향 또는 메뉴 pagination이 필요할 때.
 
+### 고객 표시용 earliest pickup window Amendment (2026-08-25)
+
+고객 Store summary/detail/search의 `nextPickupWindow`는 이 ADR의 예약 가능 read boundary를 그대로
+사용한다. `acceptingOrders && pickupEnabled`, `startsAt > now`, 7일 horizon과
+`capacity - reserved - confirmed > 0`을 모두 만족하는 가장 이른 실제 slot의
+`(startsAt, endsAt)`이며, 조건을 만족하는 slot이 없으면 field를 생략한다.
+
+목록 응답은 Store별 query를 반복하지 않고 후보 Store ID 전체를 받는 Fulfillment batch/read
+projection으로 earliest slot을 계산한다. 손상 counter나 query 실패가 후보 하나에만 있어도 그 Store를
+조용히 제외하거나 field를 생략하지 않고 전체 요청을 503으로 실패시킨다. 공개 운영시간, client clock,
+고정 lead time 또는 준비시간 추정은 이 값을 만들지 않는다.
+
+이 amendment는 예약 window와 write authority를 바꾸지 않는다. final Order creation은 같은 boundary를
+lock 아래 다시 검사하며 customer display는 reservation token이나 성공 보장이 아니다.
+
 ## Related Decisions
 
 - [BR-05 픽업 슬롯 확정 시점](../product/business-policy-decisions.md) — Slot Reservation Window Amendment (2026-08-08)
@@ -215,3 +230,4 @@ production SLA 또는 쓰기 비용 측정은 아니다.
   카탈로그는 cursor 대신 자체 경계를 쓴다
 - [MD-2026-011](../decisions/minor-decisions.md) — 메뉴 availability 투영. 이 ADR은 투영 규칙이
   아니라 목록 크기 경계만 추가한다
+- [ADR-117](ADR-117-store-customer-display-profile.md) — customer display와 주문 가능성 용어
