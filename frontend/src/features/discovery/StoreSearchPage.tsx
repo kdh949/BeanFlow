@@ -119,6 +119,7 @@ function SearchResults({ query, coordinates }: { query: string; coordinates: { l
               pickupAvailable: store.pickupAvailable,
               distanceMeters: store.distanceMeters,
               caption: store.matchedMenus.length ? store.matchedMenus.map((menu) => menu.name).join(" · ") : store.brandName ?? store.regionName,
+              image: store.image,
             }}
           />
         ))}

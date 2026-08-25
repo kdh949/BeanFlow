@@ -23,10 +23,66 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const demoImage = (name: string) => ({
+  url: `/demo/catalog/${name}.webp`,
+  expiresAt: "2099-01-01T00:00:00Z",
+});
+
+const imageCatalogStores = [
+  ["10000000-0000-4000-8000-000000000101", "성수 로스터리", "오트 라떼"],
+  ["10000000-0000-4000-8000-000000000102", "연남 아틀리에", "아메리카노"],
+  ["10000000-0000-4000-8000-000000000103", "을지로 브루어스", "카페 라떼"],
+  ["10000000-0000-4000-8000-000000000104", "망원 코너", "카라멜 마키아또"],
+  ["10000000-0000-4000-8000-000000000105", "서촌 그라운드", "플레인 베이글"],
+  ["10000000-0000-4000-8000-000000000106", "한남 플랜트", "딸기 요거트 스무디"],
+  ["10000000-0000-4000-8000-000000000107", "합정 포트", "햄 치즈 샌드위치"],
+  ["10000000-0000-4000-8000-000000000108", "문래 다크룸", "바스크 치즈케이크"],
+  ["10000000-0000-4000-8000-000000000109", "잠실 데일리", "그릭 요거트"],
+  ["10000000-0000-4000-8000-000000000110", "압구정 테이블", "마카롱 세트"],
+  ["10000000-0000-4000-8000-000000000111", "동대문 웨이브", "콜드브루"],
+  ["10000000-0000-4000-8000-000000000112", "시청 테라스", "오늘의 필터 커피"],
+] as const;
+
 export const Results: Story = {
   parameters: { msw: { handlers: searchHandlers } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("시청점")).toBeVisible();
+  },
+};
+
+/** A dense, phone-sized customer surface with all image-bearing store cards. */
+export const StorefrontImageResults: Story = {
+  parameters: {
+    layout: "fullscreen",
+    a11y: { test: "error" },
+    docs: { story: { inline: false, height: "844px" } },
+    routing: { surface: "customer", path: "/app/stores", initialEntry: "/app/stores?query=%EC%B9%B4%ED%8E%98" },
+    msw: {
+      handlers: [
+        ...signedInHandlers,
+        http.get("/api/v1/stores/search", () => HttpResponse.json({
+          items: imageCatalogStores.map(([storeId, name, menuName], index) => ({
+            storeId,
+            name,
+            matchReason: ["MENU_NAME"],
+            open: true,
+            pickupAvailable: true,
+            matchedMenus: [{ menuId: `20000000-0000-4000-8000-0000000001${String(index + 1).padStart(2, "0")}`, name: menuName }],
+            image: demoImage(`store-${String(index + 1).padStart(2, "0")}`),
+          })),
+          page: {},
+          distanceAvailable: false,
+        })),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: /성수 로스터리/ })).toHaveAttribute(
+      "href",
+      "/app/stores/10000000-0000-4000-8000-000000000101",
+    );
+    const storeLinks = canvas.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/app/stores/"));
+    await expect(storeLinks).toHaveLength(12);
   },
 };
 

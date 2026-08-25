@@ -78,6 +78,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
             insertStore(store(2), "Far cafe", longitude = 127.004, latitude = 37.5)
             insertStore(store(3), "Closed cafe", longitude = 127.0005, latitude = 37.5, acceptingOrders = false)
             insertStore(store(4), "Pickup disabled cafe", longitude = 127.0006, latitude = 37.5, pickupEnabled = false)
+            attachImage(store(1))
             insertPickupSlot(store(1))
 
             mockMvc
@@ -89,11 +90,14 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items[0].distanceMeters").value(0))
                 .andExpect(jsonPath("$.items[0].open").value(true))
                 .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+                .andExpect(jsonPath("$.items[0].image.url").isString)
+                .andExpect(jsonPath("$.items[0].image.expiresAt").isString)
                 .andExpect(jsonPath("$.items[1].storeId").value(store(2).toString()))
                 .andExpect(jsonPath("$.items[1].distanceMeters").value(353))
                 // 슬롯이 없는 매장은 결과에 남되 픽업 불가로 표시된다. Milestone 6 이전에는
                 // `acceptingOrders && pickupEnabled`라서 항상 true였다.
                 .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[1].image").doesNotExist())
                 .andExpect(jsonPath("$.items[0].distanceMicrometers").doesNotExist())
                 .andExpect(jsonPath("$.items[0].location").doesNotExist())
                 .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
@@ -552,6 +556,20 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 name,
                 longitude,
                 latitude,
+            )
+        }
+
+        private fun attachImage(storeId: UUID) {
+            jdbcTemplate.update(
+                """
+                UPDATE merchant_store
+                   SET image_original_key = ?, image_thumbnail_key = ?, image_sha256 = ?, image_updated_at = now()
+                 WHERE id = ?
+                """.trimIndent(),
+                "stores/$storeId/hash/original.jpg",
+                "stores/$storeId/hash/thumbnail.jpg",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                storeId,
             )
         }
 

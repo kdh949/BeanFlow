@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.discovery.api.StoreSearchItemView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchMenuView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchPage
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
+import io.github.kdh949.beanflow.discovery.api.StorefrontImageView
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -34,6 +35,7 @@ internal data class StoreSearchItemResponse(
     val open: Boolean,
     val pickupAvailable: Boolean,
     val matchedMenus: List<StoreSearchMenuView>,
+    val image: StorefrontImageView?,
 )
 
 internal data class StoreSearchPageResponse(
@@ -108,4 +110,5 @@ private fun StoreSearchItemView.toResponse() =
         open = open,
         pickupAvailable = pickupAvailable,
         matchedMenus = matchedMenus,
+        image = image,
     )

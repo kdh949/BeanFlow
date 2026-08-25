@@ -155,6 +155,8 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.bouncycastle:bcprov-jdk18on:1.84")
+	implementation("com.drewnoakes:metadata-extractor:2.19.0")
+	implementation("io.minio:minio:9.0.3")
 	implementation("org.springframework.modulith:spring-modulith-observability-api")
 	implementation("org.springframework.modulith:spring-modulith-starter-core")
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")

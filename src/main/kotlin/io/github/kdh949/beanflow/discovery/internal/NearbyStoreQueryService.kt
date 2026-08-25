@@ -91,6 +91,7 @@ internal class NearbyStoreReadTransaction(
     private val availability: PickupAvailabilityQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
     private val metrics: NearbyStoreQueryMetrics,
+    private val imageViews: StorefrontImageViewResolver,
 ) {
     @Transactional(readOnly = true)
     fun search(prepared: PreparedNearbyStorePage): NearbyStorePage {
@@ -122,7 +123,7 @@ internal class NearbyStoreReadTransaction(
                 )
             }
         return NearbyStorePage(
-            items = scanned.items.map { it.toView(pickupAvailable = it.storeId in availableStoreIds) },
+            items = scanned.items.map { it.toView(pickupAvailable = it.storeId in availableStoreIds, imageViews) },
             nextCursor = nextCursor,
         )
     }
@@ -136,13 +137,17 @@ internal class NearbyStoreReadTransaction(
     }
 }
 
-internal fun NearbyStoreProfileProjection.toView(pickupAvailable: Boolean): NearbyStoreView =
+internal fun NearbyStoreProfileProjection.toView(
+    pickupAvailable: Boolean,
+    imageViews: StorefrontImageViewResolver,
+): NearbyStoreView =
     NearbyStoreView(
         storeId = storeId,
         name = name,
         distanceMeters = distanceMicrometers / MICROMETERS_PER_METER,
         open = open,
         pickupAvailable = pickupAvailable,
+        image = imageViews.resolve(imageThumbnailKey),
     )
 
 private const val MICROMETERS_PER_METER = 1_000_000L

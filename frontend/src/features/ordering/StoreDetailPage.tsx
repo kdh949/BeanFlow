@@ -149,7 +149,11 @@ function MenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; storeId:
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="menu-icon"><Coffee size={25} /></span>
+        {menu.image ? (
+          <img className="menu-thumbnail" src={menu.image.url} alt="" />
+        ) : (
+          <span className="menu-icon"><Coffee size={25} /></span>
+        )}
         <span>
           <strong>{menu.name}</strong>
           <small>{won.format(menu.basePriceKrw)}{menu.available ? "" : " · 품절"}</small>

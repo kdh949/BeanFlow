@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.discovery.api.NearbyStorePage
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreView
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
+import io.github.kdh949.beanflow.discovery.api.StorefrontImageView
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -17,8 +18,18 @@ internal data class NearbyStorePageInfoResponse(
 )
 
 internal data class NearbyStorePageResponse(
-    val items: List<NearbyStoreView>,
+    val items: List<NearbyStoreItemResponse>,
     val page: NearbyStorePageInfoResponse,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+internal data class NearbyStoreItemResponse(
+    val storeId: java.util.UUID,
+    val name: String,
+    val distanceMeters: Long,
+    val open: Boolean,
+    val pickupAvailable: Boolean,
+    val image: StorefrontImageView?,
 )
 
 /**
@@ -57,5 +68,8 @@ internal class NearbyStoreQueryController(
                 ),
             ).toResponse()
 
-    private fun NearbyStorePage.toResponse() = NearbyStorePageResponse(items, NearbyStorePageInfoResponse(nextCursor))
+    private fun NearbyStorePage.toResponse() =
+        NearbyStorePageResponse(items.map(NearbyStoreView::toResponse), NearbyStorePageInfoResponse(nextCursor))
 }
+
+private fun NearbyStoreView.toResponse() = NearbyStoreItemResponse(storeId, name, distanceMeters, open, pickupAvailable, image)

@@ -96,6 +96,7 @@ internal class DiscoveryStoreCatalogIntegrationTest
         fun `menus project current owner availability for menus and options without exposing write fields`() {
             val americano = insertMenu(storeId, "Americano", 4_500, available = true)
             val seasonal = insertMenu(storeId, "Zebra latte", 6_000, available = false)
+            attachImage(americano)
             insertOption(americano, "Extra shot", 500, available = true)
             insertOption(americano, "Oat milk", 800, available = false)
             insertMenu(otherStoreId, "Another store latte", 5_000, available = true)
@@ -109,6 +110,8 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .andExpect(jsonPath("$.items[0].basePriceKrw").value(4_500))
                 .andExpect(jsonPath("$.items[0].currency").value("KRW"))
                 .andExpect(jsonPath("$.items[0].available").value(true))
+                .andExpect(jsonPath("$.items[0].image.url").isString)
+                .andExpect(jsonPath("$.items[0].image.expiresAt").isString)
                 .andExpect(jsonPath("$.items[0].options.length()").value(2))
                 .andExpect(jsonPath("$.items[0].options[0].name").value("Extra shot"))
                 .andExpect(jsonPath("$.items[0].options[0].additionalPriceKrw").value(500))
@@ -118,6 +121,7 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 // A sold-out menu stays in the list with a false flag; it is never reported available.
                 .andExpect(jsonPath("$.items[1].menuId").value(seasonal.toString()))
                 .andExpect(jsonPath("$.items[1].available").value(false))
+                .andExpect(jsonPath("$.items[1].image").doesNotExist())
                 .andExpect(jsonPath("$.items[1].options.length()").value(0))
         }
 
@@ -496,6 +500,20 @@ internal class DiscoveryStoreCatalogIntegrationTest
             acceptingOrders,
             pickupEnabled,
         )
+
+        private fun attachImage(menuId: UUID) {
+            jdbcTemplate.update(
+                """
+                UPDATE merchant_menu
+                   SET image_original_key = ?, image_thumbnail_key = ?, image_sha256 = ?, image_updated_at = now()
+                 WHERE id = ?
+                """.trimIndent(),
+                "menus/$menuId/hash/original.jpg",
+                "menus/$menuId/hash/thumbnail.jpg",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                menuId,
+            )
+        }
 
         /** A store is only publicly visible once its owner-verified discovery profile exists. */
         private fun insertDiscoveryProfile(

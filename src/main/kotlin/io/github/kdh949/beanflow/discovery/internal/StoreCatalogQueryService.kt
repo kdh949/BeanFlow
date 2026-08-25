@@ -43,10 +43,11 @@ internal class StoreCatalogQueryService(
     private val menus: StoreMenuQueryOperations,
     private val pickupSlots: PickupSlotQueryOperations,
     private val metrics: StoreCatalogMetrics,
+    private val imageViews: StorefrontImageViewResolver,
 ) : StoreCatalogQueryOperations {
     override fun listMenus(storeId: UUID): List<StoreMenuItemView> =
         observed(StoreCatalogOperation.MENUS) {
-            menus.listMenus(storeId).map(StoreMenuView::toCatalogView)
+            menus.listMenus(storeId).map { it.toCatalogView(imageViews) }
         }
 
     override fun listPickupSlots(
@@ -83,7 +84,7 @@ internal class StoreCatalogQueryService(
         }
 }
 
-private fun StoreMenuView.toCatalogView() =
+private fun StoreMenuView.toCatalogView(imageViews: StorefrontImageViewResolver) =
     StoreMenuItemView(
         menuId = menuId,
         name = name,
@@ -91,6 +92,7 @@ private fun StoreMenuView.toCatalogView() =
         currency = KRW,
         available = available,
         options = options.map(StoreMenuOptionView::toCatalogView),
+        image = imageViews.resolve(imageThumbnailKey),
     )
 
 private fun StoreMenuOptionView.toCatalogView() =

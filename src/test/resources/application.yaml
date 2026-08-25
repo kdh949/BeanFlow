@@ -1,4 +1,16 @@
 beanflow:
+  media:
+    orphan-sweep:
+      initial-delay-ms: 3600000
+      fixed-delay-ms: 3600000
+    aistor:
+      endpoint: http://127.0.0.1:19000
+      public-endpoint: http://media.beanflow.test
+      access-key: test-access-key
+      secret-key: test-secret-key
+      bucket: beanflow-test-media
+      region: us-east-1
+      verify-at-startup: false
   operations-oidc:
     issuer-uri: https://id.beanflow.test/realms/operations
     authorization-server-url: https://id.beanflow.test

@@ -94,6 +94,7 @@ internal class StoreSearchReadTransaction(
     private val repository: StoreSearchCandidateRepository,
     private val availability: PickupAvailabilityQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
+    private val imageViews: StorefrontImageViewResolver,
 ) {
     @Transactional(readOnly = true)
     fun search(prepared: PreparedStoreSearch): StoreSearchPage {
@@ -149,6 +150,7 @@ internal class StoreSearchReadTransaction(
                         pickupAvailable = candidate.pickupAvailable(availableStoreIds),
                         menus = menus[candidate.storeId].orEmpty(),
                         terms = displayTerms[candidate.storeId].orEmpty(),
+                        imageViews = imageViews,
                     )
                 },
             nextCursor = nextCursor,
@@ -179,6 +181,7 @@ private fun StoreSearchCandidate.toView(
     pickupAvailable: Boolean,
     menus: List<StoreSearchMenuRow>,
     terms: List<StoreSearchTermText>,
+    imageViews: StorefrontImageViewResolver,
 ): StoreSearchItemView =
     StoreSearchItemView(
         storeId = storeId,
@@ -191,6 +194,7 @@ private fun StoreSearchCandidate.toView(
         open = open,
         pickupAvailable = pickupAvailable,
         matchedMenus = menus.map { StoreSearchMenuView(it.menuId, it.name) },
+        image = imageViews.resolve(imageThumbnailKey),
     )
 
 /** 상위 계층부터 이어 붙인다. 계층이 하나도 없는 매장은 지역명을 내보내지 않는다. */

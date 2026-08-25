@@ -738,6 +738,51 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/image:
+    put:
+      tags: [Merchant]
+      operationId: replaceStoreImage
+      summary: 매장 대표 이미지 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        해당 매장의 STORE_OWNER만 수행합니다. JPEG 또는 PNG 한 장을 최대 5 MiB까지 받아
+        검증·정규화한 뒤 비공개 AIStor에 원본과 512×512 썸네일을 저장합니다. 현재 이미지와
+        정규화 SHA-256이 같으면 포인터와 AuditRecord를 다시 쓰지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/StorefrontImageUploadRequest" }
+      responses:
+        "200":
+          description: 현재 매장 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    delete:
+      tags: [Merchant]
+      operationId: deleteStoreImage
+      summary: 매장 대표 이미지 삭제
+      security: [{ merchantSession: [] }]
+      description: 해당 매장의 STORE_OWNER만 수행하며 이미지가 없어도 204를 반환합니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      responses:
+        "204": { description: 매장 이미지 포인터가 없음 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus:
     get:
       tags: [Discovery]
@@ -764,6 +809,52 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /stores/{storeId}/menus/{menuId}/image:
+    put:
+      tags: [Merchant]
+      operationId: replaceMenuImage
+      summary: 메뉴 이미지 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        해당 매장의 STORE_OWNER 또는 STORE_STAFF가 수행합니다. URL의 매장과 메뉴의 실제
+        소속이 다르면 404를 반환하며, 현재 이미지와 정규화 SHA-256이 같으면 다시 쓰지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/StorefrontImageUploadRequest" }
+      responses:
+        "200":
+          description: 현재 메뉴 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    delete:
+      tags: [Merchant]
+      operationId: deleteMenuImage
+      summary: 메뉴 이미지 삭제
+      security: [{ merchantSession: [] }]
+      description: STORE_OWNER 또는 STORE_STAFF가 수행하며 이미지가 없어도 204를 반환합니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      responses:
+        "204": { description: 메뉴 이미지 포인터가 없음 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/pickup-slots:
     get:
       tags: [Discovery]
@@ -2268,6 +2359,88 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/stores/{storeId}/image:
+    put:
+      tags: [Operations]
+      operationId: replaceStoreImageByOperator
+      summary: (운영팀) 매장 대표 이미지 교체
+      description: PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/AccessReason'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/StorefrontImageUploadRequest' }
+      responses:
+        '200':
+          description: 현재 매장 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontImage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Operations]
+      operationId: deleteStoreImageByOperator
+      summary: (운영팀) 매장 대표 이미지 삭제
+      description: 이미지가 없어도 204를 반환하며 실제 변경이 있을 때만 AuditRecord를 남깁니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/AccessReason'
+      responses:
+        '204': { description: 매장 이미지 포인터가 없음 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/stores/{storeId}/menus/{menuId}/image:
+    put:
+      tags: [Operations]
+      operationId: replaceMenuImageByOperator
+      summary: (운영팀) 메뉴 이미지 교체
+      description: PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/MenuId'
+        - $ref: '#/components/parameters/AccessReason'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/StorefrontImageUploadRequest' }
+      responses:
+        '200':
+          description: 현재 메뉴 썸네일의 15분 presigned GET
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontImage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Operations]
+      operationId: deleteMenuImageByOperator
+      summary: (운영팀) 메뉴 이미지 삭제
+      description: URL 매장과 메뉴 소속을 검증하고 실제 변경이 있을 때만 AuditRecord를 남깁니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/MenuId'
+        - $ref: '#/components/parameters/AccessReason'
+      responses:
+        '204': { description: 메뉴 이미지 포인터가 없음 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /regions:
     get:
       tags: [Merchant]
@@ -6310,6 +6483,12 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Identifier'
+    MenuId:
+      in: path
+      name: menuId
+      required: true
+      schema:
+        $ref: '#/components/schemas/Identifier'
     BrandId:
       in: path
       name: brandId
@@ -7561,6 +7740,7 @@ components:
           maxItems: 3
           description: Menus of this store that the query matched, most relevant first. Empty when none matched.
           items: { $ref: "#/components/schemas/StoreSearchMenu" }
+        image: { $ref: "#/components/schemas/StorefrontImage" }
     StoreSearchMenu:
       type: object
       additionalProperties: false
@@ -7577,6 +7757,27 @@ components:
         name: { type: string, minLength: 1, maxLength: 200 }
         pickupAvailable: { type: boolean }
         distanceMeters: { type: integer, minimum: 0 }
+        image: { $ref: "#/components/schemas/StorefrontImage" }
+    StorefrontImage:
+      type: object
+      additionalProperties: false
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: 비공개 AIStor 썸네일 객체의 presigned GET URL입니다.
+        expiresAt: { $ref: "#/components/schemas/DateTime" }
+    StorefrontImageUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: binary
+          maxLength: 5242880
+          description: JPEG 또는 PNG 이미지. signature, MIME, 해상도를 함께 검증합니다.
     CustomerStoreList:
       type: object
       additionalProperties: false
@@ -8430,6 +8631,8 @@ components:
           type: boolean
         pickupAvailable:
           type: boolean
+        image:
+          $ref: "#/components/schemas/StorefrontImage"
     MenuList:
       type: object
       additionalProperties: false
@@ -8484,6 +8687,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MenuOption"
+        image:
+          $ref: "#/components/schemas/StorefrontImage"
     MenuOption:
       type: object
       additionalProperties: false

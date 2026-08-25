@@ -27,7 +27,7 @@ function failed(status: number, code: string, message: string) {
 
 const menus = {
   items: [
-    { menuId: "menu-1", name: "아메리카노", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }] },
+    { menuId: "menu-1", name: "아메리카노", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }], image: { url: "/demo/catalog/americano.webp", expiresAt: "2099-01-01T00:00:00Z" } },
     { menuId: "menu-2", name: "오트 라떼", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
   ],
 };
@@ -141,9 +141,11 @@ describe("store identity comes from the server", () => {
   it("stores the server name in the cart rather than a placeholder", async () => {
     routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus), "/stores/{storeId}/pickup-slots": ok(openSlots) });
 
-    renderStore();
+    const { container } = renderStore();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /아메리카노/ }));
+    expect(await screen.findByRole("button", { name: /아메리카노/ })).toBeInTheDocument();
+    expect(container.querySelector("img.menu-thumbnail")).toHaveAttribute("src", "/demo/catalog/americano.webp");
+    await user.click(screen.getByRole("button", { name: /아메리카노/ }));
     await user.click(screen.getByRole("button", { name: /담기/ }));
 
     expect(cart.read()).toMatchObject({ status: "ready", cart: { storeName: "성수 로스터리" } });

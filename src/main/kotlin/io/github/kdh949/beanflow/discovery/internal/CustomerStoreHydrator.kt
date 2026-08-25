@@ -22,6 +22,7 @@ import java.util.UUID
 internal class CustomerStoreHydrator(
     private val stores: StoreDiscoveryQueryOperations,
     private val availability: PickupAvailabilityQueryOperations,
+    private val imageViews: StorefrontImageViewResolver,
 ) {
     @Transactional(readOnly = true)
     fun hydrate(
@@ -38,6 +39,7 @@ internal class CustomerStoreHydrator(
                     storeId = display.storeId,
                     name = display.name,
                     pickupAvailable = display.pickupCapable && display.storeId in availableStoreIds,
+                    image = imageViews.resolve(display.imageThumbnailKey),
                 )
             }
         }

@@ -34,6 +34,8 @@ internal class AuthenticationPathRegistry {
             // 참조 데이터지만 그것을 고르는 사람이 매장주이므로 merchant chain에 둔다.
             registration(AuthenticationChain.MERCHANT, "/api/v1/regions"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/region"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/image"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus/{menuId}/image"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/orders/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/settlements/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/disputes"),

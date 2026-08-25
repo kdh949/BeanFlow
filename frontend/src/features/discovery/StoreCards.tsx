@@ -1,5 +1,6 @@
 import { ArrowRight, Coffee, MapPin } from "lucide-react";
 import { Link } from "react-router";
+import type { components } from "../../api/schema";
 import { distanceLabel } from "./useBrowserLocation";
 
 export type StoreCardModel = {
@@ -9,6 +10,7 @@ export type StoreCardModel = {
   pickupAvailable: boolean;
   distanceMeters?: number;
   caption?: string | null;
+  image?: components["schemas"]["StorefrontImage"];
 };
 
 /**
@@ -28,7 +30,11 @@ export function StoreCard({ store }: { store: StoreCardModel }) {
       aria-disabled={!available}
       tabIndex={available ? undefined : -1}
     >
-      <span className="store-mark"><Coffee size={25} /></span>
+      {store.image ? (
+        <img className="store-thumbnail" src={store.image.url} alt="" />
+      ) : (
+        <span className="store-mark"><Coffee size={25} /></span>
+      )}
       <span className="store-copy">
         <strong>{store.name}</strong>
         <span>

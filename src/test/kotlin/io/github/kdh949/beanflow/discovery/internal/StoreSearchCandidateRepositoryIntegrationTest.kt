@@ -78,6 +78,25 @@ internal class StoreSearchCandidateRepositoryIntegrationTest {
     }
 
     @Test
+    fun `a search candidate carries the current thumbnail key without exposing the original key`() {
+        val store = indexStore(name = "이미지 카페")
+        jdbc.update(
+            """
+            UPDATE merchant_store
+               SET image_original_key = ?, image_thumbnail_key = ?, image_sha256 = ?, image_updated_at = now()
+             WHERE id = ?
+            """.trimIndent(),
+            "stores/$store/hash/original.jpg",
+            "stores/$store/hash/thumbnail.jpg",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            store,
+        )
+
+        assertThat(search("이미지").single().imageThumbnailKey)
+            .isEqualTo("stores/$store/hash/thumbnail.jpg")
+    }
+
+    @Test
     fun `every token must match for the store to be a candidate`() {
         val both =
             indexStore(

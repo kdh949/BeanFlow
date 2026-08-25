@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.shared.api
 
 enum class FailureCode {
     INVALID_REQUEST,
+    INVALID_IMAGE,
     PASSWORD_POLICY_VIOLATION,
     LOGIN_ID_UNAVAILABLE,
     MERCHANT_ACCOUNT_NOT_FOUND,

@@ -37,6 +37,26 @@ Behavior:
 - correlation ID 제공
 - 외부 결과가 불명확하면 reconciliation 생성
 
+#### Optional storefront media storage
+
+- AIStor endpoint, access key, secret key, private bucket 또는 public signing endpoint가 누락되거나
+  유효하지 않으면 애플리케이션 시작을 실패시킨다. 운영 profile에서 local filesystem, in-memory,
+  public bucket 또는 fake adapter로 대체하지 않는다.
+- startup probe가 연결 실패·timeout·5xx 때문에 AIStor 설정의 유효성을 판정할 수 없으면 media 상태를
+  `unavailable`로 기록하고 애플리케이션은 시작한다. 명시적인 credential·bucket 거절과 혼동하지 않는다.
+- 실행 중 AIStor 장애는 이미지 PUT과 이미 발급된 presigned URL의 직접 GET에만 영향을 준다.
+  주문·결제·매장 텍스트 조회와 애플리케이션 전체 readiness는 media health 때문에 실패시키지 않는다.
+  매장 조회 응답의 15분 presigned URL은 서버 내부의 로컬 서명으로 만들고 AIStor에 availability probe를
+  보내지 않는다.
+- 이미지 PUT timeout이나 응답 유실은 확정 실패로 추정하지 않는다. immutable object key를 한 번 HEAD해
+  기대 크기·metadata가 확인된 경우만 성공으로 수렴한다. 끝내 불명확하면 Store/Menu DB pointer를
+  바꾸지 않고 `503 DEPENDENCY_UNAVAILABLE`을 반환한다.
+- 이미지가 원래 없는 상태는 정상 optional data다. 고객 조회는 `image`를 생략한다. 실행 중 장애를
+  이미지 없음으로 바꾸거나 placeholder URL, stale URL, 빈 문자열을 반환하지 않는다.
+- 교체·삭제 뒤 이전 객체 정리는 commit 이후 Spring Modulith persistent publication으로 수행한다.
+  정리 실패는 새 Store/Menu pointer를 되돌리지 않고 incomplete publication과 media cleanup metric에
+  남긴다. 단순 주기 orphan sweep이 보완하되 정리 실패를 성공으로 기록하지 않는다.
+
 #### PaymentMethod registration and deactivation
 
 - registration/deactivation Port는 성공, contract-test로 무부수효과가 확인된 거절, 결과불명,

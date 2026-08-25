@@ -49,6 +49,7 @@ internal class StoreMenuQueryService(
                 name = menu.name,
                 basePriceKrw = menu.basePriceKrw,
                 available = menu.available,
+                imageThumbnailKey = menu.imageThumbnailKey,
                 options =
                     optionsByMenu[menu.menuId].orEmpty().map { option ->
                         StoreMenuOptionView(

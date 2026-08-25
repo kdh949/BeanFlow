@@ -22,6 +22,10 @@ spring:
     password: ${BEANFLOW_DB_PASSWORD}
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   session:
     jdbc:
       # Flyway V52 owns the official PostgreSQL Spring Session schema.
@@ -33,6 +37,15 @@ spring:
       ddl-auto: validate
     open-in-view: false
 beanflow:
+  media:
+    aistor:
+      endpoint: ${BEANFLOW_AISTOR_ENDPOINT}
+      public-endpoint: ${BEANFLOW_AISTOR_PUBLIC_ENDPOINT}
+      access-key: ${BEANFLOW_AISTOR_ACCESS_KEY}
+      secret-key: ${BEANFLOW_AISTOR_SECRET_KEY}
+      bucket: ${BEANFLOW_AISTOR_BUCKET}
+      region: ${BEANFLOW_AISTOR_REGION:us-east-1}
+      verify-at-startup: true
   authentication:
     attempt-hmac-key-base64-url: ${BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL}
     trusted-proxy-cidrs: ${BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS:}
