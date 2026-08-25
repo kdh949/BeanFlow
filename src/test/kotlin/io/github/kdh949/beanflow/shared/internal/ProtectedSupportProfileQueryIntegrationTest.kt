@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.delivery.api.ExternalCourierSupportProfileQueryOperations
 import io.github.kdh949.beanflow.identity.api.CustomerSupportProfileQueryOperations
@@ -14,12 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowSharedDatabaseTest
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -31,7 +32,6 @@ import java.util.UUID
         "beanflow.support-case-idempotency.retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class ProtectedSupportProfileQueryIntegrationTest
     @Autowired
     constructor(

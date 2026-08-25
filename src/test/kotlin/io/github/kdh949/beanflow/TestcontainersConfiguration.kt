@@ -82,6 +82,10 @@ class TestcontainersConfiguration {
     internal fun testPaymentMethodLifecycleAdapter(): ScriptedPaymentMethodLifecycleAdapter = ScriptedPaymentMethodLifecycleAdapter()
 
     @Bean
+    internal fun resettablePaymentMethodLifecycleAdapter(adapter: ScriptedPaymentMethodLifecycleAdapter): ResettableTestDouble =
+        ResettableTestDouble(adapter::reset)
+
+    @Bean
     internal fun testNotificationProvider(): ScriptedTestNotificationProvider = ScriptedTestNotificationProvider()
 
     @Bean

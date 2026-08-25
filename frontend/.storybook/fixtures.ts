@@ -4,6 +4,7 @@ import type { components } from "../src/api/schema";
 type CompensationSummary = components["schemas"]["CompensationSummary"];
 type Refund = components["schemas"]["Refund"];
 type StoreOrderBoard = components["schemas"]["StoreOrderBoard"];
+type StoreOrderBoardItem = components["schemas"]["StoreOrderBoardItem"];
 
 export const ids = {
   store: "10000000-0000-4000-8000-000000000001",
@@ -115,7 +116,7 @@ export const compensationSucceeded: CompensationSummary = {
   steps: compensationManualReview.steps.map((step) => ({ ...step, state: "SUCCEEDED", lastErrorCode: undefined })),
 };
 
-export const boardOrder: components["schemas"]["StoreOrderBoardItem"] = {
+export const boardOrder: StoreOrderBoardItem = {
   orderReference: orderSummary.orderReference,
   pickupNumber: orderSummary.pickupNumber,
   pickupBusinessDate: "2026-08-15",

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.BrowserActorLoader
 import io.github.kdh949.beanflow.shared.api.BrowserActorType
@@ -37,6 +38,7 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class, TestBrowserActorLoaderConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(properties = ["spring.main.allow-bean-definition-overriding=true"])
 class BrowserSessionPostgresIntegrationTest(
     @Autowired private val coordinator: LoginSessionCoordinator,

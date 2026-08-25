@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
 import io.github.kdh949.beanflow.ordering.api.OrderPointAccrualSourceState
@@ -13,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -21,8 +21,8 @@ import java.time.LocalDate
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class OrderPointAccrualSnapshotServiceTest
     @Autowired
     constructor(

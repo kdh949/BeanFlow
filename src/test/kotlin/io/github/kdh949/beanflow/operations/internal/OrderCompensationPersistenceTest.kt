@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicySnapshot
@@ -27,6 +28,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class OrderCompensationPersistenceTest
     @Autowired

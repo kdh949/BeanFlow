@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.AssignStoreBrandCommand
 import io.github.kdh949.beanflow.merchant.api.BrandStatus
@@ -26,7 +27,6 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.IllegalTransactionStateException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit
  * still holds its old name afterwards.
  */
 @Import(TestcontainersConfiguration::class, StoreBrandServiceIntegrationTest.FailableIndexConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.search-index-coverage.initial-delay-ms=3600000",
@@ -59,7 +60,6 @@ import java.util.concurrent.TimeUnit
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class StoreBrandServiceIntegrationTest {
     /**
      * Replaces the index port with one that can be told to fail on its next brand write.

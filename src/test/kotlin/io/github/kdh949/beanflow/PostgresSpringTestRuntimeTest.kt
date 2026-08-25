@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -8,6 +9,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
 internal class PostgresSpringTestRuntimeTest {

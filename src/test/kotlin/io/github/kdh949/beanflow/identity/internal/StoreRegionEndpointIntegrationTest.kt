@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.identity.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
@@ -11,7 +12,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -32,6 +32,7 @@ import java.util.UUID
  */
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("query audit requires committed fixture visibility")
 @SpringBootTest(
     properties = [
         "beanflow.toss.client-key=test_ck_store_region",
@@ -39,7 +40,6 @@ import java.util.UUID
         "beanflow.store-region-command.retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class StoreRegionEndpointIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,

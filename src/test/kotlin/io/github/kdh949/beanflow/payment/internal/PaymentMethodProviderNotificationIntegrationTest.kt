@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.payment.api.PaymentMethodProviderNotificationResult
 import io.github.kdh949.beanflow.payment.api.VerifiedPaymentMethodProviderNotification
@@ -22,6 +23,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.payment-method.maintenance.initial-delay-ms=3600000",

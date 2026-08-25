@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -23,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class OrderDisplayIdentityAllocatorIntegrationTest
     @Autowired

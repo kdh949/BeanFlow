@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
 import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
@@ -28,6 +29,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class PointReservationRepositoryTest
     @Autowired

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySnapshot
@@ -12,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowSharedDatabaseTest
 @SpringBootTest
 internal class OrdinaryPointAccrualPolicyPrecheckTest
     @Autowired

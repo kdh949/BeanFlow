@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
@@ -15,7 +16,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -28,6 +28,7 @@ import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.search-index-coverage.initial-delay-ms=3600000",
@@ -39,7 +40,6 @@ import java.util.UUID
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class RecentStoreEndpointIntegrationTest {
     @Autowired
     private lateinit var mockMvc: MockMvc

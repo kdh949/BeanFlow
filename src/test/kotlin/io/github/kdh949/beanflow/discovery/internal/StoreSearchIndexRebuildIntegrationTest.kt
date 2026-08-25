@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -17,7 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.IllegalTransactionStateException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -32,6 +32,7 @@ import java.util.UUID
  * SQL could not reproduce — the dotted capital I and the Greek final sigma — are pinned here.
  */
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.search-index-coverage.initial-delay-ms=3600000",
@@ -43,7 +44,6 @@ import java.util.UUID
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class StoreSearchIndexRebuildIntegrationTest {
     @Autowired
     private lateinit var rebuild: StoreSearchIndexRebuildService

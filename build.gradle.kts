@@ -1,3 +1,6 @@
+import java.lang.reflect.Modifier
+import java.net.URLClassLoader
+
 plugins {
 	kotlin("jvm") version "2.3.21"
 	kotlin("plugin.spring") version "2.3.21"
@@ -255,18 +258,31 @@ tasks.register("verifyCiTestShards") {
 
 	doLast {
 		val testTask = tasks.named<Test>("test").get()
+		val testClassLoader =
+			URLClassLoader(
+				(testTask.testClassesDirs.files + testTask.classpath.files)
+					.map { it.toURI().toURL() }
+					.toTypedArray(),
+				javaClass.classLoader,
+			)
 		val compiledTestClassNames =
-			testTask.testClassesDirs.files
-				.flatMap { classesDirectory ->
-					fileTree(classesDirectory) {
-						include("**/*Test.class", "**/*Tests.class", "**/*Benchmark.class")
-						exclude("**/*\$*.class")
-					}.files.map { classFile ->
-						classFile
-							.relativeTo(classesDirectory)
-							.invariantSeparatorsPath
-							.removeSuffix(".class")
-							.replace('/', '.')
+			testClassLoader.use { classLoader ->
+				testTask.testClassesDirs.files
+					.flatMap { classesDirectory ->
+						fileTree(classesDirectory) {
+							include("**/*Test.class", "**/*Tests.class", "**/*Benchmark.class")
+							exclude("**/*\$*.class")
+						}.files.map { classFile ->
+							classFile
+								.relativeTo(classesDirectory)
+								.invariantSeparatorsPath
+								.removeSuffix(".class")
+								.replace('/', '.')
+						}
+					}
+					.filter { className ->
+						val type = Class.forName(className, false, classLoader)
+						!type.isAnnotation && !type.isInterface && !Modifier.isAbstract(type.modifiers)
 					}
 				}
 				.sorted()

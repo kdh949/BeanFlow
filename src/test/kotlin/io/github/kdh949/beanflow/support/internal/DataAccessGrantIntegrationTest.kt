@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
 import io.github.kdh949.beanflow.shared.api.PersonalDataEncryptionContext
@@ -18,7 +19,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -51,7 +52,6 @@ import java.util.concurrent.atomic.AtomicInteger
         "beanflow.support-case-idempotency.retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class DataAccessGrantIntegrationTest
     @Autowired
     constructor(

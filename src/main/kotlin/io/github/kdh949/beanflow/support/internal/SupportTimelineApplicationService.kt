@@ -17,12 +17,9 @@ import io.github.kdh949.beanflow.shared.api.SupportTimelineType
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class SupportTimelineItemResource(
@@ -252,8 +249,7 @@ internal class SupportTimelineApplicationService(
             "\"sources\":[$sourceArray],\"types\":[$typeArray]}"
     }
 
-    private fun hash(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun hash(value: String): String = SupportSha256.utf8(value)
 
     companion object {
         const val DEFAULT_LIMIT = 20

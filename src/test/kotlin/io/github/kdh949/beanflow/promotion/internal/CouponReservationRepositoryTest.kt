@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
@@ -28,6 +29,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class CouponReservationRepositoryTest
     @Autowired

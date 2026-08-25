@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.settlement.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -11,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.LocalDate
@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -37,7 +38,6 @@ import javax.sql.DataSource
         "beanflow.settlement.batch.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class SettlementBatchLifecycleIntegrationTest
     @Autowired
     constructor(

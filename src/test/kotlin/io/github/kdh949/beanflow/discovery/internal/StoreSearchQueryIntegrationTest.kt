@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.discovery.api.SearchStoresCommand
 import io.github.kdh949.beanflow.discovery.api.StoreSearchItemView
@@ -19,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
@@ -34,6 +34,7 @@ import java.util.UUID
  * 매칭 메뉴·브랜드·지역과 함께 조립되는지를 본다.
  */
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     properties = [
         "beanflow.search-index-coverage.initial-delay-ms=3600000",
@@ -45,7 +46,6 @@ import java.util.UUID
         "beanflow.audit-retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class StoreSearchQueryIntegrationTest {
     @Autowired
     private lateinit var search: StoreSearchQueryOperations

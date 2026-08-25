@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
@@ -27,6 +28,7 @@ import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("invokes REQUIRES_NEW order idempotency registration")
 @SpringBootTest(properties = ["beanflow.toss.client-key=test_ck_contract"])
 internal class OrderControllerContractTest
     @Autowired

@@ -44,6 +44,10 @@ out/
 ### Kotlin ###
 .kotlin
 
+### Python ###
+__pycache__/
+*.py[cod]
+
 ### BeanFlow local-demo runtime ###
 # Ephemeral key material, JWTs and generated env files. Never commit these.
 .demo-runtime/

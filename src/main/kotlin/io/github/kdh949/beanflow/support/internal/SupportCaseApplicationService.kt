@@ -36,7 +36,6 @@ import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class CreateSupportCaseCommand(
@@ -884,8 +883,7 @@ internal class SupportCaseApplicationService(
             sourceReference = "support-case:$id:$action:$version",
         )
 
-    private fun hash(value: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
+    private fun hash(value: String): String = SupportSha256.utf8(value)
 
     private fun commandPayloadHash(
         operation: String,

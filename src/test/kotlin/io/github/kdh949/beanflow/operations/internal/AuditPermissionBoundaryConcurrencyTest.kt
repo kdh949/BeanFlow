@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.reservation-expiry.initial-delay-ms=3600000",

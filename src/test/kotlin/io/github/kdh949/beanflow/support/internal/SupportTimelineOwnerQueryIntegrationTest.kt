@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.FulfillmentSupportTimelineOperations
 import io.github.kdh949.beanflow.loyalty.api.LoyaltySupportTimelineOperations
@@ -22,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import java.sql.Date
 import java.sql.Timestamp
 import java.time.Instant
@@ -30,6 +30,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -41,7 +42,6 @@ import java.util.UUID
         "beanflow.support-case-idempotency.retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class SupportTimelineOwnerQueryIntegrationTest
     @Autowired
     constructor(

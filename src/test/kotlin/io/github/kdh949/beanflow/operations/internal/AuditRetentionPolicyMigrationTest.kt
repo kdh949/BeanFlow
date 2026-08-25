@@ -1,13 +1,11 @@
 package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.IsolatedPostgresSupport
-import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.FlywayException
 import org.junit.jupiter.api.Test
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import java.sql.Timestamp
@@ -19,73 +17,6 @@ import javax.sql.DataSource
 internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
     companion object {
         val databaseSequence = AtomicInteger()
-    }
-
-    @Test
-    fun `fresh PostgreSQL migration creates immutable policies audit constraints index and complete permissions`() {
-        val jdbc = migrated("fresh")
-
-        assertThat(
-            jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '39'",
-                Long::class.java,
-            ),
-        ).isOne()
-        assertThat(count(jdbc, "operations_retention_policy_version")).isEqualTo(15)
-        assertThat(count(jdbc, "operations_retention_policy_head")).isEqualTo(10)
-        assertThat(
-            jdbc.queryForList(
-                "SELECT column_name FROM information_schema.columns " +
-                    "WHERE table_name = 'operations_audit_record' AND is_nullable = 'YES'",
-                String::class.java,
-            ),
-        ).contains("audit_category", "retention_class", "retention_policy_version_id", "retention_provenance")
-        assertThat(
-            jdbc.queryForList(
-                "SELECT conname FROM pg_constraint WHERE conrelid = 'operations_audit_record'::regclass",
-                String::class.java,
-            ),
-        ).contains(
-            "fk_audit_action_category",
-            "fk_audit_retention_policy_version",
-            "chk_audit_retention_class",
-            "chk_audit_retention_provenance",
-        )
-        assertThat(
-            jdbc.queryForObject(
-                "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_audit_retention'",
-                String::class.java,
-            ),
-        ).contains("retention_expires_at", "id")
-
-        OperatorPermission.entries.forEachIndexed { index, permission ->
-            jdbc.update(
-                """
-                INSERT INTO operations_operator_permission_grant (
-                    actor_id, permission, state, granted_at, revoked_at, version, audit_source_reference
-                ) VALUES (?, ?, 'ACTIVE', now(), null, 1, ?)
-                """.trimIndent(),
-                UUID.nameUUIDFromBytes("permission:$index".toByteArray()),
-                permission.name,
-                "migration-permission:$index",
-            )
-        }
-        assertThat(count(jdbc, "operations_operator_permission_grant"))
-            .isEqualTo(OperatorPermission.entries.size.toLong())
-
-        assertThatThrownBy {
-            jdbc.update(
-                "UPDATE operations_retention_policy_version SET duration_value = 4 WHERE policy_version_id = 1",
-            )
-        }.isInstanceOf(DataIntegrityViolationException::class.java)
-        assertThatThrownBy {
-            jdbc.update(
-                "UPDATE operations_audit_action_category SET audit_category = 'PII_ACCESS' WHERE action = 'STOCK_RESERVED'",
-            )
-        }.isInstanceOf(DataIntegrityViolationException::class.java)
-        assertThatThrownBy {
-            insertClassifiedAudit(jdbc, "UNDECLARED_ACTION")
-        }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
     @Test
@@ -179,31 +110,6 @@ internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
         Timestamp.from(expiry),
     )
 
-    private fun insertClassifiedAudit(
-        jdbc: JdbcTemplate,
-        action: String,
-    ) = jdbc.update(
-        """
-        INSERT INTO operations_audit_record (
-            id, actor_id, actor_type, audit_category, action, target_type, target_id, occurred_at, reason,
-            before_summary, after_summary, correlation_id, source_reference, retention_expires_at,
-            retention_class, retention_policy_version_id, retention_provenance
-        ) VALUES (?, 'SYSTEM', 'SYSTEM', 'FINANCIAL_TRANSACTION', ?, 'MIGRATION_FIXTURE', ?, now(),
-            'MIGRATION_FIXTURE', '{}', '{}', ?, ?, now() + interval '5 years', 'FINANCIAL_AUDIT', 1,
-            'APPEND_SNAPSHOT')
-        """.trimIndent(),
-        UUID.randomUUID(),
-        action,
-        UUID.randomUUID(),
-        UUID.randomUUID().toString(),
-        "migration:${UUID.randomUUID()}",
-    )
-
-    private fun count(
-        jdbc: JdbcTemplate,
-        table: String,
-    ): Long = jdbc.queryForObject("SELECT count(*) FROM $table", Long::class.java)!!
-
     private fun migrated(name: String): JdbcTemplate =
         database(name).let { dataSource ->
             flyway(dataSource).load().migrate()
@@ -219,12 +125,5 @@ internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
             postgres.username,
             postgres.password,
         )
-    }
-
-    private fun dataSource(databaseName: String): DataSource {
-        val withoutQuery = postgres.jdbcUrl.substringBefore('?')
-        val query = postgres.jdbcUrl.substringAfter('?', "")
-        val url = withoutQuery.substringBeforeLast('/') + "/" + databaseName + if (query.isEmpty()) "" else "?$query"
-        return DriverManagerDataSource(url, postgres.username, postgres.password)
     }
 }

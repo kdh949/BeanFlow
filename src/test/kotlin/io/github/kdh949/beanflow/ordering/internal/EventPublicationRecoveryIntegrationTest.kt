@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
@@ -48,6 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 @Import(TestcontainersConfiguration::class, PublicationFailureTestConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.event-publication.initial-delay-ms=3600000",

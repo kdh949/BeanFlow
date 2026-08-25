@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.NotificationDeliveryWorker
@@ -49,6 +50,7 @@ import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class, StoreOrderLifecycleNanosecondClockConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",

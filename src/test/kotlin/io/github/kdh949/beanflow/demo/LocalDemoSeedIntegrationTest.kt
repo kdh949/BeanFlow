@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.demo
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
 import io.github.kdh949.beanflow.ordering.internal.OrderSettlementInputSnapshotService
@@ -22,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate
  * refuse to run when the required GLOBAL accrual policy is absent instead of inventing one.
  */
 @Import(TestcontainersConfiguration::class, OrderSettlementInputSnapshotService::class)
+@BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
     classes = [LocalDemoSeedApplication::class],
     properties = [

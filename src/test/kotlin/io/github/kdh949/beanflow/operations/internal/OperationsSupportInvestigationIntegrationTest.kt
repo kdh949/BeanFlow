@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.OpenOperationsSupportInvestigationCommand
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationOperations
@@ -17,7 +18,6 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -31,6 +31,7 @@ import java.util.concurrent.Executors
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -42,7 +43,6 @@ import java.util.concurrent.Executors
         "beanflow.support-case-idempotency.retention.initial-delay-ms=3600000",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class OperationsSupportInvestigationIntegrationTest
     @Autowired
     constructor(

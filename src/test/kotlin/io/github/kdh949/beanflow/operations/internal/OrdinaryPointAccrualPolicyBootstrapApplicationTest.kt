@@ -1,14 +1,15 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.RetentionPolicyOperations
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
 
+@BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
     classes = [
         OrdinaryPointAccrualPolicyBootstrapApplication::class,
@@ -21,7 +22,6 @@ import org.springframework.test.context.ActiveProfiles
     ],
 )
 @ActiveProfiles("ordinary-point-accrual-policy-bootstrap")
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class OrdinaryPointAccrualPolicyBootstrapApplicationTest
     @Autowired
     constructor(

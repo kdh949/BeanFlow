@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.spi.IThrowableProxy
 import ch.qos.logback.core.read.ListAppender
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.shared.api.ExactSearchCriterionType
 import io.micrometer.core.instrument.MeterRegistry
@@ -20,7 +21,6 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -29,6 +29,7 @@ import java.util.UUID
 /** Captures the full supported DEBUG request path and scans logs, metrics, Audit and response for PII canaries. */
 @Import(TestcontainersConfiguration::class, SupportSubjectSearchIntegrationTest.SearchTestConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("subject search rate limiting persists in an independent transaction")
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -43,7 +44,6 @@ import java.util.UUID
         "logging.level.org.springframework.web.servlet=INFO",
     ],
 )
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class SupportSubjectSearchPiiLeakTest
     @Autowired
     constructor(

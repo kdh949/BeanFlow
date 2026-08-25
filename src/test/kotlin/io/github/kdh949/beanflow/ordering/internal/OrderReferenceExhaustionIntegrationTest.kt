@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import org.assertj.core.api.Assertions.assertThat
@@ -14,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("invokes REQUIRES_NEW order idempotency registration")
 @SpringBootTest
 internal class OrderReferenceExhaustionIntegrationTest
     @Autowired

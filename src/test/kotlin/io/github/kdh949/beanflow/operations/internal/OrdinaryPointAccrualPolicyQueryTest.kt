@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.ListOrdinaryPointAccrualPolicyVersionsCommand
 import io.github.kdh949.beanflow.operations.api.ListStorePointAccrualPolicyHeadsCommand
@@ -22,13 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.annotation.DirtiesContext
 import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("uses a database failure trigger that aborts the current transaction")
 @SpringBootTest
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class OrdinaryPointAccrualPolicyQueryTest
     @Autowired
     constructor(

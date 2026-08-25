@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.ResettableTestDouble
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.api.ProviderTransportFailure
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -8,7 +9,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-internal class ScriptedTestPaymentGateway : PaymentGateway {
+internal class ScriptedTestPaymentGateway :
+    PaymentGateway,
+    ResettableTestDouble {
     private val approvals = ConcurrentLinkedQueue<ProviderPaymentResult>()
     private val oneTimeConfirmations = ConcurrentLinkedQueue<ProviderPaymentResult>()
     private val approvalFailures = ConcurrentLinkedQueue<ProviderTransportFailure>()
@@ -28,7 +31,7 @@ internal class ScriptedTestPaymentGateway : PaymentGateway {
     private val nextApprovalBlock = AtomicReference<ApprovalBlock?>()
     private val nextRefundBlock = AtomicReference<ApprovalBlock?>()
 
-    fun reset() {
+    override fun reset() {
         approvals.clear()
         oneTimeConfirmations.clear()
         approvalFailures.clear()

@@ -1,0 +1,407 @@
+# 안전장치의 중복 소유권을 테스트와 계약 검증 경계로 집중한다
+
+> **Status:** `ACTIVE`
+> **Kind:** `IMPLEMENTATION`
+> **Implementation-Ready:** `true`
+> **Writes-Migration:** `false`
+> **Depends-On:** —
+> **Completed-At:** `—`
+
+이 ExecPlan은 `.agent/PLANS.md`를 따른다. 다섯 개의 선형 Draft PR 동안 `Progress`,
+`Surprises & Discoveries`, `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신한다.
+
+## Purpose / Big Picture
+
+BeanFlow가 보호하는 멱등성, transaction, database constraint, 인가, 감사와 명시적 실패 의미는
+유지하면서 같은 보장을 여러 test class와 스크립트가 형식까지 반복 검증하는 비용을 줄인다.
+완료 후 Spring 통합 테스트는 shared rollback 또는 명시적 class isolation 중 하나를 선언하고,
+migration·문서·OpenAPI 계약은 적은 수의 semantic validator가 소유한다. 세 Support Application
+Service와 Store Order Board는 기존 public 진입점을 유지한 채 유스케이스와 표현 책임으로 나뉜다.
+
+## Current State
+
+기준선 commit은 `94f6787628cc5f166fee5e3df5d24934a6926b9c`다.
+
+- `@SpringBootTest` source 115개가 class 이름을 Context cache key에 넣어 class별 Context/database를 만든다.
+- 직접 `@DirtiesContext`를 선언한 source 57개는 global listener의 class 종료 cleanup과 중복된다.
+- `scripts/ci/test-class-weights.tsv`에 timing이 있는 Spring test 114개의 합은 약 2,658.825초다.
+- Flyway migration은 V1~V64이고 `*MigrationTest.kt`는 39개다. 해당 timing 합은 약 1,414.646초다.
+- `scripts/verify-docs.sh`는 2,356줄이며 embedded Python이 문서, ExecPlan과 OpenAPI를 함께 검증한다.
+- 기능별 `*OpenApiContractTest`는 17개이고 runtime parity test는 62개 `@MockitoBean`을 선언한다.
+- Support Application Service 상위 세 파일은 각각 1,462, 1,279, 1,249줄이다.
+- `StoreOrderBoard.tsx`는 473줄에서 API, polling, reconciliation, command와 rendering을 함께 수행한다.
+- CI는 `maxParallelForks = 1`, timing 기반 6개 runner shard와 `verifyCiTestShards` exact coverage를 사용한다.
+
+## Definitions
+
+- **Shared test:** 하나의 cached Spring Context/database를 사용하고 test-managed transaction rollback으로
+  method 사이의 persistent state를 격리하는 테스트다.
+- **Isolated test:** 실제 commit, 별도 thread, startup 또는 schema lifecycle 때문에 class 전용
+  Spring Context/database를 사용하는 테스트다.
+- **Semantic contract:** 문장, 들여쓰기나 파일 배치가 아니라 path, method, field, constraint와 failure
+  state 같은 동작 의미를 검증하는 계약이다.
+- **Vertical PR:** 하나의 안전장치 소유권을 구현·테스트·문서와 함께 전달하는 stack 단계다.
+
+## Scope
+
+### In Scope
+
+- Spring test shared/isolated classification, rollback과 test-double reset
+- 부분 환불 대형 통합 테스트 책임 분리
+- Flyway fresh smoke, 현재 schema invariant와 실제 upgrade/backfill 검증 분리
+- 문서 validator 모듈화와 historical exact-text hard gate 제거
+- OpenAPI semantic contract와 runtime mapping parity 단일화
+- SupportActionRequest, SupportCompensation, SupportProfileChange 유스케이스 분리
+- Store Order Board data hook, pure model, presentation component 분리
+- 다섯 개 선형 Draft PR, 원자 커밋과 실제 검증 evidence
+
+### Non-goals
+
+- production DB schema 또는 Flyway migration 변경
+- HTTP/OpenAPI wire shape, event, business state 또는 failure code 변경
+- idempotency, audit나 persistence의 범용 framework 도입
+- Testcontainers worker 병렬화, CI shard 제거 또는 자동 merge
+- Store Order Board 시각 redesign이나 새 design token/component system
+
+## Business Rules and Invariants
+
+- Refund, Support action, compensation과 profile change의 same-key/same-payload replay는 기존 결과에
+  수렴하고 changed payload는 기존 row를 바꾸지 않고 conflict로 실패한다.
+- Audit와 owner state는 기존 local transaction에서 함께 commit 또는 rollback한다.
+- 외부 Provider 결과 불명은 success/final failure로 추정하지 않는다.
+- 실제 transaction, database constraint, authorization, outbox와 Testcontainers 검증을 제거하지 않는다.
+- test 또는 문서 표현을 합치는 과정에서 DB/API/business source of truth를 새로 만들지 않는다.
+
+## Architecture and Transaction Boundaries
+
+- shared Spring test는 `@Transactional` test context에 참여하며 method 뒤 rollback한다.
+- commit visibility, concurrency, `REQUIRES_NEW`, startup·DDL·migration test는 isolated marker를 사용한다.
+- production Support facade는 기존 controller와 cross-context 주입 지점을 보존한다. 내부 use-case handler로
+  위임하되 기존 `REQUIRED`, `MANDATORY`, `REQUIRES_NEW` 경계와 external call 위치를 유지한다.
+- frontend hook은 server state와 command를 소유하고 presentation component는 props/callback만 소비한다.
+
+## Alternatives Considered
+
+- global truncate/schema routing: seed와 transaction 복구 framework가 필요해 제외했다.
+- migration schema 전체 snapshot: 모든 column 배치를 새 brittle contract로 만들기 때문에 제외했다.
+- OpenAPI Kotlin/Python validator 동시 유지: duplicate semantic ownership이므로 제외했다.
+- 세 Support 서비스를 하나의 generic command engine으로 통합: domain payload와 failure rule을 숨겨 제외했다.
+- 다섯 영역을 한 PR로 제출: review와 rollback 경계가 없어 선형 Draft stack을 선택했다.
+
+## Failure Semantics
+
+- shared test에서 state leak가 발견되면 isolated로 조용히 우회하지 않는다. 원인을 reset, transaction 또는
+  실제 isolation requirement로 분류하고 reason을 기록한다.
+- migration assertion은 대응 위치가 없으면 삭제하지 않는다.
+- validator가 dependency나 OpenAPI reference를 읽지 못하면 hard failure이며 skip/success로 바꾸지 않는다.
+- 서비스 분리 중 external failure를 catch/no-op 또는 local fallback으로 바꾸지 않는다.
+- Storybook MCP가 없으면 PR 5 UI 구현과 완료를 `BLOCKED`로 보고한다.
+
+## Data and Migration
+
+production migration은 만들거나 변경하지 않는다. migration test는 fresh database와 targeted previous
+version database를 계속 사용한다. applied checksum을 수정하거나 schema fixture로 실제 Flyway 실행을
+대체하지 않는다.
+
+## API and Event Contracts
+
+target/runtime OpenAPI, generated frontend schema, controller route와 event payload는 바꾸지 않는다.
+semantic validator는 path/method/operationId, security/idempotency parameter, response, required field,
+enum과 explicit failure state만 중앙에서 검증한다. Runtime parity는 실제 Spring MVC mapping과 operation
+inventory만 비교한다.
+
+## Milestones
+
+1. **PR 1 `feature/test-context-simplification`:** test isolation ADR/marker, rollback/reset, direct
+   `@DirtiesContext` 제거와 PartialRefund test 분리.
+2. **PR 2 `feature/migration-test-consolidation`:** PR 1 head 기반 fresh smoke, context invariant와
+   upgrade/backfill assertion inventory 집중화.
+3. **PR 3 `feature/docs-openapi-validation-simplification`:** PR 2 head 기반 Python validator 모듈화,
+   historical prose gate와 feature string tests 제거, runtime parity 단순화.
+4. **PR 4 `feature/support-use-case-split`:** PR 3 head 기반 SHA-256 helper와 세 Support facade 내부
+   use-case 분리.
+5. **PR 5 `feature/store-order-board-split`:** PR 4 head 기반 Storybook-first hook/model/presentation 분리,
+   전체 stack 검증과 plan completion.
+
+## Required Tests
+
+- marker 누락/중복, shared rollback, isolated database drop와 ResettableTestDouble 반복 실행
+- PartialRefund allocation/replay, point restoration, HTTP/authorization, outbox rollback, commit/concurrency
+- Flyway fresh migrate/validate, financial/security constraints, actual upgrade/backfill/gate/restart
+- docs links, ExecPlan metadata/status/dependency cycle, policy ID uniqueness, OpenAPI validation/reference
+- runtime MVC/OpenAPI operation parity와 semantic feature contract
+- Support command hash/replay, audit rollback, approval separation, provider failure/retry/manual review
+- Store board sorting/reconcile, ETag/304, visibility polling, 403/409, idempotency rotation, overflow cursor
+- Storybook loading/success/empty/error/permission/conflict/overflow/busy interaction와 a11y
+
+## Migration Assertion Inventory
+
+아래 표는 기준선의 39개 `*MigrationTest`에서 각 test method 안 assertion의 이동 여부를 고정한다.
+`혼합`은 같은 method 안에서도 schema 존재·최종 version assertion만 중앙으로 옮기고, 실제
+invalid write·upgrade 결과 assertion은 전용 시나리오에 남긴다는 뜻이다. 표에 없는 assertion은
+삭제하지 않는다.
+
+| 기존 test | 전용 유지 | 중앙 이동 | 중복 삭제 |
+|---|---|---|---|
+| `StoreCatalogQueryMigrationTest` | 고정 fixture의 전후 store-scoped query plan | index 이름/정의 | 없음 |
+| `StoreSearchTermIndexMigrationTest` | seed가 비어 있음, vocabulary와 cascade 동작 | table/index/extension metadata, unique/check/FK invalid write | 최종 Flyway version |
+| `CustomerAccountMigrationTest` | 없음 | account/login table의 HMAC-only metadata와 invalid lifecycle write | V53 최종 version, 빈 unrelated table count |
+| `MerchantAccountMigrationTest` | 없음 | credential table/actor vocabulary metadata와 invalid lifecycle write | V54 적용 count |
+| `PointAccountQueryMigrationTest` | 고정 fixture의 전후 query plan | keyset index metadata | 없음 |
+| `PointAdjustmentMigrationTest` | V30→V31 backfill, corrupted provenance fail-closed | current adjustment source/idempotency invalid write와 index metadata | 없음 |
+| `PointLotIssuerMigrationTest` | verified/missing/invalid legacy mapping, startup fail-fast | fresh current not-null/FK metadata | fresh schema의 반복 존재 확인 |
+| `PointRecoveryMigrationTest` | legacy snapshot activation gate | current payment/loyalty constraint invalid write | fresh table/column 존재 확인 |
+| `MerchantBrandCommandMigrationTest` | permission/audit vocabulary seed 결과 | command replay unique/check와 retention index | V60 최종 version |
+| `MerchantStoreRegionCommandMigrationTest` | audit vocabulary seed 결과 | command replay unique/check와 region cursor index | V61 최종 version |
+| `StoreDiscoveryProfileMigrationTest` | V33→V34 population gate, startup fail-fast, spatial query plan | PostGIS/table/GiST metadata와 invalid geometry write | migration history 전체 목록 |
+| `StoreRegionCoverageMigrationTest` | 미할당 store 배포 gate와 empty deployment | current region not-null constraint | V62 최종 version |
+| `StoreSearchVocabularyMigrationTest` | V58 authoritative seed 내용과 재실행, vocabulary cascade | pg_trgm/table/index metadata와 brand/favorite invalid write | V57 최종 version |
+| `AuditRetentionPolicyMigrationTest` | V38→V39 classification, compatibility bridge, unknown action fail-closed | current audit immutability/constraint/index와 permission vocabulary | V39 적용 count |
+| `OrderCompensationMigrationTest` | V7/V8/V9/V21→V22 legacy fail-closed upgrade | fresh current compensation shape metadata | zero-row별 반복 schema 존재 확인 |
+| `OrdinaryPointAccrualPolicyMigrationTest` | V15→V16 legacy marking | current policy/snapshot/permission invalid write | 없음 |
+| `CustomerCancellationMigrationTest` | V22→V23 retention backfill | current cancellation/idempotency/recovery invalid write와 metadata | fresh schema 단순 존재 확인 |
+| `CustomerOrderQueryMigrationTest` | 고정 fixture의 전후 query plan | V55 keyset index metadata | 없음 |
+| `CustomerRecentStoreQueryMigrationTest` | 고정 fixture의 전후 query plan | V63 state index metadata | 없음 |
+| `FastReorderMigrationTest` | V35→V36 legacy/retention backfill와 missing completion gate | current option/idempotency/config invalid write | 없음 |
+| `OrderReferenceMigrationTest` | V49→V50→V51 window, restartable backfill, context gate와 fail-closed | current immutable identity metadata | migration inventory 순서와 column 존재 반복 확인 |
+| `SettlementInputMigrationTest` | legacy order activation gate | current exact-one trigger/index, fee tie-out와 immutable snapshot invalid write | 단순 table/column 존재 확인 |
+| `StoreOrderBoardMigrationTest` | 고정 fixture의 전후 query plan/write cost | V56 partial index metadata | 없음 |
+| `OneTimePaymentMigrationTest` | 없음 | current one-time binding와 immutability invalid write | V37→V38 clean migration 반복 |
+| `PartialRefundMigrationTest` | legacy refund without evidence fail-closed | current allocation/restoration metadata | empty legacy schema 존재 확인 |
+| `PaymentMethodMigrationTest` | verified legacy backfill와 missing/ambiguous binding fail-closed | current provider/default/terminal invalid write | 없음 |
+| `CouponBurdenMigrationTest` | active/inactive legacy campaign activation gate | current burden share invalid write | 없음 |
+| `SettlementFoundationMigrationTest` | publication/cancellation legacy activation gates | current cancellation evidence, batch/item invalid write와 metadata | 단순 table/column/index 존재 확인 |
+| `SettlementLifecycleMigrationTest` | pre-existing closed batch gate | current transition/adjustment/dispute invalid write | 없음 |
+| `AuthenticationFoundationMigrationTest` | permission vocabulary와 no implicit grant | Spring Session schema/index metadata | V52 적용 count |
+| `ProtectedSupportProfileMigrationTest` | startup migration history guard | current protected profile/rate-window invalid write와 PII-free metadata | migration history 전체 목록 |
+| `PostAcceptanceResolutionMigrationTest` | 없음 | current resolution/owner-step metadata와 lifecycle invalid write | successor 뒤 V46 적용 count |
+| `SupportActionRequestMigrationTest` | 없음 | current approval-lineage metadata와 separation/idempotency invalid write | 없음 |
+| `SupportCaseMigrationTest` | 없음 | current support case/history/idempotency invalid write | V39→V40 clean migration 반복 |
+| `SupportCompensationMigrationTest` | immutable policy/template seed 값 | current owner/action/rolling constraint invalid write와 metadata | successor 뒤 V47 적용 count |
+| `SupportOrderChangeMigrationTest` | 없음 | current execution authorization/history metadata와 invalid write | 없음 |
+| `SupportProfileChangeMigrationTest` | R4/S60 호환 vocabulary | current workflow/history/claim metadata와 invalid write | migration history 전체 목록 |
+| `SupportTimelineMigrationTest` | verification-scope vocabulary seed | timeline partial index metadata | 없음 |
+| `SupportVerificationMigrationTest` | 없음 | current verification/grant metadata와 binding/TTL invalid write | 없음 |
+
+중앙 목적지는 `FlywayMigrationSmokeTest`, payment·ordering, support·operations,
+discovery·settlement current-schema invariant 계약, 그리고 한 번만 실행되는 metadata inventory다.
+전용 유지 항목은 실제 이전 version 데이터를 요구하므로 class 전용 database를 계속 사용한다.
+
+## OpenAPI Assertion Transfer Inventory
+
+기준선의 17개 문자열 기반 `*OpenApiContractTest`는 아래 semantic contract로 대응시켰다. 모든 행의
+path/method/operationId, security, parameter, response code는 `OPERATION_CONTRACTS`가 소유하고,
+required/property/enum/명시적 실패 상태와 금지 필드는 `SCHEMA_CONTRACTS`, `CLOSED_OBJECT_SCHEMAS`,
+`FORBIDDEN_OPERATIONS`가 소유한다. indentation, prose와 YAML substring은 이전하지 않는다.
+
+| 기존 test | 이전한 고유 계약 | 중앙 목적지 |
+|---|---|---|
+| `StoreCatalogOpenApiContractTest` | store/menu/pickup 조회 operation과 customer session | operation contract |
+| `CustomerAuthenticationOpenApiContractTest` | registration/session/current customer와 공개·session security | operation contract |
+| `MerchantAuthenticationOpenApiContractTest` | merchant session/password/current membership와 actor security | operation contract |
+| `CustomerOrderQueryOpenApiContractTest` | order list/detail/cancel cursor·공개 reference·금지 내부 ID | operation + schema contract |
+| `OneTimePaymentPublicTrackingOpenApiContractTest` | payment 조회/confirm 상태·idempotency·공개 order reference | operation + schema contract |
+| `PublicOrderReferenceOpenApiContractTest` | 공개 reference response와 내부 order ID 비노출 | schema contract |
+| `StoreOrderBoardOpenApiContractTest` | board/overflow/transition, ETag, idempotency, lane·action schema | operation + schema contract |
+| `CustomerCouponWalletOpenApiContractTest` | coupon wallet query와 적용 불가 enum, 내부 owner ID 비노출 | operation + schema contract |
+| `PostAcceptanceResolutionOpenApiContractTest` | create/get/execute/reconcile와 resolution/step/responsibility 상태 | operation + schema contract |
+| `SupportActionRequestOpenApiContractTest` | evaluate/create/revise/decision/reassign/investigation과 approval 상태 | operation + schema contract |
+| `SupportCaseOpenApiContractTest` | case CRUD/assignment/history/link operation과 closed request/response | operation + closed schema contract |
+| `SupportCompensationOpenApiContractTest` | evaluate/create/get/execute/retry와 band/request 상태 | operation + schema contract |
+| `SupportOrderChangeOpenApiContractTest` | execute/authorization operation과 recovery·binding 필드 | operation + schema contract |
+| `SupportProfileChangeOpenApiContractTest` | 14 create, 8 revise, 8 execute, get/retry와 write-only PII | generated operation + schema contract |
+| `SupportSubjectSearchOpenApiContractTest` | search rate/failure responses와 masked-only result | operation + schema contract |
+| `SupportTimelineOpenApiContractTest` | case/order timeline cursor와 source/action/decision enum | operation + schema contract |
+| `SupportVerificationOpenApiContractTest` | verification/grant/break-glass lifecycle와 write-only proof | operation + closed schema contract |
+
+`RuntimeOpenApiParityTest`에는 중앙 계약표를 복제하지 않고 실제 shared Spring context의
+`RequestMappingHandlerMapping`과 runtime OpenAPI의 method/path 집합 비교만 남긴다.
+
+## Validation Commands
+
+각 backend PR:
+
+- `./gradlew spotlessCheck`
+- `./gradlew verifyCiTestShards`
+- `./gradlew test`
+- `./gradlew build -x test`
+- `bash scripts/ci/test-ci-scripts.sh`
+- `bash scripts/verify-docs.sh`
+- `git diff --check <base>...HEAD`
+
+PR 5 추가:
+
+- `npm run typecheck`
+- `npm run test:unit`
+- `npm run check:design`
+- `npm run build-storybook`
+- `npm run test:storybook:docs`
+- `npm run build`
+- `npm run test:sites`
+- Storybook MCP `get-changed-stories`, `preview-stories`, `run-story-tests(a11y=true)`
+
+## Observability
+
+production metric/log는 바뀌지 않는다. test evidence로 full-suite 시간, Spring Context cache 통계,
+PostgreSQL database 생성 횟수와 class timing을 같은 환경에서 전후 기록한다. 측정 결과는 gate가 아니며
+비교 조건이 다르면 성능 개선을 주장하지 않는다.
+
+## Documentation Updates
+
+- ADR-114와 ADR index
+- test strategy/Definition of Done의 shared/isolated 기준
+- docs validator의 canonical current-document/link source
+- 이 ExecPlan의 단계별 Progress, discovery, decision과 actual validation
+- PR별 dependency, rollback, non-goal과 remote CI evidence
+
+## Progress
+
+- [x] 2026-08-19: `origin/main`과 기준선 commit, test/migration/validator/service/frontend inventory 확인
+- [x] 2026-08-19: 다섯 개 선형 Draft PR과 수치 비강제 성능 evidence를 사용자 결정으로 고정
+- [x] 2026-08-19: 115개 Spring test를 shared 11개, isolated 104개로 분류하고 raw marker와 직접
+  `@DirtiesContext`를 제거
+- [x] 2026-08-19: 부분 환불 19개 시나리오를 다섯 nested 책임으로 분리하고 공통 DB fixture support 추출
+- [x] 2026-08-19: PR 1 full suite 1차 통과와 부분 환불 nested class timing 합계 weight 갱신
+- [x] 2026-08-19: 동일 checkout 환경 baseline/head full-suite 시간과 Spring database/Hikari pool 수 비교
+- [x] 2026-08-19: 11개 shared Spring test를 JUnit random seed 11/29로 반복해 두 실행 모두 통과
+- [x] 2026-08-19: PR 1 최종 backend gate 통과, Draft PR #97 생성
+- [x] 2026-08-19: PR #97 remote shard 0의 settlement snapshot 시간 정밀도 실패 원인
+  확인과 PostgreSQL microsecond 반올림 회귀 수정
+- [x] 2026-08-24: PR #97 review에서 commit된 감사 조회를 shared transaction으로 분류한 오류를 확인하고
+  `OperatorCompensationControllerTest`를 명시적 class isolation으로 복구
+- [x] 2026-08-19: PR 2의 39개 migration assertion inventory를 유지 전용·중앙 이동·중복 삭제로 매핑
+- [x] 2026-08-19: fresh Flyway smoke, 중앙 metadata와 네 Context current-schema invariant 검증 추가
+- [x] 2026-08-19: 대응 위치가 확인된 반복 clean migration과 단순 metadata assertion만 제거하고 full suite 통과
+- [x] 2026-08-19: PR 3 문서 validator를 thin Bash wrapper와 link/ExecPlan/policy/OpenAPI Python 모듈로 분리
+- [x] 2026-08-19: 현재 canonical link, ExecPlan graph, policy ID, OpenAPI 3.1/ref만 hard gate로 유지
+- [x] 2026-08-19: 17개 OpenAPI 문자열 test의 고유 assertion을 100 operation·102 schema semantic contract로 이전
+- [x] 2026-08-19: runtime parity를 실제 shared Spring context의 mapping 비교로 좁히고 62개 mock 선언 제거
+- [x] 2026-08-19: PR 3 full suite 1,340 tests와 문서·OpenAPI validator 검증 통과
+- [x] 2026-08-24: PR #99 review에서 누락된 cookie 이름, request/response schema 연결과 response header
+  계약을 중앙 validator 및 mutation characterization test로 보강
+- [x] 2026-08-19: Support SHA-256 byte-to-lowercase-hex 구현만 `SupportSha256`으로 집중화
+- [x] 2026-08-19: ActionRequest facade를 생성·수정·결정·재배정·조회·profile approval handler로 분리
+- [x] 2026-08-19: Compensation facade를 평가·생성·실행·알림 재시도/복구·조회 handler로 분리
+- [x] 2026-08-19: ProfileChange facade를 제출·수정·실행·알림 재시도/복구·조회 handler로 분리
+- [x] 2026-08-19: live Storybook MCP에서 OrderBoard·Button·FeedbackState·StatusBadge 계약 재확인
+- [x] 2026-08-19: board 정렬/reconcile 모델, 조회·polling·ETag·명령 hook, column/overflow/card 분리
+- [x] 2026-08-19: 기존 3개 Storybook 상태 보존과 loading/conflict/overflow/transition busy 4개 추가
+- [x] 2026-08-24: 두 review remediation 통합 head에서 1,344 tests, failure/error 0, skipped 1의 full suite와
+  Spotless, 260개 test class shard coverage, backend build, CI script, 문서·OpenAPI 검증 통과
+- [ ] PR 5 전체 stack 검증, remote CI terminal 판정과 plan completion
+
+## Surprises & Discoveries
+
+- 2026-08-19: 115개 Spring test 중 대부분은 `@BeforeEach` fixture cleanup을 이미 갖지만 global
+  customizer가 class 단위 Context reuse를 무조건 차단한다.
+- 2026-08-19: 현재 CI workflow는 여섯 runner shard를 사용하고 Gradle 기본 assignment count는 세 개다.
+  remote workflow가 명시한 count가 실제 실행 source이므로 둘을 추측해 합치지 않는다.
+- 2026-08-19: 주문 생성·재주문 테스트를 test transaction으로 감싸면 `REQUIRES_NEW` 멱등 등록이
+  미커밋 fixture를 기다렸다. 해당 클래스는 교착을 숨기지 않고 isolated로 유지했다.
+- 2026-08-24: `OperatorCompensationControllerTest`의 첫 시나리오는 요청 transaction이 끝난 뒤
+  `ORDER_COMPENSATION_READ` Audit의 commit을 검증한다고 명시했지만 shared marker가 fixture, MockMvc 요청과
+  마지막 JDBC 조회를 같은 test-managed transaction에 넣었다. 같은 미커밋 row 가시성으로 거짓 성공할 수 있어
+  ADR-114의 commit visibility 격리 기준에 따라 class-isolated database를 복구했다.
+- 2026-08-19: DB failure trigger가 같은 test transaction을 abort하는 테스트는 예외를 assertion한 뒤에도
+  후속 SQL을 실행할 수 없다. DDL·강제 실패 테스트는 isolated 대상이다.
+- 2026-08-19: 동일 구성을 가진 운영 Controller shared 테스트는 한 번 시작한 Context/database를 재사용한
+  상태에서 순서 묶음 실행을 통과했다.
+- 2026-08-19: 부분 환불을 다섯 top-level isolated class로 나눈 최초 형태는 class별 Context/database가
+  1개에서 5개로 늘어 targeted 실행이 약 24초 기준에서 74초가 됐다. 다섯 책임은 `@Nested`로 분리하고
+  Spring 격리 단위는 하나로 유지해 같은 실행이 29초에 통과했다.
+- 2026-08-19: 변경 head의 첫 full suite는 44분 29초, 1,354 tests, failure/error 0, skipped 1이었다.
+  XML에서 확인한 Spring database 이름은 111개, Hikari pool 이름은 113개였다.
+- 2026-08-19: 기준선 `94f6787`의 동일 환경 full suite는 45분 36초, 1,348 tests, failure/error 0,
+  skipped 1, class time 합 2,703.272초였다. XML의 Spring database 이름은 115개, Hikari pool 이름은
+  117개였다. 변경 head는 44분 29초, 1,354 tests, class time 합 2,647.593초, database 111개,
+  pool 113개였다. 관측 차이는 wall time -67초, database/pool -4개지만 환경 노이즈를 배제할 수 없고
+  성능 수치가 acceptance gate도 아니므로 개선율로 일반화하지 않는다.
+- 2026-08-19: shared marker가 붙은 11개 Spring class를 JUnit class order random seed 11과 29로
+  각각 실행해 1분 45초와 1분 38초에 모두 통과했다. 구성별로 7개 cached context/pool이 만들어졌고,
+  같은 cache key의 class는 database와 context를 재사용한 상태에서도 persistent/fake state를 누출하지 않았다.
+- 2026-08-19: `@BeanflowSharedDatabaseTest` annotation class 이름도 compiled `*Test.class` glob에 걸렸다.
+  exact coverage verifier는 이름 예외 대신 annotation/interface/abstract class를 제외하고 concrete top-level
+  test만 비교하도록 좁혔다.
+- 2026-08-19: PR #97 remote `test (0/6)`에서만 `LocalDemoSeedIntegrationTest`가
+  `Settlement input snapshot hash does not match its immutable fields`로 실패했다. `Clock.systemUTC()`는
+  nanosecond를 만들지만 PostgreSQL `timestamptz`와 JDBC는 microsecond로 반올림한다. 직접 seed 경로가
+  저장 전 시각을 정규화하지 않아 hash에 실린 값과 재조회 값이 nano 나머지에 따라 달라졌다.
+  canonicalizer가 PostgreSQL과 같은 microsecond 반올림을 먼저 적용하고 hash와 저장 entity가
+  같은 시각을 쓰도록 수정했다. 순수 회귀 테스트와 실패했던 seed 통합 테스트가 함께 통과했다.
+- 2026-08-19: 정밀도 수정 head의 full suite는 52분 3초에 1,356 tests 중 diff 밖의
+  `StoreCatalogQueryMigrationTest` 1건이 실패했다. 실패 plan은 global scan이 아니라
+  `idx_merchant_menu_store_id`로 대상 store의 1,000행만 읽었지만, 테스트가 다른 복합 index
+  이름과 `Sort` 부재를 정확히 강제했다. 같은 commit을 새 isolated DB에서 단독 재실행하면
+  21초에 통과했고, 기준선·초기 PR 1·PR 2·PR 3 full suite에서도 통과했다. 현재는
+  PR 1 회귀로 분류하지 않고 PR 2 planner 계약의 과도한 표현 고정 후보로 기록한다.
+- 2026-08-19: PR 2에서 store catalog menu와 pickup plan의 안전 계약을 "특정 물리 scan 방식과
+  Sort 부재"에서 "V35 store index로 대상 store 범위만 읽고 global sequential scan을 하지 않음"으로
+  바꾸었다. PostgreSQL은 같은 bounded 결과에 대해 index scan 또는 bitmap index scan과 bounded sort를
+  선택할 수 있으므로 물리 연산 이름은 계약으로 고정하지 않는다.
+  정렬된 covering index와 store bitmap index 후 public bound 내 정렬은 둘 다 허용하되, index가 없는
+  전체 menu 또는 pickup slot scan은 계속 실패한다.
+- 2026-08-19: 기준선 39개 migration class의 assertion을 모두 표로 추적한 뒤, 독립 upgrade/backfill과
+  deployment gate 34개 class는 유지했다. 반복 clean migration만 소유하던 5개 class를 제거하고 fresh smoke,
+  current metadata, payment/ordering, identity, support/operations, discovery/settlement의 6개 중앙 class로 옮겼다.
+- 2026-08-19: PR 2 full suite는 44분 1초에 1,359 tests, failure/error 0, skipped 1로 통과했고 class
+  time 합은 2,619.208초였다. 이는 동일 machine의 관측값일 뿐 성능 acceptance나 개선율 주장에 사용하지 않는다.
+- 2026-08-19: 2,356줄 Bash embedded validator를 분리한 뒤 wrapper는 작업 경로 설정과 Python entry 호출만
+  남았다. 임시 repository fixture 12개가 broken link, ExecPlan metadata/dependency/cycle, policy duplicate,
+  OpenAPI 구조 실패와 정상 경로를 검증한다.
+- 2026-08-19: 실제 Spring context의 runtime parity는 62개 `@MockitoBean` 없이 targeted 실행 35초,
+  XML class time 26.588초에 통과했다. Controller dependency 추가가 mapping 계약과 무관한 mock 수정을 요구하지 않는다.
+- 2026-08-24: 최초 `OperationContract`는 security scheme의 사용 이름, response status와 parameter 이름만
+  확인해 실제 cookie 이름, status별 response schema, `ETag`와 `NoStore` header, profile-change request schema가
+  바뀌어도 통과했다. security scheme 자체와 operation wire 연결을 별도 semantic contract로 확장하고 각 mutation의
+  실패를 Python characterization test로 고정했다.
+- 2026-08-19: PR 3 full suite는 43분 12초에 1,340 tests, failure/error 0, skipped 1로
+  통과했고 class time 합은 2,570.058초였다. 17개 문자열 계약 test 제거를 반영한 실제 통합 head
+  검증 결과이며, 성능 개선율 근거로 사용하지 않는다.
+- 2026-08-19: 기존 controller 주입 facade는 각각 156, 141, 166줄의 유스케이스 routing 역할로 남겼다.
+  기존 persistence와 transaction annotation은 별도 transaction service에 그대로 이동해 `MANDATORY`,
+  `REQUIRES_NEW`, read-only 경계를 바꾸지 않았고 provider 호출 순서도 transaction 안으로 이동하지 않았다.
+- 2026-08-19: SHA 공통화는 byte digest의 lowercase hex encoding까지만 적용했다. payload field 순서,
+  idempotency repository/replay, audit category/action과 실패 code는 각 Support 도메인 경로에 남겼다.
+- 2026-08-19: live Storybook MCP가 정상 동작한 뒤 기존 공용 Button, FeedbackState, StatusBadge를 재사용했다.
+  새로운 token/variant/style은 추가하지 않았고 `StoreOrderBoardPage` export와 route는 유지했다.
+- 2026-08-19: 주문 보드 focused Storybook 7개는 interaction/a11y를 모두 통과했다. broad story interaction은
+  모두 통과했지만 이번 diff 밖의 `StoreSettlementsPage`에 기존 foreground/background 4.2:1 대비 위반 5건이
+  검출됐다. 범위 밖 style 변경을 stack에 섞지 않고 final status에서 별도 실패 증거로 유지한다.
+- 2026-08-19: frontend typecheck, 16 files/145 unit tests, design adherence, production/Storybook build,
+  Sites 4 tests는 통과했다. Storybook docs smoke는 sandbox Chromium Mach port 권한으로 1회 실패한 뒤
+  동일 산출물을 sandbox 밖에서 재실행해 29 docs entries, 14 stateful docs, 49 state surfaces로 통과했다.
+
+## Decision Log
+
+| Date | Status | Decision | Rationale | Record |
+|---|---|---|---|---|
+| 2026-08-19 | Accepted | shared rollback을 기본, 실제 commit/lifecycle만 explicit isolation | 안전장치 보존과 Context reuse 양립 | ADR-114 |
+| 2026-08-19 | Accepted | 다섯 개 선형 Draft PR | 독립 review·rollback과 final integrated head 제공 | 사용자 결정 |
+| 2026-08-19 | Accepted | 성능 개선율을 acceptance gate로 두지 않고 actual evidence만 보고 | 구조 정확성이 우선이며 환경 차이 과장 방지 | 사용자 결정 |
+| 2026-08-19 | Accepted | Support 상위 세 서비스만 이번 분리 범위로 고정 | Support 전체 재구성 방지 | 사용자 결정 |
+| 2026-08-19 | Accepted | CI LPT shard와 serial Testcontainers 유지 | coverage·container 안정성 안전장치 보존 | ADR-114 |
+
+## Outcomes & Retrospective
+
+PR 1은 [Draft PR #97](https://github.com/kdh949/BeanFlow/pull/97)로 제출했다. local full suite와
+backend/document gate는 통과했다. 첫 remote CI의 shard 0은 PostgreSQL 시간 정밀도 불일치로
+실패했고, 승인된 정밀도 수정과 회귀 검증을 적용했다. 수정 head remote CI는 재실행 전이다.
+수정 head full suite의 정밀도 관련 테스트는 모두 통과했지만 기존 planner-shape test 1건이
+비결정적으로 실패한 후 단독 재실행은 통과했다. 따라서 PR 1은 Draft를 유지한다.
+PR 2는 39개 migration test의 assertion inventory를 보존하면서 반복 소유권을 6개 중앙 검증으로
+옮겼고 full suite를 통과했다. PR 3은 12개
+validator fixture test와 100 operation·102 schema semantic contract로 문서/OpenAPI hard gate를 집중화했다.
+PR 4는 기존 facade/controller 주입 호환성을 유지하면서 세 서비스의 유스케이스 routing과 transaction
+implementation을 분리했다. PR 5는 page export/route와 시각 계약을 유지한 채 model, hook과 세 표현
+책임을 분리하고 7개 focused Storybook 계약을 통과했다. 나머지 PR URL, commit range,
+local/remote validation과 남은 결과는 단계별로 이어서 기록한다. Draft 생성이나 stack 내부
+`COMPLETED`는 merge/release를 뜻하지 않는다.
+
+2026-08-24 review remediation은 PR #97의 감사 commit visibility 분류와 PR #99의 wire contract 연결 누락을
+각각 독립 commit으로 보완했다. 통합 head의 local full suite는 44분 35초에 1,344 tests,
+failure/error 0, skipped 1로 통과했다. 새 child Draft PR의 remote CI terminal 판정 전에는 stack 완료나
+remote-green으로 간주하지 않는다.
+
+## Revision Notes
+
+- 2026-08-19: 사용자 승인 계획, 현재 main inventory와 ADR-114를 반영해 최초 작성.
