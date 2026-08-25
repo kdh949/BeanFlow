@@ -106,11 +106,16 @@ internal class FavoriteStoreEndpointIntegrationTest {
             .andExpect(jsonPath("$.items.length()").value(2))
             .andExpect(jsonPath("$.items[0].storeId").value(availableStoreId.toString()))
             .andExpect(jsonPath("$.items[0].name").value("즐겨찾기 최신 매장"))
+            .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
             .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+            .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
+            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
             .andExpect(jsonPath("$.items[0].distanceMeters").doesNotExist())
             .andExpect(jsonPath("$.items[1].storeId").value(closedStoreId.toString()))
             .andExpect(jsonPath("$.items[1].name").value("즐겨찾기 이전 매장"))
+            .andExpect(jsonPath("$.items[1].orderingAvailable").value(false))
             .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+            .andExpect(jsonPath("$.items[1].nextPickupWindow").doesNotExist())
         assertThat(favoriteCount(customerId, noLongerPublicStoreId)).isOne()
     }
 

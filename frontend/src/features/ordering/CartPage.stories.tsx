@@ -17,6 +17,7 @@ const meta = {
   component: CartPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -39,6 +40,8 @@ export const WithItems: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("시청점에서 픽업합니다.")).toBeVisible();
+    await expect(await canvas.findByText("영업 중")).toBeVisible();
+    await expect(await canvas.findByText(/가장 빠른 픽업/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: /주문하기/ })).toBeDisabled();
   },
 };

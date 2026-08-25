@@ -8,6 +8,13 @@ import { CustomerHomePage } from "./HomePage";
 import { StoreSearchPage } from "./StoreSearchPage";
 
 const actor = { actorType: "CUSTOMER" as const, customerId: "customer-id", displayName: "김도현" };
+const display = { operatingStatus: "OPEN" as const };
+const availableStore = {
+  orderingAvailable: true,
+  pickupAvailable: true,
+  nextPickupWindow: { startsAt: "2026-08-16T01:00:00Z", endsAt: "2026-08-16T01:10:00Z" },
+  customerDisplay: display,
+};
 
 function ok<T>(data: T) {
   return { data, response: new Response(null, { status: 200 }) };
@@ -77,7 +84,7 @@ describe("customer home", () => {
         page: {},
       }),
       "/me/store-recommendations": ok({
-        items: [{ store: { storeId: "store-1", name: "성수 로스터리", pickupAvailable: true }, reason: "FAVORITE" }],
+        items: [{ store: { storeId: "store-1", name: "성수 로스터리", ...availableStore }, reason: "FAVORITE" }],
       }),
     });
 
@@ -129,8 +136,7 @@ describe("store search", () => {
           storeId: "store-1",
           name: "성수 로스터리",
           matchReason: ["MENU_NAME"],
-          open: true,
-          pickupAvailable: true,
+          ...availableStore,
           matchedMenus: [{ menuId: "menu-1", name: "오트 라떼" }],
           image: { url: "/demo/catalog/store-01.webp", expiresAt: "2099-01-01T00:00:00Z" },
         }],
@@ -153,8 +159,7 @@ describe("store search", () => {
           storeId: "store-1",
           name: "성수 로스터리",
           matchReason: ["MENU_NAME"],
-          open: true,
-          pickupAvailable: true,
+          ...availableStore,
           matchedMenus: [],
         }],
         page: {},
@@ -203,14 +208,14 @@ describe("store search", () => {
       const cursor = options?.params?.query?.cursor;
       if (cursor === undefined) {
         return ok({
-          items: [{ storeId: "store-1", name: "성수 로스터리", matchReason: ["MENU_NAME"], open: true, pickupAvailable: true, matchedMenus: [] }],
+          items: [{ storeId: "store-1", name: "성수 로스터리", matchReason: ["MENU_NAME"], ...availableStore, matchedMenus: [] }],
           page: { nextCursor: "cursor-1" },
           distanceAvailable: false,
         }) as never;
       }
       if (cursor === "cursor-1") {
         return ok({
-          items: [{ storeId: "store-2", name: "합정 로스터리", matchReason: ["MENU_NAME"], open: true, pickupAvailable: true, matchedMenus: [] }],
+          items: [{ storeId: "store-2", name: "합정 로스터리", matchReason: ["MENU_NAME"], ...availableStore, matchedMenus: [] }],
           page: {},
           distanceAvailable: false,
         }) as never;
@@ -241,13 +246,13 @@ describe("store search", () => {
       const cursor = options?.params?.query?.cursor;
       if (cursor === undefined) {
         return ok({
-          items: [{ storeId: "store-1", name: "성수 로스터리", distanceMeters: 100, open: true, pickupAvailable: true }],
+          items: [{ storeId: "store-1", name: "성수 로스터리", distanceMeters: 100, ...availableStore }],
           page: { nextCursor: "cursor-1" },
         }) as never;
       }
       if (cursor === "cursor-1") {
         return ok({
-          items: [{ storeId: "store-2", name: "합정 로스터리", distanceMeters: 900, open: true, pickupAvailable: true }],
+          items: [{ storeId: "store-2", name: "합정 로스터리", distanceMeters: 900, ...availableStore }],
           page: {},
         }) as never;
       }

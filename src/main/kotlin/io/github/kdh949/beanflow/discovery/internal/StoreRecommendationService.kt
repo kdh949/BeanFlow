@@ -49,7 +49,10 @@ internal class StoreRecommendationService(
                     CustomerStoreView(
                         storeId = item.storeId,
                         name = item.name,
+                        orderingAvailable = item.orderingAvailable,
                         pickupAvailable = item.pickupAvailable,
+                        nextPickupWindow = item.nextPickupWindow,
+                        customerDisplay = item.customerDisplay,
                         distanceMeters = item.distanceMeters,
                         image = item.image,
                     )

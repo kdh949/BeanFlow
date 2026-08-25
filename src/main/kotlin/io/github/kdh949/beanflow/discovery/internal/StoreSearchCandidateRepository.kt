@@ -46,7 +46,6 @@ internal data class StoreSearchCandidate(
     val name: String,
     val relevanceRank: Long,
     val distanceMicrometers: Long,
-    val open: Boolean,
     /**
      * `acceptingOrders && pickupEnabled` — the owner half of `pickupAvailable` and exactly what the
      * `openOnly` filter matches (ADR-103 A6).
@@ -55,7 +54,7 @@ internal data class StoreSearchCandidate(
      * field is deliberately not called `pickupAvailable`: this query cannot see slots, and naming
      * it after the public flag is how the weaker meaning reached the response before Milestone 6.
      */
-    val pickupCapable: Boolean,
+    val orderingAvailable: Boolean,
     val matchedKinds: Set<StoreSearchTermKind>,
     val imageThumbnailKey: String? = null,
 )
@@ -139,8 +138,7 @@ internal class StoreSearchCandidateRepository(
                          profile.name AS name,
                          ($RELEVANCE_SCALE - floor(scored.relevance * $RELEVANCE_SCALE))::bigint AS relevance_rank,
                          $distance AS distance_micrometers,
-                         store.accepting_orders AS accepting_orders,
-                         store.pickup_enabled AS pickup_enabled,
+                         (store.accepting_orders AND store.pickup_enabled) AS ordering_available,
                          store.image_thumbnail_key AS image_thumbnail_key,
                          reason.kinds AS kinds
                     FROM scored
@@ -151,7 +149,7 @@ internal class StoreSearchCandidateRepository(
                      AND $openOnlyPredicate
                  )
             SELECT candidate.store_id, candidate.name, candidate.relevance_rank, candidate.distance_micrometers,
-                   candidate.accepting_orders, candidate.pickup_enabled, candidate.image_thumbnail_key, candidate.kinds
+                   candidate.ordering_available, candidate.image_thumbnail_key, candidate.kinds
               FROM candidate
             $keyset
              ORDER BY $order
@@ -409,14 +407,12 @@ internal class StoreSearchCandidateRepository(
 
         private val CANDIDATE_ROW_MAPPER =
             RowMapper { row, _ ->
-                val acceptingOrders = row.getBoolean("accepting_orders")
                 StoreSearchCandidate(
                     storeId = row.getObject("store_id", UUID::class.java),
                     name = row.getString("name"),
                     relevanceRank = row.getLong("relevance_rank"),
                     distanceMicrometers = row.getLong("distance_micrometers"),
-                    open = acceptingOrders,
-                    pickupCapable = acceptingOrders && row.getBoolean("pickup_enabled"),
+                    orderingAvailable = row.getBoolean("ordering_available"),
                     matchedKinds =
                         (row.getArray("kinds").array as Array<*>)
                             .map { StoreSearchTermKind.valueOf(it as String) }

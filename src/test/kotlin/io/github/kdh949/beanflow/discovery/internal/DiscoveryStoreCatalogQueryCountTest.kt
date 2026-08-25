@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import io.github.kdh949.beanflow.fulfillment.internal.PICKUP_SLOT_QUERY_HORIZON
 import io.github.kdh949.beanflow.fulfillment.internal.PickupSlotQueryRepository
+import io.github.kdh949.beanflow.merchant.internal.StoreDiscoveryProfileQueryRepository
 import io.github.kdh949.beanflow.merchant.internal.StoreMenuQueryRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
@@ -32,6 +33,7 @@ import javax.sql.DataSource
 internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
     private lateinit var countingDataSource: StatementCountingDataSource
     private lateinit var menuRepository: StoreMenuQueryRepository
+    private lateinit var storeDisplayRepository: StoreDiscoveryProfileQueryRepository
     private lateinit var slotRepository: PickupSlotQueryRepository
     private lateinit var fixtures: JdbcTemplate
 
@@ -53,6 +55,7 @@ internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
         countingDataSource = StatementCountingDataSource(dataSource)
         val countedTemplate = JdbcTemplate(countingDataSource)
         menuRepository = StoreMenuQueryRepository(countedTemplate)
+        storeDisplayRepository = StoreDiscoveryProfileQueryRepository(countedTemplate)
         slotRepository = PickupSlotQueryRepository(countedTemplate)
 
         seedStore(smallStore, menus = 1, optionsPerMenu = 1, slots = 1)
@@ -69,6 +72,37 @@ internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
             "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
             storeId,
         )
+        fixtures.update(
+            """
+            INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+            VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, '1168010100')
+            """.trimIndent(),
+            storeId,
+            "Store $storeId",
+        )
+        fixtures.update(
+            """
+            INSERT INTO merchant_store_customer_display_profile
+                (store_id, address_line, directions_hint, version, created_at, updated_at)
+            VALUES (?, NULL, NULL, 1, ?, ?)
+            """.trimIndent(),
+            storeId,
+            Timestamp.from(now),
+            Timestamp.from(now),
+        )
+        if (menus > 1) {
+            repeat(7) { dayIndex ->
+                fixtures.update(
+                    """
+                    INSERT INTO merchant_store_operating_hours
+                        (store_id, day_of_week, closed, opens_at, closes_at)
+                    VALUES (?, ?, true, NULL, NULL)
+                    """.trimIndent(),
+                    storeId,
+                    dayIndex + 1,
+                )
+            }
+        }
         repeat(menus) { menuIndex ->
             val menuId = UUID.nameUUIDFromBytes("catalog-count:$storeId:menu:$menuIndex".toByteArray())
             fixtures.update(
@@ -140,6 +174,22 @@ internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
         assertThat(small).isOne()
         assertThat(large).isOne()
         assertThat(slotRepository.findOpenSlots(largeStore, now, horizonEnd)).hasSize(40)
+    }
+
+    @Test
+    fun `Store customer display projection uses one statement regardless of stores and operating days`() {
+        val single = countStatements { storeDisplayRepository.findVisibleStores(listOf(smallStore)) }
+        val many = countStatements { storeDisplayRepository.findVisibleStores(listOf(smallStore, largeStore)) }
+
+        assertThat(single).isOne()
+        assertThat(many).isOne()
+        assertThat(
+            storeDisplayRepository
+                .findVisibleStores(listOf(largeStore))
+                .single()
+                .customerDisplay.operatingHours
+                ?.days,
+        ).hasSize(7)
     }
 
     @Test

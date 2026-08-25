@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { favoriteHandlers, ids, signedInHandlers } from "../../../.storybook/fixtures";
+import { customerStore, favoriteHandlers, ids, signedInHandlers } from "../../../.storybook/fixtures";
 import { cart } from "./cart";
 import { StoreDetailPage } from "./StoreDetailPage";
 
@@ -55,7 +55,7 @@ export const ImageCatalog: Story = {
     msw: {
       handlers: [
         ...signedInHandlers,
-        http.get("/api/v1/stores/:storeId", () => HttpResponse.json({ storeId: ids.store, name: "성수 로스터리", pickupAvailable: true })),
+        http.get("/api/v1/stores/:storeId", () => HttpResponse.json({ ...customerStore, name: "성수 로스터리" })),
         http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: imageCatalogMenus })),
         http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [
           { pickupSlotId: ids.slot, startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z", remainingCapacity: 7 },

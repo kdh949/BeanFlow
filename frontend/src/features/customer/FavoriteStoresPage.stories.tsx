@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, ids, pending } from "../../../.storybook/fixtures";
+import { apiError, customerDisplay, customerStore, pending } from "../../../.storybook/fixtures";
 import { FavoriteStoresPage } from "./FavoriteStoresPage";
 
 const meta = {
@@ -9,6 +9,7 @@ const meta = {
   component: FavoriteStoresPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: { component: "현재 고객이 저장한 매장을 조회하고 서버 멱등 DELETE로 해제하는 목록입니다." },
       story: { inline: false, height: "720px" },
@@ -24,8 +25,14 @@ export const SavedStores: Story = {
   parameters: {
     msw: {
       handlers: [http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [
-        { storeId: ids.store, name: "시청점", pickupAvailable: true },
-        { storeId: "10000000-0000-4000-8000-000000000002", name: "광화문점", pickupAvailable: false },
+        customerStore,
+        {
+          storeId: "10000000-0000-4000-8000-000000000002",
+          name: "광화문점",
+          orderingAvailable: false,
+          pickupAvailable: false,
+          customerDisplay: { ...customerDisplay, operatingStatus: "CLOSED" },
+        },
       ] }))],
     },
   },

@@ -1,11 +1,13 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.discovery.api.CustomerStoreDisplayView
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreView
 import io.github.kdh949.beanflow.discovery.api.FavoriteStoreOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStorePage
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreView
 import io.github.kdh949.beanflow.discovery.api.RecentStoreOperations
+import io.github.kdh949.beanflow.discovery.api.StoreOperatingStatus
 import io.github.kdh949.beanflow.discovery.api.StoreRecommendationCommand
 import io.github.kdh949.beanflow.shared.api.SignedCursor
 import io.github.kdh949.beanflow.shared.api.SignedCursorCodec
@@ -38,8 +40,8 @@ class StoreRecommendationServiceTest {
                             return NearbyStorePage(
                                 items =
                                     listOf(
-                                        NearbyStoreView(overlap.storeId, overlap.name, 1, true, true),
-                                        NearbyStoreView(nearby.storeId, nearby.name, 2, true, false),
+                                        NearbyStoreView(overlap.storeId, overlap.name, 1, true, true, null, display),
+                                        NearbyStoreView(nearby.storeId, nearby.name, 2, true, false, null, display),
                                     ),
                                 nextCursor = null,
                             )
@@ -168,7 +170,9 @@ class StoreRecommendationServiceTest {
             ): List<CustomerStoreView> = stores.toList()
         }
 
-    private fun store(name: String) = CustomerStoreView(UUID.randomUUID(), name, true)
+    private fun store(name: String) = CustomerStoreView(UUID.randomUUID(), name, true, true, null, display)
+
+    private val display = CustomerStoreDisplayView(null, null, StoreOperatingStatus.UNSPECIFIED, null)
 
     private fun noOpCursorCodec() =
         object : SignedCursorCodec {

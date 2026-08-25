@@ -54,12 +54,14 @@ data class StoreSearchItemView(
     val matchReason: Set<StoreSearchTermKind>,
     val distanceMeters: Long?,
     /** `acceptingOrders && pickupEnabled` — the owner state the `openOnly` filter matches. */
-    val open: Boolean,
+    val orderingAvailable: Boolean,
     /**
      * A reservable slot exists inside the seven-day window. Fulfillment's batch judgement, and the
      * same meaning the field carries on `GET /stores/nearby` (ADR-103 2026-08-15 Amendment).
      */
     val pickupAvailable: Boolean,
+    val nextPickupWindow: NextPickupWindowView?,
+    val customerDisplay: CustomerStoreDisplayView,
     val matchedMenus: List<StoreSearchMenuView>,
     val image: StorefrontImageView? = null,
 )

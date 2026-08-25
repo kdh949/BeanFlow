@@ -52,7 +52,9 @@ data class NearbyStoreView(
     val storeId: UUID,
     val name: String,
     val distanceMeters: Long,
-    val open: Boolean,
+    val orderingAvailable: Boolean,
     val pickupAvailable: Boolean,
+    val nextPickupWindow: NextPickupWindowView?,
+    val customerDisplay: CustomerStoreDisplayView,
     val image: StorefrontImageView? = null,
 )

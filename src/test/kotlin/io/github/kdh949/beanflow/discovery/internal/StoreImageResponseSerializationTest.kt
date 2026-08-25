@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.discovery.internal
 
+import io.github.kdh949.beanflow.discovery.api.CustomerStoreDisplayView
+import io.github.kdh949.beanflow.discovery.api.StoreOperatingStatus
 import io.github.kdh949.beanflow.discovery.api.StorefrontImageView
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import org.assertj.core.api.Assertions.assertThat
@@ -14,8 +16,10 @@ internal class StoreImageResponseSerializationTest {
 
     @Test
     fun `store image is omitted when absent across compact nearby and search responses`() {
-        assertThat(mapper.writeValueAsString(CustomerStoreResponse(storeId, "Store", true, null, null))).doesNotContain("image")
-        assertThat(mapper.writeValueAsString(NearbyStoreItemResponse(storeId, "Store", 10, true, true, null))).doesNotContain("image")
+        assertThat(mapper.writeValueAsString(CustomerStoreResponse(storeId, "Store", true, true, null, display, null, null)))
+            .doesNotContain("image")
+        assertThat(mapper.writeValueAsString(NearbyStoreItemResponse(storeId, "Store", 10, true, true, null, display, null)))
+            .doesNotContain("image")
         assertThat(
             mapper.writeValueAsString(
                 StoreSearchItemResponse(
@@ -27,6 +31,8 @@ internal class StoreImageResponseSerializationTest {
                     null,
                     true,
                     true,
+                    null,
+                    display,
                     emptyList(),
                     null,
                 ),
@@ -38,7 +44,7 @@ internal class StoreImageResponseSerializationTest {
     fun `store image contains only signed URL and expiry when present`() {
         val image = StorefrontImageView("https://media.beanflow.test/signed", Instant.parse("2026-08-24T00:15:00Z"))
 
-        val json = mapper.writeValueAsString(CustomerStoreResponse(storeId, "Store", true, null, image))
+        val json = mapper.writeValueAsString(CustomerStoreResponse(storeId, "Store", true, true, null, display, null, image))
 
         assertThat(json)
             .contains("\"image\"")
@@ -46,4 +52,6 @@ internal class StoreImageResponseSerializationTest {
             .contains("\"expiresAt\":\"2026-08-24T00:15:00Z\"")
             .doesNotContain("thumbnailKey", "sha256", "originalKey")
     }
+
+    private val display = CustomerStoreDisplayView(null, null, StoreOperatingStatus.UNSPECIFIED, null)
 }

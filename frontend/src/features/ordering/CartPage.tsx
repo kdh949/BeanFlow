@@ -13,6 +13,7 @@ import { couponSelection, useCouponSelection } from "../customer/couponSelection
 import { useStore } from "../discovery/useStore";
 import { type CartLine, cart, cartDisplayTotalKrw, useCart } from "./cart";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "./orderConflicts";
+import { nextPickupLabel, operatingStatusLabel } from "../discovery/storeDisplay";
 
 type PickupSlot = components["schemas"]["PickupSlot"];
 type Order = components["schemas"]["Order"];
@@ -68,6 +69,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
   // read leaves the saved name in place rather than blocking the order.
   const store = useStore(storeId);
   const storeName = store.state.status === "ready" ? store.state.value.name : savedStoreName;
+  const storeAcceptsOrders = store.state.status !== "ready" || store.state.value.orderingAvailable;
   const selectedCoupon = useCouponSelection(storeId);
 
   const loadSlots = useCallback(
@@ -77,7 +79,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
   const slots = useResource<PickupSlot[]>(loadSlots);
 
   async function createOrder() {
-    if (!selectedSlot) return;
+    if (!selectedSlot || !storeAcceptsOrders) return;
     const body = {
       storeId,
       pickupSlotId: selectedSlot,
@@ -117,6 +119,26 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
     <div className="customer-page cart-page">
       <Link className="back-link" to={`/app/stores/${storeId}`}><ArrowLeft size={17} /> 메뉴 더 담기</Link>
       <PageTitle eyebrow="CART" title="장바구니" description={`${storeName}에서 픽업합니다.`} />
+
+      {store.state.status === "loading" ? (
+        <p className="inline-note" role="status">매장 주문 상태를 확인하고 있어요.</p>
+      ) : null}
+      {store.state.status === "failed" ? (
+        <p className="inline-note" role="status">매장 안내를 불러오지 못했어요. 최종 주문 요청에서 주문 가능 여부를 다시 확인합니다.</p>
+      ) : null}
+      {store.state.status === "ready" ? (
+        <section className="surface-card cart-store-status" aria-label="매장 주문 상태">
+          <dl className="store-profile-summary">
+            <div><dt>주문</dt><dd>{store.state.value.orderingAvailable ? "주문 가능" : "주문 불가"}</dd></div>
+            <div><dt>운영시간</dt><dd>{operatingStatusLabel(store.state.value.customerDisplay.operatingStatus)}</dd></div>
+            <div><dt>픽업</dt><dd>{nextPickupLabel(store.state.value.nextPickupWindow)}</dd></div>
+          </dl>
+          <p>{store.state.value.customerDisplay.addressLine ?? "주소 정보 없음"}</p>
+          {!store.state.value.orderingAvailable ? (
+            <p className="cart-store-warning" role="status">운영시간 상태와 관계없이 이 매장은 현재 주문을 받지 않아요.</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="surface-card cart-lines" aria-label="담은 메뉴">
         {lines.map((line, index) => (
@@ -159,6 +181,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
                 type="button"
                 aria-pressed={selectedSlot === slot.pickupSlotId}
                 className={selectedSlot === slot.pickupSlotId ? "is-selected" : ""}
+                disabled={!storeAcceptsOrders}
                 onClick={() => {
                   if (selectedSlot !== slot.pickupSlotId) orderIntent.current.rotate();
                   setSelectedSlot(slot.pickupSlotId);
@@ -206,7 +229,7 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
         size="xl"
         block
         loading={submitting}
-        disabled={!selectedSlot}
+        disabled={!selectedSlot || !storeAcceptsOrders}
         onClick={() => void createOrder()}
       >
         {submitting ? "주문을 만드는 중" : `${won.format(total)} 주문하기`}

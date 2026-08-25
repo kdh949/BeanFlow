@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import io.github.kdh949.beanflow.discovery.api.CustomerStoreDisplayView
+import io.github.kdh949.beanflow.discovery.api.NextPickupWindowView
 import io.github.kdh949.beanflow.discovery.api.SearchStoresCommand
 import io.github.kdh949.beanflow.discovery.api.StoreSearchItemView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchMenuView
@@ -32,8 +34,10 @@ internal data class StoreSearchItemResponse(
     val regionName: String?,
     val matchReason: List<StoreSearchTermKind>,
     val distanceMeters: Long?,
-    val open: Boolean,
+    val orderingAvailable: Boolean,
     val pickupAvailable: Boolean,
+    val nextPickupWindow: NextPickupWindowView?,
+    val customerDisplay: CustomerStoreDisplayView,
     val matchedMenus: List<StoreSearchMenuView>,
     val image: StorefrontImageView?,
 )
@@ -107,8 +111,10 @@ private fun StoreSearchItemView.toResponse() =
         regionName = regionName,
         matchReason = StoreSearchTermKind.entries.filter { it in matchReason },
         distanceMeters = distanceMeters,
-        open = open,
+        orderingAvailable = orderingAvailable,
         pickupAvailable = pickupAvailable,
+        nextPickupWindow = nextPickupWindow,
+        customerDisplay = customerDisplay,
         matchedMenus = matchedMenus,
         image = image,
     )

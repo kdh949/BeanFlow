@@ -416,7 +416,8 @@ export interface paths {
          *     Latitude and longitude must be supplied together or both omitted; radiusMeters
          *     without both coordinates returns 400, and sort=distance without coordinates
          *     returns 400. Coordinates are request-only and never persisted or written to logs.
-         *     openOnly requires only that the store accepts orders with pickup enabled;
+         *     openOnly retains its transport spelling but means that the Store is currently accepting
+         *     orders with pickup enabled (`orderingAvailable=true`);
          *     pickupAvailable additionally requires a reservable slot and is a point-in-time
          *     projection that does not reserve one. Both default to unset, and a closed store
          *     is then still returned with its status in the flags. The relevance score itself
@@ -440,7 +441,8 @@ export interface paths {
         };
         /**
          * Read the display identity of one store
-         * @description Returns the store's current name and pickup availability so that a client which reached the
+         * @description Returns the store's current name, ordering/pickup availability, earliest actual pickup
+         *     window and customer display profile so that a client which reached the
          *     store by URL, deep link or reload can name the store from the server instead of a value it
          *     carried in navigation state. `distanceMeters` is absent here because this read takes no
          *     coordinate. A store the customer must not see is reported the same as one that does not
@@ -4560,6 +4562,40 @@ export interface components {
          * @example 2026-08-15T09:30:00+09:00
          */
         DateTime: string;
+        /** @description 현재 시각 이후 7일 안에서 capacity가 남은 가장 이른 실제 pickup slot입니다. */
+        NextPickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
+         *     closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
+         */
+        StoreOperatingDay: {
+            /** @enum {string} */
+            dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            closed: boolean;
+            /** Format: time */
+            opensAt?: string;
+            /** Format: time */
+            closesAt?: string;
+        };
+        StoreWeeklyOperatingHours: {
+            /** @enum {string} */
+            timezone: "Asia/Seoul";
+            /** @description 일곱 요일을 정확히 한 번씩 포함합니다. */
+            days: components["schemas"]["StoreOperatingDay"][];
+        };
+        CustomerStoreDisplay: {
+            addressLine?: string;
+            directionsHint?: string;
+            /**
+             * @description Asia/Seoul 주간 schedule의 현재 상태이며 주문 가능성과 독립입니다.
+             * @enum {string}
+             */
+            operatingStatus: "OPEN" | "CLOSED" | "UNSPECIFIED";
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"];
+        };
         StorefrontImage: {
             /**
              * Format: uri
@@ -4571,7 +4607,11 @@ export interface components {
         CustomerStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
+            /** @description acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다. */
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             distanceMeters?: number;
             image?: components["schemas"]["StorefrontImage"];
         };
@@ -4625,8 +4665,11 @@ export interface components {
          *       "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *       "name": "빈플로우 강남점",
          *       "distanceMeters": 320,
-         *       "open": true,
-         *       "pickupAvailable": true
+         *       "orderingAvailable": true,
+         *       "pickupAvailable": true,
+         *       "customerDisplay": {
+         *         "operatingStatus": "UNSPECIFIED"
+         *       }
          *     }
          */
         NearbyStore: {
@@ -4637,8 +4680,10 @@ export interface components {
              * @example 320
              */
             distanceMeters: number;
-            open: boolean;
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             image?: components["schemas"]["StorefrontImage"];
         };
         /**
@@ -4659,8 +4704,11 @@ export interface components {
          *           "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *           "name": "빈플로우 강남점",
          *           "distanceMeters": 320,
-         *           "open": true,
-         *           "pickupAvailable": true
+         *           "orderingAvailable": true,
+         *           "pickupAvailable": true,
+         *           "customerDisplay": {
+         *             "operatingStatus": "UNSPECIFIED"
+         *           }
          *         }
          *       ],
          *       "page": {
@@ -4685,8 +4733,11 @@ export interface components {
             /** @description The distinct kinds of searchable attribute that matched, never the score. */
             matchReason: ("STORE_NAME" | "BRAND_NAME" | "REGION_SIDO" | "REGION_SIGUNGU" | "REGION_EUPMYEONDONG" | "REGION_RI" | "MENU_NAME")[];
             distanceMeters?: number;
-            open: boolean;
+            /** @description 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다. */
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             /** @description Menus of this store that the query matched, most relevant first. Empty when none matched. */
             matchedMenus: components["schemas"]["StoreSearchMenu"][];
             image?: components["schemas"]["StorefrontImage"];
@@ -4703,25 +4754,6 @@ export interface components {
              * @description JPEG 또는 PNG 이미지. signature, MIME, 해상도를 함께 검증합니다.
              */
             image: string;
-        };
-        /**
-         * @description Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
-         *     closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
-         */
-        StoreOperatingDay: {
-            /** @enum {string} */
-            dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
-            closed: boolean;
-            /** Format: time */
-            opensAt?: string;
-            /** Format: time */
-            closesAt?: string;
-        };
-        StoreWeeklyOperatingHours: {
-            /** @enum {string} */
-            timezone: "Asia/Seoul";
-            /** @description 일곱 요일을 정확히 한 번씩 포함합니다. */
-            days: components["schemas"]["StoreOperatingDay"][];
         };
         StoreCustomerDisplayAuthoring: {
             addressLine?: string;
@@ -4788,6 +4820,8 @@ export interface components {
             basePriceKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
             available: boolean;
+            displayCategory?: string;
+            description?: string;
             options: components["schemas"]["MenuOption"][];
             image?: components["schemas"]["StorefrontImage"];
         };

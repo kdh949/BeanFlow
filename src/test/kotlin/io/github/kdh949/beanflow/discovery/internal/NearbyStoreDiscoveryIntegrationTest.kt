@@ -88,8 +88,12 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items[0].storeId").value(store(1).toString()))
                 .andExpect(jsonPath("$.items[0].name").value("Near cafe"))
                 .andExpect(jsonPath("$.items[0].distanceMeters").value(0))
-                .andExpect(jsonPath("$.items[0].open").value(true))
+                .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
                 .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+                .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
+                .andExpect(jsonPath("$.items[0].nextPickupWindow.endsAt").isString)
+                .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
+                .andExpect(jsonPath("$.items[0].open").doesNotExist())
                 .andExpect(jsonPath("$.items[0].image.url").isString)
                 .andExpect(jsonPath("$.items[0].image.expiresAt").isString)
                 .andExpect(jsonPath("$.items[1].storeId").value(store(2).toString()))
@@ -97,6 +101,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 // 슬롯이 없는 매장은 결과에 남되 픽업 불가로 표시된다. Milestone 6 이전에는
                 // `acceptingOrders && pickupEnabled`라서 항상 true였다.
                 .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[1].nextPickupWindow").doesNotExist())
                 .andExpect(jsonPath("$.items[1].image").doesNotExist())
                 .andExpect(jsonPath("$.items[0].distanceMicrometers").doesNotExist())
                 .andExpect(jsonPath("$.items[0].location").doesNotExist())

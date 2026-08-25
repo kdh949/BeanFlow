@@ -97,8 +97,12 @@ internal class StoreSearchEndpointIntegrationTest {
             .andExpect(jsonPath("$.items[0].regionName").value("서울특별시 강남구"))
             .andExpect(jsonPath("$.items[0].matchReason").isArray)
             .andExpect(jsonPath("$.items[0].matchReason[0]").value("STORE_NAME"))
-            .andExpect(jsonPath("$.items[0].open").value(true))
+            .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
             .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+            .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
+            .andExpect(jsonPath("$.items[0].nextPickupWindow.endsAt").isString)
+            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
+            .andExpect(jsonPath("$.items[0].open").doesNotExist())
             .andExpect(jsonPath("$.items[0].matchedMenus").isArray)
             // 좌표를 주지 않았으므로 거리 항은 `null`이 아니라 아예 없다.
             .andExpect(jsonPath("$.items[0].distanceMeters").doesNotExist())

@@ -9,6 +9,8 @@ internal data class StoreMenuProjection(
     val name: String,
     val basePriceKrw: Long,
     val available: Boolean,
+    val displayCategory: String?,
+    val description: String?,
     val imageThumbnailKey: String?,
 )
 
@@ -43,7 +45,8 @@ internal class StoreMenuQueryRepository(
     fun findMenus(storeId: UUID): List<StoreMenuProjection> =
         jdbcTemplate.query(
             """
-            SELECT id, name, base_price_krw, available, image_thumbnail_key
+            SELECT id, name, base_price_krw, available, display_category, public_description,
+                   image_thumbnail_key
               FROM merchant_menu
              WHERE store_id = ?
              ORDER BY name, id
@@ -55,6 +58,8 @@ internal class StoreMenuQueryRepository(
                     name = resultSet.getString("name"),
                     basePriceKrw = resultSet.getLong("base_price_krw"),
                     available = resultSet.getBoolean("available"),
+                    displayCategory = resultSet.getString("display_category"),
+                    description = resultSet.getString("public_description"),
                     imageThumbnailKey = resultSet.getString("image_thumbnail_key"),
                 )
             },

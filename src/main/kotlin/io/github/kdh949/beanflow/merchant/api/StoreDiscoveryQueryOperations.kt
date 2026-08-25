@@ -73,19 +73,27 @@ data class NearbyStoreProfileProjection(
     val storeId: UUID,
     val name: String,
     val distanceMicrometers: Long,
-    val open: Boolean,
+    val orderingAvailable: Boolean,
+    val customerDisplay: StoreCustomerDisplayProjection,
     val imageThumbnailKey: String? = null,
 )
 
 /**
  * A non-spatial current display projection for a customer-owned store reference.
  *
- * [pickupCapable] is only Merchant's owner state. Discovery combines it with Fulfillment's
- * reservable-slot batch answer before publishing the public `pickupAvailable` flag.
+ * [orderingAvailable] is only Merchant's owner state. Discovery combines it with Fulfillment's
+ * reservable-slot batch answer before publishing `pickupAvailable` and `nextPickupWindow`.
  */
 data class StoreDiscoveryDisplayProjection(
     val storeId: UUID,
     val name: String,
-    val pickupCapable: Boolean,
+    val orderingAvailable: Boolean,
+    val customerDisplay: StoreCustomerDisplayProjection,
     val imageThumbnailKey: String? = null,
+)
+
+data class StoreCustomerDisplayProjection(
+    val addressLine: String?,
+    val directionsHint: String?,
+    val operatingHours: StoreWeeklyOperatingHours?,
 )

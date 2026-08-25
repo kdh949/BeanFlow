@@ -36,6 +36,8 @@ data class StoreMenuView(
     val name: String,
     val basePriceKrw: Long,
     val available: Boolean,
+    val displayCategory: String?,
+    val description: String?,
     val options: List<StoreMenuOptionView>,
     val imageThumbnailKey: String?,
 )

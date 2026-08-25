@@ -27,11 +27,22 @@ function failed(status: number, code: string, message: string) {
 
 const menus = {
   items: [
-    { menuId: "menu-1", name: "아메리카노", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }], image: { url: "/demo/catalog/americano.webp", expiresAt: "2099-01-01T00:00:00Z" } },
-    { menuId: "menu-2", name: "오트 라떼", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
+    { menuId: "menu-1", name: "아메리카노", displayCategory: "커피", description: "고소한 원두의 긴 여운", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }], image: { url: "/demo/catalog/americano.webp", expiresAt: "2099-01-01T00:00:00Z" } },
+    { menuId: "menu-2", name: "오트 라떼", description: "부드러운 귀리 음료", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
   ],
 };
-const store = { storeId: "store-1", name: "성수 로스터리", pickupAvailable: true };
+const store = {
+  storeId: "store-1",
+  name: "성수 로스터리",
+  orderingAvailable: true,
+  pickupAvailable: true,
+  nextPickupWindow: { startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z" },
+  customerDisplay: {
+    addressLine: "서울 성동구 연무장길 10",
+    directionsHint: "성수역 3번 출구에서 도보 4분",
+    operatingStatus: "OPEN",
+  },
+};
 const openSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 4 }] };
 const closedSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 0 }] };
 
@@ -135,6 +146,7 @@ describe("store identity comes from the server", () => {
     renderStore();
 
     expect(await screen.findByRole("heading", { name: "성수 로스터리" })).toBeInTheDocument();
+    expect(screen.getByText("서울 성동구 연무장길 10")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "매장" })).not.toBeInTheDocument();
   });
 
@@ -196,7 +208,25 @@ describe("store detail", () => {
     renderStore();
 
     expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "커피" })).toBeInTheDocument();
+    expect(screen.getByText("고소한 원두의 긴 여운")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "미분류" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /오트 라떼/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
+  });
+
+  it("keeps operating hours separate from the store ordering switch", async () => {
+    routeGet({
+      "/stores/{storeId}": ok({ ...store, orderingAvailable: false, pickupAvailable: false, nextPickupWindow: undefined }),
+      "/stores/{storeId}/menus": ok(menus),
+      "/stores/{storeId}/pickup-slots": ok(openSlots),
+    });
+
+    renderStore();
+
+    expect(await screen.findByText("영업 중")).toBeInTheDocument();
+    expect(screen.getByText("주문 불가")).toBeInTheDocument();
+    expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
 

@@ -6,6 +6,9 @@ import io.github.kdh949.beanflow.discovery.api.StoreSearchMenuView
 import io.github.kdh949.beanflow.discovery.api.StoreSearchPage
 import io.github.kdh949.beanflow.discovery.api.StoreSearchQueryOperations
 import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
+import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityView
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -93,6 +96,7 @@ internal class StoreSearchQueryService(
 internal class StoreSearchReadTransaction(
     private val repository: StoreSearchCandidateRepository,
     private val availability: PickupAvailabilityQueryOperations,
+    private val stores: StoreDiscoveryQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
     private val imageViews: StorefrontImageViewResolver,
 ) {
@@ -109,17 +113,18 @@ internal class StoreSearchReadTransaction(
             }
         // 검사 대상은 probe row를 뺀 앞 limit개다. 가용성도 후보 수와 무관하게 한 번만 묻는다.
         val examined = fetched.take(prepared.limit)
-        val availableStoreIds =
-            availability.findStoresWithAvailableSlots(
+        val pickupWindows =
+            availability.findEarliestAvailableSlots(
                 examined.map(StoreSearchCandidate::storeId),
                 prepared.now,
             )
         val scanned =
             scanCandidates(fetched, prepared.limit) { candidate ->
-                !prepared.pickupAvailableOnly || candidate.pickupAvailable(availableStoreIds)
+                !prepared.pickupAvailableOnly || candidate.pickupAvailable(pickupWindows)
             }
         val page = scanned.items
         val storeIds = page.map(StoreSearchCandidate::storeId)
+        val displayByStoreId = customerDisplays(storeIds)
         val menus =
             try {
                 repository
@@ -147,7 +152,9 @@ internal class StoreSearchReadTransaction(
                 page.map { candidate ->
                     candidate.toView(
                         distanceAvailable = prepared.distanceAvailable,
-                        pickupAvailable = candidate.pickupAvailable(availableStoreIds),
+                        pickupWindow = if (candidate.orderingAvailable) pickupWindows[candidate.storeId] else null,
+                        customerDisplay = requireNotNull(displayByStoreId[candidate.storeId]).customerDisplay,
+                        now = prepared.now,
                         menus = menus[candidate.storeId].orEmpty(),
                         terms = displayTerms[candidate.storeId].orEmpty(),
                         imageViews = imageViews,
@@ -164,6 +171,22 @@ internal class StoreSearchReadTransaction(
             "Store search index is unavailable",
         ).also { it.initCause(cause) }
 
+    private fun customerDisplays(storeIds: List<UUID>): Map<UUID, StoreDiscoveryDisplayProjection> {
+        val projections =
+            try {
+                stores.findVisibleStores(storeIds)
+            } catch (failure: DataAccessException) {
+                indexUnavailable(failure)
+            } catch (failure: TransactionException) {
+                indexUnavailable(failure)
+            }
+        val byStoreId = projections.associateBy(StoreDiscoveryDisplayProjection::storeId)
+        if (!byStoreId.keys.containsAll(storeIds)) {
+            indexUnavailable(IllegalStateException("Search candidate has no current Merchant display projection"))
+        }
+        return byStoreId
+    }
+
     internal companion object {
         /** ADR-103 A5. */
         const val MAX_MATCHED_MENUS = 3
@@ -174,11 +197,14 @@ internal class StoreSearchReadTransaction(
  * ADR-103: the public flag is the owner state **and** a reservable slot. A store that stopped
  * accepting orders is not "pickup available" merely because tomorrow's slot row still has seats.
  */
-private fun StoreSearchCandidate.pickupAvailable(availableStoreIds: Set<UUID>): Boolean = pickupCapable && storeId in availableStoreIds
+private fun StoreSearchCandidate.pickupAvailable(pickupWindows: Map<UUID, PickupAvailabilityView>): Boolean =
+    orderingAvailable && storeId in pickupWindows
 
 private fun StoreSearchCandidate.toView(
     distanceAvailable: Boolean,
-    pickupAvailable: Boolean,
+    pickupWindow: PickupAvailabilityView?,
+    customerDisplay: io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayProjection,
+    now: Instant,
     menus: List<StoreSearchMenuRow>,
     terms: List<StoreSearchTermText>,
     imageViews: StorefrontImageViewResolver,
@@ -191,8 +217,10 @@ private fun StoreSearchCandidate.toView(
         matchReason = matchedKinds,
         // 좌표가 없으면 거리 항은 상수 0이므로 표시 거리로 내보내지 않는다.
         distanceMeters = if (distanceAvailable) distanceMicrometers / MICROMETERS_PER_METER else null,
-        open = open,
-        pickupAvailable = pickupAvailable,
+        orderingAvailable = orderingAvailable,
+        pickupAvailable = pickupWindow != null,
+        nextPickupWindow = pickupWindow?.toCustomerView(),
+        customerDisplay = customerDisplay.toCustomerView(now),
         matchedMenus = menus.map { StoreSearchMenuView(it.menuId, it.name) },
         image = imageViews.resolve(imageThumbnailKey),
     )

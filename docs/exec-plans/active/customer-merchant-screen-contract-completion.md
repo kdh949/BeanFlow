@@ -795,6 +795,19 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
 - 2026-08-25: Menu display-content PUT에도 기존 Menu version을 제공할 merchant read가 없음을 확인했다.
   사용자 승인으로 same-store OWNER/STAFF GET을 추가하고 customer menu catalog는 version-free로
   유지하도록 BR-50/ADR-117에 기록했다.
+- 2026-08-26: Store/menu display vertical slice에 V67 schema와 cleaner/migration 검증, Store OWNER 및
+  Menu OWNER/STAFF current/replace 계약, expected-version/no-op/Audit rollback, public display profile,
+  실제 earliest pickup window와 menu category/description projection을 구현했다.
+- 2026-08-26: Customer Store/search/nearby 응답의 `open`을 `orderingAvailable`로 원자적으로 교체하고
+  target/runtime OpenAPI와 generated TypeScript를 함께 갱신했다. Store/hours 및 pickup batch read는
+  candidate 수와 무관한 bounded statement 수를 테스트로 고정했다.
+- 2026-08-26: Home, Search, Store Detail, Cart와 favorite/image story fixtures가 새 계약을 소비한다.
+  운영시간 상태, 주문 가능, earliest pickup을 분리하고 `UNSPECIFIED`, pickup 없음,
+  `OPEN + orderingAvailable=false`를 명시적 UI state로 검증했다.
+- 2026-08-26: Store/menu focused backend integration/contract/query-count/Modulith/ArchUnit 및 문서 검증,
+  frontend typecheck, 22 unit files/165 tests, design adherence, build, Storybook build, Sites 4 tests와
+  live Storybook MCP 전체 story/a11y run이 통과했다. Vite chunk-size 경고와 Gradle 10 deprecation 경고는
+  실패가 아니며 이 slice에서 dependency/build 구성을 변경하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -812,6 +825,11 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   creating another image API would duplicate ownership and violate ADR-115.
 - Existing support-purpose public profile text must not be copied casually into a new customer display record. The
   scoped display profile only owns the new address/directions/hours fields.
+- Flattening the seven operating-hour rows into the public Store projection was required to preserve bounded reads.
+  The repository returns one joined row set and the Merchant query service rejects incomplete or invalid schedules
+  as `DEPENDENCY_UNAVAILABLE` instead of showing a plausible partial week.
+- Regenerating the TypeScript client immediately exposed the remaining `store.open` consumer in Search. Updating
+  generated types, all customer consumers, fixtures and stories in the same slice prevented a contract-only commit.
 
 ## Decision Log
 
@@ -841,9 +859,10 @@ ADR-116/117 and the related ADR amendments.
 
 ## Outcomes & Retrospective
 
-Milestone 0 decision recording is complete and `Implementation-Ready: true`. No production implementation
-outcome exists yet. Completion still requires evidence from migration/API/frontend/Storybook validation, not a
-successful document check alone.
+Milestone 0 decision recording and Milestone 3 Store/menu display implementation are complete. The Store/menu
+child is ready for review with schema, owner authoring, public read, OpenAPI/generated client, consuming UI and
+tests kept in one vertical slice. Notification, quote, order/board/refund and final cross-slice milestones remain;
+the ExecPlan as a whole is not complete.
 
 ## Revision Notes
 

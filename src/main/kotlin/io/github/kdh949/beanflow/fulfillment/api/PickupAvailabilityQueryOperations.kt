@@ -18,18 +18,24 @@ import java.util.UUID
  */
 interface PickupAvailabilityQueryOperations : FulfillmentApi {
     /**
-     * Returns the subset of [storeIds] that has at least one reservable slot inside the window.
+     * Returns the earliest reservable slot inside the window for each matching store.
      *
-     * A store with no slot row is simply absent from the result. An empty [storeIds] returns an
-     * empty set without touching the database.
+     * A store with no reservable slot is simply absent from the result. An empty [storeIds] returns
+     * an empty map without touching the database.
      *
      * @throws io.github.kdh949.beanflow.shared.api.DomainFailure with `DEPENDENCY_UNAVAILABLE` when
      * persistence fails or a candidate store owns a slot whose counters are corrupted. A corrupted
      * counter is never collapsed into "not available": that would publish a plausible-looking
      * closed store instead of an explicit failure.
      */
-    fun findStoresWithAvailableSlots(
+    fun findEarliestAvailableSlots(
         storeIds: Collection<UUID>,
         now: Instant,
-    ): Set<UUID>
+    ): Map<UUID, PickupAvailabilityView>
 }
+
+data class PickupAvailabilityView(
+    val storeId: UUID,
+    val startsAt: Instant,
+    val endsAt: Instant,
+)

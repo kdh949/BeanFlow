@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, homeHandlers, orderListHandlers, pending, signedInHandlers } from "../../../.storybook/fixtures";
+import { apiError, homeHandlers, orderListHandlers, pending, signedInHandlers, unspecifiedCustomerDisplay } from "../../../.storybook/fixtures";
 import { CustomerHomePage } from "./HomePage";
 
 const meta = {
@@ -9,6 +9,7 @@ const meta = {
   component: CustomerHomePage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -28,6 +29,34 @@ export const ActiveOrderAndRecommendations: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("아이스 아메리카노 외 1건")).toBeVisible();
     await expect(await canvas.findByText("최근 주문한 매장")).toBeVisible();
+    await expect(await canvas.findByText(/가장 빠른 픽업/)).toBeVisible();
+  },
+};
+
+export const ScheduleUnspecified: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...signedInHandlers,
+        ...orderListHandlers([]),
+        http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({
+          items: [{
+            store: {
+              storeId: "10000000-0000-4000-8000-000000000009",
+              name: "을지로점",
+              orderingAvailable: true,
+              pickupAvailable: false,
+              customerDisplay: unspecifiedCustomerDisplay,
+            },
+            reason: "NEARBY",
+          }],
+        })),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("운영시간 정보 없음")).toBeVisible();
+    await expect(await canvas.findByText("예약 가능한 픽업 시간 없음")).toBeVisible();
   },
 };
 

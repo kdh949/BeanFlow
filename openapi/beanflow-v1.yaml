@@ -518,7 +518,8 @@ paths:
         Latitude and longitude must be supplied together or both omitted; radiusMeters
         without both coordinates returns 400, and sort=distance without coordinates
         returns 400. Coordinates are request-only and never persisted or written to logs.
-        openOnly requires only that the store accepts orders with pickup enabled;
+        openOnly retains its transport spelling but means that the Store is currently accepting
+        orders with pickup enabled (`orderingAvailable=true`);
         pickupAvailable additionally requires a reservable slot and is a point-in-time
         projection that does not reserve one. Both default to unset, and a closed store
         is then still returned with its status in the flags. The relevance score itself
@@ -718,7 +719,8 @@ paths:
       summary: Read the display identity of one store
       security: [{ customerSession: [] }]
       description: |
-        Returns the store's current name and pickup availability so that a client which reached the
+        Returns the store's current name, ordering/pickup availability, earliest actual pickup
+        window and customer display profile so that a client which reached the
         store by URL, deep link or reload can name the store from the server instead of a value it
         carried in navigation state. `distanceMeters` is absent here because this read takes no
         coordinate. A store the customer must not see is reported the same as one that does not
@@ -7806,7 +7808,7 @@ components:
     StoreSearchItem:
       type: object
       additionalProperties: false
-      required: [storeId, name, matchReason, open, pickupAvailable, matchedMenus]
+      required: [storeId, name, matchReason, orderingAvailable, pickupAvailable, customerDisplay, matchedMenus]
       properties:
         storeId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
@@ -7836,8 +7838,12 @@ components:
                 MENU_NAME,
               ]
         distanceMeters: { type: integer, minimum: 0 }
-        open: { type: boolean }
+        orderingAvailable:
+          type: boolean
+          description: 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다.
         pickupAvailable: { type: boolean }
+        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         matchedMenus:
           type: array
           maxItems: 3
@@ -7883,6 +7889,32 @@ components:
           maxItems: 7
           description: 일곱 요일을 정확히 한 번씩 포함합니다.
           items: { $ref: "#/components/schemas/StoreOperatingDay" }
+    CustomerStoreDisplay:
+      type: object
+      additionalProperties: false
+      required: [operatingStatus]
+      properties:
+        addressLine:
+          type: string
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: string
+          minLength: 1
+          maxLength: 200
+        operatingStatus:
+          type: string
+          enum: [OPEN, CLOSED, UNSPECIFIED]
+          description: Asia/Seoul 주간 schedule의 현재 상태이며 주문 가능성과 독립입니다.
+        operatingHours: { $ref: "#/components/schemas/StoreWeeklyOperatingHours" }
+    NextPickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      description: 현재 시각 이후 7일 안에서 capacity가 남은 가장 이른 실제 pickup slot입니다.
+      properties:
+        startsAt: { $ref: "#/components/schemas/DateTime" }
+        endsAt: { $ref: "#/components/schemas/DateTime" }
     StoreCustomerDisplayAuthoring:
       type: object
       additionalProperties: false
@@ -7959,11 +7991,16 @@ components:
     CustomerStore:
       type: object
       additionalProperties: false
-      required: [storeId, name, pickupAvailable]
+      required: [storeId, name, orderingAvailable, pickupAvailable, customerDisplay]
       properties:
         storeId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
+        orderingAvailable:
+          type: boolean
+          description: acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다.
         pickupAvailable: { type: boolean }
+        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         distanceMeters: { type: integer, minimum: 0 }
         image: { $ref: "#/components/schemas/StorefrontImage" }
     StorefrontImage:
@@ -8800,8 +8837,10 @@ components:
           - storeId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
             name: 빈플로우 강남점
             distanceMeters: 320
-            open: true
+            orderingAvailable: true
             pickupAvailable: true
+            customerDisplay:
+              operatingStatus: UNSPECIFIED
         page:
           nextCursor: eyJvIjoiZGlzdGFuY2UiLCJ2IjoiMzIwIn0
       properties:
@@ -8815,14 +8854,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        [storeId, name, distanceMeters, open, pickupAvailable]
+        [storeId, name, distanceMeters, orderingAvailable, pickupAvailable, customerDisplay]
       description: 인근 매장 검색 결과에 포함되는 매장 요약 정보입니다.
       example:
         storeId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         name: 빈플로우 강남점
         distanceMeters: 320
-        open: true
+        orderingAvailable: true
         pickupAvailable: true
+        customerDisplay:
+          operatingStatus: UNSPECIFIED
       properties:
         storeId:
           $ref: "#/components/schemas/Identifier"
@@ -8835,10 +8876,14 @@ components:
           description: |-
             내부 마이크로미터 단위 거리를 내림한 정수 미터 표시값입니다. This is a display value, not the cursor tuple(커서 정렬에 쓰이는 튜플이 아니라 화면 표시값)입니다.
           example: 320
-        open:
+        orderingAvailable:
           type: boolean
         pickupAvailable:
           type: boolean
+        nextPickupWindow:
+          $ref: "#/components/schemas/NextPickupWindow"
+        customerDisplay:
+          $ref: "#/components/schemas/CustomerStoreDisplay"
         image:
           $ref: "#/components/schemas/StorefrontImage"
     MenuList:
@@ -8891,6 +8936,14 @@ components:
           $ref: "#/components/schemas/Currency"
         available:
           type: boolean
+        displayCategory:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
         options:
           type: array
           items:

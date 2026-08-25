@@ -9,6 +9,15 @@ import { FavoriteStoreButton, FavoriteStoresPage } from "./FavoriteStoresPage";
 import { CartPage } from "../ordering/CartPage";
 import { cart } from "../ordering/cart";
 
+const customerStore = {
+  storeId: "store-1",
+  name: "시청점",
+  orderingAvailable: true,
+  pickupAvailable: true,
+  nextPickupWindow: { startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z" },
+  customerDisplay: { operatingStatus: "OPEN" as const },
+};
+
 function ok<T>(data: T) {
   return { data, response: new Response(null, { status: 200 }) };
 }
@@ -53,7 +62,7 @@ describe("customer coupon selection", () => {
 
   it("loads coupons with the current store and never enables an inapplicable coupon", async () => {
     vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-      if (path === "/stores/{storeId}") return ok({ storeId: "store-1", name: "시청점", pickupAvailable: true }) as never;
+      if (path === "/stores/{storeId}") return ok(customerStore) as never;
       if (path === "/me/coupons") return ok({
         items: [
           { couponIssuanceId: "coupon-1", benefit: { discountType: "FIXED_KRW", fixedAmountKrw: 1_000 }, minimumOrderKrw: 5_000, couponExpiresAt: "2026-09-01T00:00:00Z", applicable: true },
@@ -82,7 +91,7 @@ describe("customer coupon selection", () => {
     );
     couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "₩1,000 할인" });
     vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-      if (path === "/stores/{storeId}") return ok({ storeId: "store-1", name: "시청점", pickupAvailable: true }) as never;
+      if (path === "/stores/{storeId}") return ok(customerStore) as never;
       if (path === "/stores/{storeId}/pickup-slots") return ok({ items: [{ pickupSlotId: "slot-1", startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z", remainingCapacity: 2 }] }) as never;
       throw new Error(`unexpected GET ${path}`);
     });
@@ -112,7 +121,7 @@ describe("customer coupon selection", () => {
 
 describe("favorite stores", () => {
   it("removes a favorite idempotently and reloads the server-owned list", async () => {
-    let items = [{ storeId: "store-1", name: "시청점", pickupAvailable: true }];
+    let items = [customerStore];
     vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
       if (path === "/me/favorite-stores") return ok({ items }) as never;
       throw new Error(`unexpected GET ${path}`);
