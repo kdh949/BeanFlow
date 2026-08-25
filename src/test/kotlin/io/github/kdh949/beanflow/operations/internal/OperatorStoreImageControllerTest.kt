@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.NormalizedStorefrontImageUpload
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
@@ -32,6 +33,7 @@ import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
+@BeanflowIsolatedSpringContext("verifies committed image and audit state across the request transaction boundary")
 @SpringBootTest
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class OperatorStoreImageControllerTest(

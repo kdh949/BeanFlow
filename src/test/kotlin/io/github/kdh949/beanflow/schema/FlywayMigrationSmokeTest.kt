@@ -38,6 +38,6 @@ internal class FlywayMigrationSmokeTest : IsolatedPostgresSupport() {
     }
 
     private companion object {
-        const val CURRENT_SCHEMA_VERSION = "64"
+        const val CURRENT_SCHEMA_VERSION = "66"
     }
 }

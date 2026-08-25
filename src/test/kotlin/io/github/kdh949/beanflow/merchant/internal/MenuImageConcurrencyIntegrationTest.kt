@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.MenuImageOperations
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
@@ -23,6 +24,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
+@BeanflowIsolatedSpringContext("verifies concurrent image replacement across transaction boundaries")
 @SpringBootTest
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class MenuImageConcurrencyIntegrationTest(
