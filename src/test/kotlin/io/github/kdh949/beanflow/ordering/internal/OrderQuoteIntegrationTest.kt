@@ -45,6 +45,47 @@ internal class OrderQuoteIntegrationTest
         }
 
         @Test
+        fun `display and image changes do not invalidate a transactional quote`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val original = quotes.quote(fixture.quoteCommand())
+
+            jdbcTemplate.update(
+                """
+                UPDATE merchant_menu
+                   SET display_category = 'SEASONAL',
+                       public_description = 'Customer-facing copy',
+                       image_original_key = 'menu/original',
+                       image_thumbnail_key = 'menu/thumbnail',
+                       image_sha256 = repeat('a', 64),
+                       image_updated_at = '2026-01-01T00:00:00Z',
+                       version = version + 1
+                 WHERE id = ?
+                """.trimIndent(),
+                fixture.menuId,
+            )
+            jdbcTemplate.update(
+                """
+                UPDATE merchant_store
+                   SET image_original_key = 'store/original',
+                       image_thumbnail_key = 'store/thumbnail',
+                       image_sha256 = repeat('b', 64),
+                       image_updated_at = '2026-01-01T00:00:00Z',
+                       version = version + 1
+                 WHERE id = ?
+                """.trimIndent(),
+                fixture.storeId,
+            )
+
+            val changed = quotes.quote(fixture.quoteCommand())
+
+            assertThat(changed.quoteFingerprint).isEqualTo(original.quoteFingerprint)
+            assertThat(changed.pricing).isEqualTo(original.pricing)
+            assertThat(changed.lines).isEqualTo(original.lines)
+            assertNoTransactionWrites()
+        }
+
+        @Test
         fun `exact quote creates an order with the same immutable money and display snapshot`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)

@@ -2,17 +2,10 @@ package io.github.kdh949.beanflow.merchant.api
 
 import java.util.UUID
 
-data class MerchantMenuQuoteMaterial(
-    val menuId: UUID,
-    val menuVersion: Long,
-    val configurationId: UUID,
-    val configurationVersion: Long,
-)
-
 data class MerchantOrderQuoteSnapshot(
-    val storeVersion: Long,
+    val storeAcceptingOrders: Boolean,
+    val storePickupEnabled: Boolean,
     val lines: List<MenuLineQuote>,
-    val materials: List<MerchantMenuQuoteMaterial>,
 )
 
 /** Owner-verified menu pricing and availability inputs used by the order quote fingerprint. */
