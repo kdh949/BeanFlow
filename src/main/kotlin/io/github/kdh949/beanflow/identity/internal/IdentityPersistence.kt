@@ -6,9 +6,12 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import java.util.UUID
 
@@ -42,6 +45,13 @@ internal class StoreMembershipEntity(
 
 internal interface StoreMembershipJpaRepository : JpaRepository<StoreMembershipEntity, UUID> {
     fun findByActorIdAndStoreId(
+        actorId: UUID,
+        storeId: UUID,
+    ): StoreMembershipEntity?
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("SELECT membership FROM StoreMembershipEntity membership WHERE membership.actorId = :actorId AND membership.storeId = :storeId")
+    fun findByActorIdAndStoreIdForShare(
         actorId: UUID,
         storeId: UUID,
     ): StoreMembershipEntity?

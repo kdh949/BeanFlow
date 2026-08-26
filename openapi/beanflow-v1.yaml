@@ -950,6 +950,58 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/ordering-policy:
+    get:
+      tags: [Merchant]
+      operationId: getStoreOrderingPolicy
+      summary: 매장 주문 접수·픽업 정책 현재 편집본 조회
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 현재 주문 접수·픽업 정책과 별도 거래
+        version을 반환합니다. membership이 없으면 Store 존재와 무관하게 404, revoked이면 403입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 현재 Store 주문 정책 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderingPolicy" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Merchant]
+      operationId: replaceStoreOrderingPolicy
+      summary: 매장 주문 접수·픽업 정책 전체 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 두 flag를 원자적으로 교체합니다. membership
+        shared lock 뒤 Store exclusive lock을 획득합니다. 동일 desired state는 version·updatedAt·Audit를
+        바꾸지 않는 no-op이며 같은 Idempotency-Key와 payload는 최초 terminal response를 재생합니다.
+        stale expectedVersion은 409 MERCHANT_CONTENT_STALE입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceStoreOrderingPolicyRequest" }
+      responses:
+        "200":
+          description: 교체·no-op·replay 후의 Store 주문 정책
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOrderingPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus:
     get:
       tags: [Discovery]
@@ -8196,6 +8248,36 @@ components:
           anyOf:
             - $ref: "#/components/schemas/StoreWeeklyOperatingHours"
             - type: "null"
+    StoreOrderingPolicy:
+      type: object
+      additionalProperties: false
+      required: [storeId, acceptingOrders, pickupEnabled, version, updatedAt]
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        acceptingOrders:
+          type: boolean
+        pickupEnabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        updatedAt: { $ref: "#/components/schemas/DateTime" }
+    ReplaceStoreOrderingPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [acceptingOrders, pickupEnabled, expectedVersion]
+      properties:
+        acceptingOrders:
+          type: boolean
+        pickupEnabled:
+          type: boolean
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
     MenuDisplayContentAuthoring:
       type: object
       additionalProperties: false

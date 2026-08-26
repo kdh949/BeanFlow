@@ -5,6 +5,7 @@ import java.util.UUID
 data class MerchantOrderQuoteSnapshot(
     val storeAcceptingOrders: Boolean,
     val storePickupEnabled: Boolean,
+    val orderingPolicyVersion: Long,
     val lines: List<MenuLineQuote>,
 )
 

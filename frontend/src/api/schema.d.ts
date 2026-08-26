@@ -2224,6 +2224,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/ordering-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 주문 접수·픽업 정책 현재 편집본 조회
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 현재 주문 접수·픽업 정책과 별도 거래
+         *     version을 반환합니다. membership이 없으면 Store 존재와 무관하게 404, revoked이면 403입니다.
+         */
+        get: operations["getStoreOrderingPolicy"];
+        /**
+         * 매장 주문 접수·픽업 정책 전체 교체
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 두 flag를 원자적으로 교체합니다. membership
+         *     shared lock 뒤 Store exclusive lock을 획득합니다. 동일 desired state는 version·updatedAt·Audit를
+         *     바꾸지 않는 no-op이며 같은 Idempotency-Key와 payload는 최초 terminal response를 재생합니다.
+         *     stale expectedVersion은 409 MERCHANT_CONTENT_STALE입니다.
+         */
+        put: operations["replaceStoreOrderingPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/settlements": {
         parameters: {
             query?: never;
@@ -7469,6 +7497,21 @@ export interface components {
             storeId: components["schemas"]["Identifier"];
             regionCode: string;
             regionFullName: string;
+        };
+        StoreOrderingPolicy: {
+            /** Format: uuid */
+            storeId: string;
+            acceptingOrders: boolean;
+            pickupEnabled: boolean;
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        ReplaceStoreOrderingPolicyRequest: {
+            acceptingOrders: boolean;
+            pickupEnabled: boolean;
+            /** Format: int64 */
+            expectedVersion: number;
         };
         /**
          * @description 매장별 정산 요약입니다. 정산일과 상태, 총 결제액, 수수료, 쿠폰·포인트 비용, 조정액, 최종 정산액을 계산 당시 값으로 저장합니다.
@@ -14034,6 +14077,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoreRegion"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreOrderingPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 Store 주문 정책 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreOrderingPolicy"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceStoreOrderingPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStoreOrderingPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체·no-op·replay 후의 Store 주문 정책 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreOrderingPolicy"];
                 };
             };
             400: components["responses"]["BadRequest"];

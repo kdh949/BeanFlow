@@ -64,6 +64,7 @@ internal class JpaMenuQuoteService(
         return MerchantOrderQuoteSnapshot(
             storeAcceptingOrders = loaded.storeDefinition.acceptingOrders,
             storePickupEnabled = loaded.storeDefinition.pickupEnabled,
+            orderingPolicyVersion = loaded.orderingPolicyVersion,
             lines = quotes,
         )
     }
@@ -124,6 +125,7 @@ internal class JpaMenuQuoteService(
             }
         return LoadedMenuDefinitions(
             storeDefinition = StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled),
+            orderingPolicyVersion = store.orderingPolicyVersion,
             menuDefinitions = menus,
         )
     }
@@ -149,6 +151,7 @@ internal class JpaMenuQuoteService(
 
     private data class LoadedMenuDefinitions(
         val storeDefinition: StoreDefinition,
+        val orderingPolicyVersion: Long,
         val menuDefinitions: Map<UUID, MenuDefinition>,
     )
 }

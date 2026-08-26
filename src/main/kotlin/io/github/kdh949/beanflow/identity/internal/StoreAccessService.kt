@@ -40,5 +40,28 @@ internal class StoreAccessService(
         actorRoles: Set<StoreActorRole>,
     ): StoreActor = requireStoreAccess(actorId, storeId, actorRoles)
 
+    @Transactional
+    override fun requireCatalogAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor {
+        merchantAccounts.requireActive(actorId)
+        val membership =
+            repository.findByActorIdAndStoreIdForShare(actorId, storeId)
+                ?: throw DomainFailure(
+                    FailureCode.RESOURCE_NOT_FOUND,
+                    "Store was not found",
+                    targetReference = storeId.toString(),
+                )
+        if (membership.status != StoreMembershipStatus.ACTIVE) {
+            denied("Store membership is revoked")
+        }
+        if (membership.membershipRole !in actorRoles) {
+            denied("The store membership role does not allow catalogue authoring")
+        }
+        return StoreActor(actorId, storeId, membership.membershipRole)
+    }
+
     private fun denied(message: String): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, message)
 }

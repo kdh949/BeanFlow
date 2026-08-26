@@ -18,9 +18,13 @@ internal class StoreEntity(
     @Id
     val id: UUID,
     @Column(name = "accepting_orders", nullable = false)
-    val acceptingOrders: Boolean,
+    var acceptingOrders: Boolean,
     @Column(name = "pickup_enabled", nullable = false)
-    val pickupEnabled: Boolean,
+    var pickupEnabled: Boolean,
+    @Column(name = "ordering_policy_version", nullable = false)
+    var orderingPolicyVersion: Long = 0,
+    @Column(name = "ordering_policy_updated_at", nullable = false)
+    var orderingPolicyUpdatedAt: Instant = Instant.EPOCH,
     @Column(name = "image_original_key")
     var imageOriginalKey: String? = null,
     @Column(name = "image_thumbnail_key")
@@ -32,6 +36,17 @@ internal class StoreEntity(
     @Version
     var version: Long = 0,
 ) {
+    fun replaceOrderingPolicy(
+        acceptingOrders: Boolean,
+        pickupEnabled: Boolean,
+        updatedAt: Instant,
+    ) {
+        this.acceptingOrders = acceptingOrders
+        this.pickupEnabled = pickupEnabled
+        orderingPolicyVersion = Math.addExact(orderingPolicyVersion, 1)
+        orderingPolicyUpdatedAt = updatedAt
+    }
+
     fun replaceImage(
         originalKey: String,
         thumbnailKey: String,

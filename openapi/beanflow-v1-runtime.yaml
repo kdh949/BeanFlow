@@ -864,6 +864,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1regions"
   /stores/{storeId}/region:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1region"
+  /stores/{storeId}/ordering-policy:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1ordering-policy"
   /stores/{storeId}/settlements:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements"
   /stores/{storeId}/settlements/{settlementBatchId}/items:

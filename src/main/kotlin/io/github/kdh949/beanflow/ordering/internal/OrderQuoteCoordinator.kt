@@ -263,7 +263,7 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v2"
+    private const val VERSION = "order-quote-fingerprint/v3"
 
     fun calculate(
         command: OrderQuoteCommand,
@@ -296,6 +296,7 @@ internal object OrderQuoteFingerprint {
                     }
                     value(menu.storeAcceptingOrders)
                     value(menu.storePickupEnabled)
+                    value(menu.orderingPolicyVersion)
                     size(menu.lines.size)
                     menu.lines.forEach { line ->
                         value(line.menuId)
