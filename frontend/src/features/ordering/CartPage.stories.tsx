@@ -56,7 +56,7 @@ export const WithItems: Story = {
     await expect(await canvas.findByText("영업 중")).toBeVisible();
     await expect(await canvas.findByText(/가장 빠른 픽업/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: /주문하기/ })).toBeDisabled();
-    await userEvent.click(canvas.getByRole("button", { name: /7잔 가능/ }));
+    await userEvent.click(await canvas.findByRole("button", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /12,800.*주문하기/ })).toBeEnabled();
   },
 };
