@@ -24,8 +24,12 @@ internal class StoreCustomerDisplayMigrationTest : IsolatedPostgresSupport() {
     fun `V67 creates optional Store display profile without inventing existing hours`() {
         val existingStore = seedStore()
 
-        assertThat(jdbc.queryForObject("SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Int::class.java))
-            .isEqualTo(67)
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '67'",
+                Long::class.java,
+            ),
+        ).isEqualTo(1)
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_store_customer_display_profile", Long::class.java)).isZero()
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_store_operating_hours", Long::class.java)).isZero()
 

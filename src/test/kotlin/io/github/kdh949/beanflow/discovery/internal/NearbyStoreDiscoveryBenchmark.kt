@@ -66,6 +66,8 @@ internal class NearbyStoreDiscoveryBenchmark : IsolatedPostgresSupport() {
             seeded = scale
             jdbcTemplate.execute("VACUUM ANALYZE merchant_store_discovery_profile")
             jdbcTemplate.execute("VACUUM ANALYZE merchant_store")
+            jdbcTemplate.execute("VACUUM ANALYZE merchant_store_customer_display_profile")
+            jdbcTemplate.execute("VACUUM ANALYZE merchant_store_operating_hours")
 
             val matched = repository.findPickupCapableStoresNear(query()).size
             val plan = explain(jdbcTemplate)
@@ -130,6 +132,38 @@ internal class NearbyStoreDiscoveryBenchmark : IsolatedPostgresSupport() {
             from,
             to - 1,
         )
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_customer_display_profile (
+                store_id, address_line, directions_hint, version, created_at, updated_at
+            )
+            SELECT md5('nearby-benchmark:' || sequence)::uuid,
+                   'Seoul benchmark address ' || sequence,
+                   'Benchmark entrance ' || sequence,
+                   0,
+                   TIMESTAMPTZ '2026-08-25 00:00:00Z',
+                   TIMESTAMPTZ '2026-08-25 00:00:00Z'
+              FROM generate_series(?, ?) AS sequence
+            """.trimIndent(),
+            from,
+            to - 1,
+        )
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_operating_hours (
+                store_id, day_of_week, closed, opens_at, closes_at
+            )
+            SELECT md5('nearby-benchmark:' || sequence)::uuid,
+                   day_of_week,
+                   false,
+                   TIME '08:00',
+                   TIME '22:00'
+              FROM generate_series(?, ?) AS sequence
+              CROSS JOIN generate_series(1, 7) AS day_of_week
+            """.trimIndent(),
+            from,
+            to - 1,
+        )
     }
 
     private fun query() =
@@ -165,20 +199,33 @@ internal class NearbyStoreDiscoveryBenchmark : IsolatedPostgresSupport() {
             .queryForList(
                 """
                 EXPLAIN (ANALYZE, BUFFERS)
-                SELECT candidate.store_id, candidate.name, candidate.distance_micrometers
-                  FROM (
-                        SELECT profile.store_id AS store_id,
-                               profile.name AS name,
-                               floor(ST_Distance(profile.location, $QUERY_POINT) * 1000000)::bigint
-                                   AS distance_micrometers
-                          FROM merchant_store_discovery_profile profile
-                          JOIN merchant_store store ON store.id = profile.store_id
-                         WHERE ST_DWithin(profile.location, $QUERY_POINT, $RADIUS_METERS)
-                           AND store.accepting_orders
-                           AND store.pickup_enabled
-                       ) AS candidate
-                 ORDER BY candidate.distance_micrometers, candidate.store_id
-                 LIMIT ${PAGE_LIMIT + 1}
+                WITH candidate AS (
+                    SELECT profile.store_id AS store_id,
+                           profile.name AS name,
+                           floor(ST_Distance(profile.location, $QUERY_POINT) * 1000000)::bigint
+                               AS distance_micrometers,
+                           (store.accepting_orders AND store.pickup_enabled) AS ordering_available,
+                           store.image_thumbnail_key AS image_thumbnail_key
+                      FROM merchant_store_discovery_profile profile
+                      JOIN merchant_store store ON store.id = profile.store_id
+                     WHERE ST_DWithin(profile.location, $QUERY_POINT, $RADIUS_METERS)
+                       AND store.accepting_orders
+                       AND store.pickup_enabled
+                ),
+                page AS (
+                    SELECT candidate.*
+                      FROM candidate
+                     ORDER BY candidate.distance_micrometers, candidate.store_id
+                     LIMIT ${PAGE_LIMIT + 1}
+                )
+                SELECT page.store_id, page.name, page.distance_micrometers,
+                       page.ordering_available, page.image_thumbnail_key,
+                       display.address_line, display.directions_hint,
+                       hours.day_of_week, hours.closed, hours.opens_at, hours.closes_at
+                  FROM page
+                  LEFT JOIN merchant_store_customer_display_profile display ON display.store_id = page.store_id
+                  LEFT JOIN merchant_store_operating_hours hours ON hours.store_id = page.store_id
+                 ORDER BY page.distance_micrometers, page.store_id, hours.day_of_week
                 """.trimIndent(),
                 String::class.java,
             ).joinToString("\n")
