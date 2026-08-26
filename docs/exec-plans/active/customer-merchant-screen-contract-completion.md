@@ -813,6 +813,16 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   주문 없는 goodwill을 `MARKETING`으로 확정했다. 기본 opt-out은 InboxItem/Delivery를 만들지 않고 Support에
   `NOTIFICATION_SKIPPED`를 남기며, 주문 연결 goodwill은 `TRANSACTIONAL`을 유지한다. BR-51, ADR-104와
   notification cursor의 ADR-070 binding을 source 변경 전에 기록했다.
+- 2026-08-26: Notification vertical slice에 V68 inbox/preference schema, 90일 bounded cleanup,
+  `GET /me/notifications`, strict read command, preference replacement와 boolean summary 계약을 구현했다.
+  listener transaction은 InboxItem·Delivery를 원자 생성하며 logical source replay를 검증하고, 마케팅
+  opt-out은 생성 전 suppress 또는 claim 시 `SKIPPED`로 명시한다. 생성·조회·command·cleanup 결과는
+  customer 식별자를 tag하지 않는 closed-vocabulary metric으로 기록한다.
+- 2026-08-26: Customer shell bell과 `/app/notifications` 화면이 unread·loading·empty·dependency failure,
+  opaque cursor, strict read, marketing preference를 소비한다. Backend Notification/Support/Order lifecycle,
+  migration/OpenAPI runtime parity/인증 경로와 frontend typecheck, 23 unit files/169 tests, design check,
+  app/Storybook build, Sites 4 tests, Storybook docs 39 entries/49 state surfaces 및 live Storybook 전체
+  interaction/a11y가 통과했다. Provider sandbox와 full release gate는 실행하지 않았다.
 
 ## Surprises & Discoveries
 
@@ -835,6 +845,12 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   as `DEPENDENCY_UNAVAILABLE` instead of showing a plausible partial week.
 - Regenerating the TypeScript client immediately exposed the remaining `store.open` consumer in Search. Updating
   generated types, all customer consumers, fixtures and stories in the same slice prevented a contract-only commit.
+- The orderless goodwill path compared a nullable Order version as though every compensation had an Order. The
+  listener now uses version `0` for the documented orderless case, while retaining the same target-version check
+  for order-linked compensation.
+- Adding the bell to the customer shell made its summary read part of every customer-shell Storybook fixture.
+  A shared signed-in fixture now declares the successful no-unread response, while dedicated bell and inbox
+  stories still override it for unread, loading and dependency-failure states.
 
 ## Decision Log
 
@@ -861,13 +877,17 @@ ADR-116/117 and the related ADR amendments.
     version; keep that concurrency version out of the customer public response.
 11. Add an authenticated same-store OWNER/STAFF GET for the Menu display-content current representation and
     existing Menu version; keep that concurrency version out of the customer menu catalog.
+12. Classify goodwill without an Order as `MARKETING` and keep order-linked goodwill `TRANSACTIONAL`.
+    Marketing remains opt-in: suppression creates neither InboxItem nor Delivery and records
+    `NOTIFICATION_SKIPPED`; an already-created marketing InboxItem remains visible if opt-out happens before
+    provider claim, while its Delivery becomes terminal `SKIPPED`.
 
 ## Outcomes & Retrospective
 
-Milestone 0 decision recording and Milestone 3 Store/menu display implementation are complete. The Store/menu
-child is ready for review with schema, owner authoring, public read, OpenAPI/generated client, consuming UI and
-tests kept in one vertical slice. Notification, quote, order/board/refund and final cross-slice milestones remain;
-the ExecPlan as a whole is not complete.
+Milestone 0 decision recording, Milestone 3 Store/menu display and Milestone 2 Notification inbox are complete.
+Each child keeps its migration, transaction rules, API/OpenAPI/generated client, consuming UI and tests in one
+vertical slice. Quote, order/board/refund and final cross-slice milestones remain; the ExecPlan as a whole is not
+complete.
 
 ## Revision Notes
 
@@ -879,3 +899,5 @@ the ExecPlan as a whole is not complete.
   explicit stale response and customer re-confirmation. The fingerprint is not a reservation or money authority.
 - 2026-08-25: Initial plan created from the supplied customer and merchant screen references, current contract
   audit and the user-supplied scope exclusions.
+- 2026-08-26: Recorded the implemented Notification inbox vertical slice, the approved goodwill classification,
+  observability and completed backend/frontend/Storybook verification evidence.
