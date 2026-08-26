@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-25
-- **Implementation owner:** [고객·점주 화면 재현을 위한 계약 완성](../exec-plans/active/customer-merchant-screen-contract-completion.md)
+- **Implementation owner:** [고객·점주 화면 재현을 위한 계약 완성](../exec-plans/completed/customer-merchant-screen-contract-completion.md)
 
 ## Context
 

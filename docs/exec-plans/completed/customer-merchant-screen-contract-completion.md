@@ -1,11 +1,11 @@
 # 고객·점주 화면 재현을 위한 계약 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-26`
 
 이 ExecPlan은 고객 홈·매장 검색·메뉴·장바구니·결제·주문 상세와 점주 주문 보드·부분 환불 화면을
 첨부 시안의 정보 밀도와 상태 표현으로 구현하기 위한 계약 완성 계획이다. `.agent/PLANS.md`,
@@ -844,6 +844,16 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   generated contract를 소비한다. Backend customer/board/refund 33 tests, 취소·재주문·runtime parity 회귀,
   frontend 36 unit tests/typecheck, 10개 live Storybook interaction/a11y와 Spotless가 통과했다. 전체 ordering
   package와 cross-slice release gate는 최종 stack에서 실행한다.
+- 2026-08-26: 최종 시각 통합에서 구현 route와 capability map, core journey, frontend route/story inventory를
+  현재 계약과 일치시켰다. 새 production 계약이나 migration은 추가하지 않았고, 40 route entry, 36 route
+  component, 37 story file, 174 story와 39 Docs entry를 확인했다.
+- 2026-08-26: 최종 combined tree에서 전체 backend 1,447 tests가 failures/errors 0, skipped 2로 50분 4초에
+  통과했다. Frontend 23 files/173 unit tests, generated schema typecheck, production/Storybook build, design
+  adherence, Sites 4 tests, Storybook Docs 39 entries/49 state surfaces와 live Storybook 174 interaction/a11y가
+  통과했다. Provider sandbox, deployment와 full release gate는 Not run이다.
+- 2026-08-26: 원격 CI에서 발견된 binary allowlist, V67/V68 migration latest 가정, quote 전 주문을 만드는
+  기존 discovery/operations/support/coupon test fixture와 board performance DDL을 owning PR과 downstream
+  검증 head에서 보완했다. Production transaction, API/OpenAPI, migration과 사용자 실패 의미는 바꾸지 않았다.
 
 ## Surprises & Discoveries
 
@@ -875,6 +885,9 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
 - The existing point-accrual policy selection used a pessimistic lock even for reads. PostgreSQL rejects that lock
   in the quote service's read-only transaction, so Operations now exposes separate non-locking quote inspection and
   locked final-order selection while returning the same versioned policy snapshot.
+- Stacked PR의 parent가 열린 뒤 발견된 test-only CI 보완은 merge/force-push 없이 각 review head가 독립
+  검증되도록 필요한 downstream test harness에만 반영했다. 이 보완은 production 계약을 다음 PR로 미루거나
+  새로운 도메인 경계를 섞지 않는다.
 
 ## Decision Log
 
@@ -908,10 +921,14 @@ ADR-116/117 and the related ADR amendments.
 
 ## Outcomes & Retrospective
 
-Milestone 0 decision recording, Milestone 3 Store/menu display, Milestone 2 Notification inbox, Milestone 4
-non-reserving quote and Milestone 5 order detail/board/refund presentation contracts are complete.
-Each child keeps its migration, transaction rules, API/OpenAPI/generated client, consuming UI and tests in one
-vertical slice. Final visual integration and cross-slice validation remain; the ExecPlan as a whole is not complete.
+Milestone 0 decision recording부터 Store/menu display, Notification inbox, non-reserving quote,
+order detail/board/refund presentation, visual integration과 cross-slice validation까지 모두 완료했다.
+각 child는 migration, transaction/failure/idempotency 규칙, API/OpenAPI/generated client, consuming UI와
+핵심 테스트를 같은 vertical slice에 둔다. 최종 child는 새 production 계약이나 migration을 추가하지 않고
+cross-slice test harness, capability/journey/design inventory와 전체 회귀 증거만 완성한다.
+
+로컬 계약·migration·backend/frontend·Storybook/a11y 검증은 통과했다. Provider sandbox, 실제 deployment,
+production 관측과 full release gate는 Not run이며 이 plan의 완료에서 그 결과를 추론하지 않는다.
 
 ## Revision Notes
 
@@ -929,3 +946,5 @@ vertical slice. Final visual integration and cross-slice validation remain; the 
   and focused backend/OpenAPI/frontend/Storybook verification evidence.
 - 2026-08-26: Recorded the implemented customer detail pricing/lifecycle, board lifecycle/ETag, safe refund
   orderContext, consuming UI and focused backend/frontend/live Storybook verification evidence.
+- 2026-08-26: Recorded final cross-slice regression, Storybook inventory, remote CI harness remediation and moved
+  the completed implementation plan to the canonical completed directory.
