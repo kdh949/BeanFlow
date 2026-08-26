@@ -2422,6 +2422,42 @@
 
 ---
 
+## BR-51 고객 알림 분류와 마케팅 기본 수신 거부
+
+- **Status:** Accepted for MVP
+- **Decision:** 고객 알림은 생성 시점의 실제 거래 근거로 `TRANSACTIONAL | MARKETING`을 고정한다.
+  실제 `orderId`가 있는 고객 알림은 `TRANSACTIONAL`, 없는 고객 알림은 `MARKETING`이며 매장 대상
+  알림은 주문 연결 여부와 무관하게 `TRANSACTIONAL`이다. 내부 식별자를 가짜 orderId로 대입해 분류를
+  바꾸지 않는다.
+- **Goodwill:** `SUPPORT_GOODWILL_COMPENSATION_ISSUED`는 `relatedOrderId`가 있으면 거래에 연결된
+  `TRANSACTIONAL`, 없으면 `MARKETING`이다. 주문 없는 goodwill을 혜택 가치가 있다는 이유만으로
+  거래 알림으로 예외 처리하지 않는다.
+- **Preference:** `MARKETING` 기본값은 opt-out이다. 생성 시점에 opt-in한 고객에게만 InboxItem과
+  Delivery를 함께 만들고, 생성 뒤 opt-out하면 기존 InboxItem은 남기되 Provider claim 직전에 발송을
+  건너뛴다. preference 조회 실패는 opt-in/out으로 추정하지 않고 source 처리 또는 delivery를 retry한다.
+- **Support Result:** opt-out으로 goodwill InboxItem과 Delivery가 만들어지지 않은 결과는
+  `NOTIFICATION_SKIPPED` terminal 상태로 남긴다. 이를 `NOTIFICATION_ACCEPTED`, 전달 실패,
+  `NOTIFICATION_RETRY` 또는 delivery ID가 있는 것처럼 표현하지 않으며 이미 발급된 혜택은 되돌리지 않는다.
+- **Transactional Boundary:** transactional source는 InboxItem과 Delivery를 같은 짧은 local transaction에
+  저장한다. 어느 한쪽이나 persistent publication 완료 저장이 실패하면 전체를 rollback하고 source를
+  retry한다. Provider 호출은 commit 뒤 worker에서만 수행하며 결과가 Inbox read 상태를 바꾸지 않는다.
+- **Rationale:** 주문 없는 보상 안내를 마케팅 수신 선택에 포함한다는 고객 결정을 존중하면서, 가짜
+  Order 연결과 silent delivery success를 제거한다. 거래 진행에 필요한 알림은 opt-out으로 끌 수 없다.
+- **Affected Contexts:** Notification, Support, Customer Web
+- **Affected Aggregates:** NotificationInboxItem, NotificationCustomerPreference, NotificationDelivery,
+  SupportCompensationRequest
+- **Required Tests:**
+  - 주문 연결 goodwill은 preference와 무관하게 InboxItem/Delivery 생성
+  - 주문 없는 goodwill은 기본·명시 opt-out에서 두 row 모두 미생성 및 `NOTIFICATION_SKIPPED`
+  - 주문 없는 goodwill은 opt-in에서 InboxItem/Delivery 정확히 한 건과 source replay dedupe
+  - 생성 뒤 opt-out에서 InboxItem 유지, Provider 미호출과 명시적 delivery 재평가 상태
+  - preference 조회·InboxItem·Delivery·publication 저장 실패의 rollback/retry
+- **ADR Required:** [ADR-104](../adr/ADR-104-notification-inbox.md)
+- **Revisit Conditions:** 주문 없는 goodwill의 고객 도달률·문의, 마케팅 opt-in률 또는 별도 account/service
+  분류가 필요하다는 제품 근거가 생길 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2458,6 +2494,8 @@
     reservation·결제·멱등성에는 `BR-05`, `BR-25`, `BR-33`을 함께 적용한다.
 29. Store 고객 표시 profile과 상태 용어는 `BR-50`을 따르며, 검색 의미는 `BR-47`, 이미지
     저장·노출은 `BR-48`을 바꾸지 않는다.
+30. 고객 알림 분류와 마케팅 수신 설정은 `BR-51`을 따르고, 보존은 `BR-37`, 외부 전달 재시도는
+    `BR-27`을 함께 적용한다.
 
 ---
 

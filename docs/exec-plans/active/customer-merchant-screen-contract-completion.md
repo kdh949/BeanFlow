@@ -808,6 +808,11 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   frontend typecheck, 22 unit files/165 tests, design adherence, build, Storybook build, Sites 4 tests와
   live Storybook MCP 전체 story/a11y run이 통과했다. Vite chunk-size 경고와 Gradle 10 deprecation 경고는
   실패가 아니며 이 slice에서 dependency/build 구성을 변경하지 않았다.
+- 2026-08-26: Notification source inventory에서 주문 없는 goodwill이 compensation request ID를
+  `notification_delivery.order_id`에 대입해 ADR-104의 실제 order 분류와 충돌함을 발견했다. 사용자 결정으로
+  주문 없는 goodwill을 `MARKETING`으로 확정했다. 기본 opt-out은 InboxItem/Delivery를 만들지 않고 Support에
+  `NOTIFICATION_SKIPPED`를 남기며, 주문 연결 goodwill은 `TRANSACTIONAL`을 유지한다. BR-51, ADR-104와
+  notification cursor의 ADR-070 binding을 source 변경 전에 기록했다.
 
 ## Surprises & Discoveries
 
