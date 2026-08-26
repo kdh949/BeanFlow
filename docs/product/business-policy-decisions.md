@@ -2465,6 +2465,44 @@
 
 ---
 
+## BR-52 점주 거래 카탈로그 수명주기와 주문 직렬화
+
+- **Status:** Accepted for MVP
+- **Decision:** ACTIVE same-store `OWNER | STAFF`는 Store 주문 접수·픽업 정책과 Menu 거래 카탈로그를
+  관리한다. Menu와 Option은 생성·전체 교체·보관할 수 있지만 public hard delete와 archived item 복원은
+  제공하지 않는다. 실행 시 membership과 Store 소유권을 다시 검증하고 다른 Store 자원의 존재를 노출하지
+  않는다.
+- **Lifecycle and Bounds:** Menu·Option·Configuration·sellable-unit requirement는 active/archived
+  수명주기를 가진다. Store당 active Menu 1,000개와 Option 5,000개, Menu당 Option 100개와
+  Configuration 500개, Configuration당 requirement 50개를 write transaction에서 검증한다. 상한을 넘은
+  요청은 partial·truncated success 없이 validation failure로 거절한다.
+- **Versioning:** Store 주문 정책은 `ordering_policy_version`, Menu 거래 의미는 `trade_version`으로
+  관리한다. 정규화 후 같은 전체 교체는 version·updatedAt·Audit를 바꾸지 않는다. 이미지와 표시용
+  설명·카테고리는 거래 version과 주문 quote fingerprint를 바꾸지 않는다.
+- **Serialization:** 최종 주문은 Store commerce root shared lock을 transaction 종료까지 유지하고,
+  Store 정책·Menu·Option·Configuration·requirement 거래 writer는 같은 root exclusive lock을 먼저
+  획득한다. writer가 먼저 commit하면 이전 quote는 `ORDER_QUOTE_STALE`, 주문이 먼저 lock을 획득하면
+  writer는 주문 commit 뒤 진행한다. transaction 안에서 외부 Provider를 호출하지 않는다.
+- **Idempotency and Search:** 모든 mutation은 command-transaction 멱등성과 최초 terminal response 재생을
+  사용한다. Menu 검색 term과 Audit는 거래 변경과 같은 local transaction에서 갱신하며 실패하면 전체를
+  rollback한다.
+- **Rationale:** 점주 메뉴·가격 운영을 실제 production command로 제공하면서 최종 주문 snapshot과 quote가
+  동시 변경된 카탈로그를 섞어 읽지 않게 하고, 과거 주문 snapshot·감사·멱등 재생을 보존한다.
+- **Affected Contexts:** Merchant, Ordering, Discovery, Inventory, Fulfillment, Identity, Merchant frontend
+- **Affected Aggregates:** Store, Menu, Option, MenuConfiguration, SellableUnitRequirement, Order
+- **Required Tests:**
+  - OWNER/STAFF, revoked membership, cross-store 인가와 Audit actor role
+  - create/replace/archive, no-op, expectedVersion conflict와 catalogue 상한
+  - Store shared Order lock과 exclusive writer lock의 두 PostgreSQL 경합 순서
+  - quote fingerprint stale과 최종 Order immutable snapshot 일치
+  - 검색 term·Audit·command record의 같은 transaction rollback과 멱등 replay
+  - archived/unavailable item의 customer catalogue·quote·search 제외
+- **ADR Required:** [ADR-118](../adr/ADR-118-merchant-transactional-catalog-lifecycle.md)
+- **Revisit Conditions:** archived 복원, STAFF 가격 한도·OWNER 승인, bulk import, 복수 Store 원자 변경 또는
+  측정된 Store-root lock 경합이 제품·운영 문제로 확인될 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2503,6 +2541,8 @@
     저장·노출은 `BR-48`을 바꾸지 않는다.
 30. 고객 알림 분류와 마케팅 수신 설정은 `BR-51`을 따르고, 보존은 `BR-37`, 외부 전달 재시도는
     `BR-27`을 함께 적용한다.
+31. 점주 Store 주문 정책과 Menu 거래 카탈로그 writer는 `BR-52`를 따르고, 최종 주문 quote·snapshot은
+    `BR-49`, 검색 term 동기화는 `BR-47`, 이미지·표시 content는 `BR-48`, `BR-50`과 분리한다.
 
 ---
 
