@@ -2148,9 +2148,11 @@
   검색된다. 전국에 중복되는 리 이름은 좌표·반경 필터로 걸러지며 별도 식별자를 요구하지 않는다.
 - **Index Freshness:** 검색 색인은 브랜드·지역 명령과 같은 transaction에서 갱신한다. 색인 갱신
   실패는 원 명령 전체를 rollback하며 데이터만 반영되고 색인이 누락된 상태를 만들지 않는다.
-  매장·메뉴는 현재 쓰기 API가 없어 시드·직접 DML로 바뀌므로 운영자 재색인 명령으로만 색인에
-  반영된다. 이 한계는 색인 커버리지 gauge와 runbook으로 관측 가능하게 남기며 stale 결과를
-  최신처럼 제공하지 않는다.
+  Menu create/full-replace/archive도 `MENU_NAME` term을 같은 transaction에서 교체하며 실패하면 Menu,
+  command ledger와 Audit까지 rollback한다. Store name은 여전히 검증된 seed·직접 DML 뒤 운영자 재색인
+  명령으로 반영한다. production command를 우회한 Menu 직접 DML은 지원되는 authoring 경로가 아니며,
+  불가피한 검증·복구 작업 뒤에는 재색인과 coverage 확인이 필요하다. 색인 커버리지 gauge와 runbook은
+  이 예외 경로를 관측 가능하게 남기며 stale 결과를 최신처럼 제공하지 않는다.
 - **Index Rebuild Command:** `POST /api/v1/operations/search-index/rebuild`는
   `PLATFORM_OPERATOR` 역할과 활성 `STORE_BRAND_MANAGE` grant, `Idempotency-Key`, 1..200자 reason을
   요구한다. 같은 actor·key·정규화 reason은 저장한 결과를 재생하고, 다른 reason은
