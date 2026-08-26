@@ -119,3 +119,4 @@
 | [ADR-115](ADR-115-store-and-menu-image-storage.md) | Accepted | 매장·메뉴 이미지의 AIStor 저장과 조회 경계 |
 | [ADR-116](ADR-116-non-reserving-order-quote.md) | Accepted | 비예약 주문 quote와 전체 fingerprint 사전조건 |
 | [ADR-117](ADR-117-store-customer-display-profile.md) | Accepted | Store 고객 표시 profile과 주문 가능성 분리 |
+| [ADR-118](ADR-118-merchant-transactional-catalog-lifecycle.md) | Accepted | 점주 거래 카탈로그 수명주기와 주문 직렬화 경계 |
