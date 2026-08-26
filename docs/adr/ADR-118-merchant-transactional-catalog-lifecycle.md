@@ -81,7 +81,8 @@ Store는 `ordering_policy_version`, Menu는 `trade_version`을 소유한다.
 - image pointer, `displayCategory`, `publicDescription`과 Store customer display profile은 거래 version을
   증가시키지 않는다.
 - authoring response는 해당 거래 version을 노출하고 mutation은 `expectedVersion`으로 optimistic conflict를
-  확인한다. customer catalogue에는 version을 노출하지 않는다.
+  확인한다. stale expected version은 기존 점주 콘텐츠 writer와 같은 `409 MERCHANT_CONTENT_STALE`로
+  거절하며, customer catalogue에는 version을 노출하지 않는다.
 
 기존 JPA `@Version`은 해당 row의 기술적 lost-update 방어로 남길 수 있지만 quote 거래 의미나 점주
 authoring contract로 사용하지 않는다.

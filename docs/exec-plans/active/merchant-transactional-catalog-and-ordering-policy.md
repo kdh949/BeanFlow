@@ -238,7 +238,7 @@ write-model association expansion and new production dependencies are prohibited
 | invalid text/money/duplicate ID/reference/bound | `400 INVALID_REQUEST` | 없음 |
 | inactive/revoked/role 부족 | `403 ACCESS_DENIED` | 없음 |
 | 다른 Store target 또는 없는 target | `404 RESOURCE_NOT_FOUND` | 없음; 존재 누설 금지 |
-| stale expected version | `409 VERSION_CONFLICT` | 없음 |
+| stale expected version | `409 MERCHANT_CONTENT_STALE` | 없음 |
 | same key, different payload | `409 IDEMPOTENCY_KEY_REUSED` | 최초 command만 유지 |
 | active config가 archived/missing Option 참조 | `409 RESOURCE_STATE_CONFLICT` | 없음 |
 | ID collision | generic `409 RESOURCE_STATE_CONFLICT` | 없음; 충돌 owner 비공개 |
@@ -479,6 +479,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 - [x] 2026-08-27: Milestone 0 ADR·Business Policy와 completed dependency/readiness gate를 PR #116에 정리했다.
 - [x] 2026-08-27: authoring 권한과 Store commerce lock 순서 충돌을 membership FOR SHARE 선취로 해소하고
   commit `c3932ef`, PR #117(`main <- feature/merchant-ordering-policy`)로 게시했다.
+- [x] 2026-08-27: stale expected version은 기존 점주 콘텐츠 writer와 같은
+  `409 MERCHANT_CONTENT_STALE`를 재사용하기로 확정했다.
 - [ ] Milestone 1 Store policy vertical slice 완료.
 - [ ] Milestone 2 Menu catalogue vertical slice 완료.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
@@ -501,6 +503,9 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   catalogue 전용 membership shared lock을 Store lock보다 먼저 획득하고 404/403을 분리하도록 통일했다.
 - 2026-08-27 running Storybook MCP에서 inventory와 Store page/FeedbackState/Button 문서, story 작성 지침을
   확인했다. policy panel은 기존 Store console page composition과 FeedbackState/Button을 재사용·조합한다.
+- 계획의 failure table은 공용 오류 계약에 없는 `VERSION_CONFLICT`를 요구했지만 production
+  `FailureCode`와 기존 Store/Menu 콘텐츠 writer는 `MERCHANT_CONTENT_STALE`를 사용했다. 2026-08-27 결정으로
+  공용 오류 표면을 늘리지 않고 기존 409 코드를 Store/Menu 거래 writer에도 재사용한다.
 
 ## Decision Log
 
@@ -513,6 +518,7 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 | 2026-08-26 | Store policy/Menu trade version을 display/image JPA version과 분리 | false stale 제거와 child 거래 변경 대표 | ADR-118, ADR-116 amendment 예정 |
 | 2026-08-26 | 모든 mutation은 command-transaction idempotency | 기존 Store root, local atomic commit, Provider 호출 없음 | ADR-064, ADR-118 |
 | 2026-08-27 | authoring은 membership FOR SHARE 뒤 Store FOR UPDATE 순서 | revoke 경쟁을 직렬화하고 cross-store/없는 Store를 같은 404로 숨기며 ExecPlan/ADR 충돌 해소 | BR-52, ADR-118 |
+| 2026-08-27 | stale expected version은 `MERCHANT_CONTENT_STALE` 재사용 | 기존 점주 콘텐츠 writer와 공용 오류 계약을 유지하고 불필요한 새 failure code를 만들지 않음 | ADR-118, 이 ExecPlan |
 
 ## Outcomes & Retrospective
 
@@ -527,3 +533,4 @@ frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `C
 - 2026-08-27: 선행 계약 계획의 completed evidence를 반영해 dependency를 completed path로 바꾸고,
   ADR-118·BR-52 결정 기록과 함께 implementation readiness를 true로 전환했다.
 - 2026-08-27: membership/Store lock 순서와 404/403 의미를 확정하고 Storybook MCP prerequisite를 충족했다.
+- 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
