@@ -152,6 +152,10 @@ internal class MenuConfigurationRequirementEntity(
 )
 
 internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("SELECT store FROM StoreEntity store WHERE store.id = :storeId")
+    fun findByIdForShare(storeId: UUID): StoreEntity?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT store FROM StoreEntity store WHERE store.id = :storeId")
     fun findByIdForUpdate(storeId: UUID): StoreEntity?

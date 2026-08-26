@@ -94,7 +94,7 @@ private data class RequestedNotification(
 internal class NotificationDeliveryService(
     private val deliveryRepository: NotificationDeliveryJpaRepository,
     private val inboxRepository: NotificationInboxItemJpaRepository,
-    private val preferenceRepository: NotificationCustomerPreferenceJpaRepository,
+    private val inboxQueries: NotificationInboxQueryRepository,
     private val provider: NotificationProvider,
     private val compensationOperations: OrderCompensationOperations,
     private val reprocessingCaseOperations: NotificationReprocessingCaseOperations,
@@ -627,7 +627,7 @@ internal class NotificationDeliveryService(
         }
     }
 
-    private fun marketingOptIn(customerId: UUID): Boolean = preferenceRepository.findById(customerId).orElse(null)?.marketingOptIn ?: false
+    private fun marketingOptIn(customerId: UUID): Boolean = inboxQueries.marketingOptInForUpdate(customerId)
 
     private fun inboxCreateMetric(
         classification: NotificationClassification,

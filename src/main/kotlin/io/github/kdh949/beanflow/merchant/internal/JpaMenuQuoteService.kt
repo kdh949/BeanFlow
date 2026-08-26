@@ -3,7 +3,6 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.github.kdh949.beanflow.merchant.api.CurrentMenuLineQuoteResult
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
-import io.github.kdh949.beanflow.merchant.api.MerchantMenuQuoteMaterial
 import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteOperations
 import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteSnapshot
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
@@ -45,38 +44,27 @@ internal class JpaMenuQuoteService(
         return calculator.quoteCurrentBatch(store = store, menus = menus, lines = lines)
     }
 
-    override fun quoteForOrder(
+    override fun inspectForQuote(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = false)
+
+    override fun lockForOrderCreation(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = true)
+
+    private fun quoteForOrder(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+        lockStore: Boolean,
     ): MerchantOrderQuoteSnapshot {
-        val loaded = load(storeId, lines)
+        val loaded = load(storeId, lines, lockStore)
         val quotes = calculator.quote(store = loaded.storeDefinition, menus = loaded.menuDefinitions, lines = lines)
-        val configurationsByMenu = loaded.configurations.groupBy(MenuConfigurationEntity::menuId)
-        val materials =
-            lines.map { line ->
-                val menu = loaded.menus.getValue(line.menuId)
-                val optionKey =
-                    line.optionIds
-                        .distinct()
-                        .sortedBy(UUID::toString)
-                        .joinToString(",")
-                val configuration =
-                    configurationsByMenu[line.menuId].orEmpty().singleOrNull { it.normalizedOptionKey == optionKey }
-                        ?: throw DomainFailure(
-                            FailureCode.DEPENDENCY_UNAVAILABLE,
-                            "Merchant menu configuration snapshot is missing",
-                        )
-                MerchantMenuQuoteMaterial(
-                    menuId = menu.id,
-                    menuVersion = menu.version,
-                    configurationId = configuration.id,
-                    configurationVersion = configuration.version,
-                )
-            }
         return MerchantOrderQuoteSnapshot(
-            storeVersion = loaded.storeEntity.version,
+            storeAcceptingOrders = loaded.storeDefinition.acceptingOrders,
+            storePickupEnabled = loaded.storeDefinition.pickupEnabled,
             lines = quotes,
-            materials = materials,
         )
     }
 
@@ -84,16 +72,17 @@ internal class JpaMenuQuoteService(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
     ): Pair<StoreDefinition, Map<UUID, MenuDefinition>> {
-        val loaded = load(storeId, lines)
+        val loaded = load(storeId, lines, lockStore = false)
         return loaded.storeDefinition to loaded.menuDefinitions
     }
 
     private fun load(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
+        lockStore: Boolean = false,
     ): LoadedMenuDefinitions {
         val store =
-            storeRepository.findById(storeId).orElse(null)
+            (if (lockStore) storeRepository.findByIdForShare(storeId) else storeRepository.findById(storeId).orElse(null))
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
         val menuEntities = menuRepository.findAllById(requestedMenuIds)
@@ -134,11 +123,8 @@ internal class JpaMenuQuoteService(
                     )
             }
         return LoadedMenuDefinitions(
-            storeEntity = store,
             storeDefinition = StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled),
-            menus = menuEntities.associateBy(MenuEntity::id),
             menuDefinitions = menus,
-            configurations = configurations,
         )
     }
 
@@ -162,10 +148,7 @@ internal class JpaMenuQuoteService(
         )
 
     private data class LoadedMenuDefinitions(
-        val storeEntity: StoreEntity,
         val storeDefinition: StoreDefinition,
-        val menus: Map<UUID, MenuEntity>,
         val menuDefinitions: Map<UUID, MenuDefinition>,
-        val configurations: List<MenuConfigurationEntity>,
     )
 }
