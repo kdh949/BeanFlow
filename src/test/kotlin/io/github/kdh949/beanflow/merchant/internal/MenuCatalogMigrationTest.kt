@@ -47,15 +47,20 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
 
         flyway().migrate()
 
-        val menu = jdbc.queryForMap("SELECT lifecycle, trade_version, trade_updated_at, archived_at FROM merchant_menu WHERE id = ?", menuId)
+        val menu =
+            jdbc.queryForMap(
+                "SELECT lifecycle, trade_version, trade_updated_at, archived_at FROM merchant_menu WHERE id = ?",
+                menuId,
+            )
         assertThat(menu["lifecycle"]).isEqualTo("ACTIVE")
         assertThat(menu["trade_version"]).isEqualTo(0L)
         assertThat((menu["trade_updated_at"] as java.sql.Timestamp).toInstant()).isEqualTo(Instant.EPOCH)
         assertThat(menu["archived_at"]).isNull()
         assertThat(jdbc.queryForObject("SELECT lifecycle FROM merchant_menu_option WHERE id = ?", String::class.java, optionId))
             .isEqualTo("ACTIVE")
-        assertThat(jdbc.queryForObject("SELECT lifecycle FROM merchant_menu_configuration WHERE id = ?", String::class.java, configurationId))
-            .isEqualTo("ACTIVE")
+        assertThat(
+            jdbc.queryForObject("SELECT lifecycle FROM merchant_menu_configuration WHERE id = ?", String::class.java, configurationId),
+        ).isEqualTo("ACTIVE")
     }
 
     @Test
@@ -107,7 +112,8 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
         target: String? = null,
     ): Flyway {
         val configuration =
-            Flyway.configure()
+            Flyway
+                .configure()
                 .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
                 .cleanDisabled(cleanDisabled)
         if (target != null) configuration.target(target)

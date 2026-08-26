@@ -21,8 +21,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import java.sql.Timestamp
 import java.sql.PreparedStatement
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
@@ -82,7 +82,8 @@ internal class MenuCatalogEndpointIntegrationTest(
         ).andExpect(status().isOk)
             .andExpect { assertThat(it.response.contentAsString).isEqualTo(created) }
 
-        mockMvc.perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.items[0].menuId").value(menuId.toString()))
         assertThat(searchTerms(storeId)).containsExactly("카페 라테")
@@ -113,7 +114,8 @@ internal class MenuCatalogEndpointIntegrationTest(
             .andExpect(jsonPath("$.lifecycle").value("ARCHIVED"))
             .andExpect(jsonPath("$.version").value(2))
 
-        mockMvc.perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.items").isEmpty)
         assertThat(searchTerms(storeId)).isEmpty()
@@ -144,12 +146,14 @@ internal class MenuCatalogEndpointIntegrationTest(
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-staff-key-0001", payload.replace("4000", "4100"))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
-        mockMvc.perform(get("/api/v1/stores/$otherStore/menu-catalog").cookie(actor.session, actor.csrf))
+        mockMvc
+            .perform(get("/api/v1/stores/$otherStore/menu-catalog").cookie(actor.session, actor.csrf))
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
 
         jdbc.update("UPDATE identity_store_membership SET status = 'REVOKED' WHERE actor_id = ?", actor.actorId)
-        mockMvc.perform(get("/api/v1/stores/$storeId/menu-catalog").cookie(actor.session, actor.csrf))
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menu-catalog").cookie(actor.session, actor.csrf))
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
     }
@@ -163,7 +167,9 @@ internal class MenuCatalogEndpointIntegrationTest(
         val configurationId = UUID.randomUUID()
         val missingOptionId = UUID.randomUUID()
         val unitId = UUID.randomUUID()
-        val invalid = content(menuId, optionId, configurationId, unitId, "콜드브루", 4_800).replaceFirst(optionId.toString(), missingOptionId.toString())
+        val invalid =
+            content(menuId, optionId, configurationId, unitId, "콜드브루", 4_800)
+                .replaceFirst(optionId.toString(), missingOptionId.toString())
 
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-invalid-key-001", invalid)
             .andExpect(status().isConflict)
@@ -189,35 +195,47 @@ internal class MenuCatalogEndpointIntegrationTest(
         )
 
         val first =
-            mockMvc.perform(
-                get("/api/v1/stores/$storeId/menu-catalog").queryParam("limit", "2").cookie(actor.session, actor.csrf),
-            ).andExpect(status().isOk)
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/$storeId/menu-catalog").queryParam("limit", "2").cookie(actor.session, actor.csrf),
+                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.nextCursor").isString)
-                .andReturn().response.contentAsString
+                .andReturn()
+                .response.contentAsString
         val cursor = JsonPath.read<String>(first, "$.nextCursor")
 
-        mockMvc.perform(
-            get("/api/v1/stores/$storeId/menu-catalog")
-                .queryParam("limit", "2")
-                .queryParam("cursor", cursor)
-                .cookie(actor.session, actor.csrf),
-        ).andExpect(status().isOk)
+        mockMvc
+            .perform(
+                get("/api/v1/stores/$storeId/menu-catalog")
+                    .queryParam("limit", "2")
+                    .queryParam("cursor", cursor)
+                    .cookie(actor.session, actor.csrf),
+            ).andExpect(status().isOk)
             .andExpect(jsonPath("$.items.length()").value(1))
             .andExpect(jsonPath("$.items[0].menuId").value(menuIds.last().toString()))
             .andExpect(jsonPath("$.nextCursor").doesNotExist())
 
         listOf(
-            get("/api/v1/stores/$storeId/menu-catalog").queryParam("limit", "3").queryParam("cursor", cursor)
+            get("/api/v1/stores/$storeId/menu-catalog")
+                .queryParam("limit", "3")
+                .queryParam("cursor", cursor)
                 .cookie(actor.session, actor.csrf),
-            get("/api/v1/stores/$storeId/menu-catalog").queryParam("limit", "2").queryParam("lifecycle", "ARCHIVED")
-                .queryParam("cursor", cursor).cookie(actor.session, actor.csrf),
-            get("/api/v1/stores/$storeId/menu-catalog").queryParam("limit", "2").queryParam("cursor", cursor)
+            get("/api/v1/stores/$storeId/menu-catalog")
+                .queryParam("limit", "2")
+                .queryParam("lifecycle", "ARCHIVED")
+                .queryParam("cursor", cursor)
+                .cookie(actor.session, actor.csrf),
+            get("/api/v1/stores/$storeId/menu-catalog")
+                .queryParam("limit", "2")
+                .queryParam("cursor", cursor)
                 .cookie(otherActor.session, otherActor.csrf),
-            get("/api/v1/stores/$storeId/menu-catalog").queryParam("cursor", "not-a-signed-cursor")
+            get("/api/v1/stores/$storeId/menu-catalog")
+                .queryParam("cursor", "not-a-signed-cursor")
                 .cookie(actor.session, actor.csrf),
         ).forEach { request ->
-            mockMvc.perform(request)
+            mockMvc
+                .perform(request)
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
@@ -302,14 +320,16 @@ internal class MenuCatalogEndpointIntegrationTest(
         val executor = Executors.newFixedThreadPool(2)
         try {
             val responses =
-                listOf(actor, secondSession).map { session ->
-                    executor.submit<String> {
-                        barrier.await()
-                        mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-concurrent-key-001", payload)
-                            .andExpect(status().isOk)
-                            .andReturn().response.contentAsString
-                    }
-                }.map { it.get(15, TimeUnit.SECONDS) }
+                listOf(actor, secondSession)
+                    .map { session ->
+                        executor.submit<String> {
+                            barrier.await()
+                            mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-concurrent-key-001", payload)
+                                .andExpect(status().isOk)
+                                .andReturn()
+                                .response.contentAsString
+                        }
+                    }.map { it.get(15, TimeUnit.SECONDS) }
 
             assertThat(responses.distinct()).hasSize(1)
             assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isOne()
@@ -369,7 +389,8 @@ internal class MenuCatalogEndpointIntegrationTest(
         key: String,
         json: String,
     ) = mockMvc.perform(
-        builder.cookie(actor.session, actor.csrf)
+        builder
+            .cookie(actor.session, actor.csrf)
             .header(CSRF_HEADER, actor.csrf.value)
             .header("Idempotency-Key", key)
             .contentType(MediaType.APPLICATION_JSON)
@@ -384,8 +405,7 @@ internal class MenuCatalogEndpointIntegrationTest(
         name: String,
         price: Long,
         expectedVersion: Long? = null,
-    ) =
-        """
+    ) = """
         {
           ${expectedVersion?.let { "\"expectedVersion\":$it," }.orEmpty()}
           "menuId":"$menuId","name":"$name","basePriceKrw":$price,"available":true,
@@ -411,26 +431,50 @@ internal class MenuCatalogEndpointIntegrationTest(
         val configurations =
             (0 until configurationCount).joinToString(",") { configurationIndex ->
                 val selected =
-                    optionIds.take(9).filterIndexed { bit, _ -> configurationIndex and (1 shl bit) != 0 }
+                    optionIds
+                        .take(9)
+                        .filterIndexed { bit, _ -> configurationIndex and (1 shl bit) != 0 }
                         .joinToString(",") { "\"$it\"" }
                 val requirementCount = if (configurationIndex == 0) firstRequirementCount else 1
                 val requirements =
                     (0 until requirementCount).joinToString(",") {
                         """{"sellableUnitId":"${UUID.randomUUID()}","quantityPerLineUnit":1}"""
                     }
-                """{"configurationId":"${UUID.randomUUID()}","selectedOptionIds":[$selected],"available":true,"requirements":[$requirements]}"""
+                """
+                {
+                  "configurationId":"${UUID.randomUUID()}",
+                  "selectedOptionIds":[$selected],
+                  "available":true,
+                  "requirements":[$requirements]
+                }
+                """.trimIndent()
             }
-        return """{"menuId":"$menuId","name":"경계 메뉴","basePriceKrw":0,"available":${configurationCount > 0},"options":[$options],"configurations":[$configurations]}"""
+        return """
+            {
+              "menuId":"$menuId",
+              "name":"경계 메뉴",
+              "basePriceKrw":0,
+              "available":${configurationCount > 0},
+              "options":[$options],
+              "configurations":[$configurations]
+            }
+            """.trimIndent()
     }
 
-    private fun seedMenus(storeId: UUID, count: Int): List<UUID> {
+    private fun seedMenus(
+        storeId: UUID,
+        count: Int,
+    ): List<UUID> {
         val menuIds = (0 until count).map { UUID.randomUUID() }
         jdbc.batchUpdate(
             "INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available) VALUES (?, ?, ?, 0, false)",
             object : BatchPreparedStatementSetter {
                 override fun getBatchSize(): Int = menuIds.size
 
-                override fun setValues(statement: PreparedStatement, index: Int) {
+                override fun setValues(
+                    statement: PreparedStatement,
+                    index: Int,
+                ) {
                     statement.setObject(1, menuIds[index])
                     statement.setObject(2, storeId)
                     statement.setString(3, "경계 메뉴 ${index.toString().padStart(4, '0')}")
@@ -440,14 +484,20 @@ internal class MenuCatalogEndpointIntegrationTest(
         return menuIds
     }
 
-    private fun seedOptions(menuIds: List<UUID>, perMenu: Int) {
+    private fun seedOptions(
+        menuIds: List<UUID>,
+        perMenu: Int,
+    ) {
         val rows = menuIds.flatMap { menuId -> (0 until perMenu).map { menuId to UUID.randomUUID() } }
         jdbc.batchUpdate(
             "INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available) VALUES (?, ?, ?, 0, true)",
             object : BatchPreparedStatementSetter {
                 override fun getBatchSize(): Int = rows.size
 
-                override fun setValues(statement: PreparedStatement, index: Int) {
+                override fun setValues(
+                    statement: PreparedStatement,
+                    index: Int,
+                ) {
                     statement.setObject(1, rows[index].second)
                     statement.setObject(2, rows[index].first)
                     statement.setString(3, "옵션 ${index.toString().padStart(4, '0')}")
@@ -456,9 +506,10 @@ internal class MenuCatalogEndpointIntegrationTest(
         )
     }
 
-    private fun seedStore(): UUID = UUID.randomUUID().also {
-        jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", it)
-    }
+    private fun seedStore(): UUID =
+        UUID.randomUUID().also {
+            jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", it)
+        }
 
     private fun signIn(
         loginId: String,
@@ -493,75 +544,128 @@ internal class MenuCatalogEndpointIntegrationTest(
             Timestamp.from(NOW),
             Timestamp.from(NOW),
         )
-        val csrf = requireNotNull(mockMvc.perform(get("/api/v1/auth/merchant/csrf")).andReturn().response.getCookie(CSRF_COOKIE))
+        val csrf =
+            requireNotNull(
+                mockMvc
+                    .perform(get("/api/v1/auth/merchant/csrf"))
+                    .andReturn()
+                    .response
+                    .getCookie(CSRF_COOKIE),
+            )
         val session =
             requireNotNull(
-                mockMvc.perform(
-                    post("/api/v1/auth/merchant/sessions")
-                        .cookie(csrf)
-                        .header(CSRF_HEADER, csrf.value)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"loginId":"$loginId","password":"$PASSWORD"}"""),
-                ).andExpect(status().isOk).andReturn().response.getCookie(SESSION_COOKIE),
+                mockMvc
+                    .perform(
+                        post("/api/v1/auth/merchant/sessions")
+                            .cookie(csrf)
+                            .header(CSRF_HEADER, csrf.value)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"loginId":"$loginId","password":"$PASSWORD"}"""),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+                    .response
+                    .getCookie(SESSION_COOKIE),
             )
         return MerchantSession(accountId, session, csrf)
     }
 
     private fun customerSession(): CustomerSession {
-        val csrf = requireNotNull(mockMvc.perform(get("/api/v1/auth/customer/csrf")).andReturn().response.getCookie(CUSTOMER_CSRF_COOKIE))
+        val csrf =
+            requireNotNull(
+                mockMvc
+                    .perform(get("/api/v1/auth/customer/csrf"))
+                    .andReturn()
+                    .response
+                    .getCookie(CUSTOMER_CSRF_COOKIE),
+            )
         val id = UUID.randomUUID()
         val login = "customer.${id.toString().take(8)}"
         jdbc.update(
-            "INSERT INTO identity_customer_account (id, login_id, password_hash, display_name, state, created_at, updated_at, version) VALUES (?, ?, ?, 'Customer', 'ACTIVE', ?, ?, 0)",
+            """
+            INSERT INTO identity_customer_account
+                (id, login_id, password_hash, display_name, state, created_at, updated_at, version)
+            VALUES (?, ?, ?, 'Customer', 'ACTIVE', ?, ?, 0)
+            """.trimIndent(),
             id,
             login,
             passwords.encode(PASSWORD),
             Timestamp.from(NOW),
             Timestamp.from(NOW),
         )
-        val session = requireNotNull(
-            mockMvc.perform(
-                post("/api/v1/auth/customer/sessions").cookie(csrf).header(CSRF_HEADER, csrf.value)
-                    .contentType(MediaType.APPLICATION_JSON).content("""{"loginId":"$login","password":"$PASSWORD"}"""),
-            ).andExpect(status().isOk).andReturn().response.getCookie(CUSTOMER_SESSION_COOKIE),
-        )
+        val session =
+            requireNotNull(
+                mockMvc
+                    .perform(
+                        post("/api/v1/auth/customer/sessions")
+                            .cookie(csrf)
+                            .header(CSRF_HEADER, csrf.value)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"loginId":"$login","password":"$PASSWORD"}"""),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+                    .response
+                    .getCookie(CUSTOMER_SESSION_COOKIE),
+            )
         return CustomerSession(session)
     }
 
-    private fun signInAgain(loginId: String, actorId: UUID): MerchantSession {
-        val csrf = requireNotNull(mockMvc.perform(get("/api/v1/auth/merchant/csrf")).andReturn().response.getCookie(CSRF_COOKIE))
+    private fun signInAgain(
+        loginId: String,
+        actorId: UUID,
+    ): MerchantSession {
+        val csrf =
+            requireNotNull(
+                mockMvc
+                    .perform(get("/api/v1/auth/merchant/csrf"))
+                    .andReturn()
+                    .response
+                    .getCookie(CSRF_COOKIE),
+            )
         val session =
             requireNotNull(
-                mockMvc.perform(
-                    post("/api/v1/auth/merchant/sessions")
-                        .cookie(csrf)
-                        .header(CSRF_HEADER, csrf.value)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"loginId":"$loginId","password":"$PASSWORD"}"""),
-                ).andExpect(status().isOk).andReturn().response.getCookie(SESSION_COOKIE),
+                mockMvc
+                    .perform(
+                        post("/api/v1/auth/merchant/sessions")
+                            .cookie(csrf)
+                            .header(CSRF_HEADER, csrf.value)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"loginId":"$loginId","password":"$PASSWORD"}"""),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+                    .response
+                    .getCookie(SESSION_COOKIE),
             )
         return MerchantSession(actorId, session, csrf)
     }
 
     private fun searchTerms(storeId: UUID): List<String> =
-        jdbc.queryForList(
-            "SELECT display_text FROM discovery_store_search_term WHERE store_id = ? AND term_kind = 'MENU_NAME' ORDER BY display_text",
-            String::class.java,
-            storeId,
-        ).filterNotNull()
+        jdbc
+            .queryForList(
+                "SELECT display_text FROM discovery_store_search_term WHERE store_id = ? AND term_kind = 'MENU_NAME' ORDER BY display_text",
+                String::class.java,
+                storeId,
+            ).filterNotNull()
 
     private fun auditActions(menuId: UUID): List<String> =
-        jdbc.queryForList(
-            "SELECT action FROM operations_audit_record WHERE target_id = ? ORDER BY occurred_at, id",
-            String::class.java,
-            menuId,
-        ).filterNotNull()
+        jdbc
+            .queryForList(
+                "SELECT action FROM operations_audit_record WHERE target_id = ? ORDER BY occurred_at, id",
+                String::class.java,
+                menuId,
+            ).filterNotNull()
 
     private fun commandCount(): Long =
         requireNotNull(jdbc.queryForObject("SELECT count(*) FROM merchant_menu_catalog_command", Long::class.java))
 
-    private data class MerchantSession(val actorId: UUID, val session: Cookie, val csrf: Cookie)
-    private data class CustomerSession(val session: Cookie)
+    private data class MerchantSession(
+        val actorId: UUID,
+        val session: Cookie,
+        val csrf: Cookie,
+    )
+
+    private data class CustomerSession(
+        val session: Cookie,
+    )
 
     private companion object {
         const val CSRF_COOKIE = "BEANFLOW_MERCHANT_XSRF"

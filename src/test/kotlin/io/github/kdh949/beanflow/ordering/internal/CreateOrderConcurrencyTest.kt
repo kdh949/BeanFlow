@@ -2,11 +2,11 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
-import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteOperations
 import io.github.kdh949.beanflow.merchant.api.MenuCatalogOperations
 import io.github.kdh949.beanflow.merchant.api.MenuConfigurationTradeContent
 import io.github.kdh949.beanflow.merchant.api.MenuSellableRequirement
 import io.github.kdh949.beanflow.merchant.api.MenuTradeDefinition
+import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteOperations
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
 import io.github.kdh949.beanflow.merchant.api.ReplaceMenuTradeContentCommand
 import io.github.kdh949.beanflow.merchant.api.ReplaceStoreOrderingPolicyCommand
@@ -433,18 +433,19 @@ internal class CreateOrderConcurrencyTest
                                         available = true,
                                         requirements = listOf(MenuSellableRequirement(fixture.sellableUnitId, quantityPerLineUnit)),
                                     ),
-                                ) + if (addVariant) {
-                                    listOf(
-                                        MenuConfigurationTradeContent(
-                                            VARIANT_CONFIGURATION_ID,
-                                            listOf(VARIANT_OPTION_ID),
-                                            available = true,
-                                            requirements = listOf(MenuSellableRequirement(fixture.sellableUnitId, 1)),
-                                        ),
-                                    )
-                                } else {
-                                    emptyList()
-                                },
+                                ) +
+                                    if (addVariant) {
+                                        listOf(
+                                            MenuConfigurationTradeContent(
+                                                VARIANT_CONFIGURATION_ID,
+                                                listOf(VARIANT_OPTION_ID),
+                                                available = true,
+                                                requirements = listOf(MenuSellableRequirement(fixture.sellableUnitId, 1)),
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                         ),
                     now = Instant.parse("2026-08-27T00:00:00Z"),
                 ),

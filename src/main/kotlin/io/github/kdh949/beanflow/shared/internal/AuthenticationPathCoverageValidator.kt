@@ -31,15 +31,15 @@ internal class AuthenticationPathCoverageValidator(
         validateRoutes(applicationRoutes)
     }
 
-    internal fun validate(paths: Collection<String>) =
-        validateRoutes(paths.map { ControllerRoute(it, null) })
+    internal fun validate(paths: Collection<String>) = validateRoutes(paths.map { ControllerRoute(it, null) })
 
     private fun validateRoutes(routes: Collection<ControllerRoute>) {
         check(registry.overlappingPatterns().isEmpty()) {
             "Authentication path patterns overlap across actor chains: ${registry.overlappingPatterns()}"
         }
         val unassigned =
-            routes.filterNot { registry.hasRegistration(it.path.canonicalPath(), it.method) }
+            routes
+                .filterNot { registry.hasRegistration(it.path.canonicalPath(), it.method) }
                 .map { route -> route.method?.let { "$it ${route.path}" } ?: route.path }
                 .sorted()
         check(unassigned.isEmpty()) {
@@ -49,5 +49,8 @@ internal class AuthenticationPathCoverageValidator(
 
     private fun String.canonicalPath(): String = replace(Regex("\\{[^}]+}"), "sample")
 
-    private data class ControllerRoute(val path: String, val method: String?)
+    private data class ControllerRoute(
+        val path: String,
+        val method: String?,
+    )
 }

@@ -89,11 +89,13 @@ internal class JpaMenuQuoteService(
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
         val menuEntities = menuRepository.findAllById(requestedMenuIds).filter { it.lifecycle == MenuLifecycle.ACTIVE }
         val optionsByMenu =
-            optionRepository.findAllByMenuIdIn(requestedMenuIds)
+            optionRepository
+                .findAllByMenuIdIn(requestedMenuIds)
                 .filter { it.lifecycle == MenuLifecycle.ACTIVE }
                 .groupBy(MenuOptionEntity::menuId)
         val configurations =
-            configurationRepository.findAllByMenuIdIn(requestedMenuIds)
+            configurationRepository
+                .findAllByMenuIdIn(requestedMenuIds)
                 .filter { it.lifecycle == MenuLifecycle.ACTIVE }
         val configurationsByMenu = configurations.groupBy(MenuConfigurationEntity::menuId)
         val requirementsByConfiguration =

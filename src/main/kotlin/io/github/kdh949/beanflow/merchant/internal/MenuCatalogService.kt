@@ -69,12 +69,14 @@ internal class MenuCatalogService(
             )
         val page = rows.take(limit)
         val optionCounts =
-            options.findAllByMenuIdIn(page.map(MenuEntity::id))
+            options
+                .findAllByMenuIdIn(page.map(MenuEntity::id))
                 .filter { it.lifecycle == it.menuLifecycle(page) }
                 .groupingBy(MenuOptionEntity::menuId)
                 .eachCount()
         val configurationCounts =
-            configurations.findAllByMenuIdIn(page.map(MenuEntity::id))
+            configurations
+                .findAllByMenuIdIn(page.map(MenuEntity::id))
                 .filter { configuration -> page.any { it.id == configuration.menuId && it.lifecycle == configuration.lifecycle } }
                 .groupingBy(MenuConfigurationEntity::menuId)
                 .eachCount()
@@ -169,7 +171,11 @@ internal class MenuCatalogService(
 
         val activeOptions = aggregate.options.filter { it.lifecycle == MenuLifecycle.ACTIVE }
         val activeConfigurations = aggregate.configurations.filter { it.lifecycle == MenuLifecycle.ACTIVE }
-        requireNewChildIds(definition, activeOptions.mapTo(mutableSetOf(), MenuOptionEntity::id), activeConfigurations.mapTo(mutableSetOf(), MenuConfigurationEntity::id))
+        requireNewChildIds(
+            definition,
+            activeOptions.mapTo(mutableSetOf(), MenuOptionEntity::id),
+            activeConfigurations.mapTo(mutableSetOf(), MenuConfigurationEntity::id),
+        )
         requireStoreBounds(command.storeId, addingMenu = false, replacingMenuId = menu.id, desiredOptions = definition.options.size)
         val searchMeaningChanged =
             menu.name != definition.name || menu.available != definition.available
@@ -228,7 +234,8 @@ internal class MenuCatalogService(
         val menuOptions = options.findAllByMenuId(menuId)
         val menuConfigurations = configurations.findAllByMenuId(menuId)
         val byConfiguration =
-            requirements.findAllByMenuConfigurationIdIn(menuConfigurations.map(MenuConfigurationEntity::id))
+            requirements
+                .findAllByMenuConfigurationIdIn(menuConfigurations.map(MenuConfigurationEntity::id))
                 .groupBy(MenuConfigurationRequirementEntity::menuConfigurationId)
         return LoadedMenuCatalog(menu, menuOptions, menuConfigurations, byConfiguration)
     }
@@ -279,7 +286,8 @@ internal class MenuCatalogService(
             }
         }
         options.saveAll(
-            desired.filter { replacement -> current.none { it.id == replacement.optionId } }
+            desired
+                .filter { replacement -> current.none { it.id == replacement.optionId } }
                 .map { MenuOptionEntity(it.optionId, menuId, it.name, it.additionalPriceKrw, it.available) },
         )
     }
@@ -314,7 +322,8 @@ internal class MenuCatalogService(
             }
         }
         configurations.saveAll(
-            desired.filter { replacement -> current.none { it.id == replacement.configurationId } }
+            desired
+                .filter { replacement -> current.none { it.id == replacement.configurationId } }
                 .map {
                     MenuConfigurationEntity(it.configurationId, menuId, optionKey(it.selectedOptionIds), it.available)
                 },
@@ -369,7 +378,8 @@ internal class MenuCatalogService(
 
     private fun replaceMenuSearchTerms(storeId: UUID) {
         val terms =
-            menus.findAllByStoreIdAndLifecycleOrderByNameAscIdAsc(storeId, MenuLifecycle.ACTIVE)
+            menus
+                .findAllByStoreIdAndLifecycleOrderByNameAscIdAsc(storeId, MenuLifecycle.ACTIVE)
                 .filter(MenuEntity::available)
                 .map { StoreSearchTermEntry(StoreSearchTermKind.MENU_NAME, it.name, it.id) }
         searchIndex.replaceStoreTerms(
@@ -419,43 +429,56 @@ internal class MenuCatalogService(
         if (raw.configurations.size > MAX_CONFIGURATIONS_PER_MENU) {
             invalid("A Menu may have at most $MAX_CONFIGURATIONS_PER_MENU active configurations")
         }
-        if (raw.options.map(MenuOptionTradeContent::optionId).distinct().size != raw.options.size) {
+        if (raw.options
+                .map(MenuOptionTradeContent::optionId)
+                .distinct()
+                .size != raw.options.size
+        ) {
             invalid("Menu option IDs must be unique")
         }
-        if (raw.configurations.map(MenuConfigurationTradeContent::configurationId).distinct().size != raw.configurations.size) {
+        if (raw.configurations
+                .map(MenuConfigurationTradeContent::configurationId)
+                .distinct()
+                .size != raw.configurations.size
+        ) {
             invalid("Menu configuration IDs must be unique")
         }
         val normalizedOptions =
-            raw.options.map {
-                if (it.additionalPriceKrw < 0) invalid("Menu option price must not be negative")
-                it.copy(name = validName(it.name, "Menu option name"))
-            }.sortedBy { it.optionId.toString() }
+            raw.options
+                .map {
+                    if (it.additionalPriceKrw < 0) invalid("Menu option price must not be negative")
+                    it.copy(name = validName(it.name, "Menu option name"))
+                }.sortedBy { it.optionId.toString() }
         val optionIds = normalizedOptions.mapTo(mutableSetOf(), MenuOptionTradeContent::optionId)
         val normalizedConfigurations =
-            raw.configurations.map { configuration ->
-                if (configuration.selectedOptionIds.distinct().size != configuration.selectedOptionIds.size) {
-                    invalid("Selected Menu option IDs must be unique")
-                }
-                if (!optionIds.containsAll(configuration.selectedOptionIds)) {
-                    conflict("An active configuration must reference active options of the same Menu")
-                }
-                if (configuration.requirements.isEmpty()) invalid("A Menu configuration requires at least one sellable unit")
-                if (configuration.requirements.size > MAX_REQUIREMENTS_PER_CONFIGURATION) {
-                    invalid("A Menu configuration may have at most $MAX_REQUIREMENTS_PER_CONFIGURATION requirements")
-                }
-                if (configuration.requirements.map(MenuSellableRequirement::sellableUnitId).distinct().size !=
-                    configuration.requirements.size
-                ) {
-                    invalid("Sellable-unit requirements must be unique within a configuration")
-                }
-                if (configuration.requirements.any { it.quantityPerLineUnit <= 0 }) {
-                    invalid("Sellable-unit requirement quantity must be positive")
-                }
-                configuration.copy(
-                    selectedOptionIds = configuration.selectedOptionIds.distinct().sortedBy(UUID::toString),
-                    requirements = configuration.requirements.sortedBy { it.sellableUnitId.toString() },
-                )
-            }.sortedBy { it.configurationId.toString() }
+            raw.configurations
+                .map { configuration ->
+                    if (configuration.selectedOptionIds.distinct().size != configuration.selectedOptionIds.size) {
+                        invalid("Selected Menu option IDs must be unique")
+                    }
+                    if (!optionIds.containsAll(configuration.selectedOptionIds)) {
+                        conflict("An active configuration must reference active options of the same Menu")
+                    }
+                    if (configuration.requirements.isEmpty()) invalid("A Menu configuration requires at least one sellable unit")
+                    if (configuration.requirements.size > MAX_REQUIREMENTS_PER_CONFIGURATION) {
+                        invalid("A Menu configuration may have at most $MAX_REQUIREMENTS_PER_CONFIGURATION requirements")
+                    }
+                    if (configuration.requirements
+                            .map(MenuSellableRequirement::sellableUnitId)
+                            .distinct()
+                            .size !=
+                        configuration.requirements.size
+                    ) {
+                        invalid("Sellable-unit requirements must be unique within a configuration")
+                    }
+                    if (configuration.requirements.any { it.quantityPerLineUnit <= 0 }) {
+                        invalid("Sellable-unit requirement quantity must be positive")
+                    }
+                    configuration.copy(
+                        selectedOptionIds = configuration.selectedOptionIds.distinct().sortedBy(UUID::toString),
+                        requirements = configuration.requirements.sortedBy { it.sellableUnitId.toString() },
+                    )
+                }.sortedBy { it.configurationId.toString() }
         if (normalizedConfigurations.map { optionKey(it.selectedOptionIds) }.distinct().size != normalizedConfigurations.size) {
             invalid("Menu configurations must have unique Option sets")
         }
@@ -529,11 +552,13 @@ private data class LoadedMenuCatalog(
             available = menu.available,
             lifecycle = lifecycle.api(),
             options =
-                options.filter { it.lifecycle == lifecycle }
+                options
+                    .filter { it.lifecycle == lifecycle }
                     .sortedBy { it.id.toString() }
                     .map { MenuOptionTradeContent(it.id, it.name, it.additionalPriceKrw, it.available) },
             configurations =
-                configurations.filter { it.lifecycle == lifecycle }
+                configurations
+                    .filter { it.lifecycle == lifecycle }
                     .sortedBy { it.id.toString() }
                     .map { configuration ->
                         MenuConfigurationTradeContent(
@@ -544,7 +569,8 @@ private data class LoadedMenuCatalog(
                                 configuration.normalizedOptionKey.split(',').map(UUID::fromString)
                             },
                             configuration.available,
-                            requirementsByConfiguration[configuration.id].orEmpty()
+                            requirementsByConfiguration[configuration.id]
+                                .orEmpty()
                                 .sortedBy { it.sellableUnitId.toString() }
                                 .map { MenuSellableRequirement(it.sellableUnitId, it.quantityPerLineUnit) },
                         )
@@ -568,8 +594,7 @@ private fun MenuLifecycle.api(): MenuCatalogLifecycle = MenuCatalogLifecycle.val
 
 private fun MenuCatalogLifecycle.internal(): MenuLifecycle = MenuLifecycle.valueOf(name)
 
-private fun MenuOptionEntity.menuLifecycle(menus: List<MenuEntity>): MenuLifecycle? =
-    menus.firstOrNull { it.id == menuId }?.lifecycle
+private fun MenuOptionEntity.menuLifecycle(menus: List<MenuEntity>): MenuLifecycle? = menus.firstOrNull { it.id == menuId }?.lifecycle
 
 @Component
 internal class MenuCatalogCommandRetentionWorker(
