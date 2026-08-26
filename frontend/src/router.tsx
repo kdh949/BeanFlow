@@ -26,6 +26,7 @@ import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
 import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
+import { StoreCatalogPage } from "./features/merchant/StoreCatalogPage";
 import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
 import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
       {
         element: <MerchantSessionGate />, children: [
           { index: true, element: <StoreOrderBoardPage /> },
+          { path: "catalog", element: <StoreCatalogPage /> },
           { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
           { path: "settlements", element: <StoreSettlementsPage /> },
           { path: "disputes", element: <StoreDisputesPage /> },

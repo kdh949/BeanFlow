@@ -77,6 +77,7 @@ export function ConsoleShell({ kind }: ConsoleShellProps) {
   }
   const storeItems = [
     { to: "/store", label: "주문 보드", icon: PackageCheck, end: true },
+    { to: "/store/catalog", label: "메뉴·가격", icon: Settings2, end: false },
     ...(ownsAnyStore
       ? [
           { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
