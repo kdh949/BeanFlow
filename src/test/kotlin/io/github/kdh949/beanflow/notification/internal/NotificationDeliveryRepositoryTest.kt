@@ -39,6 +39,11 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 @Import(TestcontainersConfiguration::class)
 @BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
@@ -55,6 +60,7 @@ internal class NotificationDeliveryRepositoryTest
     @Autowired
     constructor(
         private val service: NotificationDeliveryService,
+        private val inboxService: NotificationInboxService,
         private val repository: NotificationDeliveryJpaRepository,
         private val inboxRepository: NotificationInboxItemJpaRepository,
         private val preferenceRepository: NotificationCustomerPreferenceJpaRepository,
@@ -257,6 +263,80 @@ internal class NotificationDeliveryRepositoryTest
             assertThat(repository.findAll().single().state).isEqualTo(NotificationDeliveryState.SKIPPED)
             assertThat(inboxRepository.count()).isOne()
             assertThat(provider.requests).isEmpty()
+        }
+
+        @Test
+        fun `opt out preference lock first suppresses a concurrent marketing request`() {
+            val customerId = UUID.randomUUID()
+            preferenceRepository.saveAndFlush(NotificationCustomerPreferenceEntity(customerId, true, NOW))
+            val optOutUpdated = CountDownLatch(1)
+            val allowOptOutCommit = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(2)
+
+            try {
+                val optOut =
+                    executor.submit {
+                        transactions.executeWithoutResult {
+                            inboxService.replacePreference(customerId, false)
+                            optOutUpdated.countDown()
+                            check(allowOptOutCommit.await(5, TimeUnit.SECONDS))
+                        }
+                    }
+                check(optOutUpdated.await(5, TimeUnit.SECONDS))
+
+                val request = executor.submit(Callable { service.requestGoodwill(goodwillCommand(customerId)) })
+                assertThatThrownBy { request.get(300, TimeUnit.MILLISECONDS) }
+                    .isInstanceOf(TimeoutException::class.java)
+
+                allowOptOutCommit.countDown()
+                optOut.get(5, TimeUnit.SECONDS)
+                val result = request.get(5, TimeUnit.SECONDS)
+
+                assertThat(result.state).isEqualTo("NOTIFICATION_SKIPPED")
+                assertThat(result.deliveryId).isNull()
+                assertThat(repository.count()).isZero()
+                assertThat(inboxRepository.count()).isZero()
+            } finally {
+                allowOptOutCommit.countDown()
+                executor.shutdownNow()
+            }
+        }
+
+        @Test
+        fun `opt out preference lock first skips a concurrent provider claim`() {
+            val customerId = UUID.randomUUID()
+            preferenceRepository.saveAndFlush(NotificationCustomerPreferenceEntity(customerId, true, NOW))
+            service.requestGoodwill(goodwillCommand(customerId))
+            val optOutUpdated = CountDownLatch(1)
+            val allowOptOutCommit = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(2)
+
+            try {
+                val optOut =
+                    executor.submit {
+                        transactions.executeWithoutResult {
+                            inboxService.replacePreference(customerId, false)
+                            optOutUpdated.countDown()
+                            check(allowOptOutCommit.await(5, TimeUnit.SECONDS))
+                        }
+                    }
+                check(optOutUpdated.await(5, TimeUnit.SECONDS))
+
+                val claim = executor.submit(Callable { service.claimDue(NOW.plusSeconds(1), 10) })
+                assertThatThrownBy { claim.get(300, TimeUnit.MILLISECONDS) }
+                    .isInstanceOf(TimeoutException::class.java)
+
+                allowOptOutCommit.countDown()
+                optOut.get(5, TimeUnit.SECONDS)
+                assertThat(claim.get(5, TimeUnit.SECONDS)).isEmpty()
+
+                assertThat(repository.findAll().single().state).isEqualTo(NotificationDeliveryState.SKIPPED)
+                assertThat(inboxRepository.count()).isOne()
+                assertThat(provider.requests).isEmpty()
+            } finally {
+                allowOptOutCommit.countDown()
+                executor.shutdownNow()
+            }
         }
 
         @Test

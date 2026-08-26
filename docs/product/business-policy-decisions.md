@@ -2434,7 +2434,9 @@
   거래 알림으로 예외 처리하지 않는다.
 - **Preference:** `MARKETING` 기본값은 opt-out이다. 생성 시점에 opt-in한 고객에게만 InboxItem과
   Delivery를 함께 만들고, 생성 뒤 opt-out하면 기존 InboxItem은 남기되 Provider claim 직전에 발송을
-  건너뛴다. preference 조회 실패는 opt-in/out으로 추정하지 않고 source 처리 또는 delivery를 retry한다.
+  건너뛴다. 생성·claim·설정 변경은 preference row lock을 공통 선형화 지점으로 사용한다. claim이 lock을
+  먼저 획득하면 해당 알림은 발송될 수 있고, opt-out이 먼저 획득하면 새 알림을 만들거나 기존 알림을
+  발송하지 않는다. preference 조회 실패는 opt-in/out으로 추정하지 않고 source 처리 또는 delivery를 retry한다.
 - **Support Result:** opt-out으로 goodwill InboxItem과 Delivery가 만들어지지 않은 결과는
   `NOTIFICATION_SKIPPED` terminal 상태로 남긴다. 이를 `NOTIFICATION_ACCEPTED`, 전달 실패,
   `NOTIFICATION_RETRY` 또는 delivery ID가 있는 것처럼 표현하지 않으며 이미 발급된 혜택은 되돌리지 않는다.
@@ -2451,6 +2453,7 @@
   - 주문 없는 goodwill은 기본·명시 opt-out에서 두 row 모두 미생성 및 `NOTIFICATION_SKIPPED`
   - 주문 없는 goodwill은 opt-in에서 InboxItem/Delivery 정확히 한 건과 source replay dedupe
   - 생성 뒤 opt-out에서 InboxItem 유지, Provider 미호출과 명시적 delivery 재평가 상태
+  - opt-out과 생성·claim의 실제 PostgreSQL 경합에서 preference row lock 선취 작업 우선
   - preference 조회·InboxItem·Delivery·publication 저장 실패의 rollback/retry
 - **ADR Required:** [ADR-104](../adr/ADR-104-notification-inbox.md)
 - **Revisit Conditions:** 주문 없는 goodwill의 고객 도달률·문의, 마케팅 opt-in률 또는 별도 account/service

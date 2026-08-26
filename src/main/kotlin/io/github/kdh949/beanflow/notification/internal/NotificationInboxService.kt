@@ -104,6 +104,14 @@ internal class NotificationInboxQueryRepository(
                 customerId,
             ).singleOrNull() ?: false
 
+    fun marketingOptInForUpdate(customerId: UUID): Boolean =
+        jdbcTemplate
+            .query(
+                "SELECT marketing_opt_in FROM notification_customer_preference WHERE customer_id = ? FOR UPDATE",
+                { resultSet, _ -> resultSet.getBoolean("marketing_opt_in") },
+                customerId,
+            ).singleOrNull() ?: false
+
     fun replaceMarketingPreference(
         customerId: UUID,
         marketingOptIn: Boolean,
