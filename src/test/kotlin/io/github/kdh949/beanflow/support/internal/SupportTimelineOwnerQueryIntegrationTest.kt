@@ -7,9 +7,11 @@ import io.github.kdh949.beanflow.loyalty.api.LoyaltySupportTimelineOperations
 import io.github.kdh949.beanflow.notification.api.NotificationSupportTimelineOperations
 import io.github.kdh949.beanflow.operations.api.OperationsSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.payment.api.PaymentSupportTimelineOperations
 import io.github.kdh949.beanflow.promotion.api.PromotionSupportTimelineOperations
 import io.github.kdh949.beanflow.settlement.api.SettlementSupportTimelineOperations
@@ -55,6 +57,7 @@ internal class SupportTimelineOwnerQueryIntegrationTest
         private val notification: NotificationSupportTimelineOperations,
         private val operations: OperationsSupportTimelineOperations,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
     ) {
         private lateinit var orderId: UUID
         private lateinit var customerId: UUID
@@ -107,7 +110,11 @@ internal class SupportTimelineOwnerQueryIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 1_000)
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, customerId, 100)
             val couponId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, fixture, 100)
-            val response = createOrder.create("support-timeline-owner-query-0001", fixture.command(100, couponId))
+            val response =
+                createOrder.create(
+                    "support-timeline-owner-query-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(100, couponId)),
+                )
             assertThat(response.status).isEqualTo(201)
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(response.body)).groupValues[1])
             seedPayment()

@@ -74,6 +74,11 @@ recipientType = CUSTOMER  AND orderId 없음 → MARKETING
   외부 Provider claim 직전에도 다시 확인해 생성 후 opt-out한 고객에게 발송하지 않는다. 이미 생성된
   알림함 항목은 소급 삭제하지 않는다. preference 조회 실패는 기본 opt-in/out으로 추정하지 않고 event
   처리 또는 delivery를 retry한다.
+- 마케팅 생성, Provider claim과 수신 설정 변경은 CustomerAccount의 preference row lock을 공통
+  선형화 지점으로 사용한다. claim이 lock을 먼저 획득하면 그 알림은 발송될 수 있고, opt-out 변경이
+  먼저 획득하면 새 InboxItem·Delivery를 만들지 않거나 기존 Delivery를 `SKIPPED`로 전환한다.
+  Provider 호출은 claim transaction commit 뒤에 수행하므로 opt-out 응답 이후의 이미 확정된 claim을
+  취소한 것으로 추정하지 않는다.
 - 이 규칙으로도 애매한 알림이 생기면 `MARKETING`으로 둔다. 거래 진행에 필수인지가 최종 판단 기준이다.
 - opt-out으로 생성하지 않은 결과는 delivery 성공이나 실패가 아니다. 해당 source의 owner가 결과 상태를
   보존해야 하면 delivery ID 없이 `NOTIFICATION_SKIPPED`처럼 명시적으로 기록한다.

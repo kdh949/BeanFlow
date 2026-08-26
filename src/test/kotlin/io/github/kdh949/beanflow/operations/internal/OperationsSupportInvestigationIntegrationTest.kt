@@ -5,8 +5,10 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.operations.api.OpenOperationsSupportInvestigationCommand
 import io.github.kdh949.beanflow.operations.api.OperationsSupportInvestigationOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -49,6 +51,7 @@ internal class OperationsSupportInvestigationIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val investigationOperations: OperationsSupportInvestigationOperations,
     ) {
         private val requesterId = UUID.fromString("63000000-0000-0000-0000-000000000001")
@@ -70,7 +73,11 @@ internal class OperationsSupportInvestigationIntegrationTest
             jdbcTemplate.execute("TRUNCATE TABLE operations_audit_record, operations_operator_permission_grant")
             fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val created = createOrder.create("operations-support-investigation-order", fixture.command())
+            val created =
+                createOrder.create(
+                    "operations-support-investigation-order",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(created.body)).groupValues[1])
             makeAccepted(orderId)
             seedSupportScope()

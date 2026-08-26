@@ -5,8 +5,10 @@ import io.github.kdh949.beanflow.MerchantAccountDatabaseFixture
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionPolicy
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
 import io.github.kdh949.beanflow.support.internal.domain.SupportOrderChangeAuthorization
@@ -52,6 +54,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val payloads: SupportOrderChangePayloadCanonicalizer,
     ) {
         private val supportActorId = UUID.fromString("67000000-0000-0000-0000-000000000001")
@@ -75,7 +78,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
             jdbcTemplate.execute("TRUNCATE TABLE operations_operator_permission_grant")
             fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val created = createOrder.create("support-order-change-order", fixture.command())
+            val created = createOrder.create("support-order-change-order", orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             assertThat(created.status).isEqualTo(201)
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(created.body)).groupValues[1])
             orderVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)

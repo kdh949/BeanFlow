@@ -88,7 +88,12 @@ internal class OrderQuoteCoordinator(
         validate(command)
         val quotedAt = clock.instant()
         val quoteLines = command.lines.map { QuoteOrderLine(it.menuId, it.optionIds, it.quantity) }
-        val menu = merchantQuoteOperations.quoteForOrder(command.storeId, quoteLines)
+        val menu =
+            if (lock) {
+                merchantQuoteOperations.lockForOrderCreation(command.storeId, quoteLines)
+            } else {
+                merchantQuoteOperations.inspectForQuote(command.storeId, quoteLines)
+            }
         requireMenuIdentity(command, menu)
         val storeDisplay = storeDisplayOperations.require(command.storeId)
         val settlementTerms = settlementTermsOperations.findApplicable(command.storeId, quotedAt)
@@ -214,7 +219,7 @@ internal class OrderQuoteCoordinator(
         command: OrderQuoteCommand,
         menu: MerchantOrderQuoteSnapshot,
     ) {
-        if (menu.lines.size != command.lines.size || menu.materials.size != command.lines.size) {
+        if (menu.lines.size != command.lines.size) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Merchant quote count does not match order lines")
         }
         command.lines.zip(menu.lines).forEach { (requested, quoted) ->
@@ -258,7 +263,7 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v1"
+    private const val VERSION = "order-quote-fingerprint/v2"
 
     fun calculate(
         command: OrderQuoteCommand,
@@ -289,16 +294,14 @@ internal object OrderQuoteFingerprint {
                         values(line.optionIds.sortedBy { it.toString() })
                         value(line.quantity)
                     }
-                    value(menu.storeVersion)
+                    value(menu.storeAcceptingOrders)
+                    value(menu.storePickupEnabled)
                     size(menu.lines.size)
-                    menu.lines.zip(menu.materials).forEach { (line, material) ->
+                    menu.lines.forEach { line ->
                         value(line.menuId)
                         value(line.menuName)
                         value(line.unitPriceKrw)
                         value(line.quantity)
-                        value(material.menuVersion)
-                        value(material.configurationId)
-                        value(material.configurationVersion)
                         size(line.optionSnapshots.size)
                         line.optionSnapshots.forEach { option ->
                             value(option.optionId)
@@ -313,7 +316,6 @@ internal object OrderQuoteFingerprint {
                     }
                     value(storeDisplay.storeId)
                     value(storeDisplay.name)
-                    value(storeDisplay.storeVersion)
                     value(pickup.pickupSlotId)
                     value(pickup.storeId)
                     value(pickup.startsAt)
