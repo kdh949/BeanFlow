@@ -854,6 +854,35 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
 - 2026-08-26: 원격 CI에서 발견된 binary allowlist, V67/V68 migration latest 가정, quote 전 주문을 만드는
   기존 discovery/operations/support/coupon test fixture와 board performance DDL을 owning PR과 downstream
   검증 head에서 보완했다. Production transaction, API/OpenAPI, migration과 사용자 실패 의미는 바꾸지 않았다.
+- 2026-08-26: PR #109 review에서 nearby benchmark의 latency 대상과 `EXPLAIN` 대상 SQL shape가 다름을
+  확인했다. Production의 candidate/page CTE, customer display profile, 7일 operating-hours join과 최종
+  sort를 같은 `EXPLAIN (ANALYZE, BUFFERS)`에 사용하고 대표 profile/hours fixture를 추가했다. 100,000개
+  Store 조건에서 101개 Store·707개 hours row와 GiST 사용을 확인했으며 execution time은 56.548ms였다.
+  이는 새 query의 성능 개선 주장이 아니라 production query shape를 검증하는 증거 정합화다.
+- 2026-08-26: PR #110 review에 따라 marketing request, provider claim과 preference replacement가 같은
+  preference row `FOR UPDATE` lock을 먼저 획득하도록 선형화했다. 먼저 lock을 획득한 작업이 우선하므로
+  claim-first는 해당 알림을 발송할 수 있고 opt-out-first는 InboxItem/Delivery 생성 또는 Provider claim을
+  허용하지 않는다. 두 PostgreSQL transaction을 경합시킨 request-vs-opt-out과 claim-vs-opt-out 테스트가
+  통과했다.
+- 2026-08-26: PR #111 review에 따라 fingerprint에서 Store/Menu의 coarse JPA version을 제거하고 Store
+  주문 정책, Menu/Option/Configuration 거래 값과 benefit/slot 결과를 직접 canonicalize하는
+  `order-quote-fingerprint/v2`로 교체했다. 표시 설명·분류와 Store/Menu 이미지 변경은 fingerprint를
+  바꾸지 않고, 가격·판매 가능성·구성·혜택·slot 변경은 계속 stale을 만든다.
+- 2026-08-26: PR #111 review의 final-order serialization finding은 현재 production에 가격·옵션·판매 상태
+  writer가 없으므로 즉시 악용 가능한 금액 오류나 Critical로 단정하지 않고 **높은 Important이자 merge
+  blocker**로 처리했다. Final Order가 Store root shared lock을 transaction 종료까지 유지하도록 보강하고,
+  향후 `OWNER | STAFF` 거래 writer는 같은 root의 exclusive lock을 먼저 획득해야 하는 계약을 기록했다.
+  실제 PostgreSQL writer-first는 `ORDER_QUOTE_STALE`, Order-first는 writer가 Order commit까지 대기함을
+  검증했다. 새 production writer가 이 규약 없이 노출되면 Critical로 상향할 수 있다.
+- 2026-08-26: Review 보완 combined head에서 affected backend 통합 범위, `spotlessCheck build -x test`,
+  288개 test class의 6-shard 단일 배정, docs/OpenAPI 18 checks, frontend design/type/unit/build/Sites,
+  Storybook Docs 39 entries/49 state surfaces와 live Storybook 174 interaction/a11y가 로컬 통과했다.
+  첫 원격 full-scope run은 Cart story가 비동기 pickup slot을 동기 조회하는 test race를 드러냈고, owning
+  PR #111에서 `findByRole` 대기로 수정해 #112와 #114에 선형 전파했다.
+- 2026-08-26: 최신 review-remediation head `3b50bc6`의 원격 full-scope CI run `32971769997`에서 preflight,
+  backend build, backend test 6 shards, frontend design/type/unit, required Storybook interaction, advisory a11y,
+  Storybook build/Docs isolation과 final build gate가 모두 통과했다. 각 finding의 owning PR과 downstream은
+  merge, force-push 또는 base 변경 없이 선형 stack을 유지했다.
 
 ## Surprises & Discoveries
 
@@ -918,6 +947,12 @@ ADR-116/117 and the related ADR amendments.
     Marketing remains opt-in: suppression creates neither InboxItem nor Delivery and records
     `NOTIFICATION_SKIPPED`; an already-created marketing InboxItem remains visible if opt-out happens before
     provider claim, while its Delivery becomes terminal `SKIPPED`.
+13. Linearize marketing request, provider claim and preference replacement on the same preference-row lock.
+    The first lock holder wins: claim-first may send that delivery, while opt-out-first prevents creation or
+    provider claim.
+14. Acquire a Store-root shared lock before final-order Merchant inspection and retain it through transaction
+    completion. A future Merchant trade writer must acquire the same root exclusively; display/image-only changes
+    remain outside the trade fingerprint and locking protocol.
 
 ## Outcomes & Retrospective
 
@@ -929,6 +964,10 @@ cross-slice test harness, capability/journey/design inventory와 전체 회귀 �
 
 로컬 계약·migration·backend/frontend·Storybook/a11y 검증은 통과했다. Provider sandbox, 실제 deployment,
 production 관측과 full release gate는 Not run이며 이 plan의 완료에서 그 결과를 추론하지 않는다.
+
+Review에서 확인된 performance-evidence 불일치, marketing opt-out 경합, final-order Merchant 직렬화와
+fingerprint false-stale 문제는 각 owning PR에서 수정하고 downstream에 선형 전파했다. 최종 combined head의
+로컬 회귀와 원격 full-scope CI까지 다시 통과했으므로 `COMPLETED` 상태의 근거를 재확정했다.
 
 ## Revision Notes
 
@@ -948,3 +987,6 @@ production 관측과 full release gate는 Not run이며 이 plan의 완료에서
   orderContext, consuming UI and focused backend/frontend/live Storybook verification evidence.
 - 2026-08-26: Recorded final cross-slice regression, Storybook inventory, remote CI harness remediation and moved
   the completed implementation plan to the canonical completed directory.
+- 2026-08-26: Revalidated completion after review remediation for nearby performance evidence, marketing
+  preference concurrency, canonical quote fingerprints and final-order Store-root serialization; recorded the
+  successful local combined regression and remote full-scope CI run.
