@@ -11,8 +11,10 @@ import io.github.kdh949.beanflow.operations.internal.DecideOperationsSupportInve
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationOutcome
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
@@ -68,6 +70,7 @@ internal class SupportCompensationIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val compensations: SupportCompensationApplicationService,
         private val actionRequests: SupportActionRequestApplicationService,
         private val operations: OperationsSupportInvestigationService,
@@ -95,7 +98,7 @@ internal class SupportCompensationIntegrationTest
             fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 0)
-            val created = createOrder.create("support-goodwill-order", fixture.command())
+            val created = createOrder.create("support-goodwill-order", orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(created.body)).groupValues[1])
             orderVersion =
                 requireNotNull(

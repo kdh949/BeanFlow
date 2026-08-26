@@ -95,9 +95,21 @@ describe("customer coupon selection", () => {
       if (path === "/stores/{storeId}/pickup-slots") return ok({ items: [{ pickupSlotId: "slot-1", startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z", remainingCapacity: 2 }] }) as never;
       throw new Error(`unexpected GET ${path}`);
     });
-    const post = vi.spyOn(customerApi, "POST").mockResolvedValue(ok({
-      order: { orderId: "order-1", publicReference: "BF-TEST-0001", payableKrw: 5_000 },
-    }) as never);
+    const post = vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) => {
+      if (path === "/me/order-quotes") return ok({
+        quotedAt: "2026-09-01T00:55:00Z",
+        quoteFingerprint: "a".repeat(64),
+        store: { storeId: "store-1", name: "시청점" },
+        pickupWindow: { startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z" },
+        lines: [{ menuId: "menu-1", menuName: "오트 라떼", quantity: 1, optionNames: [], lineTotalKrw: 6_000 }],
+        pricing: { subtotalKrw: 6_000, couponDiscountKrw: 1_000, pointsAppliedKrw: 0, payableKrw: 5_000, currency: "KRW" },
+        guarantee: "NONE",
+      }) as never;
+      if (path === "/orders") return ok({
+        order: { orderId: "order-1", publicReference: "BF-TEST-0001", payableKrw: 5_000 },
+      }) as never;
+      throw new Error(`unexpected POST ${path}`);
+    });
 
     render(
       <MemoryRouter initialEntries={["/app/cart"]}>
@@ -109,10 +121,17 @@ describe("customer coupon selection", () => {
     );
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /2잔 가능/ }));
-    await user.click(screen.getByRole("button", { name: /주문하기/ }));
+    await user.click(await screen.findByRole("button", { name: /5,000.*주문하기/ }));
 
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/orders", expect.objectContaining({
+    expect(post.mock.calls[0]?.[0]).toBe("/me/order-quotes");
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
       body: expect.objectContaining({ couponIssuanceId: "coupon-1" }),
+    });
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/orders", expect.objectContaining({
+      body: expect.objectContaining({
+        couponIssuanceId: "coupon-1",
+        expectedQuoteFingerprint: "a".repeat(64),
+      }),
     })));
     expect(await screen.findByText("결제 이동 완료")).toBeInTheDocument();
     expect(couponSelection.forStore("store-1")).toBeNull();
