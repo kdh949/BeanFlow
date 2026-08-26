@@ -3,8 +3,10 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -47,6 +49,7 @@ internal class SupportActionRequestIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
     ) {
         private val requesterId = UUID.fromString("62000000-0000-0000-0000-000000000001")
         private val managerId = UUID.fromString("62000000-0000-0000-0000-000000000002")
@@ -65,7 +68,7 @@ internal class SupportActionRequestIntegrationTest
             jdbcTemplate.execute("TRUNCATE TABLE operations_audit_record, operations_operator_permission_grant")
             fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val created = createOrder.create("support-action-request-order", fixture.command())
+            val created = createOrder.create("support-action-request-order", orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             assertThat(created.status).isEqualTo(201)
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(created.body)).groupValues[1])
             makeAccepted(orderId)

@@ -3,8 +3,10 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -52,6 +54,9 @@ internal class RecentStoreEndpointIntegrationTest {
 
     @Autowired
     private lateinit var createOrderUseCase: CreateOrderUseCase
+
+    @Autowired
+    private lateinit var orderQuoteUseCase: OrderQuoteUseCase
 
     @Autowired
     private lateinit var recentStoreQuery: CustomerRecentStoreQuery
@@ -223,7 +228,11 @@ internal class RecentStoreEndpointIntegrationTest {
         createdAt: Instant,
         sequence: Long,
     ) {
-        val response = createOrderUseCase.create("recent-store-$sequence-${UUID.randomUUID()}", fixture.command())
+        val response =
+            createOrderUseCase.create(
+                "recent-store-$sequence-${UUID.randomUUID()}",
+                orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+            )
         assertThat(response.status).isEqualTo(201)
         val orderId = orderId(response.body)
         when (state) {
