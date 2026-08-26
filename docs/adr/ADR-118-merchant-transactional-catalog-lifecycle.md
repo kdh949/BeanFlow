@@ -41,6 +41,12 @@ quote fingerprint에 넣으면 가격·선택 구성과 무관한 이미지나 �
 Configuration 식별자는 존재 여부를 누설하지 않는다. UI가 보관한 membership role이나 Store 목록은
 인가 근거가 아니다.
 
+Authoring transaction은 Identity의 대상 Store membership row를 shared lock으로 먼저 읽는다. membership
+row가 없으면 Store 또는 하위 자원의 존재 여부와 무관하게 `404 RESOURCE_NOT_FOUND`, row는 있지만
+account/membership이 inactive·revoked이거나 역할이 허용되지 않으면 `403 ACCESS_DENIED`다. shared lock은
+transaction 종료까지 유지되므로 먼저 시작한 authoring은 그 권한으로 완결되고, revoke가 먼저 commit되면
+뒤 command는 403이다. 이 lock 뒤에만 같은 Store의 commerce-root exclusive lock을 획득한다.
+
 Audit actor type은 실제 membership role에 따라 `STORE_OWNER | STORE_STAFF`를 기록한다. 초기 범위에는
 STAFF 가격 상한, OWNER 승인, 이중 승인 또는 시간대별 제한을 두지 않는다.
 
@@ -86,8 +92,9 @@ authoring contract로 사용하지 않는다.
 
 - 최종 Order transaction은 Store row를 PostgreSQL shared lock으로 먼저 획득한다. 같은 Store의 여러 Order는
   함께 진행할 수 있다.
-- Store 주문 정책과 Menu 거래 catalogue writer는 Store row의 exclusive lock을 먼저 획득한다.
-- lock 뒤 membership과 target ownership, expected version, active state, catalogue 상한을 다시 검증한다.
+- Store 주문 정책과 Menu 거래 catalogue writer는 Identity membership row의 shared lock을 먼저 획득한 뒤
+  Store row의 exclusive lock을 획득한다. 모든 writer는 이 순서를 고정하고 역순으로 잠그지 않는다.
+- 두 lock 뒤 target ownership, expected version, active state, catalogue 상한을 검증한다.
 - 최종 Order는 shared lock을 transaction commit/rollback까지 유지한 채 Store policy, Store order-display
   snapshot, 요청 Menu와 그 Option/Configuration/requirement, 적용 가능한 StoreSettlementTerms를 읽는다.
 - 향후 Store 이름이나 정산 조건처럼 quote/Order snapshot에 들어가는 Merchant writer도 같은 exclusive
@@ -201,6 +208,8 @@ owner write 성공 직후 검색에 과거 Menu가 남는 window와 retry/reconc
   변경은 동일 fingerprint인지 검증한다.
 - create/update/archive의 OWNER·STAFF, revoked, cross-store, stale version, no-op, idempotent replay와
   changed-payload conflict를 검증한다.
+- membership shared lock을 먼저 얻은 command와 revoke의 경합, revoke가 먼저 commit된 command 거절,
+  membership 없는 cross-store/없는 Store의 동일 404를 PostgreSQL에서 검증한다.
 - Menu/Option/Configuration/requirement invariant와 1,000/5,000/100/500/50 상한을 Application/DB 양쪽에서
   검증한다.
 - owner row, child rows, command response, Audit와 `MENU_NAME` search term이 함께 commit/rollback하는지

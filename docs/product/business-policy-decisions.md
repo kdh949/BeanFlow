@@ -2472,6 +2472,11 @@
   관리한다. Menu와 Option은 생성·전체 교체·보관할 수 있지만 public hard delete와 archived item 복원은
   제공하지 않는다. 실행 시 membership과 Store 소유권을 다시 검증하고 다른 Store 자원의 존재를 노출하지
   않는다.
+- **Authorization Serialization:** authoring transaction은 대상 Store membership row를 shared lock으로
+  먼저 읽고 transaction 종료까지 유지한 뒤 같은 Store commerce root를 exclusive lock한다. membership이
+  없으면 대상 Store 존재 여부와 무관하게 404, inactive·revoked membership 또는 허용되지 않은 역할은
+  403이다. command가 membership lock을 먼저 얻으면 그 권한으로 commit한 뒤 revoke가 진행되고, revoke가
+  먼저 commit되면 command는 owner state를 바꾸지 않고 403이다.
 - **Lifecycle and Bounds:** Menu·Option·Configuration·sellable-unit requirement는 active/archived
   수명주기를 가진다. Store당 active Menu 1,000개와 Option 5,000개, Menu당 Option 100개와
   Configuration 500개, Configuration당 requirement 50개를 write transaction에서 검증한다. 상한을 넘은
@@ -2492,6 +2497,7 @@
 - **Affected Aggregates:** Store, Menu, Option, MenuConfiguration, SellableUnitRequirement, Order
 - **Required Tests:**
   - OWNER/STAFF, revoked membership, cross-store 인가와 Audit actor role
+  - authoring-vs-revoke 두 lock 순서와 cross-store/없는 Store의 동일 404
   - create/replace/archive, no-op, expectedVersion conflict와 catalogue 상한
   - Store shared Order lock과 exclusive writer lock의 두 PostgreSQL 경합 순서
   - quote fingerprint stale과 최종 Order immutable snapshot 일치

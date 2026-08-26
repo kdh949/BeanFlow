@@ -534,6 +534,27 @@ authorization transaction이 active grant row를 먼저 잠그면 revoke가 그 
 - 메뉴 projection은 메뉴 목록과 옵션 목록 두 statement, 슬롯 projection은 한 statement로 고정한다.
   카탈로그 크기에 따라 statement 수가 늘지 않으며 Aggregate 간 JPA 연관관계를 추가하지 않는다.
 
+## Merchant transactional catalogue authoring
+
+Store 주문 정책과 Menu 거래 카탈로그 command는 한 local transaction에서 다음 lock 순서를 고정한다.
+
+```text
+Identity StoreMembership FOR SHARE
+-> Merchant merchant_store FOR UPDATE
+-> target/version/invariant/idempotency validation
+-> owner state + search term + Audit + terminal response
+-> commit
+```
+
+- membership row 부재는 Store 또는 child 존재 여부와 무관한 404다. inactive·revoked 또는 role 부족은
+  403이며 owner state를 읽거나 바꾸지 않는다.
+- command가 membership shared lock을 먼저 얻으면 revoke는 command commit까지 기다린다. revoke가 먼저
+  commit되면 뒤 command는 403이다. writer가 Store lock 뒤 membership lock을 잡는 역순은 금지한다.
+- Store policy와 Menu writer는 같은 Store commerce root exclusive lock을 사용한다. final Order의 Store
+  shared lock과 직렬화하되 같은 Store의 Order shared lock끼리는 병렬이다.
+- owner state, command response, Audit와 Menu 검색 term은 전부 commit하거나 rollback한다. Provider 호출,
+  stale/cache/fake 성공 대체와 cross-Store lock은 없다.
+
 ## Settlement
 
 - `OrderCompletedV2` Settlement consumer는 Ordering producer와 별도의 local transaction에서 immutable
