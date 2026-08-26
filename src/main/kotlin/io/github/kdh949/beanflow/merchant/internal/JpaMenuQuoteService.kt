@@ -65,6 +65,7 @@ internal class JpaMenuQuoteService(
             storeAcceptingOrders = loaded.storeDefinition.acceptingOrders,
             storePickupEnabled = loaded.storeDefinition.pickupEnabled,
             orderingPolicyVersion = loaded.orderingPolicyVersion,
+            menuTradeVersions = loaded.menuTradeVersions,
             lines = quotes,
         )
     }
@@ -86,9 +87,14 @@ internal class JpaMenuQuoteService(
             (if (lockStore) storeRepository.findByIdForShare(storeId) else storeRepository.findById(storeId).orElse(null))
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
-        val menuEntities = menuRepository.findAllById(requestedMenuIds)
-        val optionsByMenu = optionRepository.findAllByMenuIdIn(requestedMenuIds).groupBy(MenuOptionEntity::menuId)
-        val configurations = configurationRepository.findAllByMenuIdIn(requestedMenuIds)
+        val menuEntities = menuRepository.findAllById(requestedMenuIds).filter { it.lifecycle == MenuLifecycle.ACTIVE }
+        val optionsByMenu =
+            optionRepository.findAllByMenuIdIn(requestedMenuIds)
+                .filter { it.lifecycle == MenuLifecycle.ACTIVE }
+                .groupBy(MenuOptionEntity::menuId)
+        val configurations =
+            configurationRepository.findAllByMenuIdIn(requestedMenuIds)
+                .filter { it.lifecycle == MenuLifecycle.ACTIVE }
         val configurationsByMenu = configurations.groupBy(MenuConfigurationEntity::menuId)
         val requirementsByConfiguration =
             requirementRepository
@@ -126,6 +132,7 @@ internal class JpaMenuQuoteService(
         return LoadedMenuDefinitions(
             storeDefinition = StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled),
             orderingPolicyVersion = store.orderingPolicyVersion,
+            menuTradeVersions = menuEntities.associate { it.id to it.tradeVersion },
             menuDefinitions = menus,
         )
     }
@@ -152,6 +159,7 @@ internal class JpaMenuQuoteService(
     private data class LoadedMenuDefinitions(
         val storeDefinition: StoreDefinition,
         val orderingPolicyVersion: Long,
+        val menuTradeVersions: Map<UUID, Long>,
         val menuDefinitions: Map<UUID, MenuDefinition>,
     )
 }

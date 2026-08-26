@@ -47,8 +47,14 @@ class AuthenticationPathRegistryTest {
             )
 
         expected.forEach { (path, chain) ->
-            assertThat(registry.classify(path)).describedAs(path).isEqualTo(chain)
+            val method = if (path.endsWith("/menus")) "GET" else null
+            assertThat(registry.classify(path, method)).describedAs(path).isEqualTo(chain)
         }
+
+        val menuPath = "/api/v1/stores/00000000-0000-0000-0000-000000000001/menus"
+        assertThat(registry.classify(menuPath, "POST")).isEqualTo(AuthenticationChain.MERCHANT)
+        assertThat(registry.classify(menuPath, "HEAD")).isEqualTo(AuthenticationChain.CUSTOMER)
+        assertThat(registry.classify(menuPath, "DELETE")).isNull()
     }
 
     @Test

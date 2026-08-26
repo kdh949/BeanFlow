@@ -2,11 +2,14 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import java.time.Instant
@@ -75,11 +78,11 @@ internal class MenuEntity(
     @Column(name = "store_id", nullable = false)
     val storeId: UUID,
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     @Column(name = "base_price_krw", nullable = false)
-    val basePriceKrw: Long,
+    var basePriceKrw: Long,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
     @Column(name = "image_original_key")
     var imageOriginalKey: String? = null,
     @Column(name = "image_thumbnail_key")
@@ -94,6 +97,15 @@ internal class MenuEntity(
     var publicDescription: String? = null,
     @Version
     var version: Long = 0,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "trade_version", nullable = false)
+    var tradeVersion: Long = 0,
+    @Column(name = "trade_updated_at", nullable = false)
+    var tradeUpdatedAt: Instant = Instant.EPOCH,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 ) {
     fun replaceImage(
         originalKey: String,
@@ -121,6 +133,32 @@ internal class MenuEntity(
         this.displayCategory = displayCategory
         this.publicDescription = publicDescription
     }
+
+    fun replaceTradeContent(
+        name: String,
+        basePriceKrw: Long,
+        available: Boolean,
+        updatedAt: Instant,
+    ) {
+        this.name = name
+        this.basePriceKrw = basePriceKrw
+        this.available = available
+        tradeVersion = Math.addExact(tradeVersion, 1)
+        tradeUpdatedAt = updatedAt
+    }
+
+    fun archive(updatedAt: Instant) {
+        check(lifecycle == MenuLifecycle.ACTIVE) { "Only an active Menu can be archived" }
+        lifecycle = MenuLifecycle.ARCHIVED
+        archivedAt = updatedAt
+        tradeVersion = Math.addExact(tradeVersion, 1)
+        tradeUpdatedAt = updatedAt
+    }
+}
+
+internal enum class MenuLifecycle {
+    ACTIVE,
+    ARCHIVED,
 }
 
 @Entity
@@ -131,11 +169,16 @@ internal class MenuOptionEntity(
     @Column(name = "menu_id", nullable = false)
     val menuId: UUID,
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     @Column(name = "additional_price_krw", nullable = false)
-    val additionalPriceKrw: Long,
+    var additionalPriceKrw: Long,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 )
 
 @Entity
@@ -146,11 +189,16 @@ internal class MenuConfigurationEntity(
     @Column(name = "menu_id", nullable = false)
     val menuId: UUID,
     @Column(name = "normalized_option_key", nullable = false)
-    val normalizedOptionKey: String,
+    var normalizedOptionKey: String,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
     @Version
     var version: Long = 0,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 )
 
 @Entity
@@ -188,14 +236,40 @@ internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
         menuId: UUID,
         storeId: UUID,
     ): MenuEntity?
+
+    @Query(
+        """
+        SELECT menu FROM MenuEntity menu
+         WHERE menu.storeId = :storeId
+           AND menu.lifecycle = :lifecycle
+           AND (:afterName IS NULL OR menu.name > :afterName OR (menu.name = :afterName AND menu.id > :afterMenuId))
+         ORDER BY menu.name ASC, menu.id ASC
+        """,
+    )
+    fun findCatalogPage(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+        afterName: String?,
+        afterMenuId: UUID?,
+        pageable: Pageable,
+    ): List<MenuEntity>
+
+    fun findAllByStoreIdAndLifecycleOrderByNameAscIdAsc(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuEntity>
 }
 
 internal interface MenuOptionJpaRepository : JpaRepository<MenuOptionEntity, UUID> {
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuOptionEntity>
+
+    fun findAllByMenuId(menuId: UUID): List<MenuOptionEntity>
 }
 
 internal interface MenuConfigurationJpaRepository : JpaRepository<MenuConfigurationEntity, UUID> {
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuConfigurationEntity>
+
+    fun findAllByMenuId(menuId: UUID): List<MenuConfigurationEntity>
 }
 
 internal interface MenuConfigurationRequirementJpaRepository : JpaRepository<MenuConfigurationRequirementEntity, UUID> {

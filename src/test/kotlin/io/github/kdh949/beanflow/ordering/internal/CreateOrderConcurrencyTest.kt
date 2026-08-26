@@ -3,7 +3,12 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteOperations
+import io.github.kdh949.beanflow.merchant.api.MenuCatalogOperations
+import io.github.kdh949.beanflow.merchant.api.MenuConfigurationTradeContent
+import io.github.kdh949.beanflow.merchant.api.MenuSellableRequirement
+import io.github.kdh949.beanflow.merchant.api.MenuTradeDefinition
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
+import io.github.kdh949.beanflow.merchant.api.ReplaceMenuTradeContentCommand
 import io.github.kdh949.beanflow.merchant.api.ReplaceStoreOrderingPolicyCommand
 import io.github.kdh949.beanflow.merchant.api.StoreOrderingPolicyOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
@@ -40,6 +45,7 @@ internal class CreateOrderConcurrencyTest
         private val orderCreationTransaction: OrderCreationTransaction,
         private val idempotencyService: OrderIdempotencyService,
         private val merchantQuotes: MerchantOrderQuoteOperations,
+        private val menuCatalog: MenuCatalogOperations,
         private val storeOrderingPolicies: StoreOrderingPolicyOperations,
         transactionManager: PlatformTransactionManager,
         private val jdbcTemplate: JdbcTemplate,
@@ -84,6 +90,16 @@ internal class CreateOrderConcurrencyTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val quote = orderQuoteUseCase.quote(fixture.quoteCommand())
+            transactions.executeWithoutResult {
+                replaceMenuTrade(
+                    fixture,
+                    priceKrw = 1200,
+                    expectedVersion = 0,
+                    key = "menu-writer-first-001",
+                    addVariant = true,
+                    quantityPerLineUnit = 2,
+                )
+            }
             val writerUpdated = CountDownLatch(1)
             val allowWriterCommit = CountDownLatch(1)
             val executor = Executors.newFixedThreadPool(2)
@@ -92,13 +108,20 @@ internal class CreateOrderConcurrencyTest
                 val writer =
                     executor.submit {
                         transactions.executeWithoutResult {
-                            lockStoreForTradeWrite(fixture.storeId)
-                            jdbcTemplate.update("UPDATE merchant_menu SET base_price_krw = 1200 WHERE id = ?", fixture.menuId)
+                            replaceMenuTrade(
+                                fixture,
+                                priceKrw = 1000,
+                                expectedVersion = 1,
+                                key = "menu-writer-first-002",
+                            )
                             writerUpdated.countDown()
                             check(allowWriterCommit.await(5, TimeUnit.SECONDS))
                         }
                     }
-                check(writerUpdated.await(5, TimeUnit.SECONDS))
+                if (!writerUpdated.await(5, TimeUnit.SECONDS)) {
+                    writer.get(1, TimeUnit.SECONDS)
+                    error("Menu writer did not reach the uncommitted state")
+                }
 
                 val order =
                     executor.submit(
@@ -118,8 +141,11 @@ internal class CreateOrderConcurrencyTest
 
                 assertThat(response.status).isEqualTo(409)
                 assertThat(response.body).contains("\"code\":\"ORDER_QUOTE_STALE\"")
-                assertThat(response.body).contains("\"payableKrw\":1200")
+                assertThat(response.body).contains("\"payableKrw\":1000")
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
+                assertThat(
+                    jdbcTemplate.queryForObject("SELECT trade_version FROM merchant_menu WHERE id = ?", Long::class.java, fixture.menuId),
+                ).isEqualTo(2)
             } finally {
                 allowWriterCommit.countDown()
                 executor.shutdownNow()
@@ -165,8 +191,7 @@ internal class CreateOrderConcurrencyTest
                 val writer =
                     executor.submit {
                         transactions.executeWithoutResult {
-                            lockStoreForTradeWrite(fixture.storeId)
-                            jdbcTemplate.update("UPDATE merchant_menu SET base_price_krw = 1200 WHERE id = ?", fixture.menuId)
+                            replaceMenuTrade(fixture, 1200, expectedVersion = 0, key = "menu-order-first-001")
                         }
                     }
                 assertThatThrownBy { writer.get(300, TimeUnit.MILLISECONDS) }
@@ -357,6 +382,75 @@ internal class CreateOrderConcurrencyTest
             ) ?: error("Store trade root is missing")
         }
 
+        private fun replaceMenuTrade(
+            fixture: OrderCreationFixture,
+            priceKrw: Long,
+            expectedVersion: Long,
+            key: String,
+            addVariant: Boolean = false,
+            quantityPerLineUnit: Long = 1,
+        ) {
+            val configurationId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT id FROM merchant_menu_configuration " +
+                            "WHERE menu_id = ? AND lifecycle = 'ACTIVE' AND normalized_option_key = ''",
+                        UUID::class.java,
+                        fixture.menuId,
+                    ),
+                )
+            menuCatalog.replace(
+                ReplaceMenuTradeContentCommand(
+                    actorId = fixture.customerId,
+                    idempotencyKey = key,
+                    storeId = fixture.storeId,
+                    menuId = fixture.menuId,
+                    expectedVersion = expectedVersion,
+                    definition =
+                        MenuTradeDefinition(
+                            menuId = fixture.menuId,
+                            name = "Americano",
+                            basePriceKrw = priceKrw,
+                            available = true,
+                            options =
+                                if (addVariant) {
+                                    listOf(
+                                        io.github.kdh949.beanflow.merchant.api.MenuOptionTradeContent(
+                                            VARIANT_OPTION_ID,
+                                            "Extra shot",
+                                            500,
+                                            available = true,
+                                        ),
+                                    )
+                                } else {
+                                    emptyList()
+                                },
+                            configurations =
+                                listOf(
+                                    MenuConfigurationTradeContent(
+                                        configurationId,
+                                        emptyList(),
+                                        available = true,
+                                        requirements = listOf(MenuSellableRequirement(fixture.sellableUnitId, quantityPerLineUnit)),
+                                    ),
+                                ) + if (addVariant) {
+                                    listOf(
+                                        MenuConfigurationTradeContent(
+                                            VARIANT_CONFIGURATION_ID,
+                                            listOf(VARIANT_OPTION_ID),
+                                            available = true,
+                                            requirements = listOf(MenuSellableRequirement(fixture.sellableUnitId, 1)),
+                                        ),
+                                    )
+                                } else {
+                                    emptyList()
+                                },
+                        ),
+                    now = Instant.parse("2026-08-27T00:00:00Z"),
+                ),
+            )
+        }
+
         private fun replaceOrderingPolicy(
             fixture: OrderCreationFixture,
             expectedVersion: Long,
@@ -385,4 +479,9 @@ internal class CreateOrderConcurrencyTest
                 couponIssuanceId = null,
                 pointsToUseKrw = 0,
             )
+
+        private companion object {
+            val VARIANT_OPTION_ID: UUID = UUID.fromString("30000000-0000-4000-8000-000000000101")
+            val VARIANT_CONFIGURATION_ID: UUID = UUID.fromString("30000000-0000-4000-8000-000000000102")
+        }
     }
