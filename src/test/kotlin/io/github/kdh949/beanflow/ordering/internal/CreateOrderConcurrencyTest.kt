@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -23,6 +24,7 @@ internal class CreateOrderConcurrencyTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val jdbcTemplate: JdbcTemplate,
     ) {
         @BeforeEach
@@ -32,7 +34,7 @@ internal class CreateOrderConcurrencyTest
         fun `concurrent identical key executes one order transaction`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val command = fixture.command()
+            val command = orderQuoteUseCase.attachCurrentQuote(fixture.command())
             val barrier = CyclicBarrier(2)
             val executor = Executors.newFixedThreadPool(2)
 

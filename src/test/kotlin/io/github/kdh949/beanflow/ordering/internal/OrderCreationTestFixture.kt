@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderLineCommand
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteCommand
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import org.springframework.jdbc.core.JdbcTemplate
 import java.sql.Timestamp
 import java.time.Instant
@@ -18,6 +20,7 @@ internal data class OrderCreationFixture(
         pointsToUseKrw: Long = 0,
         couponIssuanceId: UUID? = null,
         quantity: Long = 1,
+        expectedQuoteFingerprint: String? = null,
     ): CreateOrderCommand =
         CreateOrderCommand(
             customerId = customerId,
@@ -26,7 +29,23 @@ internal data class OrderCreationFixture(
             lines = listOf(CreateOrderLineCommand(menuId, emptyList(), quantity)),
             couponIssuanceId = couponIssuanceId,
             pointsToUseKrw = pointsToUseKrw,
+            expectedQuoteFingerprint = expectedQuoteFingerprint,
         )
+}
+
+internal fun OrderQuoteUseCase.attachCurrentQuote(command: CreateOrderCommand): CreateOrderCommand {
+    val quote =
+        quote(
+            OrderQuoteCommand(
+                customerId = command.customerId,
+                storeId = command.storeId,
+                pickupSlotId = command.pickupSlotId,
+                lines = command.lines,
+                couponIssuanceId = command.couponIssuanceId,
+                pointsToUseKrw = command.pointsToUseKrw,
+            ),
+        )
+    return command.copy(expectedQuoteFingerprint = quote.quoteFingerprint)
 }
 
 internal object OrderCreationDatabaseFixture {
@@ -205,6 +224,7 @@ internal object OrderCreationDatabaseFixture {
         settlementFeeRateBps: Int = 500,
         settlementTermsEffectiveTo: Instant? = null,
     ) {
+        ensureGlobalPointAccrualPolicy(jdbcTemplate)
         jdbcTemplate.update(
             "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)",
             fixture.storeId,
@@ -287,6 +307,38 @@ internal object OrderCreationDatabaseFixture {
             fixture.sellableUnitId,
             fixture.storeId,
             stockAvailable,
+        )
+    }
+
+    private fun ensureGlobalPointAccrualPolicy(jdbcTemplate: JdbcTemplate) {
+        jdbcTemplate.update(
+            """
+            WITH inserted AS (
+                INSERT INTO operations_point_accrual_policy_version (
+                    scope_type, scope_reference, state, accrual_rate_bps, rounding_mode,
+                    issuer_type, issuer_reference, expiry_rule, validity_days, effective_at,
+                    actor_type, actor_reference, reason, payload_hash, source_reference
+                )
+                SELECT
+                    'GLOBAL', '00000000-0000-0000-0000-000000000000'::uuid, 'OVERRIDE', 100, 'FLOOR',
+                    'PLATFORM', 'platform:test-fixture', 'EXACT_DURATION_FROM_COMPLETION', 365,
+                    '2020-01-01T00:00:00Z'::timestamptz,
+                    'SYSTEM', 'order-creation-fixture', 'Order creation fixture policy',
+                    repeat('e', 64), 'test:order-creation-global-policy'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM operations_point_accrual_policy_head
+                     WHERE scope_type = 'GLOBAL'
+                       AND scope_reference = '00000000-0000-0000-0000-000000000000'::uuid
+                )
+                RETURNING policy_version_id
+            )
+            INSERT INTO operations_point_accrual_policy_head (
+                scope_type, scope_reference, policy_version_id, version
+            )
+            SELECT 'GLOBAL', '00000000-0000-0000-0000-000000000000'::uuid, policy_version_id, 0
+              FROM inserted
+            ON CONFLICT (scope_type, scope_reference) DO NOTHING
+            """.trimIndent(),
         )
     }
 

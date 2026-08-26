@@ -51,6 +51,7 @@ internal class MerchantRefundIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrders: io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val paymentGateway: ScriptedTestPaymentGateway,
         private val objectMapper: ObjectMapper,
@@ -344,7 +345,7 @@ internal class MerchantRefundIntegrationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
             val key = "merchant-refund-${UUID.randomUUID()}"
-            val created = createOrders.create(key, fixture.command(quantity = 3))
+            val created = createOrders.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command(quantity = 3)))
             assertThat(created.status).isEqualTo(201)
             val order = objectMapper.readTree(created.body)["order"]
             val orderId = UUID.fromString(order["orderId"].asText())

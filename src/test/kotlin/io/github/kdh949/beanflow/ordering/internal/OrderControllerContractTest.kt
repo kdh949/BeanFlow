@@ -57,7 +57,7 @@ internal class OrderControllerContractTest
                                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
                         ).header("Idempotency-Key", "contract-key-001")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(fixture)),
+                        .content(quotedRequestBody(fixture)),
                 ).andExpect(status().isCreated)
                 .andExpect(header().string("X-Correlation-Id", matchesPattern(".+")))
                 .andExpect(jsonPath("$.order.state").value("PENDING_PAYMENT"))
@@ -82,7 +82,7 @@ internal class OrderControllerContractTest
                                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
                         ).header("Idempotency-Key", "contract-benefit-01")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(fixture, pointsToUseKrw = 1_000)),
+                        .content(quotedRequestBody(fixture, pointsToUseKrw = 1_000)),
                 ).andExpect(status().isCreated)
                 .andExpect(jsonPath("$.order.state").value("PAID"))
                 .andExpect(jsonPath("$.order.reservationExpiresAt").doesNotExist())
@@ -138,23 +138,25 @@ internal class OrderControllerContractTest
         }
 
         @Test
-        fun `resource contention returns its stable 409 code`() {
+        fun `quote resource contention returns its stable 409 code without writes`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
 
             mockMvc
                 .perform(
-                    post("/api/v1/orders")
+                    post("/api/v1/me/order-quotes")
                         .with(
                             jwt()
                                 .jwt { it.subject(fixture.customerId.toString()) }
                                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
-                        ).header("Idempotency-Key", "contract-key-004")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(fixture)),
+                        ).contentType(MediaType.APPLICATION_JSON)
+                        .content(quoteRequestBody(fixture)),
                 ).andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("STOCK_NOT_AVAILABLE"))
                 .andExpect(jsonPath("$.correlationId").isNotEmpty)
+            org.assertj.core.api.Assertions
+                .assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order"))
+                .isZero()
         }
 
         @Test
@@ -336,6 +338,27 @@ internal class OrderControllerContractTest
         private fun requestBody(
             fixture: OrderCreationFixture,
             pointsToUseKrw: Long = 0,
+            expectedQuoteFingerprint: String = "0".repeat(64),
+        ): String =
+            """
+            {
+              "storeId": "${fixture.storeId}",
+              "pickupSlotId": "${fixture.pickupSlotId}",
+              "lines": [
+                {
+                  "menuId": "${fixture.menuId}",
+                  "optionIds": [],
+                  "quantity": 1
+                }
+              ],
+              "pointsToUseKrw": $pointsToUseKrw,
+              "expectedQuoteFingerprint": "$expectedQuoteFingerprint"
+            }
+            """.trimIndent()
+
+        private fun quoteRequestBody(
+            fixture: OrderCreationFixture,
+            pointsToUseKrw: Long = 0,
         ): String =
             """
             {
@@ -352,6 +375,26 @@ internal class OrderControllerContractTest
             }
             """.trimIndent()
 
+        private fun quotedRequestBody(
+            fixture: OrderCreationFixture,
+            pointsToUseKrw: Long = 0,
+        ): String {
+            val body =
+                mockMvc
+                    .perform(
+                        post("/api/v1/me/order-quotes")
+                            .with(customerJwt(fixture.customerId))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(quoteRequestBody(fixture, pointsToUseKrw)),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.guarantee").value("NONE"))
+                    .andReturn()
+                    .response
+                    .contentAsString
+            val fingerprint = requireNotNull(Regex("\"quoteFingerprint\":\"([0-9a-f]{64})\"").find(body)).groupValues[1]
+            return requestBody(fixture, pointsToUseKrw, fingerprint)
+        }
+
         private fun createThroughHttp(
             fixture: OrderCreationFixture,
             key: String,
@@ -365,7 +408,7 @@ internal class OrderControllerContractTest
                                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
                         ).header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(fixture)),
+                        .content(quotedRequestBody(fixture)),
                 ).andExpect(status().isCreated)
         }
 

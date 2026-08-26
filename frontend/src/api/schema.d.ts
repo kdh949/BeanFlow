@@ -609,6 +609,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/order-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 현재 owner 상태로 비예약 주문 견적 계산
+         * @description 메뉴·옵션·재고·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+         *     서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
+         *     reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
+         *     호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
+         */
+        post: operations["createOrderQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orders": {
         parameters: {
             query?: never;
@@ -620,9 +643,10 @@ export interface paths {
         put?: never;
         /**
          * (고객) 주문 생성
-         * @description 고객이 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
+         * @description 고객이 확인한 견적 fingerprint와 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
          *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
-         *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 모두 재검증·예약합니다.
+         *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
+         *     정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
          *     같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
          *
          *     주요 오류:
@@ -5001,6 +5025,47 @@ export interface components {
              */
             quantity: number;
         };
+        OrderQuoteRequest: {
+            storeId: components["schemas"]["Identifier"];
+            pickupSlotId: components["schemas"]["Identifier"];
+            lines: components["schemas"]["CreateOrderLineRequest"][];
+            couponIssuanceId?: components["schemas"]["Identifier"];
+            pointsToUseKrw: components["schemas"]["MoneyKrw"];
+        };
+        OrderQuoteStore: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        OrderQuotePickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        OrderQuoteLine: {
+            menuId: components["schemas"]["Identifier"];
+            menuName: string;
+            quantity: number;
+            optionNames: string[];
+            lineTotalKrw: components["schemas"]["MoneyKrw"];
+        };
+        OrderQuotePricing: {
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            /** @enum {string} */
+            currency: "KRW";
+        };
+        OrderQuote: {
+            quotedAt: components["schemas"]["DateTime"];
+            /** @description order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다. */
+            quoteFingerprint: string;
+            store: components["schemas"]["OrderQuoteStore"];
+            pickupWindow: components["schemas"]["OrderQuotePickupWindow"];
+            lines: components["schemas"]["OrderQuoteLine"][];
+            pricing: components["schemas"]["OrderQuotePricing"];
+            /** @enum {string} */
+            guarantee: "NONE";
+        };
         /**
          * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
          *     번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
@@ -5018,7 +5083,8 @@ export interface components {
          *         }
          *       ],
          *       "couponIssuanceId": null,
-         *       "pointsToUseKrw": 1000
+         *       "pointsToUseKrw": 1000,
+         *       "expectedQuoteFingerprint": "3a6f04f95b4fbc6c25d31e4e1551b52b30ac27a5bf9f5f83a454d9172303b778"
          *     }
          */
         CreateOrderRequest: {
@@ -5028,6 +5094,8 @@ export interface components {
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
+            /** @description 고객이 마지막으로 명시적으로 확인한 OrderQuote의 opaque fingerprint입니다. */
+            expectedQuoteFingerprint: string;
         };
         /**
          * @description 주문의 현재 생명주기 상태를 나타내는 열거형입니다.
@@ -5298,6 +5366,13 @@ export interface components {
          *     `BenefitOnlyOrderCreation`(주문과 결제가 함께 확정)을 반환합니다.
          */
         CreateOrderResult: components["schemas"]["PendingPaymentOrderCreation"] | components["schemas"]["BenefitOnlyOrderCreation"];
+        OrderQuoteStaleError: {
+            /** @enum {string} */
+            code: "ORDER_QUOTE_STALE";
+            message: string;
+            correlationId: string;
+            currentQuote: components["schemas"]["OrderQuote"];
+        };
         /**
          * @description 재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
          *     새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
@@ -10368,8 +10443,10 @@ export interface components {
             };
         };
         /**
-         * @description Order resource conflict, idempotency payload reuse, or an identical
+         * @description Order quote staleness, resource conflict, idempotency payload reuse, or an identical
          *     idempotent request that is still processing or requires manual review.
+         *     ORDER_QUOTE_STALE includes the terminally stored currentQuote that the customer must
+         *     explicitly review. Re-submission requires its fingerprint and a new Idempotency-Key.
          *     PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
          *     MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
          *     Retry-After and never re-executes the order command.
@@ -10384,7 +10461,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/json": components["schemas"]["Error"] | components["schemas"]["OrderQuoteStaleError"];
             };
         };
         /**
@@ -11434,6 +11511,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createOrderQuote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderQuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description guarantee가 NONE인 현재 비예약 견적 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

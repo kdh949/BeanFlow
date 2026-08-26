@@ -75,13 +75,17 @@ internal class OrderCreationWorkflow(
         orderId: UUID,
         command: CreateOrderCommand,
         prevalidatedQuotes: List<MenuLineQuote>? = null,
+        preparedQuote: OrderQuoteCalculation? = null,
     ): OrderCreationOutcome {
         validate(command)
-        val createdAt = clock.instant()
+        if (prevalidatedQuotes != null && preparedQuote != null) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Only one prevalidated order quote may be supplied")
+        }
+        val createdAt = preparedQuote?.response?.quotedAt ?: clock.instant()
         val requestedExpiresAt = createdAt.plus(RESERVATION_LEASE)
-        val storeDisplaySnapshot = storeDisplaySnapshotOperations.require(command.storeId)
-        val settlementTerms = storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
-        val quotes = prevalidatedQuotes?.also { validatePrevalidatedQuotes(command, it) } ?: quote(command)
+        val storeDisplaySnapshot = preparedQuote?.storeDisplay ?: storeDisplaySnapshotOperations.require(command.storeId)
+        val settlementTerms = preparedQuote?.settlementTerms ?: storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
+        val quotes = preparedQuote?.menu?.lines ?: prevalidatedQuotes?.also { validatePrevalidatedQuotes(command, it) } ?: quote(command)
         val stockRequirements = aggregateStockRequirements(quotes)
 
         val pickupReservation =
@@ -129,7 +133,7 @@ internal class OrderCreationWorkflow(
                 )
             }
         val pricing =
-            pricingCalculator.calculate(
+            preparedQuote?.pricing ?: pricingCalculator.calculate(
                 lines =
                     quotes.mapIndexed { sequence, quote ->
                         PricingLine(
@@ -252,7 +256,8 @@ internal class OrderCreationWorkflow(
             points = pointReservation,
             createdAt = createdAt,
         )
-        val selectedPointAccrualPolicy = pointAccrualPolicyOperations.selectForOrder(order.storeId)
+        val selectedPointAccrualPolicy =
+            preparedQuote?.pointAccrualPolicy ?: pointAccrualPolicyOperations.selectForOrder(order.storeId)
         val pointAccrualCalculation =
             pointAccrualCalculator.calculate(
                 selectedPointAccrualPolicy.policy,

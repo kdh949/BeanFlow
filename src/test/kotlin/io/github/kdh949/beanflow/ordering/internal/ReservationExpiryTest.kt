@@ -35,6 +35,7 @@ internal class ReservationExpiryTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val expiryUseCase: ReservationExpiryUseCase,
         private val paymentLeaseGuard: OrderPaymentLeaseGuard,
         private val worker: ReservationExpiryWorker,
@@ -191,7 +192,7 @@ internal class ReservationExpiryTest
             fixture: OrderCreationFixture,
             key: String,
         ): UUID {
-            val response = createOrderUseCase.create(key, fixture.command())
+            val response = createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             assertThat(response.status).isEqualTo(201)
             return requireNotNull(
                 jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java),

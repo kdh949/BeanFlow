@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.EventPublicationRecoveryWorker
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.GatewayRefundResult
 import io.github.kdh949.beanflow.payment.internal.RejectionRefundService
@@ -58,6 +59,7 @@ internal class PaymentSetupRepairIntegrationTest
         private val eventPublicationRecoveryWorker: EventPublicationRecoveryWorker,
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
         private val maintenanceWorker: PaymentSetupRepairMaintenanceWorker,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
     ) {
         private val proposer = UUID.fromString("20000000-0000-0000-0000-000000000052")
         private val approver = UUID.fromString("20000000-0000-0000-0000-000000000053")
@@ -747,6 +749,7 @@ internal class PaymentSetupRepairIntegrationTest
             fixture: OrderCreationFixture,
             key: String,
         ): UUID {
+            val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command())
             mockMvc
                 .perform(
                     post("/api/v1/orders")
@@ -759,7 +762,8 @@ internal class PaymentSetupRepairIntegrationTest
                               "storeId":"${fixture.storeId}",
                               "pickupSlotId":"${fixture.pickupSlotId}",
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
-                              "pointsToUseKrw":0
+                              "pointsToUseKrw":0,
+                              "expectedQuoteFingerprint":"${quote.expectedQuoteFingerprint}"
                             }
                             """.trimIndent(),
                         ),

@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import com.fasterxml.jackson.annotation.JsonInclude
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -101,6 +102,13 @@ internal data class ErrorResponse(
     val details: List<ErrorDetail> = emptyList(),
     @get:JsonInclude(JsonInclude.Include.NON_NULL)
     val targetReference: String? = null,
+)
+
+internal data class OrderQuoteStaleErrorResponse(
+    val code: String = FailureCode.ORDER_QUOTE_STALE.name,
+    val message: String,
+    val correlationId: String,
+    val currentQuote: io.github.kdh949.beanflow.ordering.api.OrderQuoteResponse,
 )
 
 internal data class ErrorDetail(

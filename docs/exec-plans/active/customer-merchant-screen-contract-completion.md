@@ -823,6 +823,15 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   migration/OpenAPI runtime parity/인증 경로와 frontend typecheck, 23 unit files/169 tests, design check,
   app/Storybook build, Sites 4 tests, Storybook docs 39 entries/49 state surfaces 및 live Storybook 전체
   interaction/a11y가 통과했다. Provider sandbox와 full release gate는 실행하지 않았다.
+- 2026-08-26: Non-reserving quote vertical slice에 Merchant/Fulfillment/Inventory/Promotion/Loyalty/Operations
+  owner snapshot read와 `POST /me/order-quotes`를 추가했다. quote는 `REPEATABLE_READ` read-only transaction에서
+  계산하고 아무 거래 resource도 만들지 않는다. 최종 `POST /orders`는 같은 owner 순서로 lock·re-quote한
+  fingerprint가 일치할 때만 기존 reservation과 immutable Order snapshot을 만든다.
+- 2026-08-26: `ORDER_QUOTE_STALE.currentQuote`를 BR-25 terminal 실패로 저장·동일 재생하고, Cart가 서버
+  pricing만 표시하며 사용자의 `변경 내용 확인` 뒤 새 fingerprint와 새 `Idempotency-Key`로 제출하도록
+  구현했다. 핵심 backend 7개 클래스와 취소 회귀, OpenAPI 문서 18 checks/runtime parity, frontend 18 unit
+  tests, typecheck/build/design check, Cart 9개 live Storybook interaction/a11y가 통과했다. 전체 ordering
+  package와 full release gate는 최종 stack에서 실행한다.
 
 ## Surprises & Discoveries
 
@@ -851,6 +860,9 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
 - Adding the bell to the customer shell made its summary read part of every customer-shell Storybook fixture.
   A shared signed-in fixture now declares the successful no-unread response, while dedicated bell and inbox
   stories still override it for unread, loading and dependency-failure states.
+- The existing point-accrual policy selection used a pessimistic lock even for reads. PostgreSQL rejects that lock
+  in the quote service's read-only transaction, so Operations now exposes separate non-locking quote inspection and
+  locked final-order selection while returning the same versioned policy snapshot.
 
 ## Decision Log
 
@@ -884,9 +896,10 @@ ADR-116/117 and the related ADR amendments.
 
 ## Outcomes & Retrospective
 
-Milestone 0 decision recording, Milestone 3 Store/menu display and Milestone 2 Notification inbox are complete.
+Milestone 0 decision recording, Milestone 3 Store/menu display, Milestone 2 Notification inbox and Milestone 4
+non-reserving quote are complete.
 Each child keeps its migration, transaction rules, API/OpenAPI/generated client, consuming UI and tests in one
-vertical slice. Quote, order/board/refund and final cross-slice milestones remain; the ExecPlan as a whole is not
+vertical slice. Order detail/board/refund and final cross-slice milestones remain; the ExecPlan as a whole is not
 complete.
 
 ## Revision Notes
@@ -901,3 +914,5 @@ complete.
   audit and the user-supplied scope exclusions.
 - 2026-08-26: Recorded the implemented Notification inbox vertical slice, the approved goodwill classification,
   observability and completed backend/frontend/Storybook verification evidence.
+- 2026-08-26: Recorded the implemented non-reserving quote, terminal stale replay, explicit Cart re-confirmation
+  and focused backend/OpenAPI/frontend/Storybook verification evidence.

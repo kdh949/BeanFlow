@@ -138,15 +138,18 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1display-content"
   /stores/{storeId}/pickup-slots:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slots"
+  /me/order-quotes:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1order-quotes"
   /orders:
     post:
       tags: [Ordering]
       operationId: createOrder
       summary: (고객) 주문 생성
       description: |
-        고객이 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
+        고객이 확인한 견적 fingerprint와 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
         서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
-        픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 모두 재검증·예약합니다.
+        픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
+        정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
         같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
 
         주요 오류:

@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonAnySetter
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderLineCommand
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteCommand
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteResponse
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderCommand
 import io.github.kdh949.beanflow.ordering.api.ReorderOrderUseCase
 import io.github.kdh949.beanflow.shared.api.CustomerActor
@@ -12,6 +15,7 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotEmpty
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -28,6 +32,18 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 data class CreateOrderRequest(
+    val storeId: UUID,
+    val pickupSlotId: UUID,
+    @field:NotEmpty
+    val lines: List<@Valid CreateOrderLineRequest>,
+    val couponIssuanceId: UUID?,
+    @field:Min(0)
+    val pointsToUseKrw: Long,
+    @field:Pattern(regexp = "[0-9a-f]{64}")
+    val expectedQuoteFingerprint: String,
+)
+
+data class OrderQuoteRequest(
     val storeId: UUID,
     val pickupSlotId: UUID,
     @field:NotEmpty
@@ -89,6 +105,7 @@ internal class OrderController(
                             },
                         couponIssuanceId = request.couponIssuanceId,
                         pointsToUseKrw = request.pointsToUseKrw,
+                        expectedQuoteFingerprint = request.expectedQuoteFingerprint,
                     ),
             )
         val response =
@@ -162,6 +179,37 @@ internal class OrderController(
         @PathVariable orderId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
     ) = oneTimeCheckoutService.prepare(customerId(actor), orderId, idempotencyKey)
+
+    private fun customerId(actor: CustomerActor): UUID =
+        try {
+            actor.actorId
+        } catch (_: IllegalArgumentException) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Authenticated subject is not a valid customer ID")
+        }
+}
+
+@Validated
+@RestController
+@RequestMapping("/api/v1/me/order-quotes")
+internal class OrderQuoteController(
+    private val orderQuoteUseCase: OrderQuoteUseCase,
+) {
+    @PostMapping
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun quote(
+        actor: CustomerActor,
+        @Valid @RequestBody request: OrderQuoteRequest,
+    ): OrderQuoteResponse =
+        orderQuoteUseCase.quote(
+            OrderQuoteCommand(
+                customerId = customerId(actor),
+                storeId = request.storeId,
+                pickupSlotId = request.pickupSlotId,
+                lines = request.lines.map { CreateOrderLineCommand(it.menuId, it.optionIds, it.quantity) },
+                couponIssuanceId = request.couponIssuanceId,
+                pointsToUseKrw = request.pointsToUseKrw,
+            ),
+        )
 
     private fun customerId(actor: CustomerActor): UUID =
         try {

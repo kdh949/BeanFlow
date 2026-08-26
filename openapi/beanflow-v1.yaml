@@ -1100,6 +1100,44 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /me/order-quotes:
+    post:
+      tags: [Ordering]
+      operationId: createOrderQuote
+      summary: 현재 owner 상태로 비예약 주문 견적 계산
+      security: [{ customerSession: [] }]
+      description: |
+        메뉴·옵션·재고·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+        서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
+        reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
+        호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderQuoteRequest"
+      responses:
+        "200":
+          description: guarantee가 NONE인 현재 비예약 견적
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
   /orders:
     post:
       tags: [Ordering]
@@ -7069,8 +7107,10 @@ components:
             $ref: '#/components/schemas/Error'
     OrderCreationConflict:
       description: |
-        Order resource conflict, idempotency payload reuse, or an identical
+        Order quote staleness, resource conflict, idempotency payload reuse, or an identical
         idempotent request that is still processing or requires manual review.
+        ORDER_QUOTE_STALE includes the terminally stored currentQuote that the customer must
+        explicitly review. Re-submission requires its fingerprint and a new Idempotency-Key.
         PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
         MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
         Retry-After and never re-executes the order command.
@@ -7086,7 +7126,9 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            oneOf:
+              - $ref: "#/components/schemas/Error"
+              - $ref: "#/components/schemas/OrderQuoteStaleError"
     ReorderConflict:
       description: |
         Source state, unavailable source item, resource reservation or idempotency
@@ -9191,7 +9233,7 @@ components:
     CreateOrderRequest:
       type: object
       additionalProperties: false
-      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      required: [storeId, pickupSlotId, lines, pointsToUseKrw, expectedQuoteFingerprint]
       description: |
         신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
         번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
@@ -9205,6 +9247,7 @@ components:
             quantity: 2
         couponIssuanceId: null
         pointsToUseKrw: 1000
+        expectedQuoteFingerprint: 3a6f04f95b4fbc6c25d31e4e1551b52b30ac27a5bf9f5f83a454d9172303b778
       properties:
         storeId:
           $ref: "#/components/schemas/Identifier"
@@ -9220,6 +9263,122 @@ components:
           $ref: "#/components/schemas/Identifier"
         pointsToUseKrw:
           $ref: "#/components/schemas/MoneyKrw"
+        expectedQuoteFingerprint:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: 고객이 마지막으로 명시적으로 확인한 OrderQuote의 opaque fingerprint입니다.
+    OrderQuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        pickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateOrderLineRequest"
+        couponIssuanceId:
+          $ref: "#/components/schemas/Identifier"
+        pointsToUseKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    OrderQuote:
+      type: object
+      additionalProperties: false
+      required: [quotedAt, quoteFingerprint, store, pickupWindow, lines, pricing, guarantee]
+      properties:
+        quotedAt:
+          $ref: "#/components/schemas/DateTime"
+        quoteFingerprint:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다.
+        store:
+          $ref: "#/components/schemas/OrderQuoteStore"
+        pickupWindow:
+          $ref: "#/components/schemas/OrderQuotePickupWindow"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OrderQuoteLine"
+        pricing:
+          $ref: "#/components/schemas/OrderQuotePricing"
+        guarantee:
+          type: string
+          enum: [NONE]
+    OrderQuoteStore:
+      type: object
+      additionalProperties: false
+      required: [storeId, name]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+    OrderQuotePickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      properties:
+        startsAt:
+          $ref: "#/components/schemas/DateTime"
+        endsAt:
+          $ref: "#/components/schemas/DateTime"
+    OrderQuoteLine:
+      type: object
+      additionalProperties: false
+      required: [menuId, menuName, quantity, optionNames, lineTotalKrw]
+      properties:
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        menuName:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          minimum: 1
+        optionNames:
+          type: array
+          items:
+            type: string
+        lineTotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    OrderQuotePricing:
+      type: object
+      additionalProperties: false
+      required: [subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency]
+      properties:
+        subtotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        couponDiscountKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        pointsAppliedKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        payableKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          type: string
+          enum: [KRW]
+    OrderQuoteStaleError:
+      type: object
+      additionalProperties: false
+      required: [code, message, correlationId, currentQuote]
+      properties:
+        code:
+          type: string
+          enum: [ORDER_QUOTE_STALE]
+        message:
+          type: string
+        correlationId:
+          type: string
+        currentQuote:
+          $ref: "#/components/schemas/OrderQuote"
     CreateOrderLineRequest:
       type: object
       additionalProperties: false

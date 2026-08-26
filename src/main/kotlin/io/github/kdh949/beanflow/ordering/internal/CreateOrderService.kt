@@ -62,6 +62,12 @@ internal class CreateOrderService(
                 correlationId,
             )
         }
+        if (command.expectedQuoteFingerprint?.matches(Regex("[0-9a-f]{64}")) != true) {
+            return errorResponse(
+                DomainFailure(FailureCode.INVALID_REQUEST, "Expected quote fingerprint must be a lowercase SHA-256 value"),
+                correlationId,
+            )
+        }
         val payloadHash =
             try {
                 CanonicalOrderPayload.hash(command)
@@ -122,6 +128,9 @@ internal class CreateOrderService(
                         orderId = registration.intendedOrderId,
                         command = command,
                     )
+                } catch (failure: OrderQuoteStaleFailure) {
+                    val response = staleResponse(failure, correlationId)
+                    return persistFailureOrDependencyError(registration.recordId, response, correlationId)
                 } catch (failure: DomainFailure) {
                     val response = errorResponse(failure, correlationId)
                     return persistFailureOrDependencyError(registration.recordId, response, correlationId)
@@ -181,6 +190,7 @@ internal class CreateOrderService(
                 FailureCode.STOCK_NOT_AVAILABLE -> "stock"
                 FailureCode.COUPON_NOT_AVAILABLE -> "coupon"
                 FailureCode.POINT_BALANCE_INSUFFICIENT -> "points"
+                FailureCode.ORDER_QUOTE_STALE -> "quote"
                 else -> null
             }
         resource?.let {
@@ -196,6 +206,24 @@ internal class CreateOrderService(
         idempotencyOutcome?.let {
             meterRegistry.counter("beanflow.order.idempotency.events", "outcome", it).increment()
         }
+    }
+
+    private fun staleResponse(
+        failure: OrderQuoteStaleFailure,
+        correlationId: String,
+    ): StoredHttpResponse {
+        recordFailureMetric(FailureCode.ORDER_QUOTE_STALE)
+        return StoredHttpResponse(
+            status = 409,
+            body =
+                objectMapper.writeValueAsString(
+                    OrderQuoteStaleErrorResponse(
+                        message = "Order quote changed and requires customer confirmation",
+                        correlationId = correlationId,
+                        currentQuote = failure.currentQuote,
+                    ),
+                ),
+        )
     }
 
     private fun statusOf(code: FailureCode): Int =

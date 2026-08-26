@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
 import io.github.kdh949.beanflow.payment.internal.BenefitOnlyPaymentService
 import io.github.kdh949.beanflow.payment.internal.PaymentJpaRepository
@@ -30,6 +31,7 @@ internal class BenefitOnlyOrderCreationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val expiryWorker: ReservationExpiryWorker,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -48,7 +50,9 @@ internal class BenefitOnlyOrderCreationTest
             val response =
                 createOrderUseCase.create(
                     "benefit-only-001",
-                    fixture.command(pointsToUseKrw = 900, couponIssuanceId = couponIssuanceId),
+                    orderQuoteUseCase.attachCurrentQuote(
+                        fixture.command(pointsToUseKrw = 900, couponIssuanceId = couponIssuanceId),
+                    ),
                 )
 
             assertThat(response.status).isEqualTo(201)
@@ -126,7 +130,7 @@ internal class BenefitOnlyOrderCreationTest
             val response =
                 createOrderUseCase.create(
                     "benefit-only-002",
-                    fixture.command(pointsToUseKrw = 999),
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = 999)),
                 )
 
             assertThat(response.status).isEqualTo(201)
@@ -145,7 +149,7 @@ internal class BenefitOnlyOrderCreationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 1_000)
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 1_000)
-            val command = fixture.command(pointsToUseKrw = 1_000)
+            val command = orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = 1_000))
             val barrier = CyclicBarrier(2)
             val executor = Executors.newFixedThreadPool(2)
 
@@ -179,7 +183,7 @@ internal class BenefitOnlyOrderCreationTest
                 val response =
                     createOrderUseCase.create(
                         "benefit-fault-001",
-                        fixture.command(pointsToUseKrw = 1_000),
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = 1_000)),
                     )
 
                 assertThat(response.status).isEqualTo(503)

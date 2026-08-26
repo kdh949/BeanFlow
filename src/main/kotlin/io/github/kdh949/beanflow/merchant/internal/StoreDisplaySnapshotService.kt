@@ -19,7 +19,7 @@ internal class StoreDisplaySnapshotService(
         val snapshots =
             jdbcTemplate.query(
                 """
-                SELECT profile.store_id, profile.name
+                SELECT profile.store_id, profile.name, store.version AS store_version
                   FROM merchant_store_discovery_profile profile
                   JOIN merchant_store store ON store.id = profile.store_id
                  WHERE profile.store_id = ?
@@ -28,6 +28,7 @@ internal class StoreDisplaySnapshotService(
                     StoreDisplaySnapshot(
                         storeId = resultSet.getObject("store_id", UUID::class.java),
                         name = resultSet.getString("name"),
+                        storeVersion = resultSet.getLong("store_version"),
                     )
                 },
                 storeId,

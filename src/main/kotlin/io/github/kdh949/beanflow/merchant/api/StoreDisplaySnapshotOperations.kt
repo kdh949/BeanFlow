@@ -5,6 +5,7 @@ import java.util.UUID
 data class StoreDisplaySnapshot(
     val storeId: UUID,
     val name: String,
+    val storeVersion: Long = 0,
 )
 
 interface StoreDisplaySnapshotOperations {

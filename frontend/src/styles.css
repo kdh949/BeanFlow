@@ -316,6 +316,12 @@ code {
 .cart-line b { color: var(--text-strong); font-size: var(--fs-body-sm); }
 .cart-total { padding-top: var(--sp-5); border-top: var(--bw-hair) solid var(--divider); display: flex; align-items: baseline; justify-content: space-between; }
 .cart-total strong { color: var(--text-strong); font-size: var(--fs-title-2); }
+.cart-quote-pricing { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cart-quote-pricing > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); }
+.cart-quote-pricing dt { color: var(--text-muted); font-size: var(--fs-body-sm); }
+.cart-quote-pricing dd { color: var(--text-strong); font-weight: 700; }
+.cart-quote-pricing .cart-total { margin-top: var(--sp-2); }
+.cart-quote-pricing .cart-total dd { font-size: var(--fs-title-2); }
 .cart-slots { display: flex; flex-direction: column; gap: var(--sp-4); }
 .cart-slots h2 { font-size: var(--fs-title-2); }
 

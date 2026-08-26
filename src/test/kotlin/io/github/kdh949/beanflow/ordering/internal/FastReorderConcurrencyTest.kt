@@ -26,6 +26,7 @@ internal class FastReorderConcurrencyTest
     @Autowired
     constructor(
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val reorderOrder: ReorderOrderUseCase,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -64,7 +65,9 @@ internal class FastReorderConcurrencyTest
         private fun sourceCommand(): ReorderOrderCommand {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            check(createOrder.create("concurrent-source", fixture.command()).status == 201)
+            check(
+                createOrder.create("concurrent-source", orderQuoteUseCase.attachCurrentQuote(fixture.command())).status == 201,
+            )
             val sourceOrderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             jdbcTemplate.update("UPDATE ordering_order SET state = 'EXPIRED' WHERE id = ?", sourceOrderId)
             return ReorderOrderCommand(

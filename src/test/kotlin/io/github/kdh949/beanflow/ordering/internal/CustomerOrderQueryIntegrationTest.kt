@@ -51,6 +51,7 @@ internal class CustomerOrderQueryIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrders: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val objectMapper: ObjectMapper,
         private val meterRegistry: MeterRegistry,
         private val clock: CustomerOrderQueryMutableClock,
@@ -379,7 +380,11 @@ internal class CustomerOrderQueryIntegrationTest
             pointsToUseKrw: Long = 0,
             couponIssuanceId: UUID? = null,
         ): String {
-            val response = createOrders.create(key, fixture.command(pointsToUseKrw, couponIssuanceId))
+            val response =
+                createOrders.create(
+                    key,
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw, couponIssuanceId)),
+                )
             assertThat(response.status).isEqualTo(201)
             return json(response.body)["order"]["publicReference"].asText()
         }

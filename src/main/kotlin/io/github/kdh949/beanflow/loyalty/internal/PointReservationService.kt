@@ -1,6 +1,9 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
 import io.github.kdh949.beanflow.loyalty.api.ExpiredPointRestorationMode
+import io.github.kdh949.beanflow.loyalty.api.PointQuoteAllocation
+import io.github.kdh949.beanflow.loyalty.api.PointQuoteOperations
+import io.github.kdh949.beanflow.loyalty.api.PointQuoteSnapshot
 import io.github.kdh949.beanflow.loyalty.api.PointReservationAllocation
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationResult
@@ -33,7 +36,67 @@ internal class PointReservationService(
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
-) : PointReservationOperations {
+) : PointReservationOperations,
+    PointQuoteOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspect(
+        customerId: UUID,
+        amountKrw: Long,
+    ): PointQuoteSnapshot? = quote(customerId, amountKrw, locked = false)
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockForOrderCreation(
+        customerId: UUID,
+        amountKrw: Long,
+    ): PointQuoteSnapshot? = quote(customerId, amountKrw, locked = true)
+
+    private fun quote(
+        customerId: UUID,
+        amountKrw: Long,
+        locked: Boolean,
+    ): PointQuoteSnapshot? {
+        if (amountKrw < 0) fail(FailureCode.INVALID_REQUEST, "Point amount must not be negative")
+        if (amountKrw == 0L) return null
+        val account =
+            (if (locked) accountRepository.findLockedByCustomerId(customerId) else accountRepository.findByCustomerId(customerId))
+                ?: fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Point account is not available")
+        if (account.availablePointsKrw < amountKrw) {
+            fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Available point balance is insufficient")
+        }
+        val now = clock.instant()
+        val lots =
+            if (locked) lotRepository.findReservableLotsLocked(account.id, now) else lotRepository.findReservableLots(account.id, now)
+        var remaining = amountKrw
+        val allocations = mutableListOf<PointQuoteAllocation>()
+        for (lot in lots) {
+            if (remaining == 0L) break
+            val allocation = minOf(remaining, lot.availableAmountKrw)
+            if (allocation > 0) {
+                allocations +=
+                    PointQuoteAllocation(
+                        pointLotId = lot.id,
+                        lotVersion = lot.version,
+                        expiresAt = lot.expiresAt,
+                        issuerType = lot.issuerType,
+                        issuerReference = lot.issuerReference,
+                        availableAmountKrw = lot.availableAmountKrw,
+                        allocationKrw = allocation,
+                    )
+                remaining -= allocation
+            }
+        }
+        if (remaining != 0L) {
+            fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Unexpired point lots are insufficient")
+        }
+        return PointQuoteSnapshot(
+            pointAccountId = account.id,
+            accountVersion = account.version,
+            availablePointsKrw = account.availablePointsKrw,
+            requestedPointsKrw = amountKrw,
+            allocations = allocations,
+        )
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReservePointsCommand): PointReservationResult {
         if (command.amountKrw <= 0 || command.sourceReference.isBlank()) {

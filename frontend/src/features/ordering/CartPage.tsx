@@ -1,8 +1,8 @@
 import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { components } from "../../api/schema";
-import { SubmissionIntent, unwrap } from "../../api/client";
+import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
@@ -11,12 +11,20 @@ import { useResource } from "../shared/useResource";
 import { Button, ButtonLink } from "../../design-system";
 import { couponSelection, useCouponSelection } from "../customer/couponSelection";
 import { useStore } from "../discovery/useStore";
-import { type CartLine, cart, cartDisplayTotalKrw, useCart } from "./cart";
+import { type CartLine, cart, useCart } from "./cart";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "./orderConflicts";
 import { nextPickupLabel, operatingStatusLabel } from "../discovery/storeDisplay";
 
 type PickupSlot = components["schemas"]["PickupSlot"];
 type Order = components["schemas"]["Order"];
+type OrderQuote = components["schemas"]["OrderQuote"];
+
+type QuoteState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; quote: OrderQuote }
+  | { status: "failed"; error: unknown }
+  | { status: "stale"; quote: OrderQuote };
 
 export function CartPage() {
   const state = useCart();
@@ -49,19 +57,21 @@ export function CartPage() {
     );
   }
 
-  return <CartContents storeId={state.cart.storeId} savedStoreName={state.cart.storeName} lines={state.cart.lines} total={cartDisplayTotalKrw(state.cart)} />;
+  return <CartContents storeId={state.cart.storeId} savedStoreName={state.cart.storeName} lines={state.cart.lines} />;
 }
 
-function CartContents({ storeId, savedStoreName, lines, total }: {
+function CartContents({ storeId, savedStoreName, lines }: {
   storeId: string;
   savedStoreName: string;
   lines: CartLine[];
-  total: number;
 }) {
   const navigate = useNavigate();
   const [selectedSlot, setSelectedSlot] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [quoteState, setQuoteState] = useState<QuoteState>({ status: "idle" });
+  const [quoteReload, setQuoteReload] = useState(0);
+  const quoteRequest = useRef(0);
   const orderIntent = useRef(new SubmissionIntent());
 
   // The saved name is what this browser recorded when the menu was added. The
@@ -78,14 +88,39 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
   );
   const slots = useResource<PickupSlot[]>(loadSlots);
 
+  useEffect(() => {
+    orderIntent.current.rotate();
+    setFailure(null);
+    const requestId = ++quoteRequest.current;
+    if (!selectedSlot || !storeAcceptsOrders) {
+      setQuoteState({ status: "idle" });
+      return;
+    }
+    setQuoteState({ status: "loading" });
+    const timer = window.setTimeout(() => {
+      const body = editableOrderInput(storeId, selectedSlot, lines, selectedCoupon?.couponIssuanceId);
+      void (async () => {
+        try {
+          const quote = unwrap(
+            await customerApi.POST("/me/order-quotes", {
+              params: { header: await customerCsrfHeader() },
+              body,
+            }),
+          ) as OrderQuote;
+          if (quoteRequest.current === requestId) setQuoteState({ status: "ready", quote });
+        } catch (error) {
+          if (quoteRequest.current === requestId) setQuoteState({ status: "failed", error });
+        }
+      })();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [storeId, selectedSlot, lines, selectedCoupon?.couponIssuanceId, storeAcceptsOrders, quoteReload]);
+
   async function createOrder() {
-    if (!selectedSlot || !storeAcceptsOrders) return;
+    if (!selectedSlot || !storeAcceptsOrders || quoteState.status !== "ready") return;
     const body = {
-      storeId,
-      pickupSlotId: selectedSlot,
-      lines: lines.map((line) => ({ menuId: line.menuId, optionIds: line.optionIds, quantity: line.quantity })),
-      pointsToUseKrw: 0,
-      ...(selectedCoupon ? { couponIssuanceId: selectedCoupon.couponIssuanceId } : {}),
+      ...editableOrderInput(storeId, selectedSlot, lines, selectedCoupon?.couponIssuanceId),
+      expectedQuoteFingerprint: quoteState.quote.quoteFingerprint,
     };
     setSubmitting(true);
     setFailure(null);
@@ -105,14 +140,20 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
       couponSelection.clear(storeId);
       navigate(order.payableKrw > 0 ? `/app/checkout/${order.orderId}` : `/app/orders/${order.publicReference}`);
     } catch (error) {
-      if (shouldRotateIdempotencyKey(error)) orderIntent.current.rotate();
-      setFailure(error);
+      const currentQuote = staleQuote(error);
+      if (currentQuote) {
+        setQuoteState({ status: "stale", quote: currentQuote });
+      } else {
+        if (shouldRotateIdempotencyKey(error)) orderIntent.current.rotate();
+        setFailure(error);
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
   const guidance = orderConflictGuidance(failure);
+  const visibleQuote = quoteState.status === "ready" || quoteState.status === "stale" ? quoteState.quote : null;
   const availableSlots = slots.state.status === "ready" ? slots.state.value.filter((slot) => slot.remainingCapacity > 0) : [];
 
   return (
@@ -156,14 +197,20 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
                 <Plus size={16} />
               </button>
             </span>
-            <b>{won.format(line.display.unitPriceKrw * line.quantity)}</b>
+            <b>{visibleQuote ? won.format(visibleQuote.lines[index]?.lineTotalKrw ?? 0) : "서버 확인 전"}</b>
           </div>
         ))}
-        <div className="cart-total">
-          <span>예상 금액</span>
-          <strong>{won.format(total)}</strong>
-        </div>
-        <p className="form-footnote">최종 금액과 재고, 픽업 가능 여부는 주문할 때 매장 기준으로 다시 확인해요.</p>
+        {quoteState.status === "idle" ? (
+          <p className="form-footnote" role="status">픽업 시간을 선택하면 서버가 현재 금액과 혜택을 확인해요.</p>
+        ) : null}
+        {quoteState.status === "loading" ? <LoadingState label="현재 주문 금액을 확인하는 중" /> : null}
+        {quoteState.status === "failed" ? (
+          <ErrorState error={quoteState.error} retry={() => setQuoteReload((value) => value + 1)} />
+        ) : null}
+        {visibleQuote ? <QuotePricing quote={visibleQuote} /> : null}
+        {quoteState.status === "ready" ? (
+          <p className="form-footnote">예약 전 견적입니다. 주문을 누르면 서버가 같은 조건인지 다시 확인해요.</p>
+        ) : null}
       </section>
 
       <section className="cart-slots">
@@ -225,15 +272,74 @@ function CartContents({ storeId, savedStoreName, lines, total }: {
         </div>
       ) : failure ? <ErrorState error={failure} /> : null}
 
+      {quoteState.status === "stale" ? (
+        <div className="surface-card cart-conflict" role="alert">
+          <strong>주문 금액과 조건이 변경됐어요</strong>
+          <p>아래 서버 견적을 확인한 뒤 새 주문으로 다시 제출해 주세요. 이전 요청은 같은 결과만 재생합니다.</p>
+          <div>
+            <Button
+              onClick={() => {
+                orderIntent.current.rotate();
+                setFailure(null);
+                setQuoteState({ status: "ready", quote: quoteState.quote });
+              }}
+            >
+              변경 내용 확인
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Button
         size="xl"
         block
         loading={submitting}
-        disabled={!selectedSlot || !storeAcceptsOrders}
+        disabled={!selectedSlot || !storeAcceptsOrders || quoteState.status !== "ready"}
         onClick={() => void createOrder()}
       >
-        {submitting ? "주문을 만드는 중" : `${won.format(total)} 주문하기`}
+        {submitting
+          ? "주문을 만드는 중"
+          : quoteState.status === "ready"
+            ? `${won.format(quoteState.quote.pricing.payableKrw)} 주문하기`
+            : "견적 확인 후 주문하기"}
       </Button>
     </div>
+  );
+}
+
+function editableOrderInput(
+  storeId: string,
+  pickupSlotId: string,
+  lines: CartLine[],
+  couponIssuanceId?: string,
+) {
+  return {
+    storeId,
+    pickupSlotId,
+    lines: lines.map((line) => ({ menuId: line.menuId, optionIds: line.optionIds, quantity: line.quantity })),
+    pointsToUseKrw: 0,
+    ...(couponIssuanceId ? { couponIssuanceId } : {}),
+  };
+}
+
+function staleQuote(error: unknown): OrderQuote | null {
+  if (!(error instanceof ApiRequestError) || error.code !== "ORDER_QUOTE_STALE") return null;
+  const quote = error.currentQuote;
+  if (!quote || typeof quote !== "object") return null;
+  const candidate = quote as Partial<OrderQuote>;
+  return typeof candidate.quoteFingerprint === "string" && /^[0-9a-f]{64}$/.test(candidate.quoteFingerprint) &&
+    candidate.pricing !== undefined && Array.isArray(candidate.lines)
+    ? candidate as OrderQuote
+    : null;
+}
+
+function QuotePricing({ quote }: { quote: OrderQuote }) {
+  return (
+    <dl className="cart-quote-pricing" aria-label="서버 주문 견적">
+      <div><dt>상품 금액</dt><dd>{won.format(quote.pricing.subtotalKrw)}</dd></div>
+      <div><dt>쿠폰 할인</dt><dd>-{won.format(quote.pricing.couponDiscountKrw)}</dd></div>
+      <div><dt>포인트 사용</dt><dd>-{won.format(quote.pricing.pointsAppliedKrw)}</dd></div>
+      <div className="cart-total"><dt>결제 금액</dt><dd>{won.format(quote.pricing.payableKrw)}</dd></div>
+    </dl>
   );
 }

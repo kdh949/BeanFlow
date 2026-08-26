@@ -34,6 +34,7 @@ internal class OneTimeCheckoutIntegrationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val checkoutService: OneTimeCheckoutService,
         private val reconciliationWorker: PaymentReconciliationWorker,
         private val gateway: ScriptedTestPaymentGateway,
@@ -263,7 +264,8 @@ internal class OneTimeCheckoutIntegrationTest
             key: String,
         ): UUID {
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
+            assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
+                .isEqualTo(201)
             return value("SELECT id FROM ordering_order")
         }
 

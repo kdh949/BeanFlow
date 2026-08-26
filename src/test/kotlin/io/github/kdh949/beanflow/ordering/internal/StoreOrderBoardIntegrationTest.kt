@@ -65,6 +65,7 @@ internal class StoreOrderBoardIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrders: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val transitionService: StoreOrderTransitionService,
         private val paymentGateway: ScriptedTestPaymentGateway,
@@ -484,7 +485,7 @@ internal class StoreOrderBoardIntegrationTest
             fixture: OrderCreationFixture,
             key: String,
         ): CreatedOrder {
-            val result = createOrders.create(key, fixture.command())
+            val result = createOrders.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             assertThat(result.status).isEqualTo(201)
             val body = json(result.body)["order"]
             return CreatedOrder(UUID.fromString(body["orderId"].asText()), body["publicReference"].asText())

@@ -21,6 +21,7 @@ internal class OrderReferenceExhaustionIntegrationTest
     @Autowired
     constructor(
         private val orders: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val jdbcTemplate: JdbcTemplate,
     ) {
         @MockitoBean
@@ -41,7 +42,7 @@ internal class OrderReferenceExhaustionIntegrationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            val result = orders.create("reference-exhaustion", fixture.command())
+            val result = orders.create("reference-exhaustion", orderQuoteUseCase.attachCurrentQuote(fixture.command()))
 
             assertThat(result.status).isEqualTo(503)
             assertThat(result.body).contains("\"code\":\"ORDER_REFERENCE_EXHAUSTED\"")

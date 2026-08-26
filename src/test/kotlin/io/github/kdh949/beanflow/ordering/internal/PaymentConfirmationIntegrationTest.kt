@@ -46,6 +46,7 @@ internal class PaymentConfirmationIntegrationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val expiryUseCase: ReservationExpiryUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val reconciliationWorker: PaymentReconciliationWorker,
@@ -728,7 +729,8 @@ internal class PaymentConfirmationIntegrationTest
             key: String,
         ): UUID {
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
+            assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
+                .isEqualTo(201)
             return value("SELECT id FROM ordering_order")
         }
 
@@ -744,7 +746,8 @@ internal class PaymentConfirmationIntegrationTest
                 Timestamp.from(pickupStartsAt.plusSeconds(600)),
                 fixture.pickupSlotId,
             )
-            assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
+            assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
+                .isEqualTo(201)
             return value("SELECT id FROM ordering_order")
         }
 
