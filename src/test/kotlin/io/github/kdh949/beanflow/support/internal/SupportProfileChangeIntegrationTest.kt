@@ -85,6 +85,9 @@ internal class SupportProfileChangeIntegrationTest
 
         @BeforeEach
         fun resetAndSeed() {
+            jdbcTemplate.execute(
+                "TRUNCATE TABLE notification_customer_preference, notification_inbox_item, notification_delivery CASCADE",
+            )
             jdbcTemplate.execute("TRUNCATE TABLE identity_customer_support_profile CASCADE")
             jdbcTemplate.execute("TRUNCATE TABLE support_case CASCADE")
             jdbcTemplate.execute("TRUNCATE TABLE operations_audit_record, operations_operator_permission_grant CASCADE")
@@ -816,10 +819,10 @@ internal class ControllableProfileNotificationOperations(
         jdbcTemplate.update(
             """
             INSERT INTO notification_delivery (
-                id, event_id, event_type, logical_source, order_id, recipient_type, recipient_id,
+                id, event_id, event_type, logical_source, order_id, classification, recipient_type, recipient_id,
                 logical_channel, template, payload_json, state, attempt_count, next_attempt_at,
                 provider_idempotency_key, correlation_id, created_at, updated_at, version
-            ) VALUES (?, ?, 'SupportProfileChangeTestV1', ?, ?, 'PROFILE_TARGET', ?, ?,
+            ) VALUES (?, ?, 'SupportProfileChangeTestV1', ?, ?, 'TRANSACTIONAL', 'PROFILE_TARGET', ?, ?,
                       'SUPPORT_PROFILE_CHANGED', '{}', 'PENDING', 0, ?, ?, ?, ?, ?, 0)
             ON CONFLICT (logical_source) DO NOTHING
             """.trimIndent(),

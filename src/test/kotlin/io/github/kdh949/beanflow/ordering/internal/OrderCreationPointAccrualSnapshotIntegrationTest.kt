@@ -24,6 +24,7 @@ internal class OrderCreationPointAccrualSnapshotIntegrationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val snapshotOperations: OrderPointAccrualSnapshotOperations,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -55,12 +56,20 @@ internal class OrderCreationPointAccrualSnapshotIntegrationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 1_000)
 
-            val firstResponse = createOrderUseCase.create("accrual-snapshot-0001", fixture.command())
+            val firstResponse =
+                createOrderUseCase.create(
+                    "accrual-snapshot-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             val firstOrderId = orderId(firstResponse.body)
             val beforePolicyChange = snapshotOperations.read(firstOrderId)
 
             val nextVersionId = installNextGlobalPolicy(accrualRateBps = 777)
-            val secondResponse = createOrderUseCase.create("accrual-snapshot-0002", fixture.command())
+            val secondResponse =
+                createOrderUseCase.create(
+                    "accrual-snapshot-0002",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             val secondOrderId = orderId(secondResponse.body)
 
             assertThat(firstResponse.status).isEqualTo(201)
@@ -98,7 +107,7 @@ internal class OrderCreationPointAccrualSnapshotIntegrationTest
             val response =
                 createOrderUseCase.create(
                     "benefit-accrual-0001",
-                    fixture.command(pointsToUseKrw = 1_000),
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = 1_000)),
                 )
             val source = snapshotOperations.read(orderId(response.body))
 
@@ -126,7 +135,11 @@ internal class OrderCreationPointAccrualSnapshotIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             installSnapshotFailure()
 
-            val response = createOrderUseCase.create("accrual-failure-0001", fixture.command())
+            val response =
+                createOrderUseCase.create(
+                    "accrual-failure-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
 
             assertThat(response.status).isEqualTo(503)
             assertThat(response.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")

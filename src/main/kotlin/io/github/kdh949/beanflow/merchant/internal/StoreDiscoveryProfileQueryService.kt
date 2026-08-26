@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
+import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayProjection
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -41,6 +42,7 @@ internal class StoreDiscoveryProfileQueryService(
                 "Store discovery profile projection is invalid",
             )
         }
+        requireCustomerDisplayProjectable(projection.customerDisplay)
     }
 
     private fun requireDisplayProjectable(projection: StoreDiscoveryDisplayProjection) {
@@ -48,6 +50,29 @@ internal class StoreDiscoveryProfileQueryService(
             throw DomainFailure(
                 FailureCode.DEPENDENCY_UNAVAILABLE,
                 "Store discovery display projection is invalid",
+            )
+        }
+        requireCustomerDisplayProjectable(projection.customerDisplay)
+    }
+
+    private fun requireCustomerDisplayProjectable(display: StoreCustomerDisplayProjection) {
+        val days = display.operatingHours?.days ?: return
+        val completeWeek =
+            days.size == java.time.DayOfWeek.entries.size && days.map { it.dayOfWeek }.toSet() ==
+                java.time.DayOfWeek.entries
+                    .toSet()
+        val validTuples =
+            days.all { day ->
+                if (day.closed) {
+                    day.opensAt == null && day.closesAt == null
+                } else {
+                    day.opensAt != null && day.closesAt != null && day.opensAt < day.closesAt
+                }
+            }
+        if (!completeWeek || !validTuples) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Store operating-hours projection is invalid",
             )
         }
     }

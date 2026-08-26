@@ -1,6 +1,6 @@
 # BeanFlow Frontend Design-System Inventory
 
-> Snapshot: 2026-08-23
+> Snapshot: 2026-08-26
 > Scope: `frontend/` editable source, current router, Storybook index, generated pre-baseline snapshot, CI gates
 > Canonicality: 이 문서는 inventory와 migration 상태를 기록한다. API source of truth는 typed TSX와
 > Storybook docs이며 `_ds_bundle.js`와 `_ds_manifest.json`은 근거 자료일 뿐이다.
@@ -76,8 +76,8 @@ typed owner가 없는 selector family를 추가하면 `check:design`의 `orphan-
 
 ## 6. Route and state coverage
 
-Router의 39개 path/index/layout entry에 연결된 35개 element component는 같은 source를 사용하는
-35개 CSF story 파일에서 직접 열 수 있다. 인증 gate와 shell도 별도 Pattern/Page story로 검증한다.
+Router의 40개 path/index/layout entry에 연결된 36개 element component는 같은 source를 사용하는
+37개 CSF story 파일에서 직접 열 수 있다. 인증 gate와 shell도 별도 Pattern/Page story로 검증한다.
 
 | Route | Component | Direct story states |
 |---|---|---|
@@ -93,6 +93,7 @@ Router의 39개 path/index/layout entry에 연결된 35개 element component는 
 | `/app/points` | `CustomerPointsPage` | balance, zero balance, integrity failure |
 | `/app/coupons` | `CouponWalletPage` | applicable/unavailable, empty, store selection, loading/error |
 | `/app/favorites` | `FavoriteStoresPage` | saved, empty, unavailable, loading |
+| `/app/notifications` | `NotificationInboxPage` | unread/read, marketing opt-out, empty, loading, dependency unavailable |
 | `/app/me`, `/app/help` | `CustomerMyPage`, `CustomerHelpPage` | signed-in links, safe support guidance |
 | `/store/login`, `/store/password` | merchant auth pages | sign-in, initial password, rejected credentials/password |
 | `/store` | `StoreOrderBoardPage` | multi-store, overflow, transitions, 409 refresh, empty/permission failure |
@@ -115,14 +116,14 @@ in Docs and keep their real form submissions in `!autodocs` interaction stories,
 
 | Surface | Current result |
 |---|---:|
-| CSF story files | 35 |
-| Stories | 156 |
-| Static Docs entries | 37 |
-| Multi-state MSW Docs | 25 |
+| CSF story files | 37 |
+| Stories | 174 |
+| Static Docs entries | 39 |
+| Multi-state MSW Docs | 27 |
 | Browser-asserted stateful Docs | 14 |
 | Browser-asserted Docs state surfaces | 49 |
-| Router element components checked by guard | 35 |
-| MCP component/page entries | 35 |
+| Router element components checked by guard | 36 |
+| MCP component/page entries | 37 |
 | MCP foundation docs | `Foundations/Overview` |
 
 `Explorations/Workflow`은 static Storybook에서 template로 볼 수 있지만 `tags: ['!manifest']`로 MCP
@@ -148,7 +149,7 @@ component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `
 | `test:unit` | shared utilities와 product component behavior |
 | `test:storybook:ci` | every CSF interaction and a11y `error` in Chromium |
 | `build-storybook` | manager/preview/static asset compilation |
-| `test:storybook:docs` | all 37 Docs render; 14 stateful Docs의 49 state surfaces show their own marker |
+| `test:storybook:docs` | all 39 Docs render; 14 stateful Docs의 49 state surfaces show their own marker |
 | `typecheck` | generated runtime schema와 TypeScript 오류 0건 |
 | CI | install, adherence, typecheck, unit, Storybook browser/a11y, static build, Docs smoke |
 

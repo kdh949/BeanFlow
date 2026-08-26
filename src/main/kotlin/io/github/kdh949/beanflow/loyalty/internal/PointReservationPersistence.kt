@@ -295,6 +295,8 @@ internal class SupportResolutionPointRestorationEntity(
 )
 
 internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity, UUID> {
+    fun findByCustomerId(customerId: UUID): PointAccountEntity?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select account from PointAccountEntity account where account.id = :accountId")
     fun findLockedById(
@@ -309,6 +311,15 @@ internal interface PointAccountJpaRepository : JpaRepository<PointAccountEntity,
 }
 
 internal interface PointLotJpaRepository : JpaRepository<PointLotEntity, UUID> {
+    @Query(
+        "select lot from PointLotEntity lot where lot.pointAccountId = :accountId " +
+            "and lot.expiresAt > :now and lot.availableAmountKrw > 0 order by lot.expiresAt, lot.id",
+    )
+    fun findReservableLots(
+        @Param("accountId") accountId: UUID,
+        @Param("now") now: Instant,
+    ): List<PointLotEntity>
+
     @Query(
         "select coalesce(sum(lot.availableAmountKrw), 0) from PointLotEntity lot " +
             "where lot.pointAccountId = :accountId",

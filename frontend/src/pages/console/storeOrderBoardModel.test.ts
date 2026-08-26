@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoreOrderBoard, StoreOrderBoardItem } from "./storeOrderBoardModel";
-import { reconcileBoardItem, sortStoreOrderBoard } from "./storeOrderBoardModel";
+import { reconcileBoardItem, sortStoreOrderBoard, storeOrderElapsedLabel } from "./storeOrderBoardModel";
 
 function item(overrides: Partial<StoreOrderBoardItem> = {}): StoreOrderBoardItem {
   return {
@@ -15,6 +15,7 @@ function item(overrides: Partial<StoreOrderBoardItem> = {}): StoreOrderBoardItem
     acceptanceDeadlineAt: "2026-08-20T03:05:00Z",
     acceptancePhase: "OPEN",
     allowedActions: ["ACCEPT", "REJECT"],
+    lifecycle: { paidAt: "2026-08-20T03:00:00Z" },
     ...overrides,
   };
 }
@@ -30,6 +31,21 @@ function board(items: StoreOrderBoardItem[]): StoreOrderBoard {
 }
 
 describe("store order board model", () => {
+  it("calculates elapsed copy from a fixed client clock and the current persisted milestone", () => {
+    const now = new Date("2026-08-20T03:05:59Z");
+
+    expect(storeOrderElapsedLabel(item(), now)).toBe("결제 후 5분 경과");
+    expect(storeOrderElapsedLabel(item({
+      status: "PREPARING",
+      lane: "PREPARING",
+      lifecycle: {
+        paidAt: "2026-08-20T03:00:00Z",
+        acceptedAt: "2026-08-20T03:01:00Z",
+        preparingAt: "2026-08-20T03:03:00Z",
+      },
+    }), now)).toBe("제조 시작 후 2분 경과");
+  });
+
   it("sorts business dates, pickup windows, and reference ties without mutating the source", () => {
     const late = item({ orderReference: "ORD-LATE", pickupWindowStart: "2026-08-20T03:30:00Z" });
     const tieB = item({ orderReference: "ORD-B" });

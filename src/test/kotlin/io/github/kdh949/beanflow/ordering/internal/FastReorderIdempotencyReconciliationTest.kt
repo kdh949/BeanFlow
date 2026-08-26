@@ -25,6 +25,7 @@ internal class FastReorderIdempotencyReconciliationTest
         private val worker: OrderIdempotencyReconciliationWorker,
         private val idempotency: OrderIdempotencyService,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val reorderOrder: ReorderOrderUseCase,
         private val jdbcTemplate: JdbcTemplate,
         private val clock: Clock,
@@ -193,7 +194,13 @@ internal class FastReorderIdempotencyReconciliationTest
         private fun sourceOrder(): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            check(createOrder.create("source-create-${UUID.randomUUID()}", fixture.command()).status == 201)
+            check(
+                createOrder
+                    .create(
+                        "source-create-${UUID.randomUUID()}",
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                    ).status == 201,
+            )
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             jdbcTemplate.update("UPDATE ordering_order SET state = 'EXPIRED' WHERE id = ?", orderId)
             return SourceFixture(fixture, orderId)

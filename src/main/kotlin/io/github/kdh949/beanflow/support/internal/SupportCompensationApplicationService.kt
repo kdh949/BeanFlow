@@ -98,7 +98,12 @@ internal class QuerySupportCompensationHandler(
         compensationRequestId: UUID,
     ): SupportCompensationResource {
         val resource = transactions.get(actorId, compensationRequestId)
-        val notificationState = resource.notificationDeliveryId?.let(notifications::findGoodwill)?.state
+        val notificationState =
+            if (resource.state == SupportCompensationRequestState.NOTIFICATION_SKIPPED) {
+                "NOTIFICATION_SKIPPED"
+            } else {
+                resource.notificationDeliveryId?.let(notifications::findGoodwill)?.state
+            }
         return resource.copy(notificationState = notificationState)
     }
 }
@@ -115,7 +120,12 @@ internal class SupportCompensationNotificationHandler(
         actorId: UUID,
         retry: RetrySupportCompensationNotificationCommand?,
     ): SupportCompensationResource {
-        if (resource.state == SupportCompensationRequestState.NOTIFICATION_ACCEPTED) {
+        if (resource.state in
+            setOf(
+                SupportCompensationRequestState.NOTIFICATION_ACCEPTED,
+                SupportCompensationRequestState.NOTIFICATION_SKIPPED,
+            )
+        ) {
             return queries.get(actorId, resource.compensationRequestId)
         }
         val accepted =
@@ -135,7 +145,16 @@ internal class SupportCompensationNotificationHandler(
             } catch (failure: RuntimeException) {
                 return transactions.recordNotificationFailure(resource.compensationRequestId, retry, actorId, failure)
             }
-        transactions.completeNotification(resource.compensationRequestId, accepted.deliveryId, retry, actorId)
+        if (accepted.state == "NOTIFICATION_SKIPPED") {
+            transactions.skipNotification(resource.compensationRequestId, retry, actorId)
+        } else {
+            transactions.completeNotification(
+                resource.compensationRequestId,
+                requireNotNull(accepted.deliveryId) { "Accepted notification must bind a delivery" },
+                retry,
+                actorId,
+            )
+        }
         return queries.get(actorId, resource.compensationRequestId)
     }
 }

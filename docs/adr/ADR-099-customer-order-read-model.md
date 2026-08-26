@@ -173,9 +173,43 @@ allowedActions      서버가 계산한 수행 가능 행동
 - 검색·필터 요구가 늘어 정렬 키 조합이 인덱스로 감당되지 않을 때
 - 여러 Context를 조인해야 하는 목록 요구가 생길 때
 
+### 고객 상세 pricing·lifecycle Amendment (2026-08-25)
+
+customer order **목록**의 compact `totalAmountKrw=payableKrw`는 유지한다. **상세** 응답은
+`totalAmountKrw`를 compatibility alias 없이 다음 immutable pricing object로 교체한다.
+
+```text
+pricing {
+  subtotalKrw
+  couponDiscountKrw
+  pointsAppliedKrw
+  payableKrw
+  currency
+}
+lifecycle? {
+  paidAt?
+  acceptedAt?
+  preparingAt?
+  readyAt?
+  completedAt?
+}
+```
+
+pricing은 주문 시 저장된 snapshot만 읽으며 현재 Menu, Campaign, PointAccount 또는 Payment Provider를
+다시 계산하지 않는다. `subtotalKrw = couponDiscountKrw + pointsAppliedKrw + payableKrw`와 KRW
+currency를 검증한다. lifecycle은 실제 Order event timestamp만 포함하고 아직 발생하지 않은 단계는
+생략한다. pickup window, `updatedAt`, client clock 또는 예상 처리시간으로 timestamp를 만들지 않는다.
+Order state와 persisted timestamp 순서가 모순이면 503 projection/invariant failure이며 정상 단계
+생략으로 위장하지 않는다.
+
+customer 화면의 `거래 요약`은 public order reference, orderedAt과 이 immutable pricing을 보여 주는
+in-app Order summary다. PG 영수증, 카드전표, fiscal/VAT 문서나 Provider receipt가 아니며 내부
+Payment/provider identifier와 customer PII를 추가하지 않는다.
+
 ## Related Decisions
 
 - [ADR-070](ADR-070-signed-cursor-and-pagination-contract.md)
 - [ADR-096](ADR-096-public-order-reference.md)
 - [ADR-098](ADR-098-order-display-snapshots.md)
 - [ADR-100](ADR-100-store-order-board-read-model.md)
+- [ADR-116](ADR-116-non-reserving-order-quote.md)

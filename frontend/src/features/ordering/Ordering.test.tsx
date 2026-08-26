@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,13 +27,33 @@ function failed(status: number, code: string, message: string) {
 
 const menus = {
   items: [
-    { menuId: "menu-1", name: "아메리카노", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }], image: { url: "/demo/catalog/americano.webp", expiresAt: "2099-01-01T00:00:00Z" } },
-    { menuId: "menu-2", name: "오트 라떼", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
+    { menuId: "menu-1", name: "아메리카노", displayCategory: "커피", description: "고소한 원두의 긴 여운", basePriceKrw: 4_500, currency: "KRW", available: true, options: [{ optionId: "option-1", name: "샷 추가", additionalPriceKrw: 500, available: true }], image: { url: "/demo/catalog/americano.webp", expiresAt: "2099-01-01T00:00:00Z" } },
+    { menuId: "menu-2", name: "오트 라떼", description: "부드러운 귀리 음료", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
   ],
 };
-const store = { storeId: "store-1", name: "성수 로스터리", pickupAvailable: true };
+const store = {
+  storeId: "store-1",
+  name: "성수 로스터리",
+  orderingAvailable: true,
+  pickupAvailable: true,
+  nextPickupWindow: { startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z" },
+  customerDisplay: {
+    addressLine: "서울 성동구 연무장길 10",
+    directionsHint: "성수역 3번 출구에서 도보 4분",
+    operatingStatus: "OPEN",
+  },
+};
 const openSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 4 }] };
 const closedSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 0 }] };
+const quote = (payableKrw = 9_000, fingerprint = "a".repeat(64)) => ({
+  quotedAt: "2026-08-16T01:55:00Z",
+  quoteFingerprint: fingerprint,
+  store: { storeId: "store-1", name: "성수 로스터리" },
+  pickupWindow: { startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z" },
+  lines: [{ menuId: "menu-1", menuName: "메뉴 menu-1", quantity: payableKrw / 4_500, optionNames: [], lineTotalKrw: payableKrw }],
+  pricing: { subtotalKrw: payableKrw, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw, currency: "KRW" },
+  guarantee: "NONE",
+});
 
 function routeGet(routes: Record<string, unknown>) {
   return vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
@@ -135,6 +155,7 @@ describe("store identity comes from the server", () => {
     renderStore();
 
     expect(await screen.findByRole("heading", { name: "성수 로스터리" })).toBeInTheDocument();
+    expect(screen.getByText("서울 성동구 연무장길 10")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "매장" })).not.toBeInTheDocument();
   });
 
@@ -196,7 +217,25 @@ describe("store detail", () => {
     renderStore();
 
     expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "커피" })).toBeInTheDocument();
+    expect(screen.getByText("고소한 원두의 긴 여운")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "미분류" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /오트 라떼/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
+  });
+
+  it("keeps operating hours separate from the store ordering switch", async () => {
+    routeGet({
+      "/stores/{storeId}": ok({ ...store, orderingAvailable: false, pickupAvailable: false, nextPickupWindow: undefined }),
+      "/stores/{storeId}/menus": ok(menus),
+      "/stores/{storeId}/pickup-slots": ok(openSlots),
+    });
+
+    renderStore();
+
+    expect(await screen.findByText("영업 중")).toBeInTheDocument();
+    expect(screen.getByText("주문 불가")).toBeInTheDocument();
+    expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
 
@@ -223,12 +262,16 @@ describe("order creation conflicts", () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1"));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
     routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
-    vi.spyOn(customerApi, "POST").mockResolvedValue(failed(409, "PICKUP_SLOT_FULL", "슬롯 수용량이 없습니다.") as never);
+    vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) =>
+      path === "/me/order-quotes"
+        ? ok(quote(4_500)) as never
+        : failed(409, "PICKUP_SLOT_FULL", "슬롯 수용량이 없습니다.") as never,
+    );
 
     renderCart();
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /가능/ }));
-    await user.click(screen.getByRole("button", { name: /주문하기/ }));
+    await user.click(await screen.findByRole("button", { name: /4,500.*주문하기/ }));
 
     expect(await screen.findByText("고른 픽업 시간이 방금 마감됐어요")).toBeInTheDocument();
     expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ menuId: "menu-1" }] } });
@@ -239,26 +282,99 @@ describe("order creation conflicts", () => {
     expect(guidance?.recovery).toBe("wait");
     expect(shouldRotateIdempotencyKey(new ApiRequestError(409, "IDEMPOTENCY_REQUEST_IN_PROGRESS", ""))).toBe(false);
     expect(shouldRotateIdempotencyKey(new ApiRequestError(409, "IDEMPOTENCY_KEY_REUSED", ""))).toBe(true);
+    expect(shouldRotateIdempotencyKey(new ApiRequestError(409, "ORDER_QUOTE_STALE", ""))).toBe(false);
   });
 
   it("sends the CSRF header and the cart lines on order creation", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
     routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
-    const post = vi.spyOn(customerApi, "POST").mockResolvedValue(
-      ok({ order: { orderId: "order-1", publicReference: "BF-2345-6789", payableKrw: 9_000 } }) as never,
+    const post = vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) =>
+      path === "/me/order-quotes"
+        ? ok(quote()) as never
+        : ok({ order: { orderId: "order-1", publicReference: "BF-2345-6789", payableKrw: 9_000 } }) as never,
     );
 
     renderCart();
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /가능/ }));
-    await user.click(screen.getByRole("button", { name: /주문하기/ }));
+    await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
+    expect(post.mock.calls[0]?.[0]).toBe("/me/order-quotes");
     expect(post.mock.calls[0]?.[1]).toMatchObject({
       params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } },
       body: { storeId: "store-1", pickupSlotId: "slot-1", lines: [{ menuId: "menu-1", optionIds: [], quantity: 2 }] },
     });
+    expect(post.mock.calls[1]?.[0]).toBe("/orders");
+    expect(post.mock.calls[1]?.[1]).toMatchObject({
+      params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } },
+      body: {
+        storeId: "store-1",
+        pickupSlotId: "slot-1",
+        lines: [{ menuId: "menu-1", optionIds: [], quantity: 2 }],
+        expectedQuoteFingerprint: "a".repeat(64),
+      },
+    });
     expect(cart.read()).toEqual({ status: "empty" });
+  });
+
+  it("clears the previous money while a changed cart is being requoted", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    let quoteCall = 0;
+    vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) => {
+      if (path !== "/me/order-quotes") throw new Error(`unexpected POST ${path}`);
+      quoteCall += 1;
+      return ok(quote(quoteCall === 1 ? 9_000 : 13_500, quoteCall === 1 ? "a".repeat(64) : "b".repeat(64))) as never;
+    });
+
+    renderCart();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "메뉴 menu-1 수량 늘리기" }));
+
+    expect(screen.queryAllByText("₩9,000")).toHaveLength(0);
+    expect(await screen.findByText("현재 주문 금액을 확인하는 중")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /13,500.*주문하기/ })).toBeEnabled();
+    expect(quoteCall).toBe(2);
+  });
+
+  it("requires explicit stale quote confirmation and submits a new key with the new fingerprint", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    const currentQuote = quote(10_000, "b".repeat(64));
+    const orderRequests: Array<{ body?: unknown; key?: string }> = [];
+    vi.spyOn(customerApi, "POST").mockImplementation(async (path: string, options: unknown) => {
+      if (path === "/me/order-quotes") return ok(quote()) as never;
+      const request = options as { body?: unknown; params?: { header?: Record<string, string> } };
+      orderRequests.push({ body: request.body, key: request.params?.header?.["Idempotency-Key"] });
+      if (orderRequests.length === 1) {
+        return {
+          error: { code: "ORDER_QUOTE_STALE", message: "changed", currentQuote },
+          response: new Response(null, { status: 409 }),
+        } as never;
+      }
+      return ok({ order: { orderId: "order-2", publicReference: "BF-2345-6790", payableKrw: 10_000 } }) as never;
+    });
+
+    renderCart();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
+
+    expect(await screen.findByText("주문 금액과 조건이 변경됐어요")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "견적 확인 후 주문하기" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "변경 내용 확인" }));
+    await user.click(screen.getByRole("button", { name: /10,000.*주문하기/ }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "결제 화면" })).toBeInTheDocument());
+
+    expect(orderRequests).toHaveLength(2);
+    expect(orderRequests[0]?.body).toMatchObject({ expectedQuoteFingerprint: "a".repeat(64) });
+    expect(orderRequests[1]?.body).toMatchObject({ expectedQuoteFingerprint: "b".repeat(64) });
+    expect(orderRequests[1]?.key).not.toBe(orderRequests[0]?.key);
   });
 });

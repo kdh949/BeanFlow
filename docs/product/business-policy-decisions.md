@@ -1125,6 +1125,14 @@
 - **Status:** Accepted for MVP
 - **Decision:** 멱등성 키의 유효 범위는 `actorId + API operation + Idempotency-Key`다. 서버는 정규화한 요청 payload hash와 처리 상태·응답을 저장한다. 동일 범위의 같은 키와 같은 payload는 기존 결과를 반환하고, 같은 키에 다른 payload가 들어오면 `409 Conflict`를 반환한다.
 - **Order Creation Amendment (2026-07-28):** 주문 생성의 같은 key·같은 payload 재요청은 저장된 최초 HTTP status와 body를 그대로 반환한다. 아직 `PROCESSING`이면 새 실행이나 202 성공 표현 없이 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다. 확정된 실패도 최초 4xx/503을 저장·재생하며 다시 실행하려면 새 key를 사용한다.
+- **Order Quote Stale Amendment (2026-08-25):** `POST /orders`의
+  `409 ORDER_QUOTE_STALE`도 확정된 주문 생성 실패다. 첫 status와
+  `currentQuote` body를 terminal `FAILED` 응답으로 저장하고 같은 key·같은 payload에 그대로
+  재생한다. replay의 `currentQuote`를 최신 상태로 다시 계산하지 않는다. 고객이 current quote를
+  확인한 뒤 주문을 다시 실행하려면 새 `expectedQuoteFingerprint`와 새 `Idempotency-Key`를
+  사용한다. stale transaction은 Order·reservation·Payment·Audit·event를 남기지 않지만 이 terminal
+  idempotency response는 별도 transaction에 남는다. 저장 실패는 성공이나 재실행 가능 상태로
+  바꾸지 않고 기존 503 failure policy를 따른다.
 - **Payment Reconciliation Amendment (2026-07-29):** 결제 승인 결과가
   `UNKNOWN`이면 새 승인을 보내지 않고 Provider 상태를 10초, 30초, 2분, 5분,
   15분 시점에 최대 다섯 번 조회한다. 계속 불명이면 `MANUAL_REVIEW`와 단일
@@ -2306,6 +2314,157 @@
 
 ---
 
+## BR-49 고객 주문 전 비예약 quote와 최종 확인
+
+- **Status:** Accepted for MVP
+- **Decision:** 고객은 `POST /api/v1/me/order-quotes`에 최종 주문과 같은 editable input을 보내
+  현재 owner state의 server 계산을 확인한다. quote는 `subtotalKrw`, `couponDiscountKrw`,
+  `pointsAppliedKrw`, `payableKrw`, `currency`와 line·pickup snapshot,
+  `guarantee=NONE`, opaque `quoteFingerprint`를 반환한다.
+- **No-hold Boundary:** quote는 Order, 픽업·재고·쿠폰·포인트 reservation, Payment, 주문 생성
+  idempotency record, Audit 또는 event를 만들지 않는다. 가격·재고·slot을 보장하지 않고 Provider를
+  호출하지 않으며 `Idempotency-Key`를 받지 않는다.
+- **Fingerprint Authority:** quote와 final-create는 versioned canonical full fingerprint 함수를
+  공유한다. fingerprint는 normalized input, line/option 구성과 표시 snapshot, 가격, benefit
+  source/terms/version·배분, point lot issuer provenance, pickup window/eligibility와 Store 주문 정책을
+  포함한다. Menu/Store의 표시·이미지와 함께 증가하는 coarse persistence version은 제외하고 거래를
+  결정하는 canonical value 또는 분리된 trade version만 포함한다. `quotedAt`은 제외한다. fingerprint는
+  금액, reservation ID, 인증·권한 token, Provider input 또는 client가 계산할 수 있는 authority가 아니다.
+- **Final Order Boundary:** `POST /orders`는 editable input과 필수
+  `expectedQuoteFingerprint`만 받으며 client money를 받지 않는다. 기존 lock 순서와 짧은 주문
+  transaction에서 Store root shared lock을 먼저 획득해 현재 상태를 다시 계산하고 full fingerprint가
+  exact match일 때만 reservation과 immutable Order snapshot을 commit한다. Store 주문 정책·Menu 거래
+  writer는 같은 root의 exclusive lock을 먼저 획득한다.
+- **Stale and Idempotency:** mismatch는 `409 ORDER_QUOTE_STALE`과
+  `currentQuote`를 반환한다. 거래 write는 전부 rollback하지만 BR-25에 따라 첫 409 status/body를
+  terminal 주문 생성 idempotency 응답으로 저장·재생한다. customer가 current quote를 명시적으로
+  다시 확인한 주문은 새 fingerprint와 새 `Idempotency-Key`를 사용한다. 같은 key에 새 fingerprint를
+  보내는 것은 `IDEMPOTENCY_KEY_REUSED`다.
+- **Failure Policy:** malformed fingerprint는 400이며 최신 조건의 자동 수락이 아니다.
+  Merchant/Fulfillment/Inventory/Promotion/Loyalty read 실패는 typed 5xx로 종료한다. client 합계,
+  0원 할인, cached/stale owner 값, 빈 slot 또는 가짜 quote로 대체하지 않는다. terminal stale 응답
+  저장 실패도 503이며 성공이나 no-op으로 보이지 않는다.
+- **Scope Preservation:** BR-05의 reservation 확정 시점과 BR-33의 Toss 일회성 결제를 유지한다.
+  저장 카드·billing key·PaymentMethod checkout, PG/세무 영수증, VAT 계산·표시는 추가하지 않는다.
+- **Rationale:** customer에게 server 계산을 보여 주되 자원 hold의 새 lifecycle을 만들지 않고,
+  금액뿐 아니라 거래 구성·benefit 귀속·pickup eligibility의 변경도 명시적 재확인으로 보낸다.
+  terminal replay는 동일 네트워크 재시도가 나중에 뜻밖의 주문 실행으로 바뀌는 것을 막는다.
+- **Affected Contexts:** Ordering, Merchant, Fulfillment, Inventory, Promotion, Loyalty, Customer frontend
+- **Affected Aggregates:** Order, Store, Menu, PickupSlot, StockItem, CouponIssuance, PointAccount
+- **Required Tests:**
+  - quote 정상·validation·dependency 실패 뒤 모든 거래/idempotency/Audit/event write 부재
+  - exact quote와 생성된 immutable Order line·benefit·pickup·pricing snapshot 일치
+  - 가격·option·coupon·point source·slot 변경과 same-payable/different-source stale
+  - stale transaction의 거래 write 0건과 terminal idempotency row 1건
+  - 동일 key·payload stale byte-equivalent replay, 같은 key·새 fingerprint 거절, 새 key 재실행
+  - malformed/tampered fingerprint, client money 거부와 concurrent owner 변경
+  - writer-first stale과 Order-first writer commit 대기의 실제 PostgreSQL 경합
+  - Menu 표시 설명·분류와 Store/Menu 이미지 변경 뒤 fingerprint 불변
+- **ADR Required:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)
+- **Revisit Conditions:** 가격 보장 기간, persistent quote identity, cart hold, 사전 승인 또는 분산
+  owner 저장소가 제품 요구가 될 때
+
+---
+
+## BR-50 Store 고객 표시 profile과 상태 용어
+
+- **Status:** Accepted for MVP
+- **Decision:** Merchant는 고객 공개용 Store address/directions/weekly hours와 Menu display
+  category/description을 소유한다. 기존 Support-purpose profile을 customer display source나
+  fallback으로 사용하지 않는다.
+- **Profile Ownership:** `merchant_store_customer_display_profile`과 complete optional seven-day
+  schedule은 ACTIVE same-store `OWNER`가 full replacement한다. profile version 하나가 text와 hours
+  전체의 optimistic concurrency boundary이며 profile·hours·Audit는 한 transaction으로 commit 또는
+  rollback한다. 동일 replacement는 version·updatedAt·Audit를 바꾸지 않는 no-op이다.
+- **Owner Read Contract:** ACTIVE same-store `OWNER`는 인증된
+  `GET /api/v1/stores/{storeId}/customer-display`로 full authoring representation과 현재 `version`을
+  읽는다. profile 미생성 상태는 empty content/schedule과 `version=0`으로 표현한다. 이 concurrency
+  version은 customer public Store response나 Support-purpose profile에 노출·복제하지 않는다.
+- **Menu Ownership:** same-store `OWNER | STAFF`가 기존 Menu version으로 nullable
+  `displayCategory`과 `description`을 full replacement한다. 이 metadata는 가격, availability,
+  option, search grammar, Order snapshot, benefit 또는 refund allocation을 바꾸지 않는다.
+- **Menu Read Contract:** ACTIVE same-store `OWNER | STAFF`는 인증된
+  `GET /api/v1/stores/{storeId}/menus/{menuId}/display-content`로 현재 nullable content와 기존 Menu
+  `version`을 읽는다. customer menu catalog에는 이 concurrency version을 노출하지 않는다.
+- **Weekly Schedule:** `Asia/Seoul`, 요일별 하나의 same-day interval만 지원한다. schedule이 있으면
+  일곱 요일을 정확히 한 번씩 보내야 한다. closed day는 시간이 없고 open day는
+  `opensAt < closesAt`이다. 자정 넘김, 24시간, 휴일·임시휴무, 날짜 override와 Store별 timezone은
+  지원하지 않으며 기존 Store에 default schedule을 만들지 않는다.
+- **Customer Terminology:** customer response의 `open`을 compatibility alias 없이
+  `orderingAvailable`로 교체한다. `orderingAvailable = acceptingOrders && pickupEnabled`이며
+  `operatingStatus`와 독립이다. search의 `openOnly` query parameter spelling은 이번 변경에서
+  유지하지만 의미와 UI copy는 주문 가능성이다.
+- **Operating Status:** complete schedule이 없으면 `UNSPECIFIED`다. schedule이 있으면 서울 local
+  time의 `opensAt <= now < closesAt`만 `OPEN`, 그 외와 closed day는 `CLOSED`다.
+  `OPEN`은 주문 가능성을 보장하지 않고 주문 가능도 영업 중을 주장하지 않는다.
+- **Pickup Display:** `nextPickupWindow`는 Store policy와 ADR-076의 `startsAt > now`, 7일 horizon,
+  capacity를 만족하는 가장 이른 실제 slot이다. 없으면 생략하며 준비시간을 저장·추정하지 않는다.
+  목록은 Fulfillment batch/read를 사용해 Store별 N+1 query를 만들지 않는다.
+- **Failure Policy:** profile 미설정은 address/hours 생략과 `UNSPECIFIED`인 정상 결과다. profile
+  read 또는 schedule invariant 실패는 503이며 미설정·CLOSED·빈 값으로 대체하지 않는다. stale
+  expected version, invalid tuple, cross-store Menu와 권한 부족은 partial write나 Audit-only 성공 없이
+  실패한다.
+- **Scope Preservation:** BR-48의 optional image와 expiry/failure 계약을 그대로 사용한다. 운영 연락처,
+  customer PII, Provider/card identifier, 저장 카드, VAT·세무 정보는 profile이나 customer response에
+  추가하지 않는다. BR-37 알림 보존과 BR-38 환불 사유·권한도 변경하지 않는다.
+- **Rationale:** 영업 안내와 주문 수락 정책을 분리해 customer UI의 잘못된 `영업 중` 추정을 막고,
+  공개 content를 Support workflow가 아니라 Store owner의 versioned/Audited command로 관리한다.
+- **Affected Contexts:** Merchant, Fulfillment, Discovery, Ordering, Customer/Merchant frontend
+- **Affected Aggregates:** Store, Menu, PickupSlot
+- **Required Tests:**
+  - profile text·요일별 tuple DB constraint와 exact seven-day Application full replacement
+  - OWNER profile current read/write 및 STAFF read/write 거절, OWNER/STAFF Menu current read/write 인가,
+    cross-store/revoked/stale version
+  - full replacement·no-op·Audit·rollback 원자성
+  - fixed Clock의 `OPEN/CLOSED/UNSPECIFIED`와 orderingAvailable 독립성
+  - earliest reservable slot, absent slot/profile/image와 batch query count
+  - target/runtime/generated 계약의 `open` 제거와 `orderingAvailable` 원자 교체
+  - profile read 장애가 정상 미설정으로 위장되지 않음
+- **ADR Required:** [ADR-117](../adr/ADR-117-store-customer-display-profile.md)
+- **Revisit Conditions:** 자정 영업, 복수 interval, 휴일 override, Store별 timezone, 구조화 주소·지도
+  Provider, menu category 검색 또는 측정된 projection 병목이 제품 요구가 될 때
+
+---
+
+## BR-51 고객 알림 분류와 마케팅 기본 수신 거부
+
+- **Status:** Accepted for MVP
+- **Decision:** 고객 알림은 생성 시점의 실제 거래 근거로 `TRANSACTIONAL | MARKETING`을 고정한다.
+  실제 `orderId`가 있는 고객 알림은 `TRANSACTIONAL`, 없는 고객 알림은 `MARKETING`이며 매장 대상
+  알림은 주문 연결 여부와 무관하게 `TRANSACTIONAL`이다. 내부 식별자를 가짜 orderId로 대입해 분류를
+  바꾸지 않는다.
+- **Goodwill:** `SUPPORT_GOODWILL_COMPENSATION_ISSUED`는 `relatedOrderId`가 있으면 거래에 연결된
+  `TRANSACTIONAL`, 없으면 `MARKETING`이다. 주문 없는 goodwill을 혜택 가치가 있다는 이유만으로
+  거래 알림으로 예외 처리하지 않는다.
+- **Preference:** `MARKETING` 기본값은 opt-out이다. 생성 시점에 opt-in한 고객에게만 InboxItem과
+  Delivery를 함께 만들고, 생성 뒤 opt-out하면 기존 InboxItem은 남기되 Provider claim 직전에 발송을
+  건너뛴다. 생성·claim·설정 변경은 preference row lock을 공통 선형화 지점으로 사용한다. claim이 lock을
+  먼저 획득하면 해당 알림은 발송될 수 있고, opt-out이 먼저 획득하면 새 알림을 만들거나 기존 알림을
+  발송하지 않는다. preference 조회 실패는 opt-in/out으로 추정하지 않고 source 처리 또는 delivery를 retry한다.
+- **Support Result:** opt-out으로 goodwill InboxItem과 Delivery가 만들어지지 않은 결과는
+  `NOTIFICATION_SKIPPED` terminal 상태로 남긴다. 이를 `NOTIFICATION_ACCEPTED`, 전달 실패,
+  `NOTIFICATION_RETRY` 또는 delivery ID가 있는 것처럼 표현하지 않으며 이미 발급된 혜택은 되돌리지 않는다.
+- **Transactional Boundary:** transactional source는 InboxItem과 Delivery를 같은 짧은 local transaction에
+  저장한다. 어느 한쪽이나 persistent publication 완료 저장이 실패하면 전체를 rollback하고 source를
+  retry한다. Provider 호출은 commit 뒤 worker에서만 수행하며 결과가 Inbox read 상태를 바꾸지 않는다.
+- **Rationale:** 주문 없는 보상 안내를 마케팅 수신 선택에 포함한다는 고객 결정을 존중하면서, 가짜
+  Order 연결과 silent delivery success를 제거한다. 거래 진행에 필요한 알림은 opt-out으로 끌 수 없다.
+- **Affected Contexts:** Notification, Support, Customer Web
+- **Affected Aggregates:** NotificationInboxItem, NotificationCustomerPreference, NotificationDelivery,
+  SupportCompensationRequest
+- **Required Tests:**
+  - 주문 연결 goodwill은 preference와 무관하게 InboxItem/Delivery 생성
+  - 주문 없는 goodwill은 기본·명시 opt-out에서 두 row 모두 미생성 및 `NOTIFICATION_SKIPPED`
+  - 주문 없는 goodwill은 opt-in에서 InboxItem/Delivery 정확히 한 건과 source replay dedupe
+  - 생성 뒤 opt-out에서 InboxItem 유지, Provider 미호출과 명시적 delivery 재평가 상태
+  - opt-out과 생성·claim의 실제 PostgreSQL 경합에서 preference row lock 선취 작업 우선
+  - preference 조회·InboxItem·Delivery·publication 저장 실패의 rollback/retry
+- **ADR Required:** [ADR-104](../adr/ADR-104-notification-inbox.md)
+- **Revisit Conditions:** 주문 없는 goodwill의 고객 도달률·문의, 마케팅 opt-in률 또는 별도 account/service
+  분류가 필요하다는 제품 근거가 생길 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2338,6 +2497,12 @@
     주문 transaction의 최종 재검증을 따른다.
 27. 매장·메뉴 이미지 업로드와 고객 노출은 `BR-48`을 따르며, 매장 탐색의 검색·추천 의미는
     `BR-47`과 `BR-40`을 바꾸지 않는다.
+28. 고객 주문 전 quote와 최종 주문 fingerprint 재확인은 `BR-49`를 따르고, 최종 주문의
+    reservation·결제·멱등성에는 `BR-05`, `BR-25`, `BR-33`을 함께 적용한다.
+29. Store 고객 표시 profile과 상태 용어는 `BR-50`을 따르며, 검색 의미는 `BR-47`, 이미지
+    저장·노출은 `BR-48`을 바꾸지 않는다.
+30. 고객 알림 분류와 마케팅 수신 설정은 `BR-51`을 따르고, 보존은 `BR-37`, 외부 전달 재시도는
+    `BR-27`을 함께 적용한다.
 
 ---
 
@@ -2366,6 +2531,8 @@
 | 감사 로그 | [ADR-022](../adr/ADR-022-audit-record.md) |
 | 매출 지표와 late event 재집계 | [ADR-023](../adr/ADR-023-analytics-refund-and-late-events.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md) |
 | 매장·메뉴 이미지 저장·인가·장애 격리 | [ADR-115](../adr/ADR-115-store-and-menu-image-storage.md) |
+| 고객 주문 전 비예약 quote와 full fingerprint 재확인 | [ADR-116](../adr/ADR-116-non-reserving-order-quote.md) |
+| Store 고객 표시 profile·운영시간·주문 가능성 용어 | [ADR-117](../adr/ADR-117-store-customer-display-profile.md) |
 
 ---
 

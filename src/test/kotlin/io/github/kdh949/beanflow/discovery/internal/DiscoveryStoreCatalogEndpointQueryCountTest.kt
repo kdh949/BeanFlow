@@ -73,6 +73,8 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
                     merchant_menu,
                     fulfillment_pickup_reservation,
                     fulfillment_pickup_slot,
+                    merchant_store_operating_hours,
+                    merchant_store_customer_display_profile,
                     merchant_store_discovery_profile,
                     merchant_store
                 CASCADE
@@ -102,6 +104,16 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             assertThat(large).isEqualTo(SLOT_ENDPOINT_STATEMENTS)
         }
 
+        @Test
+        fun `the Store display endpoint stays two statements with or without seven operating days`() {
+            val small = countStatements { readStoreOk(smallStore) }
+            val large = countStatements { readStoreOk(largeStore) }
+
+            // Merchant profile/hours is one flat batch projection; Fulfillment earliest-slot is one.
+            assertThat(small).isEqualTo(STORE_ENDPOINT_STATEMENTS)
+            assertThat(large).isEqualTo(STORE_ENDPOINT_STATEMENTS)
+        }
+
         private fun readOk(
             path: String,
             expectedItems: Int,
@@ -122,9 +134,21 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             return statements.count.get() - before
         }
 
+        private fun readStoreOk(storeId: UUID) {
+            val body =
+                mockMvc
+                    .perform(get(storePath(storeId)).with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(JsonPath.read<String>(body, "$.storeId")).isEqualTo(storeId.toString())
+        }
+
         private fun menuPath(storeId: UUID) = "/api/v1/stores/$storeId/menus"
 
         private fun slotPath(storeId: UUID) = "/api/v1/stores/$storeId/pickup-slots"
+
+        private fun storePath(storeId: UUID) = "/api/v1/stores/$storeId"
 
         private fun customerJwt(): RequestPostProcessor =
             jwt()
@@ -141,6 +165,35 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
                 "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)",
                 storeId,
             )
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code)
+                VALUES (?, ?, ST_SetSRID(ST_MakePoint(127.0, 37.5), 4326)::geography, '1168010100')
+                """.trimIndent(),
+                storeId,
+                "Store $storeId",
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_customer_display_profile
+                    (store_id, address_line, directions_hint, version, created_at, updated_at)
+                VALUES (?, NULL, NULL, 1, now(), now())
+                """.trimIndent(),
+                storeId,
+            )
+            if (slots > 1) {
+                repeat(7) { dayIndex ->
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO merchant_store_operating_hours
+                            (store_id, day_of_week, closed, opens_at, closes_at)
+                        VALUES (?, ?, true, NULL, NULL)
+                        """.trimIndent(),
+                        storeId,
+                        dayIndex + 1,
+                    )
+                }
+            }
             repeat(menus) { menuIndex ->
                 val menuId = UUID.nameUUIDFromBytes("endpoint-count:$storeId:menu:$menuIndex".toByteArray())
                 jdbcTemplate.update(
@@ -185,6 +238,7 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
         private companion object {
             const val MENU_ENDPOINT_STATEMENTS = 3
             const val SLOT_ENDPOINT_STATEMENTS = 2
+            const val STORE_ENDPOINT_STATEMENTS = 2
         }
 
         /** Counts statement preparations on the application's own data source. */

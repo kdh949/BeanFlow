@@ -142,7 +142,7 @@ internal class SupportTimelineQueryPlanTest : IsolatedPostgresSupport() {
         jdbcTemplate.update(
             """
             INSERT INTO notification_delivery (
-                id, event_id, event_type, order_id, recipient_type, recipient_id,
+                id, event_id, event_type, order_id, classification, recipient_type, recipient_id,
                 logical_channel, template, payload_json, state, next_attempt_at,
                 provider_idempotency_key, correlation_id, logical_source, created_at, updated_at
             )
@@ -150,7 +150,7 @@ internal class SupportTimelineQueryPlanTest : IsolatedPostgresSupport() {
                    md5('support-plan-event:' || series)::uuid,
                    'SUPPORT_TIMELINE_PLAN',
                    CASE WHEN series = 1 THEN ?::uuid ELSE md5('support-plan-notification-order:' || series)::uuid END,
-                   'CUSTOMER', md5('support-plan-recipient:' || series)::uuid,
+                   'TRANSACTIONAL', 'CUSTOMER', md5('support-plan-recipient:' || series)::uuid,
                    'CUSTOMER_APP', 'ORDER_READY', '{}', 'PENDING',
                    timestamptz '2026-08-13 00:00:00+00',
                    'support-plan-notification-provider:' || series,

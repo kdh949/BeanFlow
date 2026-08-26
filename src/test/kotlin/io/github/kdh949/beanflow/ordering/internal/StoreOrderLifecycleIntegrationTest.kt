@@ -67,6 +67,7 @@ internal class StoreOrderLifecycleIntegrationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val transitionService: StoreOrderTransitionService,
         private val partialRefundService: PartialRefundService,
@@ -92,6 +93,8 @@ internal class StoreOrderLifecycleIntegrationTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    notification_customer_preference,
+                    notification_inbox_item,
                     notification_delivery,
                     payment_refund,
                     operations_order_compensation_step,
@@ -745,7 +748,8 @@ internal class StoreOrderLifecycleIntegrationTest
             key: String,
         ): UUID {
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrderUseCase.create(key, fixture.command()).status).isEqualTo(201)
+            assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
+                .isEqualTo(201)
             val orderId = value<UUID>("SELECT id FROM ordering_order WHERE customer_id = ?", fixture.customerId)
             val paymentMethodId = insertPaymentMethod(fixture.customerId)
             paymentGateway.enqueueApproval(

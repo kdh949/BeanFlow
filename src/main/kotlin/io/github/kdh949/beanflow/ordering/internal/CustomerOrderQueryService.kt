@@ -225,8 +225,15 @@ internal class CustomerOrderReadTransaction(
             orderedAt = createdAt,
             pickupWindowStart = pickupWindowStart,
             pickupWindowEnd = pickupWindowEnd,
-            totalAmountKrw = payableKrw,
-            currency = currency,
+            pricing =
+                CustomerOrderPricingResponse(
+                    subtotalKrw = subtotalKrw,
+                    couponDiscountKrw = couponDiscountKrw,
+                    pointsAppliedKrw = pointsAppliedKrw,
+                    payableKrw = payableKrw,
+                    currency = currency,
+                ),
+            lifecycle = lifecycleResponse(),
             lines = lines,
             allowedActions = CustomerOrderPresentationPolicy.allowedActions(actionFacts(), now),
             paymentRecovery = paymentRecovery,
@@ -243,14 +250,24 @@ internal class CustomerOrderReadTransaction(
 
     private fun CustomerOrderHeaderProjection.validateHeader() {
         if (
-            pickupSequence <= 0 || storeName.isBlank() || subtotalKrw < 0 || payableKrw < 0 || payableKrw > subtotalKrw ||
+            pickupSequence <= 0 || storeName.isBlank() || subtotalKrw < 0 || couponDiscountKrw < 0 ||
+            pointsAppliedKrw < 0 || payableKrw < 0 ||
+            subtotalKrw != couponDiscountKrw + pointsAppliedKrw + payableKrw ||
             currency != "KRW" ||
             !pickupWindowEnd.isAfter(pickupWindowStart)
         ) {
             dependency("Customer order projection is invalid")
         }
-        parseState(state)
+        OrderLifecycleProjection.validate(parseState(state), lifecycle())
     }
+
+    private fun CustomerOrderHeaderProjection.lifecycle(): PersistedOrderLifecycle =
+        PersistedOrderLifecycle(paidAt, acceptedAt, preparingAt, readyAt, completedAt)
+
+    private fun CustomerOrderHeaderProjection.lifecycleResponse(): OrderLifecycleResponse? =
+        lifecycle().takeIf(PersistedOrderLifecycle::hasOccurredEvent)?.let {
+            OrderLifecycleResponse(it.paidAt, it.acceptedAt, it.preparingAt, it.readyAt, it.completedAt)
+        }
 
     private fun parseState(raw: String): OrderState =
         try {

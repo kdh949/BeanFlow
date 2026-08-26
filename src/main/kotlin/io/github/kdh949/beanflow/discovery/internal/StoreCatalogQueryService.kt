@@ -91,6 +91,8 @@ private fun StoreMenuView.toCatalogView(imageViews: StorefrontImageViewResolver)
         basePriceKrw = basePriceKrw,
         currency = KRW,
         available = available,
+        displayCategory = displayCategory,
+        description = description,
         options = options.map(StoreMenuOptionView::toCatalogView),
         image = imageViews.resolve(imageThumbnailKey),
     )

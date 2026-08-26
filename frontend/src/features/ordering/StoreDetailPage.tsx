@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Coffee, Minus, Plus, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Check, Coffee, MapPin, Minus, Navigation, Plus, ShoppingBag } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -12,6 +12,7 @@ import { Button, ButtonLink } from "../../design-system";
 import type { CustomerStore } from "../discovery/useStore";
 import { type CartLine, cart, cartItemCount, useCart } from "./cart";
 import { FavoriteStoreButton } from "../customer/FavoriteStoresPage";
+import { nextPickupLabel, operatingDayLabel, operatingStatusLabel } from "../discovery/storeDisplay";
 
 type Menu = components["schemas"]["Menu"];
 type PickupSlot = components["schemas"]["PickupSlot"];
@@ -53,7 +54,8 @@ export function StoreDetailPage() {
 
   const { store, menus, slots } = state.value;
   const storeName = store.name;
-  const openForOrders = slots.some((slot) => slot.remainingCapacity > 0);
+  const openForOrders = store.orderingAvailable && store.pickupAvailable && slots.some((slot) => slot.remainingCapacity > 0);
+  const menuGroups = groupMenus(menus);
   const itemCount = cartItemCount(cartState);
 
   return (
@@ -71,17 +73,29 @@ export function StoreDetailPage() {
         )}
       />
 
-      {!openForOrders ? (
+      <StoreProfile store={store} />
+
+      {!store.orderingAvailable ? (
+        <p className="inline-note" role="status">매장이 현재 주문을 받지 않아요. 운영시간 상태와 별개이며, 주문을 다시 열면 메뉴를 담을 수 있어요.</p>
+      ) : !openForOrders ? (
         <p className="inline-note" role="status">지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.</p>
       ) : (
-        <p className="inline-note" role="status">픽업 가능한 시간 {slots.filter((slot) => slot.remainingCapacity > 0).length}개가 열려 있어요.</p>
+        <p className="inline-note" role="status">{nextPickupLabel(store.nextPickupWindow)} · 고를 수 있는 시간 {slots.filter((slot) => slot.remainingCapacity > 0).length}개</p>
       )}
 
       <section className="menu-list">
         {menus.length === 0
           ? <EmptyState title="판매 중인 메뉴가 없어요" description="잠시 뒤 다시 확인해 주세요." />
-          : menus.map((menu) => (
-            <MenuRow key={menu.menuId} menu={menu} storeId={storeId} storeName={storeName} orderable={openForOrders} />
+          : menuGroups.map((group) => (
+            <section className="menu-category" key={group.name} aria-labelledby={`menu-category-${group.key}`}>
+              <div className="menu-category-heading">
+                <h2 id={`menu-category-${group.key}`}>{group.name}</h2>
+                <span>{group.items.length}개</span>
+              </div>
+              {group.items.map((menu) => (
+                <MenuRow key={menu.menuId} menu={menu} storeId={storeId} storeName={storeName} orderable={openForOrders} />
+              ))}
+            </section>
           ))}
       </section>
 
@@ -94,6 +108,49 @@ export function StoreDetailPage() {
       ) : null}
     </div>
   );
+}
+
+function StoreProfile({ store }: { store: CustomerStore }) {
+  const { customerDisplay } = store;
+  return (
+    <section className="surface-card store-profile" aria-label="매장 이용 안내">
+      <dl className="store-profile-summary">
+        <div><dt>주문</dt><dd>{store.orderingAvailable ? "주문 가능" : "주문 불가"}</dd></div>
+        <div><dt>운영시간</dt><dd>{operatingStatusLabel(customerDisplay.operatingStatus)}</dd></div>
+        <div><dt>픽업</dt><dd>{nextPickupLabel(store.nextPickupWindow)}</dd></div>
+      </dl>
+      <p className="store-location-row">
+        <MapPin size={18} aria-hidden="true" />
+        <span><strong>주소</strong>{customerDisplay.addressLine ?? "주소 정보 없음"}</span>
+      </p>
+      <p className="store-location-row">
+        <Navigation size={18} aria-hidden="true" />
+        <span><strong>찾아오는 길</strong>{customerDisplay.directionsHint ?? "길찾기 안내 없음"}</span>
+      </p>
+      {customerDisplay.operatingHours ? (
+        <details className="weekly-hours">
+          <summary>주간 운영시간 · {customerDisplay.operatingHours.timezone}</summary>
+          <dl>
+            {customerDisplay.operatingHours.days.map((day) => {
+              const label = operatingDayLabel(day);
+              return <div key={day.dayOfWeek}><dt>{label.day}</dt><dd>{label.hours}</dd></div>;
+            })}
+          </dl>
+        </details>
+      ) : (
+        <p className="store-hours-missing">운영시간이 아직 등록되지 않았어요. 주문 가능 여부와 실제 픽업 시간은 별도로 확인해 주세요.</p>
+      )}
+    </section>
+  );
+}
+
+function groupMenus(menus: Menu[]) {
+  const groups = new Map<string, Menu[]>();
+  for (const menu of menus) {
+    const category = menu.displayCategory ?? "미분류";
+    groups.set(category, [...(groups.get(category) ?? []), menu]);
+  }
+  return [...groups].map(([name, items], index) => ({ name, items, key: `${index}-${name.replaceAll(" ", "-")}` }));
 }
 
 function MenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; storeId: string; storeName: string; orderable: boolean }) {
@@ -156,6 +213,7 @@ function MenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; storeId:
         )}
         <span>
           <strong>{menu.name}</strong>
+          {menu.description ? <span className="menu-description">{menu.description}</span> : null}
           <small>{won.format(menu.basePriceKrw)}{menu.available ? "" : " · 품절"}</small>
         </span>
         {open ? <Check size={19} /> : <Plus size={19} />}

@@ -22,10 +22,14 @@ import io.github.kdh949.beanflow.notification.api.RequestPostAcceptanceResolutio
 import io.github.kdh949.beanflow.notification.api.RequestProfileChangeNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestSupportPickupRescheduledNotificationCommand
 import io.github.kdh949.beanflow.notification.api.SupportOrderChangeNotificationOperations
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationClassification
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDelivery
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationInboxCopy
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationInboxItem
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationTarget
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationTemplate
 import io.github.kdh949.beanflow.operations.api.NotificationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
@@ -41,6 +45,8 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.ObjectMapper
 import java.time.Duration
 import java.time.Instant
@@ -48,7 +54,8 @@ import java.util.UUID
 
 internal data class ClaimedNotificationDelivery(
     val deliveryId: UUID,
-    val orderId: UUID,
+    val orderId: UUID?,
+    val classification: NotificationClassification,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
     val logicalChannel: NotificationLogicalChannel,
@@ -65,7 +72,7 @@ private data class NewNotificationDelivery(
     val eventType: String,
     val logicalSource: String,
     val providerIdempotencyKey: String,
-    val orderId: UUID,
+    val orderId: UUID?,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
     val logicalChannel: NotificationLogicalChannel,
@@ -75,9 +82,19 @@ private data class NewNotificationDelivery(
     val occurredAt: Instant,
 )
 
+private data class RequestedNotification(
+    val delivery: NotificationDeliveryEntity?,
+) {
+    val state: String = delivery?.state?.name ?: "NOTIFICATION_SKIPPED"
+
+    fun requireDelivery(): NotificationDeliveryEntity = requireNotNull(delivery) { "Transactional notification delivery is required" }
+}
+
 @Service
 internal class NotificationDeliveryService(
     private val deliveryRepository: NotificationDeliveryJpaRepository,
+    private val inboxRepository: NotificationInboxItemJpaRepository,
+    private val inboxQueries: NotificationInboxQueryRepository,
     private val provider: NotificationProvider,
     private val compensationOperations: OrderCompensationOperations,
     private val reprocessingCaseOperations: NotificationReprocessingCaseOperations,
@@ -120,7 +137,7 @@ internal class NotificationDeliveryService(
                     correlationId = command.correlationId,
                     occurredAt = command.cancelledAt,
                 ),
-            )
+            ).requireDelivery()
         return AcceptedCustomerCancellationNotification(delivery.id, delivery.state.name)
     }
 
@@ -152,7 +169,7 @@ internal class NotificationDeliveryService(
                     correlationId = command.correlationId,
                     occurredAt = command.occurredAt,
                 ),
-            )
+            ).requireDelivery()
         return AcceptedSupportOrderChangeNotification(delivery.id, delivery.state.name)
     }
 
@@ -187,7 +204,7 @@ internal class NotificationDeliveryService(
                     correlationId = command.correlationId,
                     occurredAt = command.occurredAt,
                 ),
-            )
+            ).requireDelivery()
         return AcceptedPostAcceptanceResolutionNotification(delivery.id, delivery.state.name)
     }
 
@@ -204,14 +221,14 @@ internal class NotificationDeliveryService(
         if (command.benefitType !in setOf("POINT", "COUPON") || command.amountKrw <= 0 || command.correlationId.isBlank()) {
             fail(FailureCode.INVALID_REQUEST, "Goodwill compensation notification command is invalid")
         }
-        val delivery =
+        val requested =
             request(
                 NewNotificationDelivery(
                     eventId = command.compensationRequestId,
                     eventType = "SupportGoodwillCompensationIssuedV1",
                     logicalSource = "support-compensation:${command.compensationRequestId}:customer-notification",
                     providerIdempotencyKey = "notification:support-compensation:${command.compensationRequestId}",
-                    orderId = command.relatedOrderId ?: command.compensationRequestId,
+                    orderId = command.relatedOrderId,
                     recipientType = NotificationRecipientType.CUSTOMER,
                     recipientId = command.customerId,
                     logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
@@ -229,7 +246,7 @@ internal class NotificationDeliveryService(
                     occurredAt = command.issuedAt,
                 ),
             )
-        return AcceptedGoodwillCompensationNotification(delivery.id, delivery.state.name)
+        return AcceptedGoodwillCompensationNotification(requested.delivery?.id, requested.state)
     }
 
     @Transactional(readOnly = true)
@@ -252,7 +269,7 @@ internal class NotificationDeliveryService(
                     eventType = "SupportProfileChangedV1",
                     logicalSource = "support-profile-change:${command.profileChangeId}:target:${command.ownerTargetId}",
                     providerIdempotencyKey = "notification:support-profile-change:${command.profileChangeId}:${command.ownerTargetId}",
-                    orderId = command.profileChangeId,
+                    orderId = null,
                     recipientType = NotificationRecipientType.PROFILE_TARGET,
                     recipientId = command.ownerTargetId,
                     logicalChannel = command.targetKind.logicalChannel(),
@@ -270,7 +287,7 @@ internal class NotificationDeliveryService(
                     correlationId = command.correlationId,
                     occurredAt = command.occurredAt,
                 ),
-            )
+            ).requireDelivery()
         return AcceptedProfileChangeNotification(delivery.id, delivery.state.name)
     }
 
@@ -325,7 +342,7 @@ internal class NotificationDeliveryService(
                     correlationId = event.envelope.correlationId,
                     occurredAt = event.envelope.occurredAt,
                 ),
-            )
+            ).requireDelivery()
         if (delivery.state == NotificationDeliveryState.SUCCEEDED) {
             recordRejectionStep(
                 event.orderId,
@@ -404,6 +421,12 @@ internal class NotificationDeliveryService(
             val entity = deliveryRepository.findLockedById(deliveryId) ?: return@mapNotNull null
             val delivery = entity.toDomain()
             val dueAt = entity.nextAttemptAt ?: entity.claimUntil ?: now
+            if (entity.classification == NotificationClassification.MARKETING && !marketingOptIn(entity.recipientId)) {
+                delivery.skip(now)
+                entity.apply(delivery)
+                afterCommit { marketingSkippedMetric(entity.template) }
+                return@mapNotNull null
+            }
             val token = identifierSource.next()
             try {
                 delivery.claim(token, now, claimLease, MAX_ATTEMPTS)
@@ -419,6 +442,7 @@ internal class NotificationDeliveryService(
             ClaimedNotificationDelivery(
                 deliveryId = entity.id,
                 orderId = entity.orderId,
+                classification = entity.classification,
                 recipientType = entity.recipientType,
                 recipientId = entity.recipientId,
                 logicalChannel = entity.logicalChannel,
@@ -477,7 +501,7 @@ internal class NotificationDeliveryService(
                 entity.apply(delivery)
                 if (entity.template == NotificationTemplate.ORDER_REJECTED) {
                     recordRejectionStep(
-                        entity.orderId,
+                        requireNotNull(entity.orderId) { "Rejected order notification is missing its order" },
                         OrderCompensationStepState.SUCCEEDED,
                         null,
                         now,
@@ -503,10 +527,18 @@ internal class NotificationDeliveryService(
             ).increment()
     }
 
-    private fun request(command: NewNotificationDelivery): NotificationDeliveryEntity {
+    private fun request(command: NewNotificationDelivery): RequestedNotification {
         val payloadJson = objectMapper.writeValueAsString(command.payload)
+        val classification = NotificationClassification.classify(command.recipientType, command.orderId)
+        val existingInbox =
+            if (command.recipientType == NotificationRecipientType.CUSTOMER) {
+                inboxRepository.findByCustomerIdAndLogicalSource(command.recipientId, command.logicalSource)
+            } else {
+                null
+            }
         deliveryRepository.findByLogicalSource(command.logicalSource)?.let { existing ->
             if (existing.eventType != command.eventType || existing.orderId != command.orderId ||
+                existing.classification != classification ||
                 existing.recipientType != command.recipientType || existing.recipientId != command.recipientId ||
                 existing.logicalChannel != command.logicalChannel || existing.template != command.template ||
                 existing.payloadJson != payloadJson ||
@@ -514,26 +546,116 @@ internal class NotificationDeliveryService(
             ) {
                 fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_SOURCE_CONFLICT")
             }
-            return existing
+            if (command.recipientType == NotificationRecipientType.CUSTOMER) {
+                val inbox = existingInbox ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_INBOX_SOURCE_MISSING")
+                requireMatchingInbox(inbox, command.toInboxItem(inbox.id, classification))
+                afterCommit { inboxCreateMetric(classification, "replayed") }
+            }
+            return RequestedNotification(existing)
+        }
+        if (existingInbox != null) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_DELIVERY_SOURCE_MISSING")
+        }
+        if (command.recipientType == NotificationRecipientType.CUSTOMER) {
+            if (classification == NotificationClassification.MARKETING && !marketingOptIn(command.recipientId)) {
+                afterCommit {
+                    marketingSkippedMetric(command.template)
+                    inboxCreateMetric(classification, "suppressed")
+                }
+                return RequestedNotification(null)
+            }
         }
         val id = identifierSource.next()
-        return deliveryRepository.save(
-            NotificationDelivery
-                .pending(
-                    id = id,
-                    eventId = command.eventId,
-                    eventType = command.eventType,
-                    logicalSource = command.logicalSource,
-                    orderId = command.orderId,
-                    recipientType = command.recipientType,
-                    recipientId = command.recipientId,
-                    logicalChannel = command.logicalChannel,
-                    template = command.template,
-                    payloadJson = payloadJson,
-                    providerIdempotencyKey = command.providerIdempotencyKey,
-                    correlationId = command.correlationId,
-                    now = command.occurredAt,
-                ).toEntity(),
+        if (command.recipientType == NotificationRecipientType.CUSTOMER) {
+            inboxRepository.saveAndFlush(command.toInboxItem(identifierSource.next(), classification).toEntity())
+        }
+        val delivery =
+            deliveryRepository.saveAndFlush(
+                NotificationDelivery
+                    .pending(
+                        id = id,
+                        eventId = command.eventId,
+                        eventType = command.eventType,
+                        logicalSource = command.logicalSource,
+                        orderId = command.orderId,
+                        recipientType = command.recipientType,
+                        recipientId = command.recipientId,
+                        logicalChannel = command.logicalChannel,
+                        template = command.template,
+                        payloadJson = payloadJson,
+                        providerIdempotencyKey = command.providerIdempotencyKey,
+                        correlationId = command.correlationId,
+                        now = command.occurredAt,
+                    ).toEntity(),
+            )
+        if (command.recipientType == NotificationRecipientType.CUSTOMER) {
+            afterCommit { inboxCreateMetric(classification, "created") }
+        }
+        return RequestedNotification(delivery)
+    }
+
+    private fun NewNotificationDelivery.toInboxItem(
+        id: UUID,
+        classification: NotificationClassification,
+    ): NotificationInboxItem {
+        check(recipientType == NotificationRecipientType.CUSTOMER) { "Inbox item requires a customer recipient" }
+        val copy = NotificationInboxCopy.forTemplate(template)
+        return NotificationInboxItem.create(
+            id = id,
+            customerId = recipientId,
+            logicalSource = logicalSource,
+            orderId = orderId,
+            classification = classification,
+            template = template,
+            title = copy.title,
+            body = copy.body,
+            target = NotificationTarget.none(),
+            createdAt = occurredAt,
+        )
+    }
+
+    private fun requireMatchingInbox(
+        existing: NotificationInboxItemEntity,
+        expected: NotificationInboxItem,
+    ) {
+        if (existing.orderId != expected.orderId || existing.classification != expected.classification ||
+            existing.template != expected.template || existing.title != expected.title || existing.body != expected.body ||
+            existing.targetType != expected.target.type || existing.targetReference != expected.target.reference ||
+            existing.createdAt != expected.createdAt || existing.retentionExpiresAt != expected.retentionExpiresAt
+        ) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "NOTIFICATION_INBOX_SOURCE_CONFLICT")
+        }
+    }
+
+    private fun marketingOptIn(customerId: UUID): Boolean = inboxQueries.marketingOptInForUpdate(customerId)
+
+    private fun inboxCreateMetric(
+        classification: NotificationClassification,
+        outcome: String,
+    ) {
+        meterRegistry
+            .counter(
+                "beanflow.notification.inbox.create.count",
+                "classification",
+                classification.name,
+                "outcome",
+                outcome,
+            ).increment()
+    }
+
+    private fun marketingSkippedMetric(template: NotificationTemplate) {
+        meterRegistry.counter("beanflow.notification.marketing.skipped.count", "template", template.name.lowercase()).increment()
+    }
+
+    private fun afterCommit(action: () -> Unit) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action()
+            return
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
         )
     }
 
@@ -608,7 +730,7 @@ internal class NotificationDeliveryService(
             enterManualReview(entity, normalized(code), now)
         } else if (entity.template == NotificationTemplate.ORDER_REJECTED) {
             recordRejectionStep(
-                entity.orderId,
+                requireNotNull(entity.orderId) { "Rejected order notification is missing its order" },
                 if (unknown) {
                     OrderCompensationStepState.UNKNOWN
                 } else {
@@ -635,7 +757,7 @@ internal class NotificationDeliveryService(
         )
         if (entity.template == NotificationTemplate.ORDER_REJECTED) {
             recordRejectionStep(
-                entity.orderId,
+                requireNotNull(entity.orderId) { "Rejected order notification is missing its order" },
                 OrderCompensationStepState.MANUAL_REVIEW,
                 code,
                 now,
@@ -666,6 +788,7 @@ internal class NotificationDeliveryService(
             eventType = eventType,
             logicalSource = logicalSource,
             orderId = orderId,
+            classification = classification,
             recipientType = recipientType,
             recipientId = recipientId,
             logicalChannel = logicalChannel,
@@ -691,6 +814,7 @@ internal class NotificationDeliveryService(
             eventType = eventType,
             logicalSource = logicalSource,
             orderId = orderId,
+            classification = classification,
             recipientType = recipientType,
             recipientId = recipientId,
             logicalChannel = logicalChannel,
@@ -707,6 +831,23 @@ internal class NotificationDeliveryService(
             correlationId = correlationId,
             createdAt = createdAt,
             updatedAt = updatedAt,
+        )
+
+    private fun NotificationInboxItem.toEntity(): NotificationInboxItemEntity =
+        NotificationInboxItemEntity(
+            id = id,
+            customerId = customerId,
+            logicalSource = logicalSource,
+            orderId = orderId,
+            classification = classification,
+            template = template,
+            title = title,
+            body = body,
+            targetType = target.type,
+            targetReference = target.reference,
+            readAt = readAt,
+            createdAt = createdAt,
+            retentionExpiresAt = retentionExpiresAt,
         )
 
     private fun NotificationDeliveryEntity.apply(delivery: NotificationDelivery) {

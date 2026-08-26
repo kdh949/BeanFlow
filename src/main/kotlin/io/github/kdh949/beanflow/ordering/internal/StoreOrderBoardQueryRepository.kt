@@ -18,6 +18,11 @@ internal data class StoreOrderBoardOrderProjection(
     val pickupWindowEnd: Instant,
     val acceptanceWarningAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
+    val paidAt: Instant?,
+    val acceptedAt: Instant?,
+    val preparingAt: Instant?,
+    val readyAt: Instant?,
+    val completedAt: Instant?,
 )
 
 internal data class StoreOrderBoardLineProjection(
@@ -177,6 +182,11 @@ internal class StoreOrderBoardQueryRepository(
         pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
         acceptanceWarningAt = resultSet.getTimestamp("acceptance_warning_at")?.toInstant(),
         acceptanceDeadlineAt = resultSet.getTimestamp("acceptance_deadline_at")?.toInstant(),
+        paidAt = resultSet.getTimestamp("paid_at")?.toInstant(),
+        acceptedAt = resultSet.getTimestamp("accepted_at")?.toInstant(),
+        preparingAt = resultSet.getTimestamp("preparing_at")?.toInstant(),
+        readyAt = resultSet.getTimestamp("ready_at")?.toInstant(),
+        completedAt = resultSet.getTimestamp("completed_at")?.toInstant(),
     )
 
     private fun line(

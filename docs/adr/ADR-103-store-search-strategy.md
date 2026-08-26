@@ -481,6 +481,22 @@ M12의 V59 GIN·V57 favorite·V63 recent 전후 실행계획은
   `beanflow.discovery.search.empty`가 이 요구를 드러내는 신호다
 - 실제 사용자 행동 데이터가 쌓여 추천 규칙을 비교 평가할 수 있을 때
 
+### 고객 표시 상태·profile Amendment (2026-08-25)
+
+customer search/nearby/recent/recommendation Store response의 ambiguous `open`을 제거하고
+`orderingAvailable = acceptingOrders && pickupEnabled`로 원자 교체한다. 배포된 client가 없으므로
+deprecated alias를 두지 않는다. query parameter `openOnly` spelling은 이번 slice에서 유지하되 filter와
+문서의 의미는 ordering availability이고 customer UI는 이를 `영업 중`으로 번역하지 않는다.
+
+모든 Store summary는 ADR-117의 `customerDisplay`과 ADR-076의 optional
+`nextPickupWindow`를 사용한다. `operatingStatus`는 공개 schedule, `orderingAvailable`은 Store
+policy, `pickupAvailable`과 next window는 실제 reservable slot projection이라는 서로 다른 source를
+유지한다. 하나를 다른 값의 fallback으로 계산하지 않는다.
+
+profile과 earliest slot은 후보 Store ID의 bounded batch projection으로 붙인다. profile 미설정은
+`UNSPECIFIED` 정상 결과지만 profile/slot read 실패는 빈 field나 Store 누락이 아니라 전체 503이다.
+기존 검색 grammar, rank, cursor binding, `openOnly` transport와 ADR-115 image 계약은 바꾸지 않는다.
+
 ## Related Decisions
 
 - [ADR-020](ADR-020-nearby-location-privacy.md)
@@ -489,3 +505,4 @@ M12의 V59 GIN·V57 favorite·V63 recent 전후 실행계획은
 - [ADR-112](ADR-112-store-brand-and-administrative-region.md) — 2026-08-15 Amendment가 소비하는
   브랜드·행정구역 데이터 모델
 - [BR-47](../product/business-policy-decisions.md) — 개정된 검색 계약의 제품 정책 수치
+- [ADR-117](ADR-117-store-customer-display-profile.md) — customer display profile과 상태 용어

@@ -114,7 +114,12 @@ internal class StoreOrderBoardMigrationTest : IsolatedPostgresSupport() {
                 pickup_window_start_snapshot timestamptz NOT NULL,
                 pickup_window_end_snapshot timestamptz NOT NULL,
                 acceptance_warning_at timestamptz,
-                acceptance_deadline_at timestamptz
+                acceptance_deadline_at timestamptz,
+                paid_at timestamptz,
+                accepted_at timestamptz,
+                preparing_at timestamptz,
+                ready_at timestamptz,
+                completed_at timestamptz
             )
             """.trimIndent(),
         )

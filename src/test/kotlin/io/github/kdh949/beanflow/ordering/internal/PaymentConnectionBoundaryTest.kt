@@ -36,6 +36,7 @@ internal class PaymentConnectionBoundaryTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val gateway: ScriptedTestPaymentGateway,
         private val jdbcTemplate: JdbcTemplate,
@@ -58,7 +59,13 @@ internal class PaymentConnectionBoundaryTest
         fun `Provider wait does not retain the only database connection`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrderUseCase.create("payment-pool-order", fixture.command()).status).isEqualTo(201)
+            assertThat(
+                createOrderUseCase
+                    .create(
+                        "payment-pool-order",
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                    ).status,
+            ).isEqualTo(201)
             val orderId =
                 requireNotNull(
                     jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java),

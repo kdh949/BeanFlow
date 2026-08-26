@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.github.kdh949.beanflow.merchant.api.CurrentMenuLineQuoteResult
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
+import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteOperations
+import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteSnapshot
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
 import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuConfigurationDefinition
@@ -22,7 +24,8 @@ internal class JpaMenuQuoteService(
     private val optionRepository: MenuOptionJpaRepository,
     private val configurationRepository: MenuConfigurationJpaRepository,
     private val requirementRepository: MenuConfigurationRequirementJpaRepository,
-) : MenuQuoteUseCase {
+) : MenuQuoteUseCase,
+    MerchantOrderQuoteOperations {
     private val calculator = MenuQuoteCalculator()
 
     override fun quote(
@@ -41,12 +44,45 @@ internal class JpaMenuQuoteService(
         return calculator.quoteCurrentBatch(store = store, menus = menus, lines = lines)
     }
 
+    override fun inspectForQuote(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = false)
+
+    override fun lockForOrderCreation(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = true)
+
+    private fun quoteForOrder(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+        lockStore: Boolean,
+    ): MerchantOrderQuoteSnapshot {
+        val loaded = load(storeId, lines, lockStore)
+        val quotes = calculator.quote(store = loaded.storeDefinition, menus = loaded.menuDefinitions, lines = lines)
+        return MerchantOrderQuoteSnapshot(
+            storeAcceptingOrders = loaded.storeDefinition.acceptingOrders,
+            storePickupEnabled = loaded.storeDefinition.pickupEnabled,
+            lines = quotes,
+        )
+    }
+
     private fun loadDefinitions(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
     ): Pair<StoreDefinition, Map<UUID, MenuDefinition>> {
+        val loaded = load(storeId, lines, lockStore = false)
+        return loaded.storeDefinition to loaded.menuDefinitions
+    }
+
+    private fun load(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+        lockStore: Boolean = false,
+    ): LoadedMenuDefinitions {
         val store =
-            storeRepository.findById(storeId).orElse(null)
+            (if (lockStore) storeRepository.findByIdForShare(storeId) else storeRepository.findById(storeId).orElse(null))
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
         val menuEntities = menuRepository.findAllById(requestedMenuIds)
@@ -86,7 +122,10 @@ internal class JpaMenuQuoteService(
                         configurations = configurationsForMenu,
                     )
             }
-        return StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled) to menus
+        return LoadedMenuDefinitions(
+            storeDefinition = StoreDefinition(store.id, store.acceptingOrders, store.pickupEnabled),
+            menuDefinitions = menus,
+        )
     }
 
     private fun parseNormalizedOptionKey(key: String): Set<UUID> {
@@ -107,4 +146,9 @@ internal class JpaMenuQuoteService(
             FailureCode.DEPENDENCY_UNAVAILABLE,
             "Merchant menu configuration data is unavailable",
         )
+
+    private data class LoadedMenuDefinitions(
+        val storeDefinition: StoreDefinition,
+        val menuDefinitions: Map<UUID, MenuDefinition>,
+    )
 }

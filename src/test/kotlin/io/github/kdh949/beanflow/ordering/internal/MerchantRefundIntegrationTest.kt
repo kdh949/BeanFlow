@@ -51,6 +51,7 @@ internal class MerchantRefundIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrders: io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val paymentGateway: ScriptedTestPaymentGateway,
         private val objectMapper: ObjectMapper,
@@ -83,7 +84,25 @@ internal class MerchantRefundIntegrationTest
             assertThat(line["cashRefundKrw"].asLong()).isZero()
             assertThat(body["totals"]["cashRefundKrw"].asLong()).isZero()
             assertThat(body["totals"]["currency"].asText()).isEqualTo("KRW")
+            assertThat(body["orderContext"]["orderedAt"].isTextual).isTrue()
+            assertThat(body["orderContext"]["pickupWindow"]["startsAt"].isTextual).isTrue()
+            assertThat(body["orderContext"]["pickupWindow"]["endsAt"].isTextual).isTrue()
+            assertThat(body["orderContext"]["status"].asText()).isEqualTo("PAID")
+            assertThat(body["orderContext"]["pricing"]["subtotalKrw"].asLong()).isEqualTo(3_000)
+            assertThat(body["orderContext"]["pricing"]["couponDiscountKrw"].asLong()).isZero()
+            assertThat(body["orderContext"]["pricing"]["pointsAppliedKrw"].asLong()).isZero()
+            assertThat(body["orderContext"]["pricing"]["payableKrw"].asLong()).isEqualTo(3_000)
+            assertThat(body["orderContext"]["pricing"]["currency"].asText()).isEqualTo("KRW")
+            assertThat(body["orderContext"]["paymentKind"].asText()).isEqualTo("ONE_TIME_EXTERNAL")
             assertThat(body["previewVersion"].asText()).matches("[0-9a-f]{64}")
+            assertThat(body.toString()).doesNotContain(
+                "customerId",
+                "paymentId",
+                "providerReference",
+                "cardBrand",
+                "lastFour",
+                "vat",
+            )
             assertThat(refundCount()).isZero()
             assertThat(auditCount()).isEqualTo(auditsBeforePreview)
             assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
@@ -344,7 +363,7 @@ internal class MerchantRefundIntegrationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
             val key = "merchant-refund-${UUID.randomUUID()}"
-            val created = createOrders.create(key, fixture.command(quantity = 3))
+            val created = createOrders.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command(quantity = 3)))
             assertThat(created.status).isEqualTo(201)
             val order = objectMapper.readTree(created.body)["order"]
             val orderId = UUID.fromString(order["orderId"].asText())

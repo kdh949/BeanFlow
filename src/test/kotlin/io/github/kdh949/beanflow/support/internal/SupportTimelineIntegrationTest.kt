@@ -3,8 +3,10 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
@@ -48,6 +50,7 @@ internal class SupportTimelineIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val authorization: SupportTimelineAuthorization,
     ) {
         private val actorId = UUID.fromString("51000000-0000-0000-0000-000000000001")
@@ -239,7 +242,11 @@ internal class SupportTimelineIntegrationTest
         private fun createOrder(): UUID {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val response = createOrder.create("support-timeline-api-order-0001", fixture.command())
+            val response =
+                createOrder.create(
+                    "support-timeline-api-order-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             assertThat(response.status).isEqualTo(201)
             return UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(response.body)).groupValues[1])
         }

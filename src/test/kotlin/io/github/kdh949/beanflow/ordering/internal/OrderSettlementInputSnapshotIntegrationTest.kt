@@ -29,6 +29,7 @@ internal class OrderSettlementInputSnapshotIntegrationTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val snapshotOperations: OrderSettlementInputSnapshotOperations,
         private val jdbcTemplate: JdbcTemplate,
     ) {
@@ -53,7 +54,11 @@ internal class OrderSettlementInputSnapshotIntegrationTest
                 settlementFeeRateBps = 333,
             )
 
-            val response = createOrderUseCase.create("settlement-input-0001", fixture.command())
+            val response =
+                createOrderUseCase.create(
+                    "settlement-input-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             val snapshot = snapshotOperations.read(orderId(response.body))
 
             assertThat(response.status).isEqualTo(201)
@@ -79,7 +84,9 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             val response =
                 createOrderUseCase.create(
                     "settlement-input-mixed-0001",
-                    fixture.command(pointsToUseKrw = 300, couponIssuanceId = couponIssuanceId),
+                    orderQuoteUseCase.attachCurrentQuote(
+                        fixture.command(pointsToUseKrw = 300, couponIssuanceId = couponIssuanceId),
+                    ),
                 )
             val snapshot = snapshotOperations.read(orderId(response.body))
 
@@ -105,7 +112,7 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             val response =
                 createOrderUseCase.create(
                     "settlement-input-point-mismatch-0001",
-                    fixture.command(pointsToUseKrw = 300),
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = 300)),
                 )
 
             assertThat(response.status).isEqualTo(503)
@@ -122,7 +129,11 @@ internal class OrderSettlementInputSnapshotIntegrationTest
                 includeSettlementTerms = false,
             )
 
-            val response = createOrderUseCase.create("settlement-input-no-terms-0001", fixture.command())
+            val response =
+                createOrderUseCase.create(
+                    "settlement-input-no-terms-0001",
+                    fixture.command(expectedQuoteFingerprint = "0".repeat(64)),
+                )
 
             assertThat(response.status).isEqualTo(503)
             assertThat(response.body).contains("\"code\":\"SETTLEMENT_INPUT_UNAVAILABLE\"")
@@ -140,7 +151,9 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             val response =
                 createOrderUseCase.create(
                     "settlement-input-persistence-failure-0001",
-                    fixture.command(pointsToUseKrw = 100, couponIssuanceId = couponIssuanceId),
+                    orderQuoteUseCase.attachCurrentQuote(
+                        fixture.command(pointsToUseKrw = 100, couponIssuanceId = couponIssuanceId),
+                    ),
                 )
 
             assertThat(response.status).isEqualTo(503)
@@ -153,9 +166,10 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            val first = createOrderUseCase.create("settlement-input-replay-0001", fixture.command())
+            val command = orderQuoteUseCase.attachCurrentQuote(fixture.command())
+            val first = createOrderUseCase.create("settlement-input-replay-0001", command)
             val before = snapshotOperations.read(orderId(first.body))
-            val replay = createOrderUseCase.create("settlement-input-replay-0001", fixture.command())
+            val replay = createOrderUseCase.create("settlement-input-replay-0001", command)
             val after = snapshotOperations.read(orderId(replay.body))
 
             assertThat(replay.replay).isTrue()
@@ -174,7 +188,11 @@ internal class OrderSettlementInputSnapshotIntegrationTest
                 settlementFeeRateBps = 500,
                 settlementTermsEffectiveTo = nextEffectiveAt,
             )
-            val response = createOrderUseCase.create("settlement-input-terms-change-0001", fixture.command())
+            val response =
+                createOrderUseCase.create(
+                    "settlement-input-terms-change-0001",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             val before = snapshotOperations.read(orderId(response.body))
 
             jdbcTemplate.update(
@@ -207,13 +225,14 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             )
             val start = CyclicBarrier(2)
             val executor = Executors.newFixedThreadPool(2)
+            val command = orderQuoteUseCase.attachCurrentQuote(fixture.command())
 
             try {
                 val orderFuture =
                     executor.submit(
                         Callable<StoredHttpResponse> {
                             start.await()
-                            createOrderUseCase.create("settlement-input-concurrent-terms-0001", fixture.command())
+                            createOrderUseCase.create("settlement-input-concurrent-terms-0001", command)
                         },
                     )
                 val termsFuture =

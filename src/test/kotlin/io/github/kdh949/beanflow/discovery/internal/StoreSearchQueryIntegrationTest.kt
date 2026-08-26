@@ -353,7 +353,7 @@ internal class StoreSearchQueryIntegrationTest {
         assertThat(item.matchedMenus.map { it.name }).containsExactly("라떼 A", "라떼 B", "라떼 C")
         // 좌표가 없으면 거리 항은 표시하지 않는다.
         assertThat(item.distanceMeters).isNull()
-        assertThat(item.open).isTrue()
+        assertThat(item.orderingAvailable).isTrue()
     }
 
     @Test

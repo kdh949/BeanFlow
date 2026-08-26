@@ -384,6 +384,7 @@ internal enum class SupportCompensationRequestState {
     BENEFIT_ISSUED,
     NOTIFICATION_RETRY,
     NOTIFICATION_ACCEPTED,
+    NOTIFICATION_SKIPPED,
     MANUAL_REVIEW,
 }
 
@@ -488,6 +489,19 @@ internal class SupportCompensationRequest private constructor(
         requireChronology(occurredAt)
         state = SupportCompensationRequestState.NOTIFICATION_ACCEPTED
         notificationDeliveryId = deliveryId
+        notificationFailureCode = null
+        version += 1
+        lastChangedAt = occurredAt
+    }
+
+    fun skipNotification(occurredAt: Instant) {
+        if (state == SupportCompensationRequestState.NOTIFICATION_SKIPPED) return
+        check(state == SupportCompensationRequestState.BENEFIT_ISSUED || state == SupportCompensationRequestState.NOTIFICATION_RETRY) {
+            "Compensation notification is not pending"
+        }
+        requireChronology(occurredAt)
+        state = SupportCompensationRequestState.NOTIFICATION_SKIPPED
+        notificationDeliveryId = null
         notificationFailureCode = null
         version += 1
         lastChangedAt = occurredAt
@@ -656,6 +670,7 @@ internal class SupportCompensationRequest private constructor(
                 SupportCompensationRequestState.BENEFIT_ISSUED,
                 SupportCompensationRequestState.NOTIFICATION_RETRY,
                 SupportCompensationRequestState.NOTIFICATION_ACCEPTED,
+                SupportCompensationRequestState.NOTIFICATION_SKIPPED,
                 SupportCompensationRequestState.MANUAL_REVIEW,
             )
     }

@@ -73,6 +73,20 @@ class SupportCompensationRequestTest {
     }
 
     @Test
+    fun `marketing opt out terminates notification without a delivery binding`() {
+        val request = request(SupportActionApprovalRoute.NONE, null)
+        request.completeBenefit(UUID.randomUUID(), actorId, DIGEST, 8, now.plusSeconds(1))
+
+        request.skipNotification(now.plusSeconds(2))
+        request.skipNotification(now.plusSeconds(3))
+
+        assertThat(request.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_SKIPPED)
+        assertThat(request.terminalBenefitId).isNotNull()
+        assertThat(request.notificationDeliveryId).isNull()
+        assertThat(request.notificationFailureCode).isNull()
+    }
+
+    @Test
     fun `coupon and action bindings are structurally exact`() {
         assertThatThrownBy {
             request(SupportActionApprovalRoute.SUPPORT_MANAGER, null)

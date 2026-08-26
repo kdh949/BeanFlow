@@ -7,7 +7,7 @@ import { useStoreOrderBoard } from "./useStoreOrderBoard";
 
 export { reconcileBoardItem } from "./storeOrderBoardModel";
 
-export function StoreOrderBoardPage() {
+export function StoreOrderBoardPage({ now = new Date() }: { now?: Date }) {
   const {
     stores, selectedStoreId, selectedStore, membershipsLoading, board, boardLoading, error,
     forbiddenStoreName, notice, busyReference, rejectingReference, rejectionReason,
@@ -57,6 +57,7 @@ export function StoreOrderBoardPage() {
           board={board}
           storeId={selectedStoreId}
           storeName={selectedStore?.storeName ?? "선택한 매장"}
+          now={now}
           busyReference={busyReference}
           rejectingReference={rejectingReference}
           rejectionReason={rejectionReason}

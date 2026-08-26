@@ -1,13 +1,16 @@
 import { ArrowRight, Coffee, MapPin } from "lucide-react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
+import { nextPickupLabel, operatingStatusLabel } from "./storeDisplay";
 import { distanceLabel } from "./useBrowserLocation";
 
 export type StoreCardModel = {
   storeId: string;
   name: string;
-  open?: boolean;
+  orderingAvailable: boolean;
   pickupAvailable: boolean;
+  nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+  customerDisplay: components["schemas"]["CustomerStoreDisplay"];
   distanceMeters?: number;
   caption?: string | null;
   image?: components["schemas"]["StorefrontImage"];
@@ -21,14 +24,11 @@ export type StoreCardModel = {
  * so it behaves the same whether it was reached from here or from a pasted URL.
  */
 export function StoreCard({ store }: { store: StoreCardModel }) {
-  const available = (store.open ?? true) && store.pickupAvailable;
   const distance = distanceLabel(store.distanceMeters);
   return (
     <Link
-      className={`store-card ${available ? "" : "is-closed"}`}
+      className={`store-card ${store.orderingAvailable ? "" : "is-unavailable"}`}
       to={`/app/stores/${store.storeId}`}
-      aria-disabled={!available}
-      tabIndex={available ? undefined : -1}
     >
       {store.image ? (
         <img className="store-thumbnail" src={store.image.url} alt="" />
@@ -41,8 +41,15 @@ export function StoreCard({ store }: { store: StoreCardModel }) {
           {distance ? <><MapPin size={14} /> {distance}</> : null}
           {store.caption ? <em>{store.caption}</em> : null}
         </span>
+        <span>{store.customerDisplay.addressLine ?? "주소 정보 없음"}</span>
       </span>
-      <span className={`availability ${available ? "is-open" : ""}`}>{available ? "주문 가능" : "준비 중"}</span>
+      <span className="store-state-copy">
+        <strong className={`availability ${store.orderingAvailable ? "is-open" : ""}`}>
+          {store.orderingAvailable ? "주문 가능" : "주문 불가"}
+        </strong>
+        <span>{operatingStatusLabel(store.customerDisplay.operatingStatus)}</span>
+        <span>{nextPickupLabel(store.nextPickupWindow)}</span>
+      </span>
       <ArrowRight size={18} />
     </Link>
   );

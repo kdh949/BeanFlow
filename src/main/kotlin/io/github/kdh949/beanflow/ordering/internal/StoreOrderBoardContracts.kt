@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.time.LocalDate
@@ -39,6 +40,15 @@ internal data class StoreOrderActionRequest(
     val reason: String?,
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
+internal data class StoreOrderBoardLifecycleResponse(
+    val paidAt: Instant?,
+    val acceptedAt: Instant?,
+    val preparingAt: Instant?,
+    val readyAt: Instant?,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 internal data class StoreOrderBoardItemResponse(
     val orderReference: String,
     val pickupNumber: String,
@@ -51,6 +61,7 @@ internal data class StoreOrderBoardItemResponse(
     val acceptanceDeadlineAt: Instant?,
     val acceptancePhase: StoreOrderAcceptancePhase?,
     val allowedActions: List<StoreOrderAction>,
+    val lifecycle: StoreOrderBoardLifecycleResponse? = null,
     val compensationRecovery: StoreCompensationSummary? = null,
 )
 

@@ -28,6 +28,7 @@ tags:
   - name: Merchant
   - name: Operations
   - name: Loyalty
+  - name: Notification
   - name: Settlement
   - name: Dispute
   - name: Support
@@ -503,6 +504,119 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notification-summary:
+    get:
+      tags: [Notification]
+      operationId: getCurrentCustomerNotificationSummary
+      summary: 현재 고객 알림함의 읽지 않은 항목 존재 여부 조회
+      description: |
+        성공한 빈 알림함만 `hasUnread=false`입니다. Delivery 상태, 알림 개수와 본문은 전역
+        shell에 노출하지 않으며 조회 의존성 실패를 false로 대체하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: 고객 범위 unread 존재 여부
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notifications:
+    get:
+      tags: [Notification]
+      operationId: listCurrentCustomerNotifications
+      summary: 현재 고객 알림함 목록 조회
+      description: |
+        `(createdAt DESC, notificationId DESC)` 순서의 customer-bound signed cursor를 사용합니다.
+        알림함 읽음 상태는 외부 Delivery 성공·실패와 독립이며 Provider 진단을 반환하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 안전한 고객 표시 copy와 target만 포함하는 알림 페이지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notifications/{notificationId}:
+    patch:
+      tags: [Notification]
+      operationId: markCurrentCustomerNotificationRead
+      summary: 현재 고객 소유 알림을 읽음 처리
+      description: |
+        `{ "read": true }`만 허용하며 최초 요청과 반복 요청 모두 204입니다. 다른 고객 소유
+        알림은 존재 여부를 노출하지 않고 404를 반환하며 unread 되돌리기는 지원하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: path
+          name: notificationId
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MarkNotificationReadRequest" }
+      responses:
+        "204": { description: 알림 읽음 처리 완료 또는 멱등 재생 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notification-preferences:
+    get:
+      tags: [Notification]
+      operationId: getCurrentCustomerNotificationPreferences
+      summary: 현재 고객 마케팅 알림 수신 설정 조회
+      description: 설정 row가 없으면 명시적으로 `marketingOptIn=false`를 반환합니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: 현재 고객 마케팅 알림 수신 설정
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Notification]
+      operationId: replaceCurrentCustomerNotificationPreferences
+      summary: 현재 고객 마케팅 알림 수신 설정 전체 교체
+      description: |
+        거래 알림은 끌 수 없습니다. 새 마케팅 알림은 opt-in 고객에게만 생성되며 opt-out해도
+        이미 생성된 InboxItem은 소급 삭제하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceNotificationPreferenceRequest" }
+      responses:
+        "200":
+          description: 전체 교체 후 현재 설정
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/search:
     get:
       tags: [Discovery]
@@ -518,7 +632,8 @@ paths:
         Latitude and longitude must be supplied together or both omitted; radiusMeters
         without both coordinates returns 400, and sort=distance without coordinates
         returns 400. Coordinates are request-only and never persisted or written to logs.
-        openOnly requires only that the store accepts orders with pickup enabled;
+        openOnly retains its transport spelling but means that the Store is currently accepting
+        orders with pickup enabled (`orderingAvailable=true`);
         pickupAvailable additionally requires a reservable slot and is a point-in-time
         projection that does not reserve one. Both default to unset, and a closed store
         is then still returned with its status in the flags. The relevance score itself
@@ -718,7 +833,8 @@ paths:
       summary: Read the display identity of one store
       security: [{ customerSession: [] }]
       description: |
-        Returns the store's current name and pickup availability so that a client which reached the
+        Returns the store's current name, ordering/pickup availability, earliest actual pickup
+        window and customer display profile so that a client which reached the
         store by URL, deep link or reload can name the store from the server instead of a value it
         carried in navigation state. `distanceMeters` is absent here because this read takes no
         coordinate. A store the customer must not see is reported the same as one that does not
@@ -782,6 +898,57 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/customer-display:
+    get:
+      tags: [Merchant]
+      operationId: getStoreCustomerDisplayContent
+      summary: 고객에게 표시할 매장 정보의 현재 편집본 조회
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER에게 현재 주소, 길찾기 안내, 선택적인 7일 운영시간과
+        optimistic-concurrency version을 반환합니다. 아직 profile이 없으면 content와 schedule은
+        생략되고 version은 0입니다. 이 version은 고객 Store 응답에 노출되지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 현재 Store customer-display 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreCustomerDisplayAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Merchant]
+      operationId: replaceStoreCustomerDisplayContent
+      summary: 고객에게 표시할 매장 정보 전체 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER만 수행합니다. 운영시간을 보내면 Asia/Seoul 기준 일곱 요일을
+        정확히 한 번씩 보내야 하며, 생략하면 기존 schedule 전체를 제거합니다. 동일 replacement는
+        version, updatedAt과 AuditRecord를 바꾸지 않습니다. stale expectedVersion은 409입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceStoreCustomerDisplayRequest" }
+      responses:
+        "200":
+          description: 교체 후 또는 no-op인 현재 Store customer-display 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreCustomerDisplayAuthoring" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus:
     get:
@@ -855,6 +1022,58 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/menus/{menuId}/display-content:
+    get:
+      tags: [Merchant]
+      operationId: getMenuDisplayContent
+      summary: 메뉴 고객 표시 content의 현재 편집본 조회
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 nullable category/description과 기존
+        Menu version을 반환합니다. 이 version은 고객 menu catalog에 노출되지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 Menu display-content 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuDisplayContentAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Merchant]
+      operationId: replaceMenuDisplayContent
+      summary: 메뉴 고객 표시 content 전체 교체
+      security: [{ merchantSession: [] }]
+      description: |
+        ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 nullable category/description을 full
+        replacement합니다. 가격, availability, option과 Order snapshot은 바뀌지 않습니다. 동일
+        replacement는 Menu version과 AuditRecord를 바꾸지 않고 stale expectedVersion은 409입니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+        - $ref: "#/components/parameters/MerchantCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceMenuDisplayContentRequest" }
+      responses:
+        "200":
+          description: 교체 후 또는 no-op인 현재 Menu display-content 편집본
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuDisplayContentAuthoring" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/pickup-slots:
     get:
       tags: [Discovery]
@@ -879,6 +1098,44 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /me/order-quotes:
+    post:
+      tags: [Ordering]
+      operationId: createOrderQuote
+      summary: 현재 owner 상태로 비예약 주문 견적 계산
+      security: [{ customerSession: [] }]
+      description: |
+        메뉴·옵션·재고·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+        서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
+        reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
+        호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderQuoteRequest"
+      responses:
+        "200":
+          description: guarantee가 NONE인 현재 비예약 견적
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /orders:
@@ -6850,8 +7107,10 @@ components:
             $ref: '#/components/schemas/Error'
     OrderCreationConflict:
       description: |
-        Order resource conflict, idempotency payload reuse, or an identical
+        Order quote staleness, resource conflict, idempotency payload reuse, or an identical
         idempotent request that is still processing or requires manual review.
+        ORDER_QUOTE_STALE includes the terminally stored currentQuote that the customer must
+        explicitly review. Re-submission requires its fingerprint and a new Idempotency-Key.
         PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
         MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
         Retry-After and never re-executes the order command.
@@ -6867,7 +7126,9 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            oneOf:
+              - $ref: "#/components/schemas/Error"
+              - $ref: "#/components/schemas/OrderQuoteStaleError"
     ReorderConflict:
       description: |
         Source state, unavailable source item, resource reservation or idempotency
@@ -7488,6 +7749,74 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CustomerOrderSummary" }
         page: { $ref: "#/components/schemas/PageInfo" }
+    NotificationClassification:
+      type: string
+      enum: [TRANSACTIONAL, MARKETING]
+    NotificationTarget:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, enum: [NONE, ORDER] }
+        reference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+      allOf:
+        - if:
+            properties: { type: { const: ORDER } }
+            required: [type]
+          then:
+            required: [reference]
+        - if:
+            properties: { type: { const: NONE } }
+            required: [type]
+          then:
+            not: { required: [reference] }
+    NotificationItem:
+      type: object
+      additionalProperties: false
+      required: [notificationId, title, body, createdAt, classification, target]
+      properties:
+        notificationId: { $ref: "#/components/schemas/Identifier" }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, minLength: 1, maxLength: 500 }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        readAt: { $ref: "#/components/schemas/DateTime" }
+        classification: { $ref: "#/components/schemas/NotificationClassification" }
+        target: { $ref: "#/components/schemas/NotificationTarget" }
+    NotificationPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationItem" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    NotificationSummary:
+      type: object
+      additionalProperties: false
+      required: [hasUnread]
+      properties:
+        hasUnread: { type: boolean }
+    MarkNotificationReadRequest:
+      type: object
+      additionalProperties: false
+      required: [read]
+      properties:
+        read: { type: boolean, const: true }
+    NotificationPreference:
+      type: object
+      additionalProperties: false
+      required: [marketingOptIn]
+      properties:
+        marketingOptIn: { type: boolean }
+    ReplaceNotificationPreferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [marketingOptIn]
+      properties:
+        marketingOptIn: { type: boolean }
     CouponWalletInapplicableReason:
       type: string
       enum: [STORE_NOT_APPLICABLE]
@@ -7554,10 +7883,31 @@ components:
           items: { type: string, minLength: 1, maxLength: 200 }
         quantity: { type: integer, minimum: 1 }
         lineTotalKrw: { $ref: "#/components/schemas/MoneyKrw" }
+    CustomerOrderPricing:
+      type: object
+      additionalProperties: false
+      required: [subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency]
+      description: 주문 생성 시 확정해 저장한 불변 가격 요약입니다.
+      properties:
+        subtotalKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        couponDiscountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsAppliedKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        payableKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+    OrderLifecycle:
+      type: object
+      additionalProperties: false
+      description: 실제 상태 전이 때 저장된 시각만 포함하는 주문 생명주기입니다. 아직 발생하지 않은 단계는 생략합니다.
+      properties:
+        paidAt: { $ref: "#/components/schemas/DateTime" }
+        acceptedAt: { $ref: "#/components/schemas/DateTime" }
+        preparingAt: { $ref: "#/components/schemas/DateTime" }
+        readyAt: { $ref: "#/components/schemas/DateTime" }
+        completedAt: { $ref: "#/components/schemas/DateTime" }
     CustomerOrderDetail:
       type: object
       additionalProperties: false
-      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, lines, allowedActions]
+      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, pricing, lines, allowedActions]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         storeId:
@@ -7573,11 +7923,8 @@ components:
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
-        totalAmountKrw:
-          allOf:
-            - $ref: "#/components/schemas/MoneyKrw"
-          description: Coupon discount and point use after the final amount payable by the customer.
-        currency: { $ref: "#/components/schemas/Currency" }
+        pricing: { $ref: "#/components/schemas/CustomerOrderPricing" }
+        lifecycle: { $ref: "#/components/schemas/OrderLifecycle" }
         lines:
           type: array
           minItems: 1
@@ -7703,7 +8050,7 @@ components:
     StoreSearchItem:
       type: object
       additionalProperties: false
-      required: [storeId, name, matchReason, open, pickupAvailable, matchedMenus]
+      required: [storeId, name, matchReason, orderingAvailable, pickupAvailable, customerDisplay, matchedMenus]
       properties:
         storeId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
@@ -7733,8 +8080,12 @@ components:
                 MENU_NAME,
               ]
         distanceMeters: { type: integer, minimum: 0 }
-        open: { type: boolean }
+        orderingAvailable:
+          type: boolean
+          description: 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다.
         pickupAvailable: { type: boolean }
+        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         matchedMenus:
           type: array
           maxItems: 3
@@ -7748,14 +8099,150 @@ components:
       properties:
         menuId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
+    StoreOperatingDay:
+      type: object
+      additionalProperties: false
+      required: [dayOfWeek, closed]
+      description: |
+        Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
+        closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
+      properties:
+        dayOfWeek:
+          type: string
+          enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+        closed: { type: boolean }
+        opensAt:
+          type: string
+          format: time
+        closesAt:
+          type: string
+          format: time
+    StoreWeeklyOperatingHours:
+      type: object
+      additionalProperties: false
+      required: [timezone, days]
+      properties:
+        timezone:
+          type: string
+          enum: [Asia/Seoul]
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: 일곱 요일을 정확히 한 번씩 포함합니다.
+          items: { $ref: "#/components/schemas/StoreOperatingDay" }
+    CustomerStoreDisplay:
+      type: object
+      additionalProperties: false
+      required: [operatingStatus]
+      properties:
+        addressLine:
+          type: string
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: string
+          minLength: 1
+          maxLength: 200
+        operatingStatus:
+          type: string
+          enum: [OPEN, CLOSED, UNSPECIFIED]
+          description: Asia/Seoul 주간 schedule의 현재 상태이며 주문 가능성과 독립입니다.
+        operatingHours: { $ref: "#/components/schemas/StoreWeeklyOperatingHours" }
+    NextPickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      description: 현재 시각 이후 7일 안에서 capacity가 남은 가장 이른 실제 pickup slot입니다.
+      properties:
+        startsAt: { $ref: "#/components/schemas/DateTime" }
+        endsAt: { $ref: "#/components/schemas/DateTime" }
+    StoreCustomerDisplayAuthoring:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        addressLine:
+          type: string
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: string
+          minLength: 1
+          maxLength: 200
+        operatingHours: { $ref: "#/components/schemas/StoreWeeklyOperatingHours" }
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    ReplaceStoreCustomerDisplayRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        addressLine:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 300
+        directionsHint:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 200
+        operatingHours:
+          anyOf:
+            - $ref: "#/components/schemas/StoreWeeklyOperatingHours"
+            - type: "null"
+    MenuDisplayContentAuthoring:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        displayCategory:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    ReplaceMenuDisplayContentRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        displayCategory:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 50
+        description:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 500
     CustomerStore:
       type: object
       additionalProperties: false
-      required: [storeId, name, pickupAvailable]
+      required: [storeId, name, orderingAvailable, pickupAvailable, customerDisplay]
       properties:
         storeId: { $ref: "#/components/schemas/Identifier" }
         name: { type: string, minLength: 1, maxLength: 200 }
+        orderingAvailable:
+          type: boolean
+          description: acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다.
         pickupAvailable: { type: boolean }
+        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         distanceMeters: { type: integer, minimum: 0 }
         image: { $ref: "#/components/schemas/StorefrontImage" }
     StorefrontImage:
@@ -7811,6 +8298,15 @@ components:
         - START_PREPARING
         - MARK_READY
         - COMPLETE
+    StoreOrderBoardLifecycle:
+      type: object
+      additionalProperties: false
+      description: 보드 ETag에 포함되는 저장된 진행 시각입니다. 완료 시각은 라이브 보드 계약에 포함하지 않습니다.
+      properties:
+        paidAt: { $ref: '#/components/schemas/DateTime' }
+        acceptedAt: { $ref: '#/components/schemas/DateTime' }
+        preparingAt: { $ref: '#/components/schemas/DateTime' }
+        readyAt: { $ref: '#/components/schemas/DateTime' }
     StoreOrderBoardItem:
       type: object
       additionalProperties: false
@@ -7889,6 +8385,9 @@ components:
           items:
             $ref: '#/components/schemas/StoreOrderAction'
           description: 현재 상태와 권한에서 서버가 허용하는 매장 작업 목록입니다.
+        lifecycle:
+          $ref: '#/components/schemas/StoreOrderBoardLifecycle'
+          description: 실제 상태 전이 때 저장된 시각만 포함하며 ETag의 의미 표현에 참여합니다.
         compensationRecovery:
           $ref: '#/components/schemas/StoreCompensationSummary'
           description: 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다.
@@ -8035,10 +8534,33 @@ components:
         pointsRestorationKrw: { $ref: "#/components/schemas/MoneyKrw" }
         cashRefundKrw: { $ref: "#/components/schemas/MoneyKrw" }
         currency: { $ref: "#/components/schemas/Currency" }
+    MerchantRefundPickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      properties:
+        startsAt: { $ref: "#/components/schemas/DateTime" }
+        endsAt: { $ref: "#/components/schemas/DateTime" }
+    MerchantRefundOrderContext:
+      type: object
+      additionalProperties: false
+      description: |
+        환불 대상 확인을 위한 안전한 읽기 전용 주문 맥락입니다. 실행 입력으로 사용하지 않으며
+        실행은 previewVersion과 잠금 후 재조회 결과를 다시 검증합니다.
+      required: [orderedAt, pickupWindow, status, pricing, paymentKind]
+      properties:
+        orderedAt: { $ref: "#/components/schemas/DateTime" }
+        pickupWindow: { $ref: "#/components/schemas/MerchantRefundPickupWindow" }
+        status: { $ref: "#/components/schemas/OrderState" }
+        pricing: { $ref: "#/components/schemas/CustomerOrderPricing" }
+        paymentKind:
+          type: string
+          enum: [ONE_TIME_EXTERNAL, BENEFIT_ONLY]
+          description: 현재 부분 환불 실행 범위에서는 ONE_TIME_EXTERNAL만 반환됩니다.
     MerchantRefundPreview:
       type: object
       additionalProperties: false
-      required: [orderReference, lines, totals, previewVersion]
+      required: [orderReference, lines, totals, orderContext, previewVersion]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         lines:
@@ -8046,6 +8568,7 @@ components:
           minItems: 1
           items: { $ref: "#/components/schemas/MerchantRefundPreviewLine" }
         totals: { $ref: "#/components/schemas/MerchantRefundTotals" }
+        orderContext: { $ref: "#/components/schemas/MerchantRefundOrderContext" }
         previewVersion: { type: string, pattern: '^[0-9a-f]{64}$' }
     MerchantRefundResult:
       type: object
@@ -8592,8 +9115,10 @@ components:
           - storeId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
             name: 빈플로우 강남점
             distanceMeters: 320
-            open: true
+            orderingAvailable: true
             pickupAvailable: true
+            customerDisplay:
+              operatingStatus: UNSPECIFIED
         page:
           nextCursor: eyJvIjoiZGlzdGFuY2UiLCJ2IjoiMzIwIn0
       properties:
@@ -8607,14 +9132,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        [storeId, name, distanceMeters, open, pickupAvailable]
+        [storeId, name, distanceMeters, orderingAvailable, pickupAvailable, customerDisplay]
       description: 인근 매장 검색 결과에 포함되는 매장 요약 정보입니다.
       example:
         storeId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         name: 빈플로우 강남점
         distanceMeters: 320
-        open: true
+        orderingAvailable: true
         pickupAvailable: true
+        customerDisplay:
+          operatingStatus: UNSPECIFIED
       properties:
         storeId:
           $ref: "#/components/schemas/Identifier"
@@ -8627,10 +9154,14 @@ components:
           description: |-
             내부 마이크로미터 단위 거리를 내림한 정수 미터 표시값입니다. This is a display value, not the cursor tuple(커서 정렬에 쓰이는 튜플이 아니라 화면 표시값)입니다.
           example: 320
-        open:
+        orderingAvailable:
           type: boolean
         pickupAvailable:
           type: boolean
+        nextPickupWindow:
+          $ref: "#/components/schemas/NextPickupWindow"
+        customerDisplay:
+          $ref: "#/components/schemas/CustomerStoreDisplay"
         image:
           $ref: "#/components/schemas/StorefrontImage"
     MenuList:
@@ -8683,6 +9214,14 @@ components:
           $ref: "#/components/schemas/Currency"
         available:
           type: boolean
+        displayCategory:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
         options:
           type: array
           items:
@@ -8748,7 +9287,7 @@ components:
     CreateOrderRequest:
       type: object
       additionalProperties: false
-      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      required: [storeId, pickupSlotId, lines, pointsToUseKrw, expectedQuoteFingerprint]
       description: |
         신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
         번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
@@ -8762,6 +9301,7 @@ components:
             quantity: 2
         couponIssuanceId: null
         pointsToUseKrw: 1000
+        expectedQuoteFingerprint: 3a6f04f95b4fbc6c25d31e4e1551b52b30ac27a5bf9f5f83a454d9172303b778
       properties:
         storeId:
           $ref: "#/components/schemas/Identifier"
@@ -8777,6 +9317,122 @@ components:
           $ref: "#/components/schemas/Identifier"
         pointsToUseKrw:
           $ref: "#/components/schemas/MoneyKrw"
+        expectedQuoteFingerprint:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: 고객이 마지막으로 명시적으로 확인한 OrderQuote의 opaque fingerprint입니다.
+    OrderQuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        pickupSlotId:
+          $ref: "#/components/schemas/Identifier"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateOrderLineRequest"
+        couponIssuanceId:
+          $ref: "#/components/schemas/Identifier"
+        pointsToUseKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    OrderQuote:
+      type: object
+      additionalProperties: false
+      required: [quotedAt, quoteFingerprint, store, pickupWindow, lines, pricing, guarantee]
+      properties:
+        quotedAt:
+          $ref: "#/components/schemas/DateTime"
+        quoteFingerprint:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다.
+        store:
+          $ref: "#/components/schemas/OrderQuoteStore"
+        pickupWindow:
+          $ref: "#/components/schemas/OrderQuotePickupWindow"
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OrderQuoteLine"
+        pricing:
+          $ref: "#/components/schemas/OrderQuotePricing"
+        guarantee:
+          type: string
+          enum: [NONE]
+    OrderQuoteStore:
+      type: object
+      additionalProperties: false
+      required: [storeId, name]
+      properties:
+        storeId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+    OrderQuotePickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      properties:
+        startsAt:
+          $ref: "#/components/schemas/DateTime"
+        endsAt:
+          $ref: "#/components/schemas/DateTime"
+    OrderQuoteLine:
+      type: object
+      additionalProperties: false
+      required: [menuId, menuName, quantity, optionNames, lineTotalKrw]
+      properties:
+        menuId:
+          $ref: "#/components/schemas/Identifier"
+        menuName:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          minimum: 1
+        optionNames:
+          type: array
+          items:
+            type: string
+        lineTotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+    OrderQuotePricing:
+      type: object
+      additionalProperties: false
+      required: [subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency]
+      properties:
+        subtotalKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        couponDiscountKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        pointsAppliedKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        payableKrw:
+          $ref: "#/components/schemas/MoneyKrw"
+        currency:
+          type: string
+          enum: [KRW]
+    OrderQuoteStaleError:
+      type: object
+      additionalProperties: false
+      required: [code, message, correlationId, currentQuote]
+      properties:
+        code:
+          type: string
+          enum: [ORDER_QUOTE_STALE]
+        message:
+          type: string
+        correlationId:
+          type: string
+        currentQuote:
+          $ref: "#/components/schemas/OrderQuote"
     CreateOrderLineRequest:
       type: object
       additionalProperties: false

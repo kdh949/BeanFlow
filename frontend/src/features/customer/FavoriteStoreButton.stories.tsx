@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { ids } from "../../../.storybook/fixtures";
+import { customerStore, ids } from "../../../.storybook/fixtures";
 import { FavoriteStoreButton } from "./FavoriteStoresPage";
 
 const meta = {
@@ -10,6 +10,7 @@ const meta = {
   tags: ["autodocs"],
   args: { storeId: ids.store, storeName: "시청점" },
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: { component: "매장 상세에서 즐겨찾기 상태를 조회하고 멱등 PUT/DELETE로 전환하는 재사용 action입니다." },
       story: { inline: false, height: "320px" },
@@ -31,7 +32,7 @@ export const NotSaved: Story = {
 };
 
 export const Saved: Story = {
-  parameters: { msw: { handlers: [http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [{ storeId: ids.store, name: "시청점", pickupAvailable: true }] }))] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [customerStore] }))] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: "시청점 즐겨찾기 해제" })).toHaveAttribute("aria-pressed", "true");
   },

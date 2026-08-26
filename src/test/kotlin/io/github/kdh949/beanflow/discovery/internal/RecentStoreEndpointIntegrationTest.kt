@@ -3,8 +3,10 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.shared.api.CustomerRecentStoreQuery
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -54,6 +56,9 @@ internal class RecentStoreEndpointIntegrationTest {
     private lateinit var createOrderUseCase: CreateOrderUseCase
 
     @Autowired
+    private lateinit var orderQuoteUseCase: OrderQuoteUseCase
+
+    @Autowired
     private lateinit var recentStoreQuery: CustomerRecentStoreQuery
 
     @BeforeEach
@@ -85,10 +90,14 @@ internal class RecentStoreEndpointIntegrationTest {
             .andExpect(jsonPath("$.items.length()").value(2))
             .andExpect(jsonPath("$.items[0].storeId").value(newestStore.storeId.toString()))
             .andExpect(jsonPath("$.items[0].name").value("최근 주문 최신 매장"))
+            .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
             .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
+            .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
+            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
             .andExpect(jsonPath("$.items[0].distanceMeters").doesNotExist())
             .andExpect(jsonPath("$.items[1].storeId").value(olderStore.storeId.toString()))
             .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+            .andExpect(jsonPath("$.items[1].nextPickupWindow").doesNotExist())
     }
 
     @Test
@@ -219,7 +228,11 @@ internal class RecentStoreEndpointIntegrationTest {
         createdAt: Instant,
         sequence: Long,
     ) {
-        val response = createOrderUseCase.create("recent-store-$sequence-${UUID.randomUUID()}", fixture.command())
+        val response =
+            createOrderUseCase.create(
+                "recent-store-$sequence-${UUID.randomUUID()}",
+                orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+            )
         assertThat(response.status).isEqualTo(201)
         val orderId = orderId(response.body)
         when (state) {

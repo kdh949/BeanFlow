@@ -14,6 +14,28 @@ export const ids = {
   payment: "50000000-0000-4000-8000-000000000001",
 } as const;
 
+export const customerDisplay = {
+  addressLine: "서울 중구 세종대로 110",
+  directionsHint: "시청역 5번 출구에서 도보 2분",
+  operatingStatus: "OPEN",
+  operatingHours: {
+    timezone: "Asia/Seoul",
+    days: [
+      { dayOfWeek: "MONDAY", closed: false, opensAt: "08:00:00", closesAt: "20:00:00" },
+      { dayOfWeek: "TUESDAY", closed: false, opensAt: "08:00:00", closesAt: "20:00:00" },
+      { dayOfWeek: "WEDNESDAY", closed: false, opensAt: "08:00:00", closesAt: "20:00:00" },
+      { dayOfWeek: "THURSDAY", closed: false, opensAt: "08:00:00", closesAt: "20:00:00" },
+      { dayOfWeek: "FRIDAY", closed: false, opensAt: "08:00:00", closesAt: "20:00:00" },
+      { dayOfWeek: "SATURDAY", closed: false, opensAt: "09:00:00", closesAt: "18:00:00" },
+      { dayOfWeek: "SUNDAY", closed: true },
+    ],
+  },
+} satisfies components["schemas"]["CustomerStoreDisplay"];
+
+export const unspecifiedCustomerDisplay = {
+  operatingStatus: "UNSPECIFIED",
+} satisfies components["schemas"]["CustomerStoreDisplay"];
+
 export const orderSummary = {
   orderReference: "BF-7K3M-9Q2P",
   pickupNumber: "A-142",
@@ -29,8 +51,27 @@ export const orderSummary = {
 };
 
 export const orderDetail = {
-  ...orderSummary,
+  orderReference: orderSummary.orderReference,
   storeId: ids.store,
+  pickupNumber: orderSummary.pickupNumber,
+  storeName: orderSummary.storeName,
+  status: orderSummary.status,
+  orderedAt: orderSummary.orderedAt,
+  pickupWindowStart: orderSummary.pickupWindowStart,
+  pickupWindowEnd: orderSummary.pickupWindowEnd,
+  pricing: {
+    subtotalKrw: 15_000,
+    couponDiscountKrw: 1_200,
+    pointsAppliedKrw: 1_000,
+    payableKrw: 12_800,
+    currency: "KRW",
+  },
+  lifecycle: {
+    paidAt: "2026-08-15T02:51:00Z",
+    acceptedAt: "2026-08-15T02:54:00Z",
+    preparingAt: "2026-08-15T03:00:00Z",
+    readyAt: "2026-08-15T03:12:00Z",
+  },
   allowedActions: ["CANCEL"],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -128,21 +169,46 @@ export const boardOrder: StoreOrderBoardItem = {
   acceptanceDeadlineAt: "2026-08-15T03:03:00Z",
   acceptancePhase: "WARNING",
   allowedActions: ["ACCEPT", "REJECT"],
+  lifecycle: { paidAt: "2026-08-15T03:00:00Z" },
 };
 
 export const nearbyHandlers = [
   http.get("/api/v1/stores/nearby", () => HttpResponse.json({
     items: [
-      { storeId: ids.store, name: "시청점", distanceMeters: 320, open: true, pickupAvailable: true },
-      { storeId: "10000000-0000-4000-8000-000000000002", name: "광화문점", distanceMeters: 860, open: false, pickupAvailable: false },
+      { ...customerStore, distanceMeters: 320 },
+      {
+        storeId: "10000000-0000-4000-8000-000000000002",
+        name: "광화문점",
+        distanceMeters: 860,
+        orderingAvailable: false,
+        pickupAvailable: false,
+        customerDisplay: { ...customerDisplay, operatingStatus: "CLOSED" },
+      },
     ],
   })),
 ];
 
 export const catalogHandlers = [
   http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [
-    { menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6_400, currency: "KRW", available: true, options: [] },
-    { menuId: "20000000-0000-4000-8000-000000000002", name: "오늘의 필터 커피", basePriceKrw: 5_500, currency: "KRW", available: false, options: [] },
+    {
+      menuId: ids.menu,
+      name: "오트 라떼",
+      displayCategory: "라떼",
+      description: "고소한 귀리 음료와 에스프레소의 균형",
+      basePriceKrw: 6_400,
+      currency: "KRW",
+      available: true,
+      options: [],
+    },
+    {
+      menuId: "20000000-0000-4000-8000-000000000002",
+      name: "오늘의 필터 커피",
+      description: "매일 바뀌는 싱글 오리진",
+      basePriceKrw: 5_500,
+      currency: "KRW",
+      available: false,
+      options: [],
+    },
   ] })),
   http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [
     { pickupSlotId: ids.slot, startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z", remainingCapacity: 7 },
@@ -163,7 +229,21 @@ export function orderListHandlers(items = [orderSummary]) {
 }
 
 export function orderDetailHandlers(overrides: Record<string, unknown> = {}) {
-  return [http.get("/api/v1/me/orders/:orderReference", () => HttpResponse.json({ ...orderDetail, ...overrides }))];
+  return [http.get("/api/v1/me/orders/:orderReference", () => {
+    const status = String(overrides.status ?? orderDetail.status);
+    const lifecycleByState: Record<string, components["schemas"]["OrderLifecycle"] | undefined> = {
+      PENDING_PAYMENT: undefined,
+      EXPIRED: undefined,
+      PAID: { paidAt: "2026-08-15T02:51:00Z" },
+      REJECTED: { paidAt: "2026-08-15T02:51:00Z" },
+      ACCEPTED: { paidAt: "2026-08-15T02:51:00Z", acceptedAt: "2026-08-15T02:54:00Z" },
+      PREPARING: { paidAt: "2026-08-15T02:51:00Z", acceptedAt: "2026-08-15T02:54:00Z", preparingAt: "2026-08-15T03:00:00Z" },
+      READY: orderDetail.lifecycle,
+      COMPLETED: { ...orderDetail.lifecycle, completedAt: "2026-08-15T03:25:00Z" },
+      CANCELLED: { paidAt: "2026-08-15T02:51:00Z" },
+    };
+    return HttpResponse.json({ ...orderDetail, lifecycle: lifecycleByState[status], ...overrides });
+  })];
 }
 
 export function storeBoardHandlers(
@@ -198,6 +278,7 @@ export const customerIdentity = {
 export const signedInHandlers = [
   http.get("/api/v1/me", () => HttpResponse.json(customerIdentity)),
   http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/v1/me/notification-summary", () => HttpResponse.json({ hasUnread: false })),
 ];
 
 export const merchantIdentity = {
@@ -224,7 +305,14 @@ export const merchantSignedInHandlers = [
   ),
 ];
 
-export const customerStore = { storeId: ids.store, name: "시청점", pickupAvailable: true };
+export const customerStore = {
+  storeId: ids.store,
+  name: "시청점",
+  orderingAvailable: true,
+  pickupAvailable: true,
+  nextPickupWindow: { startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z" },
+  customerDisplay,
+} satisfies components["schemas"]["CustomerStore"];
 
 export const storeIdentityHandlers = [
   http.get("/api/v1/stores/:storeId", () => HttpResponse.json(customerStore)),
@@ -240,7 +328,16 @@ export const homeHandlers = [
   http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({
     items: [
       { store: customerStore, reason: "RECENT" },
-      { store: { storeId: "10000000-0000-4000-8000-000000000002", name: "광화문점", pickupAvailable: false }, reason: "NEARBY" },
+      {
+        store: {
+          storeId: "10000000-0000-4000-8000-000000000002",
+          name: "광화문점",
+          orderingAvailable: false,
+          pickupAvailable: false,
+          customerDisplay: unspecifiedCustomerDisplay,
+        },
+        reason: "NEARBY",
+      },
     ],
   })),
 ];
@@ -249,12 +346,13 @@ export const searchHandlers = [
   ...signedInHandlers,
   http.get("/api/v1/stores/search", () => HttpResponse.json({
     items: [
-      { ...customerStore, open: true, matchedMenus: [{ menuId: ids.menu, name: "오트 라떼" }], brandName: "빈플로우", regionName: "중구" },
+      { ...customerStore, matchedMenus: [{ menuId: ids.menu, name: "오트 라떼" }], brandName: "빈플로우", regionName: "중구" },
       {
         storeId: "10000000-0000-4000-8000-000000000002",
         name: "광화문점",
+        orderingAvailable: false,
         pickupAvailable: false,
-        open: false,
+        customerDisplay: { ...customerDisplay, operatingStatus: "CLOSED" },
         matchedMenus: [],
         brandName: "빈플로우",
         regionName: "종로구",

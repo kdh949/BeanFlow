@@ -416,7 +416,8 @@ export interface paths {
          *     Latitude and longitude must be supplied together or both omitted; radiusMeters
          *     without both coordinates returns 400, and sort=distance without coordinates
          *     returns 400. Coordinates are request-only and never persisted or written to logs.
-         *     openOnly requires only that the store accepts orders with pickup enabled;
+         *     openOnly retains its transport spelling but means that the Store is currently accepting
+         *     orders with pickup enabled (`orderingAvailable=true`);
          *     pickupAvailable additionally requires a reservable slot and is a point-in-time
          *     projection that does not reserve one. Both default to unset, and a closed store
          *     is then still returned with its status in the flags. The relevance score itself
@@ -440,7 +441,8 @@ export interface paths {
         };
         /**
          * Read the display identity of one store
-         * @description Returns the store's current name and pickup availability so that a client which reached the
+         * @description Returns the store's current name, ordering/pickup availability, earliest actual pickup
+         *     window and customer display profile so that a client which reached the
          *     store by URL, deep link or reload can name the store from the server instead of a value it
          *     carried in navigation state. `distanceMeters` is absent here because this read takes no
          *     coordinate. A store the customer must not see is reported the same as one that does not
@@ -476,6 +478,34 @@ export interface paths {
          * @description 해당 매장의 STORE_OWNER만 수행하며 이미지가 없어도 204를 반환합니다.
          */
         delete: operations["deleteStoreImage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/customer-display": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 고객에게 표시할 매장 정보의 현재 편집본 조회
+         * @description ACTIVE same-store STORE_OWNER에게 현재 주소, 길찾기 안내, 선택적인 7일 운영시간과
+         *     optimistic-concurrency version을 반환합니다. 아직 profile이 없으면 content와 schedule은
+         *     생략되고 version은 0입니다. 이 version은 고객 Store 응답에 노출되지 않습니다.
+         */
+        get: operations["getStoreCustomerDisplayContent"];
+        /**
+         * 고객에게 표시할 매장 정보 전체 교체
+         * @description ACTIVE same-store STORE_OWNER만 수행합니다. 운영시간을 보내면 Asia/Seoul 기준 일곱 요일을
+         *     정확히 한 번씩 보내야 하며, 생략하면 기존 schedule 전체를 제거합니다. 동일 replacement는
+         *     version, updatedAt과 AuditRecord를 바꾸지 않습니다. stale expectedVersion은 409입니다.
+         */
+        put: operations["replaceStoreCustomerDisplayContent"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -529,6 +559,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/menus/{menuId}/display-content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 메뉴 고객 표시 content의 현재 편집본 조회
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF에게 nullable category/description과 기존
+         *     Menu version을 반환합니다. 이 version은 고객 menu catalog에 노출되지 않습니다.
+         */
+        get: operations["getMenuDisplayContent"];
+        /**
+         * 메뉴 고객 표시 content 전체 교체
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 nullable category/description을 full
+         *     replacement합니다. 가격, availability, option과 Order snapshot은 바뀌지 않습니다. 동일
+         *     replacement는 Menu version과 AuditRecord를 바꾸지 않고 stale expectedVersion은 409입니다.
+         */
+        put: operations["replaceMenuDisplayContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/pickup-slots": {
         parameters: {
             query?: never;
@@ -552,6 +609,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/order-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 현재 owner 상태로 비예약 주문 견적 계산
+         * @description 메뉴·옵션·재고·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+         *     서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
+         *     reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
+         *     호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
+         */
+        post: operations["createOrderQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orders": {
         parameters: {
             query?: never;
@@ -563,9 +643,10 @@ export interface paths {
         put?: never;
         /**
          * (고객) 주문 생성
-         * @description 고객이 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
+         * @description 고객이 확인한 견적 fingerprint와 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
          *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
-         *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 모두 재검증·예약합니다.
+         *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
+         *     정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
          *     같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
          *
          *     주요 오류:
@@ -808,6 +889,94 @@ export interface paths {
         /** List current customer point ledger transactions */
         get: operations["listCurrentCustomerPointTransactions"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notification-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 알림함의 읽지 않은 항목 존재 여부 조회
+         * @description 성공한 빈 알림함만 `hasUnread=false`입니다. Delivery 상태, 알림 개수와 본문은 전역
+         *     shell에 노출하지 않으며 조회 의존성 실패를 false로 대체하지 않습니다.
+         */
+        get: operations["getCurrentCustomerNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 알림함 목록 조회
+         * @description `(createdAt DESC, notificationId DESC)` 순서의 customer-bound signed cursor를 사용합니다.
+         *     알림함 읽음 상태는 외부 Delivery 성공·실패와 독립이며 Provider 진단을 반환하지 않습니다.
+         */
+        get: operations["listCurrentCustomerNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 현재 고객 소유 알림을 읽음 처리
+         * @description `{ "read": true }`만 허용하며 최초 요청과 반복 요청 모두 204입니다. 다른 고객 소유
+         *     알림은 존재 여부를 노출하지 않고 404를 반환하며 unread 되돌리기는 지원하지 않습니다.
+         */
+        patch: operations["markCurrentCustomerNotificationRead"];
+        trace?: never;
+    };
+    "/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 마케팅 알림 수신 설정 조회
+         * @description 설정 row가 없으면 명시적으로 `marketingOptIn=false`를 반환합니다.
+         */
+        get: operations["getCurrentCustomerNotificationPreferences"];
+        /**
+         * 현재 고객 마케팅 알림 수신 설정 전체 교체
+         * @description 거래 알림은 끌 수 없습니다. 새 마케팅 알림은 opt-in 고객에게만 생성되며 opt-out해도
+         *     이미 생성된 InboxItem은 소급 삭제하지 않습니다.
+         */
+        put: operations["replaceCurrentCustomerNotificationPreferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4505,6 +4674,40 @@ export interface components {
          * @example 2026-08-15T09:30:00+09:00
          */
         DateTime: string;
+        /** @description 현재 시각 이후 7일 안에서 capacity가 남은 가장 이른 실제 pickup slot입니다. */
+        NextPickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description Asia/Seoul의 한 요일 운영 구간입니다. closed=true이면 time 두 필드는 없어야 하고,
+         *     closed=false이면 두 필드가 모두 존재하며 opensAt이 closesAt보다 빨라야 합니다.
+         */
+        StoreOperatingDay: {
+            /** @enum {string} */
+            dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            closed: boolean;
+            /** Format: time */
+            opensAt?: string;
+            /** Format: time */
+            closesAt?: string;
+        };
+        StoreWeeklyOperatingHours: {
+            /** @enum {string} */
+            timezone: "Asia/Seoul";
+            /** @description 일곱 요일을 정확히 한 번씩 포함합니다. */
+            days: components["schemas"]["StoreOperatingDay"][];
+        };
+        CustomerStoreDisplay: {
+            addressLine?: string;
+            directionsHint?: string;
+            /**
+             * @description Asia/Seoul 주간 schedule의 현재 상태이며 주문 가능성과 독립입니다.
+             * @enum {string}
+             */
+            operatingStatus: "OPEN" | "CLOSED" | "UNSPECIFIED";
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"];
+        };
         StorefrontImage: {
             /**
              * Format: uri
@@ -4516,7 +4719,11 @@ export interface components {
         CustomerStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
+            /** @description acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다. */
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             distanceMeters?: number;
             image?: components["schemas"]["StorefrontImage"];
         };
@@ -4570,8 +4777,11 @@ export interface components {
          *       "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *       "name": "빈플로우 강남점",
          *       "distanceMeters": 320,
-         *       "open": true,
-         *       "pickupAvailable": true
+         *       "orderingAvailable": true,
+         *       "pickupAvailable": true,
+         *       "customerDisplay": {
+         *         "operatingStatus": "UNSPECIFIED"
+         *       }
          *     }
          */
         NearbyStore: {
@@ -4582,8 +4792,10 @@ export interface components {
              * @example 320
              */
             distanceMeters: number;
-            open: boolean;
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             image?: components["schemas"]["StorefrontImage"];
         };
         /**
@@ -4604,8 +4816,11 @@ export interface components {
          *           "storeId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *           "name": "빈플로우 강남점",
          *           "distanceMeters": 320,
-         *           "open": true,
-         *           "pickupAvailable": true
+         *           "orderingAvailable": true,
+         *           "pickupAvailable": true,
+         *           "customerDisplay": {
+         *             "operatingStatus": "UNSPECIFIED"
+         *           }
          *         }
          *       ],
          *       "page": {
@@ -4630,8 +4845,11 @@ export interface components {
             /** @description The distinct kinds of searchable attribute that matched, never the score. */
             matchReason: ("STORE_NAME" | "BRAND_NAME" | "REGION_SIDO" | "REGION_SIGUNGU" | "REGION_EUPMYEONDONG" | "REGION_RI" | "MENU_NAME")[];
             distanceMeters?: number;
-            open: boolean;
+            /** @description 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다. */
+            orderingAvailable: boolean;
             pickupAvailable: boolean;
+            nextPickupWindow?: components["schemas"]["NextPickupWindow"];
+            customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             /** @description Menus of this store that the query matched, most relevant first. Empty when none matched. */
             matchedMenus: components["schemas"]["StoreSearchMenu"][];
             image?: components["schemas"]["StorefrontImage"];
@@ -4648,6 +4866,20 @@ export interface components {
              * @description JPEG 또는 PNG 이미지. signature, MIME, 해상도를 함께 검증합니다.
              */
             image: string;
+        };
+        StoreCustomerDisplayAuthoring: {
+            addressLine?: string;
+            directionsHint?: string;
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"];
+            /** Format: int64 */
+            version: number;
+        };
+        ReplaceStoreCustomerDisplayRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            addressLine?: string | null;
+            directionsHint?: string | null;
+            operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"] | null;
         };
         /**
          * Format: int64
@@ -4700,6 +4932,8 @@ export interface components {
             basePriceKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
             available: boolean;
+            displayCategory?: string;
+            description?: string;
             options: components["schemas"]["MenuOption"][];
             image?: components["schemas"]["StorefrontImage"];
         };
@@ -4727,6 +4961,18 @@ export interface components {
          */
         MenuList: {
             items: components["schemas"]["Menu"][];
+        };
+        MenuDisplayContentAuthoring: {
+            displayCategory?: string;
+            description?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ReplaceMenuDisplayContentRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            displayCategory?: string | null;
+            description?: string | null;
         };
         /**
          * @description 특정 시간대에 픽업 가능한 잔여 수용량을 나타내는 슬롯입니다.
@@ -4779,6 +5025,47 @@ export interface components {
              */
             quantity: number;
         };
+        OrderQuoteRequest: {
+            storeId: components["schemas"]["Identifier"];
+            pickupSlotId: components["schemas"]["Identifier"];
+            lines: components["schemas"]["CreateOrderLineRequest"][];
+            couponIssuanceId?: components["schemas"]["Identifier"];
+            pointsToUseKrw: components["schemas"]["MoneyKrw"];
+        };
+        OrderQuoteStore: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        OrderQuotePickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        OrderQuoteLine: {
+            menuId: components["schemas"]["Identifier"];
+            menuName: string;
+            quantity: number;
+            optionNames: string[];
+            lineTotalKrw: components["schemas"]["MoneyKrw"];
+        };
+        OrderQuotePricing: {
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            /** @enum {string} */
+            currency: "KRW";
+        };
+        OrderQuote: {
+            quotedAt: components["schemas"]["DateTime"];
+            /** @description order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다. */
+            quoteFingerprint: string;
+            store: components["schemas"]["OrderQuoteStore"];
+            pickupWindow: components["schemas"]["OrderQuotePickupWindow"];
+            lines: components["schemas"]["OrderQuoteLine"][];
+            pricing: components["schemas"]["OrderQuotePricing"];
+            /** @enum {string} */
+            guarantee: "NONE";
+        };
         /**
          * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
          *     번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
@@ -4796,7 +5083,8 @@ export interface components {
          *         }
          *       ],
          *       "couponIssuanceId": null,
-         *       "pointsToUseKrw": 1000
+         *       "pointsToUseKrw": 1000,
+         *       "expectedQuoteFingerprint": "3a6f04f95b4fbc6c25d31e4e1551b52b30ac27a5bf9f5f83a454d9172303b778"
          *     }
          */
         CreateOrderRequest: {
@@ -4806,6 +5094,8 @@ export interface components {
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
+            /** @description 고객이 마지막으로 명시적으로 확인한 OrderQuote의 opaque fingerprint입니다. */
+            expectedQuoteFingerprint: string;
         };
         /**
          * @description 주문의 현재 생명주기 상태를 나타내는 열거형입니다.
@@ -5076,6 +5366,13 @@ export interface components {
          *     `BenefitOnlyOrderCreation`(주문과 결제가 함께 확정)을 반환합니다.
          */
         CreateOrderResult: components["schemas"]["PendingPaymentOrderCreation"] | components["schemas"]["BenefitOnlyOrderCreation"];
+        OrderQuoteStaleError: {
+            /** @enum {string} */
+            code: "ORDER_QUOTE_STALE";
+            message: string;
+            correlationId: string;
+            currentQuote: components["schemas"]["OrderQuote"];
+        };
         /**
          * @description 재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
          *     새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
@@ -5382,6 +5679,22 @@ export interface components {
             items: components["schemas"]["CustomerCouponWalletItem"][];
             page: components["schemas"]["PageInfo"];
         };
+        /** @description 주문 생성 시 확정해 저장한 불변 가격 요약입니다. */
+        CustomerOrderPricing: {
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+        };
+        /** @description 실제 상태 전이 때 저장된 시각만 포함하는 주문 생명주기입니다. 아직 발생하지 않은 단계는 생략합니다. */
+        OrderLifecycle: {
+            paidAt?: components["schemas"]["DateTime"];
+            acceptedAt?: components["schemas"]["DateTime"];
+            preparingAt?: components["schemas"]["DateTime"];
+            readyAt?: components["schemas"]["DateTime"];
+            completedAt?: components["schemas"]["DateTime"];
+        };
         CustomerOrderLine: {
             lineSequence: number;
             menuName: string;
@@ -5423,9 +5736,8 @@ export interface components {
             orderedAt: components["schemas"]["DateTime"];
             pickupWindowStart: components["schemas"]["DateTime"];
             pickupWindowEnd: components["schemas"]["DateTime"];
-            /** @description Coupon discount and point use after the final amount payable by the customer. */
-            totalAmountKrw: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
+            pricing: components["schemas"]["CustomerOrderPricing"];
+            lifecycle?: components["schemas"]["OrderLifecycle"];
             lines: components["schemas"]["CustomerOrderLine"][];
             allowedActions: components["schemas"]["CustomerOrderAllowedAction"][];
             /**
@@ -5537,6 +5849,39 @@ export interface components {
             items: components["schemas"]["PointTransaction"][];
             /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["PageInfo"];
+        };
+        NotificationSummary: {
+            hasUnread: boolean;
+        };
+        /** @enum {string} */
+        NotificationClassification: "TRANSACTIONAL" | "MARKETING";
+        NotificationTarget: {
+            /** @enum {string} */
+            type: "NONE" | "ORDER";
+            reference?: string;
+        } & (unknown & unknown);
+        NotificationItem: {
+            notificationId: components["schemas"]["Identifier"];
+            title: string;
+            body: string;
+            createdAt: components["schemas"]["DateTime"];
+            readAt?: components["schemas"]["DateTime"];
+            classification: components["schemas"]["NotificationClassification"];
+            target: components["schemas"]["NotificationTarget"];
+        };
+        NotificationPage: {
+            items: components["schemas"]["NotificationItem"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        MarkNotificationReadRequest: {
+            /** @constant */
+            read: true;
+        };
+        NotificationPreference: {
+            marketingOptIn: boolean;
+        };
+        ReplaceNotificationPreferenceRequest: {
+            marketingOptIn: boolean;
         };
         PaymentClientConfiguration: {
             /** @constant */
@@ -5817,6 +6162,13 @@ export interface components {
          * @enum {string}
          */
         StoreOrderAction: "ACCEPT" | "REJECT" | "START_PREPARING" | "MARK_READY" | "COMPLETE";
+        /** @description 보드 ETag에 포함되는 저장된 진행 시각입니다. 완료 시각은 라이브 보드 계약에 포함하지 않습니다. */
+        StoreOrderBoardLifecycle: {
+            paidAt?: components["schemas"]["DateTime"];
+            acceptedAt?: components["schemas"]["DateTime"];
+            preparingAt?: components["schemas"]["DateTime"];
+            readyAt?: components["schemas"]["DateTime"];
+        };
         /**
          * @description 주문 거절이나 고객 취소 뒤 환불·재고·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
          * @example {
@@ -5889,6 +6241,8 @@ export interface components {
             acceptancePhase?: "OPEN" | "WARNING" | "TIMEOUT_PENDING";
             /** @description 현재 상태와 권한에서 서버가 허용하는 매장 작업 목록입니다. */
             allowedActions: components["schemas"]["StoreOrderAction"][];
+            /** @description 실제 상태 전이 때 저장된 시각만 포함하며 ETag의 의미 표현에 참여합니다. */
+            lifecycle?: components["schemas"]["StoreOrderBoardLifecycle"];
             /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
         };
@@ -5966,10 +6320,30 @@ export interface components {
             cashRefundKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
         };
+        MerchantRefundPickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 환불 대상 확인을 위한 안전한 읽기 전용 주문 맥락입니다. 실행 입력으로 사용하지 않으며
+         *     실행은 previewVersion과 잠금 후 재조회 결과를 다시 검증합니다.
+         */
+        MerchantRefundOrderContext: {
+            orderedAt: components["schemas"]["DateTime"];
+            pickupWindow: components["schemas"]["MerchantRefundPickupWindow"];
+            status: components["schemas"]["OrderState"];
+            pricing: components["schemas"]["CustomerOrderPricing"];
+            /**
+             * @description 현재 부분 환불 실행 범위에서는 ONE_TIME_EXTERNAL만 반환됩니다.
+             * @enum {string}
+             */
+            paymentKind: "ONE_TIME_EXTERNAL" | "BENEFIT_ONLY";
+        };
         MerchantRefundPreview: {
             orderReference: string;
             lines: components["schemas"]["MerchantRefundPreviewLine"][];
             totals: components["schemas"]["MerchantRefundTotals"];
+            orderContext: components["schemas"]["MerchantRefundOrderContext"];
             previewVersion: string;
         };
         MerchantRefundRequest: {
@@ -10113,8 +10487,10 @@ export interface components {
             };
         };
         /**
-         * @description Order resource conflict, idempotency payload reuse, or an identical
+         * @description Order quote staleness, resource conflict, idempotency payload reuse, or an identical
          *     idempotent request that is still processing or requires manual review.
+         *     ORDER_QUOTE_STALE includes the terminally stored currentQuote that the customer must
+         *     explicitly review. Re-submission requires its fingerprint and a new Idempotency-Key.
          *     PROCESSING returns IDEMPOTENCY_REQUEST_IN_PROGRESS and Retry-After.
          *     MANUAL_REVIEW returns IDEMPOTENCY_MANUAL_REVIEW_REQUIRED without
          *     Retry-After and never re-executes the order command.
@@ -10129,7 +10505,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/json": components["schemas"]["Error"] | components["schemas"]["OrderQuoteStaleError"];
             };
         };
         /**
@@ -10944,6 +11320,67 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getStoreCustomerDisplayContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 Store customer-display 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreCustomerDisplayAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceStoreCustomerDisplayContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStoreCustomerDisplayRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체 후 또는 no-op인 현재 Store customer-display 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreCustomerDisplayAuthoring"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listStoreMenus: {
         parameters: {
             query?: never;
@@ -11033,6 +11470,69 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getMenuDisplayContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 Menu display-content 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuDisplayContentAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceMenuDisplayContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceMenuDisplayContentRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체 후 또는 no-op인 현재 Menu display-content 편집본 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuDisplayContentAuthoring"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listStorePickupSlots: {
         parameters: {
             query?: never;
@@ -11055,6 +11555,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createOrderQuote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderQuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description guarantee가 NONE인 현재 비예약 견적 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -11460,6 +11993,144 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 범위 unread 존재 여부 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerNotifications: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 안전한 고객 표시 copy와 target만 포함하는 알림 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    markCurrentCustomerNotificationRead: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                notificationId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkNotificationReadRequest"];
+            };
+        };
+        responses: {
+            /** @description 알림 읽음 처리 완료 또는 멱등 재생 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 고객 마케팅 알림 수신 설정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceCurrentCustomerNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceNotificationPreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description 전체 교체 후 현재 설정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreference"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

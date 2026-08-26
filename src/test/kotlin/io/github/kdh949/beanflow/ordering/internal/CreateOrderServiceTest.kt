@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteCommand
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -22,6 +24,7 @@ internal class CreateOrderServiceTest
     @Autowired
     constructor(
         private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val jdbcTemplate: JdbcTemplate,
         private val meterRegistry: MeterRegistry,
         private val orderCreationRetention: OrderCreationIdempotencyRetentionService,
@@ -34,7 +37,7 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            val response = createOrderUseCase.create("success-key-0001", fixture.command())
+            val response = createOrderUseCase.create("success-key-0001", quotedCommand(fixture))
 
             assertThat(response.status).isEqualTo(201)
             assertThat(response.body).contains("\"state\":\"PENDING_PAYMENT\"")
@@ -77,7 +80,7 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, includeDisplayProfile = false)
 
-            val response = createOrderUseCase.create("missing-profile-01", fixture.command())
+            val response = createOrderUseCase.create("missing-profile-01", fixture.command(expectedQuoteFingerprint = "0".repeat(64)))
 
             assertThat(response.status).isEqualTo(503)
             assertThat(response.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")
@@ -91,7 +94,7 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            createOrderUseCase.create("retention-key-01", fixture.command())
+            createOrderUseCase.create("retention-key-01", quotedCommand(fixture))
             val retentionExpiresAt =
                 requireNotNull(
                     jdbcTemplate.queryForObject(
@@ -113,7 +116,7 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
 
-            val response = createOrderUseCase.create("stock-fail-0001", fixture.command())
+            val response = createOrderUseCase.create("stock-fail-0001", fixture.command(expectedQuoteFingerprint = "0".repeat(64)))
 
             assertThat(response.status).isEqualTo(409)
             assertThat(response.body).contains("\"code\":\"STOCK_NOT_AVAILABLE\"")
@@ -124,7 +127,7 @@ internal class CreateOrderServiceTest
         fun `confirmed domain failure is stored and replayed exactly`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
-            val command = fixture.command()
+            val command = fixture.command(expectedQuoteFingerprint = "0".repeat(64))
 
             val first = createOrderUseCase.create("failure-replay-01", command)
             val replay = createOrderUseCase.create("failure-replay-01", command)
@@ -144,7 +147,7 @@ internal class CreateOrderServiceTest
             val response =
                 createOrderUseCase.create(
                     "coupon-fail-001",
-                    fixture.command(couponIssuanceId = UUID.randomUUID()),
+                    fixture.command(couponIssuanceId = UUID.randomUUID(), expectedQuoteFingerprint = "0".repeat(64)),
                 )
 
             assertThat(response.status).isEqualTo(409)
@@ -157,7 +160,11 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            val response = createOrderUseCase.create("points-fail-001", fixture.command(pointsToUseKrw = 1))
+            val response =
+                createOrderUseCase.create(
+                    "points-fail-001",
+                    fixture.command(pointsToUseKrw = 1, expectedQuoteFingerprint = "0".repeat(64)),
+                )
 
             assertThat(response.status).isEqualTo(409)
             assertThat(response.body).contains("\"code\":\"POINT_BALANCE_INSUFFICIENT\"")
@@ -168,7 +175,7 @@ internal class CreateOrderServiceTest
         fun `same key and payload replays the exact first response`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val command = fixture.command()
+            val command = quotedCommand(fixture)
 
             val first = createOrderUseCase.create("replay-key-0001", command)
             val replay = createOrderUseCase.create("replay-key-0001", command)
@@ -187,8 +194,9 @@ internal class CreateOrderServiceTest
             val replayBefore = counter("beanflow.order.creation.attempts", "outcome", "replay")
             val idempotencyBefore = counter("beanflow.order.idempotency.events", "outcome", "replay")
 
-            createOrderUseCase.create("metric-replay-01", fixture.command())
-            createOrderUseCase.create("metric-replay-01", fixture.command())
+            val command = quotedCommand(fixture)
+            createOrderUseCase.create("metric-replay-01", command)
+            createOrderUseCase.create("metric-replay-01", command)
 
             assertThat(counter("beanflow.order.creation.attempts", "outcome", "success") - successBefore)
                 .isEqualTo(1.0)
@@ -212,7 +220,10 @@ internal class CreateOrderServiceTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
             val before = counter("beanflow.order.reservation.conflicts", "resource", "stock")
 
-            createOrderUseCase.create("metric-stock-001", fixture.command())
+            createOrderUseCase.create(
+                "metric-stock-001",
+                fixture.command(expectedQuoteFingerprint = "0".repeat(64)),
+            )
 
             assertThat(counter("beanflow.order.reservation.conflicts", "resource", "stock") - before)
                 .isEqualTo(1.0)
@@ -223,8 +234,12 @@ internal class CreateOrderServiceTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
-            val first = createOrderUseCase.create("reused-key-001", fixture.command(quantity = 1))
-            val conflict = createOrderUseCase.create("reused-key-001", fixture.command(quantity = 2))
+            val first = createOrderUseCase.create("reused-key-001", quotedCommand(fixture, quantity = 1))
+            val conflict =
+                createOrderUseCase.create(
+                    "reused-key-001",
+                    fixture.command(quantity = 2, expectedQuoteFingerprint = "0".repeat(64)),
+                )
 
             assertThat(first.status).isEqualTo(201)
             assertThat(conflict.status).isEqualTo(409)
@@ -237,7 +252,7 @@ internal class CreateOrderServiceTest
         fun `manual review is distinct from processing for direct order creation`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val command = fixture.command()
+            val command = fixture.command(expectedQuoteFingerprint = "0".repeat(64))
             val key = "direct-manual-review"
             jdbcTemplate.update(
                 """
@@ -269,6 +284,27 @@ internal class CreateOrderServiceTest
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
+        }
+
+        private fun quotedCommand(
+            fixture: OrderCreationFixture,
+            pointsToUseKrw: Long = 0,
+            couponIssuanceId: UUID? = null,
+            quantity: Long = 1,
+        ): io.github.kdh949.beanflow.ordering.api.CreateOrderCommand {
+            val command = fixture.command(pointsToUseKrw, couponIssuanceId, quantity)
+            val quote =
+                orderQuoteUseCase.quote(
+                    OrderQuoteCommand(
+                        customerId = command.customerId,
+                        storeId = command.storeId,
+                        pickupSlotId = command.pickupSlotId,
+                        lines = command.lines,
+                        couponIssuanceId = command.couponIssuanceId,
+                        pointsToUseKrw = command.pointsToUseKrw,
+                    ),
+                )
+            return command.copy(expectedQuoteFingerprint = quote.quoteFingerprint)
         }
 
         private fun counter(

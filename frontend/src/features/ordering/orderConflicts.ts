@@ -45,6 +45,12 @@ export function orderConflictGuidance(failure: unknown): ConflictGuidance | null
         description: "주문을 다시 만들어 주세요.",
         recovery: "retry",
       };
+    case "ORDER_QUOTE_STALE":
+      return {
+        title: "주문 금액과 조건이 변경됐어요",
+        description: "서버가 다시 계산한 내용을 확인해야 주문을 다시 보낼 수 있어요.",
+        recovery: "retry",
+      };
     case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
       return {
         title: "같은 주문을 처리하고 있어요",
@@ -63,8 +69,9 @@ export function orderConflictGuidance(failure: unknown): ConflictGuidance | null
 }
 
 /**
- * Only a payload-mismatch conflict invalidates the current key. A retry of the
- * same intent must keep it so the server can recognise the replay.
+ * Only a payload-mismatch conflict invalidates the current key automatically.
+ * ORDER_QUOTE_STALE stays bound to its terminal key until the customer explicitly
+ * accepts currentQuote; that confirmation rotates the intent in CartPage.
  */
 export function shouldRotateIdempotencyKey(failure: unknown): boolean {
   return failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED";

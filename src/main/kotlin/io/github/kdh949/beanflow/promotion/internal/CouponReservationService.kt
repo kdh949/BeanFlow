@@ -2,6 +2,10 @@ package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
+import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteCommand
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteOperations
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteSnapshot
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.CouponReservationQuote
 import io.github.kdh949.beanflow.promotion.api.ExpiredCouponRestorationMode
@@ -34,7 +38,88 @@ internal class CouponReservationService(
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
-) : CouponReservationOperations {
+) : CouponReservationOperations,
+    CouponQuoteOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspect(command: CouponQuoteCommand): CouponQuoteSnapshot = quote(command, locked = false)
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockForOrderCreation(command: CouponQuoteCommand): CouponQuoteSnapshot = quote(command, locked = true)
+
+    private fun quote(
+        command: CouponQuoteCommand,
+        locked: Boolean,
+    ): CouponQuoteSnapshot {
+        if (command.lines.isEmpty()) {
+            fail(FailureCode.INVALID_REQUEST, "Coupon pricing lines are required")
+        }
+        val issuance =
+            if (locked) {
+                issuanceRepository.findLockedById(command.couponIssuanceId)
+            } else {
+                issuanceRepository.findById(command.couponIssuanceId).orElse(null)
+            } ?: fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon issuance is not available")
+        val now = clock.instant()
+        if (issuance.customerId != command.customerId ||
+            issuance.state !in setOf(CouponIssuanceState.AVAILABLE, CouponIssuanceState.RESTORED) ||
+            !now.isBefore(issuance.couponExpiresAt)
+        ) {
+            fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon issuance is expired, used, or owned by another customer")
+        }
+        val terms = termsFor(issuance, command.storeId, locked)
+        val targetMenus =
+            if (terms.allMenusEligible) {
+                null
+            } else {
+                terms.eligibleMenuIds.ifEmpty {
+                    fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon terms have no eligible menu")
+                }
+            }
+        val eligibleLines = command.lines.filter { targetMenus == null || it.menuId in targetMenus }
+        val eligibleSubtotal = eligibleSubtotal(eligibleLines)
+        if (eligibleSubtotal < terms.minimumEligibleSubtotalKrw) {
+            fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon minimum eligible subtotal is not met")
+        }
+        val discount = calculateDiscount(terms, eligibleSubtotal)
+        if (discount <= 0) {
+            fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon discount is zero")
+        }
+        val burden = calculateBurden(terms, discount)
+        return CouponQuoteSnapshot(
+            couponIssuanceId = issuance.id,
+            issuanceVersion = issuance.version,
+            issuanceState = issuance.state.name,
+            couponExpiresAt = issuance.couponExpiresAt,
+            originalIssuanceId = issuance.originalIssuanceId,
+            discountKrw = discount,
+            eligibleLineSequences = eligibleLines.map(CouponPricingLine::lineSequence).toSortedSet(),
+            allMenusEligible = terms.allMenusEligible,
+            eligibleMenuIds = terms.eligibleMenuIds,
+            discountType = terms.discountType,
+            fixedAmountKrw = terms.fixedAmountKrw,
+            rateBps = terms.rateBps,
+            minimumEligibleSubtotalKrw = terms.minimumEligibleSubtotalKrw,
+            maximumDiscountKrw = terms.maximumDiscountKrw,
+            campaignId = terms.campaignId,
+            campaignVersion = terms.campaignVersion,
+            costBearer = burden.costBearer,
+            platformShareBps = burden.platformShareBps,
+            storeShareBps = burden.storeShareBps,
+            platformCouponCostKrw = burden.platformCouponCostKrw,
+            storeCouponCostKrw = burden.storeCouponCostKrw,
+        )
+    }
+
+    private fun eligibleSubtotal(lines: List<io.github.kdh949.beanflow.promotion.api.CouponPricingLine>): Long =
+        lines.fold(0L) { total, line ->
+            if (line.grossKrw < 0) fail(FailureCode.INVALID_REQUEST, "Line gross must not be negative")
+            try {
+                Math.addExact(total, line.grossKrw)
+            } catch (_: ArithmeticException) {
+                fail(FailureCode.INVALID_REQUEST, "Eligible subtotal exceeds supported range")
+            }
+        }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReserveCouponCommand): CouponReservationQuote {
         if (command.sourceReference.isBlank() || command.lines.isEmpty()) {
@@ -253,10 +338,15 @@ internal class CouponReservationService(
     private fun termsFor(
         issuance: CouponIssuanceEntity,
         storeId: UUID,
+        locked: Boolean = true,
     ): CouponTerms =
         if (issuance.originalIssuanceId == null) {
             val campaign =
-                campaignRepository.findLockedById(issuance.campaignId)
+                if (locked) {
+                    campaignRepository.findLockedById(issuance.campaignId)
+                } else {
+                    campaignRepository.findById(issuance.campaignId).orElse(null)
+                }
                     ?: fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon campaign is missing")
             if (!campaign.active || campaign.storeId != storeId) {
                 fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon campaign is not available for the store")

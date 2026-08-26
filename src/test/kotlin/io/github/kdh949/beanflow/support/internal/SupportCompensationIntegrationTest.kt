@@ -11,8 +11,10 @@ import io.github.kdh949.beanflow.operations.internal.DecideOperationsSupportInve
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationOutcome
 import io.github.kdh949.beanflow.operations.internal.OperationsSupportInvestigationService
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
@@ -68,6 +70,7 @@ internal class SupportCompensationIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
         private val compensations: SupportCompensationApplicationService,
         private val actionRequests: SupportActionRequestApplicationService,
         private val operations: OperationsSupportInvestigationService,
@@ -95,7 +98,7 @@ internal class SupportCompensationIntegrationTest
             fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 0)
-            val created = createOrder.create("support-goodwill-order", fixture.command())
+            val created = createOrder.create("support-goodwill-order", orderQuoteUseCase.attachCurrentQuote(fixture.command()))
             orderId = UUID.fromString(requireNotNull(Regex("\\\"orderId\\\":\\\"([^\\\"]+)\\\"").find(created.body)).groupValues[1])
             orderVersion =
                 requireNotNull(
@@ -152,6 +155,41 @@ internal class SupportCompensationIntegrationTest
             createApi(incidentId, 100, "goodwill-duplicate-incident")
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_POLICY_DENIED"))
+        }
+
+        @Test
+        fun `orderless goodwill ends as notification skipped for default marketing opt out`() {
+            val command = orderlessCommand(UUID.randomUUID(), "orderless-create-001")
+            val evaluation = compensations.evaluate(command.evaluation())
+            assertThat(evaluation.executable).withFailMessage(evaluation.toString()).isTrue()
+            val created = compensations.create(command)
+            approveOperations(created)
+
+            val issued =
+                compensations.execute(
+                    ExecuteSupportCompensationCommand(
+                        requesterId,
+                        created.compensationRequestId,
+                        created.version,
+                        0,
+                        created.payloadDigest,
+                        "orderless-execute-001",
+                    ),
+                )
+
+            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_SKIPPED)
+            assertThat(issued.notificationState).isEqualTo("NOTIFICATION_SKIPPED")
+            assertThat(issued.notificationDeliveryId).isNull()
+            assertThat(issued.notificationFailureCode).isNull()
+            assertThat(count("notification_delivery", "event_id", created.compensationRequestId)).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM notification_inbox_item WHERE logical_source = ?",
+                    Int::class.java,
+                    "support-compensation:${created.compensationRequestId}:customer-notification",
+                ),
+            ).isZero()
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isOne()
         }
 
         @Test
@@ -591,6 +629,28 @@ internal class SupportCompensationIntegrationTest
             key,
         )
 
+        private fun orderlessCommand(
+            incidentId: UUID,
+            key: String,
+        ) = CreateSupportCompensationCommand(
+            requesterId,
+            caseId,
+            incidentId,
+            null,
+            0,
+            SupportCompensationBenefitType.POINT,
+            100,
+            null,
+            SupportCompensationResponsibility.PLATFORM,
+            null,
+            null,
+            10_000,
+            0,
+            sessionId,
+            EVIDENCE_DIGEST,
+            key,
+        )
+
         private fun couponCommand(
             incidentId: UUID,
             key: String,
@@ -776,10 +836,10 @@ internal class SupportCompensationIntegrationTest
             jdbcTemplate.update(
                 """
                 INSERT INTO notification_delivery (
-                    id, event_id, event_type, logical_source, order_id, recipient_type, recipient_id,
+                    id, event_id, event_type, logical_source, order_id, classification, recipient_type, recipient_id,
                     logical_channel, template, payload_json, state, attempt_count, next_attempt_at,
                     provider_idempotency_key, correlation_id, created_at, updated_at, version
-                ) VALUES (?, ?, 'ConflictingGoodwillEventV1', ?, ?, 'CUSTOMER', ?, 'CUSTOMER_APP',
+                ) VALUES (?, ?, 'ConflictingGoodwillEventV1', ?, ?, 'TRANSACTIONAL', 'CUSTOMER', ?, 'CUSTOMER_APP',
                           'SUPPORT_GOODWILL_COMPENSATION_ISSUED', '{}', 'PENDING', 0, ?, ?, 'conflict', ?, ?, 0)
                 """.trimIndent(),
                 UUID.randomUUID(),

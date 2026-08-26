@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualExpiryRule
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
+import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQuoteOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyScopeType
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySelectionSource
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicySnapshot
@@ -77,13 +78,32 @@ internal class OrdinaryPointAccrualPolicyService(
     private val correlationIdSource: CorrelationIdSource,
     private val entityManager: EntityManager,
     private val metrics: OperatorSecurityMetrics,
-) : OrdinaryPointAccrualPolicyOperations {
+) : OrdinaryPointAccrualPolicyOperations,
+    OrdinaryPointAccrualPolicyQuoteOperations {
     @Transactional(propagation = Propagation.MANDATORY)
-    override fun selectForOrder(storeId: UUID): SelectedOrdinaryPointAccrualPolicy =
+    override fun selectForOrder(storeId: UUID): SelectedOrdinaryPointAccrualPolicy = select(storeId, lock = true)
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspectForQuote(storeId: UUID): SelectedOrdinaryPointAccrualPolicy = select(storeId, lock = false)
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockForOrderCreation(storeId: UUID): SelectedOrdinaryPointAccrualPolicy = select(storeId, lock = true)
+
+    private fun select(
+        storeId: UUID,
+        lock: Boolean,
+    ): SelectedOrdinaryPointAccrualPolicy =
         persistenceBoundary {
-            advisoryLock.lockShared(storeLock(storeId))
+            if (lock) advisoryLock.lockShared(storeLock(storeId))
             val storeHead =
-                headRepository.findShared(OrdinaryPointAccrualPolicyScopeType.STORE, storeId)
+                if (lock) {
+                    headRepository.findShared(OrdinaryPointAccrualPolicyScopeType.STORE, storeId)
+                } else {
+                    headRepository
+                        .findById(
+                            OrdinaryPointAccrualPolicyHeadId(OrdinaryPointAccrualPolicyScopeType.STORE, storeId),
+                        ).orElse(null)
+                }
             if (storeHead != null) {
                 val storeVersion = version(storeHead)
                 if (storeVersion.state == OrdinaryPointAccrualPolicyState.OVERRIDE) {
@@ -93,12 +113,12 @@ internal class OrdinaryPointAccrualPolicyService(
                     )
                 }
                 return@persistenceBoundary SelectedOrdinaryPointAccrualPolicy(
-                    globalVersionForSelection().toSnapshot(),
+                    globalVersionForSelection(lock).toSnapshot(),
                     OrdinaryPointAccrualPolicySelectionSource.GLOBAL_INHERITED,
                 )
             }
             SelectedOrdinaryPointAccrualPolicy(
-                globalVersionForSelection().toSnapshot(),
+                globalVersionForSelection(lock).toSnapshot(),
                 OrdinaryPointAccrualPolicySelectionSource.GLOBAL_NO_OVERRIDE,
             )
         }
@@ -167,12 +187,22 @@ internal class OrdinaryPointAccrualPolicyService(
             }
         }
 
-    private fun globalVersionForSelection(): OrdinaryPointAccrualPolicyVersionEntity {
+    private fun globalVersionForSelection(lock: Boolean = true): OrdinaryPointAccrualPolicyVersionEntity {
         val head =
-            headRepository.findShared(
-                OrdinaryPointAccrualPolicyScopeType.GLOBAL,
-                OrdinaryPointAccrualPolicySnapshot.GLOBAL_SCOPE_REFERENCE,
-            ) ?: dependency("GLOBAL ordinary point accrual policy head is missing")
+            if (lock) {
+                headRepository.findShared(
+                    OrdinaryPointAccrualPolicyScopeType.GLOBAL,
+                    OrdinaryPointAccrualPolicySnapshot.GLOBAL_SCOPE_REFERENCE,
+                )
+            } else {
+                headRepository
+                    .findById(
+                        OrdinaryPointAccrualPolicyHeadId(
+                            OrdinaryPointAccrualPolicyScopeType.GLOBAL,
+                            OrdinaryPointAccrualPolicySnapshot.GLOBAL_SCOPE_REFERENCE,
+                        ),
+                    ).orElse(null)
+            } ?: dependency("GLOBAL ordinary point accrual policy head is missing")
         return version(head).also {
             if (it.state != OrdinaryPointAccrualPolicyState.OVERRIDE) {
                 dependency("GLOBAL ordinary point accrual policy is incomplete")

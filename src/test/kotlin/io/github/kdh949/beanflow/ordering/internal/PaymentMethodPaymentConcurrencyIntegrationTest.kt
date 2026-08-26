@@ -39,6 +39,7 @@ internal class PaymentMethodPaymentConcurrencyIntegrationTest
     @Autowired
     constructor(
         private val createOrders: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmations: PaymentConfirmationService,
         private val paymentMethods: PaymentMethodApplicationService,
         private val gateway: ScriptedTestPaymentGateway,
@@ -123,7 +124,7 @@ internal class PaymentMethodPaymentConcurrencyIntegrationTest
             key: String,
         ): UUID {
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrders.create(key, fixture.command()).status).isEqualTo(201)
+            assertThat(createOrders.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status).isEqualTo(201)
             return jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java)!!
         }
 

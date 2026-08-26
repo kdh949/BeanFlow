@@ -126,22 +126,26 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
         listOf(availableStore, fullStore, startedStore, beyondHorizonStore, slotlessStore, busyStore)
 
     @Test
-    fun `only stores with a reservable slot inside the window are available`() {
-        assertThat(service.findStoresWithAvailableSlots(allCandidates, now))
-            .containsExactlyInAnyOrder(availableStore, busyStore)
+    fun `each available store returns its earliest reservable window inside the horizon`() {
+        val result = service.findEarliestAvailableSlots(allCandidates, now)
+
+        assertThat(result.keys).containsExactlyInAnyOrder(availableStore, busyStore)
+        assertThat(result.getValue(availableStore).startsAt).isEqualTo(now.plus(Duration.ofDays(1)))
+        assertThat(result.getValue(availableStore).endsAt).isEqualTo(now.plus(Duration.ofDays(1)).plus(Duration.ofMinutes(20)))
+        assertThat(result.getValue(busyStore).startsAt).isEqualTo(now.plus(Duration.ofHours(70)))
     }
 
     @Test
     fun `a store outside the candidate list is never reported`() {
-        assertThat(service.findStoresWithAvailableSlots(listOf(availableStore), now))
+        assertThat(service.findEarliestAvailableSlots(listOf(availableStore), now).keys)
             .containsExactly(availableStore)
             .doesNotContain(unaskedStore)
     }
 
     @Test
     fun `the statement count is one regardless of how many candidates or slots are involved`() {
-        val single = countStatements { service.findStoresWithAvailableSlots(listOf(availableStore), now) }
-        val many = countStatements { service.findStoresWithAvailableSlots(allCandidates, now) }
+        val single = countStatements { service.findEarliestAvailableSlots(listOf(availableStore), now) }
+        val many = countStatements { service.findEarliestAvailableSlots(allCandidates, now) }
 
         assertThat(single).isOne()
         assertThat(many).isOne()
@@ -149,7 +153,7 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
 
     @Test
     fun `an empty candidate list answers without touching the database`() {
-        val statements = countStatements { assertThat(service.findStoresWithAvailableSlots(emptyList(), now)).isEmpty() }
+        val statements = countStatements { assertThat(service.findEarliestAvailableSlots(emptyList(), now)).isEmpty() }
 
         assertThat(statements).isZero()
     }
@@ -158,7 +162,7 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
     fun `a duplicated candidate id does not change the answer or the statement count`() {
         val statements =
             countStatements {
-                assertThat(service.findStoresWithAvailableSlots(listOf(availableStore, availableStore), now))
+                assertThat(service.findEarliestAvailableSlots(listOf(availableStore, availableStore), now).keys)
                     .containsExactly(availableStore)
             }
 
@@ -171,7 +175,7 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
         seedStore(boundaryStore)
         insertSlot(boundaryStore, startsIn = Duration.ZERO, capacity = 5, reserved = 0, confirmed = 0)
 
-        assertThat(service.findStoresWithAvailableSlots(listOf(boundaryStore), now)).isEmpty()
+        assertThat(service.findEarliestAvailableSlots(listOf(boundaryStore), now)).isEmpty()
     }
 
     /**
@@ -182,7 +186,7 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
     @Test
     fun `a corrupted slot counter is a dependency failure rather than an unavailable store`() {
         withCorruptedStore { corruptedStore ->
-            assertThatThrownBy { service.findStoresWithAvailableSlots(listOf(corruptedStore), now) }
+            assertThatThrownBy { service.findEarliestAvailableSlots(listOf(corruptedStore), now) }
                 .isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
                     assertThat(failure.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
                 }
@@ -197,7 +201,7 @@ internal class PickupAvailabilityQueryTest : IsolatedPostgresSupport() {
     @Test
     fun `one corrupted candidate fails the whole batch instead of shortening the answer`() {
         withCorruptedStore { corruptedStore ->
-            assertThatThrownBy { service.findStoresWithAvailableSlots(allCandidates + corruptedStore, now) }
+            assertThatThrownBy { service.findEarliestAvailableSlots(allCandidates + corruptedStore, now) }
                 .isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
                     assertThat(failure.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
                 }

@@ -151,6 +151,31 @@ TOCTOU를 줄일 수 있지만 preview 취소·만료 worker와 잠금 수명이
 - preview를 장시간 보존하거나 견적 승인 증거로 사용해야 할 때
 - 묶음 상품·세금·외화로 lineSequence/unit 배분 계약이 바뀔 때
 
+### 안전한 주문 context Amendment (2026-08-25)
+
+`MerchantRefundPreview`는 기존 line/totals와 함께 다음 read-only `orderContext`를 반환한다.
+
+```text
+orderContext {
+  orderedAt
+  pickupWindow { startsAt, endsAt }
+  status
+  pricing { subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency }
+  paymentKind: ONE_TIME_EXTERNAL | BENEFIT_ONLY
+}
+```
+
+context는 같은 Store·Order의 immutable/current projection에서 line/totals와 함께 읽고 전체가
+성공하거나 preview를 실패시킨다. header 조회 실패를 빈 값, client 입력이나 현재 Menu 가격으로
+보완하지 않는다. `ONE_TIME_EXTERNAL`은 현재 customer one-time external 결제의 화면 vocabulary일
+뿐 Provider/card/payment identifier나 저장 카드 metadata가 아니다. `BENEFIT_ONLY`는 기존 0원
+혜택 결제를 뜻한다.
+
+`orderContext`와 client money는 execute request에 들어가지 않고 authority가 아니다. 기존
+`previewVersion`만 execution staleness precondition이며 실행의 1..500자 trimmed reason,
+`Idempotency-Key`, membership, Provider/reconciliation과 money allocation 의미를 유지한다.
+customer PII, VAT/세무 값, Provider reference, card/billing key와 내부 UUID는 응답하지 않는다.
+
 ## Related Decisions
 
 - [BR-38 매장 부분 환불 실행 권한](../product/business-policy-decisions.md)

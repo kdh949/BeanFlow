@@ -34,6 +34,7 @@ internal class FastReorderControllerContractTest
     constructor(
         private val mockMvc: MockMvc,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val jdbcTemplate: JdbcTemplate,
     ) {
         @BeforeEach
@@ -231,7 +232,13 @@ internal class FastReorderControllerContractTest
         private fun sourceOrder(terminal: Boolean = true): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            check(createOrder.create("http-source-${UUID.randomUUID()}", fixture.command()).status == 201)
+            check(
+                createOrder
+                    .create(
+                        "http-source-${UUID.randomUUID()}",
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                    ).status == 201,
+            )
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             if (terminal) jdbcTemplate.update("UPDATE ordering_order SET state = 'EXPIRED' WHERE id = ?", orderId)
             return SourceFixture(fixture, orderId)

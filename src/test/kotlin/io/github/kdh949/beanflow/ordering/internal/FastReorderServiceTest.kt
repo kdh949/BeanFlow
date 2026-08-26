@@ -22,6 +22,7 @@ internal class FastReorderServiceTest
     @Autowired
     constructor(
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val reorderOrder: ReorderOrderUseCase,
         private val jdbcTemplate: JdbcTemplate,
         private val meterRegistry: MeterRegistry,
@@ -291,7 +292,7 @@ internal class FastReorderServiceTest
             val created =
                 createOrder.create(
                     "source-with-benefit",
-                    fixture.command(couponIssuanceId = sourceCoupon),
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(couponIssuanceId = sourceCoupon)),
                 )
             check(created.status == 201)
             val sourceOrderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
@@ -346,7 +347,11 @@ internal class FastReorderServiceTest
         private fun sourceOrder(terminal: Boolean = true): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val created = createOrder.create("source-create-${UUID.randomUUID()}", fixture.command())
+            val created =
+                createOrder.create(
+                    "source-create-${UUID.randomUUID()}",
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                )
             check(created.status == 201)
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             if (terminal) jdbcTemplate.update("UPDATE ordering_order SET state = 'EXPIRED' WHERE id = ?", orderId)

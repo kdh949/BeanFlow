@@ -66,6 +66,7 @@ internal class CustomerCancellationCommandIntegrationTest
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
         private val supportPickupReschedules: OrderingSupportPickupRescheduleOperations,
         private val supportOrderCancellations: OrderingSupportOrderCancellationOperations,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
     ) {
         @BeforeEach
         fun cleanDatabase() {
@@ -871,6 +872,13 @@ internal class CustomerCancellationCommandIntegrationTest
             pointsToUseKrw: Long = 0,
         ): UUID {
             val coupon = couponIssuanceId?.let { "\"couponIssuanceId\":\"$it\"," }.orEmpty()
+            val quote =
+                orderQuoteUseCase.attachCurrentQuote(
+                    fixture.command(
+                        pointsToUseKrw = pointsToUseKrw,
+                        couponIssuanceId = couponIssuanceId,
+                    ),
+                )
             mockMvc
                 .perform(
                     post("/api/v1/orders")
@@ -884,7 +892,8 @@ internal class CustomerCancellationCommandIntegrationTest
                               "pickupSlotId":"${fixture.pickupSlotId}",
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
                               $coupon
-                              "pointsToUseKrw":$pointsToUseKrw
+                              "pointsToUseKrw":$pointsToUseKrw,
+                              "expectedQuoteFingerprint":"${quote.expectedQuoteFingerprint}"
                             }
                             """.trimIndent(),
                         ),

@@ -12,8 +12,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
@@ -26,8 +29,11 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Clock
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
@@ -38,7 +44,7 @@ import java.util.UUID
  * `404`, a legitimately empty catalogue is `200`, and a persistence failure is `503` rather than
  * `404` or an empty list.
  */
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, DiscoveryStoreCatalogIntegrationTest.FixedClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
@@ -68,6 +74,7 @@ internal class DiscoveryStoreCatalogIntegrationTest
         fun cleanDatabase() {
             dropFailureView("merchant_menu")
             dropFailureView("fulfillment_pickup_slot")
+            dropFailureView("merchant_store_customer_display_profile")
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
@@ -77,6 +84,8 @@ internal class DiscoveryStoreCatalogIntegrationTest
                     merchant_menu,
                     fulfillment_pickup_reservation,
                     fulfillment_pickup_slot,
+                    merchant_store_operating_hours,
+                    merchant_store_customer_display_profile,
                     merchant_store_discovery_profile,
                     merchant_store
                 CASCADE
@@ -90,11 +99,20 @@ internal class DiscoveryStoreCatalogIntegrationTest
         fun removeFailureViews() {
             dropFailureView("merchant_menu")
             dropFailureView("fulfillment_pickup_slot")
+            dropFailureView("merchant_store_customer_display_profile")
         }
 
         @Test
         fun `menus project current owner availability for menus and options without exposing write fields`() {
-            val americano = insertMenu(storeId, "Americano", 4_500, available = true)
+            val americano =
+                insertMenu(
+                    storeId,
+                    "Americano",
+                    4_500,
+                    available = true,
+                    displayCategory = "커피",
+                    description = "고소한 원두의 아메리카노",
+                )
             val seasonal = insertMenu(storeId, "Zebra latte", 6_000, available = false)
             attachImage(americano)
             insertOption(americano, "Extra shot", 500, available = true)
@@ -110,6 +128,8 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .andExpect(jsonPath("$.items[0].basePriceKrw").value(4_500))
                 .andExpect(jsonPath("$.items[0].currency").value("KRW"))
                 .andExpect(jsonPath("$.items[0].available").value(true))
+                .andExpect(jsonPath("$.items[0].displayCategory").value("커피"))
+                .andExpect(jsonPath("$.items[0].description").value("고소한 원두의 아메리카노"))
                 .andExpect(jsonPath("$.items[0].image.url").isString)
                 .andExpect(jsonPath("$.items[0].image.expiresAt").isString)
                 .andExpect(jsonPath("$.items[0].options.length()").value(2))
@@ -127,7 +147,7 @@ internal class DiscoveryStoreCatalogIntegrationTest
 
         @Test
         fun `menu response exposes exactly the contract fields`() {
-            val menuId = insertMenu(storeId, "Americano", 4_500, available = true)
+            val menuId = insertMenu(storeId, "Americano", 4_500, available = true, displayCategory = "커피", description = "산뜻한 커피")
             insertOption(menuId, "Extra shot", 500, available = true)
 
             val body =
@@ -138,7 +158,16 @@ internal class DiscoveryStoreCatalogIntegrationTest
                     .response.contentAsString
 
             assertThat(fieldNames(body, "$.items[0]"))
-                .containsExactlyInAnyOrder("menuId", "name", "basePriceKrw", "currency", "available", "options")
+                .containsExactlyInAnyOrder(
+                    "menuId",
+                    "name",
+                    "basePriceKrw",
+                    "currency",
+                    "available",
+                    "displayCategory",
+                    "description",
+                    "options",
+                )
             assertThat(fieldNames(body, "$.items[0].options[0]"))
                 .containsExactlyInAnyOrder("optionId", "name", "additionalPriceKrw", "available")
             assertThat(body).doesNotContain("storeId", "version", "menu_id")
@@ -211,7 +240,24 @@ internal class DiscoveryStoreCatalogIntegrationTest
         @Test
         fun `the store read names the store and reports whether pickup is actually reservable`() {
             insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
-            insertSlot(storeId, clock.instant().plus(Duration.ofMinutes(30)), clock.instant().plus(Duration.ofMinutes(60)), capacity = 2)
+            insertCustomerDisplayProfile(storeId, "서울시 영등포구", "여의도역 3번 출구")
+            insertCompleteSchedule(storeId, mondayOpen = false)
+            insertSlot(
+                storeId,
+                clock.instant().plus(Duration.ofMinutes(10)),
+                clock.instant().plus(Duration.ofMinutes(20)),
+                capacity = 1,
+                reservedCount = 1,
+            )
+            val startsAt = clock.instant().plus(Duration.ofMinutes(30))
+            val endsAt = clock.instant().plus(Duration.ofMinutes(60))
+            insertSlot(storeId, startsAt, endsAt, capacity = 2)
+            insertSlot(
+                storeId,
+                clock.instant().plus(Duration.ofHours(2)),
+                clock.instant().plus(Duration.ofHours(3)),
+                capacity = 2,
+            )
 
             val body =
                 mockMvc
@@ -219,12 +265,28 @@ internal class DiscoveryStoreCatalogIntegrationTest
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.storeId").value(storeId.toString()))
                     .andExpect(jsonPath("$.name").value("BeanFlow Yeouido"))
+                    .andExpect(jsonPath("$.orderingAvailable").value(true))
                     .andExpect(jsonPath("$.pickupAvailable").value(true))
+                    .andExpect(jsonPath("$.nextPickupWindow.startsAt").value(startsAt.toString()))
+                    .andExpect(jsonPath("$.nextPickupWindow.endsAt").value(endsAt.toString()))
+                    .andExpect(jsonPath("$.customerDisplay.addressLine").value("서울시 영등포구"))
+                    .andExpect(jsonPath("$.customerDisplay.directionsHint").value("여의도역 3번 출구"))
+                    .andExpect(jsonPath("$.customerDisplay.operatingStatus").value("CLOSED"))
+                    .andExpect(jsonPath("$.customerDisplay.operatingHours.timezone").value("Asia/Seoul"))
+                    .andExpect(jsonPath("$.customerDisplay.operatingHours.days.length()").value(7))
+                    .andExpect(jsonPath("$.open").doesNotExist())
                     .andReturn()
                     .response.contentAsString
 
             // This read takes no coordinate, so it must not carry a distance the caller could believe.
-            assertThat(fieldNames(body, "$")).containsExactlyInAnyOrder("storeId", "name", "pickupAvailable")
+            assertThat(fieldNames(body, "$")).containsExactlyInAnyOrder(
+                "storeId",
+                "name",
+                "orderingAvailable",
+                "pickupAvailable",
+                "nextPickupWindow",
+                "customerDisplay",
+            )
         }
 
         @Test
@@ -235,7 +297,57 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 .perform(get(storePath(storeId)).with(customerJwt()))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.name").value("BeanFlow Yeouido"))
+                .andExpect(jsonPath("$.orderingAvailable").value(true))
                 .andExpect(jsonPath("$.pickupAvailable").value(false))
+                .andExpect(jsonPath("$.nextPickupWindow").doesNotExist())
+                .andExpect(jsonPath("$.customerDisplay.operatingStatus").value("UNSPECIFIED"))
+        }
+
+        @Test
+        fun `operating OPEN does not imply ordering availability or expose a pickup window`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+            insertCustomerDisplayProfile(storeId, null, null)
+            insertCompleteSchedule(storeId, mondayOpen = true)
+            jdbcTemplate.update("UPDATE merchant_store SET accepting_orders = false WHERE id = ?", storeId)
+            insertSlot(
+                storeId,
+                clock.instant().plus(Duration.ofMinutes(30)),
+                clock.instant().plus(Duration.ofMinutes(60)),
+                capacity = 2,
+            )
+
+            mockMvc
+                .perform(get(storePath(storeId)).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderingAvailable").value(false))
+                .andExpect(jsonPath("$.pickupAvailable").value(false))
+                .andExpect(jsonPath("$.nextPickupWindow").doesNotExist())
+                .andExpect(jsonPath("$.customerDisplay.operatingStatus").value("OPEN"))
+        }
+
+        @Test
+        fun `an incomplete operating schedule is 503 rather than UNSPECIFIED`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+            insertCustomerDisplayProfile(storeId, null, null)
+            insertOperatingDay(storeId, DayOfWeek.MONDAY, closed = true)
+
+            mockMvc
+                .perform(get(storePath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.customerDisplay").doesNotExist())
+        }
+
+        @Test
+        fun `a customer display profile read failure is 503 rather than an empty profile`() {
+            insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
+            installFailureView("merchant_store_customer_display_profile")
+
+            mockMvc
+                .perform(get(storePath(storeId)).with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.customerDisplay").doesNotExist())
         }
 
         @Test
@@ -528,23 +640,77 @@ internal class DiscoveryStoreCatalogIntegrationTest
             name,
         )
 
+        private fun insertCustomerDisplayProfile(
+            storeId: UUID,
+            addressLine: String?,
+            directionsHint: String?,
+        ) = jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_customer_display_profile
+                (store_id, address_line, directions_hint, version, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+            """.trimIndent(),
+            storeId,
+            addressLine,
+            directionsHint,
+            Timestamp.from(clock.instant()),
+            Timestamp.from(clock.instant()),
+        )
+
+        private fun insertCompleteSchedule(
+            storeId: UUID,
+            mondayOpen: Boolean,
+        ) {
+            DayOfWeek.entries.forEach { day ->
+                if (day == DayOfWeek.MONDAY && mondayOpen) {
+                    insertOperatingDay(storeId, day, closed = false, opensAt = LocalTime.of(9, 0), closesAt = LocalTime.of(18, 0))
+                } else {
+                    insertOperatingDay(storeId, day, closed = true)
+                }
+            }
+        }
+
+        private fun insertOperatingDay(
+            storeId: UUID,
+            day: DayOfWeek,
+            closed: Boolean,
+            opensAt: LocalTime? = null,
+            closesAt: LocalTime? = null,
+        ) = jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_operating_hours (store_id, day_of_week, closed, opens_at, closes_at)
+            VALUES (?, ?, ?, ?, ?)
+            """.trimIndent(),
+            storeId,
+            day.value,
+            closed,
+            opensAt,
+            closesAt,
+        )
+
         private fun insertMenu(
             storeId: UUID,
             name: String,
             basePriceKrw: Long,
             available: Boolean,
+            displayCategory: String? = null,
+            description: String? = null,
         ): UUID =
             UUID.randomUUID().also { menuId ->
                 jdbcTemplate.update(
                     """
-                    INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available, version)
-                    VALUES (?, ?, ?, ?, ?, 0)
+                    INSERT INTO merchant_menu (
+                        id, store_id, name, base_price_krw, available,
+                        display_category, public_description, version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
                     """.trimIndent(),
                     menuId,
                     storeId,
                     name,
                     basePriceKrw,
                     available,
+                    displayCategory,
+                    description,
                 )
             }
 
@@ -646,5 +812,12 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 ${'$'}${'$'}
                 """.trimIndent(),
             )
+        }
+
+        @TestConfiguration(proxyBeanMethods = false)
+        internal class FixedClockConfiguration {
+            @Bean
+            @Primary
+            fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-08-24T00:00:00Z"), ZoneOffset.UTC)
         }
     }

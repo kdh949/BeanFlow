@@ -17,7 +17,8 @@ import java.util.UUID
  */
 internal data class PickupAvailabilityRow(
     val storeId: UUID,
-    val availableCount: Long,
+    val earliestStartsAt: Instant?,
+    val earliestEndsAt: Instant?,
     val corruptedCount: Long,
 )
 
@@ -30,8 +31,8 @@ internal data class PickupAvailabilityRow(
  * aggregate reads the index rather than the heap.
  *
  * The published 1,000-slot list bound is deliberately not applied here. That bound exists so a
- * catalogue *list* is never silently truncated; this query only asks whether a reservable slot
- * exists, and existence is unaffected by how many further slots follow.
+ * catalogue *list* is never silently truncated; this query only asks for each Store's earliest
+ * reservable slot, whose answer is unaffected by how many later slots follow.
  */
 @Repository
 internal class PickupAvailabilityQueryRepository(
@@ -44,20 +45,33 @@ internal class PickupAvailabilityQueryRepository(
     ): List<PickupAvailabilityRow> =
         jdbcTemplate.query(
             """
-            SELECT store_id,
-                   count(*) FILTER (
-                       WHERE capacity - reserved_count - confirmed_count > 0
-                         AND ends_at > starts_at
-                   ) AS available_count,
-                   count(*) FILTER (
-                       WHERE capacity - reserved_count - confirmed_count < 0
-                          OR ends_at <= starts_at
-                   ) AS corrupted_count
-              FROM fulfillment_pickup_slot
-             WHERE store_id = ANY(?)
-               AND starts_at > ?
-               AND starts_at < ?
-             GROUP BY store_id
+            WITH candidate_slot AS (
+                SELECT id, store_id, starts_at, ends_at,
+                       capacity - reserved_count - confirmed_count AS remaining_capacity
+                  FROM fulfillment_pickup_slot
+                 WHERE store_id = ANY(?)
+                   AND starts_at > ?
+                   AND starts_at < ?
+            ),
+            summary AS (
+                SELECT store_id,
+                       count(*) FILTER (
+                           WHERE remaining_capacity < 0 OR ends_at <= starts_at
+                       ) AS corrupted_count
+                  FROM candidate_slot
+                 GROUP BY store_id
+            ),
+            earliest AS (
+                SELECT DISTINCT ON (store_id) store_id, starts_at, ends_at
+                  FROM candidate_slot
+                 WHERE remaining_capacity > 0
+                   AND ends_at > starts_at
+                 ORDER BY store_id, starts_at, id
+            )
+            SELECT summary.store_id, earliest.starts_at, earliest.ends_at, summary.corrupted_count
+              FROM summary
+              LEFT JOIN earliest ON earliest.store_id = summary.store_id
+             ORDER BY summary.store_id
             """.trimIndent(),
             PreparedStatementSetter { statement ->
                 statement.setArray(1, statement.connection.createArrayOf("uuid", storeIds.toTypedArray()))
@@ -67,7 +81,8 @@ internal class PickupAvailabilityQueryRepository(
             RowMapper { resultSet, _ ->
                 PickupAvailabilityRow(
                     storeId = resultSet.getObject("store_id", UUID::class.java),
-                    availableCount = resultSet.getLong("available_count"),
+                    earliestStartsAt = resultSet.getTimestamp("starts_at")?.toInstant(),
+                    earliestEndsAt = resultSet.getTimestamp("ends_at")?.toInstant(),
                     corruptedCount = resultSet.getLong("corrupted_count"),
                 )
             },

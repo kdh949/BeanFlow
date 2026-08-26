@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreView
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
 import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
+import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityView
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileCursor
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
@@ -105,14 +106,14 @@ internal class NearbyStoreReadTransaction(
             }
         // 검사 대상은 probe row를 뺀 앞 limit개다. 가용성도 딱 그만큼만 묻는다.
         val examined = fetched.take(prepared.limit)
-        val availableStoreIds =
-            availability.findStoresWithAvailableSlots(
+        val pickupWindows =
+            availability.findEarliestAvailableSlots(
                 examined.map(NearbyStoreProfileProjection::storeId),
                 prepared.now,
             )
         val scanned =
             scanCandidates(fetched, prepared.limit) { candidate ->
-                !prepared.pickupAvailableOnly || candidate.storeId in availableStoreIds
+                !prepared.pickupAvailableOnly || candidate.storeId in pickupWindows
             }
         val nextCursor =
             scanned.boundary?.let { boundary ->
@@ -123,7 +124,7 @@ internal class NearbyStoreReadTransaction(
                 )
             }
         return NearbyStorePage(
-            items = scanned.items.map { it.toView(pickupAvailable = it.storeId in availableStoreIds, imageViews) },
+            items = scanned.items.map { it.toView(pickupWindows[it.storeId], prepared.now, imageViews) },
             nextCursor = nextCursor,
         )
     }
@@ -138,15 +139,18 @@ internal class NearbyStoreReadTransaction(
 }
 
 internal fun NearbyStoreProfileProjection.toView(
-    pickupAvailable: Boolean,
+    pickupWindow: PickupAvailabilityView?,
+    now: Instant,
     imageViews: StorefrontImageViewResolver,
 ): NearbyStoreView =
     NearbyStoreView(
         storeId = storeId,
         name = name,
         distanceMeters = distanceMicrometers / MICROMETERS_PER_METER,
-        open = open,
-        pickupAvailable = pickupAvailable,
+        orderingAvailable = orderingAvailable,
+        pickupAvailable = pickupWindow != null,
+        nextPickupWindow = pickupWindow?.toCustomerView(),
+        customerDisplay = customerDisplay.toCustomerView(now),
         image = imageViews.resolve(imageThumbnailKey),
     )
 

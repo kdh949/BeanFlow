@@ -73,6 +73,10 @@ internal class MenuEntity(
     var imageSha256: String? = null,
     @Column(name = "image_updated_at")
     var imageUpdatedAt: Instant? = null,
+    @Column(name = "display_category")
+    var displayCategory: String? = null,
+    @Column(name = "public_description")
+    var publicDescription: String? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -93,6 +97,14 @@ internal class MenuEntity(
         imageThumbnailKey = null
         imageSha256 = null
         imageUpdatedAt = null
+    }
+
+    fun replaceDisplayContent(
+        displayCategory: String?,
+        publicDescription: String?,
+    ) {
+        this.displayCategory = displayCategory
+        this.publicDescription = publicDescription
     }
 }
 
@@ -140,6 +152,10 @@ internal class MenuConfigurationRequirementEntity(
 )
 
 internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("SELECT store FROM StoreEntity store WHERE store.id = :storeId")
+    fun findByIdForShare(storeId: UUID): StoreEntity?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT store FROM StoreEntity store WHERE store.id = :storeId")
     fun findByIdForUpdate(storeId: UUID): StoreEntity?

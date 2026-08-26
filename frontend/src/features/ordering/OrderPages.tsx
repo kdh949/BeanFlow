@@ -228,7 +228,7 @@ export function CustomerOrderDetailPage() {
             <p>{pickupNumberNote(order.status)}</p>
           </>
         ) : null}
-        <OrderTimeline state={order.status} />
+        <OrderTimeline state={order.status} lifecycle={order.lifecycle} />
         <dl className="pickup-window">
           <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(order.pickupWindowStart))}–{shortTime.format(new Date(order.pickupWindowEnd))}</dd></div>
           <div><dt>주문 번호</dt><dd>{order.orderReference}</dd></div>
@@ -243,7 +243,12 @@ export function CustomerOrderDetailPage() {
             <b>{won.format(line.lineTotalKrw)}</b>
           </div>
         ))}
-        <div className="order-detail-total"><span>결제 금액</span><strong>{won.format(order.totalAmountKrw)}</strong></div>
+        <dl className="order-transaction-summary" aria-label="주문 거래 요약">
+          <div><dt>상품 금액</dt><dd>{won.format(order.pricing.subtotalKrw)}</dd></div>
+          {order.pricing.couponDiscountKrw > 0 ? <div><dt>쿠폰 할인</dt><dd>−{won.format(order.pricing.couponDiscountKrw)}</dd></div> : null}
+          {order.pricing.pointsAppliedKrw > 0 ? <div><dt>포인트 사용</dt><dd>−{won.format(order.pricing.pointsAppliedKrw)}</dd></div> : null}
+          <div className="order-detail-total"><dt>결제 금액</dt><dd>{won.format(order.pricing.payableKrw)}</dd></div>
+        </dl>
       </section>
 
       {canViewRefund && order.paymentRecovery ? <RefundProgress recovery={order.paymentRecovery} /> : null}
@@ -284,12 +289,36 @@ export function customerOrderTimelineModel(state: CustomerOrderDetail["status"])
   }
 }
 
-function OrderTimeline({ state }: { state: CustomerOrderDetail["status"] }) {
+const lifecycleSteps = [
+  ["paidAt", "결제 완료"],
+  ["acceptedAt", "주문 접수"],
+  ["preparingAt", "제조 중"],
+  ["readyAt", "픽업 준비"],
+  ["completedAt", "픽업 완료"],
+] as const;
+
+function OrderTimeline({
+  state,
+  lifecycle,
+}: {
+  state: CustomerOrderDetail["status"];
+  lifecycle?: CustomerOrderDetail["lifecycle"];
+}) {
   const model = customerOrderTimelineModel(state);
-  if (model.kind === "terminal") return <div className="terminal-order-state" role="status"><strong>{model.terminalLabel}</strong></div>;
-  return <ol className="order-timeline" aria-label="주문 진행 단계">
-    {["결제 완료", "주문 접수", "제조 중", "픽업 준비", "픽업 완료"].map((label, index) => (
-      <li key={label} className={model.activeIndex !== null && index <= model.activeIndex ? "is-active" : ""}><span>{index + 1}</span><strong>{label}</strong></li>
-    ))}
-  </ol>;
+  const occurred = lifecycleSteps.filter(([field]) => lifecycle?.[field]);
+  return (
+    <>
+      {model.kind === "terminal" ? <div className="terminal-order-state" role="status"><strong>{model.terminalLabel}</strong></div> : null}
+      {occurred.length > 0 ? (
+        <ol className="order-timeline" aria-label="주문 진행 단계">
+          {occurred.map(([field, label], index) => (
+            <li key={field} className="is-active">
+              <span>{index + 1}</span>
+              <div><strong>{label}</strong><small>{shortDateTime.format(new Date(lifecycle?.[field] as string))}</small></div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </>
+  );
 }

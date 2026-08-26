@@ -35,6 +35,7 @@ internal enum class NotificationDeliveryState {
     PENDING,
     PROCESSING,
     SUCCEEDED,
+    SKIPPED,
     RETRY_SCHEDULED,
     MANUAL_REVIEW,
 }
@@ -44,7 +45,8 @@ internal class NotificationDelivery private constructor(
     val eventId: UUID,
     val eventType: String,
     val logicalSource: String,
-    val orderId: UUID,
+    val orderId: UUID?,
+    val classification: NotificationClassification,
     val recipientType: NotificationRecipientType,
     val recipientId: UUID,
     val logicalChannel: NotificationLogicalChannel,
@@ -102,6 +104,18 @@ internal class NotificationDelivery private constructor(
         check(providerReference.isNotBlank()) { "Provider delivery reference is required" }
         state = NotificationDeliveryState.SUCCEEDED
         providerDeliveryReference = providerReference
+        nextAttemptAt = null
+        lastFailureCode = null
+        clearClaim()
+        updatedAt = now
+    }
+
+    fun skip(now: Instant) {
+        check(classification == NotificationClassification.MARKETING) { "Only marketing delivery can be skipped" }
+        check(state != NotificationDeliveryState.SUCCEEDED && state != NotificationDeliveryState.MANUAL_REVIEW) {
+            "Terminal notification delivery cannot be skipped"
+        }
+        state = NotificationDeliveryState.SKIPPED
         nextAttemptAt = null
         lastFailureCode = null
         clearClaim()
@@ -194,7 +208,7 @@ internal class NotificationDelivery private constructor(
             eventId: UUID,
             eventType: String,
             logicalSource: String,
-            orderId: UUID,
+            orderId: UUID?,
             recipientType: NotificationRecipientType,
             recipientId: UUID,
             logicalChannel: NotificationLogicalChannel,
@@ -209,12 +223,14 @@ internal class NotificationDelivery private constructor(
             require(payloadJson.isNotBlank())
             require(providerIdempotencyKey.isNotBlank())
             require(correlationId.isNotBlank())
+            val classification = NotificationClassification.classify(recipientType, orderId)
             return NotificationDelivery(
                 id = id,
                 eventId = eventId,
                 eventType = eventType,
                 logicalSource = logicalSource,
                 orderId = orderId,
+                classification = classification,
                 recipientType = recipientType,
                 recipientId = recipientId,
                 logicalChannel = logicalChannel,
@@ -240,7 +256,8 @@ internal class NotificationDelivery private constructor(
             eventId: UUID,
             eventType: String,
             logicalSource: String,
-            orderId: UUID,
+            orderId: UUID?,
+            classification: NotificationClassification,
             recipientType: NotificationRecipientType,
             recipientId: UUID,
             logicalChannel: NotificationLogicalChannel,
@@ -264,6 +281,7 @@ internal class NotificationDelivery private constructor(
                 eventType,
                 logicalSource,
                 orderId,
+                classification,
                 recipientType,
                 recipientId,
                 logicalChannel,

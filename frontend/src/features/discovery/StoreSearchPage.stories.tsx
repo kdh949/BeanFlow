@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, searchHandlers, signedInHandlers } from "../../../.storybook/fixtures";
+import { apiError, customerDisplay, searchHandlers, signedInHandlers } from "../../../.storybook/fixtures";
 import { StoreSearchPage } from "./StoreSearchPage";
 
 const meta = {
@@ -9,6 +9,7 @@ const meta = {
   component: StoreSearchPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -47,6 +48,8 @@ export const Results: Story = {
   parameters: { msw: { handlers: searchHandlers } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("시청점")).toBeVisible();
+    await expect(await canvas.findByText("주문 불가")).toBeVisible();
+    await expect(await canvas.findByText("영업시간 아님")).toBeVisible();
   },
 };
 
@@ -65,8 +68,10 @@ export const StorefrontImageResults: Story = {
             storeId,
             name,
             matchReason: ["MENU_NAME"],
-            open: true,
+            orderingAvailable: true,
             pickupAvailable: true,
+            nextPickupWindow: { startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z" },
+            customerDisplay,
             matchedMenus: [{ menuId: `20000000-0000-4000-8000-0000000001${String(index + 1).padStart(2, "0")}`, name: menuName }],
             image: demoImage(`store-${String(index + 1).padStart(2, "0")}`),
           })),

@@ -7,6 +7,7 @@ import { StoreOrderBoardPage } from "./StoreOrderBoard";
 const meta = {
   title: "Pages/Store/OrderBoard",
   component: StoreOrderBoardPage,
+  args: { now: new Date("2026-08-15T03:05:00Z") },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -111,9 +112,9 @@ export const TransitionLanes: Story = {
           pickupBusinessDate: "2026-08-15",
           items: [
             boardOrder,
-            { ...boardOrder, orderReference: "BF-ACCEPTED-1", pickupNumber: "A-143", lane: "ACCEPTED", status: "ACCEPTED", acceptancePhase: "OPEN", allowedActions: ["START_PREPARING"] },
-            { ...boardOrder, orderReference: "BF-PREPARING-1", pickupNumber: "A-144", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"] },
-            { ...boardOrder, orderReference: "BF-READY-1", pickupNumber: "A-145", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"] },
+            { ...boardOrder, orderReference: "BF-ACCEPTED-1", pickupNumber: "A-143", lane: "ACCEPTED", status: "ACCEPTED", acceptancePhase: "OPEN", allowedActions: ["START_PREPARING"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z" } },
+            { ...boardOrder, orderReference: "BF-PREPARING-1", pickupNumber: "A-144", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:02:00Z" } },
+            { ...boardOrder, orderReference: "BF-READY-1", pickupNumber: "A-145", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:02:00Z", readyAt: "2026-08-15T03:03:00Z" } },
           ],
         }],
         overflow: [],
@@ -125,6 +126,10 @@ export const TransitionLanes: Story = {
     await expect(canvas.getByRole("button", { name: "제조 시작" })).toBeVisible();
     await expect(canvas.getByRole("button", { name: "준비 완료" })).toBeVisible();
     await expect(canvas.getByRole("button", { name: "픽업 완료" })).toBeVisible();
+    await expect(canvas.getByText("결제 후 5분 경과")).toBeVisible();
+    await expect(canvas.getByText("접수 후 4분 경과")).toBeVisible();
+    await expect(canvas.getByText("제조 시작 후 3분 경과")).toBeVisible();
+    await expect(canvas.getByText("준비 완료 후 2분 경과")).toBeVisible();
   },
 };
 
@@ -142,7 +147,7 @@ export const StateConflictRefreshesBoard: Story = {
           conflictBoardReadCount += 1;
           const item = conflictBoardReadCount === 1
             ? boardOrder
-            : { ...boardOrder, lane: "ACCEPTED", status: "ACCEPTED", acceptancePhase: "OPEN", allowedActions: ["START_PREPARING"] };
+            : { ...boardOrder, lane: "ACCEPTED", status: "ACCEPTED", acceptancePhase: "OPEN", allowedActions: ["START_PREPARING"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z" } };
           return HttpResponse.json({ groups: [{ pickupBusinessDate: "2026-08-15", items: [item] }], overflow: [] });
         }),
         http.post("/api/v1/stores/:storeId/orders/:orderReference/transitions", () =>
@@ -200,6 +205,7 @@ export const Overflow: Story = {
             acceptanceDeadlineAt: undefined,
             acceptancePhase: undefined,
             allowedActions: ["COMPLETE"],
+            lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:02:00Z", readyAt: "2026-08-15T03:03:00Z" },
           }],
           nextCursor: null,
         })),

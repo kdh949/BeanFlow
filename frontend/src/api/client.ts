@@ -3,6 +3,7 @@ export type ApiErrorBody = {
   message?: string;
   correlationId?: string;
   details?: Array<{ field?: string; reason: string; lineSequence?: number }>;
+  currentQuote?: unknown;
 };
 
 /**
@@ -18,6 +19,8 @@ export class ApiRequestError extends Error {
     readonly correlationId?: string,
     /** Server-owned per-field or per-item reasons. Never synthesized by the client. */
     readonly details?: ApiErrorBody["details"],
+    /** Present only when the server returns a typed terminal stale-quote response. */
+    readonly currentQuote?: unknown,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -39,6 +42,7 @@ export function unwrap<T>(result: {
     error.message ?? "요청을 완료하지 못했습니다.",
     error.correlationId,
     error.details,
+    error.currentQuote,
   );
 }
 

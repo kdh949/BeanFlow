@@ -24,6 +24,13 @@ function line(overrides: Record<string, unknown> = {}) {
 function preview(overrides: Record<string, unknown> = {}) {
   return {
     orderReference,
+    orderContext: {
+      orderedAt: "2026-08-15T02:50:00Z",
+      pickupWindow: { startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z" },
+      status: "PAID",
+      pricing: { subtotalKrw: 12_800, couponDiscountKrw: 1_000, pointsAppliedKrw: 2_000, payableKrw: 9_800, currency: "KRW" },
+      paymentKind: "ONE_TIME_EXTERNAL",
+    },
     lines: [line(), line({ lineSequence: 1, menuName: "오트 라떼", remainingQuantity: 1 })],
     totals: { grossAttributionKrw: 0, couponAttributionKrw: 0, pointsRestorationKrw: 0, cashRefundKrw: 0, currency: "KRW" },
     previewVersion: "a".repeat(64),
@@ -62,6 +69,9 @@ type Story = StoryObj<typeof meta>;
 export const SelectableItems: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("아이스 아메리카노")).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "환불 대상 주문" })).toBeVisible();
+    await expect(canvas.getByText("일회성 결제")).toBeVisible();
+    await expect(canvas.getByText("₩9,800")).toBeVisible();
     await expect(canvas.getAllByLabelText("환불 수량")[0]).toHaveValue(0);
     await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
   },

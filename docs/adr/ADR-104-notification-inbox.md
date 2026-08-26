@@ -53,13 +53,17 @@ recipientType = CUSTOMER  AND orderId 있음 → TRANSACTIONAL
 recipientType = CUSTOMER  AND orderId 없음 → MARKETING
 ```
 
-- 현재 6개 템플릿(`STORE_ACCEPTANCE_WARNING`, `ORDER_REJECTED`, `ORDER_READY`,
+- 최초 결정 당시 6개 템플릿(`STORE_ACCEPTANCE_WARNING`, `ORDER_REJECTED`, `ORDER_READY`,
   `ORDER_CANCELLATION_ACCEPTED`, `CUSTOMER_CANCELLATION_REFUND_SUCCEEDED`,
   `CUSTOMER_CANCELLATION_REFUND_DELAYED`)은 모두 `orderId`를 가지므로 전부 `TRANSACTIONAL`로
   자동 분류된다. 기존 동작이 바뀌지 않는다.
-- 현재 `notification_delivery.order_id`는 `NOT NULL`이므로 여섯 템플릿에 대한 위 판정은 실제 스키마와
-  일치한다. `orderId` 없는 고객 마케팅이나 매장 정산 알림을 도입하는 migration에서 이 컬럼을 nullable로
-  바꾸고 recipient별 분류 CHECK와 계약 테스트를 함께 추가한다. nullable 변경만 먼저 하지 않는다.
+- Notification inbox 구현 시점에는 주문 연결이 선택인 `SUPPORT_GOODWILL_COMPENSATION_ISSUED`가
+  존재한다. `relatedOrderId`가 있으면 `TRANSACTIONAL`, 없으면 `MARKETING`이며 compensation request ID를
+  가짜 orderId로 대입하지 않는다. 주문 없는 goodwill은 기본 opt-out에서 InboxItem과 Delivery를 만들지
+  않고 Support에는 명시적 terminal `NOTIFICATION_SKIPPED`를 남긴다.
+- `orderId` 없는 고객 마케팅과 매장·profile target 알림을 실제 데이터로 표현하는 migration에서
+  `notification_delivery.order_id`를 nullable로 바꾸고 recipient별 분류 계약 테스트를 함께 추가한다.
+  nullable 변경만 먼저 하지 않는다.
 - 포인트 만료 임박, 쿠폰 발급 안내, 프로모션 시작 알림은 `orderId`가 없으므로 `MARKETING`이다.
 - **매장 대상 알림은 예외 없이 `TRANSACTIONAL`이다.** 정산 완료, 이의제기 판정처럼 `orderId`가
   없는 매장 알림도 마찬가지다. 금전이 움직이는 사실을 점주가 끄지 못하게 한다.
@@ -70,7 +74,14 @@ recipientType = CUSTOMER  AND orderId 없음 → MARKETING
   외부 Provider claim 직전에도 다시 확인해 생성 후 opt-out한 고객에게 발송하지 않는다. 이미 생성된
   알림함 항목은 소급 삭제하지 않는다. preference 조회 실패는 기본 opt-in/out으로 추정하지 않고 event
   처리 또는 delivery를 retry한다.
+- 마케팅 생성, Provider claim과 수신 설정 변경은 CustomerAccount의 preference row lock을 공통
+  선형화 지점으로 사용한다. claim이 lock을 먼저 획득하면 그 알림은 발송될 수 있고, opt-out 변경이
+  먼저 획득하면 새 InboxItem·Delivery를 만들지 않거나 기존 Delivery를 `SKIPPED`로 전환한다.
+  Provider 호출은 claim transaction commit 뒤에 수행하므로 opt-out 응답 이후의 이미 확정된 claim을
+  취소한 것으로 추정하지 않는다.
 - 이 규칙으로도 애매한 알림이 생기면 `MARKETING`으로 둔다. 거래 진행에 필수인지가 최종 판단 기준이다.
+- opt-out으로 생성하지 않은 결과는 delivery 성공이나 실패가 아니다. 해당 source의 owner가 결과 상태를
+  보존해야 하면 delivery ID 없이 `NOTIFICATION_SKIPPED`처럼 명시적으로 기록한다.
 
 ### API
 
@@ -187,6 +198,8 @@ worker가 기본 1시간마다 최대 100개를 `(retention_expires_at, id)` 순
 
 - 채널 전달이 실패해도 알림함 항목이 존재하는지 검증한다.
 - 현재 6개 템플릿이 모두 `TRANSACTIONAL`로 분류되는지 검증한다.
+- 주문 연결 goodwill은 `TRANSACTIONAL`, 주문 없는 goodwill은 `MARKETING`으로 분류되고 기본 opt-out에서
+  InboxItem·Delivery 없이 `NOTIFICATION_SKIPPED`로 끝나는지 검증한다.
 - `orderId`가 없는 고객 알림이 `MARKETING`으로, `orderId`가 없는 매장 알림이 `TRANSACTIONAL`로
   분류되는지 검증한다.
 - `MARKETING` 기본값이 수신 거부이고 옵트인 전에는 발송되지 않는지 검증한다.
@@ -215,6 +228,18 @@ worker가 기본 1시간마다 최대 100개를 `(retention_expires_at, id)` 순
 - 알림 채널이 늘어 채널별 설정이 필요할 때
 - 알림함 항목 수가 커져 보존·아카이빙 전략이 필요할 때
 - 분류 경계 판단이 반복적으로 어려워질 때
+
+### Global bell unread summary Amendment (2026-08-25)
+
+`GET /api/v1/me/notification-summary`는 customer Session scope에서 unread InboxItem이 하나라도 있는지만
+`{ "hasUnread": boolean }`로 반환한다. count, title/body, target와 Delivery state를 전역 shell에
+노출하지 않고 counter/cache table도 만들지 않는다. `read_at IS NULL` 존재 여부를 bounded query로
+읽으며 이를 위한 partial index를 둘 수 있다.
+
+summary query 실패는 bell이 `hasUnread=false`인 것처럼 성공하지 않고 명시적 실패 상태가 된다.
+성공한 빈 inbox만 false다. InboxItem 생성, cursor 목록, `{ read: true }` idempotent 204,
+marketing preference와 90일 retention 의미는 그대로다. read 처리 성공 뒤 client는 summary를
+재검증하되 NotificationDelivery 성공/실패를 unread 상태로 추론하지 않는다.
 
 ## Related Decisions
 

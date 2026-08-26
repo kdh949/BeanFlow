@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { apiError, catalogHandlers, favoriteHandlers, ids, pending, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
+import { apiError, catalogHandlers, customerStore, favoriteHandlers, ids, pending, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { StoreDetailPage } from "./StoreDetailPage";
 
 const meta = {
@@ -9,6 +9,7 @@ const meta = {
   component: StoreDetailPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -27,6 +28,10 @@ export const Orderable: Story = {
   parameters: { msw: { handlers: [...signedInHandlers, ...storeIdentityHandlers, ...catalogHandlers, ...favoriteHandlers] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("heading", { name: "시청점" })).toBeVisible();
+    await expect(await canvas.findByText("서울 중구 세종대로 110")).toBeVisible();
+    await expect(await canvas.findByText("고소한 귀리 음료와 에스프레소의 균형")).toBeVisible();
+    await expect(await canvas.findByRole("heading", { name: "라떼" })).toBeVisible();
+    await expect(await canvas.findByRole("heading", { name: "미분류" })).toBeVisible();
     await expect(await canvas.findByRole("button", { name: /오늘의 필터 커피/ })).toBeDisabled();
   },
 };
@@ -37,6 +42,11 @@ export const PickupClosed: Story = {
       handlers: [
         ...signedInHandlers,
         ...storeIdentityHandlers,
+        http.get("/api/v1/stores/:storeId", () => HttpResponse.json({
+          ...customerStore,
+          pickupAvailable: false,
+          nextPickupWindow: undefined,
+        })),
         ...favoriteHandlers,
         http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [] })),
         http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [] })),
@@ -45,6 +55,30 @@ export const PickupClosed: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(/지금은 픽업 시간이 모두 마감됐어요/)).toBeVisible();
+  },
+};
+
+export const OrderingUnavailableWhileOpen: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...signedInHandlers,
+        http.get("/api/v1/stores/:storeId", () => HttpResponse.json({
+          ...customerStore,
+          orderingAvailable: false,
+          pickupAvailable: false,
+          nextPickupWindow: undefined,
+        })),
+        ...catalogHandlers,
+        ...favoriteHandlers,
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("영업 중")).toBeVisible();
+    await expect(await canvas.findByText("주문 불가")).toBeVisible();
+    await expect(await canvas.findByText(/현재 주문을 받지 않아요/)).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: /오트 라떼/ })).toBeDisabled();
   },
 };
 

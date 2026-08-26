@@ -31,14 +31,18 @@ internal class CustomerStoreHydrator(
     ): List<CustomerStoreView> {
         val orderedIds = storeIds.distinct()
         val displays = visibleStores(orderedIds)
-        val availableStoreIds = availability.findStoresWithAvailableSlots(displays.map(StoreDiscoveryDisplayProjection::storeId), now)
+        val pickupWindows = availability.findEarliestAvailableSlots(displays.map(StoreDiscoveryDisplayProjection::storeId), now)
         val displayByStoreId = displays.associateBy(StoreDiscoveryDisplayProjection::storeId)
         return orderedIds.mapNotNull { storeId ->
             displayByStoreId[storeId]?.let { display ->
+                val nextPickup = if (display.orderingAvailable) pickupWindows[display.storeId] else null
                 CustomerStoreView(
                     storeId = display.storeId,
                     name = display.name,
-                    pickupAvailable = display.pickupCapable && display.storeId in availableStoreIds,
+                    orderingAvailable = display.orderingAvailable,
+                    pickupAvailable = nextPickup != null,
+                    nextPickupWindow = nextPickup?.toCustomerView(),
+                    customerDisplay = display.customerDisplay.toCustomerView(now),
                     image = imageViews.resolve(display.imageThumbnailKey),
                 )
             }

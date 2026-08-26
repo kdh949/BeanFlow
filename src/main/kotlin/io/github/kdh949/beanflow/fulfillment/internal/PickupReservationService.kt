@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.fulfillment.internal
 
+import io.github.kdh949.beanflow.fulfillment.api.PickupQuoteOperations
+import io.github.kdh949.beanflow.fulfillment.api.PickupQuoteSnapshot
 import io.github.kdh949.beanflow.fulfillment.api.PickupRescheduleReport
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationGrant
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
@@ -32,7 +34,49 @@ internal class PickupReservationService(
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
-) : PickupReservationOperations {
+) : PickupReservationOperations,
+    PickupQuoteOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspect(
+        storeId: UUID,
+        pickupSlotId: UUID,
+    ): PickupQuoteSnapshot = requireQuote(storeId, slotRepository.findById(pickupSlotId).orElse(null))
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockForOrderCreation(
+        storeId: UUID,
+        pickupSlotId: UUID,
+    ): PickupQuoteSnapshot = requireQuote(storeId, slotRepository.findLockedById(pickupSlotId))
+
+    private fun requireQuote(
+        storeId: UUID,
+        slot: PickupSlotEntity?,
+    ): PickupQuoteSnapshot {
+        val current = slot ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Pickup slot was not found")
+        if (current.storeId != storeId) {
+            fail(FailureCode.INVALID_REQUEST, "Pickup slot belongs to another store")
+        }
+        if (!current.endsAt.isAfter(current.startsAt)) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Pickup slot window is invalid")
+        }
+        if (!current.startsAt.isAfter(clock.instant())) {
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Pickup slot has already started")
+        }
+        if (current.reservedCount + current.confirmedCount >= current.capacity) {
+            fail(FailureCode.PICKUP_SLOT_FULL, "Pickup slot capacity is exhausted")
+        }
+        return PickupQuoteSnapshot(
+            pickupSlotId = current.id,
+            storeId = current.storeId,
+            startsAt = current.startsAt,
+            endsAt = current.endsAt,
+            capacity = current.capacity,
+            reservedCount = current.reservedCount,
+            confirmedCount = current.confirmedCount,
+            version = current.version,
+        )
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReservePickupCommand): PickupReservationGrant {
         if (command.sourceReference.isBlank()) {

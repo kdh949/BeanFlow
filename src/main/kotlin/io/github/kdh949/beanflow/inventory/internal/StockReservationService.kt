@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.inventory.internal
 
 import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
 import io.github.kdh949.beanflow.inventory.api.RestoreStockAfterTerminationCommand
+import io.github.kdh949.beanflow.inventory.api.StockQuoteItem
+import io.github.kdh949.beanflow.inventory.api.StockQuoteOperations
 import io.github.kdh949.beanflow.inventory.api.StockRequirement
 import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -27,7 +29,50 @@ internal class StockReservationService(
     private val identifierSource: IdentifierSource,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
-) : StockReservationOperations {
+) : StockReservationOperations,
+    StockQuoteOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspect(
+        storeId: UUID,
+        requirements: List<StockRequirement>,
+    ): List<StockQuoteItem> {
+        val aggregated = aggregate(requirements)
+        val stocks = stockRepository.findAllById(aggregated.map(StockRequirement::sellableUnitId)).associateBy(SellableStockEntity::id)
+        return aggregated.map { requirement -> quoteItem(storeId, requirement, stocks[requirement.sellableUnitId]) }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockForOrderCreation(
+        storeId: UUID,
+        requirements: List<StockRequirement>,
+    ): List<StockQuoteItem> =
+        aggregate(requirements).map { requirement ->
+            quoteItem(storeId, requirement, stockRepository.findLockedById(requirement.sellableUnitId))
+        }
+
+    private fun quoteItem(
+        storeId: UUID,
+        requirement: StockRequirement,
+        stock: SellableStockEntity?,
+    ): StockQuoteItem {
+        val current = stock ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Sellable stock was not found")
+        if (current.storeId != storeId) {
+            fail(FailureCode.INVALID_REQUEST, "Sellable stock belongs to another store")
+        }
+        if (current.availableQuantity < requirement.quantity) {
+            fail(FailureCode.STOCK_NOT_AVAILABLE, "Sellable stock is insufficient")
+        }
+        return StockQuoteItem(
+            sellableUnitId = current.id,
+            storeId = current.storeId,
+            requiredQuantity = requirement.quantity,
+            availableQuantity = current.availableQuantity,
+            reservedQuantity = current.reservedQuantity,
+            confirmedQuantity = current.confirmedQuantity,
+            version = current.version,
+        )
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     override fun reserve(command: ReserveStockCommand): List<UUID> {
         if (command.sourceReference.isBlank() || command.requirements.isEmpty()) {

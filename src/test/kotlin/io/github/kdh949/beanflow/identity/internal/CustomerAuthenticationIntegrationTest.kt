@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationFixture
+import io.github.kdh949.beanflow.ordering.internal.attachCurrentQuote
 import io.github.kdh949.beanflow.shared.api.BrowserActorType
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -68,6 +69,7 @@ internal class CustomerAuthenticationIntegrationTest(
     @Autowired private val passwordSecurity: CustomerPasswordSecurity,
     @Autowired private val clock: MutableCustomerAuthenticationClock,
     @Autowired private val dataSource: DataSource,
+    @Autowired private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
     @Autowired transactionManager: PlatformTransactionManager,
 ) {
     private val transactions = TransactionTemplate(transactionManager)
@@ -705,22 +707,25 @@ internal class CustomerAuthenticationIntegrationTest(
     private fun orderRequestBody(
         fixture: OrderCreationFixture,
         forgedCustomerId: UUID,
-    ): String =
-        """
-        {
-          "customerId": "$forgedCustomerId",
-          "storeId": "${fixture.storeId}",
-          "pickupSlotId": "${fixture.pickupSlotId}",
-          "lines": [
+    ): String {
+        val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command())
+        return """
             {
-              "menuId": "${fixture.menuId}",
-              "optionIds": [],
-              "quantity": 1
+              "customerId": "$forgedCustomerId",
+              "storeId": "${fixture.storeId}",
+              "pickupSlotId": "${fixture.pickupSlotId}",
+              "lines": [
+                {
+                  "menuId": "${fixture.menuId}",
+                  "optionIds": [],
+                  "quantity": 1
+                }
+              ],
+              "pointsToUseKrw": 0,
+              "expectedQuoteFingerprint": "${quote.expectedQuoteFingerprint}"
             }
-          ],
-          "pointsToUseKrw": 0
-        }
-        """.trimIndent()
+            """.trimIndent()
+    }
 
     private fun recordFailure(
         loginHmac: String,

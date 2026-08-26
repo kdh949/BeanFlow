@@ -4,6 +4,8 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
+import java.time.Instant
+import java.time.LocalDate
 
 internal class StoreOrderBoardEtagTest {
     private val etags = Sha256StoreOrderBoardEtagGenerator(JsonMapper.builder().build(), SimpleMeterRegistry())
@@ -34,5 +36,41 @@ internal class StoreOrderBoardEtagTest {
         assertThat(StoreOrderBoardConditionalRequest.matches("\"same\"", "W/\"same\"")).isTrue()
         assertThat(StoreOrderBoardConditionalRequest.matches("W/\"same\", \"other\"", "W/\"same\"")).isTrue()
         assertThat(StoreOrderBoardConditionalRequest.matches("\"other\"", "W/\"same\"")).isFalse()
+    }
+
+    @Test
+    fun `etag changes when only a persisted lifecycle timestamp changes`() {
+        val paidAt = Instant.parse("2026-08-14T03:00:00Z")
+        val item =
+            StoreOrderBoardItemResponse(
+                orderReference = "BF-2222-2222",
+                pickupNumber = "A-1",
+                pickupBusinessDate = LocalDate.parse("2026-08-14"),
+                lane = StoreOrderBoardLane.ACCEPTED,
+                status = "ACCEPTED",
+                pickupWindowStart = paidAt.plusSeconds(600),
+                pickupWindowEnd = paidAt.plusSeconds(1_200),
+                itemSummary = "Americano x 1",
+                acceptanceDeadlineAt = paidAt.plusSeconds(180),
+                acceptancePhase = null,
+                allowedActions = listOf(StoreOrderAction.START_PREPARING),
+                lifecycle = StoreOrderBoardLifecycleResponse(paidAt, paidAt.plusSeconds(10), null, null),
+            )
+        val first =
+            StoreOrderBoardResponse(
+                groups = listOf(StoreOrderBoardDateGroupResponse(item.pickupBusinessDate, listOf(item))),
+            )
+        val changed =
+            first.copy(
+                groups =
+                    listOf(
+                        StoreOrderBoardDateGroupResponse(
+                            item.pickupBusinessDate,
+                            listOf(item.copy(lifecycle = item.lifecycle?.copy(acceptedAt = paidAt.plusSeconds(11)))),
+                        ),
+                    ),
+            )
+
+        assertThat(etags.generate(changed)).isNotEqualTo(etags.generate(first))
     }
 }

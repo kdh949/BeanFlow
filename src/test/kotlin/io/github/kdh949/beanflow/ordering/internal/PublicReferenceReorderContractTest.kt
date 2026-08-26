@@ -35,6 +35,7 @@ internal class PublicReferenceReorderContractTest
     constructor(
         private val mockMvc: MockMvc,
         private val createOrder: CreateOrderUseCase,
+        private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val jdbcTemplate: JdbcTemplate,
     ) {
         @BeforeEach
@@ -107,7 +108,13 @@ internal class PublicReferenceReorderContractTest
         private fun sourceOrder(): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            check(createOrder.create("public-source-${UUID.randomUUID()}", fixture.command()).status == 201)
+            check(
+                createOrder
+                    .create(
+                        "public-source-${UUID.randomUUID()}",
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command()),
+                    ).status == 201,
+            )
             val reference =
                 requireNotNull(
                     jdbcTemplate.queryForObject("SELECT public_reference FROM ordering_order", String::class.java),

@@ -22,6 +22,13 @@ function sourceFiles(directory: string): string[] {
 function preview(selectedQuantity: number) {
   return {
     orderReference,
+    orderContext: {
+      orderedAt: "2026-08-17T02:50:00Z",
+      pickupWindow: { startsAt: "2026-08-17T03:20:00Z", endsAt: "2026-08-17T03:30:00Z" },
+      status: "PAID" as const,
+      pricing: { subtotalKrw: 8_000, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 8_000, currency: "KRW" as const },
+      paymentKind: "ONE_TIME_EXTERNAL" as const,
+    },
     lines: [
       {
         lineSequence: 0,
@@ -100,6 +107,20 @@ describe("merchant financial screens use no internal identifier", () => {
 });
 
 describe("merchant refund request carries no client-calculated money", () => {
+  it("renders only the server supplied safe order context", async () => {
+    vi.spyOn(merchantApi, "POST").mockResolvedValue({
+      data: preview(0),
+      response: new Response(null, { status: 200 }),
+    } as never);
+
+    renderRefundPage();
+
+    expect(await screen.findByRole("heading", { name: "환불 대상 주문" })).toBeInTheDocument();
+    expect(screen.getByText("일회성 결제")).toBeInTheDocument();
+    expect(screen.getByText("결제 금액").nextElementSibling).toHaveTextContent("₩8,000");
+    expect(screen.queryByText(/부가세|카드|Provider|paymentId|customerId/i)).not.toBeInTheDocument();
+  });
+
   it("sends only line sequences, quantities, the preview version and a reason", async () => {
     const post = vi.spyOn(merchantApi, "POST").mockImplementation((async (path: string) => {
       if (path.endsWith("/refund-previews")) {
