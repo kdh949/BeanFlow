@@ -44,11 +44,22 @@ internal class JpaMenuQuoteService(
         return calculator.quoteCurrentBatch(store = store, menus = menus, lines = lines)
     }
 
-    override fun quoteForOrder(
+    override fun inspectForQuote(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = false)
+
+    override fun lockForOrderCreation(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+    ): MerchantOrderQuoteSnapshot = quoteForOrder(storeId, lines, lockStore = true)
+
+    private fun quoteForOrder(
+        storeId: UUID,
+        lines: List<QuoteOrderLine>,
+        lockStore: Boolean,
     ): MerchantOrderQuoteSnapshot {
-        val loaded = load(storeId, lines)
+        val loaded = load(storeId, lines, lockStore)
         val quotes = calculator.quote(store = loaded.storeDefinition, menus = loaded.menuDefinitions, lines = lines)
         return MerchantOrderQuoteSnapshot(
             storeAcceptingOrders = loaded.storeDefinition.acceptingOrders,
@@ -61,16 +72,17 @@ internal class JpaMenuQuoteService(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
     ): Pair<StoreDefinition, Map<UUID, MenuDefinition>> {
-        val loaded = load(storeId, lines)
+        val loaded = load(storeId, lines, lockStore = false)
         return loaded.storeDefinition to loaded.menuDefinitions
     }
 
     private fun load(
         storeId: UUID,
         lines: List<QuoteOrderLine>,
+        lockStore: Boolean = false,
     ): LoadedMenuDefinitions {
         val store =
-            storeRepository.findById(storeId).orElse(null)
+            (if (lockStore) storeRepository.findByIdForShare(storeId) else storeRepository.findById(storeId).orElse(null))
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store was not found")
         val requestedMenuIds = lines.map(QuoteOrderLine::menuId).toSet()
         val menuEntities = menuRepository.findAllById(requestedMenuIds)

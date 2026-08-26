@@ -55,14 +55,16 @@ cached/stale owner 값 또는 가짜 슬롯으로 성공하지 않는다.
 
 ### 2. 하나의 versioned canonical fingerprint 함수를 공유한다
 
-quote와 최종 주문 생성은 `order-quote-fingerprint/v1` canonical material과 SHA-256 소문자 hex
+quote와 최종 주문 생성은 `order-quote-fingerprint/v2` canonical material과 SHA-256 소문자 hex
 함수를 공유한다. transport는 fingerprint를 opaque 문자열로 취급하며 client가 내용을 해석하거나
 계산하지 않는다. `quotedAt`은 정보용이므로 material에 포함하지 않는다.
 
-V1 material은 최소한 다음 전체 의미를 결정적으로 포함한다.
+V2 material은 최소한 다음 전체 의미를 결정적으로 포함한다. V2는 Store/Menu의 표시·이미지 변경에도
+증가하는 coarse persistence version을 제외하고, Store 주문/pickup policy와 선택된 메뉴·옵션의 이름,
+가격, 구성, 재고 요구량을 canonical value로 직접 포함한다.
 
 - 정규화한 editable input: Store·slot·menu·option 식별자, 수량, coupon issuance, 요청 포인트
-- catalog snapshot: 메뉴·옵션 표시명, 가격, 판매 가능성, 선택 구성과 quote에 영향을 주는 owner version
+- catalog snapshot: 메뉴·옵션 표시명, 가격, 판매 가능성, 선택 구성과 거래 전용 owner version 또는 canonical value
 - benefit snapshot: coupon source/terms/version과 line 배분, 실제 적용 포인트와 lot issuer provenance,
   적용 policy version
 - pickup snapshot: slot 식별자·시작/종료, Store 주문/pickup policy, 용량 eligibility와 관련 owner version
@@ -77,8 +79,10 @@ final-create를 같은 배포에서 원자적으로 바꾼다. `payableKrw`만 �
 
 `POST /orders`는 같은 editable input과 필수 `expectedQuoteFingerprint`를 받으며 client 계산 금액,
 discount, reservation ID 또는 Provider input을 받지 않는다. 기존 주문 생성 idempotency 원장을 먼저
-등록한 뒤, 기존 lock 순서를 지키는 짧은 transaction에서 현재 owner state를 다시 읽고 full fingerprint를
-계산한다.
+등록한 뒤, 기존 lock 순서를 지키는 짧은 transaction에서 Store root shared lock을 가장 먼저 획득하고
+현재 owner state를 다시 읽어 full fingerprint를 계산한다. Store 주문 정책·Menu 거래 의미를 바꾸는
+writer가 노출되면 같은 Store root의 exclusive lock을 먼저 획득해야 한다. writer가 먼저 commit하면
+주문은 `ORDER_QUOTE_STALE`, 주문이 먼저 shared lock을 획득하면 writer는 주문 commit까지 대기한다.
 
 - exact match이면 같은 server 계산으로 자원을 예약하고 immutable Order snapshot을 저장한다.
 - mismatch이면 transaction을 rollback하고 `409 ORDER_QUOTE_STALE`과

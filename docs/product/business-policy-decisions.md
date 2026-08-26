@@ -2326,13 +2326,15 @@
   호출하지 않으며 `Idempotency-Key`를 받지 않는다.
 - **Fingerprint Authority:** quote와 final-create는 versioned canonical full fingerprint 함수를
   공유한다. fingerprint는 normalized input, line/option 구성과 표시 snapshot, 가격, benefit
-  source/terms/version·배분, point lot issuer provenance, pickup window/eligibility와 관련 owner
-  version을 포함한다. `quotedAt`은 제외한다. fingerprint는 금액, reservation ID, 인증·권한 token,
-  Provider input 또는 client가 계산할 수 있는 authority가 아니다.
+  source/terms/version·배분, point lot issuer provenance, pickup window/eligibility와 Store 주문 정책을
+  포함한다. Menu/Store의 표시·이미지와 함께 증가하는 coarse persistence version은 제외하고 거래를
+  결정하는 canonical value 또는 분리된 trade version만 포함한다. `quotedAt`은 제외한다. fingerprint는
+  금액, reservation ID, 인증·권한 token, Provider input 또는 client가 계산할 수 있는 authority가 아니다.
 - **Final Order Boundary:** `POST /orders`는 editable input과 필수
   `expectedQuoteFingerprint`만 받으며 client money를 받지 않는다. 기존 lock 순서와 짧은 주문
-  transaction에서 현재 상태를 다시 계산하고 full fingerprint가 exact match일 때만 reservation과
-  immutable Order snapshot을 commit한다.
+  transaction에서 Store root shared lock을 먼저 획득해 현재 상태를 다시 계산하고 full fingerprint가
+  exact match일 때만 reservation과 immutable Order snapshot을 commit한다. Store 주문 정책·Menu 거래
+  writer는 같은 root의 exclusive lock을 먼저 획득한다.
 - **Stale and Idempotency:** mismatch는 `409 ORDER_QUOTE_STALE`과
   `currentQuote`를 반환한다. 거래 write는 전부 rollback하지만 BR-25에 따라 첫 409 status/body를
   terminal 주문 생성 idempotency 응답으로 저장·재생한다. customer가 current quote를 명시적으로
@@ -2356,6 +2358,8 @@
   - stale transaction의 거래 write 0건과 terminal idempotency row 1건
   - 동일 key·payload stale byte-equivalent replay, 같은 key·새 fingerprint 거절, 새 key 재실행
   - malformed/tampered fingerprint, client money 거부와 concurrent owner 변경
+  - writer-first stale과 Order-first writer commit 대기의 실제 PostgreSQL 경합
+  - Menu 표시 설명·분류와 Store/Menu 이미지 변경 뒤 fingerprint 불변
 - **ADR Required:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)
 - **Revisit Conditions:** 가격 보장 기간, persistent quote identity, cart hold, 사전 승인 또는 분산
   owner 저장소가 제품 요구가 될 때

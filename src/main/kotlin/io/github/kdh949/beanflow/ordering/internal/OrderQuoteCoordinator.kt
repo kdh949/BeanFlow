@@ -88,7 +88,12 @@ internal class OrderQuoteCoordinator(
         validate(command)
         val quotedAt = clock.instant()
         val quoteLines = command.lines.map { QuoteOrderLine(it.menuId, it.optionIds, it.quantity) }
-        val menu = merchantQuoteOperations.quoteForOrder(command.storeId, quoteLines)
+        val menu =
+            if (lock) {
+                merchantQuoteOperations.lockForOrderCreation(command.storeId, quoteLines)
+            } else {
+                merchantQuoteOperations.inspectForQuote(command.storeId, quoteLines)
+            }
         requireMenuIdentity(command, menu)
         val storeDisplay = storeDisplayOperations.require(command.storeId)
         val settlementTerms = settlementTermsOperations.findApplicable(command.storeId, quotedAt)
@@ -258,7 +263,7 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v1"
+    private const val VERSION = "order-quote-fingerprint/v2"
 
     fun calculate(
         command: OrderQuoteCommand,
