@@ -481,7 +481,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   commit `c3932ef`, PR #117(`main <- feature/merchant-ordering-policy`)로 게시했다.
 - [x] 2026-08-27: stale expected version은 기존 점주 콘텐츠 writer와 같은
   `409 MERCHANT_CONTENT_STALE`를 재사용하기로 확정했다.
-- [ ] Milestone 1 Store policy vertical slice 완료.
+- [x] 2026-08-27: Milestone 1 Store policy vertical slice를 commits `98e0e8d`, `de0a9dc`,
+  PR #118(`feature/merchant-ordering-policy <- feature/merchant-store-ordering-policy`)로 게시했다.
 - [ ] Milestone 2 Menu catalogue vertical slice 완료.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
 
@@ -522,9 +523,13 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 
 ## Outcomes & Retrospective
 
-아직 구현하지 않았다. 완료 시 각 PR URL/commit, migration 번호, contract diff, concurrency interleaving evidence,
-frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `COMPLETED`는 combined head에서 required
-검증이 실제 통과한 뒤에만 선언한다.
+Milestone 1은 PR #118에서 V69 Store ordering policy version과 90일 command replay 원장, authenticated GET/PUT,
+membership FOR SHARE 뒤 Store FOR UPDATE, Audit와 quote fingerprint v3를 구현했다. PostgreSQL writer-first와
+Order-first, same-Store shared Order lock, membership revoke 경합, rollback, customer ordering projection을 검증했다.
+frontend는 `/store/catalog` policy panel과 11개 catalogue state story를 추가했고 live Storybook MCP에서 Store shell을
+포함한 12개 interaction+a11y가 통과했다. local docs/OpenAPI, focused backend, frontend type/unit/design/static docs/build와
+Sites가 통과했고 PR #118 remote CI는 게시 직후 대기 중이다. 전체 repository와 전체 Storybook suite는 Milestone 3에서
+실행한다. `COMPLETED`는 combined head에서 required 검증이 실제 통과한 뒤에만 선언한다.
 
 ## Revision Notes
 
@@ -534,3 +539,4 @@ frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `C
   ADR-118·BR-52 결정 기록과 함께 implementation readiness를 true로 전환했다.
 - 2026-08-27: membership/Store lock 순서와 404/403 의미를 확정하고 Storybook MCP prerequisite를 충족했다.
 - 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
+- 2026-08-27: V69 Store 주문 정책 vertical slice와 `/store/catalog` 소비자를 stacked PR #118로 게시했다.
