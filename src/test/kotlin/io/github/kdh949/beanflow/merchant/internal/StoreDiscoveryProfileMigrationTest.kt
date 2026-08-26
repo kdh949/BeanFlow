@@ -73,6 +73,7 @@ internal class StoreDiscoveryProfileMigrationTest : IsolatedPostgresSupport() {
         // 고쳐야 하고, 그때 그것이 검색 투영인지 아닌지 판단하게 된다.
         // brand_id는 검색 편의 필드가 아니라 ADR-112가 정한 Brand Aggregate 참조라 허용한다.
         // image_*는 ADR-114가 정한 현재 매장 이미지 pointer라 허용한다.
+        // ordering_policy_*는 ADR-118이 정한 주문 수락 거래 version과 갱신 시각이라 허용한다.
         // 매장명과 좌표는 여전히 merchant_store_discovery_profile만 가진다.
         assertThat(
             jdbcTemplate.queryForList(
@@ -89,6 +90,8 @@ internal class StoreDiscoveryProfileMigrationTest : IsolatedPostgresSupport() {
             "image_thumbnail_key",
             "image_sha256",
             "image_updated_at",
+            "ordering_policy_version",
+            "ordering_policy_updated_at",
         )
         assertThat(
             jdbcTemplate.queryForList(
