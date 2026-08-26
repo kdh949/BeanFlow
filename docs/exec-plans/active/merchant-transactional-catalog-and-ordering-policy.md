@@ -477,7 +477,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 - [x] 2026-08-26: 초기 bound를 Menu당 Option 100, Configuration 500, Configuration당 requirement 50으로 확정했다.
 - [x] 2026-08-26: ADR-118과 추가 ExecPlan 초안을 작성했다.
 - [x] 2026-08-27: Milestone 0 ADR·Business Policy와 completed dependency/readiness gate를 PR #116에 정리했다.
-- [x] 2026-08-27: authoring 권한과 Store commerce lock 순서 충돌을 발견하고 membership FOR SHARE 선취로 결정했다.
+- [x] 2026-08-27: authoring 권한과 Store commerce lock 순서 충돌을 membership FOR SHARE 선취로 해소하고
+  commit `c3932ef`, PR #117(`main <- feature/merchant-ordering-policy`)로 게시했다.
 - [ ] Milestone 1 Store policy vertical slice 완료.
 - [ ] Milestone 2 Menu catalogue vertical slice 완료.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
