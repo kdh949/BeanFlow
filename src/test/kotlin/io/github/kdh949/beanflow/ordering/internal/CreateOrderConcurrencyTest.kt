@@ -170,8 +170,9 @@ internal class CreateOrderConcurrencyTest
                 writer.get(5, TimeUnit.SECONDS)
 
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isOne()
-                assertThat(jdbcTemplate.queryForObject("SELECT base_price_krw FROM merchant_menu WHERE id = ?", Long::class.java, fixture.menuId))
-                    .isEqualTo(1200)
+                assertThat(
+                    jdbcTemplate.queryForObject("SELECT base_price_krw FROM merchant_menu WHERE id = ?", Long::class.java, fixture.menuId),
+                ).isEqualTo(1200)
             } finally {
                 allowOrderCommit.countDown()
                 executor.shutdownNow()
