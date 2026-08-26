@@ -79,6 +79,8 @@ internal class PostAcceptanceResolutionIntegrationTest
                     support_case,
                     operations_operator_permission_grant,
                     operations_audit_record,
+                    notification_customer_preference,
+                    notification_inbox_item,
                     notification_delivery,
                     payment_refund,
                     payment_provider_request_snapshot,

@@ -165,10 +165,10 @@ internal class SupportTimelineOwnerQueryIntegrationTest
             jdbcTemplate.update(
                 """
                 INSERT INTO notification_delivery (
-                    id, event_id, event_type, order_id, recipient_type, recipient_id, logical_channel,
+                    id, event_id, event_type, order_id, classification, recipient_type, recipient_id, logical_channel,
                     template, payload_json, state, attempt_count, next_attempt_at, provider_idempotency_key,
                     correlation_id, logical_source, created_at, updated_at
-                ) VALUES (?, ?, 'OrderCreated', ?, 'CUSTOMER', ?, 'CUSTOMER_APP', 'ORDER_READY',
+                ) VALUES (?, ?, 'OrderCreated', ?, 'TRANSACTIONAL', 'CUSTOMER', ?, 'CUSTOMER_APP', 'ORDER_READY',
                           '{"contact":"recipient@example.com"}', 'PENDING', 0, ?, 'provider-secret',
                           'timeline-notification', 'timeline-notification-source', ?, ?)
                 """.trimIndent(),

@@ -546,6 +546,38 @@ internal class SupportCompensationTransactionService(
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun skipNotification(
+        compensationRequestId: UUID,
+        retry: RetrySupportCompensationNotificationCommand?,
+        actorId: UUID,
+    ): SupportCompensationResource {
+        val entity = requests.findLockedById(compensationRequestId) ?: notFound()
+        if (entity.state == SupportCompensationRequestState.NOTIFICATION_SKIPPED) {
+            retry?.let { saveRetryIdempotency(it.normalized(), entity.id, now()) }
+            return resource(entity)
+        }
+        val aggregate = entity.toAggregate()
+        val changedAt = now()
+        aggregate.skipNotification(changedAt)
+        entity.apply(aggregate, changedAt)
+        requests.saveAndFlush(entity)
+        audits.appendAll(
+            listOf(
+                audit(
+                    actorId,
+                    "SUPPORT_COMPENSATION_NOTIFICATION_SKIPPED",
+                    entity.id,
+                    "MARKETING_OPT_OUT",
+                    AuditCategory.OPERATIONS_POLICY,
+                    changedAt,
+                ),
+            ),
+        )
+        retry?.let { saveRetryIdempotency(it.normalized(), entity.id, changedAt) }
+        return resource(entity)
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun recordNotificationFailure(
         compensationRequestId: UUID,
         retry: RetrySupportCompensationNotificationCommand?,
@@ -655,7 +687,7 @@ internal class SupportCompensationTransactionService(
                     command.responsibility,
                     session.requestedLevel,
                     terminals.findByIncidentId(command.incidentId) != null,
-                    command.expectedTargetVersion == (order?.version ?: 0),
+                    command.expectedTargetVersion == (order?.version ?: 0L),
                 ),
                 version,
                 evaluatedAt,

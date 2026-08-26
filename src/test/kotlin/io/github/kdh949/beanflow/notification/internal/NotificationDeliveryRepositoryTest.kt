@@ -10,7 +10,9 @@ import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.notification.api.ProfileNotificationOwnerType
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.notification.api.RequestGoodwillCompensationNotificationCommand
 import io.github.kdh949.beanflow.notification.api.RequestProfileChangeNotificationCommand
+import io.github.kdh949.beanflow.notification.internal.domain.NotificationClassification
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationDeliveryState
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogicalChannel
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
@@ -24,6 +26,7 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
 import io.github.kdh949.beanflow.shared.api.ProfileNotificationChannel
 import io.github.kdh949.beanflow.shared.api.ProfileNotificationTargetKind
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -53,9 +56,12 @@ internal class NotificationDeliveryRepositoryTest
     constructor(
         private val service: NotificationDeliveryService,
         private val repository: NotificationDeliveryJpaRepository,
+        private val inboxRepository: NotificationInboxItemJpaRepository,
+        private val preferenceRepository: NotificationCustomerPreferenceJpaRepository,
         private val compensationOperations: OrderCompensationOperations,
         private val provider: ScriptedTestNotificationProvider,
         private val jdbcTemplate: JdbcTemplate,
+        private val meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
@@ -65,6 +71,8 @@ internal class NotificationDeliveryRepositoryTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    notification_customer_preference,
+                    notification_inbox_item,
                     notification_delivery,
                     operations_reprocessing_case,
                     operations_order_compensation_step,
@@ -116,6 +124,7 @@ internal class NotificationDeliveryRepositoryTest
             assertThat(succeededStep.state).isEqualTo(OrderCompensationStepState.SUCCEEDED)
             assertThat(provider.requests.map { it.providerIdempotencyKey }.distinct()).hasSize(1)
             assertThat(repository.count()).isEqualTo(1)
+            assertThat(inboxRepository.count()).isEqualTo(1)
         }
 
         @Test
@@ -164,6 +173,8 @@ internal class NotificationDeliveryRepositoryTest
                     correlationId = "customer-cancellation-$orderId",
                 )
 
+            val createdBefore = inboxCreateMetric("TRANSACTIONAL", "created")
+            val replayedBefore = inboxCreateMetric("TRANSACTIONAL", "replayed")
             val first = transactions.execute { service.requestAccepted(command) }
             val replay = transactions.execute { service.requestAccepted(command) }
 
@@ -173,6 +184,78 @@ internal class NotificationDeliveryRepositoryTest
             assertThat(delivery.template).isEqualTo(NotificationTemplate.ORDER_CANCELLATION_ACCEPTED)
             assertThat(delivery.payloadJson).contains(orderId.toString(), "cancelledAt")
             assertThat(delivery.payloadJson).doesNotContain("reason", "detail")
+            assertThat(provider.requests).isEmpty()
+            assertThat(inboxRepository.count()).isEqualTo(1)
+            assertThat(inboxCreateMetric("TRANSACTIONAL", "created") - createdBefore).isEqualTo(1.0)
+            assertThat(inboxCreateMetric("TRANSACTIONAL", "replayed") - replayedBefore).isEqualTo(1.0)
+        }
+
+        @Test
+        fun `transactional customer source creates inbox and delivery despite marketing opt out`() {
+            val customerId = UUID.randomUUID()
+            preferenceRepository.saveAndFlush(NotificationCustomerPreferenceEntity(customerId, false, NOW))
+            val command =
+                RequestCustomerCancellationAcceptedNotificationCommand(
+                    eventId = UUID.randomUUID(),
+                    orderId = UUID.randomUUID(),
+                    customerId = customerId,
+                    storeId = UUID.randomUUID(),
+                    orderAggregateVersion = 3,
+                    cancelledAt = NOW,
+                    correlationId = "transactional-opt-out",
+                )
+
+            transactions.execute { service.requestAccepted(command) }
+
+            assertThat(repository.findAll().single().classification).isEqualTo(NotificationClassification.TRANSACTIONAL)
+            assertThat(inboxRepository.findAll().single().classification).isEqualTo(NotificationClassification.TRANSACTIONAL)
+        }
+
+        @Test
+        fun `orderless goodwill is skipped by default without inbox or delivery`() {
+            val suppressedBefore = inboxCreateMetric("MARKETING", "suppressed")
+            val result = service.requestGoodwill(goodwillCommand(UUID.randomUUID()))
+
+            assertThat(result.deliveryId).isNull()
+            assertThat(result.state).isEqualTo("NOTIFICATION_SKIPPED")
+            assertThat(repository.count()).isZero()
+            assertThat(inboxRepository.count()).isZero()
+            assertThat(provider.requests).isEmpty()
+            assertThat(inboxCreateMetric("MARKETING", "suppressed") - suppressedBefore).isEqualTo(1.0)
+        }
+
+        private fun inboxCreateMetric(
+            classification: String,
+            outcome: String,
+        ): Double =
+            meterRegistry
+                .find("beanflow.notification.inbox.create.count")
+                .tag("classification", classification)
+                .tag("outcome", outcome)
+                .counter()
+                ?.count() ?: 0.0
+
+        @Test
+        fun `opted in orderless goodwill creates one marketing source and later opt out skips provider`() {
+            val customerId = UUID.randomUUID()
+            preferenceRepository.saveAndFlush(NotificationCustomerPreferenceEntity(customerId, true, NOW))
+            val command = goodwillCommand(customerId)
+
+            val first = service.requestGoodwill(command)
+            val replay = service.requestGoodwill(command)
+
+            assertThat(replay).isEqualTo(first)
+            assertThat(repository.count()).isOne()
+            assertThat(inboxRepository.count()).isOne()
+            val delivery = repository.findAll().single()
+            assertThat(delivery.orderId).isNull()
+            assertThat(delivery.classification).isEqualTo(NotificationClassification.MARKETING)
+
+            preferenceRepository.saveAndFlush(NotificationCustomerPreferenceEntity(customerId, false, NOW.plusSeconds(1)))
+
+            assertThat(service.claimDue(NOW.plusSeconds(1), 10)).isEmpty()
+            assertThat(repository.findAll().single().state).isEqualTo(NotificationDeliveryState.SKIPPED)
+            assertThat(inboxRepository.count()).isOne()
             assertThat(provider.requests).isEmpty()
         }
 
@@ -275,6 +358,18 @@ internal class NotificationDeliveryRepositoryTest
             refundAmountKrw = amountKrw,
             outcomeAt = NOW,
         )
+
+        private fun goodwillCommand(customerId: UUID) =
+            RequestGoodwillCompensationNotificationCommand(
+                compensationRequestId = UUID.randomUUID(),
+                relatedOrderId = null,
+                customerId = customerId,
+                storeId = UUID.randomUUID(),
+                benefitType = "POINT",
+                amountKrw = 3_000,
+                issuedAt = NOW,
+                correlationId = "goodwill-$customerId",
+            )
 
         private fun cancellationDelayedEvent(
             orderId: UUID,

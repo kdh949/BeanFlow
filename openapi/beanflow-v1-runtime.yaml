@@ -66,6 +66,9 @@ tags:
   - name: Loyalty
     description: |
       고객의 적립 포인트 계좌 잔액과 적립/사용 거래 내역을 조회하는 API입니다.
+  - name: Notification
+    description: |
+      고객 알림함, unread summary와 마케팅 수신 설정을 다루는 API입니다.
   - name: Settlement
     description: |
       매장별 정산 배치와 정산 항목을 조회하는 API입니다.
@@ -77,7 +80,7 @@ tags:
       고객센터 상담원이 신원 확인, 계정 조사, 주문 변경 승인 등을 수행하는 API입니다.
 x-tagGroups:
   - name: 고객용 API
-    tags: [Identity, Discovery, Ordering, Promotion, Payment, Payment Methods, Loyalty]
+    tags: [Identity, Discovery, Ordering, Promotion, Payment, Payment Methods, Loyalty, Notification]
   - name: 가맹점(점주)용 API
     tags: [Merchant, Store Orders, Settlement, Dispute]
   - name: 운영자·내부 API
@@ -326,6 +329,14 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1points"
   /me/point-transactions:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1point-transactions"
+  /me/notification-summary:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1notification-summary"
+  /me/notifications:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1notifications"
+  /me/notifications/{notificationId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1notifications~1{notificationId}"
+  /me/notification-preferences:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1notification-preferences"
   /payment-config:
     $ref: "./beanflow-v1.yaml#/paths/~1payment-config"
   /orders/{orderId}/payment-attempts:

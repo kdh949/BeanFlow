@@ -872,6 +872,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/notification-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 알림함의 읽지 않은 항목 존재 여부 조회
+         * @description 성공한 빈 알림함만 `hasUnread=false`입니다. Delivery 상태, 알림 개수와 본문은 전역
+         *     shell에 노출하지 않으며 조회 의존성 실패를 false로 대체하지 않습니다.
+         */
+        get: operations["getCurrentCustomerNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 알림함 목록 조회
+         * @description `(createdAt DESC, notificationId DESC)` 순서의 customer-bound signed cursor를 사용합니다.
+         *     알림함 읽음 상태는 외부 Delivery 성공·실패와 독립이며 Provider 진단을 반환하지 않습니다.
+         */
+        get: operations["listCurrentCustomerNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 현재 고객 소유 알림을 읽음 처리
+         * @description `{ "read": true }`만 허용하며 최초 요청과 반복 요청 모두 204입니다. 다른 고객 소유
+         *     알림은 존재 여부를 노출하지 않고 404를 반환하며 unread 되돌리기는 지원하지 않습니다.
+         */
+        patch: operations["markCurrentCustomerNotificationRead"];
+        trace?: never;
+    };
+    "/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 고객 마케팅 알림 수신 설정 조회
+         * @description 설정 row가 없으면 명시적으로 `marketingOptIn=false`를 반환합니다.
+         */
+        get: operations["getCurrentCustomerNotificationPreferences"];
+        /**
+         * 현재 고객 마케팅 알림 수신 설정 전체 교체
+         * @description 거래 알림은 끌 수 없습니다. 새 마케팅 알림은 opt-in 고객에게만 생성되며 opt-out해도
+         *     이미 생성된 InboxItem은 소급 삭제하지 않습니다.
+         */
+        put: operations["replaceCurrentCustomerNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payment-config": {
         parameters: {
             query?: never;
@@ -5671,6 +5759,39 @@ export interface components {
             items: components["schemas"]["PointTransaction"][];
             /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
             page: components["schemas"]["PageInfo"];
+        };
+        NotificationSummary: {
+            hasUnread: boolean;
+        };
+        /** @enum {string} */
+        NotificationClassification: "TRANSACTIONAL" | "MARKETING";
+        NotificationTarget: {
+            /** @enum {string} */
+            type: "NONE" | "ORDER";
+            reference?: string;
+        } & (unknown & unknown);
+        NotificationItem: {
+            notificationId: components["schemas"]["Identifier"];
+            title: string;
+            body: string;
+            createdAt: components["schemas"]["DateTime"];
+            readAt?: components["schemas"]["DateTime"];
+            classification: components["schemas"]["NotificationClassification"];
+            target: components["schemas"]["NotificationTarget"];
+        };
+        NotificationPage: {
+            items: components["schemas"]["NotificationItem"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        MarkNotificationReadRequest: {
+            /** @constant */
+            read: true;
+        };
+        NotificationPreference: {
+            marketingOptIn: boolean;
+        };
+        ReplaceNotificationPreferenceRequest: {
+            marketingOptIn: boolean;
         };
         PaymentClientConfiguration: {
             /** @constant */
@@ -11718,6 +11839,144 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 범위 unread 존재 여부 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCurrentCustomerNotifications: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 안전한 고객 표시 copy와 target만 포함하는 알림 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    markCurrentCustomerNotificationRead: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                notificationId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkNotificationReadRequest"];
+            };
+        };
+        responses: {
+            /** @description 알림 읽음 처리 완료 또는 멱등 재생 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentCustomerNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 고객 마케팅 알림 수신 설정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceCurrentCustomerNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceNotificationPreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description 전체 교체 후 현재 설정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreference"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

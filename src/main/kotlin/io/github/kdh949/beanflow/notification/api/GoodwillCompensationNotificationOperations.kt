@@ -15,7 +15,7 @@ data class RequestGoodwillCompensationNotificationCommand(
 )
 
 data class AcceptedGoodwillCompensationNotification(
-    val deliveryId: UUID,
+    val deliveryId: UUID?,
     val state: String,
 )
 

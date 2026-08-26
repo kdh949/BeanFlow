@@ -28,6 +28,7 @@ tags:
   - name: Merchant
   - name: Operations
   - name: Loyalty
+  - name: Notification
   - name: Settlement
   - name: Dispute
   - name: Support
@@ -502,6 +503,119 @@ paths:
               schema: { $ref: "#/components/schemas/PointTransactionPage" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notification-summary:
+    get:
+      tags: [Notification]
+      operationId: getCurrentCustomerNotificationSummary
+      summary: 현재 고객 알림함의 읽지 않은 항목 존재 여부 조회
+      description: |
+        성공한 빈 알림함만 `hasUnread=false`입니다. Delivery 상태, 알림 개수와 본문은 전역
+        shell에 노출하지 않으며 조회 의존성 실패를 false로 대체하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: 고객 범위 unread 존재 여부
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notifications:
+    get:
+      tags: [Notification]
+      operationId: listCurrentCustomerNotifications
+      summary: 현재 고객 알림함 목록 조회
+      description: |
+        `(createdAt DESC, notificationId DESC)` 순서의 customer-bound signed cursor를 사용합니다.
+        알림함 읽음 상태는 외부 Delivery 성공·실패와 독립이며 Provider 진단을 반환하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 안전한 고객 표시 copy와 target만 포함하는 알림 페이지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notifications/{notificationId}:
+    patch:
+      tags: [Notification]
+      operationId: markCurrentCustomerNotificationRead
+      summary: 현재 고객 소유 알림을 읽음 처리
+      description: |
+        `{ "read": true }`만 허용하며 최초 요청과 반복 요청 모두 204입니다. 다른 고객 소유
+        알림은 존재 여부를 노출하지 않고 404를 반환하며 unread 되돌리기는 지원하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - in: path
+          name: notificationId
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MarkNotificationReadRequest" }
+      responses:
+        "204": { description: 알림 읽음 처리 완료 또는 멱등 재생 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/notification-preferences:
+    get:
+      tags: [Notification]
+      operationId: getCurrentCustomerNotificationPreferences
+      summary: 현재 고객 마케팅 알림 수신 설정 조회
+      description: 설정 row가 없으면 명시적으로 `marketingOptIn=false`를 반환합니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: 현재 고객 마케팅 알림 수신 설정
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+    put:
+      tags: [Notification]
+      operationId: replaceCurrentCustomerNotificationPreferences
+      summary: 현재 고객 마케팅 알림 수신 설정 전체 교체
+      description: |
+        거래 알림은 끌 수 없습니다. 새 마케팅 알림은 opt-in 고객에게만 생성되며 opt-out해도
+        이미 생성된 InboxItem은 소급 삭제하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceNotificationPreferenceRequest" }
+      responses:
+        "200":
+          description: 전체 교체 후 현재 설정
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/search:
     get:
@@ -7593,6 +7707,74 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CustomerOrderSummary" }
         page: { $ref: "#/components/schemas/PageInfo" }
+    NotificationClassification:
+      type: string
+      enum: [TRANSACTIONAL, MARKETING]
+    NotificationTarget:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, enum: [NONE, ORDER] }
+        reference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+      allOf:
+        - if:
+            properties: { type: { const: ORDER } }
+            required: [type]
+          then:
+            required: [reference]
+        - if:
+            properties: { type: { const: NONE } }
+            required: [type]
+          then:
+            not: { required: [reference] }
+    NotificationItem:
+      type: object
+      additionalProperties: false
+      required: [notificationId, title, body, createdAt, classification, target]
+      properties:
+        notificationId: { $ref: "#/components/schemas/Identifier" }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, minLength: 1, maxLength: 500 }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        readAt: { $ref: "#/components/schemas/DateTime" }
+        classification: { $ref: "#/components/schemas/NotificationClassification" }
+        target: { $ref: "#/components/schemas/NotificationTarget" }
+    NotificationPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationItem" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+    NotificationSummary:
+      type: object
+      additionalProperties: false
+      required: [hasUnread]
+      properties:
+        hasUnread: { type: boolean }
+    MarkNotificationReadRequest:
+      type: object
+      additionalProperties: false
+      required: [read]
+      properties:
+        read: { type: boolean, const: true }
+    NotificationPreference:
+      type: object
+      additionalProperties: false
+      required: [marketingOptIn]
+      properties:
+        marketingOptIn: { type: boolean }
+    ReplaceNotificationPreferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [marketingOptIn]
+      properties:
+        marketingOptIn: { type: boolean }
     CouponWalletInapplicableReason:
       type: string
       enum: [STORE_NOT_APPLICABLE]

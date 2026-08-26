@@ -92,6 +92,8 @@ internal class StoreOrderLifecycleIntegrationTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    notification_customer_preference,
+                    notification_inbox_item,
                     notification_delivery,
                     payment_refund,
                     operations_order_compensation_step,

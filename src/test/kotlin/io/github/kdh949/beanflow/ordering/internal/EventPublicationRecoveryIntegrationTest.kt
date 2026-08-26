@@ -81,7 +81,8 @@ internal class EventPublicationRecoveryIntegrationTest
         fun cleanDatabase() {
             await("previous publications to complete") { incompletePublicationCount() == 0L }
             jdbcTemplate.execute(
-                "TRUNCATE TABLE notification_delivery, operations_reprocessing_case, " +
+                "TRUNCATE TABLE notification_customer_preference, notification_inbox_item, notification_delivery, " +
+                    "operations_reprocessing_case, " +
                     "operations_order_compensation_case, inventory_stock_reservation, " +
                     "inventory_sellable_stock, event_publication CASCADE",
             )
@@ -139,7 +140,8 @@ internal class EventPublicationRecoveryIntegrationTest
                     incompletePublicationCount() == 1L &&
                     incompletePublicationAttemptCount() == 1 &&
                     incompletePublicationStatus() == "FAILED" &&
-                    notificationCount(event.envelope.eventId) == 1L
+                    notificationCount(event.envelope.eventId) == 1L &&
+                    inboxCount(event.customerId) == 1L
             }
             failingListener.allowSuccess()
             clock.advance(Duration.ofSeconds(12))
@@ -150,6 +152,7 @@ internal class EventPublicationRecoveryIntegrationTest
                 failingListener.callCount() == 2 && incompletePublicationCount() == 0L
             }
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
+            assertThat(inboxCount(event.customerId)).isEqualTo(1)
         }
 
         @Test
@@ -181,7 +184,8 @@ internal class EventPublicationRecoveryIntegrationTest
                 failingListener.callCount() == 1 &&
                     incompletePublicationAttemptCount() == 1 &&
                     incompletePublicationStatus() == "FAILED" &&
-                    notificationCount(event.envelope.eventId) == 1L
+                    notificationCount(event.envelope.eventId) == 1L &&
+                    inboxCount(event.customerId) == 1L
             }
             listOf(12L, 31L, 121L, 301L, 901L).forEachIndexed { index, seconds ->
                 clock.advance(Duration.ofSeconds(seconds))
@@ -199,6 +203,7 @@ internal class EventPublicationRecoveryIntegrationTest
             assertThat(incompletePublicationAttemptCount()).isEqualTo(6)
             assertThat(eventPublicationManualReviewCount(event.envelope.correlationId)).isEqualTo(1)
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
+            assertThat(inboxCount(event.customerId)).isEqualTo(1)
         }
 
         @Test
@@ -420,6 +425,15 @@ internal class EventPublicationRecoveryIntegrationTest
                     "SELECT count(*) FROM notification_delivery WHERE event_id = ?",
                     Long::class.java,
                     eventId,
+                ),
+            )
+
+        private fun inboxCount(customerId: UUID): Long =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM notification_inbox_item WHERE customer_id = ?",
+                    Long::class.java,
+                    customerId,
                 ),
             )
 
