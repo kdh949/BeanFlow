@@ -483,7 +483,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   `409 MERCHANT_CONTENT_STALE`를 재사용하기로 확정했다.
 - [x] 2026-08-27: Milestone 1 Store policy vertical slice를 commits `98e0e8d`, `de0a9dc`,
   PR #118(`feature/merchant-ordering-policy <- feature/merchant-store-ordering-policy`)로 게시했다.
-- [ ] Milestone 2 Menu catalogue vertical slice 완료.
+- [x] 2026-08-27: Milestone 2 Menu catalogue vertical slice를 commits `d404eb1`, `b713580`,
+  PR #119(`feature/merchant-store-ordering-policy <- feature/merchant-menu-catalog-lifecycle`)로 게시했다.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
 
 ## Surprises & Discoveries
@@ -531,6 +532,17 @@ frontend는 `/store/catalog` policy panel과 11개 catalogue state story를 추�
 Sites가 통과했고 PR #118 remote CI는 게시 직후 대기 중이다. 전체 repository와 전체 Storybook suite는 Milestone 3에서
 실행한다. `COMPLETED`는 combined head에서 required 검증이 실제 통과한 뒤에만 선언한다.
 
+Milestone 2는 PR #119에서 V70 Menu ACTIVE/ARCHIVED 수명주기, 별도 `trade_version`, 활성 판매 구성 유일성,
+90일 command replay 원장과 create/replace/archive API를 구현했다. mutation은 membership FOR SHARE 뒤 Store
+FOR UPDATE를 획득하고 Menu Aggregate, 검색어, Audit, command ledger를 같은 transaction에서 반영한다. 주문과 같은
+Store lock 순서를 사용하며 A→B→A 거래 상태 복귀도 version으로 기존 quote를 stale 처리한다. 실제 1,000 Menu,
+5,000 Option과 Menu당 100 Option/500 Configuration, Configuration당 50 requirement 경계, 동일 command 동시 replay,
+검색 동기화 실패 rollback을 PostgreSQL integration test로 검증했다. frontend는 signed keyset pagination과 전체
+Aggregate 편집, archive, stale/idempotency/permission/dependency 상태를 소비하며 focused 26개 Storybook
+interaction+a11y와 static Storybook build가 통과했다. local docs/OpenAPI, focused backend, frontend design/type/unit도
+통과했고 PR #119 remote CI는 preflight 성공 후 나머지 job이 진행 중이다. 전체 회귀·성능·lock-wait 증거는 계약을
+변경하지 않는 Milestone 3 child PR에서 완료한다.
+
 ## Revision Notes
 
 - 2026-08-26: review finding 검증과 사용자 결정을 바탕으로 최초 작성. vertical slice와 docs-only first PR,
@@ -540,3 +552,4 @@ Sites가 통과했고 PR #118 remote CI는 게시 직후 대기 중이다. 전�
 - 2026-08-27: membership/Store lock 순서와 404/403 의미를 확정하고 Storybook MCP prerequisite를 충족했다.
 - 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
 - 2026-08-27: V69 Store 주문 정책 vertical slice와 `/store/catalog` 소비자를 stacked PR #118로 게시했다.
+- 2026-08-27: V70 Menu catalogue 거래 계약과 점주 소비 UI를 stacked PR #119로 게시했다.
