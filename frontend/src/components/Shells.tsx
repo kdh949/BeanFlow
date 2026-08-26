@@ -19,6 +19,7 @@ import { Link, NavLink, Outlet } from "react-router";
 import { operationsAuth, useOperationsAuth } from "../auth/session";
 import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { ButtonLink } from "../design-system";
+import { NotificationBell } from "../features/notification/NotificationBell";
 
 export function CustomerShell() {
   return (
@@ -28,9 +29,7 @@ export function CustomerShell() {
           <Link to="/app" aria-label="BeanFlow 홈">
             <img src="/brand/logo-full.png" alt="BeanFlow" className="brand-full" />
           </Link>
-          <Link className="icon-action" to="/app/orders" aria-label="주문 조회">
-            <ReceiptText size={20} />
-          </Link>
+          <NotificationBell />
         </header>
         <main className="mobile-content">
           <Outlet />

@@ -244,6 +244,7 @@ export const customerIdentity = {
 export const signedInHandlers = [
   http.get("/api/v1/me", () => HttpResponse.json(customerIdentity)),
   http.get("/api/v1/auth/customer/csrf", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/v1/me/notification-summary", () => HttpResponse.json({ hasUnread: false })),
 ];
 
 export const merchantIdentity = {

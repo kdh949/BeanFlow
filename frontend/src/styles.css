@@ -56,6 +56,32 @@ code {
 
 .icon-action:hover { background: var(--surface-sunken); color: var(--text-strong); }
 
+.notification-bell { position: relative; }
+.notification-bell-indicator {
+  width: 10px;
+  height: 10px;
+  border: var(--bw-hair) solid var(--surface-card);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--danger-fg);
+  color: var(--text-on-primary);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+.notification-bell.is-unavailable .notification-bell-indicator {
+  width: var(--sp-6);
+  height: var(--sp-6);
+  top: var(--sp-1);
+  right: var(--sp-1);
+  background: var(--warning-fg);
+}
+
 .page-title {
   display: flex;
   align-items: flex-start;
@@ -235,6 +261,32 @@ code {
 .points-ledger li span { color: var(--text-faint); font-size: var(--fs-caption); }
 .points-ledger li b { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-body-sm); }
 .points-ledger li b.is-credit { color: var(--success-fg); }
+
+.notification-page { gap: var(--sp-5); }
+.notification-preference { padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+.notification-preference h2 { margin-top: var(--sp-1); color: var(--text-strong); font-size: var(--fs-title-2); }
+.notification-preference > div:first-child > p { margin-top: var(--sp-2); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
+.notification-preference > p { color: var(--text-muted); font-size: var(--fs-caption); }
+.notification-preference-control { padding: var(--sp-4); border-radius: var(--r-md); display: flex; align-items: flex-start; gap: var(--sp-4); background: var(--surface-brand-soft); cursor: pointer; }
+.notification-preference-control input { width: var(--sp-7); height: var(--sp-7); margin: var(--sp-1) 0 0; flex: none; accent-color: var(--caramel-600); }
+.notification-preference-control span { display: flex; flex-direction: column; gap: var(--sp-1); }
+.notification-preference-control strong { color: var(--text-strong); font-size: var(--fs-body-sm); }
+.notification-preference-control small { color: var(--text-muted); line-height: 1.5; }
+.notification-preference-error { padding: var(--sp-4); border-radius: var(--r-sm); display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-3); background: var(--danger-bg); color: var(--danger-fg); }
+.notification-preference-error p { font-size: var(--fs-caption); line-height: 1.5; }
+.notification-list { margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-3); list-style: none; }
+.notification-row { padding: var(--sp-5); display: flex; align-items: flex-start; gap: var(--sp-4); }
+.notification-row.is-unread { border-color: var(--border-accent); background: var(--surface-brand-soft); }
+.notification-row-icon { width: var(--control-h-md); height: var(--control-h-md); border-radius: var(--r-sm); flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-card); color: var(--text-accent); }
+.notification-row-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: var(--sp-2); }
+.notification-row-copy > strong { color: var(--text-strong); font-size: var(--fs-body-sm); line-height: 1.45; }
+.notification-row-copy > p { color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
+.notification-row-meta, .notification-row-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.notification-row-meta { color: var(--text-faint); font-size: var(--fs-micro); }
+.notification-row-meta > span { color: var(--text-accent); font-weight: var(--fw-semibold); }
+.notification-row-actions { min-height: var(--control-h-sm); margin-top: var(--sp-1); }
+.notification-row-actions > a { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-accent); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.notification-read-label { color: var(--text-faint); font-size: var(--fs-caption); }
 
 .reorder-panel { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4); }
 .reorder-panel > strong { color: var(--text-strong); }

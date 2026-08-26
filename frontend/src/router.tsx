@@ -30,6 +30,7 @@ import { OperationsSessionGate } from "./features/auth/operations/OperationsSess
 import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
 import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
+import { NotificationInboxPage } from "./features/notification/NotificationInboxPage";
 
 export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
           { path: "points", element: <CustomerPointsPage /> },
           { path: "coupons", element: <CouponWalletPage /> },
           { path: "favorites", element: <FavoriteStoresPage /> },
+          { path: "notifications", element: <NotificationInboxPage /> },
           { path: "me", element: <CustomerMyPage /> },
         ],
       },
