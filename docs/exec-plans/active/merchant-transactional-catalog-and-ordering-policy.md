@@ -56,8 +56,9 @@ migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 
    있다. write path에는 이 상한이 없다.
 7. 점주 frontend에는 `/store` 주문보드, 환불, 정산, 이의제기, 지역 route가 있지만 메뉴·가격 route가
    없다. `useMerchantStores("ANY")`, `StoreSelector`, merchant Session/CSRF client는 재사용 가능하다.
-8. 이 계획 세션에는 `beanflow_storybook` MCP tool이 연결되지 않았다. 따라서 exact component inventory와
-   reuse classification은 확인하지 않았고 UI 구현은 MCP의 documentation 호출 전까지 `Blocked`다.
+8. 2026-08-27 running `beanflow_storybook` MCP에서 component inventory, Store console page,
+   `FeedbackState`, `Button` 문서와 story 작성 지침을 확인했다. UI는 기존 Store page composition을
+   `COMPOSE`하고 두 공통 component를 `REUSE`하며 새 병렬 primitive를 만들지 않는다.
 
 ## Definitions
 
@@ -137,8 +138,9 @@ migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 
 
 ### Modules and aggregates
 
-- **Identity:** `StoreAccessOperations`로 actor의 ACTIVE `OWNER | STAFF` membership을 확인하고 실제 role을
-  반환한다. Identity는 Merchant repository를 직접 읽지 않는다.
+- **Identity:** catalogue 전용 `StoreAccessOperations`가 actor의 대상 Store membership row를 shared lock으로
+  읽고 ACTIVE `OWNER | STAFF`와 실제 role을 반환한다. membership 부재는 404, inactive·revoked·role 부족은
+  403이며 Identity는 Merchant repository를 직접 읽지 않는다.
 - **Merchant:** Store commerce root, Menu aggregate와 child lifecycle, command idempotency, Audit orchestration,
   authoring projection을 소유한다.
 - **Discovery:** 기존 `StoreSearchIndexOperations` 구현으로 `MENU_NAME` term을 원자 교체한다. Merchant가
@@ -152,7 +154,7 @@ migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 
 
 ```text
 CSRF + Session actor
-  -> ACTIVE OWNER|STAFF membership
+  -> ACTIVE OWNER|STAFF membership FOR SHARE
   -> merchant_store FOR UPDATE
   -> idempotency replay/conflict
   -> expected orderingPolicyVersion
@@ -169,7 +171,7 @@ customer search의 ordering/pickup filter는 current Store policy projection으�
 
 ```text
 CSRF + Session actor
-  -> ACTIVE OWNER|STAFF membership
+  -> ACTIVE OWNER|STAFF membership FOR SHARE
   -> merchant_store FOR UPDATE
   -> idempotency replay/conflict
   -> target Menu ownership/lifecycle + expected tradeVersion
@@ -475,6 +477,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 - [x] 2026-08-26: 초기 bound를 Menu당 Option 100, Configuration 500, Configuration당 requirement 50으로 확정했다.
 - [x] 2026-08-26: ADR-118과 추가 ExecPlan 초안을 작성했다.
 - [x] 2026-08-27: Milestone 0 ADR·Business Policy와 completed dependency/readiness gate를 PR #116에 정리했다.
+- [x] 2026-08-27: authoring 권한과 Store commerce lock 순서 충돌을 membership FOR SHARE 선취로 해소하고
+  commit `c3932ef`, PR #117(`main <- feature/merchant-ordering-policy`)로 게시했다.
 - [ ] Milestone 1 Store policy vertical slice 완료.
 - [ ] Milestone 2 Menu catalogue vertical slice 완료.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
@@ -488,8 +492,15 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   별도 거래 version이 false stale 제거와 authoring optimistic concurrency를 함께 해결한다.
 - existing `StoreSearchIndexOperations`가 caller transaction에 참여하도록 이미 설계돼 있어 새 queue/outbox가
   필요하지 않다.
-- frontend 규칙상 UI plan에도 Storybook MCP inventory가 필수이나 현재 tool이 연결되지 않았다. 그래서 exact
-  component reuse classification은 Not run/Blocked이고 implementation 전에 반드시 보완한다.
+- frontend 규칙상 필요했던 Storybook MCP inventory는 2026-08-27 running HTTP transport에서 보완했다.
+  Store policy/catalogue page는 기존 Store console composition을 `COMPOSE`, `FeedbackState`와 `Button`을
+  `REUSE`한다. dev server는 `EMFILE` watcher와 기존 story indexing warning을 보고했으므로 변경 story의
+  focused preview/test와 broad handoff test 결과를 각각 기록한다.
+- ExecPlan은 membership 확인 뒤 Store lock, ADR-118은 Store lock 뒤 membership 확인을 서술했고 기존
+  `StoreAccessService`는 membership을 잠그지 않아 revoke 경쟁도 직렬화하지 못했다. 2026-08-27 결정으로
+  catalogue 전용 membership shared lock을 Store lock보다 먼저 획득하고 404/403을 분리하도록 통일했다.
+- 2026-08-27 running Storybook MCP에서 inventory와 Store page/FeedbackState/Button 문서, story 작성 지침을
+  확인했다. policy panel은 기존 Store console page composition과 FeedbackState/Button을 재사용·조합한다.
 
 ## Decision Log
 
@@ -501,6 +512,7 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 | 2026-08-26 | Store shared Order lock / exclusive writer lock | 같은 Store Order concurrency를 유지하면서 coherent Merchant snapshot 보장 | ADR-118 |
 | 2026-08-26 | Store policy/Menu trade version을 display/image JPA version과 분리 | false stale 제거와 child 거래 변경 대표 | ADR-118, ADR-116 amendment 예정 |
 | 2026-08-26 | 모든 mutation은 command-transaction idempotency | 기존 Store root, local atomic commit, Provider 호출 없음 | ADR-064, ADR-118 |
+| 2026-08-27 | authoring은 membership FOR SHARE 뒤 Store FOR UPDATE 순서 | revoke 경쟁을 직렬화하고 cross-store/없는 Store를 같은 404로 숨기며 ExecPlan/ADR 충돌 해소 | BR-52, ADR-118 |
 
 ## Outcomes & Retrospective
 
@@ -514,3 +526,4 @@ frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `C
   Store shared/exclusive lock, 별도 거래 version, create/replace/archive와 catalogue bound를 명시했다.
 - 2026-08-27: 선행 계약 계획의 completed evidence를 반영해 dependency를 completed path로 바꾸고,
   ADR-118·BR-52 결정 기록과 함께 implementation readiness를 true로 전환했다.
+- 2026-08-27: membership/Store lock 순서와 404/403 의미를 확정하고 Storybook MCP prerequisite를 충족했다.

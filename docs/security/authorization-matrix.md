@@ -38,7 +38,8 @@
 | 매장 단건 조회 (`/stores/{storeId}`) | Customer Session | No | No | No | No |
 | 매장 메뉴 조회 (`/stores/{storeId}/menus`) | Customer Session | No | No | No | No |
 | 매장 픽업 슬롯 조회 (`/stores/{storeId}/pickup-slots`) | Customer Session | No | No | No | No |
-| 매장 메뉴 변경 | No | Owned store | Assigned store if permitted | Controlled | No |
+| 매장 주문 정책 조회·변경 (`/stores/{storeId}/ordering-policy`) | No | ACTIVE owned store + CSRF(변경) + idempotency(변경) + Audit | ACTIVE assigned store + CSRF(변경) + idempotency(변경) + Audit | No | No |
+| 거래 메뉴 조회·생성·교체·보관 (`/stores/{storeId}/menu-catalog`, `/stores/{storeId}/menus/**`) | No | ACTIVE owned store + CSRF(변경) + idempotency(변경) + Audit | ACTIVE assigned store + CSRF(변경) + idempotency(변경) + Audit | No | No |
 | 주문 수락·제조 상태 | No | Owned store | Assigned store | Support only | No |
 | 내 포인트 조회 | Own | No | No | Active explicit `POINT_ACCOUNT_READ` grant + reason | No |
 | 감사형 포인트 조정 | No | No | No | Active explicit `POINT_ADJUSTMENT` grant + reason + evidence | No |
