@@ -128,6 +128,17 @@ internal class StoreOrderBoardIntegrationTest
                 .doesNotContain(pending.reference, completed.reference, other.reference)
             assertThat(items.single { it["status"].asText() == "PAID" }["pickupBusinessDate"].asText())
                 .isEqualTo("2030-01-02")
+            assertThat(items).allSatisfy { item ->
+                assertThat(item["lifecycle"]["paidAt"].asText()).isEqualTo(now.toString())
+                assertThat(item["lifecycle"].has("completedAt")).isFalse()
+            }
+            assertThat(items.single { it["status"].asText() == "PAID" }["lifecycle"].has("acceptedAt")).isFalse()
+            assertThat(items.single { it["status"].asText() == "ACCEPTED" }["lifecycle"]["acceptedAt"].asText())
+                .isEqualTo(now.plusSeconds(10).toString())
+            assertThat(items.single { it["status"].asText() == "PREPARING" }["lifecycle"]["preparingAt"].asText())
+                .isEqualTo(now.plusSeconds(20).toString())
+            assertThat(items.single { it["status"].asText() == "READY" }["lifecycle"]["readyAt"].asText())
+                .isEqualTo(now.plusSeconds(30).toString())
             assertThat(response.response.contentAsString)
                 .contains("Americano × 1", "PENDING_ACCEPTANCE", "START_PREPARING", "MARK_READY", "COMPLETE")
                 .doesNotContain(
@@ -230,6 +241,8 @@ internal class StoreOrderBoardIntegrationTest
                         ).andExpect(status().isOk)
                         .andExpect(jsonPath("$.lane").value(lane))
                         .andExpect(jsonPath("$.items.length()").value(1))
+                        .andExpect(jsonPath("$.items[0].lifecycle.paidAt").value(now.toString()))
+                        .andExpect(jsonPath("$.items[0].lifecycle.completedAt").doesNotExist())
                         .andExpect(jsonPath("$.nextCursor").isEmpty)
                         .andReturn()
                 queuedReferencesByLane[lane] =
@@ -347,6 +360,10 @@ internal class StoreOrderBoardIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.orderReference").value(order.reference))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"))
+                .andExpect(jsonPath("$.lifecycle.paidAt").value(now.toString()))
+                .andExpect(jsonPath("$.lifecycle.acceptedAt").value(now.plusSeconds(10).toString()))
+                .andExpect(jsonPath("$.lifecycle.preparingAt").doesNotExist())
+                .andExpect(jsonPath("$.lifecycle.completedAt").doesNotExist())
                 .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.customerId").doesNotExist())
             mockMvc
@@ -403,6 +420,9 @@ internal class StoreOrderBoardIntegrationTest
                     .andExpect(jsonPath("$.status").value("ACCEPTED"))
                     .andExpect(jsonPath("$.lane").value("ACCEPTED"))
                     .andExpect(jsonPath("$.allowedActions[0]").value("START_PREPARING"))
+                    .andExpect(jsonPath("$.lifecycle.paidAt").value(now.toString()))
+                    .andExpect(jsonPath("$.lifecycle.acceptedAt").value(now.toString()))
+                    .andExpect(jsonPath("$.lifecycle.completedAt").doesNotExist())
                     .andExpect(jsonPath("$.orderId").doesNotExist())
                     .andReturn()
                     .response
@@ -448,6 +468,8 @@ internal class StoreOrderBoardIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.lane").doesNotExist())
+                .andExpect(jsonPath("$.lifecycle.readyAt").value(now.toString()))
+                .andExpect(jsonPath("$.lifecycle.completedAt").doesNotExist())
                 .andExpect(jsonPath("$.allowedActions.length()").value(0))
         }
 

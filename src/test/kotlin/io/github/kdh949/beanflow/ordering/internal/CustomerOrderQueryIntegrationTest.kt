@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -105,6 +106,13 @@ internal class CustomerOrderQueryIntegrationTest
                 .andExpect(jsonPath("$.lines[0].lineSequence").value(0))
                 .andExpect(jsonPath("$.lines[0].menuName").value("Americano"))
                 .andExpect(jsonPath("$.lines[0].lineTotalKrw").value(1_000))
+                .andExpect(jsonPath("$.pricing.subtotalKrw").value(1_000))
+                .andExpect(jsonPath("$.pricing.couponDiscountKrw").value(0))
+                .andExpect(jsonPath("$.pricing.pointsAppliedKrw").value(0))
+                .andExpect(jsonPath("$.pricing.payableKrw").value(1_000))
+                .andExpect(jsonPath("$.pricing.currency").value("KRW"))
+                .andExpect(jsonPath("$.lifecycle").doesNotExist())
+                .andExpect(jsonPath("$.totalAmountKrw").doesNotExist())
                 .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.rejectionReason").doesNotExist())
                 .andExpect(jsonPath("$.cancellationDetail").doesNotExist())
@@ -142,10 +150,45 @@ internal class CustomerOrderQueryIntegrationTest
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, benefitOnly.customerId, 10_000)
             val benefitOnlyReference = create(benefitOnly, "customer-query-benefit-only", pointsToUseKrw = 10_000)
 
-            assertDisplayedTotal(couponOnly.customerId, couponOnlyReference, 8_000)
-            assertDisplayedTotal(pointsOnly.customerId, pointsOnlyReference, 7_000)
-            assertDisplayedTotal(couponAndPoints.customerId, couponAndPointsReference, 5_000)
-            assertDisplayedTotal(benefitOnly.customerId, benefitOnlyReference, 0)
+            assertDisplayedPricing(couponOnly.customerId, couponOnlyReference, 10_000, 2_000, 0, 8_000)
+            assertDisplayedPricing(pointsOnly.customerId, pointsOnlyReference, 10_000, 0, 3_000, 7_000)
+            assertDisplayedPricing(couponAndPoints.customerId, couponAndPointsReference, 10_000, 2_000, 3_000, 5_000)
+            assertDisplayedPricing(benefitOnly.customerId, benefitOnlyReference, 10_000, 0, 10_000, 0)
+        }
+
+        @Test
+        fun `detail exposes only persisted lifecycle milestones`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val reference = create(fixture, "customer-query-lifecycle")
+            val paidAt = now.plusSeconds(10)
+            val acceptedAt = now.plusSeconds(20)
+            val preparingAt = now.plusSeconds(30)
+            val readyAt = now.plusSeconds(40)
+            val completedAt = now.plusSeconds(50)
+            jdbcTemplate.update(
+                """
+                UPDATE ordering_order
+                   SET state = 'COMPLETED', paid_at = ?, accepted_at = ?, preparing_at = ?, ready_at = ?, completed_at = ?
+                 WHERE public_reference = ?
+                """.trimIndent(),
+                Timestamp.from(paidAt),
+                Timestamp.from(acceptedAt),
+                Timestamp.from(preparingAt),
+                Timestamp.from(readyAt),
+                Timestamp.from(completedAt),
+                reference,
+            )
+
+            mockMvc
+                .perform(get("/api/v1/me/orders/{orderReference}", reference).with(customerJwt(fixture.customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.lifecycle.paidAt").value(paidAt.toString()))
+                .andExpect(jsonPath("$.lifecycle.acceptedAt").value(acceptedAt.toString()))
+                .andExpect(jsonPath("$.lifecycle.preparingAt").value(preparingAt.toString()))
+                .andExpect(jsonPath("$.lifecycle.readyAt").value(readyAt.toString()))
+                .andExpect(jsonPath("$.lifecycle.completedAt").value(completedAt.toString()))
         }
 
         @Test
@@ -389,9 +432,12 @@ internal class CustomerOrderQueryIntegrationTest
             return json(response.body)["order"]["publicReference"].asText()
         }
 
-        private fun assertDisplayedTotal(
+        private fun assertDisplayedPricing(
             customerId: UUID,
             reference: String,
+            expectedSubtotalKrw: Long,
+            expectedCouponDiscountKrw: Long,
+            expectedPointsAppliedKrw: Long,
             expectedPayableKrw: Long,
         ) {
             mockMvc
@@ -403,7 +449,12 @@ internal class CustomerOrderQueryIntegrationTest
             mockMvc
                 .perform(get("/api/v1/me/orders/{orderReference}", reference).with(customerJwt(customerId)))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.totalAmountKrw").value(expectedPayableKrw))
+                .andExpect(jsonPath("$.pricing.subtotalKrw").value(expectedSubtotalKrw))
+                .andExpect(jsonPath("$.pricing.couponDiscountKrw").value(expectedCouponDiscountKrw))
+                .andExpect(jsonPath("$.pricing.pointsAppliedKrw").value(expectedPointsAppliedKrw))
+                .andExpect(jsonPath("$.pricing.payableKrw").value(expectedPayableKrw))
+                .andExpect(jsonPath("$.pricing.currency").value("KRW"))
+                .andExpect(jsonPath("$.totalAmountKrw").doesNotExist())
         }
 
         private fun customerJwt(customerId: UUID) =

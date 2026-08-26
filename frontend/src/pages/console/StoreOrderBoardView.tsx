@@ -5,6 +5,7 @@ import { shortDateTime } from "../../lib/format";
 import {
   storeOrderActionLabels,
   storeOrderBoardColumns,
+  storeOrderElapsedLabel,
   storeOrderBoardLaneLabels,
 } from "./storeOrderBoardModel";
 import type {
@@ -34,6 +35,7 @@ export function StoreOrderBoardView({
   board,
   storeId,
   storeName,
+  now,
   overflowPages,
   overflowLoadingLane,
   onLoadOverflow,
@@ -41,6 +43,7 @@ export function StoreOrderBoardView({
 }: OrderInteractionProps & {
   board: StoreOrderBoard;
   storeName: string;
+  now: Date;
   overflowPages: Partial<Record<StoreOrderBoardLane, OverflowPage>>;
   overflowLoadingLane: StoreOrderBoardLane | null;
   onLoadOverflow: (overflow: StoreOrderBoardOverflow, cursor: string, append: boolean) => void;
@@ -58,6 +61,7 @@ export function StoreOrderBoardView({
           overflowLoadingLane={overflowLoadingLane}
           onLoadOverflow={onLoadOverflow}
           storeId={storeId}
+          now={now}
           {...interactions}
         />
       ))}
@@ -72,6 +76,7 @@ export function OrderBoardColumn({
   overflowPages,
   overflowLoadingLane,
   onLoadOverflow,
+  now,
   ...interactions
 }: OrderInteractionProps & {
   column: BoardColumn;
@@ -80,6 +85,7 @@ export function OrderBoardColumn({
   overflowPages: Partial<Record<StoreOrderBoardLane, OverflowPage>>;
   overflowLoadingLane: StoreOrderBoardLane | null;
   onLoadOverflow: (entry: StoreOrderBoardOverflow, cursor: string, append: boolean) => void;
+  now: Date;
 }) {
   return (
     <section className="order-board-column" aria-labelledby={`board-column-${column.key}`}>
@@ -101,6 +107,7 @@ export function OrderBoardColumn({
             onReasonChange={interactions.onReasonChange}
             onAction={(action, reason) => interactions.onAction(item, action, reason)}
             storeId={interactions.storeId}
+            now={now}
           />
         ))}
         {overflow.map((entry) => (
@@ -112,6 +119,7 @@ export function OrderBoardColumn({
             loadingDisabled={Boolean(overflowLoadingLane)}
             onLoad={(cursor, append) => onLoadOverflow(entry, cursor, append)}
             {...interactions}
+            now={now}
           />
         ))}
       </div>
@@ -125,6 +133,7 @@ export function OrderBoardOverflowSection({
   loading,
   loadingDisabled,
   onLoad,
+  now,
   ...interactions
 }: OrderInteractionProps & {
   overflow: StoreOrderBoardOverflow;
@@ -132,6 +141,7 @@ export function OrderBoardOverflowSection({
   loading: boolean;
   loadingDisabled: boolean;
   onLoad: (cursor: string, append: boolean) => void;
+  now: Date;
 }) {
   const laneLabel = storeOrderBoardLaneLabels[overflow.lane];
   return (
@@ -163,6 +173,7 @@ export function OrderBoardOverflowSection({
               onReasonChange={interactions.onReasonChange}
               onAction={(action, reason) => interactions.onAction(item, action, reason)}
               storeId={interactions.storeId}
+              now={now}
             />
           ))}
           {page.nextCursor ? (
@@ -186,6 +197,7 @@ export function StoreOrderCard({
   onRejectCancel,
   onReasonChange,
   onAction,
+  now,
 }: {
   item: StoreOrderBoardItem;
   storeId: string;
@@ -196,7 +208,9 @@ export function StoreOrderCard({
   onRejectCancel: () => void;
   onReasonChange: (value: string) => void;
   onAction: (action: StoreOrderAction, reason?: string) => void;
+  now: Date;
 }) {
+  const elapsed = storeOrderElapsedLabel(item, now);
   return (
     <article className={`order-board-card ${item.acceptancePhase === "WARNING" ? "is-warning" : ""}`} aria-label={`주문 ${item.pickupNumber}`}>
       <div className="order-card-heading">
@@ -207,6 +221,7 @@ export function StoreOrderCard({
       <dl className="order-card-time">
         <div><dt><CalendarDays size={15} /> 픽업 영업일</dt><dd>{item.pickupBusinessDate}</dd></div>
         <div><dt><Clock3 size={15} /> 픽업 시간</dt><dd>{shortDateTime.format(new Date(item.pickupWindowStart))}</dd></div>
+        {elapsed ? <div><dt><Clock3 size={15} /> 현재 단계</dt><dd>{elapsed}</dd></div> : null}
       </dl>
       {item.acceptancePhase === "WARNING" ? <p className="acceptance-warning"><AlertTriangle size={15} /> 접수 제한 시간이 얼마 남지 않았습니다.</p> : null}
       {item.acceptancePhase === "TIMEOUT_PENDING" ? <p className="acceptance-warning"><AlertTriangle size={15} /> 자동 거절 처리를 확인 중입니다.</p> : null}

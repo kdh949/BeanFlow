@@ -7,7 +7,7 @@ import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
 import { ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
 import { PageTitle } from "../../components/Shells";
 import { Button } from "../../design-system";
-import { won } from "../../lib/format";
+import { shortDateTime, shortTime, won } from "../../lib/format";
 import { useResource } from "../shared/useResource";
 
 type Preview = components["schemas"]["MerchantRefundPreview"];
@@ -153,6 +153,22 @@ export function StoreRefundPage() {
       {refundable ? null : (
         <p className="form-footnote" role="status">이 주문에는 더 환불할 수 있는 품목이 없습니다.</p>
       )}
+
+      <section className="surface-card refund-order-context" aria-labelledby="refund-order-context-title">
+        <div className="refund-order-context-heading">
+          <div><span className="eyebrow">REFUND TARGET</span><h2 id="refund-order-context-title">환불 대상 주문</h2></div>
+          <StatusBadge state={current.orderContext.status} />
+        </div>
+        <dl className="detail-list">
+          <div><dt>주문 시각</dt><dd>{shortDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div>
+          <div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div>
+          <div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div>
+          <div><dt>상품 금액</dt><dd className="bf-num">{won.format(current.orderContext.pricing.subtotalKrw)}</dd></div>
+          <div><dt>쿠폰·포인트</dt><dd className="bf-num">−{won.format(current.orderContext.pricing.couponDiscountKrw + current.orderContext.pricing.pointsAppliedKrw)}</dd></div>
+          <div><dt>결제 금액</dt><dd className="bf-num">{won.format(current.orderContext.pricing.payableKrw)}</dd></div>
+        </dl>
+        <p className="form-footnote">주문 확인용 정보입니다. 환불 실행 금액은 선택한 품목과 최신 미리보기를 서버가 다시 검증해 결정합니다.</p>
+      </section>
 
       <section className="surface-card refund-lines">
         <h2>환불 품목</h2>

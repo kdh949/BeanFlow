@@ -21,8 +21,27 @@ const summary = {
 };
 
 const detail = {
-  ...summary,
+  orderReference: summary.orderReference,
   storeId: "store-1",
+  pickupNumber: summary.pickupNumber,
+  storeName: summary.storeName,
+  status: summary.status,
+  orderedAt: summary.orderedAt,
+  pickupWindowStart: summary.pickupWindowStart,
+  pickupWindowEnd: summary.pickupWindowEnd,
+  pricing: {
+    subtotalKrw: 15_000,
+    couponDiscountKrw: 1_200,
+    pointsAppliedKrw: 1_000,
+    payableKrw: 12_800,
+    currency: "KRW" as const,
+  },
+  lifecycle: {
+    paidAt: "2026-08-14T03:01:00Z",
+    acceptedAt: "2026-08-14T03:02:00Z",
+    preparingAt: "2026-08-14T03:03:00Z",
+    readyAt: "2026-08-14T03:04:00Z",
+  },
   allowedActions: ["CANCEL" as const],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -129,6 +148,9 @@ describe("customer order detail", () => {
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
     expect(screen.getByText("아이스 아메리카노")).toBeInTheDocument();
     expect(screen.getByText("ICE · 샷 추가 · 2잔")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "주문 진행 단계" })).toHaveTextContent(/픽업 준비.*8\. 14\./);
+    expect(screen.getByLabelText("주문 거래 요약")).toHaveTextContent("상품 금액₩15,000");
+    expect(screen.getByLabelText("주문 거래 요약")).toHaveTextContent("결제 금액₩12,800");
     expect(screen.getByRole("button", { name: "주문 취소" })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/me/orders/{orderReference}", {
       params: { path: { orderReference: "BF-7K3M-9Q2P" } },

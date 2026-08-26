@@ -27,12 +27,18 @@ internal data class CustomerOrderHeaderProjection(
     val pickupWindowStart: Instant,
     val pickupWindowEnd: Instant,
     val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
     val payableKrw: Long,
     val currency: String,
     val reservationExpiresAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
     val cancellationCause: String?,
     val paidAt: Instant?,
+    val acceptedAt: Instant?,
+    val preparingAt: Instant?,
+    val readyAt: Instant?,
+    val completedAt: Instant?,
     val version: Long,
 )
 
@@ -180,12 +186,18 @@ internal class CustomerOrderQueryRepository(
         pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
         pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
         subtotalKrw = resultSet.getLong("subtotal_krw"),
+        couponDiscountKrw = resultSet.getLong("coupon_discount_krw"),
+        pointsAppliedKrw = resultSet.getLong("points_applied_krw"),
         payableKrw = resultSet.getLong("payable_krw"),
         currency = resultSet.getString("currency"),
         reservationExpiresAt = resultSet.getTimestamp("reservation_expires_at")?.toInstant(),
         acceptanceDeadlineAt = resultSet.getTimestamp("acceptance_deadline_at")?.toInstant(),
         cancellationCause = resultSet.getString("cancellation_cause"),
         paidAt = resultSet.getTimestamp("paid_at")?.toInstant(),
+        acceptedAt = resultSet.getTimestamp("accepted_at")?.toInstant(),
+        preparingAt = resultSet.getTimestamp("preparing_at")?.toInstant(),
+        readyAt = resultSet.getTimestamp("ready_at")?.toInstant(),
+        completedAt = resultSet.getTimestamp("completed_at")?.toInstant(),
         version = resultSet.getLong("version"),
     )
 
@@ -207,8 +219,10 @@ internal class CustomerOrderQueryRepository(
         val HEADER_SELECT =
             """
             SELECT id, store_id, public_reference, pickup_sequence, store_name_snapshot, state, created_at,
-                   pickup_window_start_snapshot, pickup_window_end_snapshot, subtotal_krw, payable_krw, currency,
-                   reservation_expires_at, acceptance_deadline_at, cancellation_cause, paid_at, version
+                   pickup_window_start_snapshot, pickup_window_end_snapshot,
+                   subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency,
+                   reservation_expires_at, acceptance_deadline_at, cancellation_cause,
+                   paid_at, accepted_at, preparing_at, ready_at, completed_at, version
               FROM ordering_order
             """.trimIndent()
         val LINE_SELECT =

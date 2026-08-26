@@ -451,6 +451,11 @@ code {
 .order-detail-lines > div > span small { color: var(--text-muted); font-size: var(--fs-caption); }
 .order-detail-lines > div > b:last-child { color: var(--text-strong); font-size: var(--fs-body-sm); }
 .order-detail-total { margin-top: var(--sp-3); padding-top: var(--sp-4); border-top: 1px solid var(--divider); display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); }
+.order-transaction-summary { margin: var(--sp-4) 0 0; }
+.order-transaction-summary > div { padding: var(--sp-2) 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); }
+.order-transaction-summary dt { color: var(--text-muted); font-size: var(--fs-caption); }
+.order-transaction-summary dd { margin: 0; color: var(--text-strong); font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); }
+.order-transaction-summary .order-detail-total dt, .order-transaction-summary .order-detail-total dd { color: var(--text-strong); font-size: var(--fs-body-lg); font-weight: var(--fw-bold); }
 .order-id-line { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: var(--fs-caption); }
 .order-id-line code { color: var(--text-strong); }
 .order-timeline { margin: 0; padding: var(--sp-5); list-style: none; display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -459,6 +464,8 @@ code {
 .order-timeline li > span { width: 27px; height: 27px; z-index: 1; border: 1px solid var(--border-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-app); font-size: var(--fs-micro); }
 .order-timeline li.is-active { color: var(--text-strong); }
 .order-timeline li.is-active > span { border-color: var(--caramel-500); background: var(--caramel-500); color: var(--espresso-900); }
+.order-timeline li > div { display: flex; flex-direction: column; gap: var(--sp-1); }
+.order-timeline li small { color: var(--text-faint); font-size: var(--fs-micro); }
 .terminal-order-state { margin: var(--sp-5) 0; padding: var(--sp-4); display: flex; align-items: center; gap: var(--sp-3); border: 1px solid var(--danger-solid); border-radius: var(--r-card); background: var(--danger-bg); color: var(--danger-fg); }
 .order-summary { display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--fs-body-sm); }
 .order-summary span { color: var(--text-muted); }
@@ -768,6 +775,11 @@ code {
 .failed-store-list code { color: var(--text-body); font-size: var(--fs-caption); overflow-wrap: anywhere; }
 
 .refund-lines { padding: var(--sp-7); }
+.refund-order-context { padding: var(--sp-7); }
+.refund-order-context-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+.refund-order-context-heading h2 { margin-top: var(--sp-1); font-size: var(--fs-title-3); }
+.refund-order-context .detail-list { margin-top: var(--sp-5); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.refund-order-context .form-footnote { margin-top: var(--sp-4); }
 .refund-lines h2 { font-size: var(--fs-title-3); }
 .refund-lines ul { margin: var(--sp-5) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-5); }
 .refund-lines li { padding-top: var(--sp-5); border-top: var(--bw-hair) solid var(--divider); display: flex; flex-direction: column; gap: var(--sp-3); }

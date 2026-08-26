@@ -51,8 +51,27 @@ export const orderSummary = {
 };
 
 export const orderDetail = {
-  ...orderSummary,
+  orderReference: orderSummary.orderReference,
   storeId: ids.store,
+  pickupNumber: orderSummary.pickupNumber,
+  storeName: orderSummary.storeName,
+  status: orderSummary.status,
+  orderedAt: orderSummary.orderedAt,
+  pickupWindowStart: orderSummary.pickupWindowStart,
+  pickupWindowEnd: orderSummary.pickupWindowEnd,
+  pricing: {
+    subtotalKrw: 15_000,
+    couponDiscountKrw: 1_200,
+    pointsAppliedKrw: 1_000,
+    payableKrw: 12_800,
+    currency: "KRW",
+  },
+  lifecycle: {
+    paidAt: "2026-08-15T02:51:00Z",
+    acceptedAt: "2026-08-15T02:54:00Z",
+    preparingAt: "2026-08-15T03:00:00Z",
+    readyAt: "2026-08-15T03:12:00Z",
+  },
   allowedActions: ["CANCEL"],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
@@ -150,6 +169,7 @@ export const boardOrder: StoreOrderBoardItem = {
   acceptanceDeadlineAt: "2026-08-15T03:03:00Z",
   acceptancePhase: "WARNING",
   allowedActions: ["ACCEPT", "REJECT"],
+  lifecycle: { paidAt: "2026-08-15T03:00:00Z" },
 };
 
 export const nearbyHandlers = [
@@ -209,7 +229,21 @@ export function orderListHandlers(items = [orderSummary]) {
 }
 
 export function orderDetailHandlers(overrides: Record<string, unknown> = {}) {
-  return [http.get("/api/v1/me/orders/:orderReference", () => HttpResponse.json({ ...orderDetail, ...overrides }))];
+  return [http.get("/api/v1/me/orders/:orderReference", () => {
+    const status = String(overrides.status ?? orderDetail.status);
+    const lifecycleByState: Record<string, components["schemas"]["OrderLifecycle"] | undefined> = {
+      PENDING_PAYMENT: undefined,
+      EXPIRED: undefined,
+      PAID: { paidAt: "2026-08-15T02:51:00Z" },
+      REJECTED: { paidAt: "2026-08-15T02:51:00Z" },
+      ACCEPTED: { paidAt: "2026-08-15T02:51:00Z", acceptedAt: "2026-08-15T02:54:00Z" },
+      PREPARING: { paidAt: "2026-08-15T02:51:00Z", acceptedAt: "2026-08-15T02:54:00Z", preparingAt: "2026-08-15T03:00:00Z" },
+      READY: orderDetail.lifecycle,
+      COMPLETED: { ...orderDetail.lifecycle, completedAt: "2026-08-15T03:25:00Z" },
+      CANCELLED: { paidAt: "2026-08-15T02:51:00Z" },
+    };
+    return HttpResponse.json({ ...orderDetail, lifecycle: lifecycleByState[status], ...overrides });
+  })];
 }
 
 export function storeBoardHandlers(

@@ -28,6 +28,23 @@ export const storeOrderBoardLaneLabels: Record<StoreOrderBoardLane, string> = {
   READY: "준비 완료",
 };
 
+const lifecycleByStatus = {
+  PAID: ["paidAt", "결제 후"],
+  ACCEPTED: ["acceptedAt", "접수 후"],
+  PREPARING: ["preparingAt", "제조 시작 후"],
+  READY: ["readyAt", "준비 완료 후"],
+} as const;
+
+export function storeOrderElapsedLabel(item: StoreOrderBoardItem, now: Date): string | null {
+  const milestone = lifecycleByStatus[item.status as keyof typeof lifecycleByStatus];
+  if (!milestone || !item.lifecycle) return null;
+  const [field, prefix] = milestone;
+  const startedAt = item.lifecycle[field];
+  if (!startedAt) return null;
+  const elapsedMinutes = Math.max(0, Math.floor((now.getTime() - new Date(startedAt).getTime()) / 60_000));
+  return `${prefix} ${elapsedMinutes}분 경과`;
+}
+
 export function sortStoreOrderBoard(
   groups: StoreOrderBoard["groups"],
   overflow: StoreOrderBoard["overflow"],

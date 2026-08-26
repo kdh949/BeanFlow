@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import java.time.Instant
 import java.util.UUID
 
 internal data class MerchantRefundPreviewQuery(
@@ -57,10 +58,37 @@ internal data class MerchantRefundPreviewTotalsResponse(
     val currency: String,
 )
 
+internal data class MerchantRefundPickupWindowResponse(
+    val startsAt: Instant,
+    val endsAt: Instant,
+)
+
+internal data class MerchantRefundPricingResponse(
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+    val currency: String,
+)
+
+internal enum class MerchantRefundPaymentKind {
+    ONE_TIME_EXTERNAL,
+    BENEFIT_ONLY,
+}
+
+internal data class MerchantRefundOrderContextResponse(
+    val orderedAt: Instant,
+    val pickupWindow: MerchantRefundPickupWindowResponse,
+    val status: String,
+    val pricing: MerchantRefundPricingResponse,
+    val paymentKind: MerchantRefundPaymentKind,
+)
+
 internal data class MerchantRefundPreviewResponse(
     val orderReference: String,
     val lines: List<MerchantRefundPreviewLineResponse>,
     val totals: MerchantRefundPreviewTotalsResponse,
+    val orderContext: MerchantRefundOrderContextResponse,
     val previewVersion: String,
 )
 
@@ -162,6 +190,7 @@ internal class MerchantRefundService(
                     cashRefundKrw = lines.sumOf { it.cashRefundKrw },
                     currency = order.currency,
                 ),
+            orderContext = order.context(),
             previewVersion = previewVersion(order, payment),
         )
     }
@@ -248,6 +277,27 @@ internal class MerchantRefundService(
             ),
         )
     }
+
+    /**
+     * Payment.previewSnapshot rejects every non-approved external payment. This
+     * display vocabulary therefore maps the current executable path to
+     * ONE_TIME_EXTERNAL without widening refund eligibility to benefit-only orders.
+     */
+    private fun RefundableOrderSnapshot.context(): MerchantRefundOrderContextResponse =
+        MerchantRefundOrderContextResponse(
+            orderedAt = orderedAt,
+            pickupWindow = MerchantRefundPickupWindowResponse(pickupWindowStart, pickupWindowEnd),
+            status = state,
+            pricing =
+                MerchantRefundPricingResponse(
+                    subtotalKrw = subtotalKrw,
+                    couponDiscountKrw = couponDiscountKrw,
+                    pointsAppliedKrw = pointsAppliedKrw,
+                    payableKrw = payableKrw,
+                    currency = currency,
+                ),
+            paymentKind = MerchantRefundPaymentKind.ONE_TIME_EXTERNAL,
+        )
 
     /**
      * Reprojects the stored Refund response body onto the merchant contract.

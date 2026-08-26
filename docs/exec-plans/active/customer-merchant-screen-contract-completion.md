@@ -832,6 +832,18 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   구현했다. 핵심 backend 7개 클래스와 취소 회귀, OpenAPI 문서 18 checks/runtime parity, frontend 18 unit
   tests, typecheck/build/design check, Cart 9개 live Storybook interaction/a11y가 통과했다. 전체 ordering
   package와 full release gate는 최종 stack에서 실행한다.
+- 2026-08-26: Customer Order Detail의 단일 금액 alias를 immutable pricing과 실제 lifecycle로 교체하고,
+  Store board 일반·overflow·상세·전이 projection에 실제 진행 시각을 추가했다. lifecycle 모순은 503으로
+  실패하며 board ETag는 timestamp-only 변경도 감지한다. 기존 lane·정렬·50건 상한·cursor·전이 멱등성은
+  변경하지 않았다.
+- 2026-08-26: Merchant refund preview에 같은 store/order snapshot의 safe `orderContext`를 추가했다.
+  context는 표시 전용이고 execute body와 `previewVersion`, Order→Payment 잠금, EXTERNAL 전용 실행 범위,
+  mandatory reason, stale/unresolved/idempotency semantics는 그대로다. 이 slice는 기존 Order 컬럼만 읽어
+  migration을 추가하지 않았다.
+- 2026-08-26: Customer detail transaction summary, fixed-clock board elapsed copy와 refund target summary가
+  generated contract를 소비한다. Backend customer/board/refund 33 tests, 취소·재주문·runtime parity 회귀,
+  frontend 36 unit tests/typecheck, 10개 live Storybook interaction/a11y와 Spotless가 통과했다. 전체 ordering
+  package와 cross-slice release gate는 최종 stack에서 실행한다.
 
 ## Surprises & Discoveries
 
@@ -896,11 +908,10 @@ ADR-116/117 and the related ADR amendments.
 
 ## Outcomes & Retrospective
 
-Milestone 0 decision recording, Milestone 3 Store/menu display, Milestone 2 Notification inbox and Milestone 4
-non-reserving quote are complete.
+Milestone 0 decision recording, Milestone 3 Store/menu display, Milestone 2 Notification inbox, Milestone 4
+non-reserving quote and Milestone 5 order detail/board/refund presentation contracts are complete.
 Each child keeps its migration, transaction rules, API/OpenAPI/generated client, consuming UI and tests in one
-vertical slice. Order detail/board/refund and final cross-slice milestones remain; the ExecPlan as a whole is not
-complete.
+vertical slice. Final visual integration and cross-slice validation remain; the ExecPlan as a whole is not complete.
 
 ## Revision Notes
 
@@ -916,3 +927,5 @@ complete.
   observability and completed backend/frontend/Storybook verification evidence.
 - 2026-08-26: Recorded the implemented non-reserving quote, terminal stale replay, explicit Cart re-confirmation
   and focused backend/OpenAPI/frontend/Storybook verification evidence.
+- 2026-08-26: Recorded the implemented customer detail pricing/lifecycle, board lifecycle/ETag, safe refund
+  orderContext, consuming UI and focused backend/frontend/live Storybook verification evidence.

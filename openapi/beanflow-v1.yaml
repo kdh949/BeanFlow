@@ -7883,10 +7883,31 @@ components:
           items: { type: string, minLength: 1, maxLength: 200 }
         quantity: { type: integer, minimum: 1 }
         lineTotalKrw: { $ref: "#/components/schemas/MoneyKrw" }
+    CustomerOrderPricing:
+      type: object
+      additionalProperties: false
+      required: [subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency]
+      description: 주문 생성 시 확정해 저장한 불변 가격 요약입니다.
+      properties:
+        subtotalKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        couponDiscountKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        pointsAppliedKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        payableKrw: { $ref: "#/components/schemas/MoneyKrw" }
+        currency: { $ref: "#/components/schemas/Currency" }
+    OrderLifecycle:
+      type: object
+      additionalProperties: false
+      description: 실제 상태 전이 때 저장된 시각만 포함하는 주문 생명주기입니다. 아직 발생하지 않은 단계는 생략합니다.
+      properties:
+        paidAt: { $ref: "#/components/schemas/DateTime" }
+        acceptedAt: { $ref: "#/components/schemas/DateTime" }
+        preparingAt: { $ref: "#/components/schemas/DateTime" }
+        readyAt: { $ref: "#/components/schemas/DateTime" }
+        completedAt: { $ref: "#/components/schemas/DateTime" }
     CustomerOrderDetail:
       type: object
       additionalProperties: false
-      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, lines, allowedActions]
+      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, pricing, lines, allowedActions]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         storeId:
@@ -7902,11 +7923,8 @@ components:
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
-        totalAmountKrw:
-          allOf:
-            - $ref: "#/components/schemas/MoneyKrw"
-          description: Coupon discount and point use after the final amount payable by the customer.
-        currency: { $ref: "#/components/schemas/Currency" }
+        pricing: { $ref: "#/components/schemas/CustomerOrderPricing" }
+        lifecycle: { $ref: "#/components/schemas/OrderLifecycle" }
         lines:
           type: array
           minItems: 1
@@ -8280,6 +8298,15 @@ components:
         - START_PREPARING
         - MARK_READY
         - COMPLETE
+    StoreOrderBoardLifecycle:
+      type: object
+      additionalProperties: false
+      description: 보드 ETag에 포함되는 저장된 진행 시각입니다. 완료 시각은 라이브 보드 계약에 포함하지 않습니다.
+      properties:
+        paidAt: { $ref: '#/components/schemas/DateTime' }
+        acceptedAt: { $ref: '#/components/schemas/DateTime' }
+        preparingAt: { $ref: '#/components/schemas/DateTime' }
+        readyAt: { $ref: '#/components/schemas/DateTime' }
     StoreOrderBoardItem:
       type: object
       additionalProperties: false
@@ -8358,6 +8385,9 @@ components:
           items:
             $ref: '#/components/schemas/StoreOrderAction'
           description: 현재 상태와 권한에서 서버가 허용하는 매장 작업 목록입니다.
+        lifecycle:
+          $ref: '#/components/schemas/StoreOrderBoardLifecycle'
+          description: 실제 상태 전이 때 저장된 시각만 포함하며 ETag의 의미 표현에 참여합니다.
         compensationRecovery:
           $ref: '#/components/schemas/StoreCompensationSummary'
           description: 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다.
@@ -8504,10 +8534,33 @@ components:
         pointsRestorationKrw: { $ref: "#/components/schemas/MoneyKrw" }
         cashRefundKrw: { $ref: "#/components/schemas/MoneyKrw" }
         currency: { $ref: "#/components/schemas/Currency" }
+    MerchantRefundPickupWindow:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt]
+      properties:
+        startsAt: { $ref: "#/components/schemas/DateTime" }
+        endsAt: { $ref: "#/components/schemas/DateTime" }
+    MerchantRefundOrderContext:
+      type: object
+      additionalProperties: false
+      description: |
+        환불 대상 확인을 위한 안전한 읽기 전용 주문 맥락입니다. 실행 입력으로 사용하지 않으며
+        실행은 previewVersion과 잠금 후 재조회 결과를 다시 검증합니다.
+      required: [orderedAt, pickupWindow, status, pricing, paymentKind]
+      properties:
+        orderedAt: { $ref: "#/components/schemas/DateTime" }
+        pickupWindow: { $ref: "#/components/schemas/MerchantRefundPickupWindow" }
+        status: { $ref: "#/components/schemas/OrderState" }
+        pricing: { $ref: "#/components/schemas/CustomerOrderPricing" }
+        paymentKind:
+          type: string
+          enum: [ONE_TIME_EXTERNAL, BENEFIT_ONLY]
+          description: 현재 부분 환불 실행 범위에서는 ONE_TIME_EXTERNAL만 반환됩니다.
     MerchantRefundPreview:
       type: object
       additionalProperties: false
-      required: [orderReference, lines, totals, previewVersion]
+      required: [orderReference, lines, totals, orderContext, previewVersion]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         lines:
@@ -8515,6 +8568,7 @@ components:
           minItems: 1
           items: { $ref: "#/components/schemas/MerchantRefundPreviewLine" }
         totals: { $ref: "#/components/schemas/MerchantRefundTotals" }
+        orderContext: { $ref: "#/components/schemas/MerchantRefundOrderContext" }
         previewVersion: { type: string, pattern: '^[0-9a-f]{64}$' }
     MerchantRefundResult:
       type: object

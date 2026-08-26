@@ -44,8 +44,15 @@ internal class OrderRefundSnapshotService(
             customerId = order.customerId,
             storeId = order.storeId,
             state = order.state.name,
+            orderedAt = order.createdAt,
+            pickupWindowStart = order.pickupWindowStartSnapshot,
+            pickupWindowEnd = order.pickupWindowEndSnapshot,
             completedAt = order.completedAt,
             aggregateVersion = order.version,
+            subtotalKrw = order.subtotalKrw,
+            couponDiscountKrw = order.couponDiscountKrw,
+            pointsAppliedKrw = order.pointsAppliedKrw,
+            payableKrw = order.payableKrw,
             currency = order.currency,
             lines =
                 lines.map {

@@ -5679,6 +5679,22 @@ export interface components {
             items: components["schemas"]["CustomerCouponWalletItem"][];
             page: components["schemas"]["PageInfo"];
         };
+        /** @description 주문 생성 시 확정해 저장한 불변 가격 요약입니다. */
+        CustomerOrderPricing: {
+            subtotalKrw: components["schemas"]["MoneyKrw"];
+            couponDiscountKrw: components["schemas"]["MoneyKrw"];
+            pointsAppliedKrw: components["schemas"]["MoneyKrw"];
+            payableKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+        };
+        /** @description 실제 상태 전이 때 저장된 시각만 포함하는 주문 생명주기입니다. 아직 발생하지 않은 단계는 생략합니다. */
+        OrderLifecycle: {
+            paidAt?: components["schemas"]["DateTime"];
+            acceptedAt?: components["schemas"]["DateTime"];
+            preparingAt?: components["schemas"]["DateTime"];
+            readyAt?: components["schemas"]["DateTime"];
+            completedAt?: components["schemas"]["DateTime"];
+        };
         CustomerOrderLine: {
             lineSequence: number;
             menuName: string;
@@ -5720,9 +5736,8 @@ export interface components {
             orderedAt: components["schemas"]["DateTime"];
             pickupWindowStart: components["schemas"]["DateTime"];
             pickupWindowEnd: components["schemas"]["DateTime"];
-            /** @description Coupon discount and point use after the final amount payable by the customer. */
-            totalAmountKrw: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
+            pricing: components["schemas"]["CustomerOrderPricing"];
+            lifecycle?: components["schemas"]["OrderLifecycle"];
             lines: components["schemas"]["CustomerOrderLine"][];
             allowedActions: components["schemas"]["CustomerOrderAllowedAction"][];
             /**
@@ -6147,6 +6162,13 @@ export interface components {
          * @enum {string}
          */
         StoreOrderAction: "ACCEPT" | "REJECT" | "START_PREPARING" | "MARK_READY" | "COMPLETE";
+        /** @description 보드 ETag에 포함되는 저장된 진행 시각입니다. 완료 시각은 라이브 보드 계약에 포함하지 않습니다. */
+        StoreOrderBoardLifecycle: {
+            paidAt?: components["schemas"]["DateTime"];
+            acceptedAt?: components["schemas"]["DateTime"];
+            preparingAt?: components["schemas"]["DateTime"];
+            readyAt?: components["schemas"]["DateTime"];
+        };
         /**
          * @description 주문 거절이나 고객 취소 뒤 환불·재고·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
          * @example {
@@ -6219,6 +6241,8 @@ export interface components {
             acceptancePhase?: "OPEN" | "WARNING" | "TIMEOUT_PENDING";
             /** @description 현재 상태와 권한에서 서버가 허용하는 매장 작업 목록입니다. */
             allowedActions: components["schemas"]["StoreOrderAction"][];
+            /** @description 실제 상태 전이 때 저장된 시각만 포함하며 ETag의 의미 표현에 참여합니다. */
+            lifecycle?: components["schemas"]["StoreOrderBoardLifecycle"];
             /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
         };
@@ -6296,10 +6320,30 @@ export interface components {
             cashRefundKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
         };
+        MerchantRefundPickupWindow: {
+            startsAt: components["schemas"]["DateTime"];
+            endsAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 환불 대상 확인을 위한 안전한 읽기 전용 주문 맥락입니다. 실행 입력으로 사용하지 않으며
+         *     실행은 previewVersion과 잠금 후 재조회 결과를 다시 검증합니다.
+         */
+        MerchantRefundOrderContext: {
+            orderedAt: components["schemas"]["DateTime"];
+            pickupWindow: components["schemas"]["MerchantRefundPickupWindow"];
+            status: components["schemas"]["OrderState"];
+            pricing: components["schemas"]["CustomerOrderPricing"];
+            /**
+             * @description 현재 부분 환불 실행 범위에서는 ONE_TIME_EXTERNAL만 반환됩니다.
+             * @enum {string}
+             */
+            paymentKind: "ONE_TIME_EXTERNAL" | "BENEFIT_ONLY";
+        };
         MerchantRefundPreview: {
             orderReference: string;
             lines: components["schemas"]["MerchantRefundPreviewLine"][];
             totals: components["schemas"]["MerchantRefundTotals"];
+            orderContext: components["schemas"]["MerchantRefundOrderContext"];
             previewVersion: string;
         };
         MerchantRefundRequest: {
