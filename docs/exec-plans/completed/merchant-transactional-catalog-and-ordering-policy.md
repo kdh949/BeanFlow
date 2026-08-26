@@ -1,11 +1,11 @@
 # 점주 거래 카탈로그와 주문 정책 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-merchant-screen-contract-completion.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-27`
 
 이 ExecPlan은 `.agent/PLANS.md`와
 [ADR-118](../../adr/ADR-118-merchant-transactional-catalog-lifecycle.md)을 따른다. 기존 고객·점주 화면
@@ -485,7 +485,9 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   PR #118(`feature/merchant-ordering-policy <- feature/merchant-store-ordering-policy`)로 게시했다.
 - [x] 2026-08-27: Milestone 2 Menu catalogue vertical slice를 commits `d404eb1`, `b713580`,
   PR #119(`feature/merchant-store-ordering-policy <- feature/merchant-menu-catalog-lifecycle`)로 게시했다.
-- [ ] Milestone 3 combined verification과 completion evidence 완료.
+- [x] 2026-08-27: Milestone 3 combined verification과 completion evidence를 commits `828df45`,
+  `48a0add`, PR #120(`feature/merchant-menu-catalog-lifecycle <- feature/merchant-catalog-completion-evidence`)으로
+  게시했다.
 
 ## Surprises & Discoveries
 
@@ -543,6 +545,21 @@ interaction+a11y와 static Storybook build가 통과했다. local docs/OpenAPI, 
 통과했고 PR #119 remote CI는 preflight 성공 후 나머지 job이 진행 중이다. 전체 회귀·성능·lock-wait 증거는 계약을
 변경하지 않는 Milestone 3 child PR에서 완료한다.
 
+Milestone 3는 PR #120에서 새 production 계약 없이 lock/search performance fixture, quality evidence,
+BR-47 freshness 정정, capability/design map과 authoring runbook을 추가했다. 첫 전체 backend run은 V69 뒤에도
+기존 column/latest-migration 기대치를 고정한 두 테스트 때문에 1,476건 중 2건이 실패했다. 수정은 가장
+이른 영향 PR #118의 commit `40e5884`에 넣고 #119와 combined head로 merge-forward했다. 수정 후 전체
+backend는 1,477 tests, 0 failures, 2 skipped로 50분 2초에 통과했고 `./gradlew build`와 Spotless도
+통과했다. docs/OpenAPI, frontend design/type/177 unit/production build/Storybook build/Sites, Storybook Docs
+40 entries와 running Storybook MCP 전체 interaction+a11y도 통과했다. PostgreSQL 고정 fixture는 일반 Store
+read 200회 71 ms/2,785 ops/s와 `FOR SHARE` 70 ms/2,834 ops/s를 기록했지만 단일 순차 표본이므로 개선
+주장을 하지 않는다. shared/shared 획득은 15 ms였고 controlled 250 ms 뒤 exclusive writer는 총 284 ms
+대기했으며 `pg_stat_activity`에서 `Lock`과 blocking PID를 확인했다. V70 schema의 100,000-term 검색은
+Seq Scan 269.263 ms에서 V59 Bitmap index plan 5.996 ms로 바뀌는 단일 EXPLAIN capture를 재확인했다.
+Provider sandbox, 실제 deployment/migration duration, production traffic p50/p95/p99와 connection-pool load는
+실행하지 않았으며 `Not run`이다. 이 완료는 verified stacked head를 뜻하며 merge 또는 deployment 완료를
+뜻하지 않는다.
+
 ## Revision Notes
 
 - 2026-08-26: review finding 검증과 사용자 결정을 바탕으로 최초 작성. vertical slice와 docs-only first PR,
@@ -553,3 +570,5 @@ interaction+a11y와 static Storybook build가 통과했다. local docs/OpenAPI, 
 - 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
 - 2026-08-27: V69 Store 주문 정책 vertical slice와 `/store/catalog` 소비자를 stacked PR #118로 게시했다.
 - 2026-08-27: V70 Menu catalogue 거래 계약과 점주 소비 UI를 stacked PR #119로 게시했다.
+- 2026-08-27: combined regression·lock/search 성능 증거와 운영 문서를 stacked PR #120으로 게시하고
+  계획을 completed path로 이동했다.

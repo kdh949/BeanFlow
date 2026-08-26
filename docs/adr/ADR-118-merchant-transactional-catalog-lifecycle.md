@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-26
-- **Implementation owner:** [점주 거래 카탈로그와 주문 정책 완성](../exec-plans/active/merchant-transactional-catalog-and-ordering-policy.md)
+- **Implementation owner:** [점주 거래 카탈로그와 주문 정책 완성](../exec-plans/completed/merchant-transactional-catalog-and-ordering-policy.md)
 - **Amends:** ADR-076의 쓰기 상한, ADR-103의 Menu 검색어 동기화, ADR-116의 Merchant owner-state 직렬화와 fingerprint material
 
 ## Context
