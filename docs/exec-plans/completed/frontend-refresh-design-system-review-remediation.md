@@ -144,8 +144,11 @@ adapter를 `presentation/shared`로 분리했다. 공용 CSS 소유권과 44px �
 interaction test로 고정했다. unit 176개, boundary 7개, live Storybook 159개(a11y 포함), typecheck,
 design guard, product/Storybook build, Sites 및 Storybook docs isolation이 통과했다. 수정 커밋을 PR #122
 head에 반영한 뒤 지정된 review thread 8건을 모두 해결했고, GraphQL 재조회로 8건 모두 resolved임을 확인했다.
+첫 원격 frontend 실행에서 안전 문구 변경 뒤 남은 Storybook docs marker drift를 발견해 관련 marker
+5곳을 현재 고정 제목과 동기화하고 정적 Storybook 검증을 다시 수행했다.
 
 ## Revision Notes
 
 - 2026-08-27: PR #122 review remediation 시작.
 - 2026-08-27: 로컬 및 Storybook 검증, 원격 반영, review thread 8건 해결 완료.
+- 2026-08-27: 원격 Storybook docs marker drift 5곳 동기화.

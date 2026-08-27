@@ -58,7 +58,7 @@ const statefulDocs = {
     "pages-operations-compensationlookup--idle": "감사 조회 대기",
     "pages-operations-compensationlookup--manual-review": "PROVIDER_TIMEOUT",
     "pages-operations-compensationlookup--successful-lookup": "완료",
-    "pages-operations-compensationlookup--recoverable-error": "서비스 연결을 확인하고 있습니다.",
+    "pages-operations-compensationlookup--recoverable-error": "서비스 연결을 확인하고 있습니다",
     "pages-operations-compensationlookup--loading": "보상 상태를 조회하는 중",
   },
   "pages-refresh-store-order-board--docs": {
@@ -70,7 +70,7 @@ const statefulDocs = {
   "pages-refresh-customer-home--docs": {
     "pages-refresh-customer-home--active-order-and-recommendations": "최근 주문한 매장",
     "pages-refresh-customer-home--nothing-in-progress": "진행 중인 주문이 없어요",
-    "pages-refresh-customer-home--recommendation-failure": "추천 서비스를 사용할 수 없습니다.",
+    "pages-refresh-customer-home--recommendation-failure": "서비스 연결을 확인하고 있습니다",
   },
   "pages-refresh-customer-store-detail--docs": {
     "pages-refresh-customer-store-detail--orderable": "오트 라떼",
@@ -84,21 +84,21 @@ const statefulDocs = {
     "pages-customer-orders--active-order": "A-142",
     "pages-customer-orders--past-order": "픽업 완료",
     "pages-customer-orders--empty": "진행 중인 주문이 없어요",
-    "pages-customer-orders--recoverable-error": "서비스 연결을 확인하고 있습니다.",
+    "pages-customer-orders--recoverable-error": "서비스 연결을 확인하고 있습니다",
     "pages-customer-orders--loading": "주문을 불러오는 중",
   },
   "pages-refresh-customer-order-detail--docs": {
     "pages-refresh-customer-order-detail--ready-for-pickup": "거래 요약",
     "pages-refresh-customer-order-detail--refund-delayed": "환불 확인이 지연되고 있어요",
     "pages-refresh-customer-order-detail--cancelled": "취소된 주문이에요",
-    "pages-refresh-customer-order-detail--permission-failure": "이 주문을 볼 수 없습니다.",
+    "pages-refresh-customer-order-detail--permission-failure": "이 작업을 진행할 수 없습니다",
   },
   "pages-customer-paymentsuccess--docs": {
     "pages-customer-paymentsuccess--approved": "결제가 완료됐어요",
     "pages-customer-paymentsuccess--unknown-reconciliation": "결제 결과를 확인하고 있어요",
     "pages-customer-paymentsuccess--not-paid-yet": "아직 결제가 끝나지 않았어요",
     "pages-customer-paymentsuccess--declined": "결제를 완료하지 못했어요",
-    "pages-customer-paymentsuccess--dependency-error": "서비스 연결을 확인하고 있습니다.",
+    "pages-customer-paymentsuccess--dependency-error": "서비스 연결을 확인하고 있습니다",
     "pages-customer-paymentsuccess--manual-review": "결제 확인에 시간이 더 필요해요",
   },
   "pages-customer-paymentfailure--docs": {
