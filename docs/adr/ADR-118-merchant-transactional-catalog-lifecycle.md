@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-26
-- **Implementation owner:** [점주 거래 카탈로그와 주문 정책 완성](../exec-plans/active/merchant-transactional-catalog-and-ordering-policy.md)
+- **Implementation owner:** [점주 거래 카탈로그와 주문 정책 완성](../exec-plans/completed/merchant-transactional-catalog-and-ordering-policy.md)
 - **Amends:** ADR-076의 쓰기 상한, ADR-103의 Menu 검색어 동기화, ADR-116의 Merchant owner-state 직렬화와 fingerprint material
 
 ## Context
@@ -64,6 +64,9 @@ active/archived 상태를 가진다.
 - 기존 OrderLine의 immutable 이름·가격·Option·requirement snapshot은 현재 catalogue lifecycle과 무관하게
   그대로 유지한다.
 - v1 public API에는 archived item 복원과 hard delete를 두지 않는다.
+- archived Menu는 authoring 목록에서 요약만 조회하며 현재 편집본 조회·수정 UI를 제공하지 않는다.
+  archive command의 terminal 응답은 보관 직전 active child snapshot에 ARCHIVED root 상태를 적용하므로,
+  과거 replace에서 이미 제거된 child를 다시 포함하지 않는다.
 
 Menu가 `available=true`이면 최소 한 개의 active MenuConfiguration이 있어야 한다. Configuration의
 정규화 Option 집합은 같은 Menu의 active Option만 참조하며 같은 집합은 하나만 존재한다. 각 active
@@ -81,7 +84,8 @@ Store는 `ordering_policy_version`, Menu는 `trade_version`을 소유한다.
 - image pointer, `displayCategory`, `publicDescription`과 Store customer display profile은 거래 version을
   증가시키지 않는다.
 - authoring response는 해당 거래 version을 노출하고 mutation은 `expectedVersion`으로 optimistic conflict를
-  확인한다. customer catalogue에는 version을 노출하지 않는다.
+  확인한다. stale expected version은 기존 점주 콘텐츠 writer와 같은 `409 MERCHANT_CONTENT_STALE`로
+  거절하며, customer catalogue에는 version을 노출하지 않는다.
 
 기존 JPA `@Version`은 해당 row의 기술적 lost-update 방어로 남길 수 있지만 quote 거래 의미나 점주
 authoring contract로 사용하지 않는다.
@@ -136,6 +140,11 @@ transaction 안에 있으며 Provider 호출이 없으므로 ADR-064의 command-
 
 - 같은 actor·operation·key·payload는 최초 status/body를 재생한다.
 - 같은 key의 다른 payload는 `IDEMPOTENCY_KEY_REUSED` 409다.
+- command ledger의 DB uniqueness는 `actor_id + operation + idempotency_key`이며 Store ID는 scope에
+  포함하지 않는다. 서로 다른 Store의 같은 actor·operation·key도 membership shared lock 뒤 동일한
+  transaction-scoped advisory lock으로 직렬화한 다음 replay를 다시 읽고, 그 뒤에만 Store commerce-root
+  exclusive lock을 획득한다. 따라서 concurrent changed-payload 재사용은 unique violation/503이 아니라
+  결정적인 `IDEMPOTENCY_KEY_REUSED` 409다.
 - rollback된 명령은 terminal command row, owner 변경, 검색 색인 또는 Audit를 남기지 않는다.
 - command record는 BR-26 보존 규칙과 bounded cleanup을 따른다.
 

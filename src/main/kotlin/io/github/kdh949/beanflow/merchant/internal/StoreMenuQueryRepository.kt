@@ -49,6 +49,7 @@ internal class StoreMenuQueryRepository(
                    image_thumbnail_key
               FROM merchant_menu
              WHERE store_id = ?
+               AND lifecycle = 'ACTIVE'
              ORDER BY name, id
              LIMIT ${MAX_STORE_MENUS + 1}
             """.trimIndent(),
@@ -82,6 +83,7 @@ internal class StoreMenuQueryRepository(
                   SELECT id
                     FROM merchant_menu
                    WHERE store_id = ?
+                     AND lifecycle = 'ACTIVE'
                    ORDER BY id
                    LIMIT ${MAX_STORE_MENUS + 1}
               ) menu
@@ -89,6 +91,7 @@ internal class StoreMenuQueryRepository(
                   SELECT menu_id, id, name, additional_price_krw, available
                     FROM merchant_menu_option
                    WHERE menu_id = menu.id
+                     AND lifecycle = 'ACTIVE'
                    ORDER BY name, id
                    LIMIT ${MAX_STORE_MENU_OPTIONS + 1}
               ) menu_option

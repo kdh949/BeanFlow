@@ -13,28 +13,44 @@ internal class AuthenticationPathCoverageValidator(
     private val handlerMapping: RequestMappingHandlerMapping,
 ) : ApplicationRunner {
     override fun run(args: ApplicationArguments) {
-        val applicationPaths =
+        val applicationRoutes =
             handlerMapping.handlerMethods
                 .filterValues { handler -> handler.beanType.packageName.startsWith("io.github.kdh949.beanflow") }
                 .keys
                 .flatMap { mapping ->
-                    mapping.pathPatternsCondition
-                        ?.patterns
-                        .orEmpty()
-                        .map { it.patternString }
+                    val methods: List<String?> =
+                        if (mapping.methodsCondition.methods.isEmpty()) {
+                            listOf(null)
+                        } else {
+                            mapping.methodsCondition.methods.map { it.name }
+                        }
+                    mapping.pathPatternsCondition?.patterns.orEmpty().flatMap { pattern ->
+                        methods.map { method -> ControllerRoute(pattern.patternString, method) }
+                    }
                 }.toSet()
-        validate(applicationPaths)
+        validateRoutes(applicationRoutes)
     }
 
-    internal fun validate(paths: Collection<String>) {
+    internal fun validate(paths: Collection<String>) = validateRoutes(paths.map { ControllerRoute(it, null) })
+
+    private fun validateRoutes(routes: Collection<ControllerRoute>) {
         check(registry.overlappingPatterns().isEmpty()) {
             "Authentication path patterns overlap across actor chains: ${registry.overlappingPatterns()}"
         }
-        val unassigned = paths.filter { registry.classify(it.canonicalPath()) == null }.sorted()
+        val unassigned =
+            routes
+                .filterNot { registry.hasRegistration(it.path.canonicalPath(), it.method) }
+                .map { route -> route.method?.let { "$it ${route.path}" } ?: route.path }
+                .sorted()
         check(unassigned.isEmpty()) {
             "Controller paths must be assigned to exactly one authentication chain: $unassigned"
         }
     }
 
     private fun String.canonicalPath(): String = replace(Regex("\\{[^}]+}"), "sample")
+
+    private data class ControllerRoute(
+        val path: String,
+        val method: String?,
+    )
 }

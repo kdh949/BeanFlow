@@ -1,11 +1,11 @@
 # 점주 거래 카탈로그와 주문 정책 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/customer-merchant-screen-contract-completion.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-27`
 
 이 ExecPlan은 `.agent/PLANS.md`와
 [ADR-118](../../adr/ADR-118-merchant-transactional-catalog-lifecycle.md)을 따른다. 기존 고객·점주 화면
@@ -113,20 +113,24 @@ migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 
 4. Menu가 `available=true`이면 active Configuration이 하나 이상이어야 한다. Configuration은 같은 Menu의
    active Option만 중복 없이 참조하고 option ID 문자열 오름차순 canonical key가 Menu 안에서 unique다.
 5. active Configuration은 requirement를 1..50개 가지며 각 `quantityPerLineUnit > 0`, sellableUnitId가
-   Configuration 안에서 unique다.
+   Configuration 안에서 unique다. 고객에게 판매 가능한 Menu/Configuration은 존재하는 같은 Store의
+   sellable unit만 참조하며, unavailable draft는 이후 활성화 command에서 다시 검증한다.
 6. Store당 active Menu 1,000개, Store당 active Option 5,000개, Menu당 active Option 100개, Menu당 active
    Configuration 500개를 넘는 desired state는 owner 변경 전에 400으로 거절한다.
 7. full replacement에서 누락된 child는 archive한다. DB row를 delete하지 않으며 archived child를 active
    Configuration이 참조할 수 없다.
 8. archive Menu는 모든 active child를 함께 archive하고 customer catalogue/search/quote에서 제외한다.
-   과거 Order snapshot은 바꾸거나 current catalogue로 재계산하지 않는다.
+   authoring 목록에서는 summary만 제공하고 full trade-content 편집본은 노출하지 않는다. archive terminal
+   응답은 보관 직전 active child만 포함하며 과거 replace에서 제거된 child를 다시 섞지 않는다. 과거 Order
+   snapshot은 바꾸거나 current catalogue로 재계산하지 않는다.
 9. 정규화된 desired state가 current와 같으면 version/updatedAt/Audit/search index를 바꾸지 않는다.
 10. 실제 거래 변경은 Menu `tradeVersion`을 command당 한 번만 증가시킨다. 이미지, display category/
     description과 Store customer display는 거래 version을 건드리지 않는다.
 11. owner state, command response, Audit와 검색 색인은 하나의 local transaction에서 전부 commit/rollback한다.
     transaction 안에 Provider 호출이 없다.
 12. 같은 actor·operation·Idempotency-Key·payload는 최초 terminal response를 재생한다. key가 같고 payload가
-    다르면 409이며 어떤 owner write도 하지 않는다.
+    다르면 409이며 어떤 owner write도 하지 않는다. Store ID는 key scope에 포함하지 않으므로 membership
+    shared lock 뒤 key advisory lock으로 직렬화하고 replay를 다시 읽은 다음 Store exclusive lock을 획득한다.
 13. final Order는 Merchant shared Store lock을 먼저 획득하고 commit/rollback까지 유지한다. Merchant writer는
     같은 Store exclusive lock을 먼저 획득한다. 어떤 경로도 Store A lock 뒤 Store B lock을 잡지 않는다.
 14. writer-first이면 이전 fingerprint가 stale이다. Order-first이면 writer가 Order commit을 기다린다. 두 상태의
@@ -155,8 +159,9 @@ migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 
 ```text
 CSRF + Session actor
   -> ACTIVE OWNER|STAFF membership FOR SHARE
-  -> merchant_store FOR UPDATE
+  -> actor + operation + Idempotency-Key advisory lock
   -> idempotency replay/conflict
+  -> merchant_store FOR UPDATE
   -> expected orderingPolicyVersion
   -> desired-state validation/no-op
   -> flags + version + updatedAt
@@ -172,9 +177,11 @@ customer search의 ordering/pickup filter는 current Store policy projection으�
 ```text
 CSRF + Session actor
   -> ACTIVE OWNER|STAFF membership FOR SHARE
-  -> merchant_store FOR UPDATE
+  -> actor + operation + Idempotency-Key advisory lock
   -> idempotency replay/conflict
+  -> merchant_store FOR UPDATE
   -> target Menu ownership/lifecycle + expected tradeVersion
+  -> available Menu/Configuration의 same-store sellable unit 검증
   -> canonical desired aggregate + 1,000/5,000/100/500/50 bound
   -> Menu/Option/Configuration/requirement write or no-op
   -> MENU_NAME search term replacement
@@ -236,9 +243,10 @@ write-model association expansion and new production dependencies are prohibited
 | 상황 | 응답/상태 | durable 결과 |
 | --- | --- | --- |
 | invalid text/money/duplicate ID/reference/bound | `400 INVALID_REQUEST` | 없음 |
+| 판매 가능한 configuration의 missing/cross-store sellable unit | `400 INVALID_REQUEST` | 없음 |
 | inactive/revoked/role 부족 | `403 ACCESS_DENIED` | 없음 |
 | 다른 Store target 또는 없는 target | `404 RESOURCE_NOT_FOUND` | 없음; 존재 누설 금지 |
-| stale expected version | `409 VERSION_CONFLICT` | 없음 |
+| stale expected version | `409 MERCHANT_CONTENT_STALE` | 없음 |
 | same key, different payload | `409 IDEMPOTENCY_KEY_REUSED` | 최초 command만 유지 |
 | active config가 archived/missing Option 참조 | `409 RESOURCE_STATE_CONFLICT` | 없음 |
 | ID collision | generic `409 RESOURCE_STATE_CONFLICT` | 없음; 충돌 owner 비공개 |
@@ -298,6 +306,8 @@ POST /api/v1/stores/{storeId}/menus/{menuId}/archive
   available, Configuration ID/selectedOptionIds/available/requirements를 포함한다.
 - replace/archive는 `expectedVersion`; 모든 mutation은 `Idempotency-Key`와 CSRF를 요구한다.
 - response는 normalized full representation, lifecycle, trade `version`, `updatedAt`을 반환한다.
+- create와 동일 요청 replay는 `201 Created`다. archived 목록은 summary-only이며 full trade-content GET은
+  `409 RESOURCE_STATE_CONFLICT`다.
 - display category/description과 image는 기존 별도 endpoint/version을 유지하고 trade payload에 넣지 않는다.
 - 새 event를 발행하지 않는다. 검색 색인은 같은 local transaction의 port 호출이다.
 
@@ -479,9 +489,21 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 - [x] 2026-08-27: Milestone 0 ADR·Business Policy와 completed dependency/readiness gate를 PR #116에 정리했다.
 - [x] 2026-08-27: authoring 권한과 Store commerce lock 순서 충돌을 membership FOR SHARE 선취로 해소하고
   commit `c3932ef`, PR #117(`main <- feature/merchant-ordering-policy`)로 게시했다.
-- [ ] Milestone 1 Store policy vertical slice 완료.
-- [ ] Milestone 2 Menu catalogue vertical slice 완료.
-- [ ] Milestone 3 combined verification과 completion evidence 완료.
+- [x] 2026-08-27: stale expected version은 기존 점주 콘텐츠 writer와 같은
+  `409 MERCHANT_CONTENT_STALE`를 재사용하기로 확정했다.
+- [x] 2026-08-27: Milestone 1 Store policy vertical slice를 commits `98e0e8d`, `de0a9dc`,
+  PR #118(`feature/merchant-ordering-policy <- feature/merchant-store-ordering-policy`)로 게시했다.
+- [x] 2026-08-27: Milestone 2 Menu catalogue vertical slice를 commits `d404eb1`, `b713580`,
+  PR #119(`feature/merchant-store-ordering-policy <- feature/merchant-menu-catalog-lifecycle`)로 게시했다.
+- [x] 2026-08-27: Milestone 3 combined verification과 completion evidence를 commits `828df45`,
+  `48a0add`, PR #120(`feature/merchant-menu-catalog-lifecycle <- feature/merchant-catalog-completion-evidence`)으로
+  게시했다.
+- [x] 2026-08-27: PR #118 review의 Store 전환 late response와 cross-Store idempotency 경합을 commits
+  `1f366dc`, `49be55a`로 수정하고 #119/#120에 merge-forward했다.
+- [x] 2026-08-27: PR #119 review의 sellable unit 참조, archive snapshot/detail/UI, cross-Store idempotency와
+  create 201 계약을 commits `0700842`, `27353e0`, `a3df2a7`, `22452f8`로 수정했다.
+- [x] 2026-08-27: combined Storybook이 발견한 ACTIVE→ARCHIVED 목록 late response 경합을 #119 commit
+  `a74e905`로 수정하고 #120에 merge-forward했다.
 
 ## Surprises & Discoveries
 
@@ -501,6 +523,16 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   catalogue 전용 membership shared lock을 Store lock보다 먼저 획득하고 404/403을 분리하도록 통일했다.
 - 2026-08-27 running Storybook MCP에서 inventory와 Store page/FeedbackState/Button 문서, story 작성 지침을
   확인했다. policy panel은 기존 Store console page composition과 FeedbackState/Button을 재사용·조합한다.
+- 계획의 failure table은 공용 오류 계약에 없는 `VERSION_CONFLICT`를 요구했지만 production
+  `FailureCode`와 기존 Store/Menu 콘텐츠 writer는 `MERCHANT_CONTENT_STALE`를 사용했다. 2026-08-27 결정으로
+  공용 오류 표면을 늘리지 않고 기존 409 코드를 Store/Menu 거래 writer에도 재사용한다.
+- ADR-026은 Merchant가 Inventory의 공개 validation API로 sellable unit 정합성을 확인하도록 요구했지만
+  현재 Modulith 경계는 Merchant가 `shared :: api`에만 의존하도록 제한한다. 기존 검색 색인과 같은 shared
+  bridge port를 Inventory가 구현하도록 ADR을 정정해 직접 Repository 참조와 Merchant→Inventory→Operations→
+  Merchant 순환을 만들지 않았다.
+- Store Catalog focused Storybook은 archived summary 검증이 통과했지만 전체 병렬 suite는 이전 ACTIVE list
+  응답이 늦게 도착해 ARCHIVED tab을 덮는 경합을 발견했다. Store+lifecycle request generation으로 stale
+  response/error/finally를 격리했고 역순 deferred unit test와 전체 Storybook으로 재검증했다.
 
 ## Decision Log
 
@@ -513,12 +545,46 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 | 2026-08-26 | Store policy/Menu trade version을 display/image JPA version과 분리 | false stale 제거와 child 거래 변경 대표 | ADR-118, ADR-116 amendment 예정 |
 | 2026-08-26 | 모든 mutation은 command-transaction idempotency | 기존 Store root, local atomic commit, Provider 호출 없음 | ADR-064, ADR-118 |
 | 2026-08-27 | authoring은 membership FOR SHARE 뒤 Store FOR UPDATE 순서 | revoke 경쟁을 직렬화하고 cross-store/없는 Store를 같은 404로 숨기며 ExecPlan/ADR 충돌 해소 | BR-52, ADR-118 |
+| 2026-08-27 | stale expected version은 `MERCHANT_CONTENT_STALE` 재사용 | 기존 점주 콘텐츠 writer와 공용 오류 계약을 유지하고 불필요한 새 failure code를 만들지 않음 | ADR-118, 이 ExecPlan |
+| 2026-08-27 | Store ID를 제외한 actor·operation·key 멱등 scope와 key advisory lock | BR-25 scope를 유지하면서 서로 다른 Store의 동시 재사용도 deterministic replay/409로 직렬화 | ADR-118, 이 ExecPlan |
+| 2026-08-27 | sellable unit 검증은 `shared :: api` bridge port를 Inventory가 구현 | ADR-026 정합성을 지키면서 Merchant의 허용 의존성과 Aggregate 소유권 유지 | ADR-026, 이 ExecPlan |
+| 2026-08-27 | archived Menu는 summary-only이고 full trade-content 편집을 제공하지 않음 | revision subsystem 없이 과거 제거 child 재노출과 실패가 예정된 writable UI를 함께 제거 | ADR-118, 이 ExecPlan |
 
 ## Outcomes & Retrospective
 
-아직 구현하지 않았다. 완료 시 각 PR URL/commit, migration 번호, contract diff, concurrency interleaving evidence,
-frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `COMPLETED`는 combined head에서 required
-검증이 실제 통과한 뒤에만 선언한다.
+Milestone 1은 PR #118에서 V69 Store ordering policy version과 90일 command replay 원장, authenticated GET/PUT,
+Audit와 quote fingerprint v3를 구현했다. review 뒤 idempotency scope를 actor·operation·key로 유지한 채 membership
+FOR SHARE 다음 key advisory lock으로 cross-Store 재사용을 직렬화하고, replay 확인 뒤에만 Store FOR UPDATE를
+획득하도록 고쳤다. frontend는 Store 전환 뒤 늦게 끝난 policy 응답이 현재 Store를 덮지 않도록 request generation을
+추가했다. PostgreSQL 동시 요청과 reversed deferred frontend unit test를 포함한 focused 검증이 통과했고, commits
+`1f366dc`, `49be55a`의 원격 CI도 모든 job이 통과했다.
+
+Milestone 2는 PR #119에서 V70 Menu ACTIVE/ARCHIVED 수명주기, 별도 `trade_version`, 활성 판매 구성 유일성,
+90일 command replay 원장과 create/replace/archive API를 구현했다. review 뒤 Store writer와 같은 cross-Store
+idempotency 직렬화를 적용하고, available Menu/Configuration이 같은 Store의 available sellable unit만 참조하는지
+Inventory 구현 shared bridge로 검증한다. archived authoring은 summary-only이며 full trade-content GET을 409로
+차단하고 terminal response는 보관 직전 active child만 반환한다. create와 replay는 OpenAPI/generated client/UI까지
+`201 Created`로 정렬했다. frontend에는 archived read-only 계약과 ACTIVE→ARCHIVED 전환의 늦은 목록 응답 격리를
+추가했다. 관련 PostgreSQL integration, Modulith, frontend unit/type/design과 최종 전체 Storybook 200개
+interaction+a11y가 통과했고 commits `0700842`, `27353e0`, `a3df2a7`, `22452f8`, `a74e905`의 원격 CI도 모든
+job이 통과했다.
+
+Milestone 3는 PR #120에서 새 production 계약 없이 lock/search performance fixture, quality evidence,
+BR-47 freshness 정정, capability/design map과 authoring runbook을 추가했다. 첫 전체 backend run은 V69 뒤에도
+기존 column/latest-migration 기대치를 고정한 두 테스트 때문에 1,476건 중 2건이 실패했다. 수정은 가장
+이른 영향 PR #118의 commit `40e5884`에 넣고 #119와 combined head로 merge-forward했다. review에서 지적된
+부모 PR correctness 변경도 #120에 merge-forward한 뒤 combined head에서 새로 검증했다. 전체 backend 결과는
+1,480 tests, 0 failures, 0 errors, 2 skipped로 55분 33초에 통과했고 `./gradlew build`와 Spotless도 통과했다.
+docs/OpenAPI verifier와 frontend design/type/179 unit/production build/Storybook build/Sites가 통과했다. 첫
+전체 Storybook은 archived late response 경합 1건을 발견해 `a74e905`로 수정했고, 최종 200개
+interaction+a11y가 통과했다. PostgreSQL 고정 fixture는 일반 Store
+read 200회 71 ms/2,785 ops/s와 `FOR SHARE` 70 ms/2,834 ops/s를 기록했지만 단일 순차 표본이므로 개선
+주장을 하지 않는다. shared/shared 획득은 15 ms였고 controlled 250 ms 뒤 exclusive writer는 총 284 ms
+대기했으며 `pg_stat_activity`에서 `Lock`과 blocking PID를 확인했다. V70 schema의 100,000-term 검색은
+Seq Scan 269.263 ms에서 V59 Bitmap index plan 5.996 ms로 바뀌는 단일 EXPLAIN capture를 재확인했다.
+Provider sandbox, 실제 deployment/migration duration, production traffic p50/p95/p99와 connection-pool load는
+실행하지 않았으며 `Not run`이다. 이 완료는 verified stacked head를 뜻하며 merge 또는 deployment 완료를
+뜻하지 않는다.
 
 ## Revision Notes
 
@@ -527,3 +593,10 @@ frontend/Storybook 결과, local/remote CI와 Not run 항목을 기록한다. `C
 - 2026-08-27: 선행 계약 계획의 completed evidence를 반영해 dependency를 completed path로 바꾸고,
   ADR-118·BR-52 결정 기록과 함께 implementation readiness를 true로 전환했다.
 - 2026-08-27: membership/Store lock 순서와 404/403 의미를 확정하고 Storybook MCP prerequisite를 충족했다.
+- 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
+- 2026-08-27: V69 Store 주문 정책 vertical slice와 `/store/catalog` 소비자를 stacked PR #118로 게시했다.
+- 2026-08-27: V70 Menu catalogue 거래 계약과 점주 소비 UI를 stacked PR #119로 게시했다.
+- 2026-08-27: combined regression·lock/search 성능 증거와 운영 문서를 stacked PR #120으로 게시하고
+  계획을 completed path로 이동했다.
+- 2026-08-27: PR #118/#119 review correctness 수정을 각 부모 branch에 적용한 뒤 순서대로 merge-forward했고,
+  combined head의 전체 검증을 다시 실행한 결과로 완료 근거를 정정했다.

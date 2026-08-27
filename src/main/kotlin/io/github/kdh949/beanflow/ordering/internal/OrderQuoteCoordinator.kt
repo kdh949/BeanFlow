@@ -222,6 +222,11 @@ internal class OrderQuoteCoordinator(
         if (menu.lines.size != command.lines.size) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Merchant quote count does not match order lines")
         }
+        if (menu.menuTradeVersions.keys != command.lines.map { it.menuId }.toSet() ||
+            menu.menuTradeVersions.values.any { it < 0 }
+        ) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Merchant trade versions do not match order lines")
+        }
         command.lines.zip(menu.lines).forEach { (requested, quoted) ->
             if (requested.menuId != quoted.menuId || requested.quantity != quoted.quantity ||
                 requested.optionIds.sortedBy { it.toString() } != quoted.optionSnapshots.map { it.optionId }
@@ -263,7 +268,7 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v2"
+    private const val VERSION = "order-quote-fingerprint/v4"
 
     fun calculate(
         command: OrderQuoteCommand,
@@ -296,9 +301,11 @@ internal object OrderQuoteFingerprint {
                     }
                     value(menu.storeAcceptingOrders)
                     value(menu.storePickupEnabled)
+                    value(menu.orderingPolicyVersion)
                     size(menu.lines.size)
                     menu.lines.forEach { line ->
                         value(line.menuId)
+                        value(menu.menuTradeVersions[line.menuId])
                         value(line.menuName)
                         value(line.unitPriceKrw)
                         value(line.quantity)

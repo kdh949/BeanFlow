@@ -36,6 +36,11 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/region"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/image"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/customer-display"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/ordering-policy"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menu-catalog"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus", setOf("POST")),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus/{menuId}/trade-content"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus/{menuId}/archive"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus/{menuId}/image"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/menus/{menuId}/display-content"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/orders/**"),
@@ -55,38 +60,50 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/nearby"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/search"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}"),
-            registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus"),
+            registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus", setOf("GET", "HEAD")),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/pickup-slots"),
         )
 
-    fun classify(path: String): AuthenticationChain? {
-        val matches = matchingRegistrations(path).map { it.chain }.distinct()
+    fun classify(
+        path: String,
+        method: String? = null,
+    ): AuthenticationChain? {
+        val matches = matchingRegistrations(path, method).map { it.chain }.distinct()
         check(matches.size <= 1) { "Authentication path '$path' belongs to multiple chains: $matches" }
         return matches.singleOrNull()
     }
 
     fun requestMatcher(chain: AuthenticationChain): RequestMatcher =
-        RequestMatcher { request -> classify(request.applicationPath()) == chain }
+        RequestMatcher { request -> classify(request.applicationPath(), request.method) == chain }
 
     fun overlappingPatterns(): List<Pair<String, String>> =
         registrations.indices.flatMap { leftIndex ->
             ((leftIndex + 1) until registrations.size).mapNotNull { rightIndex ->
                 val left = registrations[leftIndex]
                 val right = registrations[rightIndex]
-                if (left.chain == right.chain) return@mapNotNull null
+                if (left.chain == right.chain || !left.methodsOverlap(right)) return@mapNotNull null
                 val overlaps =
                     listOf(left.patternText.canonicalSample(), right.patternText.canonicalSample())
-                        .any { sample -> left.matches(sample) && right.matches(sample) }
+                        .any { sample -> left.matches(sample, null) && right.matches(sample, null) }
                 if (overlaps) left.patternText to right.patternText else null
             }
         }
 
-    private fun matchingRegistrations(path: String): List<Registration> = registrations.filter { it.matches(path) }
+    internal fun hasRegistration(
+        path: String,
+        method: String? = null,
+    ): Boolean = matchingRegistrations(path, method).map(Registration::chain).distinct().size == 1
+
+    private fun matchingRegistrations(
+        path: String,
+        method: String?,
+    ): List<Registration> = registrations.filter { it.matches(path, method) }
 
     private fun registration(
         chain: AuthenticationChain,
         pattern: String,
-    ) = Registration(chain, pattern, parser.parse(pattern))
+        methods: Set<String> = emptySet(),
+    ) = Registration(chain, pattern, parser.parse(pattern), methods)
 
     private fun HttpServletRequest.applicationPath(): String = requestURI.removePrefix(contextPath).ifEmpty { "/" }
 
@@ -99,7 +116,16 @@ internal class AuthenticationPathRegistry {
         val chain: AuthenticationChain,
         val patternText: String,
         val pattern: PathPattern,
+        val methods: Set<String>,
     ) {
-        fun matches(path: String): Boolean = pattern.matches(PathContainer.parsePath(path))
+        fun matches(
+            path: String,
+            method: String?,
+        ): Boolean =
+            pattern.matches(PathContainer.parsePath(path)) &&
+                (method == null || methods.isEmpty() || method in methods)
+
+        fun methodsOverlap(other: Registration): Boolean =
+            methods.isEmpty() || other.methods.isEmpty() || methods.any(other.methods::contains)
     }
 }

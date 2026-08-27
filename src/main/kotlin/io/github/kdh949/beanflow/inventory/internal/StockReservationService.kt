@@ -11,6 +11,7 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
+import io.github.kdh949.beanflow.shared.api.SellableUnitValidationOperations
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -30,7 +31,23 @@ internal class StockReservationService(
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
 ) : StockReservationOperations,
-    StockQuoteOperations {
+    StockQuoteOperations,
+    SellableUnitValidationOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun requireOwnedByStore(
+        storeId: UUID,
+        sellableUnitIds: Set<UUID>,
+    ) {
+        if (sellableUnitIds.isEmpty()) return
+        val stocks = stockRepository.findAllById(sellableUnitIds).associateBy(SellableStockEntity::id)
+        if (!stocks.keys.containsAll(sellableUnitIds)) {
+            fail(FailureCode.INVALID_REQUEST, "Sellable stock was not found")
+        }
+        if (stocks.values.any { it.storeId != storeId }) {
+            fail(FailureCode.INVALID_REQUEST, "Sellable stock belongs to another store")
+        }
+    }
+
     @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
     override fun inspect(
         storeId: UUID,

@@ -1,8 +1,10 @@
 # Store Keyword Search Runbook
 
 `POST /api/v1/operations/search-index/rebuild`로 매장 통합 검색 색인을 초기 적재하거나,
-검증된 seed·직접 DML 뒤의 매장명/판매 중 메뉴명 변경을 반영하는 절차다. 검색어·고객 좌표를
-조사하거나, 매장·메뉴 source를 임의 값으로 보정하는 절차는 아니다.
+검증된 seed·직접 DML 뒤의 매장명/판매 중 메뉴명 변경을 반영하는 절차다. production Menu
+create/replace/archive는 `MENU_NAME` term을 같은 transaction에서 갱신하므로 정상 authoring 뒤 rebuild를
+일상 절차로 사용하지 않는다. 검색어·고객 좌표를 조사하거나, 매장·메뉴 source를 임의 값으로 보정하는
+절차는 아니다.
 
 관련 결정: [BR-47](../product/business-policy-decisions.md),
 [ADR-103](../adr/ADR-103-store-search-strategy.md),

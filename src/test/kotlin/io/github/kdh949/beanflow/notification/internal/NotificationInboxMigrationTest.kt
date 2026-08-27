@@ -26,10 +26,10 @@ internal class NotificationInboxMigrationTest : IsolatedPostgresSupport() {
     fun `V68 creates customer inbox preference and bounded lookup indexes`() {
         assertThat(
             jdbc.queryForObject(
-                "SELECT max(CAST(version AS integer)) FROM flyway_schema_history WHERE success",
-                Int::class.java,
+                "SELECT count(*) FROM flyway_schema_history WHERE version = '68' AND success",
+                Long::class.java,
             ),
-        ).isEqualTo(68)
+        ).isOne()
 
         assertThat(indexDefinition("ix_notification_inbox_customer_recent"))
             .contains("customer_id", "created_at DESC", "id DESC")
