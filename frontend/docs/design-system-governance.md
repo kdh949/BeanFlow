@@ -113,6 +113,9 @@ Literal dimensions may be valid for intrinsic geometry, media assets, hit target
 - Prefer explicit variants and states over unrestricted `className` or `style` escape hatches.
 - A component protects its own accessibility semantics, focus behavior, disabled behavior, and loading behavior.
 - Product-specific business text and data remain outside primitives unless the component is intentionally a domain pattern.
+- Product source는 `input`, `select`, `textarea`를 직접 렌더링하지 않고 canonical field/selection component를 사용한다.
+- Feature CSS는 canonical control의 color, border, focus, selected, disabled, touch-target 계약을 재정의하지 않고 배치만 소유한다.
+- API error, domain state, 사용자 노출 문구의 변환은 shared/product presentation 계층이 소유하며 design-system은 presentation-safe prop만 받는다.
 - Deprecated components are documented with a replacement and removed from the AI manifest.
 
 ## 7. Story rules
@@ -219,6 +222,7 @@ Recommended checks:
 - Storybook/Vitest browser tests
 - Storybook static build
 - design-token/adherence lint
+- native-control and CSS ownership boundary regression tests
 - accessibility tests
 - product build and Sites handoff tests
 - visual regression for canonical critical stories once a clean baseline is approved

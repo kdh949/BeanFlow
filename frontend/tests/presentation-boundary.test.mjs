@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   findDesignSystemDependencyViolations,
   findLegacyArtifactViolations,
+  findParallelControlStyleViolations,
   findPresentationBoundaryViolations,
+  findRawControlViolations,
 } from "../scripts/presentation-boundary.mjs";
 
 test("allows presentation-neutral dependencies", () => {
@@ -78,4 +80,31 @@ test("rejects design-system-owned shared selectors in the global stylesheet", ()
   );
 
   assert.deepEqual(violations.map(({ kind }) => kind), ["parallel-shared-css", "parallel-shared-css"]);
+});
+
+test("allows native controls only inside the canonical design system", () => {
+  assert.deepEqual(
+    findRawControlViolations("src/design-system/components/forms/Field.tsx", "<input /><select /><textarea />"),
+    [],
+  );
+  assert.deepEqual(
+    findRawControlViolations("src/features/auth/LoginPage.tsx", "<input /><select /><textarea />").map(({ kind, element }) => ({ kind, element })),
+    [
+      { kind: "raw-product-control", element: "input" },
+      { kind: "raw-product-control", element: "select" },
+      { kind: "raw-product-control", element: "textarea" },
+    ],
+  );
+});
+
+test("rejects feature CSS that restyles native controls", () => {
+  const violations = findParallelControlStyleViolations(
+    "src/features/orders/orders.css",
+    ".order-form input, .order-form select:focus { border: 1px solid red; } .order-actions button { min-height: 30px; }",
+  );
+  assert.deepEqual(violations.map(({ kind }) => kind), ["parallel-control-css", "parallel-control-css"]);
+  assert.deepEqual(
+    findParallelControlStyleViolations("src/design-system/components/forms/forms.css", ".bf-field input { min-height: 44px; }"),
+    [],
+  );
 });
