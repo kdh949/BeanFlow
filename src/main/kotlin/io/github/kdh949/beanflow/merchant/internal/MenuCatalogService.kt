@@ -17,6 +17,7 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.ReplaceStoreSearchTermsCommand
+import io.github.kdh949.beanflow.shared.api.SellableUnitValidationOperations
 import io.github.kdh949.beanflow.shared.api.StoreSearchIndexOperations
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
@@ -43,6 +44,7 @@ internal class MenuCatalogService(
     private val configurations: MenuConfigurationJpaRepository,
     private val requirements: MenuConfigurationRequirementJpaRepository,
     private val commands: MenuCatalogCommandRepository,
+    private val sellableUnits: SellableUnitValidationOperations,
     private val searchIndex: StoreSearchIndexOperations,
     private val identifiers: IdentifierSource,
     private val objectMapper: ObjectMapper,
@@ -121,6 +123,7 @@ internal class MenuCatalogService(
             return MenuCatalogMutation(it, null, changed = false, replayed = true)
         }
         requireStoreForWrite(command.storeId)
+        requireSellableUnits(command.storeId, definition)
         if (menus.existsById(definition.menuId)) conflict("Menu id is already in use")
         requireNewChildIds(definition, emptySet(), emptySet())
         requireStoreBounds(command.storeId, addingMenu = true, replacingMenuId = null, desiredOptions = definition.options.size)
@@ -165,6 +168,7 @@ internal class MenuCatalogService(
         val menu = aggregate.menu
         if (menu.lifecycle != MenuLifecycle.ACTIVE) conflict("An archived Menu cannot be replaced")
         if (menu.tradeVersion != command.expectedVersion) stale()
+        requireSellableUnits(command.storeId, definition)
         val previous = aggregate.snapshot()
         if (previous.sameTradeMeaning(definition)) {
             record(command.actorId, command.idempotencyKey, REPLACE, hash, command.storeId, menu.id, previous, command.now)
@@ -360,6 +364,20 @@ internal class MenuCatalogService(
         ) {
             conflict("Menu configuration id is already in use")
         }
+    }
+
+    private fun requireSellableUnits(
+        storeId: UUID,
+        definition: MenuTradeDefinition,
+    ) {
+        if (!definition.available) return
+        val referencedIds =
+            definition.configurations
+                .asSequence()
+                .filter(MenuConfigurationTradeContent::available)
+                .flatMap { it.requirements.asSequence() }
+                .mapTo(mutableSetOf(), MenuSellableRequirement::sellableUnitId)
+        sellableUnits.requireOwnedByStore(storeId, referencedIds)
     }
 
     private fun requireStoreBounds(

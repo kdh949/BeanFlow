@@ -36,7 +36,8 @@
 ### Merchant 소유 MenuConfiguration 번역
 
 - 메뉴 의미와 Inventory 수량 소유권을 분리한다.
-- 두 Context 사이 공개 Application API와 ID 정합성 검증이 필요하다.
+- Merchant가 Inventory persistence를 직접 참조하지 않도록 `shared :: api`의 공개 검증 포트를
+  Inventory가 구현하며, 이 포트로 ID 정합성을 확인한다.
 
 ### Inventory가 menu/option을 직접 해석
 
@@ -57,8 +58,9 @@ Merchant는 고객이 선택한 메뉴 구성이 무엇을 의미하는지 알�
 ## Consequences
 
 - Merchant schema에 normalized option-set identity와 requirement 행이 필요하다.
-- MenuConfiguration을 활성화하기 전에 참조 sellableUnitId 존재를 Application
-  validation 또는 DB FK 정책으로 확인해야 한다.
+- MenuConfiguration을 고객에게 판매 가능 상태로 활성화하기 전에 `shared :: api` 검증 포트로
+  참조 sellableUnitId의 존재와 같은 Store 소유를 확인한다. unavailable draft는 이 검증을 미룰 수 있지만
+  이후 활성화하는 command에서 다시 확인한다.
 - Ordering은 requirement를 결정적으로 합산한 뒤 global lock order에 따라 Inventory
   API를 호출한다.
 - MenuConfiguration 변경은 이미 생성된 Order와 StockReservation 수량을 바꾸지
