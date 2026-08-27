@@ -7,6 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(root, "src");
 const tokenRoot = join(src, "design-system", "tokens");
 const baselinePath = join(root, "design-adherence-baseline.json");
+const isolatedPresentationRoots = [join(src, "presentation", "beanflow-refresh")];
 
 function filesUnder(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -79,8 +80,9 @@ const violations = [];
 const pixelCounts = new Map();
 const sourceFiles = filesUnder(src);
 const cssFiles = sourceFiles.filter((path) => path.endsWith(".css") && !path.startsWith(tokenRoot));
+const designSystemCssFiles = cssFiles.filter((path) => !isolatedPresentationRoots.some((rootPath) => path.startsWith(rootPath)));
 
-for (const path of cssFiles) {
+for (const path of designSystemCssFiles) {
   const file = displayPath(path);
   const source = withoutComments(readFileSync(path, "utf8"));
 
@@ -117,7 +119,6 @@ for (const [key, count] of pixelCounts) {
 }
 
 for (const path of sourceFiles.filter((candidate) => /\.(?:ts|tsx|js|jsx)$/.test(candidate))) {
-  if (path.endsWith("_ds_bundle.js")) continue;
   const file = displayPath(path);
   const source = readFileSync(path, "utf8");
   if (/_ds_(?:bundle|manifest)/.test(source)) violations.push({ rule: "generated-import", file, value: "generated artefact" });
@@ -132,7 +133,7 @@ const editableComponentSource = sourceFiles
   .map((path) => readFileSync(path, "utf8"))
   .join("\n");
 const canonicalStyleFamilies = new Set();
-for (const path of cssFiles.filter((candidate) => candidate.includes(`${join("design-system", "components")}`))) {
+for (const path of designSystemCssFiles.filter((candidate) => candidate.includes(`${join("design-system", "components")}`))) {
   const source = withoutComments(readFileSync(path, "utf8"));
   for (const match of source.matchAll(/\.bf-([a-z0-9]+)(?:[-_:{.#\[]|$)/gi)) canonicalStyleFamilies.add(match[1]);
 }
@@ -210,4 +211,5 @@ const debt = normalized.filter((violation) => violation.rule === "repeated-raw-p
 console.log(`Design adherence passed: ${tokens.size} tokens, ${storyFiles.length} story files, ${routeComponents.size} route components.`);
 console.log(`Canonical style ownership passed: ${canonicalStyleFamilies.size} component style families have editable TSX owners.`);
 console.log(`Autodocs isolation passed: ${isolatedNetworkDocs} multi-state MSW docs use story iframes.`);
+console.log(`Presentation isolation: ${cssFiles.length - designSystemCssFiles.length} CSS file(s) are governed by the presentation-boundary check.`);
 console.log(`Baseline debt: ${debt.length} repeated raw pixel value(s); new values or count increases fail.`);
