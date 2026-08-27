@@ -1,11 +1,11 @@
 # 프런트엔드 디자인 시스템 리뷰 결함 보정
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-27`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -123,7 +123,7 @@ DB 및 데이터 migration 없음.
 - [x] presentation 경계 수정
 - [x] styling, token, CI, 문서 수정
 - [x] 전체 검증
-- [ ] push 및 review thread 해결
+- [x] push 및 review thread 해결
 
 ## Surprises & Discoveries
 
@@ -142,9 +142,10 @@ DB 및 데이터 migration 없음.
 디자인 시스템의 application import와 domain 상태 소유권을 제거했고, 안전한 오류 adapter와 domain 상태
 adapter를 `presentation/shared`로 분리했다. 공용 CSS 소유권과 44px 터치 영역을 guard와 Storybook
 interaction test로 고정했다. unit 176개, boundary 7개, live Storybook 159개(a11y 포함), typecheck,
-design guard, product/Storybook build, Sites 및 Storybook docs isolation이 통과했다. 원격 반영과 review
-thread 해결은 다음 단계에서 수행한다.
+design guard, product/Storybook build, Sites 및 Storybook docs isolation이 통과했다. 수정 커밋을 PR #122
+head에 반영한 뒤 지정된 review thread 8건을 모두 해결했고, GraphQL 재조회로 8건 모두 resolved임을 확인했다.
 
 ## Revision Notes
 
 - 2026-08-27: PR #122 review remediation 시작.
+- 2026-08-27: 로컬 및 Storybook 검증, 원격 반영, review thread 8건 해결 완료.
