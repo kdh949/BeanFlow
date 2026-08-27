@@ -342,6 +342,49 @@ internal class MenuCatalogEndpointIntegrationTest(
     }
 
     @Test
+    fun `same actor operation and key across Stores serializes changed payload to deterministic conflict`() {
+        val firstStoreId = seedStore()
+        val secondStoreId = seedStore()
+        val actor = signIn("catalog.cross-store.concurrent", firstStoreId, "OWNER")
+        addMembership(actor.actorId, secondStoreId, "OWNER")
+        val secondSession = signInAgain("catalog.cross-store.concurrent", actor.actorId)
+        val firstMenuId = UUID.randomUUID()
+        val secondMenuId = UUID.randomUUID()
+        val barrier = CyclicBarrier(2)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val statuses =
+                listOf(
+                    Triple(
+                        firstStoreId,
+                        actor,
+                        content(firstMenuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "시청 라테", 4_500),
+                    ),
+                    Triple(
+                        secondStoreId,
+                        secondSession,
+                        content(secondMenuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "강남 라테", 5_000),
+                    ),
+                ).map { (storeId, session, payload) ->
+                    executor.submit<Int> {
+                        barrier.await()
+                        mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-cross-store-key-001", payload)
+                            .andReturn()
+                            .response.status
+                    }
+                }.map { it.get(15, TimeUnit.SECONDS) }
+
+            assertThat(statuses.count { it in 200..299 }).isEqualTo(1)
+            assertThat(statuses.count { it == 409 }).isEqualTo(1)
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isOne()
+            assertThat(commandCount()).isOne()
+            assertThat(auditActions(firstMenuId).size + auditActions(secondMenuId).size).isEqualTo(1)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `Store boundaries accept 1000 active Menus and 5000 active Options then reject overflow`() {
         val menuBoundStore = seedStore()
         val menuBoundActor = signIn("catalog.store.menu.boundary", menuBoundStore, "OWNER")
@@ -567,6 +610,26 @@ internal class MenuCatalogEndpointIntegrationTest(
                     .getCookie(SESSION_COOKIE),
             )
         return MerchantSession(accountId, session, csrf)
+    }
+
+    private fun addMembership(
+        actorId: UUID,
+        storeId: UUID,
+        role: String,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_store_membership
+                (id, actor_id, store_id, membership_role, status, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            actorId,
+            storeId,
+            role,
+            Timestamp.from(NOW),
+            Timestamp.from(NOW),
+        )
     }
 
     private fun customerSession(): CustomerSession {

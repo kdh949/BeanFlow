@@ -17,8 +17,21 @@ internal data class MenuCatalogCommandRecord(
 internal class MenuCatalogCommandRepository(
     private val jdbc: JdbcTemplate,
 ) {
+    fun lockCommandKey(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+    ) {
+        jdbc.queryForObject(
+            "select pg_advisory_xact_lock(hashtextextended(?, 0))",
+            Any::class.java,
+            "merchant-menu-catalog:$actorId:$operation:$idempotencyKey",
+        )
+    }
+
     fun find(
         actorId: UUID,
+        operation: String,
         idempotencyKey: String,
     ): MenuCatalogCommandRecord? =
         jdbc
@@ -26,10 +39,11 @@ internal class MenuCatalogCommandRepository(
                 """
                 SELECT payload_hash, response_json
                   FROM merchant_menu_catalog_command
-                 WHERE actor_id = ? AND idempotency_key = ?
+                 WHERE actor_id = ? AND operation = ? AND idempotency_key = ?
                 """.trimIndent(),
                 { row, _ -> MenuCatalogCommandRecord(row.getString("payload_hash"), row.getString("response_json")) },
                 actorId,
+                operation,
                 idempotencyKey,
             ).firstOrNull()
 

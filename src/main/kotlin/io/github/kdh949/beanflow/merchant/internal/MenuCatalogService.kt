@@ -115,11 +115,12 @@ internal class MenuCatalogService(
         validateKey(command.idempotencyKey)
         val definition = normalize(command.definition)
         if (definition.menuId != command.definition.menuId) invalid("Menu id is invalid")
-        requireStoreForWrite(command.storeId)
         val hash = payloadHash(CREATE, command.storeId, definition, null)
-        replay(command.actorId, command.idempotencyKey, hash)?.let {
+        commands.lockCommandKey(command.actorId, CREATE, command.idempotencyKey)
+        replay(command.actorId, CREATE, command.idempotencyKey, hash)?.let {
             return MenuCatalogMutation(it, null, changed = false, replayed = true)
         }
+        requireStoreForWrite(command.storeId)
         if (menus.existsById(definition.menuId)) conflict("Menu id is already in use")
         requireNewChildIds(definition, emptySet(), emptySet())
         requireStoreBounds(command.storeId, addingMenu = true, replacingMenuId = null, desiredOptions = definition.options.size)
@@ -154,11 +155,12 @@ internal class MenuCatalogService(
         if (command.expectedVersion < 0) invalid("expectedVersion must be zero or greater")
         val definition = normalize(command.definition)
         if (definition.menuId != command.menuId) invalid("Body menuId must match the path menuId")
-        requireStoreForWrite(command.storeId)
         val hash = payloadHash(REPLACE, command.storeId, definition, command.expectedVersion)
-        replay(command.actorId, command.idempotencyKey, hash)?.let {
+        commands.lockCommandKey(command.actorId, REPLACE, command.idempotencyKey)
+        replay(command.actorId, REPLACE, command.idempotencyKey, hash)?.let {
             return MenuCatalogMutation(it, it, changed = false, replayed = true)
         }
+        requireStoreForWrite(command.storeId)
         val aggregate = loadMenu(command.storeId, command.menuId)
         val menu = aggregate.menu
         if (menu.lifecycle != MenuLifecycle.ACTIVE) conflict("An archived Menu cannot be replaced")
@@ -193,11 +195,12 @@ internal class MenuCatalogService(
     override fun archive(command: ArchiveMenuCatalogCommand): MenuCatalogMutation {
         validateKey(command.idempotencyKey)
         if (command.expectedVersion < 0) invalid("expectedVersion must be zero or greater")
-        requireStoreForWrite(command.storeId)
         val hash = payloadHash(ARCHIVE, command.storeId, command.menuId, command.expectedVersion)
-        replay(command.actorId, command.idempotencyKey, hash)?.let {
+        commands.lockCommandKey(command.actorId, ARCHIVE, command.idempotencyKey)
+        replay(command.actorId, ARCHIVE, command.idempotencyKey, hash)?.let {
             return MenuCatalogMutation(it, it, changed = false, replayed = true)
         }
+        requireStoreForWrite(command.storeId)
         val aggregate = loadMenu(command.storeId, command.menuId)
         if (aggregate.menu.tradeVersion != command.expectedVersion) stale()
         if (aggregate.menu.lifecycle != MenuLifecycle.ACTIVE) conflict("An archived Menu cannot be archived again")
@@ -389,10 +392,11 @@ internal class MenuCatalogService(
 
     private fun replay(
         actorId: UUID,
+        operation: String,
         key: String,
         hash: String,
     ): MenuTradeContent? =
-        commands.find(actorId, key)?.let {
+        commands.find(actorId, operation, key)?.let {
             if (it.payloadHash != hash) {
                 throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency-Key was reused with another Menu command")
             }
