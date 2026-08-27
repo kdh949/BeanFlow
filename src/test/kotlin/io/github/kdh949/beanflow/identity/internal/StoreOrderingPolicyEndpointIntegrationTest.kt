@@ -118,6 +118,88 @@ internal class StoreOrderingPolicyEndpointIntegrationTest(
     }
 
     @Test
+    fun `same actor and key across Stores deterministically returns replay conflict instead of dependency failure`() {
+        val firstStoreId = seedStore()
+        val secondStoreId = seedStore()
+        val actor = signIn("policy.cross-store-key", firstStoreId, "OWNER")
+        seedMembership(actor.actorId, secondStoreId, "OWNER")
+        val key = "policy-cross-store-key-001"
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+
+        jdbc.execute(
+            """
+            CREATE OR REPLACE FUNCTION test_delay_policy_command_insert() RETURNS trigger
+            LANGUAGE plpgsql AS ${'$'}${'$'}
+            BEGIN
+                PERFORM pg_sleep(0.25);
+                RETURN NEW;
+            END
+            ${'$'}${'$'}
+            """.trimIndent(),
+        )
+        jdbc.execute(
+            """
+            CREATE TRIGGER test_delay_policy_command_insert
+            BEFORE INSERT ON merchant_store_ordering_policy_command
+            FOR EACH ROW EXECUTE FUNCTION test_delay_policy_command_insert()
+            """.trimIndent(),
+        )
+
+        try {
+            val first =
+                executor.submit(
+                    Callable {
+                        ready.countDown()
+                        check(start.await(5, TimeUnit.SECONDS))
+                        runCatching {
+                            applicationService.replace(
+                                StoreOrderingPolicyCommandContext(actor.actorId, key),
+                                firstStoreId,
+                                acceptingOrders = false,
+                                pickupEnabled = true,
+                                expectedVersion = 0,
+                            )
+                        }
+                    },
+                )
+            val second =
+                executor.submit(
+                    Callable {
+                        ready.countDown()
+                        check(start.await(5, TimeUnit.SECONDS))
+                        runCatching {
+                            applicationService.replace(
+                                StoreOrderingPolicyCommandContext(actor.actorId, key),
+                                secondStoreId,
+                                acceptingOrders = false,
+                                pickupEnabled = true,
+                                expectedVersion = 0,
+                            )
+                        }
+                    },
+                )
+            check(ready.await(5, TimeUnit.SECONDS))
+            start.countDown()
+
+            val results = listOf(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS))
+            assertThat(results.count { it.isSuccess }).isOne()
+            val failure = results.single { it.isFailure }.exceptionOrNull() as DomainFailure
+            assertThat(failure.code).isEqualTo(FailureCode.IDEMPOTENCY_KEY_REUSED)
+            assertThat(listOf(policyVersion(firstStoreId), policyVersion(secondStoreId)))
+                .containsExactlyInAnyOrder(0, 1)
+            assertThat(commandCount()).isOne()
+            assertThat(auditActorTypes(firstStoreId) + auditActorTypes(secondStoreId)).hasSize(1)
+        } finally {
+            start.countDown()
+            executor.shutdownNow()
+            jdbc.execute("DROP TRIGGER IF EXISTS test_delay_policy_command_insert ON merchant_store_ordering_policy_command")
+            jdbc.execute("DROP FUNCTION IF EXISTS test_delay_policy_command_insert()")
+        }
+    }
+
+    @Test
     fun `stale revoked and cross-store requests do not change policy`() {
         val storeId = seedStore()
         val otherStoreId = seedStore()
@@ -424,6 +506,26 @@ internal class StoreOrderingPolicyEndpointIntegrationTest(
                     .getCookie(SESSION_COOKIE),
             )
         return MerchantSession(accountId, session, csrf)
+    }
+
+    private fun seedMembership(
+        actorId: UUID,
+        storeId: UUID,
+        role: String,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_store_membership
+                (id, actor_id, store_id, membership_role, status, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            actorId,
+            storeId,
+            role,
+            Timestamp.from(NOW),
+            Timestamp.from(NOW),
+        )
     }
 
     private fun policyVersion(storeId: UUID): Long =

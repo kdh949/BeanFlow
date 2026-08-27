@@ -47,7 +47,8 @@ internal class MenuCatalogEndpointIntegrationTest(
                 merchant_menu_catalog_command, discovery_store_search_term,
                 identity_store_membership, identity_merchant_account, operations_audit_record,
                 merchant_menu_configuration_requirement, merchant_menu_configuration,
-                merchant_menu_option, merchant_menu, merchant_store CASCADE
+                merchant_menu_option, merchant_menu, inventory_stock_reservation,
+                inventory_sellable_stock, merchant_store CASCADE
             """.trimIndent(),
         )
     }
@@ -59,6 +60,8 @@ internal class MenuCatalogEndpointIntegrationTest(
         val menuId = UUID.randomUUID()
         val optionId = UUID.randomUUID()
         val configurationId = UUID.randomUUID()
+        val replacementOptionId = UUID.randomUUID()
+        val replacementConfigurationId = UUID.randomUUID()
         val sellableUnitId = UUID.randomUUID()
 
         val created =
@@ -66,8 +69,8 @@ internal class MenuCatalogEndpointIntegrationTest(
                 post("/api/v1/stores/$storeId/menus"),
                 actor,
                 "menu-create-key-0001",
-                content(menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
-            ).andExpect(status().isOk)
+                content(storeId, menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
+            ).andExpect(status().isCreated)
                 .andExpect(jsonPath("$.menuId").value(menuId.toString()))
                 .andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.lifecycle").value("ACTIVE"))
@@ -78,8 +81,8 @@ internal class MenuCatalogEndpointIntegrationTest(
             post("/api/v1/stores/$storeId/menus"),
             actor,
             "menu-create-key-0001",
-            content(menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
-        ).andExpect(status().isOk)
+            content(storeId, menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
+        ).andExpect(status().isCreated)
             .andExpect { assertThat(it.response.contentAsString).isEqualTo(created) }
 
         mockMvc
@@ -92,7 +95,16 @@ internal class MenuCatalogEndpointIntegrationTest(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
             "menu-replace-key-001",
-            content(menuId, optionId, configurationId, sellableUnitId, "바닐라 라테", 5_000, expectedVersion = 0),
+            content(
+                storeId,
+                menuId,
+                replacementOptionId,
+                replacementConfigurationId,
+                sellableUnitId,
+                "바닐라 라테",
+                5_000,
+                expectedVersion = 0,
+            ),
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.name").value("바닐라 라테"))
             .andExpect(jsonPath("$.version").value(1))
@@ -101,7 +113,16 @@ internal class MenuCatalogEndpointIntegrationTest(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
             "menu-noop-key-0001",
-            content(menuId, optionId, configurationId, sellableUnitId, "바닐라 라테", 5_000, expectedVersion = 1),
+            content(
+                storeId,
+                menuId,
+                replacementOptionId,
+                replacementConfigurationId,
+                sellableUnitId,
+                "바닐라 라테",
+                5_000,
+                expectedVersion = 1,
+            ),
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.version").value(1))
 
@@ -113,6 +134,15 @@ internal class MenuCatalogEndpointIntegrationTest(
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.lifecycle").value("ARCHIVED"))
             .andExpect(jsonPath("$.version").value(2))
+            .andExpect(jsonPath("$.options.length()").value(1))
+            .andExpect(jsonPath("$.options[0].optionId").value(replacementOptionId.toString()))
+            .andExpect(jsonPath("$.configurations.length()").value(1))
+            .andExpect(jsonPath("$.configurations[0].configurationId").value(replacementConfigurationId.toString()))
+
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$menuId/trade-content").cookie(actor.session, actor.csrf))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RESOURCE_STATE_CONFLICT"))
 
         mockMvc
             .perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))
@@ -132,15 +162,15 @@ internal class MenuCatalogEndpointIntegrationTest(
         val optionId = UUID.randomUUID()
         val configurationId = UUID.randomUUID()
         val unitId = UUID.randomUUID()
-        val payload = content(menuId, optionId, configurationId, unitId, "필터 커피", 4_000)
+        val payload = content(storeId, menuId, optionId, configurationId, unitId, "필터 커피", 4_000)
 
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-staff-key-0001", payload)
-            .andExpect(status().isOk)
+            .andExpect(status().isCreated)
         mutate(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
             "menu-stale-key-0001",
-            content(menuId, optionId, configurationId, unitId, "필터 커피", 4_000, expectedVersion = 7),
+            content(storeId, menuId, optionId, configurationId, unitId, "필터 커피", 4_000, expectedVersion = 7),
         ).andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("MERCHANT_CONTENT_STALE"))
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-staff-key-0001", payload.replace("4000", "4100"))
@@ -168,13 +198,61 @@ internal class MenuCatalogEndpointIntegrationTest(
         val missingOptionId = UUID.randomUUID()
         val unitId = UUID.randomUUID()
         val invalid =
-            content(menuId, optionId, configurationId, unitId, "콜드브루", 4_800)
+            content(storeId, menuId, optionId, configurationId, unitId, "콜드브루", 4_800)
                 .replaceFirst(optionId.toString(), missingOptionId.toString())
 
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-invalid-key-001", invalid)
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RESOURCE_STATE_CONFLICT"))
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isZero()
+        assertThat(commandCount()).isZero()
+    }
+
+    @Test
+    fun `available Menu rejects missing and cross-Store sellable units without partial writes`() {
+        val storeId = seedStore()
+        val otherStoreId = seedStore()
+        val actor = signIn("catalog.sellable.validation", storeId, "OWNER")
+        val missingUnitId = UUID.randomUUID()
+
+        mutate(
+            post("/api/v1/stores/$storeId/menus"),
+            actor,
+            "menu-missing-unit-001",
+            content(
+                storeId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                missingUnitId,
+                "누락 재고 메뉴",
+                4_000,
+                seedStock = false,
+            ),
+        ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+        val crossStoreUnitId = UUID.randomUUID()
+        seedSellableUnit(otherStoreId, crossStoreUnitId)
+        mutate(
+            post("/api/v1/stores/$storeId/menus"),
+            actor,
+            "menu-cross-store-unit-001",
+            content(
+                storeId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                crossStoreUnitId,
+                "다른 매장 재고 메뉴",
+                4_500,
+                seedStock = false,
+            ),
+        ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isZero()
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)).isZero()
         assertThat(commandCount()).isZero()
     }
 
@@ -250,15 +328,15 @@ internal class MenuCatalogEndpointIntegrationTest(
             post("/api/v1/stores/$storeId/menus"),
             actor,
             "menu-boundary-exact-001",
-            boundaryContent(UUID.randomUUID(), optionCount = 100, configurationCount = 500, firstRequirementCount = 50),
-        ).andExpect(status().isOk)
+            boundaryContent(storeId, UUID.randomUUID(), optionCount = 100, configurationCount = 500, firstRequirementCount = 50),
+        ).andExpect(status().isCreated)
             .andExpect(jsonPath("$.options.length()").value(100))
             .andExpect(jsonPath("$.configurations.length()").value(500))
 
         listOf(
-            boundaryContent(UUID.randomUUID(), optionCount = 101, configurationCount = 0, firstRequirementCount = 0),
-            boundaryContent(UUID.randomUUID(), optionCount = 9, configurationCount = 501, firstRequirementCount = 1),
-            boundaryContent(UUID.randomUUID(), optionCount = 1, configurationCount = 1, firstRequirementCount = 51),
+            boundaryContent(storeId, UUID.randomUUID(), optionCount = 101, configurationCount = 0, firstRequirementCount = 0),
+            boundaryContent(storeId, UUID.randomUUID(), optionCount = 9, configurationCount = 501, firstRequirementCount = 1),
+            boundaryContent(storeId, UUID.randomUUID(), optionCount = 1, configurationCount = 1, firstRequirementCount = 51),
         ).forEachIndexed { index, payload ->
             mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-boundary-over-00$index", payload)
                 .andExpect(status().isBadRequest)
@@ -295,7 +373,7 @@ internal class MenuCatalogEndpointIntegrationTest(
                 post("/api/v1/stores/$storeId/menus"),
                 actor,
                 "menu-search-failure-001",
-                content(menuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "롤백 라테", 4_500),
+                content(storeId, menuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "롤백 라테", 4_500),
             ).andExpect(status().isServiceUnavailable)
                 .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
 
@@ -315,7 +393,7 @@ internal class MenuCatalogEndpointIntegrationTest(
         val actor = signIn("catalog.concurrent", storeId, "OWNER")
         val secondSession = signInAgain("catalog.concurrent", actor.actorId)
         val menuId = UUID.randomUUID()
-        val payload = content(menuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "동시 라테", 4_500)
+        val payload = content(storeId, menuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "동시 라테", 4_500)
         val barrier = CyclicBarrier(2)
         val executor = Executors.newFixedThreadPool(2)
         try {
@@ -325,7 +403,7 @@ internal class MenuCatalogEndpointIntegrationTest(
                         executor.submit<String> {
                             barrier.await()
                             mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-concurrent-key-001", payload)
-                                .andExpect(status().isOk)
+                                .andExpect(status().isCreated)
                                 .andReturn()
                                 .response.contentAsString
                         }
@@ -342,6 +420,49 @@ internal class MenuCatalogEndpointIntegrationTest(
     }
 
     @Test
+    fun `same actor operation and key across Stores serializes changed payload to deterministic conflict`() {
+        val firstStoreId = seedStore()
+        val secondStoreId = seedStore()
+        val actor = signIn("catalog.cross-store.concurrent", firstStoreId, "OWNER")
+        addMembership(actor.actorId, secondStoreId, "OWNER")
+        val secondSession = signInAgain("catalog.cross-store.concurrent", actor.actorId)
+        val firstMenuId = UUID.randomUUID()
+        val secondMenuId = UUID.randomUUID()
+        val barrier = CyclicBarrier(2)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val statuses =
+                listOf(
+                    Triple(
+                        firstStoreId,
+                        actor,
+                        content(firstStoreId, firstMenuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "시청 라테", 4_500),
+                    ),
+                    Triple(
+                        secondStoreId,
+                        secondSession,
+                        content(secondStoreId, secondMenuId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "강남 라테", 5_000),
+                    ),
+                ).map { (storeId, session, payload) ->
+                    executor.submit<Int> {
+                        barrier.await()
+                        mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-cross-store-key-001", payload)
+                            .andReturn()
+                            .response.status
+                    }
+                }.map { it.get(15, TimeUnit.SECONDS) }
+
+            assertThat(statuses.count { it in 200..299 }).isEqualTo(1)
+            assertThat(statuses.count { it == 409 }).isEqualTo(1)
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isOne()
+            assertThat(commandCount()).isOne()
+            assertThat(auditActions(firstMenuId).size + auditActions(secondMenuId).size).isEqualTo(1)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `Store boundaries accept 1000 active Menus and 5000 active Options then reject overflow`() {
         val menuBoundStore = seedStore()
         val menuBoundActor = signIn("catalog.store.menu.boundary", menuBoundStore, "OWNER")
@@ -350,13 +471,13 @@ internal class MenuCatalogEndpointIntegrationTest(
             post("/api/v1/stores/$menuBoundStore/menus"),
             menuBoundActor,
             "store-menu-boundary-001",
-            boundaryContent(UUID.randomUUID(), optionCount = 0, configurationCount = 0, firstRequirementCount = 0),
-        ).andExpect(status().isOk)
+            boundaryContent(menuBoundStore, UUID.randomUUID(), optionCount = 0, configurationCount = 0, firstRequirementCount = 0),
+        ).andExpect(status().isCreated)
         mutate(
             post("/api/v1/stores/$menuBoundStore/menus"),
             menuBoundActor,
             "store-menu-overflow-001",
-            boundaryContent(UUID.randomUUID(), optionCount = 0, configurationCount = 0, firstRequirementCount = 0),
+            boundaryContent(menuBoundStore, UUID.randomUUID(), optionCount = 0, configurationCount = 0, firstRequirementCount = 0),
         ).andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu WHERE store_id = ?", Long::class.java, menuBoundStore))
@@ -371,13 +492,13 @@ internal class MenuCatalogEndpointIntegrationTest(
             post("/api/v1/stores/$optionBoundStore/menus"),
             optionBoundActor,
             "store-option-boundary-001",
-            boundaryContent(UUID.randomUUID(), optionCount = 100, configurationCount = 0, firstRequirementCount = 0),
-        ).andExpect(status().isOk)
+            boundaryContent(optionBoundStore, UUID.randomUUID(), optionCount = 100, configurationCount = 0, firstRequirementCount = 0),
+        ).andExpect(status().isCreated)
         mutate(
             post("/api/v1/stores/$optionBoundStore/menus"),
             optionBoundActor,
             "store-option-overflow-001",
-            boundaryContent(UUID.randomUUID(), optionCount = 1, configurationCount = 0, firstRequirementCount = 0),
+            boundaryContent(optionBoundStore, UUID.randomUUID(), optionCount = 1, configurationCount = 0, firstRequirementCount = 0),
         ).andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu_option", Long::class.java)).isEqualTo(5_000)
@@ -398,6 +519,7 @@ internal class MenuCatalogEndpointIntegrationTest(
     )
 
     private fun content(
+        storeId: UUID,
         menuId: UUID,
         optionId: UUID,
         configurationId: UUID,
@@ -405,19 +527,24 @@ internal class MenuCatalogEndpointIntegrationTest(
         name: String,
         price: Long,
         expectedVersion: Long? = null,
-    ) = """
-        {
-          ${expectedVersion?.let { "\"expectedVersion\":$it," }.orEmpty()}
-          "menuId":"$menuId","name":"$name","basePriceKrw":$price,"available":true,
-          "options":[{"optionId":"$optionId","name":"샷 추가","additionalPriceKrw":500,"available":true}],
-          "configurations":[{
-            "configurationId":"$configurationId","selectedOptionIds":["$optionId"],"available":true,
-            "requirements":[{"sellableUnitId":"$sellableUnitId","quantityPerLineUnit":1}]
-          }]
-        }
-        """.trimIndent()
+        seedStock: Boolean = true,
+    ): String {
+        if (seedStock) seedSellableUnit(storeId, sellableUnitId)
+        return """
+            {
+              ${expectedVersion?.let { "\"expectedVersion\":$it," }.orEmpty()}
+              "menuId":"$menuId","name":"$name","basePriceKrw":$price,"available":true,
+              "options":[{"optionId":"$optionId","name":"샷 추가","additionalPriceKrw":500,"available":true}],
+              "configurations":[{
+                "configurationId":"$configurationId","selectedOptionIds":["$optionId"],"available":true,
+                "requirements":[{"sellableUnitId":"$sellableUnitId","quantityPerLineUnit":1}]
+              }]
+            }
+            """.trimIndent()
+    }
 
     private fun boundaryContent(
+        storeId: UUID,
         menuId: UUID,
         optionCount: Int,
         configurationCount: Int,
@@ -428,6 +555,7 @@ internal class MenuCatalogEndpointIntegrationTest(
             optionIds.joinToString(",") { optionId ->
                 """{"optionId":"$optionId","name":"옵션 $optionId","additionalPriceKrw":0,"available":true}"""
             }
+        val sellableUnitIds = mutableSetOf<UUID>()
         val configurations =
             (0 until configurationCount).joinToString(",") { configurationIndex ->
                 val selected =
@@ -438,7 +566,8 @@ internal class MenuCatalogEndpointIntegrationTest(
                 val requirementCount = if (configurationIndex == 0) firstRequirementCount else 1
                 val requirements =
                     (0 until requirementCount).joinToString(",") {
-                        """{"sellableUnitId":"${UUID.randomUUID()}","quantityPerLineUnit":1}"""
+                        val sellableUnitId = UUID.randomUUID().also(sellableUnitIds::add)
+                        """{"sellableUnitId":"$sellableUnitId","quantityPerLineUnit":1}"""
                     }
                 """
                 {
@@ -449,6 +578,7 @@ internal class MenuCatalogEndpointIntegrationTest(
                 }
                 """.trimIndent()
             }
+        seedSellableUnits(storeId, sellableUnitIds)
         return """
             {
               "menuId":"$menuId",
@@ -511,6 +641,38 @@ internal class MenuCatalogEndpointIntegrationTest(
             jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", it)
         }
 
+    private fun seedSellableUnit(
+        storeId: UUID,
+        sellableUnitId: UUID,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO inventory_sellable_stock
+                (id, store_id, available_quantity, reserved_quantity, confirmed_quantity, version)
+            VALUES (?, ?, 100000, 0, 0, 0)
+            ON CONFLICT (id) DO NOTHING
+            """.trimIndent(),
+            sellableUnitId,
+            storeId,
+        )
+    }
+
+    private fun seedSellableUnits(
+        storeId: UUID,
+        sellableUnitIds: Collection<UUID>,
+    ) {
+        if (sellableUnitIds.isEmpty()) return
+        jdbc.batchUpdate(
+            """
+            INSERT INTO inventory_sellable_stock
+                (id, store_id, available_quantity, reserved_quantity, confirmed_quantity, version)
+            VALUES (?, ?, 100000, 0, 0, 0)
+            ON CONFLICT (id) DO NOTHING
+            """.trimIndent(),
+            sellableUnitIds.map { arrayOf(it, storeId) },
+        )
+    }
+
     private fun signIn(
         loginId: String,
         storeId: UUID,
@@ -567,6 +729,26 @@ internal class MenuCatalogEndpointIntegrationTest(
                     .getCookie(SESSION_COOKIE),
             )
         return MerchantSession(accountId, session, csrf)
+    }
+
+    private fun addMembership(
+        actorId: UUID,
+        storeId: UUID,
+        role: String,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_store_membership
+                (id, actor_id, store_id, membership_role, status, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            actorId,
+            storeId,
+            role,
+            Timestamp.from(NOW),
+            Timestamp.from(NOW),
+        )
     }
 
     private fun customerSession(): CustomerSession {

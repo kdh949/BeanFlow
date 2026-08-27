@@ -1084,7 +1084,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MenuTradeDefinition" }
       responses:
-        "200":
+        "201":
           description: 생성 또는 replay된 normalized Menu 거래 내용
           content:
             application/json:
@@ -1099,7 +1099,8 @@ paths:
     get:
       tags: [Merchant]
       operationId: getMerchantMenuTradeContent
-      summary: Menu 거래 내용 현재 편집본 조회
+      summary: Active Menu 거래 내용 현재 편집본 조회
+      description: ARCHIVED Menu는 목록의 요약만 제공하며 현재 편집본 조회는 409로 거절합니다.
       security: [{ merchantSession: [] }]
       parameters:
         - $ref: "#/components/parameters/StoreId"
@@ -1113,6 +1114,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
     put:
       tags: [Merchant]

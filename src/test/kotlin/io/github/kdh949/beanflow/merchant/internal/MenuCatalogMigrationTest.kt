@@ -89,12 +89,20 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
         assertThatThrownBy {
             jdbc.update("UPDATE merchant_menu SET lifecycle = 'ARCHIVED' WHERE id = ?", menuId)
         }.isInstanceOf(DataIntegrityViolationException::class.java)
+        jdbc.update(
+            "INSERT INTO merchant_menu_catalog_command (id, actor_id, operation, idempotency_key, payload_hash, store_id, menu_id, response_json, created_at, retention_expires_at) VALUES (?, ?, 'ARCHIVE_MENU_V1', 'menu-create-key-001', ?, ?, ?, '{}', now(), now() + interval '90 days')",
+            UUID.randomUUID(),
+            actorId,
+            "b".repeat(64),
+            storeId,
+            menuId,
+        )
         assertThatThrownBy {
             jdbc.update(
-                "INSERT INTO merchant_menu_catalog_command (id, actor_id, operation, idempotency_key, payload_hash, store_id, menu_id, response_json, created_at, retention_expires_at) VALUES (?, ?, 'ARCHIVE_MENU_V1', 'menu-create-key-001', ?, ?, ?, '{}', now(), now() + interval '90 days')",
+                "INSERT INTO merchant_menu_catalog_command (id, actor_id, operation, idempotency_key, payload_hash, store_id, menu_id, response_json, created_at, retention_expires_at) VALUES (?, ?, 'CREATE_MENU_V1', 'menu-create-key-001', ?, ?, ?, '{}', now(), now() + interval '90 days')",
                 UUID.randomUUID(),
                 actorId,
-                "b".repeat(64),
+                "c".repeat(64),
                 storeId,
                 menuId,
             )

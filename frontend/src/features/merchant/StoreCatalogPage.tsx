@@ -27,30 +27,40 @@ export function StoreCatalogPage() {
   const [saved, setSaved] = useState(false);
   const intent = useRef(new SubmissionIntent());
   const storeId = selected?.storeId ?? null;
+  const policyRequest = useRef(0);
+  const activeStoreId = useRef(storeId);
+  activeStoreId.current = storeId;
 
   const loadPolicy = useCallback(async () => {
     if (!storeId) return;
+    const requestedStoreId = storeId;
+    const requestId = ++policyRequest.current;
     setLoading(true);
     setLoadError(null);
     setSaveError(null);
     setSaved(false);
     try {
       const next = unwrap(await merchantApi.GET("/stores/{storeId}/ordering-policy", {
-        params: { path: { storeId } },
+        params: { path: { storeId: requestedStoreId } },
       }));
+      if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
       intent.current.rotate();
     } catch (failure) {
+      if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
       setPolicy(null);
       setLoadError(failure);
     } finally {
-      setLoading(false);
+      if (policyRequest.current === requestId && activeStoreId.current === requestedStoreId) {
+        setLoading(false);
+      }
     }
   }, [storeId]);
 
   useEffect(() => {
+    policyRequest.current += 1;
     setPolicy(null);
     if (storeId) void loadPolicy();
   }, [storeId, loadPolicy]);
@@ -63,7 +73,7 @@ export function StoreCatalogPage() {
   }
 
   async function save() {
-    if (!storeId || !policy) return;
+    if (!storeId || !policy || policy.storeId !== storeId) return;
     const body = { acceptingOrders, pickupEnabled, expectedVersion: policy.version };
     const fingerprint = JSON.stringify({ storeId, ...body });
     setSaving(true);
@@ -370,10 +380,15 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
         <ul className="menu-authoring-list">
           {items.map((item) => (
             <li key={item.menuId}>
-              <button type="button" className="menu-authoring-summary" onClick={() => void edit(item)}>
-                <span><strong>{item.name}</strong><small>{item.basePriceKrw.toLocaleString("ko-KR")}원 · 옵션 {item.optionCount} · 구성 {item.configurationCount}</small></span>
-                <span>{item.available ? "판매 가능" : "판매 중지"}</span>
-              </button>
+              {item.lifecycle === "ACTIVE" ? (
+                <button type="button" className="menu-authoring-summary" onClick={() => void edit(item)}>
+                  <MenuCatalogItemSummary item={item} />
+                </button>
+              ) : (
+                <div className="menu-authoring-summary" aria-label={`${item.name} 보관 요약`}>
+                  <MenuCatalogItemSummary item={item} />
+                </div>
+              )}
               {item.lifecycle === "ACTIVE" ? (
                 <Button type="button" variant="danger" size="sm" onClick={() => { archiveTrigger.current = document.activeElement as HTMLButtonElement; setArchiveTarget(item); }}>
                   <Archive aria-hidden="true" /> 보관
@@ -418,6 +433,15 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function MenuCatalogItemSummary({ item }: { item: MenuCatalogSummary }) {
+  return (
+    <>
+      <span><strong>{item.name}</strong><small>{item.basePriceKrw.toLocaleString("ko-KR")}원 · 옵션 {item.optionCount} · 구성 {item.configurationCount}</small></span>
+      <span>{item.available ? "판매 가능" : "판매 중지"}</span>
+    </>
   );
 }
 

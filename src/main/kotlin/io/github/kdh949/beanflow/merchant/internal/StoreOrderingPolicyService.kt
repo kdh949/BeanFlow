@@ -39,15 +39,9 @@ internal class StoreOrderingPolicyService(
     @Transactional(propagation = Propagation.MANDATORY)
     override fun replace(command: ReplaceStoreOrderingPolicyCommand): StoreOrderingPolicyReplacement {
         validate(command)
-        val store =
-            stores.findByIdForUpdate(command.storeId)
-                ?: throw DomainFailure(
-                    FailureCode.RESOURCE_NOT_FOUND,
-                    "Store was not found",
-                    targetReference = command.storeId.toString(),
-                )
         val payloadHash = payloadHash(command)
-        commands.findCommand(command.actorId, command.idempotencyKey)?.let { existing ->
+        commands.lockCommandKey(command.actorId, OPERATION, command.idempotencyKey)
+        commands.findCommand(command.actorId, OPERATION, command.idempotencyKey)?.let { existing ->
             if (existing.payloadHash != payloadHash) {
                 throw DomainFailure(
                     FailureCode.IDEMPOTENCY_KEY_REUSED,
@@ -57,6 +51,13 @@ internal class StoreOrderingPolicyService(
             val replay = objectMapper.readValue(existing.responseJson, StoreOrderingPolicySnapshot::class.java)
             return StoreOrderingPolicyReplacement(replay, replay, changed = false, replayed = true)
         }
+        val store =
+            stores.findByIdForUpdate(command.storeId)
+                ?: throw DomainFailure(
+                    FailureCode.RESOURCE_NOT_FOUND,
+                    "Store was not found",
+                    targetReference = command.storeId.toString(),
+                )
         if (store.orderingPolicyVersion != command.expectedVersion) {
             throw DomainFailure(FailureCode.MERCHANT_CONTENT_STALE, "Store ordering-policy version is stale")
         }
