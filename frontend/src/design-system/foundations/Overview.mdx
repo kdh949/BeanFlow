@@ -1,4 +1,20 @@
-import { Meta } from '@storybook/addon-docs/blocks';
+import { Meta, Story } from '@storybook/addon-docs/blocks';
+import * as BrandLockupStories from '../components/brand/BrandLockup.stories';
+import * as StatusTextStories from '../components/commerce/StatusText.stories';
+import * as ButtonStories from '../components/core/Button.stories';
+import * as ChipButtonStories from '../components/core/ChipButton.stories';
+import * as IconButtonStories from '../components/core/IconButton.stories';
+import * as FeedbackStateStories from '../components/feedback/FeedbackState.stories';
+import * as InlineNoticeStories from '../components/feedback/InlineNotice.stories';
+import * as CheckboxStories from '../components/forms/Checkbox.stories';
+import * as QuantityStepperStories from '../components/forms/QuantityStepper.stories';
+import * as RadioGroupStories from '../components/forms/RadioGroup.stories';
+import * as SearchFieldStories from '../components/forms/SearchField.stories';
+import * as SelectFieldStories from '../components/forms/SelectField.stories';
+import * as SwitchStories from '../components/forms/Switch.stories';
+import * as TextAreaFieldStories from '../components/forms/TextAreaField.stories';
+import * as TextFieldStories from '../components/forms/TextField.stories';
+import * as TabsStories from '../components/navigation/Tabs.stories';
 import './foundations.css';
 
 <Meta title="Foundations/Overview" />
@@ -9,6 +25,47 @@ import './foundations.css';
 `tokens/*.css`가 색, 글꼴, 여백, radius, elevation, motion의 canonical source이고 제품과 Storybook은
 semantic token 또는 명시된 palette token만 소비합니다. 이전 espresso, caramel, crema token과 생성
 snapshot은 제거됐습니다.
+
+## Component catalog
+
+이 Overview는 foundation token을 실제로 소비하는 canonical component의 대표 상태를 함께 보여줍니다.
+상세 API와 disabled, invalid, loading 같은 추가 상태는 왼쪽 Components 문서에서 확인합니다.
+
+### Brand and actions
+
+<div className="foundation-component-grid">
+  <section className="foundation-component-card"><h4>BrandLockup</h4><p>고객과 workspace shell이 공유하는 브랜드 식별자</p><div className="foundation-component-preview"><Story of={BrandLockupStories.Static} /></div></section>
+  <section className="foundation-component-card"><h4>Button</h4><p>결정 영역의 primary, secondary, ghost, danger action</p><div className="foundation-component-preview"><Story of={ButtonStories.Brand} /></div></section>
+  <section className="foundation-component-card"><h4>IconButton</h4><p>accessible label을 필수로 갖는 icon-only action</p><div className="foundation-component-preview"><Story of={IconButtonStories.Secondary} /></div></section>
+  <section className="foundation-component-card"><h4>ChipButton</h4><p>검색 보조어와 일회성 filter action</p><div className="foundation-component-preview"><Story of={ChipButtonStories.WithIcon} /></div></section>
+</div>
+
+### Fields and quantity
+
+<div className="foundation-component-grid">
+  <section className="foundation-component-card"><h4>SearchField</h4><p>검색 affordance와 clear action을 포함하는 field</p><div className="foundation-component-preview"><Story of={SearchFieldStories.WithValue} /></div></section>
+  <section className="foundation-component-card"><h4>TextField</h4><p>문자열 값을 유지하는 single-line controlled field</p><div className="foundation-component-preview"><Story of={TextFieldStories.Default} /></div></section>
+  <section className="foundation-component-card"><h4>TextAreaField</h4><p>긴 사유와 설명을 위한 multiline controlled field</p><div className="foundation-component-preview"><Story of={TextAreaFieldStories.Default} /></div></section>
+  <section className="foundation-component-card"><h4>SelectField</h4><p>제품이 option을 소유하는 canonical native select</p><div className="foundation-component-preview"><Story of={SelectFieldStories.Default} /></div></section>
+  <section className="foundation-component-card"><h4>QuantityStepper</h4><p>min/max 경계를 보호하는 수량 조절</p><div className="foundation-component-preview"><Story of={QuantityStepperStories.Default} /></div></section>
+</div>
+
+### Selection and navigation
+
+<div className="foundation-component-grid">
+  <section className="foundation-component-card"><h4>Checkbox</h4><p>한 form에서 여러 항목을 포함하거나 제외</p><div className="foundation-component-preview"><Story of={CheckboxStories.CardWithPrice} /></div></section>
+  <section className="foundation-component-card"><h4>Switch</h4><p>저장 즉시 반영되는 이진 preference</p><div className="foundation-component-preview"><Story of={SwitchStories.On} /></div></section>
+  <section className="foundation-component-card"><h4>RadioGroup</h4><p>지역과 픽업 시간처럼 하나만 선택하는 group</p><div className="foundation-component-preview"><Story of={RadioGroupStories.CompactOptions} /></div></section>
+  <section className="foundation-component-card"><h4>Tabs</h4><p>기본 manual activation을 사용하는 controlled navigation</p><div className="foundation-component-preview"><Story of={TabsStories.ManualActivation} /></div></section>
+</div>
+
+### Feedback and status
+
+<div className="foundation-component-grid">
+  <section className="foundation-component-card"><h4>InlineNotice</h4><p>화면 흐름 안에서 설명하는 presentation-safe notice</p><div className="foundation-component-preview"><Story of={InlineNoticeStories.Information} /></div></section>
+  <section className="foundation-component-card"><h4>FeedbackState</h4><p>loading, empty, recoverable error를 명시적으로 구분</p><div className="foundation-component-preview"><Story of={FeedbackStateStories.Empty} /></div></section>
+  <section className="foundation-component-card"><h4>StatusText</h4><p>제품 상태 해석 없이 tone과 전달받은 문구만 렌더링</p><div className="foundation-component-preview"><Story of={StatusTextStories.Uncertain} /></div></section>
+</div>
 
 ## Color roles
 
@@ -55,7 +112,7 @@ pattern인 `DomainStatusText`가 담당합니다.
 `--r-control`; cards use `--r-card`. 큰 둥근 카드와 장식 shadow를 반복하지 않습니다.
 
 공용 `.surface-card`, `.context-label`, `.customer-page`, `.console-page`, `.panel-heading`, `.back-link`,
-`.icon-action`, `.inline-note`, `.form-error`, `.form-footnote`는 design-system 소유 pattern CSS입니다.
+`.bf-icon-action`, `.bf-chip-action`, `.inline-note`, `.form-error`, `.form-footnote`는 design-system 소유 pattern CSS입니다.
 `src/styles.css`에는 route/feature-specific layout만 둡니다.
 
 ## Elevation and motion

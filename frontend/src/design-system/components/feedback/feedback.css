@@ -11,3 +11,9 @@
 .success-mark { background: var(--success-bg); color: var(--success-fg); }
 .pending-mark { background: var(--warning-bg); color: var(--warning-fg); }
 .failure-mark { background: var(--danger-bg); color: var(--danger-fg); }
+.bf-inline-notice { padding: var(--sp-5); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5); border: var(--bw-hair) solid var(--border-info-soft); border-radius: var(--r-card); background: var(--info-bg); color: var(--info-fg); }
+.bf-inline-notice--warning { border-color: var(--border-warning-soft); background: var(--warning-bg); color: var(--warning-fg); }
+.bf-inline-notice--danger { border-color: var(--border-danger-soft); background: var(--danger-bg); color: var(--danger-fg); }
+.bf-inline-notice strong { display: block; }
+.bf-inline-notice p { margin: var(--sp-2) 0 0; color: var(--text-body); line-height: var(--lh-body); }
+.bf-inline-notice__action { flex: 0 0 auto; }
