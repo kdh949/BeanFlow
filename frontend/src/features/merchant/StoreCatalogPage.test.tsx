@@ -143,6 +143,8 @@ describe("StoreCatalogPage", () => {
   });
 
   it("keeps archived Menu rows summary-only without opening a writable editor", async () => {
+    const activeMenuList = deferred<never>();
+    const archivedMenuList = deferred<never>();
     const get = vi.mocked(merchantApi.GET);
     get.mockImplementation(((path: string, options: {
       params?: { query?: { lifecycle?: string } };
@@ -151,15 +153,25 @@ describe("StoreCatalogPage", () => {
       if (path === "/stores/{storeId}/ordering-policy") return Promise.resolve(response(policy));
       if (path === "/stores/{storeId}/menu-catalog") {
         const archived = options.params?.query?.lifecycle === "ARCHIVED";
-        return Promise.resolve(response({ items: [{ ...menuSummary, lifecycle: archived ? "ARCHIVED" : "ACTIVE", available: !archived }] }));
+        return archived ? archivedMenuList.promise : activeMenuList.promise;
       }
       if (path === "/stores/{storeId}/menus/{menuId}/trade-content") return Promise.resolve(response(menuContent));
       throw new Error(`unexpected GET ${path}`);
     }) as never);
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
 
+    const requestedLifecycle = (value: string) =>
+      (get.mock.calls as unknown as Array<[string, { params?: { query?: { lifecycle?: string } } } | undefined]>).some(
+        ([path, options]) => path === "/stores/{storeId}/menu-catalog" && options?.params?.query?.lifecycle === value,
+      );
+    await waitFor(() => expect(requestedLifecycle("ACTIVE")).toBe(true));
     await userEvent.click(await screen.findByRole("button", { name: "보관된 메뉴" }));
+    await waitFor(() => expect(requestedLifecycle("ARCHIVED")).toBe(true));
+    archivedMenuList.resolve(response({ items: [{ ...menuSummary, lifecycle: "ARCHIVED", available: false }] }));
     expect(await screen.findByLabelText("카페 라테 보관 요약")).toBeVisible();
+
+    activeMenuList.resolve(response({ items: [{ ...menuSummary, lifecycle: "ACTIVE", available: true }] }));
+    await waitFor(() => expect(screen.getByLabelText("카페 라테 보관 요약")).toBeVisible());
     expect(screen.queryByRole("button", { name: /카페 라테/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("메뉴 이름")).not.toBeInTheDocument();
     const getCalls = get.mock.calls as unknown as Array<[string, unknown?]>;

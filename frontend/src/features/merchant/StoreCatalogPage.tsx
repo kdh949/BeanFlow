@@ -209,30 +209,48 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   const archiveTrigger = useRef<HTMLButtonElement | null>(null);
   const archiveDialog = useRef<HTMLDivElement | null>(null);
   const intent = useRef(new SubmissionIntent());
+  const listRequest = useRef(0);
+  const activeListScope = useRef({ storeId, lifecycle });
+  activeListScope.current = { storeId, lifecycle };
 
   const loadList = useCallback(async (cursor?: string) => {
+    const requestedStoreId = storeId;
+    const requestedLifecycle = lifecycle;
+    const requestId = ++listRequest.current;
     if (cursor) setLoadingMore(true); else setLoading(true);
     setLoadError(null);
     try {
       const page = unwrap(await merchantApi.GET("/stores/{storeId}/menu-catalog", {
-        params: { path: { storeId }, query: { lifecycle, limit: 50, ...(cursor ? { cursor } : {}) } },
+        params: { path: { storeId: requestedStoreId }, query: { lifecycle: requestedLifecycle, limit: 50, ...(cursor ? { cursor } : {}) } },
       }));
+      if (listRequest.current !== requestId ||
+        activeListScope.current.storeId !== requestedStoreId ||
+        activeListScope.current.lifecycle !== requestedLifecycle) return;
       setItems((currentItems) => cursor ? [...currentItems, ...page.items] : page.items);
       setNextCursor(page.nextCursor ?? null);
     } catch (failure) {
+      if (listRequest.current !== requestId ||
+        activeListScope.current.storeId !== requestedStoreId ||
+        activeListScope.current.lifecycle !== requestedLifecycle) return;
       if (!cursor) setItems([]);
       setLoadError(failure);
     } finally {
-      if (cursor) setLoadingMore(false); else setLoading(false);
+      if (listRequest.current === requestId &&
+        activeListScope.current.storeId === requestedStoreId &&
+        activeListScope.current.lifecycle === requestedLifecycle) {
+        if (cursor) setLoadingMore(false); else setLoading(false);
+      }
     }
   }, [lifecycle, storeId]);
 
   useEffect(() => {
+    listRequest.current += 1;
     setDraft(null);
     setCurrent(null);
     setEditing(false);
     setItems([]);
     setNextCursor(null);
+    setLoadingMore(false);
     void loadList();
   }, [loadList]);
 
