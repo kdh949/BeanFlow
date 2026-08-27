@@ -148,7 +148,7 @@ describe("customer forms are usable at the 420px viewport", () => {
   });
 
   it("stops the pending spinner animation under reduced motion", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readFileSync("src/design-system/components/feedback/feedback.css", "utf8");
     expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{\s*\.spin\s*{\s*animation: none;/);
   });
 
@@ -160,6 +160,6 @@ describe("customer forms are usable at the 420px viewport", () => {
 
     renderScreen(<CustomerPointsPage />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("포인트를 조회하지 못했습니다.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("서비스 연결을 확인하고 있습니다");
   });
 });

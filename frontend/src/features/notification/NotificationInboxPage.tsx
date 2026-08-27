@@ -4,9 +4,10 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 import { publishCustomerNotificationSummaryChanged } from "./notificationSummary";
 

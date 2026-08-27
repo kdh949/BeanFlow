@@ -1,4 +1,4 @@
-.bf-action { min-height: var(--control-h-md); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--r-control); background: var(--primary-bg); color: var(--text-on-primary) !important; font-weight: 750; line-height: 1; cursor: pointer; white-space: nowrap; text-decoration: none; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform var(--dur-instant) var(--ease-standard); }
+.bf-action { min-height: var(--tap-min); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--r-control); background: var(--primary-bg); color: var(--text-on-primary) !important; font-weight: 750; line-height: 1; cursor: pointer; white-space: nowrap; text-decoration: none; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform var(--dur-instant) var(--ease-standard); }
 .bf-action:active:not(:disabled) { transform: scale(var(--press-scale)); }
 .bf-action:hover:not(:disabled) { background: var(--primary-bg-hover); color: var(--text-on-primary); }
 .bf-action:disabled { cursor: not-allowed; background: var(--disabled-bg); color: var(--disabled-text) !important; }
@@ -7,10 +7,12 @@
 .bf-action--ghost { background: transparent; color: var(--text-strong) !important; }
 .bf-action--danger { background: var(--danger-solid); }
 .bf-action--danger:hover:not(:disabled) { background: var(--danger-fg); }
-.bf-action--sm { min-height: var(--control-h-sm); padding-inline: 12px; border-radius: var(--r-sm); font-size: var(--fs-caption); }
+.bf-action--sm { min-height: var(--tap-min); padding-inline: 12px; border-radius: var(--r-sm); font-size: var(--fs-caption); }
 .bf-action--lg { min-height: var(--control-h-lg); }
 .bf-action--xl { min-height: var(--control-h-xl); font-size: var(--fs-body-lg); }
 .bf-action--block { width: 100%; }
+.icon-action { min-width: var(--tap-min); min-height: var(--tap-min); border: 1px solid var(--border-hair); border-radius: var(--r-sm); background: var(--surface-card); color: var(--text-body); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.icon-action:hover { background: var(--surface-sunken); color: var(--text-strong); }
 .bf-spin { animation: bf-spin .8s linear infinite; }
 @keyframes bf-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bf-spin { animation: none; } }

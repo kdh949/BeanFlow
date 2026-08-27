@@ -3,9 +3,10 @@ import { useCallback, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { StoreCard } from "../discovery/StoreCards";
 import { useResource } from "../shared/useResource";
 
@@ -115,7 +116,7 @@ export function FavoriteStoreButton({ storeId, storeName }: { storeId: string; s
         <p className="form-error" role="alert">
           {failure instanceof ApiRequestError && failure.code === "FAVORITE_STORE_LIMIT_EXCEEDED"
             ? "즐겨찾기는 최대 200개까지 저장할 수 있어요. 기존 매장을 해제한 뒤 다시 시도해 주세요."
-            : failure instanceof ApiRequestError ? failure.message : "즐겨찾기를 변경하지 못했습니다."}
+            : "즐겨찾기를 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
         </p>
       ) : null}
     </div>

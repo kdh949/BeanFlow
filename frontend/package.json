@@ -8,7 +8,7 @@
     "dev": "vite",
     "generate:api": "openapi-typescript ../openapi/beanflow-v1-runtime.yaml -o src/api/schema.d.ts",
     "typecheck": "npm run generate:api && tsc --noEmit",
-    "test": "npm run test:unit",
+    "test": "npm run test:unit && npm run test:presentation-boundary",
     "test:unit": "vitest run --project unit",
     "test:storybook:ci": "vitest run --project storybook",
     "test:storybook:docs": "node scripts/check-storybook-docs.mjs",

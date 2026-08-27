@@ -3,11 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { shortDateTime } from "../../lib/format";
 import { useResource } from "../shared/useResource";
 import { Button } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 
 type CustomerPointSummary = components["schemas"]["CustomerPointSummary"];
 type PointTransactionPage = components["schemas"]["PointTransactionPage"];

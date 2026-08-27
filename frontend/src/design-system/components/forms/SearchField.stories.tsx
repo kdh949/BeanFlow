@@ -16,7 +16,11 @@ export const Empty: Story = {};
 export const WithValue: Story = {
   args: { value: "아메리카노", onClear: fn() },
   play: async ({ args, canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "검색어 지우기" }));
+    const clear = canvas.getByRole("button", { name: "검색어 지우기" });
+    const bounds = clear.getBoundingClientRect();
+    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await userEvent.click(clear);
     await expect(args.onClear).toHaveBeenCalledOnce();
   },
 };

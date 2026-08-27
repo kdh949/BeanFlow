@@ -10,10 +10,11 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { EmptyState, ErrorState, LoadingState, StatusText } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { compactId, shortDateTime } from "../../lib/format";
 import { Button } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 
 type Compensation = components["schemas"]["CompensationSummary"];
 

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findLegacyArtifactViolations, findPresentationBoundaryViolations } from "../scripts/presentation-boundary.mjs";
+import {
+  findDesignSystemDependencyViolations,
+  findLegacyArtifactViolations,
+  findPresentationBoundaryViolations,
+} from "../scripts/presentation-boundary.mjs";
 
 test("allows presentation-neutral dependencies", () => {
   assert.deepEqual(
@@ -55,4 +59,23 @@ test("rejects retained target files and route-unused legacy CSS", () => {
     ".home-page { padding: 0 }",
   );
   assert.deepEqual(violations.map(({ kind }) => kind), ["legacy-file", "legacy-css"]);
+});
+
+test("rejects application dependencies from the canonical design system", () => {
+  const violations = findDesignSystemDependencyViolations(
+    "src/design-system/patterns/feedback/ResourceState.tsx",
+    `import { ApiRequestError } from "../../../api/client";
+     import { Button } from "../../components/core/Button";`,
+  );
+
+  assert.deepEqual(violations.map(({ kind }) => kind), ["design-system-application-dependency"]);
+});
+
+test("rejects design-system-owned shared selectors in the global stylesheet", () => {
+  const violations = findLegacyArtifactViolations(
+    new Set(),
+    ".context-label { color: red } .customer-page { padding: 1rem }",
+  );
+
+  assert.deepEqual(violations.map(({ kind }) => kind), ["parallel-shared-css", "parallel-shared-css"]);
 });

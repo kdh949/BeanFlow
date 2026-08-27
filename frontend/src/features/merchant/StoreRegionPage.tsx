@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 

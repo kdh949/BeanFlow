@@ -3,3 +3,12 @@
 .bf-page-heading h1 { font-size: var(--fs-title-1); line-height: 1.16; letter-spacing: var(--ls-title); }
 .bf-page-heading p { max-width: 62ch; margin-top: 8px; color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.55; }
 @media (max-width: 640px) { .bf-page-heading { flex-direction: column; } }
+.context-label { display: block; color: var(--text-muted); font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); line-height: var(--lh-body-sm); }
+.surface-card { background: var(--surface-card); border: 1px solid var(--border-hair); border-radius: var(--r-card); box-shadow: var(--sh-1); }
+.customer-page { padding: var(--sp-7) var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-6); }
+.back-link { min-height: var(--tap-min); align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--text-muted); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.console-page { max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--sp-7); }
+.narrow-console-page { max-width: 760px; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5); }
+.panel-heading h2 { margin-top: var(--sp-2); font-size: var(--fs-title-2); }
+@media (max-width: 640px) { .console-page { gap: var(--sp-6); } }

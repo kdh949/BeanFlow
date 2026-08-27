@@ -21,7 +21,8 @@ import { attemptStorage } from "../../features/payment/paymentAttempt";
 import { pickupNumberNote } from "../../features/ordering/orderPresentation";
 import { reorderFailure } from "../../features/ordering/reorderFailures";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
-import { Button, StatusText } from "../../design-system";
+import { Button } from "../../design-system";
+import { StatusText } from "../shared";
 
 type Order = components["schemas"]["Order"];
 type ReorderPriceComparison = components["schemas"]["ReorderPriceComparison"];

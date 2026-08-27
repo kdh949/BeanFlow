@@ -1,7 +1,7 @@
 import { Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketPercent } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ErrorState } from "../../../design-system";
+import { ErrorState } from "../../../presentation/shared";
 import { PageHeading } from "../../../design-system";
 import { customerSession, useCustomerSession } from "./customerSession";
 import { Button } from "../../../design-system";

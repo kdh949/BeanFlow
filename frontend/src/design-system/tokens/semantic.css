@@ -16,8 +16,8 @@
 
   --text-strong: var(--ink-950);
   --text-body: var(--ink-800);
-  --text-muted: var(--slate-600);
-  --text-faint: var(--slate-700);
+  --text-muted: var(--slate-700);
+  --text-faint: var(--slate-600);
   --text-on-primary: var(--color-white);
   --text-on-accent: var(--color-white);
   --text-accent: var(--coral-700);

@@ -92,7 +92,7 @@ describe("StoreRegionPage", () => {
     await userEvent.type(screen.getByLabelText("지정 사유"), "소재지 정정");
     await userEvent.click(screen.getByRole("button", { name: "지역 지정" }));
 
-    expect(await screen.findByText("같은 요청 키가 다른 지역 지정에 사용되었습니다.")).toBeVisible();
+    expect(await screen.findByText("요청 정보가 변경되었습니다")).toBeVisible();
     expect(screen.queryByText("지역을 지정했습니다")).not.toBeInTheDocument();
   });
 });

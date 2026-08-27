@@ -172,7 +172,7 @@ describe("store order board", () => {
     const user = userEvent.setup();
 
     renderBoard();
-    expect(await screen.findByRole("alert")).toHaveTextContent("매장 목록을 불러오지 못했습니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("서비스 연결을 확인하고 있습니다");
     expect(screen.queryByText("접근 가능한 매장이 없습니다")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다시 시도" }));

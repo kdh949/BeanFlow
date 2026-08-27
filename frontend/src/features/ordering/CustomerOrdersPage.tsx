@@ -4,9 +4,10 @@ import { Link, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState, StatusText } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime, won } from "../../lib/format";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];

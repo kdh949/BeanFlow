@@ -1,7 +1,7 @@
 export { BrandLockup } from "./components/brand/BrandLockup";
 export type { BrandLockupProps } from "./components/brand/BrandLockup";
 export { StatusText } from "./components/commerce/StatusText";
-export type { StatusTextProps } from "./components/commerce/StatusText";
+export type { StatusTextProps, StatusTextTone } from "./components/commerce/StatusText";
 export { Button, ButtonLink } from "./components/core/Button";
 export type { ButtonLinkProps, ButtonProps, ButtonSize, ButtonVariant } from "./components/core/Button";
 export { FeedbackState } from "./components/feedback/FeedbackState";
@@ -12,4 +12,4 @@ export { SearchField } from "./components/forms/SearchField";
 export type { SearchFieldProps } from "./components/forms/SearchField";
 export { PageHeading } from "./patterns/layout/PageHeading";
 export type { PageHeadingProps } from "./patterns/layout/PageHeading";
-export { EmptyState, ErrorState, LoadingState, SuccessMark } from "./patterns/feedback/ResourceState";
+export { EmptyState, LoadingState, SuccessMark } from "./patterns/feedback/ResourceState";

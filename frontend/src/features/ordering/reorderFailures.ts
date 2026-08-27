@@ -44,7 +44,11 @@ export function reorderFailure(failure: unknown): ReorderFailure | null {
         items: [],
       };
     case "STOCK_NOT_AVAILABLE":
-      return { title: "재고가 부족해요", description: failure.message, items: [] };
+      return {
+        title: "재고가 부족해요",
+        description: "현재 재고를 확인한 뒤 메뉴 수량이나 구성을 다시 선택해 주세요.",
+        items: [],
+      };
     case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
       return {
         title: "같은 주문을 처리하고 있어요",

@@ -39,6 +39,31 @@ const REMOVED_TARGET_SELECTORS = [
   ".checkout-card", ".customer-order-detail-page", ".store-board-page", ".refund-lines",
 ];
 
+const DESIGN_SYSTEM_OWNED_SELECTORS = [
+  ".context-label",
+  ".surface-card",
+  ".icon-action",
+  ".inline-note",
+  ".customer-page",
+  ".back-link",
+  ".success-mark",
+  ".pending-mark",
+  ".failure-mark",
+  ".form-error",
+  ".form-footnote",
+  ".console-page",
+  ".narrow-console-page",
+  ".panel-heading",
+];
+
+const APPLICATION_LAYER_PREFIXES = [
+  "src/api/",
+  "src/auth/",
+  "src/features/",
+  "src/pages/",
+  "src/presentation/",
+];
+
 const IMPORT_PATTERN = /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
 
 function normalizedImport(sourceFile, importPath) {
@@ -103,12 +128,37 @@ export function findPresentationBoundaryViolations(sourceFile, source) {
   return violations;
 }
 
+export function findDesignSystemDependencyViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (!normalizedFile.startsWith("src/design-system/")) return [];
+
+  const violations = [];
+  for (const match of source.matchAll(IMPORT_PATTERN)) {
+    const importPath = match[1];
+    const normalized = importPath.startsWith(".")
+      ? normalizedImport(normalizedFile, importPath)
+      : importPath;
+    if (APPLICATION_LAYER_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+      violations.push({ kind: "design-system-application-dependency", importPath });
+    }
+  }
+  return violations;
+}
+
 export function findLegacyArtifactViolations(existingFiles, styles) {
   const violations = REMOVED_TARGET_FILES.filter((file) => existingFiles.has(file)).map((file) => ({ kind: "legacy-file", file }));
   for (const selector of REMOVED_TARGET_SELECTORS) {
-    if (styles.includes(selector)) violations.push({ kind: "legacy-css", file: "src/styles.css", selector });
+    if (definesSelector(styles, selector)) violations.push({ kind: "legacy-css", file: "src/styles.css", selector });
+  }
+  for (const selector of DESIGN_SYSTEM_OWNED_SELECTORS) {
+    if (definesSelector(styles, selector)) violations.push({ kind: "parallel-shared-css", file: "src/styles.css", selector });
   }
   return violations;
+}
+
+function definesSelector(styles, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|})\\s*${escaped}(?:\\s*[,:{])`, "m").test(styles);
 }
 
 function collectFiles(directory) {
@@ -131,6 +181,13 @@ function run() {
     return findPresentationBoundaryViolations(relative, fs.readFileSync(file, "utf8"))
       .map((violation) => ({ file: relative, ...violation }));
   });
+  const designSystemFiles = collectFiles(path.join(frontendRoot, "src/design-system"))
+    .filter((file) => /\.(?:ts|tsx)$/.test(file) && !/\.stories\.tsx$/.test(file));
+  violations.push(...designSystemFiles.flatMap((file) => {
+    const relative = path.relative(frontendRoot, file);
+    return findDesignSystemDependencyViolations(relative, fs.readFileSync(file, "utf8"))
+      .map((violation) => ({ file: relative, ...violation }));
+  }));
   const existingFiles = new Set(collectFiles(path.join(frontendRoot, "src")).map((file) => path.relative(frontendRoot, file).replaceAll(path.sep, "/")));
   violations.push(...findLegacyArtifactViolations(existingFiles, fs.readFileSync(path.join(frontendRoot, "src/styles.css"), "utf8")));
 

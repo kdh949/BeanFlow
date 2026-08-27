@@ -101,7 +101,7 @@ describe("customer home", () => {
 
     renderHome();
 
-    expect(await screen.findByText("주문을 조회하지 못했습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(screen.queryByText("진행 중인 주문이 없어요")).not.toBeInTheDocument();
   });
 
@@ -186,7 +186,7 @@ describe("store search", () => {
 
     renderSearch("/app/stores?query=라떼");
 
-    expect(await screen.findByText("검색을 사용할 수 없습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
   });
 
   it("explains a denied location permission and still allows search", async () => {

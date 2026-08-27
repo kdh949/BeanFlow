@@ -111,7 +111,7 @@ export const ResetConflict: Story = {
     await lookup(canvas);
     await userEvent.type(canvas.getByLabelText("임시 비밀번호 재발급 사유"), "본인 확인 완료");
     await userEvent.click(canvas.getByRole("button", { name: "임시 비밀번호 재발급" }));
-    await expect(await canvas.findByText(/임시 비밀번호는 다시 표시할 수 없습니다/)).toBeVisible();
+    await expect(await canvas.findByText("임시 비밀번호를 다시 표시할 수 없습니다")).toBeVisible();
     await expect(canvas.queryByText("RESET_PASSWORD_DEMO_00000000001")).not.toBeInTheDocument();
   },
 };
@@ -144,6 +144,6 @@ export const QueryUnavailable: Story = {
     await userEvent.type(canvas.getByLabelText("점주 로그인 ID"), "merchant01");
     await userEvent.selectOptions(canvas.getByLabelText("조회 사유"), "MERCHANT_ACCOUNT_STATUS_REVIEW");
     await userEvent.click(canvas.getByRole("button", { name: "계정 조회" }));
-    await expect(await canvas.findByText("점주 계정 저장소를 사용할 수 없습니다.")).toBeVisible();
+    await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
   },
 };

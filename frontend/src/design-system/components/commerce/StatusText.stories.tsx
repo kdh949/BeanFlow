@@ -5,13 +5,11 @@ const meta = {
   title: "Components/Commerce/StatusText",
   component: StatusText,
   tags: ["autodocs"],
-  parameters: { a11y: { test: "error" }, docs: { description: { component: "채워진 배지 대신 거래 상태를 텍스트로 직접 표현합니다." } } },
+  parameters: { a11y: { test: "error" }, docs: { description: { component: "채워진 배지 없이 전달받은 문구를 시각 tone으로 표현합니다. 도메인 상태 해석은 presentation 계층이 담당합니다." } } },
 } satisfies Meta<typeof StatusText>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Ready: Story = { args: { state: "READY" } };
-export const Unknown: Story = { args: { state: "UNKNOWN" } };
-export const ManualReview: Story = { args: { state: "MANUAL_REVIEW" } };
-export const Failed: Story = { args: { state: "FAILED" } };
-export const UnknownCodePreserved: Story = { args: { state: "PROVIDER_HOLD" } };
+export const Neutral: Story = { args: { children: "준비 완료", tone: "neutral" } };
+export const Uncertain: Story = { args: { children: "확인 필요", tone: "uncertain" } };
+export const Danger: Story = { args: { children: "실패", tone: "danger" } };

@@ -10,7 +10,8 @@ import { storeOrderActionLabels, storeOrderBoardColumns, storeOrderElapsedLabel,
 import type { StoreOrderAction, StoreOrderBoardItem, StoreOrderBoardOverflow } from "../../pages/console/storeOrderBoardModel";
 import { useStoreOrderBoard } from "../../pages/console/useStoreOrderBoard";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshPageHeading } from "./RefreshShared";
-import { Button, ButtonLink, FeedbackState, QuantityStepper, StatusText } from "../../design-system";
+import { Button, ButtonLink, FeedbackState, QuantityStepper } from "../../design-system";
+import { StatusText } from "../shared";
 
 export function RefreshStoreOrderBoardPage({ now = new Date() }: { now?: Date }) {
   const state = useStoreOrderBoard();

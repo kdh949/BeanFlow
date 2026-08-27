@@ -7,11 +7,6 @@ import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./
 
 const PASSWORD_MIN_LENGTH = 15;
 
-function messageFor(failure: unknown, fallback: string): string {
-  if (failure instanceof ApiRequestError) return failure.message || fallback;
-  return fallback;
-}
-
 function codeOf(failure: unknown): string | null {
   return failure instanceof ApiRequestError ? failure.code : null;
 }
@@ -82,10 +77,10 @@ export function MerchantLoginPage() {
         {failure ? (
           <p className="form-error" id="merchant-login-error" role="alert">
             {code === "AUTHENTICATION_RATE_LIMITED"
-              ? messageFor(failure, "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.")
+              ? "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요."
               : code === "AUTHENTICATION_FAILED"
                 ? "아이디 또는 비밀번호를 확인해 주세요."
-                : messageFor(failure, "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+                : "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button size="xl" block type="submit" loading={submitting} disabled={!loginId.trim() || !password}>
@@ -164,10 +159,10 @@ export function MerchantPasswordChangePage() {
         {failure ? (
           <p className="form-error" id="merchant-password-error" role="alert">
             {code === "PASSWORD_POLICY_VIOLATION"
-              ? messageFor(failure, "비밀번호 규칙을 확인해 주세요.")
+              ? "비밀번호 규칙을 확인해 주세요."
               : code === "AUTHENTICATION_FAILED"
                 ? "현재 비밀번호를 확인해 주세요."
-                : messageFor(failure, "비밀번호를 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+                : "비밀번호를 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button

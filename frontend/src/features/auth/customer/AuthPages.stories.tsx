@@ -89,7 +89,7 @@ export const RateLimited: Story = {
     await userEvent.type(await canvas.findByLabelText("아이디"), "busy-user");
     await userEvent.type(canvas.getByLabelText("비밀번호"), "invalid-password");
     await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
-    await expect(await canvas.findByText("로그인 시도가 너무 많습니다. 15분 뒤 다시 시도해 주세요.")).toBeVisible();
+    await expect(await canvas.findByText("로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.")).toBeVisible();
   },
 };
 

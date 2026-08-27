@@ -7,11 +7,6 @@ import { customerSession, sanitizeReturnPath, useCustomerSession } from "./custo
 
 const PASSWORD_MIN_LENGTH = 15;
 
-function messageFor(failure: unknown, fallback: string): string {
-  if (failure instanceof ApiRequestError) return failure.message || fallback;
-  return fallback;
-}
-
 function codeOf(failure: unknown): string | null {
   return failure instanceof ApiRequestError ? failure.code : null;
 }
@@ -78,10 +73,10 @@ export function CustomerLoginPage() {
         {failure ? (
           <p className="form-error" id="customer-login-error" role="alert">
             {rateLimited
-              ? messageFor(failure, "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.")
+              ? "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요."
               : code === "AUTHENTICATION_FAILED"
                 ? "아이디 또는 비밀번호를 확인해 주세요."
-                : messageFor(failure, "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+                : "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button size="xl" block type="submit" loading={submitting} disabled={!loginId.trim() || !password}>
@@ -198,7 +193,7 @@ export function CustomerSignupPage() {
               ? "가입은 완료됐지만 로그인하지 못했습니다. 비밀번호를 확인한 뒤 다시 시도해 주세요."
               : duplicateLoginId
                 ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요."
-                : messageFor(failure, "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.")}
+                : "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button

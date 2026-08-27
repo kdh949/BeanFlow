@@ -23,20 +23,20 @@ export function orderConflictGuidance(failure: unknown): ConflictGuidance | null
     case "STOCK_NOT_AVAILABLE":
       return {
         title: "재고가 부족한 메뉴가 있어요",
-        description: failure.message,
+        description: "현재 재고를 확인한 뒤 메뉴 수량이나 구성을 다시 선택해 주세요.",
         recovery: "recheck-menu",
       };
     case "MENU_CONFIGURATION_NOT_AVAILABLE":
       return {
         title: "지금 주문할 수 없는 메뉴 구성이에요",
-        description: failure.message,
+        description: "메뉴와 옵션의 판매 상태가 바뀌었습니다. 구성을 다시 선택해 주세요.",
         recovery: "recheck-menu",
       };
     case "COUPON_NOT_AVAILABLE":
     case "POINT_BALANCE_INSUFFICIENT":
       return {
         title: "혜택을 적용할 수 없어요",
-        description: failure.message,
+        description: "쿠폰 또는 포인트 적용 조건을 확인한 뒤 다시 선택해 주세요.",
         recovery: "recheck-menu",
       };
     case "RESERVATION_EXPIRED":

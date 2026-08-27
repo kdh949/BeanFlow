@@ -2,3 +2,12 @@
 .bf-feedback p { max-width: 44ch; color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.5; }
 .bf-feedback code { color: var(--text-muted); }
 .bf-feedback--error { border-color: var(--border-danger-soft); color: var(--danger-fg); }
+.spin { animation: bf-spin .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.inline-note { padding: var(--sp-4); border-radius: var(--r-sm); background: var(--surface-app); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.5; }
+.form-footnote { color: var(--text-faint); font-size: var(--fs-caption); line-height: 1.5; }
+.form-error { margin-top: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-sm); background: var(--danger-bg); color: var(--danger-fg); font-size: var(--fs-caption); line-height: 1.5; }
+.success-mark, .pending-mark, .failure-mark { width: 72px; height: 72px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.success-mark { background: var(--success-bg); color: var(--success-fg); }
+.pending-mark { background: var(--warning-bg); color: var(--warning-fg); }
+.failure-mark { background: var(--danger-bg); color: var(--danger-fg); }

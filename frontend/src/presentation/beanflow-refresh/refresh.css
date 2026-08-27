@@ -20,7 +20,7 @@
 .bfr-customer-app { width: min(100%, 390px); min-height: 100svh; margin: 0 auto; position: relative; background: var(--color-white); box-shadow: var(--sh-customer-frame); }
 .bfr-customer-header { height: 72px; padding: 0 26px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--slate-200); background: var(--surface-header-glass); }
 .bfr-header-actions { display: flex; gap: 8px; }
-.bfr-header-action { width: 42px; height: 42px; position: relative; display: grid; place-items: center; border-radius: 50%; color: var(--ink-950); }
+.bfr-header-action { width: var(--tap-min); height: var(--tap-min); position: relative; display: grid; place-items: center; border-radius: 50%; color: var(--ink-950); }
 .bfr-header-action:hover { background: var(--slate-50); }
 .bfr-header-action > span { width: 8px; height: 8px; position: absolute; top: 7px; right: 7px; display: grid; place-items: center; border: 2px solid var(--color-white); border-radius: 50%; background: var(--coral-600); color: var(--color-white); font-size: 7px; }
 .bfr-header-action.is-failed > span { width: 14px; height: 14px; border: 0; }
@@ -31,7 +31,7 @@
 .bfr-customer-tabs a.active::before { content: ""; width: 48px; height: 2px; position: absolute; top: 0; background: var(--coral-600); }
 
 .bfr-page { padding: 26px; }
-.bfr-back-link { min-height: 40px; margin-bottom: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--slate-600); font-size: 14px; font-weight: 700; }
+.bfr-back-link { min-height: var(--tap-min); margin-bottom: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--slate-600); font-size: 14px; font-weight: 700; }
 
 /* Home: measured against image-6 at a 390 x 693 viewport. */
 .bfr-home { padding: 0 26px 24px; }
@@ -69,7 +69,7 @@
 /* Search and shared store rows */
 .bfr-search-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .bfr-query-helpers { margin: 12px 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
-.bfr-query-helpers button { min-height: 34px; padding: 0 14px; border: 1px solid var(--slate-200); border-radius: 18px; background: var(--color-white); color: var(--ink-700); font-size: 13px; }
+.bfr-query-helpers button { min-height: var(--tap-min); padding: 0 14px; border: 1px solid var(--slate-200); border-radius: 18px; background: var(--color-white); color: var(--ink-700); font-size: 13px; }
 .bfr-location-action { width: 100%; min-height: 50px; margin-bottom: 18px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; background: var(--ink-950); color: var(--color-white); font-weight: 750; }
 .bfr-search-results h2 { margin: 20px 0 12px; font-size: 19px; }
 .bfr-store-list { display: grid; border-top: 1px solid var(--slate-200); }
@@ -105,10 +105,10 @@
 .bfr-menu-row__media img { width: 100%; height: 100%; object-fit: cover; }
 .bfr-menu-group article > div:nth-child(2) { display: grid; gap: 5px; }
 .bfr-menu-group article p, .bfr-menu-group article small { color: var(--slate-600); font-size: 12px; }
-.bfr-menu-row__add { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--slate-300); border-radius: 50%; background: var(--color-white); color: var(--coral-700); }
+.bfr-menu-row__add { width: var(--tap-min); height: var(--tap-min); display: grid; place-items: center; border: 1px solid var(--slate-300); border-radius: 50%; background: var(--color-white); color: var(--coral-700); }
 .bfr-menu-config { margin-top: 20px; padding: 18px; border: 1px solid var(--slate-200); border-radius: 14px; }
 .bfr-menu-config fieldset { margin: 16px 0; padding: 0; border: 0; }
-.bfr-menu-config label { min-height: 42px; display: flex; align-items: center; gap: 8px; }
+.bfr-menu-config label { min-height: var(--tap-min); display: flex; align-items: center; gap: 8px; }
 .bfr-config-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .bfr-floating-cart { position: sticky; z-index: 10; bottom: 78px; margin-top: 20px; }
 .bfr-cart-store, .bfr-cart-lines, .bfr-slot-section, .bfr-coupon-row, .bfr-transaction-card, .bfr-checkout-card, .bfr-order-status-card, .bf-action-panel { margin-bottom: 14px; padding: 18px; border: 1px solid var(--slate-200); border-radius: 13px; background: var(--color-white); }
@@ -168,7 +168,7 @@
 .bfr-live > span { width: 8px; height: 8px; border-radius: 50%; background: var(--coral-600); }
 .bfr-board-toolbar { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .bfr-board-toolbar label { display: flex; align-items: center; gap: 8px; }
-.bfr-board-toolbar select { min-height: 38px; padding: 0 28px 0 10px; border: 1px solid var(--slate-200); border-radius: 8px; background: var(--color-white); }
+.bfr-board-toolbar select { min-height: var(--tap-min); padding: 0 28px 0 10px; border: 1px solid var(--slate-200); border-radius: 8px; background: var(--color-white); }
 .bfr-board-notice { margin-bottom: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; border-radius: 8px; background: var(--blue-100); color: var(--blue-700); font-size: 12px; }
 .bfr-order-board { display: grid; grid-template-columns: repeat(3, minmax(250px, 1fr)); gap: 12px; }
 .bfr-board-lane { min-width: 0; overflow: hidden; border: 1px solid var(--slate-200); border-radius: 12px; background: var(--slate-100); }
@@ -247,14 +247,14 @@
 .bfr-cart .bfr-cart-lines > div { min-height: 50px; }
 .bfr-cart .bfr-slot-section { padding-block: 8px; }
 .bfr-cart .bfr-slot-section h2 { margin-bottom: 5px; font-size: 12px; }
-.bfr-cart .bfr-slot-grid button { min-height: 35px; }
-.bfr-cart .bfr-coupon-row { min-height: 42px; padding-block: 8px; }
+.bfr-cart .bfr-slot-grid button { min-height: var(--tap-min); }
+.bfr-cart .bfr-coupon-row { min-height: var(--tap-min); padding-block: 8px; }
 .bfr-cart .bfr-cart-pricing { padding-block: 8px; }
 .bfr-cart .bfr-cart-pricing .bfr-pricing { gap: 3px; }
 .bfr-cart .bfr-cart-pricing .bfr-pricing div:last-child { padding-top: 4px; }
 .bfr-muted-note { color: var(--slate-600); font-size: 9px; }
 .bfr-cart-lines > div > .bf-stepper { display: inline-flex; }
-.bfr-cart-lines .bf-stepper button { width: 23px; height: 25px; }
+.bfr-cart-lines .bf-stepper button { min-width: var(--tap-min); min-height: var(--tap-min); }
 .bfr-cart-lines .bf-stepper output { min-width: 22px; font-size: 9px; }
 .bfr-cart-lines > p { margin-top: 5px; color: var(--slate-600); font-size: 8px; }
 
@@ -318,7 +318,7 @@
 .bfr-customer-header .bf-brand { font-size: 19px; }
 .bfr-customer-header .bf-brand img { width: 23px; height: 23px; }
 .bfr-header-actions { gap: 2px; }
-.bfr-header-action { width: 36px; height: 36px; }
+.bfr-header-action { width: var(--tap-min); height: var(--tap-min); }
 .bfr-customer-content { padding-bottom: 70px; }
 .bfr-customer-tabs { height: 70px; }
 .bfr-customer-tabs a { gap: 2px; font-size: 10px; }
@@ -328,18 +328,18 @@
 .bf-page-heading { margin-bottom: 14px; gap: 12px; }
 .bf-page-heading h1 { font-size: 24px; line-height: 1.18; }
 .bf-page-heading p { margin-top: 5px; font-size: 12px; line-height: 1.45; }
-.bfr-back-link { min-height: 28px; margin-bottom: 8px; font-size: 12px; }
-.bf-action { min-height: 38px; padding-inline: 14px; border-radius: 8px; font-size: 12px; }
-.bf-action--sm { min-height: 30px; padding-inline: 10px; font-size: 11px; }
+.bfr-back-link { min-height: var(--tap-min); margin-bottom: 8px; font-size: 12px; }
+.bf-action { min-height: var(--tap-min); padding-inline: 14px; border-radius: 8px; font-size: 12px; }
+.bf-action--sm { min-height: var(--tap-min); padding-inline: 10px; font-size: 11px; }
 .bf-action--xl { min-height: 48px; font-size: 14px; }
-.bf-stepper button { width: 30px; height: 30px; }
+.bf-stepper button { min-width: var(--tap-min); min-height: var(--tap-min); }
 .bf-stepper output { min-width: 28px; font-size: 12px; }
 .bf-feedback { min-height: 92px; padding: 16px; border-radius: 10px; }
 
 .bfr-customer-app:has(.bfr-has-page-topbar) > .bfr-customer-header { display: none; }
 .bfr-has-page-topbar { padding-top: 0; }
-.bfr-mobile-topbar { height: 54px; margin: 0 -18px 14px; padding: 0 18px; display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; border-bottom: 1px solid var(--slate-200); background: var(--surface-console-header); }
-.bfr-mobile-topbar > :first-child, .bfr-mobile-topbar > :last-child { width: 34px; height: 34px; position: relative; display: grid; place-items: center; }
+.bfr-mobile-topbar { height: 54px; margin: 0 -18px 14px; padding: 0 18px; display: grid; grid-template-columns: var(--tap-min) 1fr var(--tap-min); align-items: center; border-bottom: 1px solid var(--slate-200); background: var(--surface-console-header); }
+.bfr-mobile-topbar > :first-child, .bfr-mobile-topbar > :last-child { width: var(--tap-min); height: var(--tap-min); position: relative; display: grid; place-items: center; }
 .bfr-mobile-topbar > :last-child > span { width: 6px; height: 6px; position: absolute; top: 6px; right: 5px; border-radius: 50%; background: var(--coral-600); }
 .bfr-mobile-topbar h1 { text-align: center; font-size: 15px; letter-spacing: -.02em; }
 .bfr-mobile-topbar .bf-brand { justify-self: center; gap: 6px; font-size: 15px; }
@@ -378,7 +378,7 @@
 .bfr-search-submit { display: grid; place-items: center; border-radius: 0 9px 9px 0; background: var(--coral-700); color: var(--color-white); }
 .bfr-search-submit:disabled { background: var(--disabled-bg); color: var(--disabled-text); }
 .bfr-query-helpers { margin: 10px 0 12px; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.bfr-query-helpers button { min-height: 29px; padding-inline: 10px; flex: none; border-radius: 15px; font-size: 10px; }
+.bfr-query-helpers button { min-height: var(--tap-min); padding-inline: 10px; flex: none; border-radius: 15px; font-size: 10px; }
 .bfr-query-helpers .bfr-location-chip { display: inline-flex; align-items: center; gap: 4px; }
 .bfr-search-results h2 { margin: 12px 0 9px; font-size: 15px; }
 .bfr-store-list { gap: 8px; border-top: 0; }
@@ -421,7 +421,7 @@
 .bfr-menu-group article > button strong { font-size: 11px; }
 .bfr-menu-group article > button small, .bfr-menu-group article > button b { font-size: 9px; }
 .bfr-menu-row__media { width: 52px; height: 52px; border-radius: 50%; }
-.bfr-menu-row__add { width: 30px; height: 30px; }
+.bfr-menu-row__add { width: var(--tap-min); height: var(--tap-min); }
 .bfr-menu-config { margin: 6px 0 10px; padding: 12px; border-radius: 9px; }
 .bfr-floating-cart { bottom: 76px; margin-top: 10px; }
 
@@ -440,7 +440,7 @@
 .bfr-cart-line-media { width: 36px; height: 36px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--slate-50); }
 .bfr-cart-line-media img { width: 100%; height: 100%; object-fit: cover; }
 .bfr-slot-grid { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.bfr-slot-grid button { min-width: 74px; min-height: 42px; padding: 6px; font-size: 10px; }
+.bfr-slot-grid button { min-width: 74px; min-height: var(--tap-min); padding: 6px; font-size: 10px; }
 .bfr-coupon-row { min-height: 48px; font-size: 10px; }
 .bfr-pricing { gap: 5px; font-size: 10px; }
 .bfr-pricing div:last-child { padding-top: 7px; font-size: 13px; }
@@ -496,7 +496,7 @@
 .bfr-store-sidebar .bf-brand img { width: 24px; height: 24px; }
 .bfr-store-context { margin: 22px 8px 8px; color: var(--slate-600); font-size: 9px; }
 .bfr-store-sidebar nav { gap: 4px; }
-.bfr-store-sidebar nav a, .bfr-store-sidebar-foot :where(a, button) { min-height: 38px; padding-inline: 10px; border-radius: 7px; color: var(--ink-700); font-size: 11px; }
+.bfr-store-sidebar nav a, .bfr-store-sidebar-foot :where(a, button) { min-height: var(--tap-min); padding-inline: 10px; border-radius: 7px; color: var(--ink-700); font-size: 11px; }
 .bfr-store-sidebar nav a.active { background: var(--coral-100); color: var(--coral-700); }
 .bfr-store-topbar { height: 64px; padding-inline: 24px; }
 .bfr-store-topbar > div span { font-size: 9px; }
@@ -522,7 +522,7 @@
 .bfr-order-card > dl { gap: 3px; }
 .bfr-order-card > dl div, .bfr-card-warning { font-size: 8px; }
 .bfr-card-actions { margin-top: 7px; gap: 4px; }
-.bfr-store-shell .bfr-card-actions .bf-action { min-height: 26px; padding-inline: 8px; font-size: 8px; }
+.bfr-store-shell .bfr-card-actions .bf-action { min-height: var(--tap-min); padding-inline: 8px; font-size: 8px; }
 .bfr-live { font-size: 9px; }
 .bfr-selected-store { font-size: 10px; }
 

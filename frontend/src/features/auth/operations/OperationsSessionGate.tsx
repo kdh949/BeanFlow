@@ -4,8 +4,9 @@ import type { components } from "../../../api/schema";
 import { ApiRequestError, unwrap } from "../../../api/client";
 import { operationsApi } from "../../../api/consoleClient";
 import { operationsAuth, type OperationsAuthState } from "../../../auth/session";
-import { EmptyState, ErrorState, LoadingState } from "../../../design-system";
+import { EmptyState, LoadingState } from "../../../design-system";
 import { Button } from "../../../design-system";
+import { ErrorState } from "../../../presentation/shared";
 
 type OperationsSession = {
   get(): OperationsAuthState;

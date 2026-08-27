@@ -2,10 +2,11 @@ import { RefreshCw, XCircle } from "lucide-react";
 import { useLayoutEffect, useMemo } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../api/client";
-import { ErrorState, LoadingState, StatusText, SuccessMark } from "../../design-system";
+import { LoadingState, SuccessMark } from "../../design-system";
 import { PageHeading } from "../../design-system";
 import { won } from "../../lib/format";
 import { ButtonLink } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 import { checkCallback, hasCallbackQuery, type PaymentCallback } from "./paymentAttempt";
 import { type Payment, type PaymentResolution, usePaymentResolution } from "./usePaymentResolution";
 

@@ -116,7 +116,7 @@ export const AssignmentConflict: Story = {
     await userEvent.click(await canvas.findByRole("radio", { name: /역삼동/ }));
     await userEvent.type(canvas.getByLabelText("지정 사유"), "소재지 정정");
     await userEvent.click(canvas.getByRole("button", { name: "지역 지정" }));
-    await expect(await canvas.findByText(/요청 키가 다른 지역 지정/)).toBeVisible();
+    await expect(await canvas.findByText("요청 정보가 변경되었습니다")).toBeVisible();
     await expect(canvas.queryByText("지역을 지정했습니다")).not.toBeInTheDocument();
   },
 };
@@ -149,6 +149,6 @@ export const SearchUnavailable: Story = {
     const canvas = within(canvasElement);
     await userEvent.type(await canvas.findByLabelText("지역 검색"), "역삼동");
     await userEvent.click(canvas.getByRole("button", { name: "검색" }));
-    await expect(await canvas.findByText("지역 기준정보를 조회하지 못했습니다.")).toBeVisible();
+    await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
   },
 };

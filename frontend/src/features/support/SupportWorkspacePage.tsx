@@ -12,8 +12,9 @@ import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
 import { PageHeading } from "../../design-system";
-import { EmptyState, ErrorState, LoadingState, StatusText } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
 import { Button } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 
 type SearchResult = components["schemas"]["SupportSubjectSearchResult"];

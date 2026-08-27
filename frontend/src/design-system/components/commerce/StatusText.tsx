@@ -1,18 +1,9 @@
-export type StatusTextProps = { state: string; label?: string };
+import type { ReactNode } from "react";
 
-const labels: Record<string, string> = {
-  PENDING_PAYMENT: "결제 대기", READY: "준비 완료", APPROVING: "승인 중", CONFIRMING: "승인 중",
-  APPROVED: "결제 완료", SUCCEEDED: "완료", PAID: "결제 완료", ACCEPTED: "주문 접수", REQUESTED: "요청됨",
-  PREPARING: "제조 중", PROCESSING: "처리 중", RETRY_SCHEDULED: "재시도 예정", COMPLETED: "픽업 완료",
-  CANCELLED: "취소됨", REJECTED: "거절됨", EXPIRED: "만료됨", UNKNOWN: "확인 중",
-  RECONCILING: "복구 중", MANUAL_REVIEW: "확인 필요", FAILED: "실패", NOT_REQUIRED: "해당 없음",
-};
+export type StatusTextTone = "neutral" | "uncertain" | "danger";
+export type StatusTextProps = { tone?: StatusTextTone; children: ReactNode };
 
-const uncertainty = new Set(["UNKNOWN", "RECONCILING", "MANUAL_REVIEW"]);
-const failure = new Set(["FAILED", "CANCELLED", "REJECTED", "EXPIRED"]);
-
-/** Text-first domain state label. It intentionally avoids the retired filled status badge treatment. */
-export function StatusText({ state, label }: StatusTextProps) {
-  const tone = uncertainty.has(state) ? "uncertain" : failure.has(state) ? "danger" : "neutral";
-  return <span className={`bf-status-text bf-status-text--${tone}`}>{label ?? labels[state] ?? state}</span>;
+/** Text-first visual primitive. Product state meaning belongs to the presentation layer. */
+export function StatusText({ tone = "neutral", children }: StatusTextProps) {
+  return <span className={`bf-status-text bf-status-text--${tone}`}>{children}</span>;
 }

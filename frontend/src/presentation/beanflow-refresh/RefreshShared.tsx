@@ -1,9 +1,10 @@
-import { ArrowLeft, ArrowRight, Bell, MapPin, Navigation, RotateCcw, Store } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, MapPin, Navigation, Store } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { nextPickupLabel, operatingStatusLabel } from "../../features/discovery/storeDisplay";
-import { BrandLockup, Button, FeedbackState, PageHeading } from "../../design-system";
+import { BrandLockup, FeedbackState, PageHeading } from "../../design-system";
+import { ErrorState } from "../shared";
 
 type StoreSearchItem = components["schemas"]["StoreSearchItem"];
 type NearbyStore = components["schemas"]["NearbyStore"];
@@ -29,8 +30,7 @@ export function RefreshLoading({ label }: { label: string }) {
 }
 
 export function RefreshError({ error, retry }: { error: unknown; retry?: () => void }) {
-  const description = error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
-  return <FeedbackState kind="error" title="정보를 불러오지 못했어요" description={description} action={retry ? <Button variant="secondary" onClick={retry}><RotateCcw size={16} />다시 시도</Button> : undefined} />;
+  return <ErrorState error={error} retry={retry} />;
 }
 
 export function RefreshEmpty({ title, description, action }: { title: string; description: string; action?: ReactNode }) {

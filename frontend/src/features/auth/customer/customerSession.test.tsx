@@ -187,7 +187,7 @@ describe("customer login and signup states", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("아이디 또는 비밀번호를 확인해 주세요.");
 
     await user.click(screen.getByRole("button", { name: "로그인" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("15분 뒤 다시 시도해 주세요.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("잠시 뒤 다시 시도해 주세요.");
     expect(post).toHaveBeenCalledTimes(2);
   });
 
@@ -292,7 +292,7 @@ describe("customer logout", () => {
     await user.click(await screen.findByRole("button", { name: "로그아웃" }));
 
     await waitFor(() => expect(remove).toHaveBeenCalled());
-    expect(await screen.findByText("요청을 완료하지 못했습니다")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "내 정보" })).toBeInTheDocument();
     expect(customerSession.get().status).toBe("authenticated");
   });

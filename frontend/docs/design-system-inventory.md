@@ -13,7 +13,7 @@ filled success badge와 refresh 전용 primitive/frame은 삭제했으며 compat
 | Foundations | `src/design-system/tokens/*.css` | color, semantic color, typography, spacing, radius, elevation, motion, focus |
 | Components | `src/design-system/components/**` | 한 가지 상호작용·표현 책임을 가진 typed primitive |
 | Patterns | `src/design-system/patterns/**` | component를 조합한 반복 상태와 page structure |
-| Shared presentation | `src/presentation/AppShells.tsx` | actor/session/API 상태를 읽어 canonical component와 layout을 조합하는 runtime shell |
+| Shared presentation | `src/presentation/AppShells.tsx`, `src/presentation/shared/**` | actor/session/API/domain 상태를 presentation-safe props로 변환하고 canonical component를 조합 |
 | Product pages | `src/features/**`, `src/pages/**`, `src/presentation/beanflow-refresh/**` | OpenAPI와 domain state를 canonical public API로 연결 |
 
 Product code는 `src/design-system/index.ts`를 통해서만 canonical component와 pattern을 import한다.
@@ -24,11 +24,11 @@ Feature가 token을 재정의하거나 병렬 button, badge, input, status, shel
 | Family | Examples | Usage |
 |---|---|---|
 | Brand | `--coral-*`, `--ink-*`, `--slate-*` | coral primary action, navy hierarchy, cool neutral surfaces |
-| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--action-*`, `--state-*` | component와 page의 의미 기반 선택 |
+| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--primary-*`, `--success-*`, `--warning-*`, `--danger-*`, `--info-*` | component와 page의 의미 기반 선택 |
 | Type | `--fs-*`, `--lh-*`, `--fw-*`, `--ls-*` | Korean-first hierarchy; decorative uppercase micro label 금지 |
 | Space/size | `--sp-*`, `--control-h-*`, `--tap-min`, viewport/layout tokens | mobile app와 dense workspace rhythm |
-| Shape/depth | `--radius-*`, `--shadow-*` | restrained corner and cool navy elevation |
-| Motion/focus | `--motion-*`, base focus ring | reduced-motion-safe interaction and keyboard visibility |
+| Shape/depth | `--r-*`, `--sh-*` | restrained corner and cool navy elevation |
+| Motion/focus | `--dur-*`, `--ease-*`, `--ring-*` | reduced-motion-safe interaction and keyboard visibility |
 
 Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `npm run check:design`이 막는다.
 
@@ -38,7 +38,7 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 |---|---|---|---|
 | Brand | `BrandLockup` | 제공된 cup asset과 wordmark의 일관된 link/static 표현 | static, home link |
 | Action | `Button`, `ButtonLink` | brand, secondary, ghost, danger action | loading, disabled, long Korean |
-| Commerce | `StatusText` | filled badge 없이 transaction state를 text-first로 표현 | ready, failed, unknown, manual review, unknown code |
+| Commerce | `StatusText` | 전달받은 문구를 filled badge 없이 visual tone으로 표현 | neutral, uncertain, danger |
 | Feedback | `FeedbackState` | loading, empty, recoverable dependency failure | loading, empty, error |
 | Form | `SearchField` | visible search affordance와 accessible clear action | empty, value, clear |
 | Form | `QuantityStepper` | bounded decrement/increment | default, min/max, keyboard action |
@@ -51,7 +51,9 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 | Pattern | Owner | Notes |
 |---|---|---|
 | `PageHeading` | design system | source에 없던 eyebrow 없이 title, description, action만 구성 |
-| `LoadingState`, `EmptyState`, `ErrorState`, `SuccessMark` | design system | `ApiRequestError` 의미와 correlation reference 보존 |
+| `LoadingState`, `EmptyState`, `SuccessMark` | design system | presentation-safe feedback와 결과 mark 렌더링 |
+| `ErrorState`, `requestErrorPresentation` | shared presentation | 알려진 `ApiRequestError`만 안전한 문구로 변환하고 correlation reference 보존 |
+| `DomainStatusText` | shared presentation | BeanFlow state를 사용자 label과 visual tone으로 변환하고 unknown code 보존 |
 | `CustomerShell` | shared presentation | 모든 `/app` route가 동일한 brand/header/tab chrome 사용 |
 | `ConsoleShell` | shared presentation | `/store`, `/ops`, `/support`가 동일한 dense workspace chrome 사용 |
 | `NotificationAction` | shared presentation | loading/read/unread/failure를 숨기지 않는 고객 header action |
@@ -59,6 +61,9 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 
 Shell은 session membership, notification API, logout failure 같은 runtime 책임 때문에 design-system
 primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system만 사용하고 독립 Storybook states로 검증한다.
+공용 `.surface-card`, `.context-label`, `.customer-page`, `.console-page`, `.panel-heading`, `.back-link`,
+`.icon-action`, `.inline-note`, `.form-error`, `.form-footnote`도 design-system 소유 CSS contract이며
+`src/styles.css`에는 feature/route-specific layout만 둔다.
 
 ## 5. Consumer coverage
 
@@ -89,9 +94,9 @@ primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system
 | Gate | Coverage |
 |---|---|
 | `npm run check:design` | token reference, raw style, public escape, taxonomy, story/docs and CSS ownership, pixel ratchet |
-| `npm run check:presentation-boundary` | refresh runtime boundary와 retired source/import absence |
+| `npm run check:presentation-boundary` | refresh runtime boundary, design-system 의존성 방향, 전역 shared selector와 retired source/import absence |
 | `npm run typecheck` | TypeScript와 generated runtime OpenAPI schema |
-| `npm run test:unit` | shared utility와 product behavior |
+| `npm test` | shared utility와 product behavior 및 presentation-boundary guard 자체 회귀 |
 | live Storybook MCP | documentation, interaction, and a11y for every indexed story |
 | `npm run build-storybook` + `npm run test:storybook:docs` | static compilation and isolated state-marker smoke |
 | `npm run build` + `npm run test:sites` | product bundle와 actor route surface |
