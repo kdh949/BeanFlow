@@ -64,6 +64,9 @@ active/archived 상태를 가진다.
 - 기존 OrderLine의 immutable 이름·가격·Option·requirement snapshot은 현재 catalogue lifecycle과 무관하게
   그대로 유지한다.
 - v1 public API에는 archived item 복원과 hard delete를 두지 않는다.
+- archived Menu는 authoring 목록에서 요약만 조회하며 현재 편집본 조회·수정 UI를 제공하지 않는다.
+  archive command의 terminal 응답은 보관 직전 active child snapshot에 ARCHIVED root 상태를 적용하므로,
+  과거 replace에서 이미 제거된 child를 다시 포함하지 않는다.
 
 Menu가 `available=true`이면 최소 한 개의 active MenuConfiguration이 있어야 한다. Configuration의
 정규화 Option 집합은 같은 Menu의 active Option만 참조하며 같은 집합은 하나만 존재한다. 각 active

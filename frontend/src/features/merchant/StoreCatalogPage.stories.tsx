@@ -296,6 +296,10 @@ export const ArchivedMenuList: Story = {
   play: async ({ canvas }) => {
     await userEvent.click(await canvas.findByRole("button", { name: "보관된 메뉴" }));
     await expect(await canvas.findByText("카페 라테")).toBeVisible();
+    await expect(canvas.getByLabelText("카페 라테 보관 요약")).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: /카페 라테/ })).not.toBeInTheDocument();
+    await expect(canvas.queryByLabelText("메뉴 이름")).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "거래 내용 저장" })).not.toBeInTheDocument();
     await waitFor(() => expect(canvas.queryByRole("button", { name: /보관$/ })).not.toBeInTheDocument());
   },
 };

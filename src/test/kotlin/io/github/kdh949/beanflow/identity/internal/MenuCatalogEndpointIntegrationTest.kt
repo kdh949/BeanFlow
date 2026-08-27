@@ -60,6 +60,8 @@ internal class MenuCatalogEndpointIntegrationTest(
         val menuId = UUID.randomUUID()
         val optionId = UUID.randomUUID()
         val configurationId = UUID.randomUUID()
+        val replacementOptionId = UUID.randomUUID()
+        val replacementConfigurationId = UUID.randomUUID()
         val sellableUnitId = UUID.randomUUID()
 
         val created =
@@ -93,7 +95,16 @@ internal class MenuCatalogEndpointIntegrationTest(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
             "menu-replace-key-001",
-            content(storeId, menuId, optionId, configurationId, sellableUnitId, "바닐라 라테", 5_000, expectedVersion = 0),
+            content(
+                storeId,
+                menuId,
+                replacementOptionId,
+                replacementConfigurationId,
+                sellableUnitId,
+                "바닐라 라테",
+                5_000,
+                expectedVersion = 0,
+            ),
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.name").value("바닐라 라테"))
             .andExpect(jsonPath("$.version").value(1))
@@ -102,7 +113,16 @@ internal class MenuCatalogEndpointIntegrationTest(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
             "menu-noop-key-0001",
-            content(storeId, menuId, optionId, configurationId, sellableUnitId, "바닐라 라테", 5_000, expectedVersion = 1),
+            content(
+                storeId,
+                menuId,
+                replacementOptionId,
+                replacementConfigurationId,
+                sellableUnitId,
+                "바닐라 라테",
+                5_000,
+                expectedVersion = 1,
+            ),
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.version").value(1))
 
@@ -114,6 +134,15 @@ internal class MenuCatalogEndpointIntegrationTest(
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.lifecycle").value("ARCHIVED"))
             .andExpect(jsonPath("$.version").value(2))
+            .andExpect(jsonPath("$.options.length()").value(1))
+            .andExpect(jsonPath("$.options[0].optionId").value(replacementOptionId.toString()))
+            .andExpect(jsonPath("$.configurations.length()").value(1))
+            .andExpect(jsonPath("$.configurations[0].configurationId").value(replacementConfigurationId.toString()))
+
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$menuId/trade-content").cookie(actor.session, actor.csrf))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RESOURCE_STATE_CONFLICT"))
 
         mockMvc
             .perform(get("/api/v1/stores/$storeId/menus").cookie(customerSession().session))

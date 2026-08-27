@@ -527,7 +527,8 @@ code {
 .catalog-lifecycle-tabs button[aria-pressed="true"] { background: var(--surface-card); color: var(--text-strong); box-shadow: var(--sh-1); }
 .menu-authoring-list { margin: 0; padding: 0; display: grid; gap: var(--sp-3); list-style: none; }
 .menu-authoring-list > li { padding: var(--sp-3); border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-md); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; }
-.menu-authoring-summary { min-height: 54px; padding: var(--sp-2); border: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); background: transparent; color: var(--text-strong); cursor: pointer; text-align: left; }
+.menu-authoring-summary { min-height: 54px; padding: var(--sp-2); border: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); background: transparent; color: var(--text-strong); cursor: default; text-align: left; }
+button.menu-authoring-summary { cursor: pointer; }
 .menu-authoring-summary > span:first-child { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .menu-authoring-summary strong, .menu-authoring-summary small { overflow-wrap: anywhere; }
 .menu-authoring-summary small, .menu-authoring-summary > span:last-child { color: var(--text-muted); font-size: var(--fs-caption); }

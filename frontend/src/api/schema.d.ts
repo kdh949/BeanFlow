@@ -2286,7 +2286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Menu 거래 내용 현재 편집본 조회 */
+        /**
+         * Active Menu 거래 내용 현재 편집본 조회
+         * @description ARCHIVED Menu는 목록의 요약만 제공하며 현재 편집본 조회는 409로 거절합니다.
+         */
         get: operations["getMerchantMenuTradeContent"];
         /**
          * Menu 거래 내용 전체 교체
@@ -14402,6 +14405,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

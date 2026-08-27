@@ -142,6 +142,30 @@ describe("StoreCatalogPage", () => {
     expect(name).toHaveValue("새 라테");
   });
 
+  it("keeps archived Menu rows summary-only without opening a writable editor", async () => {
+    const get = vi.mocked(merchantApi.GET);
+    get.mockImplementation(((path: string, options: {
+      params?: { query?: { lifecycle?: string } };
+    }) => {
+      if (path === "/merchant/me/stores") return Promise.resolve(response([{ storeId, storeName: "시청점", membershipRole: "STAFF" }]));
+      if (path === "/stores/{storeId}/ordering-policy") return Promise.resolve(response(policy));
+      if (path === "/stores/{storeId}/menu-catalog") {
+        const archived = options.params?.query?.lifecycle === "ARCHIVED";
+        return Promise.resolve(response({ items: [{ ...menuSummary, lifecycle: archived ? "ARCHIVED" : "ACTIVE", available: !archived }] }));
+      }
+      if (path === "/stores/{storeId}/menus/{menuId}/trade-content") return Promise.resolve(response(menuContent));
+      throw new Error(`unexpected GET ${path}`);
+    }) as never);
+    render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
+
+    await userEvent.click(await screen.findByRole("button", { name: "보관된 메뉴" }));
+    expect(await screen.findByLabelText("카페 라테 보관 요약")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /카페 라테/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("메뉴 이름")).not.toBeInTheDocument();
+    const getCalls = get.mock.calls as unknown as Array<[string, unknown?]>;
+    expect(getCalls.filter(([path]) => path === "/stores/{storeId}/menus/{menuId}/trade-content")).toHaveLength(0);
+  });
+
   it("ignores a late ordering policy response from the previously selected Store", async () => {
     const firstPolicy = deferred<never>();
     const secondPolicy = deferred<never>();

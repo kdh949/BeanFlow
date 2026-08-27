@@ -109,7 +109,11 @@ internal class MenuCatalogService(
         menuId: UUID,
     ): MenuTradeContent {
         requireStoreForRead(storeId)
-        return loadMenu(storeId, menuId).snapshot()
+        val aggregate = loadMenu(storeId, menuId)
+        if (aggregate.menu.lifecycle != MenuLifecycle.ACTIVE) {
+            conflict("Archived Menu trade content is not available")
+        }
+        return aggregate.snapshot()
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -220,7 +224,13 @@ internal class MenuCatalogService(
         aggregate.menu.archive(command.now)
         menus.flush()
         replaceMenuSearchTerms(command.storeId)
-        val content = loadMenu(command.storeId, command.menuId).snapshot()
+        val content =
+            previous.copy(
+                available = aggregate.menu.available,
+                lifecycle = MenuCatalogLifecycle.ARCHIVED,
+                version = aggregate.menu.tradeVersion,
+                updatedAt = aggregate.menu.tradeUpdatedAt,
+            )
         record(command.actorId, command.idempotencyKey, ARCHIVE, hash, command.storeId, command.menuId, content, command.now)
         return MenuCatalogMutation(content, previous, changed = true, replayed = false)
     }
