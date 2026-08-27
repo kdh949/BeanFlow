@@ -57,7 +57,7 @@ export const ConfigurationUnavailable: Story = {
     }),
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("OIDC 공개 설정을 확인할 수 없습니다.")).toBeVisible();
+    await expect(await canvas.findByText("운영자 로그인 설정을 확인할 수 없습니다")).toBeVisible();
     await expect(canvas.getByRole("button", { name: /다시 시도/ })).toBeVisible();
   },
 };

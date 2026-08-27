@@ -4,8 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../../api/customerClient";
 import { customerSession } from "../auth/customer/customerSession";
-import { CustomerHomePage } from "./HomePage";
-import { StoreSearchPage } from "./StoreSearchPage";
+import { RefreshCustomerHomePage, RefreshStoreSearchPage } from "../../presentation/beanflow-refresh";
 
 const actor = { actorType: "CUSTOMER" as const, customerId: "customer-id", displayName: "김도현" };
 const display = { operatingStatus: "OPEN" as const };
@@ -38,7 +37,7 @@ function renderHome() {
   return render(
     <MemoryRouter initialEntries={["/app"]}>
       <Routes>
-        <Route path="/app" element={<CustomerHomePage />} />
+        <Route path="/app" element={<RefreshCustomerHomePage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -48,7 +47,7 @@ function renderSearch(path = "/app/stores") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/app/stores" element={<StoreSearchPage />} />
+        <Route path="/app/stores" element={<RefreshStoreSearchPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -90,8 +89,8 @@ describe("customer home", () => {
 
     renderHome();
 
-    expect(await screen.findByText("A12")).toBeInTheDocument();
-    expect(await screen.findByText("자주 가는 매장")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /A12 아메리카노 1잔/ })).toBeInTheDocument();
+    expect(await screen.findByText("자주 찾는 매장")).toBeInTheDocument();
   });
 
   it("keeps an order list failure visible instead of showing an empty state", async () => {
@@ -102,7 +101,7 @@ describe("customer home", () => {
 
     renderHome();
 
-    expect(await screen.findByText("주문을 조회하지 못했습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(screen.queryByText("진행 중인 주문이 없어요")).not.toBeInTheDocument();
   });
 
@@ -149,7 +148,7 @@ describe("store search", () => {
 
     expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
     expect(screen.getByText("오트 라떼")).toBeInTheDocument();
-    expect(container.querySelector("img.store-thumbnail")).toHaveAttribute("src", "/demo/catalog/store-01.webp");
+    expect(container.querySelector(".bfr-store-card__media img")).toHaveAttribute("src", "/demo/catalog/store-01.webp");
   });
 
   it("keeps the coffee mark for a store whose image is omitted", async () => {
@@ -170,8 +169,8 @@ describe("store search", () => {
     const { container } = renderSearch("/app/stores?query=라떼");
 
     await screen.findByText("성수 로스터리");
-    expect(container.querySelector("img.store-thumbnail")).toBeNull();
-    expect(container.querySelector(".store-mark")).toBeInTheDocument();
+    expect(container.querySelector(".bfr-store-card__media img")).toBeNull();
+    expect(container.querySelector(".bfr-store-card__media svg")).toBeInTheDocument();
   });
 
   it("shows an empty result without claiming a failure", async () => {
@@ -187,7 +186,7 @@ describe("store search", () => {
 
     renderSearch("/app/stores?query=라떼");
 
-    expect(await screen.findByText("검색을 사용할 수 없습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
   });
 
   it("explains a denied location permission and still allows search", async () => {
@@ -196,10 +195,10 @@ describe("store search", () => {
     Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } });
 
     renderSearch();
-    await userEvent.click(screen.getByRole("button", { name: "현재 위치로 찾기" }));
+    await userEvent.click(screen.getByRole("button", { name: "현재 위치로 가까운 매장 찾기" }));
 
     expect(await screen.findByText(/위치 권한이 꺼져 있어/)).toBeInTheDocument();
-    expect(screen.getByLabelText("검색어")).toBeEnabled();
+    expect(screen.getByLabelText("매장과 메뉴 검색")).toBeEnabled();
   });
 
   it("loads the next page with the server's nextCursor instead of stopping at the first 20", async () => {
@@ -260,7 +259,7 @@ describe("store search", () => {
     });
 
     renderSearch();
-    await userEvent.click(screen.getByRole("button", { name: "현재 위치로 찾기" }));
+    await userEvent.click(screen.getByRole("button", { name: "현재 위치로 가까운 매장 찾기" }));
 
     expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
     expect(screen.queryByText("합정 로스터리")).not.toBeInTheDocument();

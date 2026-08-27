@@ -199,6 +199,6 @@ export const SearchRateLimited: Story = {
   play: async ({ canvas }) => {
     await userEvent.type(canvas.getByLabelText("전화번호 또는 이메일"), "010-0000-0000");
     await userEvent.click(canvas.getByRole("button", { name: "정확 검색" }));
-    await expect(await canvas.findByText(/5분 검색 한도를 초과했습니다/)).toBeVisible();
+    await expect(await canvas.findByText("검색 요청이 너무 많습니다")).toBeVisible();
   },
 };

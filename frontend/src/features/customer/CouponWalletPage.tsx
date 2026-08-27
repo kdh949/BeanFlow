@@ -4,9 +4,10 @@ import { Link, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, LoadingState } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { shortDateTime, won } from "../../lib/format";
 import { couponSelection, useCouponSelection } from "./couponSelection";
 
@@ -62,7 +63,7 @@ export function CouponWalletPage() {
   if (!storeId) {
     return (
       <div className="customer-page coupon-wallet-page">
-        <PageTitle eyebrow="COUPONS" title="쿠폰" description="쿠폰은 주문할 매장을 먼저 정한 뒤 적용 가능 여부를 확인합니다." />
+        <PageHeading title="쿠폰" description="쿠폰은 주문할 매장을 먼저 정한 뒤 적용 가능 여부를 확인합니다." />
         <EmptyState
           title="쿠폰을 사용할 매장을 골라주세요"
           description="매장별 적용 범위가 달라서 매장을 선택해야 사용할 수 있는 쿠폰을 정확히 보여드릴 수 있어요."
@@ -78,8 +79,8 @@ export function CouponWalletPage() {
   return (
     <div className="customer-page coupon-wallet-page">
       <Link className="back-link" to={`/app/stores/${storeId}`}><ArrowLeft size={17} /> {wallet.store.name}</Link>
-      <PageTitle
-        eyebrow="COUPONS"
+      <PageHeading
+
         title={`${wallet.store.name} 쿠폰`}
         description="선택은 이 브라우저에만 잠시 유지되며, 주문할 때 서버가 금액과 사용 가능 여부를 다시 확인합니다."
       />
@@ -104,7 +105,7 @@ export function CouponWalletPage() {
                   {!coupon.applicable ? <small>이 매장에서는 사용할 수 없어요.</small> : null}
                 </div>
                 <Button
-                  variant={isSelected ? "secondary" : "primary"}
+                  variant={isSelected ? "secondary" : "brand"}
                   disabled={!coupon.applicable}
                   aria-pressed={isSelected}
                   aria-label={!coupon.applicable

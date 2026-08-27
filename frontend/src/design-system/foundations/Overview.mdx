@@ -5,59 +5,69 @@ import './foundations.css';
 
 # BeanFlow foundations
 
-`tokens/*.css`가 색, 글꼴, 여백, radius, elevation, motion의 canonical source입니다. 제품과
-Storybook은 palette 값이 아니라 semantic token을 소비합니다. 현재 token 정의는 201개이며,
-`_ds_manifest.json`의 187개 snapshot과 type 분류는 migration 참고값일 뿐입니다.
+신규 고객·점주 화면에서 검증한 cool white, navy, coral 시각 언어가 전체 제품의 유일한 기준입니다.
+`tokens/*.css`가 색, 글꼴, 여백, radius, elevation, motion의 canonical source이고 제품과 Storybook은
+semantic token 또는 명시된 palette token만 소비합니다. 이전 espresso, caramel, crema token과 생성
+snapshot은 제거됐습니다.
 
 ## Color roles
 
 <div className="foundation-grid">
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--espresso" /><strong>Primary action</strong><code>--primary-bg</code><span>espresso-700</span></div>
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--caramel" /><strong>Accent action</strong><code>--accent-bg</code><span>caramel-500</span></div>
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--crema" /><strong>App surface</strong><code>--surface-app</code><span>crema-100</span></div>
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--success" /><strong>Success</strong><code>--success-bg / --success-fg</code><span>확정된 성공에만 사용</span></div>
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--warning" /><strong>Warning</strong><code>--warning-bg / --warning-fg</code><span>진행·주의 상태, 5.05:1</span></div>
-  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--danger" /><strong>Danger</strong><code>--danger-bg / --danger-fg</code><span>실패·거절·파괴 행동</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--ink" /><strong>Strong information</strong><code>--text-strong / --ink-950</code><span>제목, 콘솔 navigation, pickup number</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--coral" /><strong>Brand action</strong><code>--primary-bg / --coral-600</code><span>결정 영역의 주 행동 하나</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--canvas" /><strong>App canvas</strong><code>--surface-app / --slate-50</code><span>고객·작업 공간 공통 배경</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--uncertain" /><strong>Uncertain state</strong><code>--info-fg</code><span>UNKNOWN, RECONCILING, MANUAL_REVIEW</span></div>
+  <div className="foundation-card"><div className="foundation-swatch foundation-swatch--danger" /><strong>Failure</strong><code>--danger-fg</code><span>실패, 거절, 만료, 파괴 행동</span></div>
 </div>
 
-Text roles are `--text-strong`, `--text-body`, `--text-muted`, `--text-faint`, and
-`--text-accent`. On a sunken `--crema-200` surface, use `--text-body`; muted text does not
-meet AA on that background. The approved softer borders are `--border-info-soft`,
-`--border-success-soft`, `--border-warning-soft`, and `--border-danger-soft`.
+Status는 채워진 초록 배지로 성공을 장식하지 않습니다. 디자인 시스템 `StatusText`는 전달받은 문구와
+tone만 렌더링합니다. 서버 상태의 문구와 tone 해석, 알 수 없는 code 보존은 application presentation
+pattern인 `DomainStatusText`가 담당합니다.
 
 ## Typography
 
 <div className="foundation-card">
-  <p className="foundation-type-display">12,800원</p>
+  <p className="foundation-type-display">A-142</p>
   <p className="foundation-type-title">좋은 커피는 기다리지 않아도 돼요.</p>
   <p className="foundation-type-body">거래 상태는 서버가 확정한 의미를 그대로 설명합니다.</p>
 </div>
 
-- UI and Korean body: `--font-sans`
+<div className="foundation-text-hierarchy" aria-label="semantic text hierarchy">
+  <p className="is-strong">Strong · --text-strong</p>
+  <p className="is-body">Body · --text-body</p>
+  <p className="is-muted">Muted · --text-muted</p>
+  <p className="is-faint">Faint · --text-faint</p>
+</div>
+
+강조 위계는 `strong > body > muted > faint` 순서입니다. 각 semantic 이름은 실제 대비 농도와 같은
+방향을 유지해야 합니다.
+
+- Korean UI: `--font-sans`
 - identifiers and pickup numbers: `--font-mono`
-- currency and quantities: tabular numerals through `.bf-num`
-- headings: `--fs-title-*` with `--ls-title`
-- body: `--fs-body*` with `--lh-body`
+- headings: tight `--ls-title` with one `h1` per page
+- helper text: body hierarchy 안에서 필요한 경우에만 사용
 
 ## Spacing and geometry
 
 <div className="foundation-space-row" aria-label="spacing token scale example"><span /><span /><span /><span /><span /></div>
 
-Use `--sp-2`, `--sp-4`, `--sp-6`, `--sp-8`, and `--sp-10` for the example above. Controls
-use `--r-control`; cards use `--r-card`; pill badges use `--r-pill`. Literal dimensions are
-reserved for intrinsic icons, media, minimum hit targets, charts, and breakpoints.
+모바일 gutter는 `--gutter-mobile`, workspace gutter는 `--gutter-desktop`을 사용합니다. Controls use
+`--r-control`; cards use `--r-card`. 큰 둥근 카드와 장식 shadow를 반복하지 않습니다.
+
+공용 `.surface-card`, `.context-label`, `.customer-page`, `.console-page`, `.panel-heading`, `.back-link`,
+`.icon-action`, `.inline-note`, `.form-error`, `.form-footnote`는 design-system 소유 pattern CSS입니다.
+`src/styles.css`에는 route/feature-specific layout만 둡니다.
 
 ## Elevation and motion
 
-- cards: `--sh-1`; hover: `--sh-2` or `--sh-3`; dialogs: `--sh-4`
-- customer device frame: `--sh-customer-frame`
+- default surfaces: border first, `--sh-0` or `--sh-1`
+- floating search and decision surfaces: `--sh-2`
 - focus: `--ring-focus`; destructive focus: `--ring-danger`
-- micro interaction: `--dur-fast`; normal transition: `--dur-base`; sheet: `--dur-sheet`
-- reduced motion changes all duration tokens to `0ms`
+- reduced motion sets duration tokens to `0ms`
 
 <div className="foundation-motion" aria-label="hover to preview standard motion"><span /><code>--dur-base / --ease-standard</code></div>
 
 ## New token checklist
 
-A new token must record its semantic name, owner layer, affected surfaces, usage here, and a
-story that renders it. Do not add a token solely to disguise a one-off value.
+새 token은 semantic name, owner layer, affected surface, usage와 consumer story를 기록합니다. 화면 하나의
+literal을 숨기기 위한 token이나 두 번째 palette scale은 추가하지 않습니다.

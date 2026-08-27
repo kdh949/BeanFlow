@@ -1,0 +1,9 @@
+.bf-search-field { min-height: 54px; padding: 0 16px; display: flex; align-items: center; gap: 11px; border: var(--bw-hair) solid var(--border-strong); border-radius: var(--r-xl); background: var(--surface-card); color: var(--text-muted); }
+.bf-search-field:focus-within { border-color: var(--ink-700); box-shadow: var(--ring-focus); }
+.bf-search-field input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-strong); }
+.bf-search-field button { min-width: var(--tap-min); min-height: var(--tap-min); display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
+.bf-stepper { display: inline-flex; align-items: center; overflow: hidden; border: var(--bw-hair) solid var(--border-strong); border-radius: var(--r-md); background: var(--surface-card); }
+.bf-stepper button { min-width: var(--tap-min); min-height: var(--tap-min); display: grid; place-items: center; border: 0; background: var(--surface-card); color: var(--text-strong); cursor: pointer; }
+.bf-stepper button:disabled { color: var(--slate-400); cursor: not-allowed; }
+.bf-stepper output { min-width: 32px; text-align: center; font-weight: 800; }
+.bf-sr-only { width: var(--a11y-hidden-size); height: var(--a11y-hidden-size); padding: 0; margin: calc(var(--a11y-hidden-size) * -1); position: absolute; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

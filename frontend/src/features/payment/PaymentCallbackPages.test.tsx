@@ -171,7 +171,7 @@ describe("payment confirmation recovery", () => {
 
     renderAt("/app/payments/payment-id/success?paymentKey=provider-key&orderId=provider-order&amount=4500");
 
-    expect(await screen.findByText("인증 의존성을 사용할 수 없습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
 
     // The CSRF cookie becomes available again (e.g. the dependency recovered);

@@ -1,20 +1,11 @@
 {
-  "description": "2026-08-15 intrinsic geometry and legacy layout debt. New values or count increases fail; remove entries as CSS is migrated to component tokens.",
+  "description": "2026-08-27 remaining intrinsic geometry after the navy/coral design-system migration. New values or count increases fail; remove entries as feature CSS is migrated.",
   "repeatedRawPixel": {
-    "src/styles.css|14px": 3,
-    "src/styles.css|1px": 47,
-    "src/styles.css|24px": 5,
-    "src/styles.css|28px": 3,
-    "src/styles.css|2px": 11,
-    "src/styles.css|32px": 4,
-    "src/styles.css|3px": 7,
-    "src/styles.css|40px": 7,
+    "src/styles.css|1px": 16,
+    "src/styles.css|2px": 4,
+    "src/styles.css|3px": 3,
+    "src/styles.css|40px": 3,
     "src/styles.css|44px": 3,
-    "src/styles.css|48px": 5,
-    "src/styles.css|50px": 3,
-    "src/styles.css|62px": 3,
-    "src/styles.css|72px": 3,
-    "src/styles.css|76px": 3,
-    "src/styles.css|8px": 4
+    "src/styles.css|48px": 3
   }
 }

@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, LoadingState } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -117,8 +118,8 @@ export function StoreRegionPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="STORE REGION"
+      <PageHeading
+
         title="매장 지역 설정"
         description="법정동 지역을 검색해 매장의 검색 노출 기준 지역을 지정합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
@@ -134,7 +135,7 @@ export function StoreRegionPage() {
           <section className="surface-card region-search-panel" aria-labelledby="region-search-title">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">ACTIVE REGION</span>
+                <span className="context-label">현재 지역</span>
                 <h2 id="region-search-title">법정동 검색</h2>
               </div>
               <MapPin aria-hidden="true" />
@@ -207,7 +208,7 @@ export function StoreRegionPage() {
 
           <aside className="surface-card action-panel region-assignment" aria-labelledby="region-assignment-title">
             <div>
-              <span className="eyebrow">ASSIGNMENT</span>
+              <span className="context-label">지역 지정</span>
               <h2 id="region-assignment-title">선택 지역 지정</h2>
             </div>
             {selectedRegion ? (

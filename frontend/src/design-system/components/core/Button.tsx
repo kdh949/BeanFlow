@@ -2,19 +2,18 @@ import { LoaderCircle } from "lucide-react";
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 import { Link } from "react-router";
 
-export type ButtonVariant = "primary" | "accent" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "brand" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg" | "xl";
 
 type ButtonVisualProps = {
-  /** Visual emphasis. Use `primary` once per decision area and `danger` only for destructive actions. */
+  /** Visual emphasis. Use `brand` once per decision area and `danger` only for destructive actions. */
   variant?: ButtonVariant;
-  /** Control height and horizontal density. */
+  /** Control height and horizontal density from the canonical size scale. */
   size?: ButtonSize;
   /** Expands the control to the width of its container. */
   block?: boolean;
-  /** Replaces the leading content with a spinner and prevents repeated submission. */
+  /** Shows progress and prevents repeated submission. */
   loading?: boolean;
-  /** Visible button content. Labels should name the action and its object. */
   children: ReactNode;
 };
 
@@ -24,15 +23,15 @@ export type ButtonProps = ButtonVisualProps &
 export type ButtonLinkProps = Omit<ButtonVisualProps, "loading"> &
   Omit<ComponentProps<typeof Link>, "children" | "className" | "style">;
 
-/** Canonical BeanFlow action control. Static visual overrides are intentionally not exposed. */
+/** Canonical BeanFlow action control derived from the selected customer and merchant stories. */
 export function Button({
-  variant = "primary",
+  variant = "brand",
   size = "md",
   block = false,
   loading = false,
   disabled,
-  children,
   type = "button",
+  children,
   ...props
 }: ButtonProps) {
   return (
@@ -43,29 +42,19 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
     >
-      {loading ? <LoaderCircle className="bf-btn__spinner" size={16} aria-hidden="true" /> : null}
+      {loading ? <LoaderCircle className="bf-spin" size={16} aria-hidden="true" /> : null}
       {children}
     </button>
   );
 }
 
-/** Router-aware canonical action link. Use for navigation, never for form submission. */
-export function ButtonLink({
-  variant = "primary",
-  size = "md",
-  block = false,
-  children,
-  ...props
-}: ButtonLinkProps) {
-  return (
-    <Link {...props} className={buttonClassName(variant, size, block)}>
-      {children}
-    </Link>
-  );
+/** Router-aware canonical navigation action. */
+export function ButtonLink({ variant = "brand", size = "md", block = false, children, ...props }: ButtonLinkProps) {
+  return <Link {...props} className={buttonClassName(variant, size, block)}>{children}</Link>;
 }
 
 function buttonClassName(variant: ButtonVariant, size: ButtonSize, block: boolean) {
-  return ["bf-btn", `bf-btn--${variant}`, `bf-btn--${size}`, block ? "bf-btn--block" : null]
+  return ["bf-action", `bf-action--${variant}`, `bf-action--${size}`, block ? "bf-action--block" : null]
     .filter(Boolean)
     .join(" ");
 }

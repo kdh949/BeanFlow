@@ -4,13 +4,13 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
-import { StoreOrderBoardPage } from "./StoreOrderBoard";
+import { RefreshStoreOrderBoardPage } from "../../presentation/beanflow-refresh";
 
 /** 보드 카드가 환불 화면으로 연결되므로 router context 안에서 렌더한다. */
 function renderBoard() {
   return render(
     <MemoryRouter initialEntries={["/store"]}>
-      <StoreOrderBoardPage />
+      <RefreshStoreOrderBoardPage />
     </MemoryRouter>,
   );
 }
@@ -78,7 +78,7 @@ describe("store order board", () => {
 
     renderBoard();
 
-    expect(await screen.findByRole("heading", { name: "실행 주문 보드" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "주문 보드" })).toBeInTheDocument();
     expect(await screen.findByText("A-142")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "운영 매장" })).not.toBeInTheDocument();
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
@@ -172,7 +172,7 @@ describe("store order board", () => {
     const user = userEvent.setup();
 
     renderBoard();
-    expect(await screen.findByRole("alert")).toHaveTextContent("매장 목록을 불러오지 못했습니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("서비스 연결을 확인하고 있습니다");
     expect(screen.queryByText("접근 가능한 매장이 없습니다")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
@@ -268,7 +268,7 @@ describe("store order board", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("매장 접근 권한이 변경되었습니다");
     expect(screen.queryByText("A-142")).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "운영 매장" })).not.toHaveValue(gangnam.storeId);
+    expect(screen.queryByRole("combobox", { name: "운영 매장" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "강남 2호점" })).not.toBeInTheDocument();
   });
 

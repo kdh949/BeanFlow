@@ -6,8 +6,7 @@ import { ApiRequestError } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { runCustomerLogoutHandlers } from "../shared/customerLogout";
 import { CART_STORAGE_KEY, type CartLine, cart } from "./cart";
-import { CartPage } from "./CartPage";
-import { StoreDetailPage } from "./StoreDetailPage";
+import { RefreshCartPage, RefreshStoreDetailPage } from "../../presentation/beanflow-refresh";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "./orderConflicts";
 
 const line = (menuId: string, quantity = 1): CartLine => ({
@@ -66,7 +65,7 @@ function renderStore() {
   return render(
     <MemoryRouter initialEntries={["/app/stores/store-1"]}>
       <Routes>
-        <Route path="/app/stores/:storeId" element={<StoreDetailPage />} />
+        <Route path="/app/stores/:storeId" element={<RefreshStoreDetailPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -76,7 +75,7 @@ function renderCart() {
   return render(
     <MemoryRouter initialEntries={["/app/cart"]}>
       <Routes>
-        <Route path="/app/cart" element={<CartPage />} />
+        <Route path="/app/cart" element={<RefreshCartPage />} />
         <Route path="/app/checkout/:orderId" element={<h1>결제 화면</h1>} />
       </Routes>
     </MemoryRouter>,
@@ -165,7 +164,7 @@ describe("store identity comes from the server", () => {
     const { container } = renderStore();
     const user = userEvent.setup();
     expect(await screen.findByRole("button", { name: /아메리카노/ })).toBeInTheDocument();
-    expect(container.querySelector("img.menu-thumbnail")).toHaveAttribute("src", "/demo/catalog/americano.webp");
+    expect(container.querySelector(".bfr-menu-row__media img")).toHaveAttribute("src", "/demo/catalog/americano.webp");
     await user.click(screen.getByRole("button", { name: /아메리카노/ }));
     await user.click(screen.getByRole("button", { name: /담기/ }));
 
@@ -216,10 +215,10 @@ describe("store detail", () => {
 
     renderStore();
 
-    expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "커피" })).toBeInTheDocument();
     expect(screen.getByText("고소한 원두의 긴 여운")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "미분류" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "메뉴" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /오트 라떼/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
@@ -234,7 +233,7 @@ describe("store detail", () => {
     renderStore();
 
     expect(await screen.findByText("영업 중")).toBeInTheDocument();
-    expect(screen.getByText("주문 불가")).toBeInTheDocument();
+    expect(screen.getByText("주문 쉬는 중")).toBeInTheDocument();
     expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });

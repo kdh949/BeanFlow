@@ -6,7 +6,7 @@ import { customerApi } from "../../api/customerClient";
 import { couponSelection } from "./couponSelection";
 import { CouponWalletPage } from "./CouponWalletPage";
 import { FavoriteStoreButton, FavoriteStoresPage } from "./FavoriteStoresPage";
-import { CartPage } from "../ordering/CartPage";
+import { RefreshCartPage } from "../../presentation/beanflow-refresh";
 import { cart } from "../ordering/cart";
 
 const customerStore = {
@@ -114,7 +114,7 @@ describe("customer coupon selection", () => {
     render(
       <MemoryRouter initialEntries={["/app/cart"]}>
         <Routes>
-          <Route path="/app/cart" element={<CartPage />} />
+          <Route path="/app/cart" element={<RefreshCartPage />} />
           <Route path="/app/checkout/:orderId" element={<p>결제 이동 완료</p>} />
         </Routes>
       </MemoryRouter>,

@@ -4,7 +4,9 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../../api/customerClient";
 import { won } from "../../lib/format";
-import { CustomerOrderDetailPage, CustomerOrdersPage, customerOrderTimelineModel, seoulDate } from "./OrderPages";
+import { CustomerOrdersPage, seoulDate } from "./CustomerOrdersPage";
+import { customerOrderTimelineModel } from "./orderPresentation";
+import { RefreshCustomerOrderDetailPage } from "../../presentation/beanflow-refresh";
 
 const summary = {
   orderReference: "BF-7K3M-9Q2P",
@@ -59,7 +61,7 @@ function renderAt(url: string) {
     <BrowserRouter>
       <Routes>
         <Route path="/app/orders" element={<CustomerOrdersPage />} />
-        <Route path="/app/orders/:orderReference" element={<CustomerOrderDetailPage />} />
+        <Route path="/app/orders/:orderReference" element={<RefreshCustomerOrderDetailPage />} />
       </Routes>
     </BrowserRouter>,
   );
@@ -144,13 +146,16 @@ describe("customer order detail", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    expect(await screen.findByText("A-142")).toBeInTheDocument();
+    expect(await screen.findAllByText("A-142")).toHaveLength(2);
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
     expect(screen.getByText("아이스 아메리카노")).toBeInTheDocument();
-    expect(screen.getByText("ICE · 샷 추가 · 2잔")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "주문 진행 단계" })).toHaveTextContent(/픽업 준비.*8\. 14\./);
-    expect(screen.getByLabelText("주문 거래 요약")).toHaveTextContent("상품 금액₩15,000");
-    expect(screen.getByLabelText("주문 거래 요약")).toHaveTextContent("결제 금액₩12,800");
+    expect(screen.getByText("ICE · 샷 추가")).toBeInTheDocument();
+    expect(screen.getAllByText("2")).toHaveLength(2);
+    const timeline = screen.getByRole("list", { name: "주문 진행 단계" });
+    expect(timeline).toHaveTextContent("픽업 준비");
+    expect(timeline.closest("section")).toHaveTextContent(/픽업 시간.*8\. 14\./);
+    expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("상품 금액₩15,000");
+    expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("결제 금액₩12,800");
     expect(screen.getByRole("button", { name: "주문 취소" })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/me/orders/{orderReference}", {
       params: { path: { orderReference: "BF-7K3M-9Q2P" } },
@@ -237,7 +242,7 @@ describe("customer order actions", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    await screen.findByText("A-142");
+    await screen.findAllByText("A-142");
     expect(screen.queryByRole("button", { name: "주문 취소" })).not.toBeInTheDocument();
   });
 
@@ -285,9 +290,9 @@ describe("customer order actions", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    expect(await screen.findByText("취소된 주문입니다")).toBeInTheDocument();
-    expect(screen.getByText("환불을 처리하고 있어요")).toBeInTheDocument();
-    expect(screen.getByText(/환불이 예상보다 늦어지고 있어요/)).toBeInTheDocument();
+    expect(await screen.findByText("취소된 주문이에요")).toBeInTheDocument();
+    expect(screen.getByText("환불 확인이 지연되고 있어요")).toBeInTheDocument();
+    expect(screen.getByText(/담당자가 결과를 확인하고 있습니다/)).toBeInTheDocument();
     expect(screen.queryByText("환불이 완료됐어요")).not.toBeInTheDocument();
   });
 
@@ -315,7 +320,7 @@ describe("customer reorder", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    await screen.findByText("A-142");
+    await screen.findAllByText("A-142");
     expect(screen.queryByRole("button", { name: /같은 메뉴로 다시 주문/ })).not.toBeInTheDocument();
   });
 

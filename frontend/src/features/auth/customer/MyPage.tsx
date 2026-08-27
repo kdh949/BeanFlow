@@ -1,8 +1,8 @@
 import { Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketPercent } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ErrorState } from "../../../components/Ui";
-import { PageTitle } from "../../../components/Shells";
+import { ErrorState } from "../../../presentation/shared";
+import { PageHeading } from "../../../design-system";
 import { customerSession, useCustomerSession } from "./customerSession";
 import { Button } from "../../../design-system";
 
@@ -29,7 +29,7 @@ export function CustomerMyPage() {
 
   return (
     <div className="customer-page my-page">
-      <PageTitle eyebrow="MY" title="내 정보" description="로그인한 계정과 주문·혜택 화면으로 이동할 수 있어요." />
+      <PageHeading title="내 정보" description="로그인한 계정과 주문·혜택 화면으로 이동할 수 있어요." />
       <section className="surface-card my-identity">
         <strong>{session.actor.displayName}</strong>
         <span>고객 계정으로 로그인되어 있습니다.</span>

@@ -108,6 +108,6 @@ export const RejectedNewPassword: Story = {
     await userEvent.type(await canvas.findByLabelText("임시 비밀번호"), "TemporaryPass1234!");
     await userEvent.type(canvas.getByLabelText("새 비밀번호"), "NewMerchantPass2026!");
     await userEvent.click(canvas.getByRole("button", { name: "비밀번호 변경" }));
-    await expect(await canvas.findByRole("alert")).toHaveTextContent("비밀번호가 정책을 충족하지 않습니다.");
+    await expect(await canvas.findByRole("alert")).toHaveTextContent("비밀번호 규칙을 확인해 주세요.");
   },
 };

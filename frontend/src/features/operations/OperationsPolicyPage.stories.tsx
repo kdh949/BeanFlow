@@ -51,7 +51,7 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: "기존 Button, FeedbackState, StatusBadge와 콘솔 카드 패턴을 조합해 포인트·만료 혜택 정책, 브랜드, 검색 색인을 관리합니다. 모든 변경은 현재 버전과 멱등성 키를 사용합니다.",
+        component: "기존 Button, FeedbackState, StatusText와 콘솔 카드 패턴을 조합해 포인트·만료 혜택 정책, 브랜드, 검색 색인을 관리합니다. 모든 변경은 현재 버전과 멱등성 키를 사용합니다.",
       },
       story: { inline: false, height: "980px" },
     },
@@ -86,7 +86,7 @@ export const PointPolicyConflict: Story = {
     await userEvent.type(canvas.getByLabelText("적립률(%)"), "7");
     await userEvent.type(canvas.getByLabelText("변경 사유"), "프로모션 적립률 반영");
     await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
-    await expect(await canvas.findByText("다른 운영자가 정책을 먼저 변경했습니다. 현재값을 다시 조회해 주세요.")).toBeVisible();
+    await expect(await canvas.findByText("정책 버전이 변경되었습니다")).toBeVisible();
   },
 };
 
@@ -135,6 +135,6 @@ export const SearchIndexInProgress: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "매장 검색 색인 장애 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
-    await expect(await canvas.findByText("같은 재생성 요청이 아직 실행 중입니다. Retry-After 이후 다시 확인해 주세요.")).toBeVisible();
+    await expect(await canvas.findByText("요청을 처리하고 있습니다")).toBeVisible();
   },
 };

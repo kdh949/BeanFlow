@@ -162,9 +162,9 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
-      - name: Run frontend unit tests
+      - name: Run frontend unit and boundary regression tests
         working-directory: frontend
-        run: npm run test:unit
+        run: npm test
 
       - name: Run required Storybook interaction tests
         working-directory: frontend

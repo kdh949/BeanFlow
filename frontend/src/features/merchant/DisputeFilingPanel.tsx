@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { ErrorState } from "../../components/Ui";
 import { Button } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { won } from "../../lib/format";
 
 type SettlementDispute = components["schemas"]["SettlementDispute"];

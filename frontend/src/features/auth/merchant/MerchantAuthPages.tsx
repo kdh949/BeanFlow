@@ -1,16 +1,11 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { PageTitle } from "../../../components/Shells";
+import { PageHeading } from "../../../design-system";
 import { Button } from "../../../design-system";
 import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./merchantSession";
 
 const PASSWORD_MIN_LENGTH = 15;
-
-function messageFor(failure: unknown, fallback: string): string {
-  if (failure instanceof ApiRequestError) return failure.message || fallback;
-  return fallback;
-}
 
 function codeOf(failure: unknown): string | null {
   return failure instanceof ApiRequestError ? failure.code : null;
@@ -52,7 +47,7 @@ export function MerchantLoginPage() {
   const code = codeOf(failure);
   return (
     <div className="console-auth">
-      <PageTitle eyebrow="STORE CONSOLE" title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
+      <PageHeading title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <label htmlFor="merchant-login-id">아이디</label>
         <input
@@ -82,10 +77,10 @@ export function MerchantLoginPage() {
         {failure ? (
           <p className="form-error" id="merchant-login-error" role="alert">
             {code === "AUTHENTICATION_RATE_LIMITED"
-              ? messageFor(failure, "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.")
+              ? "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요."
               : code === "AUTHENTICATION_FAILED"
                 ? "아이디 또는 비밀번호를 확인해 주세요."
-                : messageFor(failure, "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+                : "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button size="xl" block type="submit" loading={submitting} disabled={!loginId.trim() || !password}>
@@ -132,8 +127,8 @@ export function MerchantPasswordChangePage() {
   const tooShort = newPassword.length > 0 && newPassword.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="console-auth">
-      <PageTitle
-        eyebrow="STORE CONSOLE"
+      <PageHeading
+
         title="비밀번호 변경"
         description="임시 비밀번호를 바꾸기 전에는 매장 화면을 사용할 수 없습니다."
       />
@@ -164,10 +159,10 @@ export function MerchantPasswordChangePage() {
         {failure ? (
           <p className="form-error" id="merchant-password-error" role="alert">
             {code === "PASSWORD_POLICY_VIOLATION"
-              ? messageFor(failure, "비밀번호 규칙을 확인해 주세요.")
+              ? "비밀번호 규칙을 확인해 주세요."
               : code === "AUTHENTICATION_FAILED"
                 ? "현재 비밀번호를 확인해 주세요."
-                : messageFor(failure, "비밀번호를 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요.")}
+                : "비밀번호를 변경하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button

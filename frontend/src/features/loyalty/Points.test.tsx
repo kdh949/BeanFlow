@@ -97,7 +97,7 @@ describe("customer points", () => {
 
     renderPoints();
 
-    expect(await screen.findByText("포인트 내역을 조회하지 못했습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(screen.queryByText("아직 포인트 내역이 없어요")).not.toBeInTheDocument();
   });
 

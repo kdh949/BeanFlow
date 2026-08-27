@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
-import { ErrorState, LoadingState } from "../../../components/Ui";
+import { LoadingState } from "../../../design-system";
+import { ErrorState } from "../../../presentation/shared";
 import { merchantSession, useMerchantSession } from "./merchantSession";
 
 /**
