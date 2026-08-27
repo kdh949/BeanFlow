@@ -1084,7 +1084,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MenuTradeDefinition" }
       responses:
-        "200":
+        "201":
           description: 생성 또는 replay된 normalized Menu 거래 내용
           content:
             application/json:

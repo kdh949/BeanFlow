@@ -70,7 +70,7 @@ internal class MenuCatalogEndpointIntegrationTest(
                 actor,
                 "menu-create-key-0001",
                 content(storeId, menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
-            ).andExpect(status().isOk)
+            ).andExpect(status().isCreated)
                 .andExpect(jsonPath("$.menuId").value(menuId.toString()))
                 .andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.lifecycle").value("ACTIVE"))
@@ -82,7 +82,7 @@ internal class MenuCatalogEndpointIntegrationTest(
             actor,
             "menu-create-key-0001",
             content(storeId, menuId, optionId, configurationId, sellableUnitId, "카페 라테", 4_500),
-        ).andExpect(status().isOk)
+        ).andExpect(status().isCreated)
             .andExpect { assertThat(it.response.contentAsString).isEqualTo(created) }
 
         mockMvc
@@ -165,7 +165,7 @@ internal class MenuCatalogEndpointIntegrationTest(
         val payload = content(storeId, menuId, optionId, configurationId, unitId, "필터 커피", 4_000)
 
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-staff-key-0001", payload)
-            .andExpect(status().isOk)
+            .andExpect(status().isCreated)
         mutate(
             put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
             actor,
@@ -329,7 +329,7 @@ internal class MenuCatalogEndpointIntegrationTest(
             actor,
             "menu-boundary-exact-001",
             boundaryContent(storeId, UUID.randomUUID(), optionCount = 100, configurationCount = 500, firstRequirementCount = 50),
-        ).andExpect(status().isOk)
+        ).andExpect(status().isCreated)
             .andExpect(jsonPath("$.options.length()").value(100))
             .andExpect(jsonPath("$.configurations.length()").value(500))
 
@@ -403,7 +403,7 @@ internal class MenuCatalogEndpointIntegrationTest(
                         executor.submit<String> {
                             barrier.await()
                             mutate(post("/api/v1/stores/$storeId/menus"), session, "menu-concurrent-key-001", payload)
-                                .andExpect(status().isOk)
+                                .andExpect(status().isCreated)
                                 .andReturn()
                                 .response.contentAsString
                         }
@@ -472,7 +472,7 @@ internal class MenuCatalogEndpointIntegrationTest(
             menuBoundActor,
             "store-menu-boundary-001",
             boundaryContent(menuBoundStore, UUID.randomUUID(), optionCount = 0, configurationCount = 0, firstRequirementCount = 0),
-        ).andExpect(status().isOk)
+        ).andExpect(status().isCreated)
         mutate(
             post("/api/v1/stores/$menuBoundStore/menus"),
             menuBoundActor,
@@ -493,7 +493,7 @@ internal class MenuCatalogEndpointIntegrationTest(
             optionBoundActor,
             "store-option-boundary-001",
             boundaryContent(optionBoundStore, UUID.randomUUID(), optionCount = 100, configurationCount = 0, firstRequirementCount = 0),
-        ).andExpect(status().isOk)
+        ).andExpect(status().isCreated)
         mutate(
             post("/api/v1/stores/$optionBoundStore/menus"),
             optionBoundActor,

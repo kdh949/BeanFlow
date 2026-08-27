@@ -14365,7 +14365,7 @@ export interface operations {
         };
         responses: {
             /** @description 생성 또는 replay된 normalized Menu 거래 내용 */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

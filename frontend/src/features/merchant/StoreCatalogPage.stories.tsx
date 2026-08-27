@@ -65,7 +65,7 @@ const listMenus = http.get("/api/v1/stores/:storeId/menu-catalog", ({ request })
 const getMenu = http.get("/api/v1/stores/:storeId/menus/:menuId/trade-content", () => HttpResponse.json(menuContent));
 const createMenu = http.post("/api/v1/stores/:storeId/menus", async ({ request }) => {
   const body = await request.json() as typeof menuContent;
-  return HttpResponse.json({ ...body, lifecycle: "ACTIVE", version: 0, updatedAt: "2026-08-27T04:00:00Z" });
+  return HttpResponse.json({ ...body, lifecycle: "ACTIVE", version: 0, updatedAt: "2026-08-27T04:00:00Z" }, { status: 201 });
 });
 const replaceMenu = http.put("/api/v1/stores/:storeId/menus/:menuId/trade-content", async ({ request }) => {
   const body = await request.json() as typeof menuContent & { expectedVersion: number };

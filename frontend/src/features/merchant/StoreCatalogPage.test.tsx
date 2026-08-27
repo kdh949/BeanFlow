@@ -102,7 +102,7 @@ describe("StoreCatalogPage", () => {
 
   it("creates the complete menu definition with CSRF and an idempotency key", async () => {
     const post = vi.spyOn(merchantApi, "POST").mockImplementation((async (path: string, options: { body: Record<string, unknown> }) => {
-      if (path === "/stores/{storeId}/menus") return response({ ...options.body, lifecycle: "ACTIVE", version: 0, updatedAt: "2026-08-27T01:00:00Z" });
+      if (path === "/stores/{storeId}/menus") return response({ ...options.body, lifecycle: "ACTIVE", version: 0, updatedAt: "2026-08-27T01:00:00Z" }, 201);
       throw new Error(`unexpected POST ${path}`);
     }) as never);
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
