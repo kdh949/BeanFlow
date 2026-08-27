@@ -1,165 +1,100 @@
-# BeanFlow Frontend Design-System Inventory
+# BeanFlow design-system inventory
 
-> Snapshot: 2026-08-26
-> Scope: `frontend/` editable source, current router, Storybook index, generated pre-baseline snapshot, CI gates
-> Canonicality: 이 문서는 inventory와 migration 상태를 기록한다. API source of truth는 typed TSX와
-> Storybook docs이며 `_ds_bundle.js`와 `_ds_manifest.json`은 근거 자료일 뿐이다.
+> Status: canonical · Revised: 2026-08-27
 
-## 1. Canonical source
+신규 고객·점주 핵심 여덟 화면에서 검증한 cool white, navy, coral 언어가 전체 frontend의 유일한
+디자인 기준이다. Espresso/caramel/crema token, `components/Ui`, `components/Shells`, generated snapshot,
+filled success badge와 refresh 전용 primitive/frame은 삭제했으며 compatibility layer로 복원하지 않는다.
 
-| Concern | Canonical source | Derived or non-canonical input |
+## 1. Canonical ownership
+
+| Layer | Owner | Responsibility |
 |---|---|---|
-| Token | `src/design-system/tokens/*.css` | `_ds_manifest.json` token metadata |
-| Component | `src/design-system/components/**/*.tsx` | `_ds_bundle.js`, 존재하지 않는 manifest JSX 경로 |
-| Component contract | typed props, JSDoc, canonical CSF stories | generated HTML cards |
-| Page state | 실제 route component와 같은 source를 쓰는 `Pages/*` stories | screenshot, 수동 재현 |
-| Validation | MCP story test, browser Docs smoke, executable repository scripts | 실행되지 않는 lint config |
+| Foundations | `src/design-system/tokens/*.css` | color, semantic color, typography, spacing, radius, elevation, motion, focus |
+| Components | `src/design-system/components/**` | 한 가지 상호작용·표현 책임을 가진 typed primitive |
+| Patterns | `src/design-system/patterns/**` | component를 조합한 반복 상태와 page structure |
+| Shared presentation | `src/presentation/AppShells.tsx` | actor/session/API 상태를 읽어 canonical component와 layout을 조합하는 runtime shell |
+| Product pages | `src/features/**`, `src/pages/**`, `src/presentation/beanflow-refresh/**` | OpenAPI와 domain state를 canonical public API로 연결 |
 
-Product와 Storybook은 `src/design-system/index.ts`를 통해 같은 `Button`, `ButtonLink`, `StatusBadge`,
-`FeedbackState` source를 사용한다. `components/Ui.tsx`의 loading/empty/error wrapper도 이 source를
-합성하며 별도 markup 구현을 갖지 않는다.
+Product code는 `src/design-system/index.ts`를 통해서만 canonical component와 pattern을 import한다.
+Feature가 token을 재정의하거나 병렬 button, badge, input, status, shell system을 만들지 않는다.
 
-## 2. Token inventory
+## 2. Tokens
 
-현재 token 파일에는 206개 선언과 201개 고유 이름이 있다. `motion.css`의 5개 중복 선언은
-`prefers-reduced-motion`에서 같은 duration token을 `0ms`로 재정의하는 의도적 override다.
+| Family | Examples | Usage |
+|---|---|---|
+| Brand | `--coral-*`, `--ink-*`, `--slate-*` | coral primary action, navy hierarchy, cool neutral surfaces |
+| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--action-*`, `--state-*` | component와 page의 의미 기반 선택 |
+| Type | `--fs-*`, `--lh-*`, `--fw-*`, `--ls-*` | Korean-first hierarchy; decorative uppercase micro label 금지 |
+| Space/size | `--sp-*`, `--control-h-*`, `--tap-min`, viewport/layout tokens | mobile app와 dense workspace rhythm |
+| Shape/depth | `--radius-*`, `--shadow-*` | restrained corner and cool navy elevation |
+| Motion/focus | `--motion-*`, base focus ring | reduced-motion-safe interaction and keyboard visibility |
 
-| File | Definitions | Unique names | Role |
-|---|---:|---:|---|
-| `colors.css` | 48 | 48 | palette와 brand color |
-| `typography.css` | 33 | 33 | family, size, line-height, weight, tracking, numerals |
-| `spacing.css` | 26 | 26 | spacing, gutters, layout and control dimensions |
-| `radius.css` | 14 | 14 | radius와 border width |
-| `elevation.css` | 10 | 10 | shadow와 focus ring |
-| `motion.css` | 15 | 10 | duration, easing, press scale, reduced-motion override |
-| `semantic.css` | 60 | 60 | surface, text, border, action, status, domain aliases |
-| `fonts.css`, `base.css` | 0 | 0 | font loading과 document base rules |
+Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `npm run check:design`이 막는다.
 
-Foundation 문서는 `Foundations/Overview`에서 중요한 이름·값·사용 규칙을 source text로 명시해 MCP가
-runtime loop 없이 읽을 수 있게 한다.
+## 3. Components
 
-## 3. Editable component inventory
-
-| Layer | Component | Product consumers | Contract evidence |
+| Family | API | Responsibility | Required states |
 |---|---|---|---|
-| Core | `Button`, `ButtonLink` | Shell, customer, store, operations, router | typed props, JSDoc, 5 stories |
-| Commerce | `StatusBadge` | customer orders/payment, store board, operations | server-state mapping, 5 stories |
-| Feedback | `FeedbackState` | `LoadingState`, `EmptyState`, `ErrorState`, store board | semantic live region, 3 stories |
+| Brand | `BrandLockup` | 제공된 cup asset과 wordmark의 일관된 link/static 표현 | static, home link |
+| Action | `Button`, `ButtonLink` | brand, secondary, ghost, danger action | loading, disabled, long Korean |
+| Commerce | `StatusText` | filled badge 없이 transaction state를 text-first로 표현 | ready, failed, unknown, manual review, unknown code |
+| Feedback | `FeedbackState` | loading, empty, recoverable dependency failure | loading, empty, error |
+| Form | `SearchField` | visible search affordance와 accessible clear action | empty, value, clear |
+| Form | `QuantityStepper` | bounded decrement/increment | default, min/max, keyboard action |
 
-Live design-system CSS에는 위 세 TSX owner의 `bf-btn`, `bf-status`, `bf-feedback` family만 남긴다.
-typed owner가 없는 selector family를 추가하면 `check:design`의 `orphan-component-style` 규칙이 실패한다.
+모든 component는 typed props, JSDoc, Autodocs, `a11y.test = "error"`를 가진다. `className` 또는
+`style` public escape hatch를 제공하지 않는다.
 
-## 4. Repeated product patterns
+## 4. Patterns and runtime composition
 
-| Pattern | Current owner | Decision |
+| Pattern | Owner | Notes |
 |---|---|---|
-| page action | canonical `Button`/`ButtonLink` | `REUSE` |
-| loading, empty, recoverable error | canonical `FeedbackState`를 `components/Ui.tsx`가 합성 | `COMPOSE` |
-| transaction status | canonical `StatusBadge` | `REUSE` |
-| card surface | product `.surface-card` composition | generated `Card` API는 `DEPRECATE`; 반복 API가 확정될 때 typed source로 `MIGRATE` |
-| customer/store/operations chrome | `CustomerShell`, `ConsoleShell` | generated navigation API를 현재 shell에 `MERGE` |
-| labeled form controls | route-local native elements | Plan 80/90에서 실제 validation contract가 확정될 때 `MIGRATE` |
-| page heading | `PageTitle` | generated `SectionHeader`를 여기에 `MERGE` |
+| `PageHeading` | design system | source에 없던 eyebrow 없이 title, description, action만 구성 |
+| `LoadingState`, `EmptyState`, `ErrorState`, `SuccessMark` | design system | `ApiRequestError` 의미와 correlation reference 보존 |
+| `CustomerShell` | shared presentation | 모든 `/app` route가 동일한 brand/header/tab chrome 사용 |
+| `ConsoleShell` | shared presentation | `/store`, `/ops`, `/support`가 동일한 dense workspace chrome 사용 |
+| `NotificationAction` | shared presentation | loading/read/unread/failure를 숨기지 않는 고객 header action |
+| `RootRedirect` | shared presentation | actor workspace 선택 entry |
 
-## 5. Generated manifest disposition
+Shell은 session membership, notification API, logout failure 같은 runtime 책임 때문에 design-system
+primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system만 사용하고 독립 Storybook states로 검증한다.
 
-`_ds_manifest.json`의 32개 component 경로에는 실제 JSX source가 없다. 아래 분류는 수량을 맞추기 위한
-복원이 아니라 현재 product 소비와 후속 plan의 책임을 기준으로 한다.
+## 5. Consumer coverage
 
-| Classification | Manifest entries | Result |
-|---|---|---|
-| `KEEP` | Button | typed `Button`/`ButtonLink`로 복원하고 product가 사용 |
-| `MERGE` | Badge, OrderStatus, EmptyState, SectionHeader, TopBar, SideNav, TabBar | 각각 `StatusBadge`, `FeedbackState`, `PageTitle`, 실제 Shell로 단일화 |
-| `MIGRATE` | StoreCard, MenuItem, PickupSlots, DataTable, OrderTicket, Card, IconButton, Input, Select, Checkbox, QuantityStepper, SearchField, Tabs, ListRow | 현재 route-local pattern을 유지하고 Plan 80/90 등에서 둘 이상의 실제 consumer와 API가 확인될 때 typed source로 승격 |
-| `DEPRECATE` | BalanceCard, CouponCard, StatTile, Icon, Alert, Dialog, ProgressBar, Toast, Radio, Switch | 현재 product owner와 검증된 API가 없어 manifest 이름을 public contract로 사용하지 않음 |
-| `DELETE` | bundle-only selector blocks, obsolete `Ui.stories.tsx`, disconnected `_adherence.oxlintrc.json` | live CSS와 Storybook/CI 입력에서 제거. snapshot bundle/manifest 자체는 provenance를 위해 보존 |
+- Customer: 신규 home/search/store/cart/checkout/order-detail과 기존 orders, payment, points, coupons,
+  favorites, notifications, account/auth가 같은 customer shell과 canonical components를 사용한다.
+- Store: 신규 order board/refund와 기존 settlements, disputes, region/auth가 같은 console shell을 사용한다.
+- Operations: dashboard, order lookup, merchant accounts, policy와 OIDC gate가 같은 system을 사용한다.
+- Support: masked search, Case, verification, data grant와 terminal state가 같은 system을 사용한다.
+- Storybook: foundations, 모든 canonical component, shared shells, route loading/success/empty/error/permission/
+  unknown/reconciling/manual-review state를 문서화한다.
 
-## 6. Route and state coverage
+## 6. Removed system and prohibited reintroduction
 
-Router의 40개 path/index/layout entry에 연결된 36개 element component는 같은 source를 사용하는
-37개 CSF story 파일에서 직접 열 수 있다. 인증 gate와 shell도 별도 Pattern/Page story로 검증한다.
+다음 source/API/token은 repository에 존재하면 실패다.
 
-| Route | Component | Direct story states |
-|---|---|---|
-| `/` | `RootRedirect` | role choice, customer/store/operations/support chrome |
-| `/app/login`, `/app/signup` | `CustomerLoginPage`, `CustomerSignupPage` | success, rejected credentials, account lock, rate limit |
-| `/app` | `CustomerHomePage` | active order, empty, recommendation unavailable, loading |
-| `/app/stores` | `StoreSearchPage` | results, empty, permission denied, unavailable, loading |
-| `/app/stores/:storeId` | `StoreDetailPage` | menu/slot success, closed, unavailable, loading, favorite action |
-| `/app/cart` | `CartPage` | items, empty/corrupt, stock and price conflict |
-| `/app/checkout/:orderId` | `CheckoutPage` | pending payment, reorder price change, unavailable, loading |
-| `/app/payments/:paymentId/success`, `/fail` | `PaymentSuccessPage`, `PaymentFailPage` | approved, declined, unknown/reconciling, manual review, dependency error |
-| `/app/orders`, `/app/orders/:orderReference` | `CustomerOrdersPage`, `CustomerOrderDetailPage` | active/past/empty and all order/reorder transition states |
-| `/app/points` | `CustomerPointsPage` | balance, zero balance, integrity failure |
-| `/app/coupons` | `CouponWalletPage` | applicable/unavailable, empty, store selection, loading/error |
-| `/app/favorites` | `FavoriteStoresPage` | saved, empty, unavailable, loading |
-| `/app/notifications` | `NotificationInboxPage` | unread/read, marketing opt-out, empty, loading, dependency unavailable |
-| `/app/me`, `/app/help` | `CustomerMyPage`, `CustomerHelpPage` | signed-in links, safe support guidance |
-| `/store/login`, `/store/password` | merchant auth pages | sign-in, initial password, rejected credentials/password |
-| `/store` | `StoreOrderBoardPage` | multi-store, overflow, transitions, 409 refresh, empty/permission failure |
-| `/store/refunds/:storeId/:orderReference` | `StoreRefundPage` | selectable/server amount, stale preview, provider unknown, empty/unavailable |
-| `/store/settlements`, `/store/disputes` | settlement/dispute pages | success, empty, owner boundary, filtered/error, dispute entry |
-| `/store/region` | `StoreRegionPage` | search, no result, assignment success/conflict, unavailable, owner boundary |
-| `/ops` | `OpsDashboardPage` | current dashboard |
-| `/ops/orders` | `OpsOrderPage` | idle, success, loading, recoverable error, manual review |
-| `/ops/merchant-accounts` | `MerchantAccountsPage` | exact lookup, create/one-time password, unlock, conflict, not found/unavailable |
-| `/ops/policies` | `OperationsPolicyPage` | point/restoration policies, brand catalog, conflict, complete/partial/in-progress index |
-| `/support` | `SupportWorkspacePage` | masked search, Case/timeline, verified grant/reveal, locked/terminal/rate limit |
-| `*` | `NotFoundPage` | unknown route |
+- `src/components/Ui.tsx`, `src/components/Shells.tsx`
+- `src/design-system/_ds_bundle.js`, `src/design-system/_ds_manifest.json`
+- `StatusBadge`, `RefreshPrimitives`, `RefreshFrames`
+- espresso/caramel/crema token과 `.bf-btn`
+- filled green success pill, decorative English eyebrow label
+- product route의 Storybook fixture 또는 implicit fake/fallback data
 
-The customer and console layout components are additionally covered by the `RoleChoice` Docs entry. Async page
-stories use deterministic MSW fixtures. Twenty-five Autodocs files with multiple MSW states render each story in its own
-iframe so one story's handler cannot overwrite another. Operations submit-result stories use static result presenters
-in Docs and keep their real form submissions in `!autodocs` interaction stories, avoiding concurrent input races.
+`presentation-boundary.mjs`가 retired path/import를, `check-design-adherence.mjs`가 style/token/taxonomy drift를
+검사한다. 삭제 기록은 governance와 DD-009에 남기되 삭제된 code를 migration input으로 보존하지 않는다.
 
-## 7. Storybook and MCP inventory
-
-| Surface | Current result |
-|---|---:|
-| CSF story files | 37 |
-| Stories | 174 |
-| Static Docs entries | 39 |
-| Multi-state MSW Docs | 27 |
-| Browser-asserted stateful Docs | 14 |
-| Browser-asserted Docs state surfaces | 49 |
-| Router element components checked by guard | 36 |
-| MCP component/page entries | 37 |
-| MCP foundation docs | `Foundations/Overview` |
-
-`Explorations/Workflow`은 static Storybook에서 template로 볼 수 있지만 `tags: ['!manifest']`로 MCP
-component inventory에서 제외한다. 선택된 exploration만 `Patterns`나 `Pages`로 승격하고 나머지는 삭제한다.
-
-## 8. Drift and remaining debt
-
-- 삭제한 legacy CSS 뒤 live component style family는 typed owner가 있는 세 개뿐이다.
-- repeated raw pixel baseline은 product layout의 15개 값 조합이다. 새 값이나 count 증가는 실패하고
-  감소하면 baseline 갱신을 요구한다.
-- `_ds_bundle.js`와 `_ds_manifest.json`은 여전히 historical migration input이다. Product import는 guard가 막는다.
-- formerly blocked unsafe request 세 곳은 actor별 CSRF helper로 header를 보낸다. `npm run typecheck`은
-  이제 오류 없이 통과하며, 알려진 오류를 허용하는 baseline은 없다.
-- 브라우저 `Headers`는 한글 `X-Access-Reason` 값을 전송 전에 거부한다. Operations와 Support 화면은
-  한글 레이블에 대응하는 고정 ASCII 업무 코드를 전송하며 자유 입력 PII를 header에 넣지 않는다.
-- visual regression은 approved baseline과 credential이 없어 `Not configured`다.
-
-## 9. Executable guardrails
+## 7. Validation contract
 
 | Gate | Coverage |
 |---|---|
-| `check:design` | token reference, raw color/font/shadow, inline style escape, generated import, taxonomy, route story, orphan CSS owner, MSW Docs isolation, raw-pixel ratchet |
-| `test:unit` | shared utilities와 product component behavior |
-| `test:storybook:ci` | every CSF interaction and a11y `error` in Chromium |
-| `build-storybook` | manager/preview/static asset compilation |
-| `test:storybook:docs` | all 39 Docs render; 14 stateful Docs의 49 state surfaces show their own marker |
-| `typecheck` | generated runtime schema와 TypeScript 오류 0건 |
-| CI | install, adherence, typecheck, unit, Storybook browser/a11y, static build, Docs smoke |
+| `npm run check:design` | token reference, raw style, public escape, taxonomy, story/docs and CSS ownership, pixel ratchet |
+| `npm run check:presentation-boundary` | refresh runtime boundary와 retired source/import absence |
+| `npm run typecheck` | TypeScript와 generated runtime OpenAPI schema |
+| `npm run test:unit` | shared utility와 product behavior |
+| live Storybook MCP | documentation, interaction, and a11y for every indexed story |
+| `npm run build-storybook` + `npm run test:storybook:docs` | static compilation and isolated state-marker smoke |
+| `npm run build` + `npm run test:sites` | product bundle와 actor route surface |
 
-운영자·Support OIDC에는 Keycloak 공식 browser adapter인 `keycloak-js` 26.2.4를 고정 버전으로 추가했다.
-TypeScript AST, Playwright, Storybook, MSW는 기존 lockfile의 dependency를 사용한다.
-
-## 10. Next migration slices
-
-1. route-local form control이 둘 이상의 독립 화면에서 같은 validation·error contract를 공유하게 되면
-   typed design-system control로 승격한다.
-2. 현재 조회 계약이 없는 매장 지역 지정값은 서버 API가 추가될 때 추정이나 브라우저 저장 없이 연결한다.
-3. 중복 layout debt를 정리하고 사람이 critical page baseline을 승인한 뒤 Chromatic 또는 repository-owned
-   screenshot assertion 중 하나를 별도 결정으로 활성화한다.
+실행하지 않은 검증은 `Not run`, sandbox/infra 차단은 `Blocked`로 구분한다. Static Storybook은 live MCP를
+대체하지 않는다.
