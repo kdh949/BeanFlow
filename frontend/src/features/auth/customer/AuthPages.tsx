@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { PageTitle } from "../../../components/Shells";
+import { PageHeading } from "../../../design-system";
 import { Button } from "../../../design-system";
 import { customerSession, sanitizeReturnPath, useCustomerSession } from "./customerSession";
 
@@ -48,7 +48,7 @@ export function CustomerLoginPage() {
   const rateLimited = code === "AUTHENTICATION_RATE_LIMITED";
   return (
     <div className="customer-page auth-page">
-      <PageTitle eyebrow="SIGN IN" title="로그인" description="주문과 포인트는 로그인한 계정에만 표시됩니다." />
+      <PageHeading title="로그인" description="주문과 포인트는 로그인한 계정에만 표시됩니다." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <label htmlFor="customer-login-id">아이디</label>
         <input
@@ -144,7 +144,7 @@ export function CustomerSignupPage() {
   const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="customer-page auth-page">
-      <PageTitle eyebrow="SIGN UP" title="회원가입" description="아이디와 비밀번호만으로 가입하고 바로 주문할 수 있어요." />
+      <PageHeading title="회원가입" description="아이디와 비밀번호만으로 가입하고 바로 주문할 수 있어요." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         {registered ? (
           <p className="inline-note" role="status">

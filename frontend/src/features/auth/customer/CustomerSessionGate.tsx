@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
-import { ErrorState, LoadingState } from "../../../components/Ui";
+import { ErrorState, LoadingState } from "../../../design-system";
 import { customerSession, useCustomerSession } from "./customerSession";
 
 /**

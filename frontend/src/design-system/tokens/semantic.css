@@ -1,55 +1,64 @@
-:root{
-/* surfaces */
---surface-app:var(--crema-100);
---surface-card:var(--crema-0);
---surface-raised:var(--crema-0);
---surface-sunken:var(--crema-200);
---surface-inverse:var(--espresso-700);
---surface-accent-soft:var(--caramel-50);
---surface-brand-soft:var(--espresso-50);
---surface-overlay:rgba(36,16,11,.44);
---surface-glass:rgba(255,252,248,.78);
---surface-header-glass:rgba(255,252,248,.94);
---surface-console-header:rgba(255,252,248,.9);
---surface-inverse-hover:rgba(255,255,255,.07);
---border-on-inverse:rgba(255,255,255,.1);
---reward-glow:rgba(245,168,90,.34);
+:root {
+  --surface-app: var(--slate-50);
+  --surface-card: var(--color-white);
+  --surface-raised: var(--color-white);
+  --surface-sunken: var(--slate-100);
+  --surface-inverse: var(--ink-950);
+  --surface-brand-soft: var(--coral-100);
+  --surface-accent-soft: var(--coral-100);
+  --surface-overlay: rgba(7, 22, 51, .46);
+  --surface-glass: rgba(255, 255, 255, .88);
+  --surface-header-glass: rgba(255, 255, 255, .97);
+  --surface-console-header: rgba(255, 255, 255, .97);
+  --surface-inverse-hover: rgba(255, 255, 255, .1);
+  --border-on-inverse: rgba(255, 255, 255, .16);
+  --reward-glow: rgba(255, 75, 66, .16);
 
-/* text */
---text-strong:var(--espresso-800);
---text-body:var(--crema-800);
---text-muted:var(--crema-600);
---text-faint:var(--crema-700);
---text-on-primary:#FFF9F2;
---text-on-accent:var(--espresso-800);
---text-accent:var(--caramel-700);
---text-link:var(--espresso-600);
---text-link-hover:var(--caramel-600);
+  --text-strong: var(--ink-950);
+  --text-body: var(--ink-800);
+  --text-muted: var(--slate-600);
+  --text-faint: var(--slate-700);
+  --text-on-primary: var(--color-white);
+  --text-on-accent: var(--color-white);
+  --text-accent: var(--coral-700);
+  --text-link: var(--ink-700);
+  --text-link-hover: var(--coral-700);
 
-/* borders */
---border-hair:var(--crema-300);
---border-strong:var(--crema-400);
---border-accent:var(--caramel-300);
---divider:var(--crema-200);
---border-info-soft:var(--sky-200);
---border-success-soft:var(--mint-200);
---border-warning-soft:var(--amber-200);
---border-danger-soft:var(--berry-200);
+  --border-hair: var(--slate-200);
+  --border-strong: var(--slate-300);
+  --border-accent: var(--coral-600);
+  --divider: var(--slate-200);
+  --border-info-soft: #cbd5ff;
+  --border-success-soft: #bcded3;
+  --border-warning-soft: #ead3a4;
+  --border-danger-soft: #efbec5;
 
-/* actions */
---primary-bg:var(--espresso-700);--primary-bg-hover:var(--espresso-600);--primary-bg-press:var(--espresso-800);
---accent-bg:var(--caramel-500);--accent-bg-hover:var(--caramel-400);--accent-bg-press:var(--caramel-600);
---secondary-bg:var(--crema-0);--secondary-bg-hover:var(--crema-100);--secondary-border:var(--crema-300);
---ghost-bg-hover:var(--espresso-50);
---disabled-bg:var(--crema-200);--disabled-text:var(--crema-500);
+  --primary-bg: var(--coral-700);
+  --primary-bg-hover: #bd2d29;
+  --primary-bg-press: #a82724;
+  --secondary-bg: var(--color-white);
+  --secondary-bg-hover: var(--slate-50);
+  --secondary-border: var(--slate-300);
+  --ghost-bg-hover: var(--slate-50);
+  --disabled-bg: #d7dce5;
+  --disabled-text: #70798a;
 
-/* status */
---success-bg:var(--mint-100);--success-fg:var(--mint-600);--success-solid:var(--mint-500);
---warning-bg:var(--amber-100);--warning-fg:var(--caramel-700);--warning-solid:var(--amber-500);
---danger-bg:var(--berry-100);--danger-fg:var(--berry-600);--danger-solid:var(--berry-500);
---info-bg:var(--sky-100);--info-fg:var(--sky-600);--info-solid:var(--sky-500);
+  --success-bg: var(--green-100);
+  --success-fg: var(--green-700);
+  --success-solid: var(--green-700);
+  --warning-bg: var(--amber-100);
+  --warning-fg: var(--amber-700);
+  --warning-solid: var(--amber-600);
+  --danger-bg: var(--red-100);
+  --danger-fg: var(--red-700);
+  --danger-solid: var(--red-600);
+  --info-bg: var(--blue-100);
+  --info-fg: var(--blue-700);
+  --info-solid: var(--blue-600);
 
-/* domain */
---reward-bg:var(--caramel-100);--reward-fg:var(--caramel-700);
---slot-open:var(--mint-500);--slot-tight:var(--amber-500);--slot-full:var(--crema-400);
+  --reward-bg: var(--coral-100);
+  --reward-fg: var(--coral-700);
+  --slot-open: var(--green-700);
+  --slot-tight: var(--amber-600);
+  --slot-full: var(--slate-400);
 }

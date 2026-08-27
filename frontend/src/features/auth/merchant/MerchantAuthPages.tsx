@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { PageTitle } from "../../../components/Shells";
+import { PageHeading } from "../../../design-system";
 import { Button } from "../../../design-system";
 import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./merchantSession";
 
@@ -52,7 +52,7 @@ export function MerchantLoginPage() {
   const code = codeOf(failure);
   return (
     <div className="console-auth">
-      <PageTitle eyebrow="STORE CONSOLE" title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
+      <PageHeading title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <label htmlFor="merchant-login-id">아이디</label>
         <input
@@ -132,8 +132,8 @@ export function MerchantPasswordChangePage() {
   const tooShort = newPassword.length > 0 && newPassword.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="console-auth">
-      <PageTitle
-        eyebrow="STORE CONSOLE"
+      <PageHeading
+
         title="비밀번호 변경"
         description="임시 비밀번호를 바꾸기 전에는 매장 화면을 사용할 수 없습니다."
       />

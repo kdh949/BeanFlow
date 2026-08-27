@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, ErrorState, LoadingState, StatusText } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
@@ -61,8 +61,8 @@ export function StoreSettlementsPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="SETTLEMENT"
+      <PageHeading
+
         title="정산 내역"
         description="확정된 정산과 주문별 명세를 확인하고, 금액이 다르면 이의를 제기합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={(id) => { setOpenBatch(null); select(id); }} />}
@@ -86,10 +86,10 @@ export function StoreSettlementsPage() {
               <article className="surface-card settlement-card" key={batch.settlementBatchId}>
                 <header>
                   <div>
-                    <span className="eyebrow">{settlementDate.format(new Date(batch.settlementDate))}</span>
+                    <span className="context-label">{settlementDate.format(new Date(batch.settlementDate))}</span>
                     <strong className="bf-num">{won.format(batch.netSettlementKrw)}</strong>
                   </div>
-                  <StatusBadge state={batch.state} />
+                  <StatusText state={batch.state} />
                 </header>
                 <dl className="detail-list">
                   <div><dt>결제 총액</dt><dd className="bf-num">{won.format(batch.grossPaidKrw)}</dd></div>

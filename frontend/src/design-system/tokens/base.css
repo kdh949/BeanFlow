@@ -6,7 +6,7 @@ h1,h2,h3,h4,h5{color:var(--text-strong);font-weight:var(--fw-bold);letter-spacin
 a{color:var(--text-link);text-decoration:none;transition:color var(--dur-fast) var(--ease-standard)}
 a:hover{color:var(--text-link-hover)}
 button,input,select,textarea{font:inherit;letter-spacing:inherit;color:inherit}
-:focus-visible{outline:none;box-shadow:var(--ring-focus)}
+:focus-visible{outline:2px solid transparent;box-shadow:var(--ring-focus)}
 .bf-num{font-variant-numeric:tabular-nums lining-nums;font-feature-settings:var(--num-tabular)}
 .bf-mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 /* Lucide icon glyph: CSS-mask so icons inherit currentColor */

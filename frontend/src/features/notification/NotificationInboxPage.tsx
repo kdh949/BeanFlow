@@ -4,8 +4,8 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
 import { shortDateTime } from "../../lib/format";
 import { publishCustomerNotificationSummaryChanged } from "./notificationSummary";
@@ -75,7 +75,7 @@ export function NotificationInboxPage() {
 
   return (
     <div className="customer-page notification-page">
-      <PageTitle eyebrow="NOTIFICATIONS" title="알림" description="주문과 혜택 소식을 안전한 고객용 내용으로 확인하세요." />
+      <PageHeading title="알림" description="주문과 혜택 소식을 안전한 고객용 내용으로 확인하세요." />
       <NotificationPreferenceCard />
       {!page && !listError ? <LoadingState label="알림을 불러오는 중" /> : null}
       {listError ? <ErrorState error={listError} retry={() => void load()} /> : null}
@@ -181,7 +181,7 @@ function NotificationPreferenceCard() {
   return (
     <section className="surface-card notification-preference" aria-labelledby="notification-preference-title">
       <div>
-        <span className="eyebrow">PREFERENCE</span>
+        <span className="context-label">알림 수신 설정</span>
         <h2 id="notification-preference-title">마케팅 알림</h2>
         <p>주문과 연결되지 않은 보상·혜택 소식을 알림함에서 받습니다. 주문 상태 알림은 이 설정과 무관하게 계속 표시됩니다.</p>
       </div>

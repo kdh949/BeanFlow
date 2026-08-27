@@ -1,27 +1,20 @@
 import { createBrowserRouter } from "react-router";
-import { ConsoleShell, CustomerShell, RootRedirect } from "./components/Shells";
-import { CheckoutPage } from "./features/payment/CheckoutPage";
+import { ConsoleShell, CustomerShell, RootRedirect } from "./presentation/AppShells";
 import {
   CustomerHelpPage,
   PaymentFailPage,
   PaymentSuccessPage,
 } from "./features/payment/PaymentResultPages";
-import { CartPage } from "./features/ordering/CartPage";
 import { CustomerPointsPage } from "./features/loyalty/PointsPage";
-import { StoreDetailPage } from "./features/ordering/StoreDetailPage";
-import { CustomerHomePage } from "./features/discovery/HomePage";
-import { StoreSearchPage } from "./features/discovery/StoreSearchPage";
-import { CustomerOrderDetailPage, CustomerOrdersPage } from "./features/ordering/OrderPages";
+import { CustomerOrdersPage } from "./features/ordering/CustomerOrdersPage";
 import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
 import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
 import { MerchantLoginPage, MerchantPasswordChangePage } from "./features/auth/merchant/MerchantAuthPages";
 import { MerchantSessionGate } from "./features/auth/merchant/MerchantSessionGate";
-import { StoreRefundPage } from "./features/merchant/StoreRefundPage";
 import { StoreSettlementsPage } from "./features/merchant/StoreSettlementsPage";
 import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
 import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
-import { StoreOrderBoardPage } from "./pages/console/StoreOrderBoard";
 import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
@@ -31,6 +24,16 @@ import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
 import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
 import { NotificationInboxPage } from "./features/notification/NotificationInboxPage";
+import {
+  RefreshCartPage,
+  RefreshCheckoutPage,
+  RefreshCustomerHomePage,
+  RefreshCustomerOrderDetailPage,
+  RefreshStoreDetailPage,
+  RefreshStoreOrderBoardPage,
+  RefreshStoreRefundPage,
+  RefreshStoreSearchPage,
+} from "./presentation/beanflow-refresh";
 
 export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
@@ -39,41 +42,53 @@ export function NotFoundPage() {
 export const router = createBrowserRouter([
   { path: "/", element: <RootRedirect /> },
   {
-    path: "/app", element: <CustomerShell />, children: [
-      { path: "login", element: <CustomerLoginPage /> },
-      { path: "signup", element: <CustomerSignupPage /> },
-      { path: "help", element: <CustomerHelpPage /> },
+    path: "/app", children: [
+      { element: <CustomerShell />, children: [
+        { path: "login", element: <CustomerLoginPage /> },
+        { path: "signup", element: <CustomerSignupPage /> },
+        { path: "help", element: <CustomerHelpPage /> },
+      ] },
       {
         element: <CustomerSessionGate />, children: [
-          { index: true, element: <CustomerHomePage /> },
-          { path: "stores", element: <StoreSearchPage /> },
-          { path: "stores/:storeId", element: <StoreDetailPage /> },
-          { path: "cart", element: <CartPage /> },
-          { path: "checkout/:orderId", element: <CheckoutPage /> },
-          { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
-          { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
-          { path: "orders", element: <CustomerOrdersPage /> },
-          { path: "orders/:orderReference", element: <CustomerOrderDetailPage /> },
-          { path: "points", element: <CustomerPointsPage /> },
-          { path: "coupons", element: <CouponWalletPage /> },
-          { path: "favorites", element: <FavoriteStoresPage /> },
-          { path: "notifications", element: <NotificationInboxPage /> },
-          { path: "me", element: <CustomerMyPage /> },
+          { element: <CustomerShell />, children: [
+            { index: true, element: <RefreshCustomerHomePage /> },
+            { path: "stores", element: <RefreshStoreSearchPage /> },
+            { path: "stores/:storeId", element: <RefreshStoreDetailPage /> },
+            { path: "cart", element: <RefreshCartPage /> },
+            { path: "checkout/:orderId", element: <RefreshCheckoutPage /> },
+            { path: "orders/:orderReference", element: <RefreshCustomerOrderDetailPage /> },
+          ] },
+          { element: <CustomerShell />, children: [
+            { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
+            { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
+            { path: "orders", element: <CustomerOrdersPage /> },
+            { path: "points", element: <CustomerPointsPage /> },
+            { path: "coupons", element: <CouponWalletPage /> },
+            { path: "favorites", element: <FavoriteStoresPage /> },
+            { path: "notifications", element: <NotificationInboxPage /> },
+            { path: "me", element: <CustomerMyPage /> },
+          ] },
         ],
       },
     ],
   },
   {
-    path: "/store", element: <ConsoleShell kind="store" />, children: [
-      { path: "login", element: <MerchantLoginPage /> },
-      { path: "password", element: <MerchantPasswordChangePage /> },
+    path: "/store", children: [
+      { element: <ConsoleShell kind="store" />, children: [
+        { path: "login", element: <MerchantLoginPage /> },
+        { path: "password", element: <MerchantPasswordChangePage /> },
+      ] },
       {
         element: <MerchantSessionGate />, children: [
-          { index: true, element: <StoreOrderBoardPage /> },
-          { path: "refunds/:storeId/:orderReference", element: <StoreRefundPage /> },
-          { path: "settlements", element: <StoreSettlementsPage /> },
-          { path: "disputes", element: <StoreDisputesPage /> },
-          { path: "region", element: <StoreRegionPage /> },
+          { element: <ConsoleShell kind="store" />, children: [
+            { index: true, element: <RefreshStoreOrderBoardPage /> },
+            { path: "refunds/:storeId/:orderReference", element: <RefreshStoreRefundPage /> },
+          ] },
+          { element: <ConsoleShell kind="store" />, children: [
+            { path: "settlements", element: <StoreSettlementsPage /> },
+            { path: "disputes", element: <StoreDisputesPage /> },
+            { path: "region", element: <StoreRegionPage /> },
+          ] },
         ],
       },
     ],

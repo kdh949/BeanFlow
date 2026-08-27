@@ -13,7 +13,7 @@ export type CartLine = {
   menuId: string;
   optionIds: string[];
   quantity: number;
-  display: { menuName: string; optionNames: string[]; unitPriceKrw: number };
+  display: { menuName: string; optionNames: string[]; unitPriceKrw: number; imageUrl?: string };
 };
 
 export type Cart = {
@@ -59,6 +59,7 @@ function isCartLine(value: unknown): value is CartLine {
     && typeof display.menuName === "string"
     && Array.isArray(display.optionNames) && display.optionNames.every((option) => typeof option === "string")
     && typeof display.unitPriceKrw === "number" && Number.isFinite(display.unitPriceKrw)
+    && (display.imageUrl === undefined || typeof display.imageUrl === "string")
   );
 }
 

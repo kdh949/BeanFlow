@@ -1,5 +1,16 @@
-:root{
---r-xs:6px;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:20px;--r-2xl:28px;--r-pill:999px;
---r-control:10px;--r-card:16px;--r-sheet:24px;--r-chip:999px;
---bw-hair:1px;--bw-thick:1.5px;--bw-focus:2px;
+:root {
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r-md: 9px;
+  --r-lg: 11px;
+  --r-xl: 13px;
+  --r-2xl: 14px;
+  --r-pill: 999px;
+  --r-control: 10px;
+  --r-card: 11px;
+  --r-sheet: 14px;
+  --r-chip: 999px;
+  --bw-hair: 1px;
+  --bw-thick: 1.5px;
+  --bw-focus: 2px;
 }

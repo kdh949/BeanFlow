@@ -3,7 +3,7 @@ import { HttpResponse, http } from "msw";
 import { expect, userEvent } from "storybook/test";
 import { compensationManualReview, compensationSucceeded } from "../../../.storybook/fixtures";
 import { ApiRequestError } from "../../api/client";
-import { ErrorState, LoadingState } from "../../components/Ui";
+import { ErrorState, LoadingState } from "../../design-system";
 import { CompensationResult, OpsOrderPage } from "./ConsolePages";
 
 const meta = {

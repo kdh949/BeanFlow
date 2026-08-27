@@ -3,8 +3,8 @@ import { useCallback, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, ErrorState, LoadingState } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
 import { StoreCard } from "../discovery/StoreCards";
 import { useResource } from "../shared/useResource";
@@ -42,7 +42,7 @@ export function FavoriteStoresPage() {
 
   return (
     <div className="customer-page favorite-stores-page">
-      <PageTitle eyebrow="FAVORITES" title="즐겨찾기" description="자주 찾는 매장을 모아두고 바로 주문을 시작할 수 있어요." />
+      <PageHeading title="즐겨찾기" description="자주 찾는 매장을 모아두고 바로 주문을 시작할 수 있어요." />
       {favorites.state.status === "loading" ? <LoadingState label="즐겨찾기 매장을 불러오는 중" /> : null}
       {favorites.state.status === "failed" ? <ErrorState error={favorites.state.error} retry={favorites.reload} /> : null}
       {mutationError ? <ErrorState error={mutationError} /> : null}

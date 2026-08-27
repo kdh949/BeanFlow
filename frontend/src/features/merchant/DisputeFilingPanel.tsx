@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { ErrorState } from "../../components/Ui";
+import { ErrorState } from "../../design-system";
 import { Button } from "../../design-system";
 import { won } from "../../lib/format";
 

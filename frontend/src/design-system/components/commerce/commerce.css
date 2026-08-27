@@ -1,8 +1,3 @@
-.bf-status{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-5);border-radius:var(--r-pill);font-size:var(--fs-caption);font-weight:var(--fw-semibold);white-space:nowrap}
-.bf-status__dot{width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
-.bf-status--neutral{background:var(--crema-200);color:var(--crema-700)}
-.bf-status--brand{background:var(--surface-brand-soft);color:var(--espresso-600)}
-.bf-status--success{background:var(--success-bg);color:var(--success-fg)}
-.bf-status--warning{background:var(--warning-bg);color:var(--warning-fg)}
-.bf-status--danger{background:var(--danger-bg);color:var(--danger-fg)}
-.bf-status--info{background:var(--info-bg);color:var(--info-fg)}
+.bf-status-text { display: inline-flex; align-items: center; color: var(--text-strong); font-size: var(--fs-caption); font-weight: 800; line-height: 1.35; white-space: nowrap; }
+.bf-status-text--uncertain { color: var(--info-fg); }
+.bf-status-text--danger { color: var(--danger-fg); }

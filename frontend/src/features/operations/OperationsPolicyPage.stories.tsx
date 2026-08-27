@@ -51,7 +51,7 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: "기존 Button, FeedbackState, StatusBadge와 콘솔 카드 패턴을 조합해 포인트·만료 혜택 정책, 브랜드, 검색 색인을 관리합니다. 모든 변경은 현재 버전과 멱등성 키를 사용합니다.",
+        component: "기존 Button, FeedbackState, StatusText와 콘솔 카드 패턴을 조합해 포인트·만료 혜택 정책, 브랜드, 검색 색인을 관리합니다. 모든 변경은 현재 버전과 멱등성 키를 사용합니다.",
       },
       story: { inline: false, height: "980px" },
     },

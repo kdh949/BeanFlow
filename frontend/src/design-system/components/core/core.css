@@ -1,25 +1,16 @@
-/* Buttons ------------------------------------------------- */
-.bf-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-3);border:1px solid transparent;border-radius:var(--r-control);font-weight:var(--fw-semibold);font-size:var(--fs-body-sm);line-height:1;letter-spacing:var(--ls-body);cursor:pointer;white-space:nowrap;text-decoration:none;transition:background var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-instant) var(--ease-standard)}
-.bf-btn:active:not(:disabled){transform:scale(var(--press-scale))}
-.bf-btn:disabled{cursor:not-allowed;background:var(--disabled-bg);color:var(--disabled-text);border-color:transparent;box-shadow:none}
-.bf-btn--sm{height:var(--control-h-sm);padding:0 var(--sp-5);font-size:var(--fs-caption);border-radius:var(--r-sm)}
-.bf-btn--md{height:var(--control-h-md);padding:0 var(--sp-6)}
-.bf-btn--lg{height:var(--control-h-lg);padding:0 var(--sp-7);font-size:var(--fs-body-lg)}
-.bf-btn--xl{height:var(--control-h-xl);padding:0 var(--sp-8);font-size:var(--fs-body-lg);border-radius:var(--r-md)}
-.bf-btn--block{width:100%}
-.bf-btn--pill{border-radius:var(--r-pill)}
-.bf-btn--primary{background:var(--primary-bg);color:var(--text-on-primary);box-shadow:var(--sh-1)}
-.bf-btn--primary:hover:not(:disabled){background:var(--primary-bg-hover);box-shadow:var(--sh-2)}
-.bf-btn--primary:active:not(:disabled){background:var(--primary-bg-press)}
-.bf-btn--accent{background:var(--accent-bg);color:var(--text-on-accent);box-shadow:var(--sh-1)}
-.bf-btn--accent:hover:not(:disabled){background:var(--accent-bg-hover)}
-.bf-btn--accent:active:not(:disabled){background:var(--accent-bg-press)}
-.bf-btn--secondary{background:var(--secondary-bg);color:var(--text-strong);border-color:var(--secondary-border);box-shadow:var(--sh-1)}
-.bf-btn--secondary:hover:not(:disabled){background:var(--secondary-bg-hover);border-color:var(--border-strong)}
-.bf-btn--ghost{background:transparent;color:var(--text-strong)}
-.bf-btn--ghost:hover:not(:disabled){background:var(--ghost-bg-hover)}
-.bf-btn--danger{background:var(--danger-fg);color:var(--text-on-primary)}
-.bf-btn--danger:hover:not(:disabled){background:var(--danger-fg);box-shadow:var(--sh-2)}
-.bf-btn--danger:focus-visible{box-shadow:var(--ring-danger)}
-.bf-btn__spinner{animation:bf-spin .9s linear infinite}
-@keyframes bf-spin{to{transform:rotate(360deg)}}
+.bf-action { min-height: var(--control-h-md); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--r-control); background: var(--primary-bg); color: var(--text-on-primary) !important; font-weight: 750; line-height: 1; cursor: pointer; white-space: nowrap; text-decoration: none; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform var(--dur-instant) var(--ease-standard); }
+.bf-action:active:not(:disabled) { transform: scale(var(--press-scale)); }
+.bf-action:hover:not(:disabled) { background: var(--primary-bg-hover); color: var(--text-on-primary); }
+.bf-action:disabled { cursor: not-allowed; background: var(--disabled-bg); color: var(--disabled-text) !important; }
+.bf-action--secondary { border-color: var(--secondary-border); background: var(--secondary-bg); color: var(--text-strong) !important; }
+.bf-action--secondary:hover:not(:disabled), .bf-action--ghost:hover:not(:disabled) { background: var(--secondary-bg-hover); color: var(--text-strong); }
+.bf-action--ghost { background: transparent; color: var(--text-strong) !important; }
+.bf-action--danger { background: var(--danger-solid); }
+.bf-action--danger:hover:not(:disabled) { background: var(--danger-fg); }
+.bf-action--sm { min-height: var(--control-h-sm); padding-inline: 12px; border-radius: var(--r-sm); font-size: var(--fs-caption); }
+.bf-action--lg { min-height: var(--control-h-lg); }
+.bf-action--xl { min-height: var(--control-h-xl); font-size: var(--fs-body-lg); }
+.bf-action--block { width: 100%; }
+.bf-spin { animation: bf-spin .8s linear infinite; }
+@keyframes bf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bf-spin { animation: none; } }

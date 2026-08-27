@@ -3,8 +3,8 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { EmptyState, ErrorState, LoadingState, StatusText } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
 import { shortDateTime } from "../../lib/format";
 
@@ -162,8 +162,8 @@ export function MerchantAccountsPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="MERCHANT CREDENTIAL"
+      <PageHeading
+
         title="점주 계정 관리"
         description="로그인 ID exact 조회, 최초 계정 발급, 임시 비밀번호 재발급과 로그인 잠금 해제를 처리합니다."
       />
@@ -199,8 +199,8 @@ export function MerchantAccountsPage() {
             <div className="console-detail-grid merchant-account-workspace">
               <section className="surface-card order-panel merchant-account-summary">
                 <div className="panel-heading">
-                  <div><span className="eyebrow">EXACT ACCOUNT</span><h2>{account.displayName}</h2></div>
-                  <StatusBadge state={account.accountState} />
+                  <div><span className="context-label">정확 일치 계정</span><h2>{account.displayName}</h2></div>
+                  <StatusText state={account.accountState} />
                 </div>
                 <dl className="detail-list">
                   <div><dt>로그인 ID</dt><dd>{account.loginId}</dd></div>
@@ -210,7 +210,7 @@ export function MerchantAccountsPage() {
                 <div className="merchant-memberships">
                   <h3>매장 권한</h3>
                   {account.memberships.map((membership) => (
-                    <div key={`${membership.storeId}-${membership.role}`}><code>{membership.storeId}</code><StatusBadge state={membership.role} /></div>
+                    <div key={`${membership.storeId}-${membership.role}`}><code>{membership.storeId}</code><StatusText state={membership.role} /></div>
                   ))}
                 </div>
               </section>
@@ -264,7 +264,7 @@ function OneTimePasswordPanel({ result, onDismiss }: { result: OneTimePassword; 
     <section className="surface-card one-time-password" aria-labelledby="one-time-password-title">
       <ShieldCheck aria-hidden="true" />
       <div>
-        <span className="eyebrow">ONE-TIME SECRET</span>
+        <span className="context-label">일회용 비밀번호</span>
         <h2 id="one-time-password-title">임시 비밀번호를 지금 전달하세요</h2>
         <p>이 값은 화면 이동·새로고침 후 복구되지 않습니다. 티켓·로그·브라우저 저장소에 남기지 마세요.</p>
         <code>{result.temporaryPassword}</code>

@@ -1,0 +1,5 @@
+.bf-page-heading { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.bf-page-heading > div { min-width: 0; }
+.bf-page-heading h1 { font-size: var(--fs-title-1); line-height: 1.16; letter-spacing: var(--ls-title); }
+.bf-page-heading p { max-width: 62ch; margin-top: 8px; color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.55; }
+@media (max-width: 640px) { .bf-page-heading { flex-direction: column; } }

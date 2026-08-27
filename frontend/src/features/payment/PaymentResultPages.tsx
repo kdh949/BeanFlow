@@ -2,8 +2,8 @@ import { RefreshCw, XCircle } from "lucide-react";
 import { useLayoutEffect, useMemo } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../api/client";
-import { ErrorState, LoadingState, StatusBadge, SuccessMark } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
+import { ErrorState, LoadingState, StatusText, SuccessMark } from "../../design-system";
+import { PageHeading } from "../../design-system";
 import { won } from "../../lib/format";
 import { ButtonLink } from "../../design-system";
 import { checkCallback, hasCallbackQuery, type PaymentCallback } from "./paymentAttempt";
@@ -85,12 +85,12 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
     return (
       <div className="customer-page result-page">
         <span className="failure-mark"><XCircle size={36} /></span>
-        <span className="eyebrow">PAYMENT STOPPED</span>
+        <span className="context-label">결제 중단</span>
         <h1>{retryable ? "아직 결제가 끝나지 않았어요" : "결제를 완료하지 못했어요"}</h1>
         <p>{retryable
           ? "결제창이 닫혔거나 결제가 진행되지 않았어요. 주문 상태를 확인해 주세요."
           : "결제가 승인되지 않았습니다. 주문 상태를 확인해 주세요."}</p>
-        <StatusBadge state={payment.approvalState} label={retryable ? "결제 전" : undefined} />
+        <StatusText state={payment.approvalState} label={retryable ? "결제 전" : undefined} />
         <ButtonLink size="xl" block to={orderTrackingPath(payment.orderReference)}>
           주문 상태 보기
         </ButtonLink>
@@ -103,19 +103,19 @@ function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolut
   return (
     <div className="customer-page result-page">
       {pending ? <span className="pending-mark"><RefreshCw className="spin" size={30} /></span> : <SuccessMark />}
-      <span className="eyebrow">{pending ? "PAYMENT CHECK" : "ORDER CONFIRMED"}</span>
+      <span className="context-label">{pending ? "결제 확인" : "주문 확인"}</span>
       <h1>{pending ? "결제 결과를 확인하고 있어요" : "결제가 완료됐어요"}</h1>
       <p>{pending
         ? "같은 결제를 다시 시도하지 않아도 됩니다. 결제 상태를 조회해 결과를 확인하고 있어요."
         : "매장에서 주문을 확인하면 픽업 준비 상태를 알려드릴게요."}</p>
-      <StatusBadge state={payment.approvalState} />
+      <StatusText state={payment.approvalState} />
       <div className="result-summary surface-card">
         <div><span>주문 번호</span><code>{payment.orderReference}</code></div>
         <div><span>승인 금액</span><strong>{payment.approvedAmountKrw == null ? "확인 중" : won.format(payment.approvedAmountKrw)}</strong></div>
         {payment.recovery ? (
           <div>
             <span>복구 상태</span>
-            <StatusBadge state={payment.recovery.state} />
+            <StatusText state={payment.recovery.state} />
           </div>
         ) : null}
       </div>
@@ -151,10 +151,10 @@ export function PaymentFailPage() {
     return (
       <div className="customer-page result-page">
         <span className="pending-mark"><RefreshCw className="spin" size={30} /></span>
-        <span className="eyebrow">PAYMENT CHECK</span>
+        <span className="context-label">결제 확인</span>
         <h1>결제 결과를 확인하고 있어요</h1>
         <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
-        <StatusBadge state={resolution.payment.approvalState} />
+        <StatusText state={resolution.payment.approvalState} />
         <ButtonLink variant="secondary" block to={orderTrackingPath(resolution.payment.orderReference)}>주문 상태 보기</ButtonLink>
       </div>
     );
@@ -163,7 +163,7 @@ export function PaymentFailPage() {
   return (
     <div className="customer-page result-page">
       <span className="failure-mark"><XCircle size={36} /></span>
-      <span className="eyebrow">PAYMENT STOPPED</span>
+      <span className="context-label">결제 중단</span>
       <h1>결제를 완료하지 못했어요</h1>
       <p>{failureMessage(code)}</p>
       <code className="failure-code">{code}</code>
@@ -183,10 +183,10 @@ function ManualReviewPaymentView({ payment }: { payment: Payment }) {
   return (
     <div className="customer-page result-page">
       <span className="pending-mark"><RefreshCw size={30} /></span>
-      <span className="eyebrow">PAYMENT REVIEW</span>
+      <span className="context-label">결제 검토</span>
       <h1>결제 확인에 시간이 더 필요해요</h1>
       <p>같은 결제를 다시 시도하지 마세요. 주문 상태를 확인하거나 도움이 필요하면 문의해 주세요.</p>
-      <StatusBadge state={payment.approvalState} />
+      <StatusText state={payment.approvalState} />
       <div className="result-summary surface-card">
         <div><span>주문 번호</span><code>{payment.orderReference}</code></div>
       </div>
@@ -219,7 +219,7 @@ export function publicFailureCode(code: string) {
 export function CustomerHelpPage() {
   return (
     <div className="customer-page">
-      <PageTitle eyebrow="HELP" title="도움이 필요하신가요?" description="결제 결과가 확인 중이면 같은 결제를 반복하지 말고 주문 상태를 새로고침해 주세요." />
+      <PageHeading title="도움이 필요하신가요?" description="결제 결과가 확인 중이면 같은 결제를 반복하지 말고 주문 상태를 새로고침해 주세요." />
       <section className="surface-card help-card">
         <strong>결제·환불 문의</strong>
         <p>문의할 때 화면의 문의 코드와 주문 번호를 알려주세요. 카드 번호나 인증 정보는 보내지 마세요.</p>

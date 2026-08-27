@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { merchantApi } from "../../api/merchantClient";
 import { merchantSession } from "../auth/merchant/merchantSession";
-import { RefundOutcome, StoreRefundPage } from "./StoreRefundPage";
+import { RefundOutcome, RefreshStoreRefundPage } from "../../presentation/beanflow-refresh/MerchantPages";
 
 const storeId = "10000000-0000-4000-8000-000000000001";
 const orderReference = "BF-7K3M-9Q2P";
@@ -56,7 +56,7 @@ function renderRefundPage() {
   return render(
     <MemoryRouter initialEntries={[`/store/refunds/${storeId}/${orderReference}`]}>
       <Routes>
-        <Route path="/store/refunds/:storeId/:orderReference" element={<StoreRefundPage />} />
+        <Route path="/store/refunds/:storeId/:orderReference" element={<RefreshStoreRefundPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -183,10 +183,12 @@ describe("refund preview requests do not race", () => {
     }) as never);
 
     renderRefundPage();
-    const quantityInput = (await screen.findByLabelText("환불 수량")) as HTMLInputElement;
+    const increase = await screen.findByRole("button", { name: "아이스 아메리카노 환불 수량 늘리기" });
+    const quantityOutput = screen.getByLabelText("아이스 아메리카노 환불 수량 0");
 
-    fireEvent.change(quantityInput, { target: { value: "1" } });
-    fireEvent.change(quantityInput, { target: { value: "2" } });
+    fireEvent.click(increase);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    fireEvent.click(increase);
 
     await waitFor(() => expect(pending).toHaveLength(2));
     expect(pending.map((request) => request.quantity)).toEqual([1, 2]);
@@ -194,11 +196,11 @@ describe("refund preview requests do not race", () => {
     // The newer "quantity 2" request settles first, the stale "quantity 1"
     // request settles after it. The stale answer must not win.
     pending[1]?.resolve();
-    await waitFor(() => expect(quantityInput).toHaveValue(2));
+    await waitFor(() => expect(quantityOutput).toHaveTextContent("2"));
     pending[0]?.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(quantityInput).toHaveValue(2);
+    expect(quantityOutput).toHaveTextContent("2");
   });
 });
 

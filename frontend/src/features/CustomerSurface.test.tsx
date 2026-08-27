@@ -8,11 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../api/customerClient";
 import { CustomerLoginPage, CustomerSignupPage } from "./auth/customer/AuthPages";
 import { customerSession } from "./auth/customer/customerSession";
-import { StoreSearchPage } from "./discovery/StoreSearchPage";
-import { CartPage } from "./ordering/CartPage";
-import { CustomerOrdersPage, pickupNumberNote } from "./ordering/OrderPages";
-import { RefundProgress } from "./ordering/RefundProgress";
+import { CustomerOrdersPage } from "./ordering/CustomerOrdersPage";
+import { pickupNumberNote } from "./ordering/orderPresentation";
 import { CustomerPointsPage } from "./loyalty/PointsPage";
+import { RefreshCartPage, RefreshStoreSearchPage } from "../presentation/beanflow-refresh";
+import { PaymentRecovery } from "../presentation/beanflow-refresh/CustomerTransactionPages";
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -65,8 +65,8 @@ describe("customer surface has no manual credential or identifier input", () => 
     const screens: Array<[string, ReactElement]> = [
       ["login", <CustomerLoginPage key="login" />],
       ["signup", <CustomerSignupPage key="signup" />],
-      ["store search", <StoreSearchPage key="search" />],
-      ["cart", <CartPage key="cart" />],
+      ["store search", <RefreshStoreSearchPage key="search" />],
+      ["cart", <RefreshCartPage key="cart" />],
       ["orders", <CustomerOrdersPage key="orders" />],
     ];
 
@@ -91,7 +91,7 @@ describe("customer screens never show a raw status code", () => {
   it("labels every refund recovery state in words", () => {
     for (const state of ["NOT_REQUIRED", "REQUESTED", "PROCESSING", "SUCCEEDED"] as const) {
       const view = render(
-        <RefundProgress recovery={{ state, cancellationRequestedRefundAmountKrw: 0 } as never} />,
+        <PaymentRecovery recovery={{ state, cancellationRequestedRefundAmountKrw: 0 } as never} />,
       );
       expect(view.container.textContent, state).not.toMatch(/[A-Z]{3,}_[A-Z_]+/);
       view.unmount();

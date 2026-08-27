@@ -11,3 +11,6 @@
 @import url("./components/core/core.css");
 @import url("./components/feedback/feedback.css");
 @import url("./components/commerce/commerce.css");
+@import url("./components/brand/brand.css");
+@import url("./components/forms/forms.css");
+@import url("./patterns/layout/layout.css");
