@@ -78,7 +78,7 @@ export const UnreadAndPreference: Story = {
     await expect(await canvas.findByRole("link", { name: "알림함 열기" })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "읽음으로 표시" })).not.toBeInTheDocument();
 
-    const preference = canvas.getByRole("checkbox", { name: /마케팅 알림 받기/ });
+    const preference = canvas.getByRole("switch", { name: /마케팅 알림 받기/ });
     await expect(preference).not.toBeChecked();
     await userEvent.click(preference);
     await waitFor(() => expect(preference).toBeChecked());

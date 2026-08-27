@@ -7,7 +7,7 @@ import { Link, NavLink, Outlet } from "react-router";
 import { ApiRequestError, unwrap } from "../api/client";
 import { customerApi } from "../api/customerClient";
 import { operationsAuth, useOperationsAuth } from "../auth/session";
-import { BrandLockup, ButtonLink } from "../design-system";
+import { BrandLockup, Button, ButtonLink } from "../design-system";
 import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { CUSTOMER_NOTIFICATION_SUMMARY_CHANGED } from "../features/notification/notificationSummary";
 import "./beanflow-refresh/refresh.css";
@@ -118,14 +118,14 @@ export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
         </nav>
         <div className="bfr-store-sidebar-foot">
           <Link to="/app"><Store size={17} />고객 앱</Link>
-          <button type="button" onClick={() => void logOut()}><LogOut size={17} />로그아웃</button>
+          <Button variant="ghost" size="sm" onClick={() => void logOut()}><LogOut size={17} />로그아웃</Button>
           {logoutFailed ? <p role="alert">로그아웃에 실패했습니다. 다시 시도해 주세요.</p> : null}
         </div>
       </aside>
       <section className="bfr-store-main">
         <header className="bfr-store-topbar">
           <div><span>{context}</span><strong>거래 상태와 다음 작업을 정확하게 확인하세요</strong></div>
-          <button type="button" aria-label={`${context} 계정 상태`}><span>{actor.slice(0, 1)}</span>{actor}<ChevronDown size={15} /></button>
+          <div className="bfr-store-actor" aria-label={`${context} 계정 상태`}><span>{actor.slice(0, 1)}</span>{actor}<ChevronDown size={15} aria-hidden="true" /></div>
         </header>
         <main className="bfr-store-content"><Outlet /></main>
       </section>

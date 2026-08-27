@@ -4,7 +4,7 @@ import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
-import { Button } from "../../design-system";
+import { Button, ChipButton } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
@@ -87,15 +87,13 @@ export function StoreDisputesPage() {
         <>
           <div className="filter-row" role="group" aria-label="상태 필터">
             {STATE_FILTERS.map((option) => (
-              <button
+              <ChipButton
                 key={option.value}
-                type="button"
-                className={filter === option.value ? "is-active" : ""}
                 aria-pressed={filter === option.value}
                 onClick={() => setFilter(option.value)}
               >
                 {option.label}
-              </button>
+              </ChipButton>
             ))}
           </div>
 

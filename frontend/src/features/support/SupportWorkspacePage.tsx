@@ -11,9 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { PageHeading } from "../../design-system";
-import { EmptyState, LoadingState } from "../../design-system";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 
@@ -379,24 +377,20 @@ export function SupportWorkspacePage() {
       <section className="support-intake-grid">
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void searchSubjects(); }}>
           <div className="operation-heading"><Search aria-hidden="true" /><div><strong>보호 대상 정확 검색</strong><small>원문은 POST body에만 전송하고 즉시 지웁니다.</small></div></div>
-          <label htmlFor="support-criterion-type">검색 기준</label>
-          <select id="support-criterion-type" value={criterionType} onChange={(event) => setCriterionType(event.target.value as "PHONE" | "EMAIL")}>
+          <SelectField label="검색 기준" id="support-criterion-type" value={criterionType} onValueChange={(value) => setCriterionType(value as "PHONE" | "EMAIL")}>
             <option value="PHONE">등록 전화번호</option><option value="EMAIL">등록 이메일</option>
-          </select>
-          <label htmlFor="support-subject-type">대상 유형</label>
-          <select id="support-subject-type" value={subjectType} onChange={(event) => setSubjectType(event.target.value as typeof subjectType)}>
+          </SelectField>
+          <SelectField label="대상 유형" id="support-subject-type" value={subjectType} onValueChange={(value) => setSubjectType(value as typeof subjectType)}>
             <option value="CUSTOMER">고객</option><option value="STORE">매장</option><option value="RIDER">외부 배달원</option>
-          </select>
-          <label htmlFor="support-criterion">전화번호 또는 이메일</label>
-          <input id="support-criterion" type={criterionType === "EMAIL" ? "email" : "tel"} value={criterion} required autoComplete="off" onChange={(event) => setCriterion(event.target.value)} />
+          </SelectField>
+          <TextField label="전화번호 또는 이메일" id="support-criterion" type={criterionType === "EMAIL" ? "email" : "tel"} value={criterion} required autoComplete="off" onValueChange={setCriterion} />
           <Button type="submit" loading={searching} disabled={!criterion.trim()}><Search size={17} /> 정확 검색</Button>
           {searchError ? <ErrorState error={searchError} /> : null}
         </form>
 
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void openCase(caseLookupId); }}>
           <div className="operation-heading"><Link2 aria-hidden="true" /><div><strong>기존 Case 열기</strong><small>Case ID는 PII가 아닌 opaque 식별자입니다.</small></div></div>
-          <label htmlFor="support-case-id">기존 Case ID</label>
-          <input id="support-case-id" value={caseLookupId} required onChange={(event) => setCaseLookupId(event.target.value)} />
+          <TextField label="기존 Case ID" id="support-case-id" value={caseLookupId} required onValueChange={setCaseLookupId} />
           <Button type="submit" variant="secondary" loading={caseLoading}>Case 열기</Button>
           {caseError && !supportCase ? <ErrorState error={caseError} retry={() => void openCase(caseLookupId)} /> : null}
         </form>
@@ -412,8 +406,8 @@ export function SupportWorkspacePage() {
                 <article key={`${candidate.subjectType}-${candidate.subjectId}`}>
                   <div><StatusText state={candidate.subjectType} /><strong>{candidate.maskedDisplayName}</strong><span>{candidate.maskedMatchedValue}</span><code>{candidate.subjectId}</code></div>
                   <div className="candidate-case-options">
-                    <label>문의 분류<select value={caseCategory} onChange={(event) => setCaseCategory(event.target.value as typeof caseCategory)}><option value="ACCOUNT_RECOVERY">계정 복구</option><option value="PAYMENT_OR_REFUND">결제·환불</option><option value="PRIVACY">개인정보</option><option value="COMPENSATION">보상</option></select></label>
-                    <label>우선순위<select value={casePriority} onChange={(event) => setCasePriority(event.target.value as typeof casePriority)}><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="URGENT">긴급</option></select></label>
+                    <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}><option value="ACCOUNT_RECOVERY">계정 복구</option><option value="PAYMENT_OR_REFUND">결제·환불</option><option value="PRIVACY">개인정보</option><option value="COMPENSATION">보상</option></SelectField>
+                    <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="URGENT">긴급</option></SelectField>
                     <Button loading={creatingCase} onClick={() => void createCaseFor(candidate)}><FilePlus2 size={16} /> 새 Case에 연결</Button>
                   </div>
                 </article>
@@ -441,7 +435,7 @@ export function SupportWorkspacePage() {
                 <div className="support-step-stack">
                   <div className="support-step-summary"><span>Verification</span><StatusText state={verification.state} /><strong>{verification.achievedLevel}</strong><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
                   {!challenge && verification.state === "PENDING" ? <Button variant="secondary" block loading={verificationBusy} onClick={() => void issueChallenge()}>등록 전화로 challenge 발급</Button> : null}
-                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> Challenge {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><label htmlFor="support-proof">일회성 proof</label><input id="support-proof" type="password" autoComplete="one-time-code" value={proof} onChange={(event) => setProof(event.target.value)} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>proof 검증</Button></> : null}</div> : null}
+                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> Challenge {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 proof" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>proof 검증</Button></> : null}</div> : null}
                   {verification.achievedLevel === "ENHANCED" && !grant ? <Button block loading={grantBusy} onClick={() => void requestGrant()}>전화번호 Grant 요청</Button> : null}
                 </div>
               ) : null}
@@ -549,15 +543,15 @@ function SupportCompensationPanel({ caseId, verificationSessionId, disabled }: {
     <section className="surface-card support-compensation-panel">
       <div className="operation-heading"><Sparkles aria-hidden="true" /><div><strong>고객 불편 보상</strong><small>평가 결과와 실제 요청 상태를 분리합니다. 요청 접수는 지급 완료가 아닙니다.</small></div></div>
       <div className="support-compensation-grid">
-        <label>사고 ID<input value={incidentId} required onChange={(event) => { setIncidentId(event.target.value); setEvaluation(null); }} /></label>
-        <label>주문 ID (선택)<input value={orderId} onChange={(event) => { setOrderId(event.target.value); setEvaluation(null); }} /></label>
-        <label>대상 버전<input type="number" min="0" value={targetVersion} onChange={(event) => { setTargetVersion(event.target.value); setEvaluation(null); }} /></label>
-        <label>포인트 금액<input type="number" min="1" value={amountKrw} onChange={(event) => { setAmountKrw(event.target.value); setEvaluation(null); }} /></label>
+        <TextField label="사고 ID" value={incidentId} required onValueChange={(value) => { setIncidentId(value); setEvaluation(null); }} />
+        <TextField label="주문 ID (선택)" value={orderId} onValueChange={(value) => { setOrderId(value); setEvaluation(null); }} />
+        <TextField label="대상 버전" type="number" min="0" value={targetVersion} onValueChange={(value) => { setTargetVersion(value); setEvaluation(null); }} />
+        <TextField label="포인트 금액" type="number" min="1" value={amountKrw} onValueChange={(value) => { setAmountKrw(value); setEvaluation(null); }} />
       </div>
       {!verificationSessionId ? <p className="operation-warning">보상 평가는 완료된 본인확인 세션이 필요합니다.</p> : null}
       <Button variant="secondary" loading={busy} disabled={disabled || !incidentId.trim() || !verificationSessionId} onClick={() => void evaluate()}>보상 가능 여부 평가</Button>
       {evaluation ? <div className="support-compensation-result"><StatusText state={evaluation.decision} /><strong>{evaluation.band} · {evaluation.approvalRoute}</strong><span>{evaluation.executable ? "현재 평가상 실행 가능" : "승인·조사 또는 추가 조건 필요"}</span><small>{evaluation.reasonCodes.join(", ") || "정책 제한 사유 없음"}</small></div> : null}
-      {evaluation && evaluation.decision !== "DENIED" ? <><label htmlFor="support-evidence-digest">증거 SHA-256 digest</label><input id="support-evidence-digest" value={evidenceDigest} pattern="[a-f0-9]{64}" placeholder="원문 대신 소문자 64자리 digest" onChange={(event) => setEvidenceDigest(event.target.value)} /><Button loading={busy} disabled={!/^[a-f0-9]{64}$/.test(evidenceDigest)} onClick={() => void create()}>보상 요청 생성</Button></> : null}
+      {evaluation && evaluation.decision !== "DENIED" ? <><TextField label="증거 SHA-256 digest" id="support-evidence-digest" value={evidenceDigest} pattern="[a-f0-9]{64}" placeholder="원문 대신 소문자 64자리 digest" onValueChange={setEvidenceDigest} /><Button loading={busy} disabled={!/^[a-f0-9]{64}$/.test(evidenceDigest)} onClick={() => void create()}>보상 요청 생성</Button></> : null}
       {compensation ? <div className="support-compensation-result"><StatusText state={compensation.state} /><strong>{won.format(compensation.amountKrw)} 포인트 보상 요청</strong><code>{compensation.compensationRequestId}</code><small>서버 상태가 BENEFIT_ISSUED 또는 NOTIFICATION_ACCEPTED가 되기 전 완료로 표시하지 않습니다.</small></div> : null}
       {error ? <ErrorState error={error} /> : null}
     </section>

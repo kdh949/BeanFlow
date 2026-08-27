@@ -7,7 +7,7 @@ import { customerApi } from "../../api/customerClient";
 import { coordinatesOf, useBrowserLocation } from "../../features/discovery/useBrowserLocation";
 import { useResource } from "../../features/shared/useResource";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar, RefreshStoreCard } from "./RefreshShared";
-import { Button, ButtonLink, SearchField } from "../../design-system";
+import { Button, ButtonLink, ChipButton, IconButton, SearchField } from "../../design-system";
 
 type CustomerOrderSummary = components["schemas"]["CustomerOrderSummary"];
 type StoreRecommendation = components["schemas"]["StoreRecommendation"];
@@ -44,7 +44,7 @@ export function RefreshCustomerHomePage() {
         <h2>주문 가능한 매장</h2>
         <div className="bfr-home-store-list">
           {recommendations.state.status === "ready" ? recommendations.state.value.slice(0, 2).map((item, index) => <Link key={item.store.storeId} to={`/app/stores/${item.store.storeId}`}><span className="bfr-store-symbol"><Store size={26} /></span><span><strong>{item.store.name}</strong><small>{index === 0 ? "최근 주문한 매장" : "가까운 매장"}</small></span><b>{item.store.orderingAvailable ? "주문 가능" : "준비 중"}</b><ChevronRight size={20} /></Link>) : null}
-          <button type="button" onClick={locate} disabled={location.status === "locating"}><span className="bfr-store-symbol"><MapPin size={27} /></span><span><strong>{location.status === "locating" ? "현재 위치 확인 중" : "현재 위치로 찾기"}</strong><small>내 주변 매장 보기</small></span><ChevronRight size={20} /></button>
+          <Button block variant="ghost" onClick={locate} disabled={location.status === "locating"}><span className="bfr-store-symbol"><MapPin size={27} /></span><span><strong>{location.status === "locating" ? "현재 위치 확인 중" : "현재 위치로 찾기"}</strong><small>내 주변 매장 보기</small></span><ChevronRight size={20} /></Button>
         </div>
         {location.status === "denied" ? <p className="bfr-inline-status" role="status">위치 권한이 꺼져 있어 자주 가는 매장과 최근 매장만 보여드려요.</p> : null}
         {location.status === "unavailable" ? <p className="bfr-inline-status" role="status">현재 위치를 확인할 수 없어 저장된 이용 기록을 기준으로 보여드려요.</p> : null}
@@ -81,11 +81,11 @@ export function RefreshStoreSearchPage() {
       <RefreshMobileTopbar title="매장 검색" backTo="/app" />
       <form className="bfr-search-form" role="search" onSubmit={submit}>
         <SearchField label="매장과 메뉴 검색" value={draft} placeholder="예: 성수 라떼" onChange={(event) => setDraft(event.target.value)} onClear={() => search("")} />
-        <button className="bfr-search-submit" type="submit" aria-label="검색" disabled={draft.trim().length < MIN_QUERY_LENGTH}><Search size={20} aria-hidden="true" /></button>
+        <IconButton label="검색" type="submit" variant="ghost" disabled={draft.trim().length < MIN_QUERY_LENGTH}><Search size={20} aria-hidden="true" /></IconButton>
       </form>
       <div className="bfr-query-helpers" aria-label="빠른 검색어">
-        {queryHelpers.map((helper) => <button type="button" key={helper} onClick={() => search(helper)}>{helper}</button>)}
-        <button className="bfr-location-chip" aria-label="현재 위치로 가까운 매장 찾기" type="button" onClick={locate} disabled={location.status === "locating"}><LocateFixed size={14} />{location.status === "locating" ? "위치 확인 중" : "현재 위치"}</button>
+        {queryHelpers.map((helper) => <ChipButton key={helper} onClick={() => search(helper)}>{helper}</ChipButton>)}
+        <ChipButton aria-label="현재 위치로 가까운 매장 찾기" onClick={locate} disabled={location.status === "locating"}><LocateFixed size={14} />{location.status === "locating" ? "위치 확인 중" : "현재 위치"}</ChipButton>
       </div>
       {location.status === "denied" ? <p className="bfr-inline-status" role="status">위치 권한이 꺼져 있어 거리 대신 검색어로만 찾을 수 있어요.</p> : null}
       {location.status === "unavailable" ? <p className="bfr-inline-status" role="status">현재 위치를 확인하지 못했어요. 검색어로 매장을 찾아 주세요.</p> : null}

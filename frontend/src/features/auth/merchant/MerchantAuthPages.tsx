@@ -1,8 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { PageHeading } from "../../../design-system";
-import { Button } from "../../../design-system";
+import { Button, PageHeading, TextField } from "../../../design-system";
 import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./merchantSession";
 
 const PASSWORD_MIN_LENGTH = 15;
@@ -49,8 +48,8 @@ export function MerchantLoginPage() {
     <div className="console-auth">
       <PageHeading title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
-        <label htmlFor="merchant-login-id">아이디</label>
-        <input
+        <TextField
+          label="아이디"
           id="merchant-login-id"
           name="loginId"
           value={loginId}
@@ -58,21 +57,21 @@ export function MerchantLoginPage() {
           autoCapitalize="none"
           spellCheck={false}
           required
-          aria-invalid={failure !== null}
+          invalid={failure !== null}
           aria-describedby={failure ? "merchant-login-error" : undefined}
-          onChange={(event) => setLoginId(event.target.value)}
+          onValueChange={setLoginId}
         />
-        <label htmlFor="merchant-login-password">비밀번호</label>
-        <input
+        <TextField
+          label="비밀번호"
           id="merchant-login-password"
           name="password"
           type="password"
           value={password}
           autoComplete="current-password"
           required
-          aria-invalid={failure !== null}
+          invalid={failure !== null}
           aria-describedby={failure ? "merchant-login-error" : undefined}
-          onChange={(event) => setPassword(event.target.value)}
+          onValueChange={setPassword}
         />
         {failure ? (
           <p className="form-error" id="merchant-login-error" role="alert">
@@ -133,29 +132,28 @@ export function MerchantPasswordChangePage() {
         description="임시 비밀번호를 바꾸기 전에는 매장 화면을 사용할 수 없습니다."
       />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
-        <label htmlFor="merchant-current-password">임시 비밀번호</label>
-        <input
+        <TextField
+          label="임시 비밀번호"
           id="merchant-current-password"
           name="currentPassword"
           type="password"
           value={currentPassword}
           autoComplete="current-password"
           required
-          onChange={(event) => setCurrentPassword(event.target.value)}
+          onValueChange={setCurrentPassword}
         />
-        <label htmlFor="merchant-new-password">새 비밀번호</label>
-        <input
+        <TextField
+          label="새 비밀번호"
           id="merchant-new-password"
           name="newPassword"
           type="password"
           value={newPassword}
           autoComplete="new-password"
           required
-          aria-invalid={tooShort}
-          aria-describedby="merchant-new-password-hint"
-          onChange={(event) => setNewPassword(event.target.value)}
+          error={tooShort ? `${PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.` : undefined}
+          description={tooShort ? undefined : `${PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.`}
+          onValueChange={setNewPassword}
         />
-        <small id="merchant-new-password-hint">{PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.</small>
         {failure ? (
           <p className="form-error" id="merchant-password-error" role="alert">
             {code === "PASSWORD_POLICY_VIOLATION"

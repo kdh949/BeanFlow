@@ -120,7 +120,7 @@ describe("customer coupon selection", () => {
       </MemoryRouter>,
     );
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /2잔 가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /2잔 가능/ }));
     await user.click(await screen.findByRole("button", { name: /5,000.*주문하기/ }));
 
     expect(post.mock.calls[0]?.[0]).toBe("/me/order-quotes");

@@ -3,9 +3,7 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 
@@ -168,28 +166,19 @@ export function MerchantAccountsPage() {
         title="점주 계정 관리"
         description="로그인 ID exact 조회, 최초 계정 발급, 임시 비밀번호 재발급과 로그인 잠금 해제를 처리합니다."
       />
-      <div className="filter-row" role="group" aria-label="점주 계정 업무 선택">
-        <button type="button" className={mode === "lookup" ? "is-active" : ""} aria-pressed={mode === "lookup"} onClick={() => { setMode("lookup"); clearSensitiveResult(); }}>
-          계정 조회·복구
-        </button>
-        <button type="button" className={mode === "create" ? "is-active" : ""} aria-pressed={mode === "create"} onClick={() => { setMode("create"); clearSensitiveResult(); }}>
-          새 계정 발급
-        </button>
-      </div>
-
-      {mode === "lookup" ? (
+      <Tabs value={mode} onValueChange={(value) => { setMode(value as typeof mode); clearSensitiveResult(); }}>
+        <TabList label="점주 계정 업무 선택"><Tab value="lookup">계정 조회·복구</Tab><Tab value="create">새 계정 발급</Tab></TabList>
+      <TabPanel value="lookup">
         <>
           <form className="surface-card merchant-account-lookup" onSubmit={(event) => { event.preventDefault(); void lookup(); }}>
             <div className="lookup-fields">
-              <label htmlFor="merchant-login-id">점주 로그인 ID</label>
-              <input id="merchant-login-id" value={loginId} minLength={5} maxLength={32} required onChange={(event) => setLoginId(event.target.value)} />
-              <label htmlFor="merchant-access-reason">조회 사유</label>
-              <select id="merchant-access-reason" value={accessReason} required onChange={(event) => setAccessReason(event.target.value)}>
+              <TextField label="점주 로그인 ID" id="merchant-login-id" value={loginId} minLength={5} maxLength={32} required onValueChange={setLoginId} />
+              <SelectField label="조회 사유" id="merchant-access-reason" value={accessReason} required onValueChange={setAccessReason}>
                 <option value="">업무 사유 선택</option>
                 <option value="MERCHANT_ACCOUNT_RECOVERY">계정 복구 요청 확인</option>
                 <option value="MERCHANT_ACCOUNT_EXISTENCE_CHECK">계정 유무 확인</option>
                 <option value="MERCHANT_ACCOUNT_STATUS_REVIEW">계정 상태 확인</option>
-              </select>
+              </SelectField>
             </div>
             <Button type="submit" loading={lookingUp}><Search size={17} /> {lookingUp ? "조회 중" : "계정 조회"}</Button>
           </form>
@@ -218,8 +207,7 @@ export function MerchantAccountsPage() {
               <aside className="merchant-credential-actions">
                 <section className="surface-card action-panel">
                   <div className="operation-heading"><KeyRound aria-hidden="true" /><div><strong>임시 비밀번호 재발급</strong><small>성공 응답에서 한 번만 표시</small></div></div>
-                  <label htmlFor="reset-password-reason">임시 비밀번호 재발급 사유</label>
-                  <textarea id="reset-password-reason" value={resetReason} maxLength={200} required onChange={(event) => { setResetReason(event.target.value); setResetError(null); clearSensitiveResult(); resetIntent.current.rotate(); }} />
+                  <TextAreaField label="임시 비밀번호 재발급 사유" id="reset-password-reason" value={resetReason} maxLength={200} required onValueChange={(value) => { setResetReason(value); setResetError(null); clearSensitiveResult(); resetIntent.current.rotate(); }} />
                   <Button block loading={resetting} disabled={!resetReason.trim()} onClick={() => void resetTemporaryPassword()}>
                     {resetting ? "재발급 중" : "임시 비밀번호 재발급"}
                   </Button>
@@ -227,8 +215,7 @@ export function MerchantAccountsPage() {
                 </section>
                 <section className="surface-card action-panel">
                   <div className="operation-heading"><LockKeyholeOpen aria-hidden="true" /><div><strong>로그인 잠금 해제</strong><small>계정 잠금과 로그인 시도 차단을 함께 해제</small></div></div>
-                  <label htmlFor="unlock-reason">잠금 해제 사유</label>
-                  <textarea id="unlock-reason" value={unlockReason} maxLength={200} required onChange={(event) => { setUnlockReason(event.target.value); setUnlockError(null); setUnlocked(false); unlockIntent.current.rotate(); }} />
+                  <TextAreaField label="잠금 해제 사유" id="unlock-reason" value={unlockReason} maxLength={200} required onValueChange={(value) => { setUnlockReason(value); setUnlockError(null); setUnlocked(false); unlockIntent.current.rotate(); }} />
                   <Button variant="secondary" block loading={unlocking} disabled={!unlockReason.trim()} onClick={() => void releaseLock()}>
                     {unlocking ? "해제 중" : "로그인 잠금 해제"}
                   </Button>
@@ -239,21 +226,22 @@ export function MerchantAccountsPage() {
             </div>
           ) : null}
         </>
-      ) : (
+      </TabPanel>
+      <TabPanel value="create">
         <form className="surface-card operation-form merchant-account-create" onSubmit={(event) => { event.preventDefault(); void createAccount(); }}>
           <div className="operation-heading"><UserPlus aria-hidden="true" /><div><strong>점주 계정과 첫 매장 권한</strong><small>서버가 한 트랜잭션에서 함께 생성합니다.</small></div></div>
           <div className="account-create-grid">
-            <label htmlFor="new-merchant-login">새 로그인 ID<input id="new-merchant-login" value={newLoginId} minLength={5} maxLength={32} required onChange={(event) => { setNewLoginId(event.target.value); clearSensitiveResult(); createIntent.current.rotate(); }} /></label>
-            <label htmlFor="new-merchant-name">표시 이름<input id="new-merchant-name" value={displayName} maxLength={100} required onChange={(event) => { setDisplayName(event.target.value); clearSensitiveResult(); createIntent.current.rotate(); }} /></label>
-            <label htmlFor="new-merchant-store">첫 매장 ID<input id="new-merchant-store" value={storeId} required onChange={(event) => { setStoreId(event.target.value); clearSensitiveResult(); createIntent.current.rotate(); }} /></label>
-            <label htmlFor="new-merchant-role">첫 매장 역할<select id="new-merchant-role" value={membershipRole} onChange={(event) => { setMembershipRole(event.target.value as "OWNER" | "STAFF"); clearSensitiveResult(); createIntent.current.rotate(); }}><option value="OWNER">점주</option><option value="STAFF">직원</option></select></label>
+            <TextField label="새 로그인 ID" id="new-merchant-login" value={newLoginId} minLength={5} maxLength={32} required onValueChange={(value) => { setNewLoginId(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
+            <TextField label="표시 이름" id="new-merchant-name" value={displayName} maxLength={100} required onValueChange={(value) => { setDisplayName(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
+            <TextField label="첫 매장 ID" id="new-merchant-store" value={storeId} required onValueChange={(value) => { setStoreId(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
+            <SelectField label="첫 매장 역할" id="new-merchant-role" value={membershipRole} onValueChange={(value) => { setMembershipRole(value as "OWNER" | "STAFF"); clearSensitiveResult(); createIntent.current.rotate(); }}><option value="OWNER">점주</option><option value="STAFF">직원</option></SelectField>
           </div>
-          <label htmlFor="create-merchant-reason">발급 사유</label>
-          <textarea id="create-merchant-reason" value={createReason} maxLength={200} required onChange={(event) => { setCreateReason(event.target.value); clearSensitiveResult(); createIntent.current.rotate(); }} />
+          <TextAreaField label="발급 사유" id="create-merchant-reason" value={createReason} maxLength={200} required onValueChange={(value) => { setCreateReason(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
           <Button type="submit" loading={creating}>{creating ? "발급 중" : "점주 계정 발급"}</Button>
           {createError ? <ErrorState error={createError} /> : null}
         </form>
-      )}
+      </TabPanel>
+      </Tabs>
 
       {passwordResult ? <OneTimePasswordPanel result={passwordResult} onDismiss={clearSensitiveResult} /> : null}
     </div>

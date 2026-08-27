@@ -92,7 +92,7 @@ export const PointPolicyConflict: Story = {
 
 export const RestorationPolicies: Story = {
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "만료 혜택 복원" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "만료 혜택 복원" }));
     await userEvent.selectOptions(canvas.getByLabelText("복원 정책 조회 사유"), "BENEFIT_POLICY_REVIEW");
     await userEvent.click(canvas.getByRole("button", { name: "복원 정책 조회" }));
     await expect(await canvas.findByText("PARTIAL_REFUND")).toBeVisible();
@@ -102,7 +102,7 @@ export const RestorationPolicies: Story = {
 
 export const BrandCatalog: Story = {
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "브랜드" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "브랜드" }));
     await expect(await canvas.findByText("빈플로우 커피")).toBeVisible();
     await expect(canvas.getByText("소속 매장 12개")).toBeVisible();
   },
@@ -111,7 +111,7 @@ export const BrandCatalog: Story = {
 export const SearchIndexComplete: Story = {
   parameters: { msw: { handlers: [http.post("/api/v1/operations/search-index/rebuild", () => HttpResponse.json({ indexedStoreCount: 128, skippedStoreCount: 2, failedStoreIds: [], complete: true }))] } },
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "검색 색인" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "브랜드 변경 후 검색 정합성 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
     await expect(await canvas.findByText("스냅샷 범위 재생성 완료")).toBeVisible();
@@ -121,7 +121,7 @@ export const SearchIndexComplete: Story = {
 export const SearchIndexPartial: Story = {
   parameters: { msw: { handlers: [http.post("/api/v1/operations/search-index/rebuild", () => HttpResponse.json({ indexedStoreCount: 127, skippedStoreCount: 2, failedStoreIds: [ids.store], complete: false }))] } },
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "검색 색인" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "매장 검색 색인 장애 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
     await expect(await canvas.findByText("부분 완료 · 재조정 필요")).toBeVisible();
@@ -132,7 +132,7 @@ export const SearchIndexPartial: Story = {
 export const SearchIndexInProgress: Story = {
   parameters: { msw: { handlers: [http.post("/api/v1/operations/search-index/rebuild", () => HttpResponse.json({ code: "IDEMPOTENCY_REQUEST_IN_PROGRESS", message: "같은 재생성 요청이 아직 실행 중입니다. Retry-After 이후 다시 확인해 주세요.", correlationId: "REQ-INDEX-409" }, { status: 409, headers: { "Retry-After": "5" } }))] } },
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "검색 색인" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "매장 검색 색인 장애 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
     await expect(await canvas.findByText("요청을 처리하고 있습니다")).toBeVisible();

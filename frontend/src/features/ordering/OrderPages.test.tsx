@@ -339,7 +339,7 @@ describe("customer reorder", () => {
     renderAt("/app/orders/BF-7K3M-9Q2P");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(screen.getByRole("button", { name: "이 시간으로 주문" }));
 
     await waitFor(() => expect(post).toHaveBeenCalled());
@@ -375,7 +375,7 @@ describe("customer reorder", () => {
     renderAt("/app/orders/BF-7K3M-9Q2P");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(screen.getByRole("button", { name: "이 시간으로 주문" }));
 
     expect(await screen.findByText("지금 그대로 다시 주문할 수 없어요")).toBeInTheDocument();

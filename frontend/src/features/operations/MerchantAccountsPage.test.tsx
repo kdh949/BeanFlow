@@ -89,7 +89,7 @@ describe("MerchantAccountsPage", () => {
     }, 201));
 
     render(<MemoryRouter><MerchantAccountsPage /></MemoryRouter>);
-    await userEvent.click(screen.getByRole("button", { name: "새 계정 발급" }));
+    await userEvent.click(screen.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(screen.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(screen.getByLabelText("표시 이름"), "신규 점주");
     await userEvent.type(screen.getByLabelText("첫 매장 ID"), storeId);

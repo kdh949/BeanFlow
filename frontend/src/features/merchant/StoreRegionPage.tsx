@@ -3,9 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, RadioCard, RadioGroup, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
@@ -147,15 +145,15 @@ export function StoreRegionPage() {
                 void search(draftQuery);
               }}
             >
-              <label htmlFor="region-query">지역 검색</label>
               <div>
                 <Search size={18} aria-hidden="true" />
-                <input
+                <TextField
+                  label="지역 검색"
                   id="region-query"
                   value={draftQuery}
                   placeholder="예: 역삼동, 강남구"
                   required
-                  onChange={(event) => setDraftQuery(event.target.value)}
+                  onValueChange={setDraftQuery}
                 />
                 <Button type="submit" loading={searching}>{searching ? "검색 중" : "검색"}</Button>
               </div>
@@ -170,28 +168,10 @@ export function StoreRegionPage() {
               />
             ) : null}
             {page?.items.length ? (
-              <fieldset className="region-results">
-                <legend><strong>{submittedQuery}</strong> 검색 결과</legend>
-                {page.items.map((region) => (
-                  <label key={region.code} className={selectedRegion?.code === region.code ? "is-selected" : ""}>
-                    <input
-                      type="radio"
-                      name="region"
-                      checked={selectedRegion?.code === region.code}
-                      onChange={() => {
-                        setSelectedRegion(region);
-                        setSaved(null);
-                        setSaveError(null);
-                        intent.current.rotate();
-                      }}
-                      aria-label={`${region.fullName} ${region.code}`}
-                    />
-                    <span>
-                      <strong>{region.fullName}</strong>
-                      <small>{region.code}</small>
-                    </span>
-                  </label>
-                ))}
+              <div className="region-results">
+                <RadioGroup label={`${submittedQuery} 검색 결과`} value={selectedRegion?.code ?? ""} onValueChange={(value) => { setSelectedRegion(page.items.find((region) => region.code === value) ?? null); setSaved(null); setSaveError(null); intent.current.rotate(); }}>
+                  {page.items.map((region) => <RadioCard key={region.code} value={region.code} label={region.fullName} description={region.code} />)}
+                </RadioGroup>
                 {page.page.nextCursor ? (
                   <Button
                     type="button"
@@ -202,7 +182,7 @@ export function StoreRegionPage() {
                     {loadingMore ? "더 불러오는 중" : "지역 더 보기"}
                   </Button>
                 ) : null}
-              </fieldset>
+              </div>
             ) : null}
           </section>
 
@@ -219,15 +199,15 @@ export function StoreRegionPage() {
             ) : (
               <p className="form-footnote">검색 결과에서 지역을 선택해 주세요. 검색어 자체는 저장되지 않습니다.</p>
             )}
-            <label htmlFor="region-reason">지정 사유</label>
-            <textarea
+            <TextAreaField
+              label="지정 사유"
               id="region-reason"
               value={reason}
               maxLength={1000}
               required
               placeholder="예: 사업자등록증상 소재지 기준"
-              onChange={(event) => {
-                setReason(event.target.value);
+              onValueChange={(value) => {
+                setReason(value);
                 setSaved(null);
                 setSaveError(null);
                 intent.current.rotate();

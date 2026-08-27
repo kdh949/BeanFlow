@@ -205,7 +205,7 @@ describe("store identity comes from the server", () => {
     renderCart();
 
     expect(await screen.findByText("성수 로스터리에서 픽업합니다.")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /가능/ })).toBeEnabled();
+    expect(await screen.findByRole("radio", { name: /가능/ })).toBeEnabled();
   });
 });
 
@@ -269,7 +269,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /4,500.*주문하기/ }));
 
     expect(await screen.findByText("고른 픽업 시간이 방금 마감됐어요")).toBeInTheDocument();
@@ -296,7 +296,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
@@ -331,7 +331,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "메뉴 menu-1 수량 늘리기" }));
 
@@ -362,7 +362,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByText("주문 금액과 조건이 변경됐어요")).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { Button } from "../../design-system";
+import { Button, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { won } from "../../lib/format";
 
@@ -86,37 +86,37 @@ export function DisputeFilingPanel({
         void submit();
       }}
     >
-      <label htmlFor={`dispute-amount-${settlementItemId}`}>기대하는 조정 금액 (원)</label>
-      <input
+      <TextField
+        label="기대하는 조정 금액 (원)"
         id={`dispute-amount-${settlementItemId}`}
         type="number"
-        value={expectedAdjustmentKrw}
+        value={String(expectedAdjustmentKrw)}
         required
-        onChange={(event) => {
-          setExpectedAdjustmentKrw(Number(event.target.value));
+        description="서버가 확정 명세와 한도를 다시 검증합니다. 입력값이 승인 금액이 되지는 않습니다."
+        onValueChange={(value) => {
+          setExpectedAdjustmentKrw(Number(value));
           intent.current.rotate();
         }}
       />
-      <small>서버가 확정 명세와 한도를 다시 검증합니다. 입력값이 승인 금액이 되지는 않습니다.</small>
-      <label htmlFor={`dispute-reason-${settlementItemId}`}>사유</label>
-      <textarea
+      <TextAreaField
+        label="사유"
         id={`dispute-reason-${settlementItemId}`}
         value={reason}
         maxLength={1000}
         required
-        onChange={(event) => {
-          setReason(event.target.value);
+        onValueChange={(value) => {
+          setReason(value);
           intent.current.rotate();
         }}
       />
-      <label htmlFor={`dispute-evidence-${settlementItemId}`}>증빙 위치 (한 줄에 하나)</label>
-      <textarea
+      <TextAreaField
+        label="증빙 위치 (한 줄에 하나)"
         id={`dispute-evidence-${settlementItemId}`}
         value={evidence}
         required
         placeholder="영수증 보관 위치나 내부 기록 위치를 적어 주세요"
-        onChange={(event) => {
-          setEvidence(event.target.value);
+        onValueChange={(value) => {
+          setEvidence(value);
           intent.current.rotate();
         }}
       />

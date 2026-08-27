@@ -90,7 +90,7 @@ describe("customer notification inbox", () => {
     const put = vi.spyOn(customerApi, "PUT").mockResolvedValue(ok({ marketingOptIn: true }) as never);
 
     renderInbox();
-    const preference = await screen.findByRole("checkbox", { name: /마케팅 알림 받기/ });
+    const preference = await screen.findByRole("switch", { name: /마케팅 알림 받기/ });
     expect(preference).not.toBeChecked();
 
     await userEvent.click(preference);
