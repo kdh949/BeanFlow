@@ -27,30 +27,40 @@ export function StoreCatalogPage() {
   const [saved, setSaved] = useState(false);
   const intent = useRef(new SubmissionIntent());
   const storeId = selected?.storeId ?? null;
+  const policyRequest = useRef(0);
+  const activeStoreId = useRef(storeId);
+  activeStoreId.current = storeId;
 
   const loadPolicy = useCallback(async () => {
     if (!storeId) return;
+    const requestedStoreId = storeId;
+    const requestId = ++policyRequest.current;
     setLoading(true);
     setLoadError(null);
     setSaveError(null);
     setSaved(false);
     try {
       const next = unwrap(await merchantApi.GET("/stores/{storeId}/ordering-policy", {
-        params: { path: { storeId } },
+        params: { path: { storeId: requestedStoreId } },
       }));
+      if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
       intent.current.rotate();
     } catch (failure) {
+      if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
       setPolicy(null);
       setLoadError(failure);
     } finally {
-      setLoading(false);
+      if (policyRequest.current === requestId && activeStoreId.current === requestedStoreId) {
+        setLoading(false);
+      }
     }
   }, [storeId]);
 
   useEffect(() => {
+    policyRequest.current += 1;
     setPolicy(null);
     if (storeId) void loadPolicy();
   }, [storeId, loadPolicy]);
@@ -63,7 +73,7 @@ export function StoreCatalogPage() {
   }
 
   async function save() {
-    if (!storeId || !policy) return;
+    if (!storeId || !policy || policy.storeId !== storeId) return;
     const body = { acceptingOrders, pickupEnabled, expectedVersion: policy.version };
     const fingerprint = JSON.stringify({ storeId, ...body });
     setSaving(true);

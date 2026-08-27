@@ -24,7 +24,7 @@ CREATE TABLE merchant_store_ordering_policy_command (
     response_json text NOT NULL CHECK (length(btrim(response_json)) > 0),
     created_at timestamptz NOT NULL,
     retention_expires_at timestamptz NOT NULL,
-    UNIQUE (actor_id, idempotency_key),
+    UNIQUE (actor_id, operation, idempotency_key),
     CONSTRAINT ck_store_ordering_policy_command_retention
         CHECK (retention_expires_at = created_at + interval '90 days')
 );
