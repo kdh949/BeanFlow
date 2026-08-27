@@ -137,6 +137,11 @@ transaction 안에 있으며 Provider 호출이 없으므로 ADR-064의 command-
 
 - 같은 actor·operation·key·payload는 최초 status/body를 재생한다.
 - 같은 key의 다른 payload는 `IDEMPOTENCY_KEY_REUSED` 409다.
+- command ledger의 DB uniqueness는 `actor_id + operation + idempotency_key`이며 Store ID는 scope에
+  포함하지 않는다. 서로 다른 Store의 같은 actor·operation·key도 membership shared lock 뒤 동일한
+  transaction-scoped advisory lock으로 직렬화한 다음 replay를 다시 읽고, 그 뒤에만 Store commerce-root
+  exclusive lock을 획득한다. 따라서 concurrent changed-payload 재사용은 unique violation/503이 아니라
+  결정적인 `IDEMPOTENCY_KEY_REUSED` 409다.
 - rollback된 명령은 terminal command row, owner 변경, 검색 색인 또는 Audit를 남기지 않는다.
 - command record는 BR-26 보존 규칙과 bounded cleanup을 따른다.
 

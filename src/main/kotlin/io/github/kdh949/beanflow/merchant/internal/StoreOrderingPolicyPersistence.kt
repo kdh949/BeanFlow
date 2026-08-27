@@ -17,8 +17,21 @@ internal data class StoreOrderingPolicyCommandRecord(
 internal class StoreOrderingPolicyCommandRepository(
     private val jdbc: JdbcTemplate,
 ) {
+    fun lockCommandKey(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+    ) {
+        jdbc.queryForObject(
+            "select pg_advisory_xact_lock(hashtextextended(?, 0))",
+            Any::class.java,
+            "merchant-store-ordering-policy:$actorId:$operation:$idempotencyKey",
+        )
+    }
+
     fun findCommand(
         actorId: UUID,
+        operation: String,
         idempotencyKey: String,
     ): StoreOrderingPolicyCommandRecord? =
         jdbc
@@ -26,10 +39,11 @@ internal class StoreOrderingPolicyCommandRepository(
                 """
                 SELECT payload_hash, response_json
                   FROM merchant_store_ordering_policy_command
-                 WHERE actor_id = ? AND idempotency_key = ?
+                 WHERE actor_id = ? AND operation = ? AND idempotency_key = ?
                 """.trimIndent(),
                 { row, _ -> StoreOrderingPolicyCommandRecord(row.getString("payload_hash"), row.getString("response_json")) },
                 actorId,
+                operation,
                 idempotencyKey,
             ).firstOrNull()
 
