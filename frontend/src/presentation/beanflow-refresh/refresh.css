@@ -193,7 +193,7 @@
 .bfr-refund-context, .bfr-refund-lines, .bfr-refund-summary, .bfr-refund-form { margin-bottom: 14px; padding: 18px; border: 1px solid var(--slate-200); border-radius: 11px; background: var(--color-white); }
 .bfr-refund-context > header, .bfr-refund-lines > header { padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--slate-200); }
 .bfr-refund-context h2, .bfr-refund-lines h2 { font-size: 17px; }
-.bfr-refund-context > dl { margin: 14px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.bfr-refund-context > dl { margin: 14px 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .bfr-refund-context dt, .bfr-refund-lines dt { color: var(--slate-600); font-size: 11px; }
 .bfr-refund-context dd, .bfr-refund-lines dd { margin: 4px 0 0; font-weight: 750; }
 .bfr-refund-context > p { color: var(--slate-600); font-size: 11px; }
@@ -227,8 +227,6 @@
 
 /* Second parity pass: match the reference block order, not the retired page hierarchy. */
 .bfr-cart .bfr-mobile-topbar { height: 44px; margin-bottom: 4px; }
-.bfr-cart .bf-page-heading { margin-bottom: 6px; }
-.bfr-cart .bf-page-heading h1 { font-size: 20px; }
 .bfr-cart .bfr-cart-store { min-height: 44px; padding-block: 8px; }
 .bfr-cart .bfr-cart-lines { padding-block: 8px; }
 .bfr-cart .bfr-cart-lines h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -311,8 +309,6 @@
 .bfr-customer-tabs a.active svg { fill: currentColor; stroke-width: 1.8; }
 .bfr-customer-tabs a.active::before { width: 48px; }
 .bfr-page { padding: 18px 18px 86px; }
-.bf-page-heading { margin-bottom: 14px; gap: 12px; }
-.bf-page-heading h1 { font-size: 24px; line-height: 1.18; }
 .bfr-back-link { min-height: var(--tap-min); margin-bottom: 8px; font-size: 12px; }
 .bf-action { min-height: var(--tap-min); padding-inline: 14px; border-radius: 8px; font-size: 12px; }
 .bf-action--sm { min-height: var(--tap-min); padding-inline: 10px; font-size: 11px; }
@@ -408,8 +404,6 @@
 
 /* Cart, checkout and order detail, images 1, 2 and 5. */
 .bfr-cart, .bfr-checkout, .bfr-order-detail { background: var(--slate-50); }
-.bfr-cart .bf-page-heading { margin-bottom: 8px; }
-.bfr-cart .bf-page-heading h1 { font-size: 22px; }
 .bfr-cart-store, .bfr-cart-lines, .bfr-slot-section, .bfr-coupon-row, .bfr-transaction-card, .bfr-checkout-card, .bfr-order-status-card, .bf-action-panel { margin-bottom: 8px; padding: 12px; border-radius: 9px; }
 .bfr-cart-store { min-height: 48px; align-items: center; font-size: 10px; }
 .bfr-cart-store > div { display: flex; align-items: center; gap: 7px; }
@@ -485,8 +479,6 @@
 .bfr-store-actor { font-size: 10px; }
 .bfr-store-content { padding: 22px 24px; }
 .bfr-merchant-page { max-width: none; }
-.bfr-merchant-page .bf-page-heading { margin-bottom: 16px; }
-.bfr-merchant-page .bf-page-heading h1 { font-size: 25px; }
 .bfr-board-toolbar { margin-bottom: 12px; }
 .bfr-order-board { gap: 10px; }
 .bfr-board-lane { border-radius: 9px; }

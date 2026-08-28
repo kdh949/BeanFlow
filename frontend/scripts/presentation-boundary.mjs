@@ -56,6 +56,10 @@ const DESIGN_SYSTEM_OWNED_SELECTORS = [
   ".panel-heading",
 ];
 
+const CANONICAL_PATTERN_SELECTORS = [
+  ".bf-page-heading",
+];
+
 const APPLICATION_LAYER_PREFIXES = [
   "src/api/",
   "src/auth/",
@@ -169,6 +173,23 @@ export function findParallelControlStyleViolations(sourceFile, styles) {
   return violations;
 }
 
+export function findCanonicalPatternStyleViolations(sourceFile, styles) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile.startsWith("src/design-system/")) return [];
+
+  const violations = [];
+  for (const match of styles.matchAll(/([^{}]+)\{/g)) {
+    const selectorGroup = match[1].trim();
+    if (selectorGroup.startsWith("@")) continue;
+    for (const selector of selectorGroup.split(",").map((item) => item.trim())) {
+      if (CANONICAL_PATTERN_SELECTORS.some((canonical) => containsSelector(selector, canonical))) {
+        violations.push({ kind: "canonical-pattern-css", selector });
+      }
+    }
+  }
+  return violations;
+}
+
 export function findLegacyArtifactViolations(existingFiles, styles) {
   const violations = REMOVED_TARGET_FILES.filter((file) => existingFiles.has(file)).map((file) => ({ kind: "legacy-file", file }));
   for (const selector of REMOVED_TARGET_SELECTORS) {
@@ -183,6 +204,11 @@ export function findLegacyArtifactViolations(existingFiles, styles) {
 function definesSelector(styles, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?:^|})\\s*${escaped}(?:\\s*[,:{])`, "m").test(styles);
+}
+
+function containsSelector(selector, canonical) {
+  const escaped = canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${escaped}(?=$|[\\s>+~.#:\\[])`).test(selector);
 }
 
 function collectFiles(directory) {
@@ -223,8 +249,11 @@ function run() {
     .filter((file) => /\.css$/.test(file));
   violations.push(...productStyleFiles.flatMap((file) => {
     const relative = path.relative(frontendRoot, file);
-    return findParallelControlStyleViolations(relative, fs.readFileSync(file, "utf8"))
-      .map((violation) => ({ file: relative, ...violation }));
+    const styles = fs.readFileSync(file, "utf8");
+    return [
+      ...findParallelControlStyleViolations(relative, styles),
+      ...findCanonicalPatternStyleViolations(relative, styles),
+    ].map((violation) => ({ file: relative, ...violation }));
   }));
   const existingFiles = new Set(collectFiles(path.join(frontendRoot, "src")).map((file) => path.relative(frontendRoot, file).replaceAll(path.sep, "/")));
   violations.push(...findLegacyArtifactViolations(existingFiles, fs.readFileSync(path.join(frontendRoot, "src/styles.css"), "utf8")));

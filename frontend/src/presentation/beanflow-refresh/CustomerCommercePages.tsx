@@ -19,8 +19,8 @@ import { type CartLine, cart, cartItemCount, useCart } from "../../features/orde
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "../../features/ordering/orderConflicts";
 import { useResource } from "../../features/shared/useResource";
 import { won } from "../../lib/format";
-import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar, RefreshPageHeading } from "./RefreshShared";
-import { Button, ButtonLink, Checkbox, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
+import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
+import { Button, ButtonLink, Checkbox, PageHeading, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
 
 type CustomerStore = components["schemas"]["CustomerStore"];
 type Menu = components["schemas"]["Menu"];
@@ -123,8 +123,8 @@ type QuoteState = { status: "idle" } | { status: "loading" } | { status: "ready"
 
 export function RefreshCartPage() {
   const state = useCart();
-  if (state.status === "corrupt") return <div className="bfr-page"><RefreshPageHeading title="장바구니" /><div className="bfr-decision" role="alert"><strong>장바구니 정보를 읽지 못했어요</strong><p>이 기기에 저장된 정보가 손상됐습니다. 비운 뒤 다시 담아 주세요.</p><Button variant="brand" onClick={() => cart.clear()}>장바구니 비우기</Button></div></div>;
-  if (state.status === "empty") return <div className="bfr-page"><RefreshPageHeading title="장바구니" /><RefreshEmpty title="담은 메뉴가 없어요" description="매장을 골라 메뉴를 담으면 여기에서 픽업 시간을 정할 수 있어요." action={<ButtonLink variant="brand" to="/app/stores">매장 찾기</ButtonLink>} /></div>;
+  if (state.status === "corrupt") return <div className="bfr-page"><PageHeading title="장바구니" /><div className="bfr-decision" role="alert"><strong>장바구니 정보를 읽지 못했어요</strong><p>이 기기에 저장된 정보가 손상됐습니다. 비운 뒤 다시 담아 주세요.</p><Button variant="brand" onClick={() => cart.clear()}>장바구니 비우기</Button></div></div>;
+  if (state.status === "empty") return <div className="bfr-page"><PageHeading title="장바구니" /><RefreshEmpty title="담은 메뉴가 없어요" description="매장을 골라 메뉴를 담으면 여기에서 픽업 시간을 정할 수 있어요." action={<ButtonLink variant="brand" to="/app/stores">매장 찾기</ButtonLink>} /></div>;
   return <RefreshCartContents storeId={state.cart.storeId} savedStoreName={state.cart.storeName} lines={state.cart.lines} />;
 }
 
@@ -177,7 +177,7 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
   return (
     <div className="bfr-page bfr-cart bfr-has-page-topbar">
       <RefreshMobileTopbar title="BeanFlow" brand />
-      <RefreshPageHeading title="장바구니" />
+      <PageHeading title="장바구니" />
       {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span> : null}</section> : null}
       <section className="bfr-cart-lines" aria-label="담은 메뉴">
         <h2>주문 메뉴</h2>{lines.map((line, index) => <div key={`${line.menuId}-${line.optionIds.join("-")}`}><span className="bfr-cart-line-media">{line.display.imageUrl ? <img src={line.display.imageUrl} alt="" /> : <Coffee size={21} aria-hidden="true" />}</span><span><strong>{line.display.menuName}</strong><small>{line.display.optionNames.join(" · ") || "기본 옵션"}</small></span><QuantityStepper value={line.quantity} min={0} label={`${line.display.menuName} 수량`} onChange={(value) => cart.setQuantity(index, value)} /><b>{quote ? won.format(quote.lines[index]?.lineTotalKrw ?? 0) : <Trash2 size={17} />}</b></div>)}
