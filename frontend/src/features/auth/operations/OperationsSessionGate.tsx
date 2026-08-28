@@ -84,7 +84,7 @@ export function OperationsSessionGate({
       <div className="console-page state-page operations-login-state">
         <EmptyState
           title="운영자 로그인이 필요합니다"
-          description="BeanFlow 운영 권한이 연결된 조직 계정으로 로그인해 주세요. 액세스 토큰은 브라우저 메모리에만 유지됩니다."
+          description="BeanFlow 운영 권한이 연결된 조직 계정으로 로그인해 주세요."
           action={(
             <Button onClick={() => {
               setLoginError(null);

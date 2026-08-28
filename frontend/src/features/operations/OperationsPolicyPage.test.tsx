@@ -103,7 +103,7 @@ describe("OperationsPolicyPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(screen.getByLabelText("재생성 사유"), "브랜드 변경 후 검색 정합성 복구");
     await userEvent.click(screen.getByRole("button", { name: "검색 색인 재생성" }));
-    expect(await screen.findByText("부분 완료 · 재조정 필요")).toBeVisible();
+    expect(await screen.findByText("일부 매장 완료 · 추가 확인 필요")).toBeVisible();
     expect(screen.getByText("실패 매장 1개")).toBeVisible();
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
   });

@@ -55,7 +55,7 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 
 | Pattern | Owner | Notes |
 |---|---|---|
-| `PageHeading` | design system | source에 없던 eyebrow 없이 title, description, action만 구성 |
+| `PageHeading` | design system | source에 없던 eyebrow 없이 title과 optional action만 구성 |
 | `LoadingState`, `EmptyState`, `SuccessMark` | design system | presentation-safe feedback와 결과 mark 렌더링 |
 | `ErrorState`, `requestErrorPresentation` | shared presentation | 알려진 `ApiRequestError`만 안전한 문구로 변환하고 correlation reference 보존 |
 | `DomainStatusText` | shared presentation | BeanFlow state를 사용자 label과 visual tone으로 변환하고 unknown code 보존 |

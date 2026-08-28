@@ -117,9 +117,7 @@ export function StoreRegionPage() {
   return (
     <div className="console-page">
       <PageHeading
-
         title="매장 지역 설정"
-        description="법정동 지역을 검색해 매장의 검색 노출 기준 지역을 지정합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
       />
 
@@ -197,7 +195,7 @@ export function StoreRegionPage() {
                 <div><strong>{selectedRegion.fullName}</strong><small>{selectedRegion.code}</small></div>
               </div>
             ) : (
-              <p className="form-footnote">검색 결과에서 지역을 선택해 주세요. 검색어 자체는 저장되지 않습니다.</p>
+              <p className="form-footnote">검색 결과에서 지역을 선택해 주세요.</p>
             )}
             <TextAreaField
               label="지정 사유"
@@ -231,7 +229,7 @@ export function StoreRegionPage() {
               </div>
             ) : null}
             <p className="form-footnote">
-              현재 지정값 조회 API는 제공되지 않습니다. 이 화면은 이번 저장 응답만 표시하며, 새로고침 후 기존 값을 추정하지 않습니다.
+              저장한 지역은 완료 메시지에서 확인할 수 있어요. 다시 변경하려면 지역을 새로 검색해 주세요.
             </p>
           </aside>
         </div>

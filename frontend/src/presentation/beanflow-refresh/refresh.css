@@ -229,7 +229,6 @@
 .bfr-cart .bfr-mobile-topbar { height: 44px; margin-bottom: 4px; }
 .bfr-cart .bf-page-heading { margin-bottom: 6px; }
 .bfr-cart .bf-page-heading h1 { font-size: 20px; }
-.bfr-cart .bf-page-heading p { margin-top: 2px; font-size: 9px; }
 .bfr-cart .bfr-cart-store { min-height: 44px; padding-block: 8px; }
 .bfr-cart .bfr-cart-lines { padding-block: 8px; }
 .bfr-cart .bfr-cart-lines h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -314,7 +313,6 @@
 .bfr-page { padding: 18px 18px 86px; }
 .bf-page-heading { margin-bottom: 14px; gap: 12px; }
 .bf-page-heading h1 { font-size: 24px; line-height: 1.18; }
-.bf-page-heading p { margin-top: 5px; font-size: 12px; line-height: 1.45; }
 .bfr-back-link { min-height: var(--tap-min); margin-bottom: 8px; font-size: 12px; }
 .bf-action { min-height: var(--tap-min); padding-inline: 14px; border-radius: 8px; font-size: 12px; }
 .bf-action--sm { min-height: var(--tap-min); padding-inline: 10px; font-size: 11px; }
@@ -489,7 +487,6 @@
 .bfr-merchant-page { max-width: none; }
 .bfr-merchant-page .bf-page-heading { margin-bottom: 16px; }
 .bfr-merchant-page .bf-page-heading h1 { font-size: 25px; }
-.bfr-merchant-page .bf-page-heading p { font-size: 11px; }
 .bfr-board-toolbar { margin-bottom: 12px; }
 .bfr-order-board { gap: 10px; }
 .bfr-board-lane { border-radius: 9px; }

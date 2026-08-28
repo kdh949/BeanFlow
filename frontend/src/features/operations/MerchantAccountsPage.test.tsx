@@ -88,7 +88,7 @@ describe("MerchantAccountsPage", () => {
       temporaryPasswordExpiresAt: "2026-08-24T18:00:00+09:00",
     }, 201));
 
-    render(<MemoryRouter><MerchantAccountsPage /></MemoryRouter>);
+    const view = render(<MemoryRouter><MerchantAccountsPage /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(screen.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(screen.getByLabelText("표시 이름"), "신규 점주");
@@ -107,5 +107,15 @@ describe("MerchantAccountsPage", () => {
       reason: "신규 가맹 계약 승인",
     });
     expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain("NEW_TEMPORARY_PASSWORD_00000001");
+    expect(screen.getByRole("heading", { name: "임시 비밀번호" })).toBeVisible();
+    expect(screen.getByText(/^만료 /)).toBeVisible();
+    expect(screen.queryByText(/티켓·로그|브라우저 저장소|지금 전달/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "화면에서 지우기" }));
+    expect(screen.queryByText("NEW_TEMPORARY_PASSWORD_00000001")).not.toBeInTheDocument();
+
+    view.unmount();
+    render(<MemoryRouter><MerchantAccountsPage /></MemoryRouter>);
+    expect(screen.queryByText("NEW_TEMPORARY_PASSWORD_00000001")).not.toBeInTheDocument();
   });
 });

@@ -29,10 +29,9 @@ export function CustomerMyPage() {
 
   return (
     <div className="customer-page my-page">
-      <PageHeading title="내 정보" description="로그인한 계정과 주문·혜택 화면으로 이동할 수 있어요." />
+      <PageHeading title="내 정보" />
       <section className="surface-card my-identity">
         <strong>{session.actor.displayName}</strong>
-        <span>고객 계정으로 로그인되어 있습니다.</span>
       </section>
       <nav className="my-links" aria-label="내 정보 바로가기">
         <Link className="surface-card my-link" to="/app/orders"><ReceiptText size={19} /><span>주문 내역</span></Link>
@@ -45,7 +44,7 @@ export function CustomerMyPage() {
       <Button variant="secondary" block loading={signingOut} onClick={() => void signOut()}>
         <LogOut size={17} /> {signingOut ? "로그아웃 중" : "로그아웃"}
       </Button>
-      <p className="form-footnote">로그아웃하면 이 기기의 장바구니와 진행 중이던 요청 키가 함께 지워집니다.</p>
+      <p className="form-footnote">로그아웃하면 이 기기에 담아 둔 장바구니도 함께 비워져요.</p>
     </div>
   );
 }

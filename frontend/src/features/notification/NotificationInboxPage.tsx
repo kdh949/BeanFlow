@@ -74,7 +74,7 @@ export function NotificationInboxPage() {
 
   return (
     <div className="customer-page notification-page">
-      <PageHeading title="알림" description="주문과 혜택 소식을 안전한 고객용 내용으로 확인하세요." />
+      <PageHeading title="알림" />
       <NotificationPreferenceCard />
       {!page && !listError ? <LoadingState label="알림을 불러오는 중" /> : null}
       {listError ? <ErrorState error={listError} retry={() => void load()} /> : null}
@@ -83,7 +83,7 @@ export function NotificationInboxPage() {
       ) : null}
       {readError ? (
         <div className="form-error" role="alert">
-          읽음 상태를 저장하지 못했습니다. 알림 내용은 그대로 유지되며 다시 시도할 수 있습니다.
+          읽음으로 표시하지 못했어요. 알림은 그대로 남아 있으니 다시 시도해 주세요.
         </div>
       ) : null}
       {page?.items.length ? (
@@ -196,7 +196,7 @@ function NotificationPreferenceCard() {
       ) : null}
       {error ? (
         <div className="notification-preference-error" role="alert">
-          <p>마케팅 알림 수신 설정을 확인하거나 저장하지 못했습니다. 현재 설정을 임의로 바꾸지 않았습니다.</p>
+          <p>알림 설정을 확인하지 못했어요. 다시 불러와 현재 설정을 확인해 주세요.</p>
           <Button variant="secondary" size="sm" onClick={() => void load()}>다시 시도</Button>
         </div>
       ) : null}

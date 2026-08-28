@@ -23,10 +23,10 @@ function OverviewCard({ icon, label, value, hint }: { icon: ReactNode; label: st
 export function OpsDashboardPage() {
   return (
     <div className="console-page">
-      <PageHeading title="플랫폼 운영 현황" description="금전 조정과 보상 복구를 서버 소유 상태로 확인합니다." />
+      <PageHeading title="플랫폼 운영 현황" />
       <section className="metric-grid">
         <OverviewCard icon={<RotateCcw />} label="환불" value="매장 콘솔" hint="주문번호와 품목으로 실행하고 운영 화면은 조회만 담당" />
-        <OverviewCard icon={<AlertTriangle />} label="미확정 결과" value="UNKNOWN 유지" hint="성공이나 실패로 추정하지 않음" />
+        <OverviewCard icon={<AlertTriangle />} label="미확정 결과" value="확인 필요" hint="확인 전까지 미확정 상태 유지" />
         <OverviewCard icon={<CheckCircle2 />} label="감사 접근" value="사유 필수" hint="운영자 보상 조회 기록" />
       </section>
       <section className="console-shortcuts">
@@ -50,10 +50,10 @@ export function OpsOrderPage() {
     } catch (failure) { setError(failure); } finally { setLoading(false); }
   }
   return <div className="console-page">
-    <PageHeading title="주문 보상 조회" description="권한 있는 운영자가 감사 사유를 남긴 뒤 상세 복구 단계를 확인합니다." />
-    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 번호" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="UUID 주문 번호" /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
+    <PageHeading title="주문 보상 조회" />
+    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 ID" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="UUID 입력" /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
     {loading ? <LoadingState label="보상 상태를 조회하는 중" /> : null}{error ? <ErrorState error={error} /> : null}
-    {!result && !loading && !error ? <EmptyState title="감사 조회 대기" description="주문 번호와 업무상 접근 사유가 모두 필요합니다." /> : null}
+    {!result && !loading && !error ? <EmptyState title="감사 조회 대기" description="주문 ID와 업무상 접근 사유가 모두 필요합니다." /> : null}
     {result ? <CompensationResult result={result} /> : null}
   </div>;
 }

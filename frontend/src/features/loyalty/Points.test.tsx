@@ -49,7 +49,7 @@ describe("customer points", () => {
 
     renderPoints();
 
-    expect(await screen.findByText(/잔액이 0원이라는 뜻은 아니며/)).toBeInTheDocument();
+    expect(await screen.findByText(/정확한 포인트 잔액을 확인할 수 없어/)).toBeInTheDocument();
     expect(screen.queryByText("0P")).not.toBeInTheDocument();
     expect(screen.queryByText("포인트 내역")).not.toBeInTheDocument();
   });

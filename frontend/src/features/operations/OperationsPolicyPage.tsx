@@ -28,11 +28,7 @@ export function OperationsPolicyPage() {
   const [workspace, setWorkspace] = useState<Workspace>("points");
   return (
     <div className="console-page operations-policy-page">
-      <PageHeading
-
-        title="운영 정책 관리"
-        description="포인트·만료 혜택 정책, 브랜드와 매장 검색 색인을 실제 서버 상태 기준으로 관리합니다."
-      />
+      <PageHeading title="운영 정책 관리" />
       <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
         <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
         <TabPanel value="points"><PointPolicyWorkspace /></TabPanel>
@@ -122,7 +118,7 @@ function PointPolicyWorkspace() {
   return (
     <section className="policy-workspace" aria-labelledby="point-policy-title">
       <div className="surface-card policy-intro-card">
-        <div><span className="context-label">공통 기본값</span><h2 id="point-policy-title">공통 포인트 적립 정책</h2><p>현재 버전을 먼저 감사 조회한 뒤 새 버전으로 즉시 적용합니다.</p></div>
+        <div><span className="context-label">공통 기본값</span><h2 id="point-policy-title">공통 포인트 적립 정책</h2></div>
         <div className="policy-audit-read">
           <SelectField label="정책 조회 사유" id="point-policy-access-reason" value={accessReason} onValueChange={setAccessReason} required>
             <option value="">업무 사유 선택</option>
@@ -153,7 +149,7 @@ function PointPolicyWorkspace() {
               <TextField label="적립률(%)" type="number" min="0" max="100" step="0.01" value={rate} onValueChange={(value) => { setRate(value); intent.current.rotate(); }} required />
               <SelectField label="반올림 방식" value={roundingMode} onValueChange={(value) => setRoundingMode(value as typeof roundingMode)}><option value="FLOOR">버림</option><option value="HALF_UP">반올림</option></SelectField>
               <SelectField label="발행 주체" value={issuerType} onValueChange={(value) => setIssuerType(value as typeof issuerType)}><option value="PLATFORM">플랫폼</option><option value="BRAND">브랜드</option><option value="STORE">매장</option></SelectField>
-              <TextField label="발행 주체 식별값" value={issuerReference} maxLength={240} onValueChange={setIssuerReference} required />
+              <TextField label="발행 주체 ID" value={issuerReference} maxLength={240} onValueChange={setIssuerReference} required />
               <SelectField label="만료 계산" value={expiryRule} onValueChange={(value) => setExpiryRule(value as typeof expiryRule)}><option value="SEOUL_CALENDAR_DAYS_FROM_COMPLETION">서울 달력일</option><option value="EXACT_DURATION_FROM_COMPLETION">정확한 시간</option></SelectField>
               <TextField label="유효일수" type="number" min="1" max="3650" value={validityDays} onValueChange={setValidityDays} required />
             </div>
@@ -233,7 +229,7 @@ function RestorationPolicyWorkspace() {
   return (
     <section className="policy-workspace" aria-labelledby="restoration-title">
       <div className="surface-card policy-intro-card">
-        <div><span className="context-label">만료 혜택</span><h2 id="restoration-title">만료 혜택 복원 정책</h2><p>다섯 가지 허용 조합을 현재 버전과 함께 관리합니다.</p></div>
+        <div><span className="context-label">만료 혜택</span><h2 id="restoration-title">만료 혜택 복원 정책</h2></div>
         <div className="policy-audit-read">
           <SelectField label="복원 정책 조회 사유" id="restoration-access-reason" value={accessReason} onValueChange={setAccessReason} required>
             <option value="">업무 사유 선택</option><option value="BENEFIT_POLICY_REVIEW">혜택 복원 정책 검토</option><option value="BENEFIT_POLICY_AUDIT">혜택 정책 감사</option>
@@ -360,7 +356,7 @@ function BrandWorkspace() {
 
   return (
     <section className="policy-workspace" aria-labelledby="brand-title">
-      <div className="surface-card policy-intro-card"><div><span className="context-label">브랜드 목록</span><h2 id="brand-title">브랜드 관리</h2><p>활성 이름 중복과 소속 매장 수·버전 충돌을 서버에서 다시 검증합니다.</p></div><Button variant="secondary" onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
+      <div className="surface-card policy-intro-card"><div><span className="context-label">브랜드 목록</span><h2 id="brand-title">브랜드 관리</h2><p>같은 이름이 있거나 매장에 연결된 브랜드는 변경할 수 없습니다.</p></div><Button variant="secondary" onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
       <form className="surface-card inline-policy-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
         <TextField label="새 브랜드 이름" value={newName} maxLength={120} onValueChange={(value) => { setNewName(value); createIntent.current.rotate(); }} required />
         <TextField label="브랜드 등록 사유" value={createReason} maxLength={500} onValueChange={(value) => { setCreateReason(value); createIntent.current.rotate(); }} required />
@@ -427,17 +423,16 @@ function SearchIndexWorkspace() {
 
   return (
     <section className="policy-workspace" aria-labelledby="search-index-title">
-      <div className="surface-card policy-intro-card"><div><span className="context-label">검색 복구</span><h2 id="search-index-title">매장 검색 색인 재생성</h2><p>실행 시작 전 대상을 고정하고 매장별 트랜잭션으로 갱신합니다. 부분 결과는 전체 성공이 아닙니다.</p></div></div>
+      <div className="surface-card policy-intro-card"><div><span className="context-label">검색 복구</span><h2 id="search-index-title">매장 검색 색인 재생성</h2></div></div>
       <form className="surface-card policy-form search-index-form" onSubmit={(event) => { event.preventDefault(); void rebuild(); }}>
         <TextAreaField label="재생성 사유" value={reason} maxLength={500} onValueChange={(value) => { setReason(value); setError(null); setResult(null); intent.current.rotate(); }} required />
         <Button type="submit" loading={running} disabled={!reason.trim()}><RefreshCw size={17} /> 검색 색인 재생성</Button>
-        <p className="policy-caution">503 응답은 어떤 매장도 반영되지 않았다는 뜻이 아닙니다. 재시도 전 운영 Runbook을 확인하세요.</p>
       </form>
       {running ? <LoadingState label="검색 색인을 매장별로 재생성하는 중" /> : null}
       {error ? <ErrorState error={error} /> : null}
       {result ? (
         <section className={result.complete ? "surface-card index-result is-complete" : "surface-card index-result is-partial"} aria-live="polite">
-          <div className="panel-heading"><div><span className="context-label">저장된 실행 결과</span><h2>{result.complete ? "스냅샷 범위 재생성 완료" : "부분 완료 · 재조정 필요"}</h2></div><StatusText state={result.complete ? "COMPLETE" : "RECONCILING"} /></div>
+          <div className="panel-heading"><div><span className="context-label">저장된 실행 결과</span><h2>{result.complete ? "대상 매장 재생성 완료" : "일부 매장 완료 · 추가 확인 필요"}</h2></div><StatusText state={result.complete ? "COMPLETE" : "RECONCILING"} /></div>
           <dl className="detail-list">
             <div><dt>색인 반영</dt><dd>{result.indexedStoreCount}개</dd></div>
             <div><dt>건너뜀</dt><dd>{result.skippedStoreCount}개</dd></div>

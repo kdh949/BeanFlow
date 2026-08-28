@@ -112,14 +112,14 @@ const statefulDocs = {
     "pages-refresh-customer-store-search--location-permission-denied": "위치 권한이 꺼져 있어",
   },
   "pages-customer-sign-in--docs": {
-    "pages-customer-sign-in--sign-in": "주문과 포인트는 로그인한 계정에만 표시됩니다.",
+    "pages-customer-sign-in--sign-in": "로그인",
     "pages-customer-sign-in--sign-up": "가입하고 시작하기",
   },
   // The cart is localStorage-backed and every docs iframe shares this origin, so
   // only one cart state can be shown here. Empty and corrupt are covered by the
   // interaction tests instead.
   "pages-refresh-customer-cart--docs": {
-    "pages-refresh-customer-cart--with-items": "시청점에서 픽업합니다.",
+    "pages-refresh-customer-cart--with-items": "시청점",
   },
   "pages-refresh-store-item-refund--docs": {
     "pages-refresh-store-item-refund--selectable-items": "환불 대상 주문",
@@ -130,12 +130,12 @@ const statefulDocs = {
   "pages-customer-points--docs": {
     "pages-customer-points--balance-and-ledger": "1,500P",
     "pages-customer-points--zero-balance": "아직 포인트 내역이 없어요",
-    "pages-customer-points--account-integrity-failure": "잔액이 0원이라는 뜻은 아니며",
+    "pages-customer-points--account-integrity-failure": "정확한 포인트 잔액을 확인할 수 없어",
   },
   "patterns-customer-session-gate--docs": {
     "patterns-customer-session-gate--checking": "로그인 상태를 확인하는 중",
-    "patterns-customer-session-gate--wrong-actor": "다른 역할로 로그인되어 있는지 확인해 주세요",
-    "patterns-customer-session-gate--session-store-unavailable": "로그아웃된 것이 아니므로 다시 시도해 주세요",
+    "patterns-customer-session-gate--wrong-actor": "고객 계정으로 다시 로그인해 주세요",
+    "patterns-customer-session-gate--session-store-unavailable": "로그인 상태를 불러오지 못했어요",
   },
 };
 

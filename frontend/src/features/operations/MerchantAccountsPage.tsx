@@ -161,11 +161,7 @@ export function MerchantAccountsPage() {
 
   return (
     <div className="console-page">
-      <PageHeading
-
-        title="점주 계정 관리"
-        description="로그인 ID exact 조회, 최초 계정 발급, 임시 비밀번호 재발급과 로그인 잠금 해제를 처리합니다."
-      />
+      <PageHeading title="점주 계정 관리" />
       <Tabs value={mode} onValueChange={(value) => { setMode(value as typeof mode); clearSensitiveResult(); }}>
         <TabList label="점주 계정 업무 선택"><Tab value="lookup">계정 조회·복구</Tab><Tab value="create">새 계정 발급</Tab></TabList>
       <TabPanel value="lookup">
@@ -183,7 +179,7 @@ export function MerchantAccountsPage() {
             <Button type="submit" loading={lookingUp}><Search size={17} /> {lookingUp ? "조회 중" : "계정 조회"}</Button>
           </form>
           {lookingUp ? <LoadingState label="점주 계정을 조회하는 중" /> : null}
-          {notFound ? <EmptyState title="일치하는 점주 계정이 없습니다" description="부분 검색은 제공하지 않습니다. canonical 로그인 ID를 확인해 주세요." /> : null}
+          {notFound ? <EmptyState title="일치하는 점주 계정이 없습니다" description="전체 로그인 ID를 정확히 입력해 주세요." /> : null}
           {lookupError && !notFound ? <ErrorState error={lookupError} retry={() => void lookup()} /> : null}
           {account ? (
             <div className="console-detail-grid merchant-account-workspace">
@@ -206,7 +202,7 @@ export function MerchantAccountsPage() {
               </section>
               <aside className="merchant-credential-actions">
                 <section className="surface-card action-panel">
-                  <div className="operation-heading"><KeyRound aria-hidden="true" /><div><strong>임시 비밀번호 재발급</strong><small>성공 응답에서 한 번만 표시</small></div></div>
+                  <div className="operation-heading"><KeyRound aria-hidden="true" /><div><strong>임시 비밀번호 재발급</strong></div></div>
                   <TextAreaField label="임시 비밀번호 재발급 사유" id="reset-password-reason" value={resetReason} maxLength={200} required onValueChange={(value) => { setResetReason(value); setResetError(null); clearSensitiveResult(); resetIntent.current.rotate(); }} />
                   <Button block loading={resetting} disabled={!resetReason.trim()} onClick={() => void resetTemporaryPassword()}>
                     {resetting ? "재발급 중" : "임시 비밀번호 재발급"}
@@ -214,7 +210,7 @@ export function MerchantAccountsPage() {
                   {resetError ? <ErrorState error={resetError} /> : null}
                 </section>
                 <section className="surface-card action-panel">
-                  <div className="operation-heading"><LockKeyholeOpen aria-hidden="true" /><div><strong>로그인 잠금 해제</strong><small>계정 잠금과 로그인 시도 차단을 함께 해제</small></div></div>
+                  <div className="operation-heading"><LockKeyholeOpen aria-hidden="true" /><div><strong>로그인 잠금 해제</strong></div></div>
                   <TextAreaField label="잠금 해제 사유" id="unlock-reason" value={unlockReason} maxLength={200} required onValueChange={(value) => { setUnlockReason(value); setUnlockError(null); setUnlocked(false); unlockIntent.current.rotate(); }} />
                   <Button variant="secondary" block loading={unlocking} disabled={!unlockReason.trim()} onClick={() => void releaseLock()}>
                     {unlocking ? "해제 중" : "로그인 잠금 해제"}
@@ -229,7 +225,7 @@ export function MerchantAccountsPage() {
       </TabPanel>
       <TabPanel value="create">
         <form className="surface-card operation-form merchant-account-create" onSubmit={(event) => { event.preventDefault(); void createAccount(); }}>
-          <div className="operation-heading"><UserPlus aria-hidden="true" /><div><strong>점주 계정과 첫 매장 권한</strong><small>서버가 한 트랜잭션에서 함께 생성합니다.</small></div></div>
+          <div className="operation-heading"><UserPlus aria-hidden="true" /><div><strong>점주 계정과 첫 매장 권한</strong></div></div>
           <div className="account-create-grid">
             <TextField label="새 로그인 ID" id="new-merchant-login" value={newLoginId} minLength={5} maxLength={32} required onValueChange={(value) => { setNewLoginId(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
             <TextField label="표시 이름" id="new-merchant-name" value={displayName} maxLength={100} required onValueChange={(value) => { setDisplayName(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
@@ -253,13 +249,11 @@ function OneTimePasswordPanel({ result, onDismiss }: { result: OneTimePassword; 
     <section className="surface-card one-time-password" aria-labelledby="one-time-password-title">
       <ShieldCheck aria-hidden="true" />
       <div>
-        <span className="context-label">일회용 비밀번호</span>
-        <h2 id="one-time-password-title">임시 비밀번호를 지금 전달하세요</h2>
-        <p>이 값은 화면 이동·새로고침 후 복구되지 않습니다. 티켓·로그·브라우저 저장소에 남기지 마세요.</p>
+        <h2 id="one-time-password-title">임시 비밀번호</h2>
         <code>{result.temporaryPassword}</code>
         <small>만료 {shortDateTime.format(new Date(result.temporaryPasswordExpiresAt))}</small>
       </div>
-      <Button variant="ghost" onClick={onDismiss}>확인 후 지우기</Button>
+      <Button variant="ghost" onClick={onDismiss}>화면에서 지우기</Button>
     </section>
   );
 }

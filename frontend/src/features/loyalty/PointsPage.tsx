@@ -32,7 +32,7 @@ export function CustomerPointsPage() {
 
   return (
     <div className="customer-page points-page">
-      <PageHeading title="포인트" description="적립과 사용 내역, 만료 예정 포인트를 확인하세요." />
+      <PageHeading title="포인트" />
       {summary.state.status === "loading" ? <LoadingState label="포인트를 불러오는 중" /> : null}
       {summary.state.status === "failed" ? <PointsFailure error={summary.state.error} retry={summary.reload} /> : null}
       {summary.state.status === "ready" ? <PointsSummary summary={summary.state.value} /> : null}
@@ -52,8 +52,8 @@ function PointsFailure({ error, retry }: { error: unknown; retry: () => void }) 
       <ErrorState error={error} retry={retry} />
       <p className="state-page-note">
         {integrity
-          ? "포인트 계정을 확인하지 못했어요. 잔액이 0원이라는 뜻은 아니며, 문의 코드와 함께 알려주시면 확인해 드릴게요."
-          : "포인트 잔액을 불러오지 못했어요. 화면에 보이는 값이 없더라도 0원으로 계산하지 마세요."}
+          ? "정확한 포인트 잔액을 확인할 수 없어 금액을 표시하지 않았어요. 문의 코드와 함께 알려주시면 확인해 드릴게요."
+          : "포인트 잔액을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요."}
       </p>
     </>
   );

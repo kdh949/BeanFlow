@@ -65,7 +65,7 @@ function callbackMessage(code: "INVALID_PAYMENT_CALLBACK" | "PAYMENT_CALLBACK_MI
 }
 
 function PaymentResultView({ resolution, refresh }: { resolution: PaymentResolution; refresh: () => void }) {
-  if (resolution.phase === "confirming") return <LoadingState label="결제를 안전하게 승인하는 중" />;
+  if (resolution.phase === "confirming") return <LoadingState label="결제 결과를 확인하는 중" />;
   if (resolution.phase === "failed") {
     return (
       <div className="customer-page result-page">
@@ -154,7 +154,7 @@ export function PaymentFailPage() {
         <span className="pending-mark"><RefreshCw className="spin" size={30} /></span>
         <span className="context-label">결제 확인</span>
         <h1>결제 결과를 확인하고 있어요</h1>
-        <p>같은 결제를 다시 시도하지 마세요. 서버가 현재 결제 상태를 확인하고 있습니다.</p>
+        <p>결제 결과를 확인하고 있어요. 같은 결제를 다시 요청하지 말고 잠시만 기다려 주세요.</p>
         <StatusText state={resolution.payment.approvalState} />
         <ButtonLink variant="secondary" block to={orderTrackingPath(resolution.payment.orderReference)}>주문 상태 보기</ButtonLink>
       </div>
@@ -207,7 +207,7 @@ export function failureMessage(code: string) {
     PAY_PROCESS_ABORTED: "결제 인증이 중단됐습니다. 다른 카드나 간편결제로 다시 시도해 주세요.",
     REJECT_CARD_COMPANY: "카드사에서 승인을 거절했습니다. 카드사에 확인하거나 다른 수단을 이용해 주세요.",
   };
-  return messages[code] ?? "결제 인증을 마치지 못했습니다. 주문서에서 안전하게 다시 시도할 수 있어요.";
+  return messages[code] ?? "결제 인증을 마치지 못했어요. 주문서로 돌아가 다시 시도해 주세요.";
 }
 
 /** Only the documented public SDK codes are echoed; anything else is generic. */
@@ -220,10 +220,10 @@ export function publicFailureCode(code: string) {
 export function CustomerHelpPage() {
   return (
     <div className="customer-page">
-      <PageHeading title="도움이 필요하신가요?" description="결제 결과가 확인 중이면 같은 결제를 반복하지 말고 주문 상태를 새로고침해 주세요." />
+      <PageHeading title="도움이 필요하신가요?" />
       <section className="surface-card help-card">
         <strong>결제·환불 문의</strong>
-        <p>문의할 때 화면의 문의 코드와 주문 번호를 알려주세요. 카드 번호나 인증 정보는 보내지 마세요.</p>
+        <p>결제 결과를 확인 중이라면 같은 결제를 반복하지 말고 주문 상태를 새로고침해 주세요. 문의할 때 화면의 문의 코드와 주문 번호를 알려주세요. 카드 번호나 인증 정보는 보내지 마세요.</p>
       </section>
     </div>
   );

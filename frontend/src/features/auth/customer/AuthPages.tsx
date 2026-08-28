@@ -42,7 +42,7 @@ export function CustomerLoginPage() {
   const rateLimited = code === "AUTHENTICATION_RATE_LIMITED";
   return (
     <div className="customer-page auth-page">
-      <PageHeading title="로그인" description="주문과 포인트는 로그인한 계정에만 표시됩니다." />
+      <PageHeading title="로그인" />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <TextField
           label="아이디"
@@ -138,7 +138,7 @@ export function CustomerSignupPage() {
   const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="customer-page auth-page">
-      <PageHeading title="회원가입" description="아이디와 비밀번호만으로 가입하고 바로 주문할 수 있어요." />
+      <PageHeading title="회원가입" />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         {registered ? (
           <p className="inline-note" role="status">

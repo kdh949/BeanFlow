@@ -124,7 +124,7 @@ export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
       </aside>
       <section className="bfr-store-main">
         <header className="bfr-store-topbar">
-          <div><span>{context}</span><strong>거래 상태와 다음 작업을 정확하게 확인하세요</strong></div>
+          <div><span>{context}</span></div>
           <div className="bfr-store-actor" aria-label={`${context} 계정 상태`}><span>{actor.slice(0, 1)}</span>{actor}<ChevronDown size={15} aria-hidden="true" /></div>
         </header>
         <main className="bfr-store-content"><Outlet /></main>
@@ -152,7 +152,6 @@ export function RootRedirect() {
     <main className="surface-card root-choice">
       <BrandLockup />
       <h1>어떤 화면을 열까요?</h1>
-      <p>역할에 맞는 BeanFlow 작업 공간을 선택하세요.</p>
       <div>
         <ButtonLink to="/app">고객 앱</ButtonLink>
         <ButtonLink variant="secondary" to="/store"><Store size={18} /> 매장 콘솔</ButtonLink>

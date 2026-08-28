@@ -11,8 +11,8 @@ type NearbyStore = components["schemas"]["NearbyStore"];
 type Recommendation = components["schemas"]["StoreRecommendation"];
 type CardStore = StoreSearchItem | NearbyStore | Recommendation["store"];
 
-export function RefreshPageHeading({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
-  return <PageHeading title={title} description={description} action={action} />;
+export function RefreshPageHeading({ title, action }: { title: string; action?: ReactNode }) {
+  return <PageHeading title={title} action={action} />;
 }
 
 export function RefreshMobileTopbar({ title, backTo, brand = false }: { title: string; backTo?: string; brand?: boolean }) {

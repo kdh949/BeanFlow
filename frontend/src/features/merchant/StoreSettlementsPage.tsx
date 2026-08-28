@@ -63,9 +63,7 @@ export function StoreSettlementsPage() {
   return (
     <div className="console-page">
       <PageHeading
-
         title="정산 내역"
-        description="확정된 정산과 주문별 명세를 확인하고, 금액이 다르면 이의를 제기합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={(id) => { setOpenBatch(null); select(id); }} />}
       />
 

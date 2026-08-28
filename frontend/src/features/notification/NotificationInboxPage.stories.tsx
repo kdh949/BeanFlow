@@ -131,7 +131,7 @@ export const DependencyUnavailable: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("link", { name: /알림 상태를 확인하지 못했습니다/ })).toBeVisible();
-    await expect(await canvas.findByText("마케팅 알림 수신 설정을 확인하거나 저장하지 못했습니다. 현재 설정을 임의로 바꾸지 않았습니다.")).toBeVisible();
+    await expect(await canvas.findByText("알림 설정을 확인하지 못했어요. 다시 불러와 현재 설정을 확인해 주세요.")).toBeVisible();
     await expect(canvas.queryByText("아직 받은 알림이 없어요")).not.toBeInTheDocument();
   },
 };

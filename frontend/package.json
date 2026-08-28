@@ -8,7 +8,7 @@
     "dev": "vite",
     "generate:api": "openapi-typescript ../openapi/beanflow-v1-runtime.yaml -o src/api/schema.d.ts",
     "typecheck": "npm run generate:api && tsc --noEmit",
-    "test": "npm run test:unit && npm run test:presentation-boundary",
+    "test": "npm run test:unit && npm run test:presentation-boundary && npm run test:product-copy",
     "test:unit": "vitest run --project unit",
     "test:storybook:ci": "vitest run --project storybook",
     "test:storybook:docs": "node scripts/check-storybook-docs.mjs",
@@ -17,6 +17,8 @@
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:presentation-boundary": "node --test tests/presentation-boundary.test.mjs",
+    "test:product-copy": "node --test tests/product-copy.test.mjs",
+    "check:product-copy": "node scripts/check-product-copy.mjs",
     "check:presentation-boundary": "node scripts/presentation-boundary.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

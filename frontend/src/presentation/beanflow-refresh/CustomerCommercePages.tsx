@@ -67,7 +67,7 @@ export function RefreshStoreDetailPage() {
       {store.customerDisplay.directionsHint ? <p className="bfr-direction"><Navigation size={16} />{store.customerDisplay.directionsHint}</p> : null}
       {!store.orderingAvailable ? <p className="bfr-inline-status" role="status">운영시간과 별개로 이 매장은 현재 주문을 받지 않아요.</p> : !orderable ? <p className="bfr-inline-status" role="status">지금은 픽업 시간이 모두 마감됐어요.</p> : null}
 
-      {slots.length ? <section className="bfr-pickup-strip" aria-label="픽업 시간"><header><h2>픽업 시간</h2><span>서버 제공 시간</span></header><div>{slots.slice(0, 6).map((slot, index) => <span className={index === 0 ? "is-first" : ""} key={slot.pickupSlotId}>{new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>)}</div></section> : null}
+      {slots.length ? <section className="bfr-pickup-strip" aria-label="픽업 시간"><header><h2>픽업 시간</h2><span>선택 가능 시간</span></header><div>{slots.slice(0, 6).map((slot, index) => <span className={index === 0 ? "is-first" : ""} key={slot.pickupSlotId}>{new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>)}</div></section> : null}
 
       <nav className="bfr-category-tabs" aria-label="메뉴 카테고리">{groups.map((group) => <a key={group.key} href={`#bfr-menu-${group.key}`}>{group.name}</a>)}</nav>
       <div className="bfr-menu-groups">
@@ -112,7 +112,6 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
       {open ? <div className="bfr-menu-config">
         {options.length ? <fieldset><legend>옵션 선택</legend>{options.map((option) => <Checkbox key={option.optionId} variant="card" label={`${option.name}${option.available ? "" : " · 품절"}`} trailing={`+${won.format(option.additionalPriceKrw)}`} checked={optionIds.includes(option.optionId)} disabled={!option.available} onCheckedChange={() => setOptionIds((current) => current.includes(option.optionId) ? current.filter((id) => id !== option.optionId) : [...current, option.optionId])} />)}</fieldset> : null}
         <div className="bfr-config-actions"><QuantityStepper value={quantity} label={`${menu.name} 수량`} onChange={setQuantity} /><Button variant="brand" onClick={add}>{won.format(unitPrice * quantity)} 담기</Button></div>
-        <p>금액과 재고는 주문할 때 매장 기준으로 다시 확인해요.</p>
       </div> : null}
       {added ? <p className="bfr-success-note" role="status">장바구니에 담았어요.</p> : null}
       {conflict ? <div className="bfr-decision" role="alertdialog" aria-label="다른 매장 장바구니"><strong>{conflict.currentStoreName} 주문이 이미 담겨 있어요</strong><p>한 번에 한 매장만 주문할 수 있습니다.</p><div><Button variant="ghost" onClick={() => setConflict(null)}>그대로 두기</Button><Button variant="brand" onClick={() => { cart.replaceWith({ storeId, storeName }, conflict.line); setConflict(null); setAdded(true); setOpen(false); }}>비우고 담기</Button></div></div> : null}
@@ -178,21 +177,20 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
   return (
     <div className="bfr-page bfr-cart bfr-has-page-topbar">
       <RefreshMobileTopbar title="BeanFlow" brand />
-      <RefreshPageHeading title="장바구니" description={`${storeName}에서 픽업합니다.`} />
-      {store.state.status === "ready" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{store.state.value.name}</strong><small>{store.state.value.customerDisplay.addressLine ?? "주소 정보 없음"}</small></span></div><span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span></section> : null}
-      {store.state.status === "failed" ? <p className="bfr-inline-status" role="status">매장 안내를 불러오지 못했어요. 주문 요청에서 가능 여부를 다시 확인합니다.</p> : null}
+      <RefreshPageHeading title="장바구니" />
+      {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span> : null}</section> : null}
       <section className="bfr-cart-lines" aria-label="담은 메뉴">
         <h2>주문 메뉴</h2>{lines.map((line, index) => <div key={`${line.menuId}-${line.optionIds.join("-")}`}><span className="bfr-cart-line-media">{line.display.imageUrl ? <img src={line.display.imageUrl} alt="" /> : <Coffee size={21} aria-hidden="true" />}</span><span><strong>{line.display.menuName}</strong><small>{line.display.optionNames.join(" · ") || "기본 옵션"}</small></span><QuantityStepper value={line.quantity} min={0} label={`${line.display.menuName} 수량`} onChange={(value) => cart.setQuantity(index, value)} /><b>{quote ? won.format(quote.lines[index]?.lineTotalKrw ?? 0) : <Trash2 size={17} />}</b></div>)}
-        {quoteState.status === "idle" ? <p>픽업 시간을 선택하면 서버가 현재 금액과 혜택을 확인해요.</p> : null}
+        {quoteState.status === "idle" ? <p>픽업 시간을 고르면 최종 금액과 혜택을 보여드릴게요.</p> : null}
         {quoteState.status === "loading" ? <RefreshLoading label="현재 주문 금액을 확인하는 중" /> : null}
         {quoteState.status === "failed" ? <RefreshError error={quoteState.error} retry={() => setQuoteReload((value) => value + 1)} /> : null}
       </section>
       <section className="bfr-slot-section">{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && availableSlots.length === 0 ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{availableSlots.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} disabled={!storeAcceptsOrders} onValueChange={(value) => { if (selectedSlot !== value) intent.current.rotate(); setSelectedSlot(value); }}>{availableSlots.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}</section>
       <section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{selectedCoupon?.label ?? "선택하지 않음"}</strong></span>{selectedCoupon ? <Button variant="ghost" onClick={() => couponSelection.clear(storeId)}>선택 해제</Button> : <ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 보기</ButtonLink>}</section>
-      <section className="bfr-coupon-row"><span><small>포인트</small><strong>{quote ? `${quote.pricing.pointsAppliedKrw.toLocaleString("ko-KR")}P 사용` : "견적 확인 후 적용"}</strong></span><span className="bfr-muted-note">서버 계산</span></section>
+      <section className="bfr-coupon-row"><span><small>포인트</small><strong>{quote ? `${quote.pricing.pointsAppliedKrw.toLocaleString("ko-KR")}P 사용` : "견적 확인 후 적용"}</strong></span><span className="bfr-muted-note">최종 금액에 반영</span></section>
       {quote ? <section className="bfr-transaction-card bfr-cart-pricing"><RefreshQuotePricing quote={quote} /></section> : null}
       {guidance ? <div className="bfr-decision" role="alert"><strong>{guidance.title}</strong><p>{guidance.description}</p></div> : failure ? <RefreshError error={failure} /> : null}
-      {quoteState.status === "stale" ? <div className="bfr-decision" role="alert"><strong>주문 금액과 조건이 변경됐어요</strong><p>새 서버 견적을 확인한 뒤 다시 제출해 주세요.</p><Button variant="brand" onClick={() => { intent.current.rotate(); setFailure(null); setQuoteState({ status: "ready", quote: quoteState.quote }); }}>변경 내용 확인</Button></div> : null}
+      {quoteState.status === "stale" ? <div className="bfr-decision" role="alert"><strong>주문 금액과 조건이 변경됐어요</strong><p>변경된 금액과 조건을 확인한 뒤 다시 주문해 주세요.</p><Button variant="brand" onClick={() => { intent.current.rotate(); setFailure(null); setQuoteState({ status: "ready", quote: quoteState.quote }); }}>변경 내용 확인</Button></div> : null}
       <Button variant="brand" size="xl" block loading={submitting} disabled={!selectedSlot || !storeAcceptsOrders || quoteState.status !== "ready"} onClick={() => void createOrder()}>{quoteState.status === "ready" ? `${won.format(quoteState.quote.pricing.payableKrw)} 주문하기` : "견적 확인 후 주문하기"}</Button>
     </div>
   );

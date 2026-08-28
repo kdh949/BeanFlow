@@ -92,7 +92,7 @@ export function DisputeFilingPanel({
         type="number"
         value={String(expectedAdjustmentKrw)}
         required
-        description="서버가 확정 명세와 한도를 다시 검증합니다. 입력값이 승인 금액이 되지는 않습니다."
+        description="입력한 금액은 요청액이며, 접수 가능 금액과 최종 승인 금액은 검토 과정에서 확정됩니다."
         onValueChange={(value) => {
           setExpectedAdjustmentKrw(Number(value));
           intent.current.rotate();
