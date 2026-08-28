@@ -145,6 +145,30 @@ export function findDesignSystemDependencyViolations(sourceFile, source) {
   return violations;
 }
 
+const RAW_CONTROL_PATTERN = /<(input|select|textarea)\b/g;
+const CONTROL_SELECTOR_PATTERN = /(^|[\s>+~,:])(?:input|select|textarea|button)(?=$|[\s>+~.#:\[\],])/;
+
+export function findRawControlViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile.startsWith("src/design-system/")) return [];
+  return [...source.matchAll(RAW_CONTROL_PATTERN)].map((match) => ({
+    kind: "raw-product-control",
+    element: match[1],
+  }));
+}
+
+export function findParallelControlStyleViolations(sourceFile, styles) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile.startsWith("src/design-system/")) return [];
+  const violations = [];
+  for (const match of styles.matchAll(/([^{}]+)\{/g)) {
+    const selector = match[1].trim();
+    if (selector.startsWith("@") || !CONTROL_SELECTOR_PATTERN.test(selector)) continue;
+    violations.push({ kind: "parallel-control-css", selector });
+  }
+  return violations;
+}
+
 export function findLegacyArtifactViolations(existingFiles, styles) {
   const violations = REMOVED_TARGET_FILES.filter((file) => existingFiles.has(file)).map((file) => ({ kind: "legacy-file", file }));
   for (const selector of REMOVED_TARGET_SELECTORS) {
@@ -188,12 +212,26 @@ function run() {
     return findDesignSystemDependencyViolations(relative, fs.readFileSync(file, "utf8"))
       .map((violation) => ({ file: relative, ...violation }));
   }));
+  const productSourceFiles = collectFiles(path.join(frontendRoot, "src"))
+    .filter((file) => /\.tsx$/.test(file) && !/\.stories\.tsx$/.test(file));
+  violations.push(...productSourceFiles.flatMap((file) => {
+    const relative = path.relative(frontendRoot, file);
+    return findRawControlViolations(relative, fs.readFileSync(file, "utf8"))
+      .map((violation) => ({ file: relative, ...violation }));
+  }));
+  const productStyleFiles = collectFiles(path.join(frontendRoot, "src"))
+    .filter((file) => /\.css$/.test(file));
+  violations.push(...productStyleFiles.flatMap((file) => {
+    const relative = path.relative(frontendRoot, file);
+    return findParallelControlStyleViolations(relative, fs.readFileSync(file, "utf8"))
+      .map((violation) => ({ file: relative, ...violation }));
+  }));
   const existingFiles = new Set(collectFiles(path.join(frontendRoot, "src")).map((file) => path.relative(frontendRoot, file).replaceAll(path.sep, "/")));
   violations.push(...findLegacyArtifactViolations(existingFiles, fs.readFileSync(path.join(frontendRoot, "src/styles.css"), "utf8")));
 
   if (violations.length > 0) {
     for (const violation of violations) {
-      console.error(`${violation.file}: ${violation.kind}: ${violation.importPath ?? violation.selector ?? "must be removed"}`);
+      console.error(`${violation.file}: ${violation.kind}: ${violation.importPath ?? violation.selector ?? violation.element ?? "must be removed"}`);
     }
     process.exitCode = 1;
     return;

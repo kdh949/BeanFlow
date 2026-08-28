@@ -10,7 +10,7 @@ import { storeOrderActionLabels, storeOrderBoardColumns, storeOrderElapsedLabel,
 import type { StoreOrderAction, StoreOrderBoardItem, StoreOrderBoardOverflow } from "../../pages/console/storeOrderBoardModel";
 import { useStoreOrderBoard } from "../../pages/console/useStoreOrderBoard";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshPageHeading } from "./RefreshShared";
-import { Button, ButtonLink, FeedbackState, QuantityStepper } from "../../design-system";
+import { Button, ButtonLink, FeedbackState, QuantityStepper, SelectField, TextAreaField } from "../../design-system";
 import { StatusText } from "../shared";
 
 export function RefreshStoreOrderBoardPage({ now = new Date() }: { now?: Date }) {
@@ -21,7 +21,7 @@ export function RefreshStoreOrderBoardPage({ now = new Date() }: { now?: Date })
       <RefreshPageHeading title="주문 보드" description="실시간 주문을 상태별로 확인하고 처리합니다." action={state.selectedStore ? <span className="bfr-live"><span />3초마다 확인</span> : undefined} />
       <div className="bfr-board-toolbar">
         {state.membershipsLoading ? <RefreshLoading label="접근 가능한 매장을 확인하는 중" /> : null}
-        {!state.membershipsLoading && state.stores.length > 1 ? <label><Store size={16} /><span>운영 매장</span><select value={state.selectedStoreId ?? ""} onChange={(event) => state.selectStore(event.target.value)}>{state.stores.map((store) => <option key={store.storeId} value={store.storeId}>{store.storeName}</option>)}</select></label> : state.selectedStore ? <p className="bfr-selected-store"><Store size={16} />{state.selectedStore.storeName}</p> : null}
+        {!state.membershipsLoading && state.stores.length > 1 ? <div><Store size={16} /><SelectField label="운영 매장" value={state.selectedStoreId ?? ""} onValueChange={state.selectStore}>{state.stores.map((store) => <option key={store.storeId} value={store.storeId}>{store.storeName}</option>)}</SelectField></div> : state.selectedStore ? <p className="bfr-selected-store"><Store size={16} />{state.selectedStore.storeName}</p> : null}
         <Button variant="secondary" onClick={state.retry} disabled={state.boardLoading}><RefreshCw size={15} />새로고침</Button>
       </div>
       {state.forbiddenStoreName ? <FeedbackState kind="error" title="매장 접근 권한이 변경되었습니다" description={`${state.forbiddenStoreName} 주문 보드를 더 이상 표시할 수 없습니다.`} /> : null}
@@ -55,7 +55,7 @@ function RefreshOrderCard({ item, storeId, now, busy, rejecting, rejectionReason
     {item.acceptancePhase === "WARNING" ? <p className="bfr-card-warning"><AlertTriangle size={14} />접수 제한 시간이 얼마 남지 않았습니다.</p> : null}
     {item.acceptancePhase === "TIMEOUT_PENDING" ? <p className="bfr-card-warning"><AlertTriangle size={14} />자동 거절 처리를 확인 중입니다.</p> : null}
     <div className="bfr-card-actions">{item.allowedActions.map((action) => action === "REJECT" ? <Button key={action} size="sm" variant="danger" disabled={busy} onClick={onBeginReject}>{storeOrderActionLabels[action]}</Button> : <Button key={action} size="sm" variant="brand" loading={busy} onClick={() => onAction(action)}>{busy ? "처리 중" : storeOrderActionLabels[action]}</Button>)}<ButtonLink size="sm" variant="ghost" to={`/store/refunds/${storeId}/${item.orderReference}`}>부분 환불</ButtonLink></div>
-    {rejecting ? <form className="bfr-reject" onSubmit={(event) => { event.preventDefault(); onAction("REJECT", rejectionReason.trim()); }}><label>거절 사유<textarea value={rejectionReason} maxLength={500} required onChange={(event) => onReasonChange(event.target.value)} /></label><div><Button size="sm" variant="ghost" onClick={onCancelReject}>취소</Button><Button size="sm" variant="secondary" type="submit" disabled={busy || !rejectionReason.trim()}>거절 확정</Button></div></form> : null}
+    {rejecting ? <form className="bfr-reject" onSubmit={(event) => { event.preventDefault(); onAction("REJECT", rejectionReason.trim()); }}><TextAreaField label="거절 사유" value={rejectionReason} maxLength={500} required onValueChange={onReasonChange} /><div><Button size="sm" variant="ghost" onClick={onCancelReject}>취소</Button><Button size="sm" variant="secondary" type="submit" disabled={busy || !rejectionReason.trim()}>거절 확정</Button></div></form> : null}
   </article>;
 }
 
@@ -123,7 +123,7 @@ export function RefreshStoreRefundPage() {
         {failure ? <RefreshError error={failure} retry={() => void refresh()} /> : null}
       </aside>
     </div>
-    <form className="bfr-refund-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}><label>환불 사유<textarea value={reason} required maxLength={500} placeholder="환불 사유를 입력해 주세요" onChange={(event) => { setReason(event.target.value); intent.current.rotate(); }} /></label><div><Button variant="secondary" type="button" disabled={submitting} onClick={() => void refresh()}>금액 다시 계산</Button><Button variant="brand" type="submit" loading={submitting} disabled={selectedTotal <= 0 || !reason.trim()}><RotateCcw size={16} />부분 환불 실행</Button></div></form>
+    <form className="bfr-refund-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}><TextAreaField label="환불 사유" value={reason} required maxLength={500} placeholder="환불 사유를 입력해 주세요" onValueChange={(value) => { setReason(value); intent.current.rotate(); }} /><div><Button variant="secondary" type="button" disabled={submitting} onClick={() => void refresh()}>금액 다시 계산</Button><Button variant="brand" type="submit" loading={submitting} disabled={selectedTotal <= 0 || !reason.trim()}><RotateCcw size={16} />부분 환불 실행</Button></div></form>
   </div>;
 }
 

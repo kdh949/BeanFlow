@@ -31,3 +31,10 @@ export const Default: Story = {
   },
 };
 export const AtMaximum: Story = { args: { value: 20, label: "아메리카노 수량", onChange: () => undefined } };
+export const Disabled: Story = {
+  args: { value: 2, label: "아메리카노 수량", onChange: () => undefined, disabled: true },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("button", { name: "아메리카노 수량 줄이기" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "아메리카노 수량 늘리기" })).toBeDisabled();
+  },
+};

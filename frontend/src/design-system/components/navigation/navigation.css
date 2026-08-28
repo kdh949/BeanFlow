@@ -1,0 +1,9 @@
+.bf-tabs { min-width: 0; }
+.bf-tab-list { display: flex; gap: var(--sp-2); border-bottom: var(--bw-hair) solid var(--border-hair); overflow-x: auto; }
+.bf-tab { min-width: var(--tap-min); min-height: var(--tap-min); padding: 0 var(--sp-5); position: relative; border: 0; background: transparent; color: var(--text-muted); font: inherit; font-weight: var(--fw-semibold); white-space: nowrap; cursor: pointer; }
+.bf-tab::after { content: ""; height: var(--sp-1); position: absolute; right: var(--sp-4); bottom: 0; left: var(--sp-4); border-radius: var(--r-pill); background: transparent; }
+.bf-tab[aria-selected="true"] { color: var(--text-strong); }
+.bf-tab[aria-selected="true"]::after { background: var(--primary-bg); }
+.bf-tab:hover:not(:disabled) { color: var(--text-strong); background: var(--ghost-bg-hover); }
+.bf-tab:disabled { color: var(--control-disabled-text); cursor: not-allowed; }
+.bf-tab-panel:focus-visible { outline: 0; box-shadow: var(--control-focus); }

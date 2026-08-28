@@ -11,8 +11,15 @@
 .bf-action--lg { min-height: var(--control-h-lg); }
 .bf-action--xl { min-height: var(--control-h-xl); font-size: var(--fs-body-lg); }
 .bf-action--block { width: 100%; }
-.icon-action { min-width: var(--tap-min); min-height: var(--tap-min); border: 1px solid var(--border-hair); border-radius: var(--r-sm); background: var(--surface-card); color: var(--text-body); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.icon-action:hover { background: var(--surface-sunken); color: var(--text-strong); }
+.bf-icon-action { min-width: var(--tap-min); min-height: var(--tap-min); display: inline-flex; align-items: center; justify-content: center; border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-control); background: var(--control-bg); color: var(--text-body); cursor: pointer; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard); }
+.bf-icon-action--lg { min-width: var(--control-h-lg); min-height: var(--control-h-lg); }
+.bf-icon-action--ghost { border-color: transparent; background: transparent; }
+.bf-icon-action:hover:not(:disabled) { border-color: var(--control-border-hover); background: var(--surface-sunken); color: var(--text-strong); }
+.bf-icon-action:disabled { border-color: var(--control-disabled-border); background: var(--control-disabled-bg); color: var(--control-disabled-text); cursor: not-allowed; }
+.bf-chip-action { min-height: var(--tap-min); padding: 0 var(--sp-5); display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3); border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-pill); background: var(--control-bg); color: var(--text-body); font: inherit; font-size: var(--fs-caption); font-weight: var(--fw-semibold); cursor: pointer; }
+.bf-chip-action:hover:not(:disabled) { border-color: var(--control-border-hover); background: var(--surface-sunken); color: var(--text-strong); }
+.bf-chip-action[aria-pressed="true"] { border-color: var(--control-selected-border); background: var(--control-selected-bg); color: var(--control-selected-text); }
+.bf-chip-action:disabled { border-color: var(--control-disabled-border); background: var(--control-disabled-bg); color: var(--control-disabled-text); cursor: not-allowed; }
 .bf-spin { animation: bf-spin .8s linear infinite; }
 @keyframes bf-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bf-spin { animation: none; } }

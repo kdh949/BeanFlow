@@ -43,6 +43,22 @@
   --disabled-bg: #d7dce5;
   --disabled-text: #70798a;
 
+  /* Canonical form and selection states. Components consume these aliases rather than palette values. */
+  --control-bg: var(--surface-card);
+  --control-text: var(--text-strong);
+  --control-placeholder: var(--text-faint);
+  --control-border: var(--border-strong);
+  --control-border-hover: var(--ink-500);
+  --control-border-focus: var(--ink-700);
+  --control-focus: var(--ring-focus);
+  --control-invalid-border: var(--danger-solid);
+  --control-disabled-bg: var(--disabled-bg);
+  --control-disabled-text: var(--disabled-text);
+  --control-disabled-border: var(--slate-300);
+  --control-selected-bg: var(--surface-brand-soft);
+  --control-selected-border: var(--border-accent);
+  --control-selected-text: var(--text-accent);
+
   --success-bg: var(--green-100);
   --success-fg: var(--green-700);
   --success-solid: var(--green-700);

@@ -24,3 +24,11 @@ export const WithValue: Story = {
     await expect(args.onClear).toHaveBeenCalledOnce();
   },
 };
+export const Invalid: Story = {
+  args: { value: "", error: "검색어를 두 글자 이상 입력해 주세요." },
+  play: async ({ canvas }) => {
+    const field = canvas.getByRole("searchbox", { name: "매장 또는 메뉴 검색" });
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    await expect(field).toHaveAccessibleDescription("검색어를 두 글자 이상 입력해 주세요.");
+  },
+};

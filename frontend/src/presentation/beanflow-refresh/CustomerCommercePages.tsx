@@ -20,7 +20,7 @@ import { orderConflictGuidance, shouldRotateIdempotencyKey } from "../../feature
 import { useResource } from "../../features/shared/useResource";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar, RefreshPageHeading } from "./RefreshShared";
-import { Button, ButtonLink, QuantityStepper } from "../../design-system";
+import { Button, ButtonLink, Checkbox, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
 
 type CustomerStore = components["schemas"]["CustomerStore"];
 type Menu = components["schemas"]["Menu"];
@@ -104,13 +104,13 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
   }
   return (
     <article className={`bfr-menu-row ${!menu.available ? "is-soldout" : ""}`}>
-      <button type="button" disabled={!selectable} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      <Button block variant="ghost" disabled={!selectable} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         <span className="bfr-menu-row__media">{menu.image ? <img src={menu.image.url} alt="" /> : <Coffee size={26} />}</span>
         <span><strong>{menu.name}</strong>{menu.description ? <small>{menu.description}</small> : null}<b>{won.format(menu.basePriceKrw)}{menu.available ? "" : " · 품절"}</b></span>
         <span className="bfr-menu-row__add">{open ? <Check size={17} /> : "+"}</span>
-      </button>
+      </Button>
       {open ? <div className="bfr-menu-config">
-        {options.length ? <fieldset><legend>옵션 선택</legend>{options.map((option) => <label key={option.optionId}><input type="checkbox" checked={optionIds.includes(option.optionId)} disabled={!option.available} onChange={() => setOptionIds((current) => current.includes(option.optionId) ? current.filter((id) => id !== option.optionId) : [...current, option.optionId])} /><span>{option.name}{option.available ? "" : " · 품절"}</span><b>+{won.format(option.additionalPriceKrw)}</b></label>)}</fieldset> : null}
+        {options.length ? <fieldset><legend>옵션 선택</legend>{options.map((option) => <Checkbox key={option.optionId} variant="card" label={`${option.name}${option.available ? "" : " · 품절"}`} trailing={`+${won.format(option.additionalPriceKrw)}`} checked={optionIds.includes(option.optionId)} disabled={!option.available} onCheckedChange={() => setOptionIds((current) => current.includes(option.optionId) ? current.filter((id) => id !== option.optionId) : [...current, option.optionId])} />)}</fieldset> : null}
         <div className="bfr-config-actions"><QuantityStepper value={quantity} label={`${menu.name} 수량`} onChange={setQuantity} /><Button variant="brand" onClick={add}>{won.format(unitPrice * quantity)} 담기</Button></div>
         <p>금액과 재고는 주문할 때 매장 기준으로 다시 확인해요.</p>
       </div> : null}
@@ -187,7 +187,7 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
         {quoteState.status === "loading" ? <RefreshLoading label="현재 주문 금액을 확인하는 중" /> : null}
         {quoteState.status === "failed" ? <RefreshError error={quoteState.error} retry={() => setQuoteReload((value) => value + 1)} /> : null}
       </section>
-      <section className="bfr-slot-section"><h2>픽업 시간</h2>{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && availableSlots.length === 0 ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}<div className="bfr-slot-grid">{availableSlots.map((slot) => <button key={slot.pickupSlotId} type="button" aria-pressed={selectedSlot === slot.pickupSlotId} disabled={!storeAcceptsOrders} onClick={() => { if (selectedSlot !== slot.pickupSlotId) intent.current.rotate(); setSelectedSlot(slot.pickupSlotId); }}><strong>{new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</strong><small>{slot.remainingCapacity}잔 가능</small></button>)}</div></section>
+      <section className="bfr-slot-section">{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && availableSlots.length === 0 ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{availableSlots.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} disabled={!storeAcceptsOrders} onValueChange={(value) => { if (selectedSlot !== value) intent.current.rotate(); setSelectedSlot(value); }}>{availableSlots.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}</section>
       <section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{selectedCoupon?.label ?? "선택하지 않음"}</strong></span>{selectedCoupon ? <Button variant="ghost" onClick={() => couponSelection.clear(storeId)}>선택 해제</Button> : <ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 보기</ButtonLink>}</section>
       <section className="bfr-coupon-row"><span><small>포인트</small><strong>{quote ? `${quote.pricing.pointsAppliedKrw.toLocaleString("ko-KR")}P 사용` : "견적 확인 후 적용"}</strong></span><span className="bfr-muted-note">서버 계산</span></section>
       {quote ? <section className="bfr-transaction-card bfr-cart-pricing"><RefreshQuotePricing quote={quote} /></section> : null}

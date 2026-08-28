@@ -10,10 +10,8 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, TextField } from "../../design-system";
 import { compactId, shortDateTime } from "../../lib/format";
-import { Button } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 
 type Compensation = components["schemas"]["CompensationSummary"];
@@ -53,7 +51,7 @@ export function OpsOrderPage() {
   }
   return <div className="console-page">
     <PageHeading title="주문 보상 조회" description="권한 있는 운영자가 감사 사유를 남긴 뒤 상세 복구 단계를 확인합니다." />
-    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><label htmlFor="ops-order-id">주문 번호</label><div><Search size={18} /><input id="ops-order-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="UUID 주문 번호" /><input aria-label="접근 사유" value={accessReason} onChange={(event) => setAccessReason(event.target.value)} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
+    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 번호" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="UUID 주문 번호" /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
     {loading ? <LoadingState label="보상 상태를 조회하는 중" /> : null}{error ? <ErrorState error={error} /> : null}
     {!result && !loading && !error ? <EmptyState title="감사 조회 대기" description="주문 번호와 업무상 접근 사유가 모두 필요합니다." /> : null}
     {result ? <CompensationResult result={result} /> : null}

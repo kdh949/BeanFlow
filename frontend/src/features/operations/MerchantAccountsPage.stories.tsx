@@ -83,7 +83,7 @@ export const LockedAccountReleased: Story = {
 
 export const NewAccountOneTimePassword: Story = {
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "새 계정 발급" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(canvas.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(canvas.getByLabelText("표시 이름"), "신규 점주");
     await userEvent.type(canvas.getByLabelText("첫 매장 ID"), ids.store);

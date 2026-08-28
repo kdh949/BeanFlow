@@ -24,7 +24,7 @@ Feature가 token을 재정의하거나 병렬 button, badge, input, status, shel
 | Family | Examples | Usage |
 |---|---|---|
 | Brand | `--coral-*`, `--ink-*`, `--slate-*` | coral primary action, navy hierarchy, cool neutral surfaces |
-| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--primary-*`, `--success-*`, `--warning-*`, `--danger-*`, `--info-*` | component와 page의 의미 기반 선택 |
+| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--primary-*`, `--success-*`, `--warning-*`, `--danger-*`, `--info-*`, `--control-*` | component와 page의 의미 및 control interaction state 선택 |
 | Type | `--fs-*`, `--lh-*`, `--fw-*`, `--ls-*` | Korean-first hierarchy; decorative uppercase micro label 금지 |
 | Space/size | `--sp-*`, `--control-h-*`, `--tap-min`, viewport/layout tokens | mobile app와 dense workspace rhythm |
 | Shape/depth | `--r-*`, `--sh-*` | restrained corner and cool navy elevation |
@@ -38,10 +38,15 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 |---|---|---|---|
 | Brand | `BrandLockup` | 제공된 cup asset과 wordmark의 일관된 link/static 표현 | static, home link |
 | Action | `Button`, `ButtonLink` | brand, secondary, ghost, danger action | loading, disabled, long Korean |
+| Action | `IconButton`, `ChipButton` | 접근 가능한 icon action과 검색 보조어·일회성 filter action | md/lg hit area, selected, disabled |
 | Commerce | `StatusText` | 전달받은 문구를 filled badge 없이 visual tone으로 표현 | neutral, uncertain, danger |
-| Feedback | `FeedbackState` | loading, empty, recoverable dependency failure | loading, empty, error |
-| Form | `SearchField` | visible search affordance와 accessible clear action | empty, value, clear |
-| Form | `QuantityStepper` | bounded decrement/increment | default, min/max, keyboard action |
+| Feedback | `FeedbackState`, `InlineNotice` | loading/empty state와 presentation-safe inline guidance | loading, empty, info, warning, danger, announcement |
+| Form | `TextField`, `TextAreaField`, `SelectField` | label, description, validation 연결을 소유하는 controlled field | md/lg, focus, invalid, disabled, read-only |
+| Form | `SearchField` | visible search affordance와 accessible clear action | empty, value, clear, disabled |
+| Form | `Checkbox`, `Switch` | form 선택과 이진 preference를 분리한 controlled control | standard/card, checked, disabled |
+| Form | `RadioGroup`, `RadioOption`, `RadioCard` | 지역·픽업 시간처럼 하나만 고르는 native radio semantics | keyboard, selected, disabled, error |
+| Form | `QuantityStepper` | bounded decrement/increment | default, min/max, disabled, 44px action |
+| Navigation | `Tabs`, `TabList`, `Tab`, `TabPanel` | controlled view 전환과 manual/automatic keyboard activation | arrows, Home/End, disabled tab |
 
 모든 component는 typed props, JSDoc, Autodocs, `a11y.test = "error"`를 가진다. `className` 또는
 `style` public escape hatch를 제공하지 않는다.
@@ -62,7 +67,7 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 Shell은 session membership, notification API, logout failure 같은 runtime 책임 때문에 design-system
 primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system만 사용하고 독립 Storybook states로 검증한다.
 공용 `.surface-card`, `.context-label`, `.customer-page`, `.console-page`, `.panel-heading`, `.back-link`,
-`.icon-action`, `.inline-note`, `.form-error`, `.form-footnote`도 design-system 소유 CSS contract이며
+`.bf-icon-action`, `.bf-chip-action`, `.inline-note`, `.form-error`, `.form-footnote`도 design-system 소유 CSS contract이며
 `src/styles.css`에는 feature/route-specific layout만 둔다.
 
 ## 5. Consumer coverage
@@ -94,7 +99,7 @@ primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system
 | Gate | Coverage |
 |---|---|
 | `npm run check:design` | token reference, raw style, public escape, taxonomy, story/docs and CSS ownership, pixel ratchet |
-| `npm run check:presentation-boundary` | refresh runtime boundary, design-system 의존성 방향, 전역 shared selector와 retired source/import absence |
+| `npm run check:presentation-boundary` | refresh runtime boundary, design-system 의존성 방향, product raw control, 전역 control/shared selector와 retired source/import absence |
 | `npm run typecheck` | TypeScript와 generated runtime OpenAPI schema |
 | `npm test` | shared utility와 product behavior 및 presentation-boundary guard 자체 회귀 |
 | live Storybook MCP | documentation, interaction, and a11y for every indexed story |

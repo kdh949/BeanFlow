@@ -1,8 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { PageHeading } from "../../../design-system";
-import { Button } from "../../../design-system";
+import { Button, PageHeading, TextField } from "../../../design-system";
 import { customerSession, sanitizeReturnPath, useCustomerSession } from "./customerSession";
 
 const PASSWORD_MIN_LENGTH = 15;
@@ -45,8 +44,8 @@ export function CustomerLoginPage() {
     <div className="customer-page auth-page">
       <PageHeading title="로그인" description="주문과 포인트는 로그인한 계정에만 표시됩니다." />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
-        <label htmlFor="customer-login-id">아이디</label>
-        <input
+        <TextField
+          label="아이디"
           id="customer-login-id"
           name="loginId"
           value={loginId}
@@ -54,21 +53,21 @@ export function CustomerLoginPage() {
           autoCapitalize="none"
           spellCheck={false}
           required
-          aria-invalid={failure !== null}
+          invalid={failure !== null}
           aria-describedby={failure ? "customer-login-error" : undefined}
-          onChange={(event) => setLoginId(event.target.value)}
+          onValueChange={setLoginId}
         />
-        <label htmlFor="customer-login-password">비밀번호</label>
-        <input
+        <TextField
+          label="비밀번호"
           id="customer-login-password"
           name="password"
           type="password"
           value={password}
           autoComplete="current-password"
           required
-          aria-invalid={failure !== null}
+          invalid={failure !== null}
           aria-describedby={failure ? "customer-login-error" : undefined}
-          onChange={(event) => setPassword(event.target.value)}
+          onValueChange={setPassword}
         />
         {failure ? (
           <p className="form-error" id="customer-login-error" role="alert">
@@ -146,8 +145,8 @@ export function CustomerSignupPage() {
             회원가입은 완료됐어요. 아이디는 <strong>{normalizedLoginId}</strong>입니다.
           </p>
         ) : null}
-        <label htmlFor="customer-signup-id">아이디</label>
-        <input
+        <TextField
+          label="아이디"
           id="customer-signup-id"
           name="loginId"
           value={loginId}
@@ -156,44 +155,40 @@ export function CustomerSignupPage() {
           spellCheck={false}
           required
           readOnly={registered}
-          aria-invalid={duplicateLoginId}
-          aria-describedby="customer-signup-id-hint"
-          onChange={(event) => {
-            setLoginId(event.target.value);
+          error={duplicateLoginId ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요." : undefined}
+          description="영문 소문자와 숫자로 5~32자를 사용합니다."
+          onValueChange={(value) => {
+            setLoginId(value);
             if (duplicateLoginId) setFailure(null);
           }}
         />
-        <small id="customer-signup-id-hint">영문 소문자와 숫자로 5~32자를 사용합니다.</small>
-        <label htmlFor="customer-signup-name">표시 이름</label>
-        <input
+        <TextField
+          label="표시 이름"
           id="customer-signup-name"
           name="displayName"
           value={displayName}
           autoComplete="nickname"
           required
           readOnly={registered}
-          onChange={(event) => setDisplayName(event.target.value)}
+          onValueChange={setDisplayName}
         />
-        <label htmlFor="customer-signup-password">비밀번호</label>
-        <input
+        <TextField
+          label="비밀번호"
           id="customer-signup-password"
           name="password"
           type="password"
           value={password}
           autoComplete="new-password"
           required
-          aria-invalid={passwordTooShort}
-          aria-describedby="customer-signup-password-hint"
-          onChange={(event) => setPassword(event.target.value)}
+          error={passwordTooShort ? `${PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.` : undefined}
+          description={passwordTooShort ? undefined : `${PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.`}
+          onValueChange={setPassword}
         />
-        <small id="customer-signup-password-hint">{PASSWORD_MIN_LENGTH}자 이상으로 만들어 주세요.</small>
-        {failure ? (
+        {failure && !duplicateLoginId ? (
           <p className="form-error" id="customer-signup-error" role="alert">
             {registered
               ? "가입은 완료됐지만 로그인하지 못했습니다. 비밀번호를 확인한 뒤 다시 시도해 주세요."
-              : duplicateLoginId
-                ? "이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요."
-                : "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요."}
+              : "가입을 완료하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요."}
           </p>
         ) : null}
         <Button

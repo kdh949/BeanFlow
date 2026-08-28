@@ -4,9 +4,7 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, Switch } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 import { publishCustomerNotificationSummaryChanged } from "./notificationSummary";
@@ -188,18 +186,13 @@ function NotificationPreferenceCard() {
       </div>
       {!preference && !error ? <p role="status">수신 설정을 불러오는 중</p> : null}
       {preference ? (
-        <label className="notification-preference-control">
-          <input
-            type="checkbox"
-            checked={preference.marketingOptIn}
-            disabled={saving}
-            onChange={(event) => void replace(event.target.checked)}
-          />
-          <span>
-            <strong>마케팅 알림 받기</strong>
-            <small>{saving ? "설정을 저장하는 중입니다." : "끄더라도 이미 받은 알림은 보관 기간 동안 남습니다."}</small>
-          </span>
-        </label>
+        <Switch
+          label="마케팅 알림 받기"
+          description={saving ? "설정을 저장하는 중입니다." : "끄더라도 이미 받은 알림은 보관 기간 동안 남습니다."}
+          checked={preference.marketingOptIn}
+          disabled={saving}
+          onCheckedChange={(checked) => void replace(checked)}
+        />
       ) : null}
       {error ? (
         <div className="notification-preference-error" role="alert">

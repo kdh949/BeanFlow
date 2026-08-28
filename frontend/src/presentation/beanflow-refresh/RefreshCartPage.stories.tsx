@@ -27,7 +27,7 @@ type Story = StoryObj<typeof meta>;
 export const WithItems: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("시청점에서 픽업합니다.")).toBeVisible();
-    await userEvent.click(await canvas.findByRole("button", { name: /7잔 가능/ }));
+    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /16,600.*주문하기/ })).toBeEnabled();
     await expect(canvas.getByText("결제 금액")).toBeVisible();
   },

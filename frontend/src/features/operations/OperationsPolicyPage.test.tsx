@@ -70,7 +70,7 @@ describe("OperationsPolicyPage", () => {
     expect(pointOptions.body).toMatchObject({ expectedPolicyVersionId: 12, accrualRateBps: 700, reason: "프로모션 적립률 반영" });
     expect(pointOptions.params.header["Idempotency-Key"]).toBeTruthy();
 
-    await userEvent.click(screen.getByRole("button", { name: "만료 혜택 복원" }));
+    await userEvent.click(screen.getByRole("tab", { name: "만료 혜택 복원" }));
     await userEvent.selectOptions(screen.getByLabelText("복원 정책 조회 사유"), "BENEFIT_POLICY_REVIEW");
     await userEvent.click(screen.getByRole("button", { name: "복원 정책 조회" }));
     expect(await screen.findAllByText("신규 혜택 발급")).toHaveLength(3);
@@ -93,14 +93,14 @@ describe("OperationsPolicyPage", () => {
     }) as never);
 
     render(<MemoryRouter><OperationsPolicyPage /></MemoryRouter>);
-    await userEvent.click(screen.getByRole("button", { name: "브랜드" }));
+    await userEvent.click(screen.getByRole("tab", { name: "브랜드" }));
     expect(await screen.findByText("빈플로우 커피")).toBeVisible();
     await userEvent.type(screen.getByLabelText("새 브랜드 이름"), "빈플로우 로스터스");
     await userEvent.type(screen.getByLabelText("브랜드 등록 사유"), "신규 브랜드 계약 승인");
     await userEvent.click(screen.getByRole("button", { name: "브랜드 등록" }));
     expect(await screen.findByText("빈플로우 로스터스")).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: "검색 색인" }));
+    await userEvent.click(screen.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(screen.getByLabelText("재생성 사유"), "브랜드 변경 후 검색 정합성 복구");
     await userEvent.click(screen.getByRole("button", { name: "검색 색인 재생성" }));
     expect(await screen.findByText("부분 완료 · 재조정 필요")).toBeVisible();
