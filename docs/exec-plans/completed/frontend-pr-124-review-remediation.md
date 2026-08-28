@@ -1,11 +1,11 @@
 # PR 124 디자인 시스템 리뷰 보정
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/frontend-page-heading-copy-removal.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-08-29`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -110,7 +110,7 @@ OpenAPI와 event contract 변경 없음.
 - [x] 실패하는 boundary 회귀 테스트
 - [x] 구현
 - [x] 검증
-- [ ] push와 review resolution
+- [x] push와 review resolution
 
 ## Surprises & Discoveries
 
@@ -129,7 +129,10 @@ OpenAPI와 event contract 변경 없음.
 - 주문 번호를 부분 환불 대상 주문의 명시적인 `<dl>` 항목으로 이동했다.
 - `npm run typecheck`, `npm test`, `npm run check:design`, `npm run build-storybook`, `npm run test:storybook:docs`, `npm run build`, `npm run test:sites`, docs 검증과 `git diff --check`가 통과했다.
 - Storybook MCP focused 4개 Story와 전체 Story의 interaction/a11y 검사가 통과했다.
+- 구현 커밋 `bc74fe0`을 PR #124의 `feature/frontend-product-copy-audit` 브랜치에 push했다.
+- GitHub의 frontend, build, preflight, CodeQL과 네 언어 Analyze 검사가 모두 통과한 뒤 세 review thread에 근거를 답글로 남기고 모두 해결했다.
 
 ## Revision Notes
 
 - 2026-08-29: PR #124 review remediation 계획 최초 작성.
+- 2026-08-29: 원격 검증과 review thread 3개 해결 결과를 기록하고 완료 처리.
