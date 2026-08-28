@@ -9,8 +9,8 @@ import { shortDateTime, shortTime, won } from "../../lib/format";
 import { storeOrderActionLabels, storeOrderBoardColumns, storeOrderElapsedLabel, storeOrderBoardLaneLabels } from "../../pages/console/storeOrderBoardModel";
 import type { StoreOrderAction, StoreOrderBoardItem, StoreOrderBoardOverflow } from "../../pages/console/storeOrderBoardModel";
 import { useStoreOrderBoard } from "../../pages/console/useStoreOrderBoard";
-import { RefreshEmpty, RefreshError, RefreshLoading, RefreshPageHeading } from "./RefreshShared";
-import { Button, ButtonLink, FeedbackState, QuantityStepper, SelectField, TextAreaField } from "../../design-system";
+import { RefreshEmpty, RefreshError, RefreshLoading } from "./RefreshShared";
+import { Button, ButtonLink, FeedbackState, PageHeading, QuantityStepper, SelectField, TextAreaField } from "../../design-system";
 import { StatusText } from "../shared";
 
 export function RefreshStoreOrderBoardPage({ now = new Date() }: { now?: Date }) {
@@ -18,7 +18,7 @@ export function RefreshStoreOrderBoardPage({ now = new Date() }: { now?: Date })
   const allItems = state.board?.groups.flatMap((group) => group.items) ?? [];
   return (
     <div className="bfr-merchant-page bfr-board-page">
-      <RefreshPageHeading title="주문 보드" description="실시간 주문을 상태별로 확인하고 처리합니다." action={state.selectedStore ? <span className="bfr-live"><span />3초마다 확인</span> : undefined} />
+      <PageHeading title="주문 보드" action={state.selectedStore ? <span className="bfr-live"><span />3초마다 확인</span> : undefined} />
       <div className="bfr-board-toolbar">
         {state.membershipsLoading ? <RefreshLoading label="접근 가능한 매장을 확인하는 중" /> : null}
         {!state.membershipsLoading && state.stores.length > 1 ? <div><Store size={16} /><SelectField label="운영 매장" value={state.selectedStoreId ?? ""} onValueChange={state.selectStore}>{state.stores.map((store) => <option key={store.storeId} value={store.storeId}>{store.storeName}</option>)}</SelectField></div> : state.selectedStore ? <p className="bfr-selected-store"><Store size={16} />{state.selectedStore.storeName}</p> : null}
@@ -111,11 +111,11 @@ export function RefreshStoreRefundPage() {
   const selectedTotal = current.totals.cashRefundKrw + current.totals.pointsRestorationKrw;
   return <div className="bfr-merchant-page bfr-refund-page">
     <Link className="bfr-back-link" to="/store"><ArrowLeft size={16} />주문 관리로</Link>
-    <RefreshPageHeading title="부분 환불" description={`주문 ${current.orderReference} · 품목과 수량을 선택하면 서버가 최신 환불 금액을 다시 계산합니다.`} />
+    <PageHeading title="부분 환불" />
     {result ? <RefundOutcome result={result} /> : null}
-    <section className="bfr-refund-context"><header><div><h2>환불 대상 주문</h2></div><StatusText state={current.orderContext.status} /></header><dl><div><dt>주문 시각</dt><dd>{shortDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div><div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div><div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div><div><dt>결제 금액</dt><dd>{won.format(current.orderContext.pricing.payableKrw)}</dd></div></dl><p>환불 판단과 실행에 필요한 주문 정보만 표시합니다.</p></section>
+    <section className="bfr-refund-context"><header><h2>환불 대상 주문</h2><StatusText state={current.orderContext.status} /></header><dl><div><dt>주문 번호</dt><dd>{current.orderReference}</dd></div><div><dt>주문 시각</dt><dd>{shortDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div><div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div><div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div><div><dt>결제 금액</dt><dd>{won.format(current.orderContext.pricing.payableKrw)}</dd></div></dl></section>
     <div className="bfr-refund-workspace">
-      <section className="bfr-refund-lines"><header><h2>환불 품목</h2><span>서버 계산 금액</span></header>{current.lines.map((line) => <article key={line.lineSequence}><div><strong>{line.menuName}</strong><small>남은 환불 가능 {line.remainingQuantity}개</small></div><QuantityStepper value={selection[line.lineSequence] ?? line.selectedQuantity} min={0} max={line.remainingQuantity} label={`${line.menuName} 환불 수량`} onChange={(value) => change(line, value)} /><dl><div><dt>현금</dt><dd>{won.format(line.cashRefundKrw)}</dd></div><div><dt>포인트</dt><dd>{won.format(line.pointsRestorationKrw)}</dd></div><div><dt>쿠폰 귀속</dt><dd>{won.format(line.couponAttributionKrw)}</dd></div></dl></article>)}</section>
+      <section className="bfr-refund-lines"><header><h2>환불 품목</h2><span>현재 환불 가능 금액</span></header>{current.lines.map((line) => <article key={line.lineSequence}><div><strong>{line.menuName}</strong><small>남은 환불 가능 {line.remainingQuantity}개</small></div><QuantityStepper value={selection[line.lineSequence] ?? line.selectedQuantity} min={0} max={line.remainingQuantity} label={`${line.menuName} 환불 수량`} onChange={(value) => change(line, value)} /><dl><div><dt>현금</dt><dd>{won.format(line.cashRefundKrw)}</dd></div><div><dt>포인트</dt><dd>{won.format(line.pointsRestorationKrw)}</dd></div><div><dt>쿠폰 귀속</dt><dd>{won.format(line.couponAttributionKrw)}</dd></div></dl></article>)}</section>
       <aside className="bfr-refund-side">
         <section className="bfr-refund-summary"><div><span>현금 환불</span><strong>{won.format(current.totals.cashRefundKrw)}</strong></div><div><span>포인트 복원</span><strong>{won.format(current.totals.pointsRestorationKrw)}</strong></div><p>쿠폰 귀속액 {won.format(current.totals.couponAttributionKrw)}은 쿠폰 복원을 의미하지 않습니다.</p></section>
         {!current.lines.some((line) => line.remainingQuantity > 0) ? <p className="bfr-refund-alert" role="status">이 주문에는 남은 환불 가능 수량이 없습니다.</p> : null}

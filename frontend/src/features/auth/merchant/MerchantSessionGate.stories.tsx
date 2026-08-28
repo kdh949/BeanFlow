@@ -44,7 +44,7 @@ export const WrongActor: Story = {
     msw: { handlers: merchantMeResponds(403, { code: "ACCESS_DENIED", message: "매장 권한이 없습니다." }) },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(/다른 역할로 로그인되어 있는지 확인해 주세요/)).toBeVisible();
+    await expect(await canvas.findByText(/점주 계정으로 다시 로그인해 주세요/)).toBeVisible();
   },
 };
 
@@ -56,7 +56,7 @@ export const SessionStoreUnavailable: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(/로그아웃된 것이 아니므로 다시 시도해 주세요/)).toBeVisible();
+    await expect(await canvas.findByText(/로그인 상태를 불러오지 못했습니다/)).toBeVisible();
   },
 };
 

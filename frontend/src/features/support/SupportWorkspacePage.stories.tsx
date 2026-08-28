@@ -73,9 +73,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function openCase(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
-  await userEvent.type(canvas.getByLabelText("기존 Case ID"), caseId);
-  await userEvent.click(canvas.getByRole("button", { name: "Case 열기" }));
-  await expect(await canvas.findByText(`CASE ${caseId}`)).toBeVisible();
+  await userEvent.type(canvas.getByLabelText("기존 상담 건 ID"), caseId);
+  await userEvent.click(canvas.getByRole("button", { name: "상담 건 열기" }));
+  await expect(await canvas.findByText(`상담 ${caseId}`)).toBeVisible();
 }
 
 export const MaskedExactSearch: Story = {
@@ -143,14 +143,14 @@ export const VerifiedGrantReveal: Story = {
   },
   play: async ({ canvas }) => {
     await openCase(canvas);
-    await userEvent.click(canvas.getByRole("button", { name: "ENHANCED 본인확인 시작" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "등록 전화로 challenge 발급" }));
-    await userEvent.type(await canvas.findByLabelText("일회성 proof"), "123456");
-    await userEvent.click(canvas.getByRole("button", { name: "proof 검증" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "전화번호 Grant 요청" }));
+    await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "등록 전화로 인증 코드 발급" }));
+    await userEvent.type(await canvas.findByLabelText("일회성 인증 코드"), "123456");
+    await userEvent.click(canvas.getByRole("button", { name: "인증 코드 확인" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "전화번호 열람 권한 요청" }));
     await userEvent.click(await canvas.findByRole("button", { name: "승인된 전화번호 열람" }));
     await expect(await canvas.findByText("010-1234-5678")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "원문 즉시 지우기" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "지금 지우기" })).toBeVisible();
   },
 };
 
@@ -168,9 +168,9 @@ export const VerificationLocked: Story = {
   },
   play: async ({ canvas }) => {
     await openCase(canvas);
-    await userEvent.click(canvas.getByRole("button", { name: "ENHANCED 본인확인 시작" }));
+    await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
     await expect(await canvas.findByText("LOCKED")).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: "등록 전화로 challenge 발급" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "등록 전화로 인증 코드 발급" })).not.toBeInTheDocument();
   },
 };
 
@@ -183,8 +183,8 @@ export const TerminalCase: Story = {
   },
   play: async ({ canvas }) => {
     await openCase(canvas);
-    await expect(canvas.getByText(/RESOLVED\/CLOSED Case에서는/)).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: "ENHANCED 본인확인 시작" })).not.toBeInTheDocument();
+    await expect(canvas.getByText(/종료된 상담 건에서는/)).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "강화 본인확인 시작" })).not.toBeInTheDocument();
   },
 };
 

@@ -108,7 +108,7 @@ describe("customer notification inbox", () => {
     renderInbox(true);
 
     expect(await screen.findByRole("link", { name: /알림 상태를 확인하지 못했습니다/ })).toBeInTheDocument();
-    expect(await screen.findByText("마케팅 알림 수신 설정을 확인하거나 저장하지 못했습니다. 현재 설정을 임의로 바꾸지 않았습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("알림 설정을 확인하지 못했어요. 다시 불러와 현재 설정을 확인해 주세요.")).toBeInTheDocument();
     expect(screen.queryByText("아직 받은 알림이 없어요")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "알림함 열기" })).not.toBeInTheDocument();
   });

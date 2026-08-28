@@ -46,7 +46,7 @@ export function MerchantLoginPage() {
   const code = codeOf(failure);
   return (
     <div className="console-auth">
-      <PageHeading title="매장 로그인" description="운영팀이 발급한 매장 계정으로 로그인합니다." />
+      <PageHeading title="매장 로그인" />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <TextField
           label="아이디"
@@ -86,7 +86,7 @@ export function MerchantLoginPage() {
           {submitting ? "로그인 중" : "로그인"}
         </Button>
       </form>
-      <p className="auth-switch">계정 발급과 비밀번호 초기화는 운영팀이 처리합니다.</p>
+      <p className="auth-switch">계정 발급이나 비밀번호 초기화가 필요하면 운영팀에 문의해 주세요.</p>
     </div>
   );
 }
@@ -126,12 +126,9 @@ export function MerchantPasswordChangePage() {
   const tooShort = newPassword.length > 0 && newPassword.length < PASSWORD_MIN_LENGTH;
   return (
     <div className="console-auth">
-      <PageHeading
-
-        title="비밀번호 변경"
-        description="임시 비밀번호를 바꾸기 전에는 매장 화면을 사용할 수 없습니다."
-      />
+      <PageHeading title="비밀번호 변경" />
       <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+        <p className="form-footnote">비밀번호를 변경해야 매장 화면을 이용할 수 있습니다.</p>
         <TextField
           label="임시 비밀번호"
           id="merchant-current-password"

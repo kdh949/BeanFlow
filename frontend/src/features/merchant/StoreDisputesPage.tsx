@@ -72,9 +72,7 @@ export function StoreDisputesPage() {
   return (
     <div className="console-page">
       <PageHeading
-
         title="정산 이의제기"
-        description="접수한 이의제기의 진행 상태와 보류 금액을 확인합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
       />
 

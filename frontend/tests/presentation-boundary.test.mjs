@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  findCanonicalPatternStyleViolations,
   findDesignSystemDependencyViolations,
   findLegacyArtifactViolations,
   findParallelControlStyleViolations,
@@ -105,6 +106,28 @@ test("rejects feature CSS that restyles native controls", () => {
   assert.deepEqual(violations.map(({ kind }) => kind), ["parallel-control-css", "parallel-control-css"]);
   assert.deepEqual(
     findParallelControlStyleViolations("src/design-system/components/forms/forms.css", ".bf-field input { min-height: 44px; }"),
+    [],
+  );
+});
+
+test("rejects product CSS that reaches into canonical PageHeading styles", () => {
+  const violations = findCanonicalPatternStyleViolations(
+    "src/presentation/beanflow-refresh/refresh.css",
+    ".bfr-cart .bf-page-heading { margin-bottom: 6px; } .bfr-page .bf-page-heading h1 { font-size: 20px; }",
+  );
+
+  assert.deepEqual(
+    violations.map(({ kind, selector }) => ({ kind, selector })),
+    [
+      { kind: "canonical-pattern-css", selector: ".bfr-cart .bf-page-heading" },
+      { kind: "canonical-pattern-css", selector: ".bfr-page .bf-page-heading h1" },
+    ],
+  );
+  assert.deepEqual(
+    findCanonicalPatternStyleViolations(
+      "src/design-system/patterns/layout/layout.css",
+      ".bf-page-heading { margin-bottom: 24px; }",
+    ),
     [],
   );
 });

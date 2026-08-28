@@ -192,7 +192,8 @@ describe("store identity comes from the server", () => {
 
     renderCart();
 
-    expect(await screen.findByText("성수 로스터리에서 픽업합니다.")).toBeInTheDocument();
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.queryByText("예전 이름")).not.toBeInTheDocument();
   });
 
   it("keeps the saved name and stays orderable when the store read fails", async () => {
@@ -204,7 +205,8 @@ describe("store identity comes from the server", () => {
 
     renderCart();
 
-    expect(await screen.findByText("성수 로스터리에서 픽업합니다.")).toBeInTheDocument();
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.getByText("매장 안내를 불러오지 못했어요.")).toBeInTheDocument();
     expect(await screen.findByRole("radio", { name: /가능/ })).toBeEnabled();
   });
 });

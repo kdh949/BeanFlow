@@ -28,7 +28,7 @@ export function CustomerSessionGate() {
     return (
       <div className="customer-page state-page">
         <ErrorState error={session.error} />
-        <p className="state-page-note">이 브라우저의 인증 정보는 고객 화면을 사용할 수 없습니다. 다른 역할로 로그인되어 있는지 확인해 주세요.</p>
+        <p className="state-page-note">현재 로그인으로는 고객 화면을 이용할 수 없어요. 고객 계정으로 다시 로그인해 주세요.</p>
       </div>
     );
   }
@@ -37,7 +37,7 @@ export function CustomerSessionGate() {
     return (
       <div className="customer-page state-page">
         <ErrorState error={session.error} retry={() => void customerSession.refresh()} />
-        <p className="state-page-note">로그인 상태를 확인하지 못했습니다. 로그아웃된 것이 아니므로 다시 시도해 주세요.</p>
+        <p className="state-page-note">로그인 상태를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</p>
       </div>
     );
   }

@@ -331,7 +331,7 @@ describe("Toss payment failure copy", () => {
   it("never renders an untrusted provider message", () => {
     const untrusted = "<script>alert('card')</script>";
     expect(failureMessage(untrusted)).not.toContain(untrusted);
-    expect(failureMessage(untrusted)).toContain("안전하게 다시 시도");
+    expect(failureMessage(untrusted)).toContain("주문서로 돌아가 다시 시도");
   });
 });
 

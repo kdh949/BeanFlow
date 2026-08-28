@@ -90,7 +90,11 @@ export const NewAccountOneTimePassword: Story = {
     await userEvent.type(canvas.getByLabelText("발급 사유"), "신규 가맹 계약 승인");
     await userEvent.click(canvas.getByRole("button", { name: "점주 계정 발급" }));
     await expect(await canvas.findByText("NEW_PASSWORD_DEMO_0000000000001")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "확인 후 지우기" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "임시 비밀번호" })).toBeVisible();
+    await expect(canvas.getByText(/^만료 /)).toBeVisible();
+    await expect(canvas.queryByText(/티켓·로그|브라우저 저장소|지금 전달/)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "화면에서 지우기" }));
+    await expect(canvas.queryByText("NEW_PASSWORD_DEMO_0000000000001")).not.toBeInTheDocument();
   },
 };
 

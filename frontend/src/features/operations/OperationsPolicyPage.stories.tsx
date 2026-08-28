@@ -114,7 +114,7 @@ export const SearchIndexComplete: Story = {
     await userEvent.click(canvas.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "브랜드 변경 후 검색 정합성 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
-    await expect(await canvas.findByText("스냅샷 범위 재생성 완료")).toBeVisible();
+    await expect(await canvas.findByText("대상 매장 재생성 완료")).toBeVisible();
   },
 };
 
@@ -124,7 +124,7 @@ export const SearchIndexPartial: Story = {
     await userEvent.click(canvas.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "매장 검색 색인 장애 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
-    await expect(await canvas.findByText("부분 완료 · 재조정 필요")).toBeVisible();
+    await expect(await canvas.findByText("일부 매장 완료 · 추가 확인 필요")).toBeVisible();
     await expect(canvas.getByText(ids.store)).toBeVisible();
   },
 };

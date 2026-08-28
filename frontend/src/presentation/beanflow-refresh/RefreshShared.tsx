@@ -3,17 +3,13 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { nextPickupLabel, operatingStatusLabel } from "../../features/discovery/storeDisplay";
-import { BrandLockup, FeedbackState, PageHeading } from "../../design-system";
+import { BrandLockup, FeedbackState } from "../../design-system";
 import { ErrorState } from "../shared";
 
 type StoreSearchItem = components["schemas"]["StoreSearchItem"];
 type NearbyStore = components["schemas"]["NearbyStore"];
 type Recommendation = components["schemas"]["StoreRecommendation"];
 type CardStore = StoreSearchItem | NearbyStore | Recommendation["store"];
-
-export function RefreshPageHeading({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
-  return <PageHeading title={title} description={description} action={action} />;
-}
 
 export function RefreshMobileTopbar({ title, backTo, brand = false }: { title: string; backTo?: string; brand?: boolean }) {
   return (

@@ -38,7 +38,7 @@ export const ManualReview: Story = {
 };
 
 async function submitLookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
-  await userEvent.type(canvas.getByLabelText("주문 번호"), "40000000-0000-4000-8000-000000000001");
+  await userEvent.type(canvas.getByLabelText("주문 ID"), "40000000-0000-4000-8000-000000000001");
   await userEvent.type(canvas.getByLabelText("접근 사유"), "compensation recovery review");
   await userEvent.click(canvas.getByRole("button", { name: "조회" }));
 }

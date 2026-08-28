@@ -368,15 +368,11 @@ export function SupportWorkspacePage() {
 
   return (
     <div className="console-page support-workspace">
-      <PageHeading
-
-        title="고객지원 콘솔"
-        description="마스킹 검색부터 Case, 본인확인, 제한형 개인정보 열람, 타임라인과 보상 판단까지 하나의 감사 가능한 흐름으로 처리합니다."
-      />
+      <PageHeading title="고객지원 콘솔" />
 
       <section className="support-intake-grid">
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void searchSubjects(); }}>
-          <div className="operation-heading"><Search aria-hidden="true" /><div><strong>보호 대상 정확 검색</strong><small>원문은 POST body에만 전송하고 즉시 지웁니다.</small></div></div>
+          <div className="operation-heading"><Search aria-hidden="true" /><div><strong>고객 정보 정확 검색</strong></div></div>
           <SelectField label="검색 기준" id="support-criterion-type" value={criterionType} onValueChange={(value) => setCriterionType(value as "PHONE" | "EMAIL")}>
             <option value="PHONE">등록 전화번호</option><option value="EMAIL">등록 이메일</option>
           </SelectField>
@@ -389,9 +385,9 @@ export function SupportWorkspacePage() {
         </form>
 
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void openCase(caseLookupId); }}>
-          <div className="operation-heading"><Link2 aria-hidden="true" /><div><strong>기존 Case 열기</strong><small>Case ID는 PII가 아닌 opaque 식별자입니다.</small></div></div>
-          <TextField label="기존 Case ID" id="support-case-id" value={caseLookupId} required onValueChange={setCaseLookupId} />
-          <Button type="submit" variant="secondary" loading={caseLoading}>Case 열기</Button>
+          <div className="operation-heading"><Link2 aria-hidden="true" /><div><strong>기존 상담 건 열기</strong></div></div>
+          <TextField label="기존 상담 건 ID" id="support-case-id" value={caseLookupId} required onValueChange={setCaseLookupId} />
+          <Button type="submit" variant="secondary" loading={caseLoading}>상담 건 열기</Button>
           {caseError && !supportCase ? <ErrorState error={caseError} retry={() => void openCase(caseLookupId)} /> : null}
         </form>
       </section>
@@ -400,7 +396,7 @@ export function SupportWorkspacePage() {
       {searchResult ? (
         <section className="surface-card support-search-results" aria-labelledby="support-search-title">
           <div className="panel-heading"><div><span className="context-label">마스킹 검색 결과</span><h2 id="support-search-title">마스킹 후보 {searchResult.matchedCount}건</h2></div>{searchResult.ambiguous ? <StatusText state="AMBIGUOUS" /> : null}</div>
-          {searchResult.items.length === 0 ? <EmptyState title="일치하는 대상이 없습니다" description="필수 의존성과 감사 기록이 성공한 빈 결과입니다." /> : (
+          {searchResult.items.length === 0 ? <EmptyState title="일치하는 대상이 없습니다" description="전화번호나 이메일을 확인해 다시 검색해 주세요." /> : (
             <div className="support-candidate-list">
               {searchResult.items.map((candidate) => (
                 <article key={`${candidate.subjectType}-${candidate.subjectId}`}>
@@ -408,7 +404,7 @@ export function SupportWorkspacePage() {
                   <div className="candidate-case-options">
                     <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}><option value="ACCOUNT_RECOVERY">계정 복구</option><option value="PAYMENT_OR_REFUND">결제·환불</option><option value="PRIVACY">개인정보</option><option value="COMPENSATION">보상</option></SelectField>
                     <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="URGENT">긴급</option></SelectField>
-                    <Button loading={creatingCase} onClick={() => void createCaseFor(candidate)}><FilePlus2 size={16} /> 새 Case에 연결</Button>
+                    <Button loading={creatingCase} onClick={() => void createCaseFor(candidate)}><FilePlus2 size={16} /> 새 상담 건에 연결</Button>
                   </div>
                 </article>
               ))}
@@ -417,26 +413,26 @@ export function SupportWorkspacePage() {
         </section>
       ) : null}
 
-      {caseLoading ? <LoadingState label="Case와 타임라인을 함께 불러오는 중" /> : null}
+      {caseLoading ? <LoadingState label="상담 건과 관련 이력을 불러오는 중" /> : null}
       {supportCase ? (
         <>
           <section className="surface-card support-case-header">
-            <div><span className="context-label">진행 중인 Case</span><h2>CASE {supportCase.caseId}</h2><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
+            <div><span className="context-label">진행 중인 상담 건</span><h2>상담 {supportCase.caseId}</h2><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
             <div><StatusText state={supportCase.state} />{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>다음 상태: {nextCaseState[supportCase.state]}</Button> : null}</div>
           </section>
           {caseError ? <ErrorState error={caseError} retry={() => void openCase(supportCase.caseId)} /> : null}
           <div className="support-control-grid">
             <section className="surface-card support-access-panel">
-              <div className="operation-heading"><ShieldCheck aria-hidden="true" /><div><strong>본인확인과 제한형 열람</strong><small>Verification 성공이 Grant를 자동 부여하지 않습니다.</small></div></div>
-              {activeLink ? <p className="support-subject-binding"><StatusText state={activeLink.subjectType} /><code>{activeLink.subjectId}</code><span>{revealField}</span></p> : <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 Case에 연결해 주세요." />}
-              {terminal ? <p className="operation-warning">RESOLVED/CLOSED Case에서는 verification, grant와 reveal을 시작할 수 없습니다.</p> : null}
-              {activeLink && !verification && !terminal ? <Button block loading={verificationBusy} onClick={() => void startVerification()}>ENHANCED 본인확인 시작</Button> : null}
+              <div className="operation-heading"><ShieldCheck aria-hidden="true" /><div><strong>본인확인과 제한형 열람</strong><small>본인확인을 마쳐도 개인정보 열람 권한은 별도로 승인해야 합니다.</small></div></div>
+              {activeLink ? <p className="support-subject-binding"><StatusText state={activeLink.subjectType} /><code>{activeLink.subjectId}</code><span>{revealField}</span></p> : <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." />}
+              {terminal ? <p className="operation-warning">종료된 상담 건에서는 본인확인이나 개인정보 열람을 시작할 수 없습니다.</p> : null}
+              {activeLink && !verification && !terminal ? <Button block loading={verificationBusy} onClick={() => void startVerification()}>강화 본인확인 시작</Button> : null}
               {verification ? (
                 <div className="support-step-stack">
-                  <div className="support-step-summary"><span>Verification</span><StatusText state={verification.state} /><strong>{verification.achievedLevel}</strong><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
-                  {!challenge && verification.state === "PENDING" ? <Button variant="secondary" block loading={verificationBusy} onClick={() => void issueChallenge()}>등록 전화로 challenge 발급</Button> : null}
-                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> Challenge {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 proof" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>proof 검증</Button></> : null}</div> : null}
-                  {verification.achievedLevel === "ENHANCED" && !grant ? <Button block loading={grantBusy} onClick={() => void requestGrant()}>전화번호 Grant 요청</Button> : null}
+                  <div className="support-step-summary"><span>본인확인</span><StatusText state={verification.state} /><strong>{verification.achievedLevel}</strong><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
+                  {!challenge && verification.state === "PENDING" ? <Button variant="secondary" block loading={verificationBusy} onClick={() => void issueChallenge()}>등록 전화로 인증 코드 발급</Button> : null}
+                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> 인증 코드 {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 인증 코드" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>인증 코드 확인</Button></> : null}</div> : null}
+                  {verification.achievedLevel === "ENHANCED" && !grant ? <Button block loading={grantBusy} onClick={() => void requestGrant()}>전화번호 열람 권한 요청</Button> : null}
                 </div>
               ) : null}
               {verificationError ? <ErrorState error={verificationError} /> : null}
@@ -444,7 +440,7 @@ export function SupportWorkspacePage() {
                 <div className="support-grant-card">
                   <div><span className="context-label">데이터 접근 승인</span><StatusText state={grant.state} /></div>
                   <code>{grant.grantId}</code><p>{grant.risk} · 사용 {grant.reservedReveals}/{grant.maxReveals}</p>
-                  {grant.state === "APPROVAL_PENDING" ? <Button variant="secondary" block loading={grantBusy} onClick={() => void approveGrant()}>별도 승인자로 Grant 승인</Button> : null}
+                  {grant.state === "APPROVAL_PENDING" ? <Button variant="secondary" block loading={grantBusy} onClick={() => void approveGrant()}>별도 승인자로 열람 승인</Button> : null}
                   {grant.state === "ACTIVE" ? <Button block loading={grantBusy} onClick={() => void revealPersonalData()}><Eye size={16} /> 승인된 전화번호 열람</Button> : null}
                 </div>
               ) : null}
@@ -465,9 +461,9 @@ export function SupportWorkspacePage() {
 function RevealPanel({ reveal, onClear }: { reveal: Reveal; onClear: () => void }) {
   return (
     <section className="support-reveal" aria-labelledby="support-reveal-title">
-      <div><EyeOff aria-hidden="true" /><div><strong id="support-reveal-title">60초 뒤 자동 제거되는 원문</strong><small>복사·다운로드 기능과 브라우저 저장을 제공하지 않습니다.</small></div></div>
+      <div><EyeOff aria-hidden="true" /><div><strong id="support-reveal-title">60초 뒤 자동으로 숨겨지는 정보</strong></div></div>
       {Object.entries(reveal.values).map(([field, value]) => <p key={field}><span>{field}</span><strong>{value}</strong></p>)}
-      <Button variant="ghost" block onClick={onClear}>원문 즉시 지우기</Button>
+      <Button variant="ghost" block onClick={onClear}>지금 지우기</Button>
     </section>
   );
 }
@@ -475,8 +471,8 @@ function RevealPanel({ reveal, onClear }: { reveal: Reveal; onClear: () => void 
 function TimelinePanel({ timeline }: { timeline: Timeline | null }) {
   return (
     <section className="surface-card support-timeline-panel">
-      <div className="operation-heading"><Sparkles aria-hidden="true" /><div><strong>교차 Context 타임라인</strong><small>서버가 마스킹한 owner fact만 시간순으로 표시합니다.</small></div></div>
-      {!timeline || timeline.items.length === 0 ? <EmptyState title="표시할 이력이 없습니다" description="빈 결과를 장애 fallback으로 만들지 않습니다." /> : (
+      <div className="operation-heading"><Sparkles aria-hidden="true" /><div><strong>관련 이력 타임라인</strong></div></div>
+      {!timeline || timeline.items.length === 0 ? <EmptyState title="표시할 이력이 없습니다" description="연결된 주문·결제·보상 이력이 생기면 여기에 표시됩니다." /> : (
         <ol className="support-timeline">
           {timeline.items.map((item) => <li key={item.itemId}><span aria-hidden="true" /><div><small>{item.source} · {item.type}</small><strong>{item.summary}</strong><p><StatusText state={item.state} /> {shortDateTime.format(new Date(item.occurredAt))}{item.amountKrw !== null ? ` · ${won.format(item.amountKrw)}` : ""}</p></div></li>)}
         </ol>
@@ -551,8 +547,8 @@ function SupportCompensationPanel({ caseId, verificationSessionId, disabled }: {
       {!verificationSessionId ? <p className="operation-warning">보상 평가는 완료된 본인확인 세션이 필요합니다.</p> : null}
       <Button variant="secondary" loading={busy} disabled={disabled || !incidentId.trim() || !verificationSessionId} onClick={() => void evaluate()}>보상 가능 여부 평가</Button>
       {evaluation ? <div className="support-compensation-result"><StatusText state={evaluation.decision} /><strong>{evaluation.band} · {evaluation.approvalRoute}</strong><span>{evaluation.executable ? "현재 평가상 실행 가능" : "승인·조사 또는 추가 조건 필요"}</span><small>{evaluation.reasonCodes.join(", ") || "정책 제한 사유 없음"}</small></div> : null}
-      {evaluation && evaluation.decision !== "DENIED" ? <><TextField label="증거 SHA-256 digest" id="support-evidence-digest" value={evidenceDigest} pattern="[a-f0-9]{64}" placeholder="원문 대신 소문자 64자리 digest" onValueChange={setEvidenceDigest} /><Button loading={busy} disabled={!/^[a-f0-9]{64}$/.test(evidenceDigest)} onClick={() => void create()}>보상 요청 생성</Button></> : null}
-      {compensation ? <div className="support-compensation-result"><StatusText state={compensation.state} /><strong>{won.format(compensation.amountKrw)} 포인트 보상 요청</strong><code>{compensation.compensationRequestId}</code><small>서버 상태가 BENEFIT_ISSUED 또는 NOTIFICATION_ACCEPTED가 되기 전 완료로 표시하지 않습니다.</small></div> : null}
+      {evaluation && evaluation.decision !== "DENIED" ? <><TextField label="증빙 파일 해시 (SHA-256)" id="support-evidence-digest" value={evidenceDigest} pattern="[a-f0-9]{64}" placeholder="소문자 64자리 해시" onValueChange={setEvidenceDigest} /><Button loading={busy} disabled={!/^[a-f0-9]{64}$/.test(evidenceDigest)} onClick={() => void create()}>보상 요청 생성</Button></> : null}
+      {compensation ? <div className="support-compensation-result"><StatusText state={compensation.state} /><strong>{won.format(compensation.amountKrw)} 포인트 보상 요청</strong><code>{compensation.compensationRequestId}</code><small>혜택 지급 또는 알림 접수 상태가 확인되기 전에는 완료로 표시하지 않습니다.</small></div> : null}
       {error ? <ErrorState error={error} /> : null}
     </section>
   );

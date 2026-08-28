@@ -17,6 +17,6 @@ type Story = StoryObj<typeof meta>;
 
 export const Dashboard: Story = {
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("UNKNOWN 유지")).toBeVisible();
+    await expect(canvas.getByText("확인 필요")).toBeVisible();
   },
 };

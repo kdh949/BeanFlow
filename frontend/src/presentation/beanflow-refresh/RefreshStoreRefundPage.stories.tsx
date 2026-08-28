@@ -29,9 +29,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SelectableItems: Story = {
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByText("아이스 아메리카노")).toBeVisible();
     await expect(canvas.getByRole("heading", { name: "환불 대상 주문" })).toBeVisible();
+    await expect(canvas.getByText("주문 번호")).toBeVisible();
+    await expect(canvas.getByText(orderReference)).toBeVisible();
+    await expect(canvasElement.querySelector(".bfr-refund-context .context-label")).toBeNull();
     await expect(canvas.queryByText(/고객 이름|전화번호|VAT|주문 채널/)).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
   },
