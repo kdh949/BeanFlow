@@ -88,3 +88,103 @@ Acceptable P3/expected differences:
 ## Final result
 
 final result: passed
+
+## Merchant workspace chrome follow-up — 2026-08-29
+
+- Source sidebar: `/var/folders/rg/k27jblsn7sn4qsddc_5ckkvw0000gn/T/codex-clipboard-367ff598-ef6a-4f68-b7e8-7415c6331a02.png`
+- Source topbar: `/var/folders/rg/k27jblsn7sn4qsddc_5ckkvw0000gn/T/codex-clipboard-12b01c16-9a60-438d-83d6-061552925d80.png`
+- Browser-rendered implementation: `patterns-navigation-app-shells--store-chrome`
+- Matched viewport: `1600 × 1000`; final browser capture: `/private/tmp/beanflow-merchant-shell-story-final.png`
+
+The source crops and final Storybook capture were reviewed together at original resolution. The implementation preserves the 216px white sidebar, 70px white topbar, grouped Korean navigation, coral active row, bottom collapse control, store selector, notification/help area, and actor control. The first visual pass exposed excess navigation height, mismatched representative icons, and a missing bordered collapse affordance; all three were corrected before the final capture.
+
+Exact store reference, notification state, and actor copy remain contract-driven at runtime. The Storybook reference states use deterministic `A-142`, unread notification, and actor fixtures only; the real `/store` shell does not invent values that the merchant API does not provide. Unsupported destinations are visible but non-interactive and do not create placeholder routes.
+
+Focused Storybook interaction and accessibility validation passed for the reusable shell states and the actual `ConsoleShell kind="store"` composition. No actionable P0, P1, or P2 visual difference remains.
+
+merchant chrome final result: passed
+
+## Customer-support workspace chrome follow-up — 2026-08-29
+
+- Source sidebar: `/var/folders/rg/k27jblsn7sn4qsddc_5ckkvw0000gn/T/codex-clipboard-9e65f840-d696-4518-9af5-1f610a648b01.png`
+- Browser-rendered implementation: `patterns-support-support-workspace-shell--sidebar-reference`
+- Matched viewport: `260 × 991`
+
+The source image and the live Storybook sidebar were reviewed together at the same `260 × 991` viewport. The implementation preserves the cool gray support surface, 260px wide chrome, BeanFlow brand placement, coral queue selection, grouped support tools, separated settings row, and bottom actor control. The first pass exposed a Storybook-only 320px body minimum that introduced scrollbars at the source width; the reference story now removes that preview constraint without changing production layout.
+
+The support shell shares only `WorkspaceFrame` geometry tokens with the merchant shell. Navigation, active-state meaning, actor copy, unavailable destinations, and topbar context remain support-owned. Unsupported destinations render with disabled semantics and no placeholder route; runtime actor copy remains derived from operations authentication state rather than the reference fixture.
+
+Focused Storybook interaction and accessibility validation passed for the workspace frame, merchant shell, support shell, and actual `ConsoleShell` compositions; the final live-MCP sweep passed all 206 indexed stories. Lucide icons are the closest available library matches to the raster source; no handcrafted SVG or screenshot-derived asset was introduced. No actionable P0, P1, or P2 visual difference remains.
+
+support chrome final result: passed
+
+## Reference-screen composition follow-up — 2026-08-29
+
+### Scope and evidence
+
+- Customer references: payment success/failure, login, signup, help, orders, coupons, favorites, and points.
+- Store references: disputes, login, first-password change, settlements, and operating region.
+- Operations references: compensation lookup, dashboard, merchant accounts, and policy management.
+- Same-viewport per-screen comparisons: `/private/tmp/beanflow-reference-qa-*-comparison.png`.
+- Favorite-store replacement follow-up: `/private/tmp/beanflow-reference-qa-customer-favorites-comparison.png`.
+- Customer contact sheet: `/private/tmp/beanflow-reference-qa-customer-contact.png`.
+- Store/operations contact sheet: `/private/tmp/beanflow-reference-qa-workspace-contact.png`.
+
+Every comparison places the supplied reference and the browser-rendered canonical story side by side at the same viewport. The review therefore covers the actual route/story source rather than a detached mock.
+
+### Findings
+
+- The 18 target routes and canonical stories now compose reusable customer result/auth/list layouts or the shared workspace page pattern. They do not reproduce each screenshot as an isolated page.
+- Favorite stores now composes the same `RefreshStoreCard` used by the new customer discovery presentation. The retired `features/discovery/StoreCards` file and its unscoped global selectors were removed, and the active-reference import boundary now covers the 18 page/story entry files directly.
+- Store pages always use the user-selected `MerchantWorkspaceShell`; conflicting sidebar or topbar chrome shown in individual screen references is intentionally ignored. Support remains owned by `SupportWorkspaceShell`, while operations uses an operations-owned shell. All three share only `WorkspaceFrame` geometry and foundation tokens.
+- The cool-white surface, navy hierarchy, coral active/action accent, card treatment, input treatment, status colors, and workspace spacing are consistent across customer, store, support, and operations surfaces.
+- Reference-only capabilities without an OpenAPI/runtime contract were not fabricated. This includes help search/contact metadata, point QR use, aggregate operations KPIs, merchant account lists, public compensation lists, and settlement-wide totals. These screens therefore have intentionally lower content density than their reference images while preserving the supported task hierarchy and explicit failure semantics.
+- Logo and interface icons use repository assets and Lucide. No screenshot crop, CSS/inline-SVG drawing, emoji, fake QR, or production mock provider was introduced.
+- Customer login, signup, and transaction result stories expose individual runtime states instead of simultaneously rendering the multiple mutually exclusive states shown in composite design references.
+
+The comparison shows no reusable-shell ownership defect or actionable P0/P1 difference. Exact pixel/content parity is not claimed for unsupported reference capabilities; those gaps remain contract work rather than frontend placeholders.
+
+### Validation
+
+- `npm run typecheck`: passed.
+- `npm test`: passed — 24 files, 176 tests; presentation boundary 15 tests; product-copy audit 11 tests.
+- `npm run check:design`: passed — 193 tokens, 57 story files, 36 route components.
+- `npm run build-storybook`, `npm run test:storybook:docs`, `npm run build`, and `npm run test:sites`: passed.
+- Live Storybook MCP focused run: 23 representative stories passed with accessibility enabled.
+- Live Storybook full run: all indexed stories passed with accessibility enabled after the settlement empty-state handoff was made stable.
+- `git diff --check`: passed.
+- Pixel baseline automation: not configured; same-viewport combined-image review is the recorded visual evidence.
+
+reference-screen composition final result: passed within current runtime contracts
+
+## Customer-support S130 screen suite — 2026-08-29
+
+### Scope and visual evidence
+
+- Eight runtime-backed screens: queue, intake, case detail, verification/reveal, order action, compensation, profile change, and approvals/audit.
+- Reference viewport: `1586 × 992`.
+- Combined reference/current evidence: `/private/tmp/beanflow-support-all-comparisons.png`.
+- Per-screen evidence: `/private/tmp/beanflow-support-*-comparison-1586x992.png`.
+- Responsive browser checks: `1440`, `1280`, and `1024` CSS-pixel widths; the representative queue and order-action routes had `scrollWidth === clientWidth` and exactly one `main` landmark at every width.
+- Narrow desktop evidence: `/private/tmp/beanflow-support-queue-1024x900.png` and `/private/tmp/beanflow-support-order-action-1024x900.png`.
+
+The supplied raster references and the live runtime-route stories were reviewed side by side. The implementation keeps the user-selected `SupportWorkspaceShell` as the sole customer-support sidebar and topbar owner, then composes the same cool-white, navy, coral, card, dense-table, filter, metric, stepper, and timeline foundations across all eight screens. No reference crop is rendered as product UI.
+
+### Findings and intentional differences
+
+- The shell, content hierarchy, primary accent roles, master/detail structure, and dense operational patterns match the reference family. The black regions in some references are treated as canvas outside the application surface.
+- Runtime screens use only fields and states exposed by the OpenAPI contracts. Reference-only page-number pagination, generic upload/download helpers, unassigned-case workflow, and invented customer or merchant fields are intentionally absent; signed cursors, `MINE|ALL`, evidence digests, and masked owner summaries are used instead.
+- Storybook handlers provide deterministic contract-shaped examples only. Runtime routes do not import MSW, story fixtures, or fallback data.
+- The order-action story exercises server policy evaluation. Verification and sensitive reveal remain route-local and are cleared by navigation/session/permission lifecycle handling.
+- At `1024px`, dense multi-column areas collapse into a readable vertical flow without horizontal clipping; the fixed support navigation remains available and the canonical topbar remains the sole header.
+
+### Validation
+
+- Live Storybook MCP focused run: all eight runtime-route stories passed with accessibility enabled.
+- Live Storybook MCP full run: all indexed stories passed with accessibility enabled.
+- Frontend unit, presentation-boundary, product-copy, design, application build, Storybook static build, Storybook docs smoke, and Sites tests passed.
+- Presentation boundary reports zero legacy presentation imports across active routes, stories, and the support-center root.
+- Same-viewport visual comparison: passed for reusable shell ownership and supported contract-backed task hierarchy. Exact content density is not claimed where the reference depends on unsupported contracts.
+- Automated pixel-diff threshold: not configured; the combined-image review above is the recorded visual evidence.
+
+customer-support S130 visual result: passed within current contracts
