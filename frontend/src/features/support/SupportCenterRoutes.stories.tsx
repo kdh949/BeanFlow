@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import {
   SupportApprovalsRoute,
@@ -112,7 +112,9 @@ export const Detail: Story = {
   play: async ({ canvas }) => {
     await userEvent.type(await canvas.findByLabelText("새 내부 메모"), "고객이 재배송을 원하지 않는다고 확인함");
     await userEvent.click(canvas.getByRole("button", { name: "메모 추가" }));
-    await expect(await canvas.findByText("메모가 비식별 기록으로 저장되었습니다.")).toBeVisible();
+    await waitFor(async () => {
+      await expect(canvas.getByText("메모가 비식별 기록으로 저장되었습니다.")).toBeVisible();
+    });
   },
 };
 export const Verification: Story = { render: () => inWorkspace(<SupportVerificationRoute />), parameters: { routing: { path: "/support/cases/:caseId/verification", initialEntry: `/support/cases/${caseId}/verification` } } };
