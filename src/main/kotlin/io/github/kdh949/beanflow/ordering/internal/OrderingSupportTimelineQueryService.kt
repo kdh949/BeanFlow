@@ -1,9 +1,9 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
-import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderLineOverview
 import io.github.kdh949.beanflow.ordering.api.SupportOrderOverviewSnapshot
+import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderState
 import io.github.kdh949.beanflow.shared.api.SUPPORT_TIMELINE_COMPARATOR
 import io.github.kdh949.beanflow.shared.api.SupportOwnerTimelineFact
@@ -44,24 +44,25 @@ internal class OrderingSupportTimelineQueryService(
         val ids = orderIds.sortedBy(UUID::toString)
         val placeholders = ids.joinToString(",") { "?" }
         val lines =
-            jdbcTemplate.query(
-                """
-                SELECT order_id, line_sequence, menu_name, quantity, gross_krw
-                  FROM ordering_order_line
-                 WHERE order_id IN ($placeholders)
-                 ORDER BY order_id, line_sequence
-                """.trimIndent(),
-                { resultSet, _ ->
-                    resultSet.getObject("order_id", UUID::class.java) to
-                        SupportOrderLineOverview(
-                            resultSet.getInt("line_sequence"),
-                            resultSet.getString("menu_name"),
-                            resultSet.getLong("quantity"),
-                            resultSet.getLong("gross_krw"),
-                        )
-                },
-                *ids.toTypedArray(),
-            ).groupBy({ it.first }, { it.second })
+            jdbcTemplate
+                .query(
+                    """
+                    SELECT order_id, line_sequence, menu_name, quantity, gross_krw
+                      FROM ordering_order_line
+                     WHERE order_id IN ($placeholders)
+                     ORDER BY order_id, line_sequence
+                    """.trimIndent(),
+                    { resultSet, _ ->
+                        resultSet.getObject("order_id", UUID::class.java) to
+                            SupportOrderLineOverview(
+                                resultSet.getInt("line_sequence"),
+                                resultSet.getString("menu_name"),
+                                resultSet.getLong("quantity"),
+                                resultSet.getLong("gross_krw"),
+                            )
+                    },
+                    *ids.toTypedArray(),
+                ).groupBy({ it.first }, { it.second })
         return jdbcTemplate.query(
             """
             SELECT id, customer_id, store_id, public_reference, store_name_snapshot, state, version,
