@@ -33,6 +33,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -219,6 +220,28 @@ internal class SupportProfileChangeIntegrationTest
             val created = profiles.submit(primaryPhoneCommand("phone-dual-create"))
             assertThat(created.riskClass).isEqualTo(ProfileRiskClass.R3)
             assertThat(created.state).isEqualTo(SupportProfileChangeState.AWAITING_APPROVAL)
+
+            val unrelatedActor = UUID.fromString("83000000-0000-0000-0000-000000000005")
+            grant(unrelatedActor, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(get("/api/v1/support/profile-changes").with(jwt().jwt { it.subject(unrelatedActor.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/profile-changes")
+                        .param("caseId", caseId.toString())
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) }),
+                ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/profile-changes/${created.profileChangeId}")
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) }),
+                ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(get("/api/v1/support/profile-changes").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].profileChangeId").value(created.profileChangeId.toString()))
 
             grant(requesterId, "SUPPORT_ACTION_APPROVE")
             grant(requesterId, "SUPPORT_PROFILE_R3_APPROVE")

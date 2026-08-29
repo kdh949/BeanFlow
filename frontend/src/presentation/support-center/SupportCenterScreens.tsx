@@ -98,7 +98,7 @@ export function SupportQueueScreen({ status, summary, page, filters, onFilterCha
   </SupportPage>;
 }
 
-export function SupportCaseIntakeScreen({ status, criterionType, criterion, result, busy, onCriterionTypeChange, onCriterionChange, onSearch, onCreate }: { status: ScreenStatus; criterionType: string; criterion: string; result?: SearchResult; busy?: boolean; onCriterionTypeChange?: (value: string) => void; onCriterionChange?: (value: string) => void; onSearch?: () => void; onCreate?: (candidate: SearchResult["items"][number]) => void }) {
+export function SupportCaseIntakeScreen({ status, criterionType, criterion, category = "ACCOUNT_RECOVERY", priority = "NORMAL", result, busy, onCriterionTypeChange, onCriterionChange, onCategoryChange, onPriorityChange, onSearch, onCreate }: { status: ScreenStatus; criterionType: string; criterion: string; category?: components["schemas"]["SupportInquiryCategory"]; priority?: components["schemas"]["SupportCasePriority"]; result?: SearchResult; busy?: boolean; onCriterionTypeChange?: (value: string) => void; onCriterionChange?: (value: string) => void; onCategoryChange?: (value: string) => void; onPriorityChange?: (value: string) => void; onSearch?: () => void; onCreate?: (candidate: SearchResult["items"][number]) => void }) {
   return <SupportPage title="문의 접수" description="고객·매장·배달원을 정확 검색하고 새 상담 Case를 생성합니다.">
     <ScreenGate status={status} loadingLabel="문의 접수 화면을 준비하는 중">
       <div className="bf-support-two-column">
@@ -114,8 +114,8 @@ export function SupportCaseIntakeScreen({ status, criterionType, criterion, resu
           </div>
         </Surface>
         <Surface title="문의 정보 입력" description="대상을 선택하면 새 Case에 연결됩니다.">
-          <SelectField label="문의 유형" value="PAYMENT_OR_REFUND" onValueChange={() => undefined} disabled><option value="PAYMENT_OR_REFUND">결제·환불 문의</option></SelectField>
-          <SelectField label="우선순위" value="NORMAL" onValueChange={() => undefined} disabled><option value="NORMAL">보통</option></SelectField>
+          <SelectField label="문의 유형" value={category} onValueChange={onCategoryChange ?? (() => undefined)}><option value="ORDER_STATUS">주문 상태</option><option value="PICKUP_RESCHEDULE">픽업 일정 변경</option><option value="ORDER_CANCELLATION">주문 취소</option><option value="PAYMENT_OR_REFUND">결제·환불</option><option value="COUPON_OR_POINT">쿠폰·포인트</option><option value="COMPENSATION">보상</option><option value="CUSTOMER_PROFILE">고객 정보</option><option value="STORE_PROFILE">매장 정보</option><option value="DELIVERY_STATUS">배달 상태</option><option value="DELIVERY_INCIDENT">배달 사고</option><option value="SETTLEMENT">정산</option><option value="DISPUTE">이의제기</option><option value="ACCOUNT_RECOVERY">계정 복구</option><option value="PRIVACY">개인정보</option><option value="SAFETY">안전</option><option value="OTHER">기타</option></SelectField>
+          <SelectField label="우선순위" value={priority} onValueChange={onPriorityChange ?? (() => undefined)}><option value="LOW">낮음</option><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="URGENT">긴급</option></SelectField>
           <TextAreaField label="상담 내용" value="" onValueChange={() => undefined} readOnly placeholder="상담 내용을 상세히 입력해 주세요." rows={9} />
           <FeedbackState kind="empty" title="접수 원칙" description="검색 대상과 문의 분류만 Case에 연결하며 원문 PII를 상담 메모에 복사하지 않습니다." />
         </Surface>
@@ -124,13 +124,13 @@ export function SupportCaseIntakeScreen({ status, criterionType, criterion, resu
   </SupportPage>;
 }
 
-export function SupportCaseDetailScreen({ status, overview, timeline = [], noteContent = "", interactionSummary = "", mutationMessage, busy, onNoteContentChange, onInteractionSummaryChange, onAppendNote, onAppendInteraction, onRefresh }: { status: ScreenStatus; overview?: CaseOverview; timeline?: components["schemas"]["SupportTimelineItem"][]; noteContent?: string; interactionSummary?: string; mutationMessage?: string; busy?: boolean; onNoteContentChange?: (value: string) => void; onInteractionSummaryChange?: (value: string) => void; onAppendNote?: () => void; onAppendInteraction?: () => void; onRefresh?: () => void }) {
+export function SupportCaseDetailScreen({ status, overview, timeline = [], noteContent = "", interactionSummary = "", mutationMessage, busy, nextState, onNoteContentChange, onInteractionSummaryChange, onAppendNote, onAppendInteraction, onTransition, onRefresh }: { status: ScreenStatus; overview?: CaseOverview; timeline?: components["schemas"]["SupportTimelineItem"][]; noteContent?: string; interactionSummary?: string; mutationMessage?: string; busy?: boolean; nextState?: components["schemas"]["SupportCaseState"]; onNoteContentChange?: (value: string) => void; onInteractionSummaryChange?: (value: string) => void; onAppendNote?: () => void; onAppendInteraction?: () => void; onTransition?: () => void; onRefresh?: () => void }) {
   return <SupportPage title="상담 상세" description="Case, 관련 대상과 상담 이력을 한 화면에서 확인합니다." actions={<Button variant="secondary" onClick={onRefresh}><RefreshCw size={16} />새로고침</Button>}>
     <ScreenGate status={status} loadingLabel="상담 상세를 불러오는 중">
       {overview ? <>
         <div className="bf-support-summary-grid">
           <Surface title="고객 정보"><strong>{overview.case.primarySubject?.maskedDisplayName ?? "보호된 대상"}</strong><p>{overview.case.primarySubject?.maskedMatchedValue ?? "마스킹 정보 없음"}</p><StatusText tone={statusTone(overview.case.priority)}>{overview.case.priority}</StatusText></Surface>
-          <Surface title="Case 정보"><strong>{compact(overview.case.caseId)}</strong><p>{overview.case.category} · v{overview.case.version}</p><StatusText tone={statusTone(overview.case.state)}>{overview.case.state}</StatusText></Surface>
+          <Surface title="Case 정보" actions={nextState ? <Button size="sm" variant="secondary" loading={busy} onClick={onTransition}>다음 상태: {nextState}</Button> : undefined}><strong>{compact(overview.case.caseId)}</strong><p>{overview.case.category} · v{overview.case.version}</p><StatusText tone={statusTone(overview.case.state)}>{overview.case.state}</StatusText></Surface>
           <Surface title="관련 주문"><strong>{overview.orders.length}건</strong><p>{overview.orders[0]?.publicReference ?? "연결 주문 없음"}</p>{overview.orders[0] ? <ButtonLink size="sm" variant="secondary" to={`/support/cases/${overview.case.caseId}/orders/${overview.orders[0].orderId}/action`}>주문 보기</ButtonLink> : null}</Surface>
         </div>
         {mutationMessage ? <p className="bf-support-action-feedback" role="status">{mutationMessage}</p> : null}
@@ -145,7 +145,7 @@ export function SupportCaseDetailScreen({ status, overview, timeline = [], noteC
 }
 
 export type VerificationVisualState = "pending" | "invalid" | "locked" | "expired" | "verified" | "grant-pending" | "active";
-export function SupportVerificationScreen({ status, state = "pending", verificationCode = "", revealedValue, onVerificationCodeChange, onIssue, onVerify, onReveal, onClear }: { status: ScreenStatus; state?: VerificationVisualState; verificationCode?: string; revealedValue?: string; onVerificationCodeChange?: (value: string) => void; onIssue?: () => void; onVerify?: () => void; onReveal?: () => void; onClear?: () => void }) {
+export function SupportVerificationScreen({ status, state = "pending", verificationCode = "", challengeChannel, verifiedChannelCount = 0, busy, revealedValue, onVerificationCodeChange, onIssue, onVerify, onReveal, onClear }: { status: ScreenStatus; state?: VerificationVisualState; verificationCode?: string; challengeChannel?: components["schemas"]["VerificationChannel"]; verifiedChannelCount?: number; busy?: boolean; revealedValue?: string; onVerificationCodeChange?: (value: string) => void; onIssue?: () => void; onVerify?: () => void; onReveal?: () => void; onClear?: () => void }) {
   const failed = state === "invalid" || state === "locked" || state === "expired";
   return <SupportPage title="본인확인·정보 열람" description="본인확인과 목적 제한 열람을 단계별로 처리합니다.">
     <ScreenGate status={status} loadingLabel="본인확인 상태를 불러오는 중">
@@ -156,8 +156,8 @@ export function SupportVerificationScreen({ status, state = "pending", verificat
         { id: "reveal", label: "제한 시간 열람", state: state === "active" ? "current" : "upcoming" },
       ]} />
       <div className="bf-support-three-column">
-        <Surface title="1. 인증 코드 발급"><TextField label="등록 전화번호" value="010-12**-5678" onValueChange={() => undefined} readOnly /><Button block onClick={onIssue}>코드 발급</Button></Surface>
-          <Surface title="2. 인증 코드 검증"><TextField label="6자리 인증 코드" inputMode="numeric" maxLength={6} autoComplete="one-time-code" value={verificationCode} onValueChange={(value) => onVerificationCodeChange?.(value.replace(/\D/g, "").slice(0, 6))} /><Button block variant="secondary" disabled={verificationCode.length !== 6} onClick={onVerify}>검증</Button>{failed ? <FeedbackState kind="error" title={state === "locked" ? "인증이 잠겼습니다" : state === "expired" ? "인증 코드가 만료됐습니다" : "인증 코드가 올바르지 않습니다"} description="인증 상태를 확인한 뒤 다시 시도해 주세요." /> : null}</Surface>
+        <Surface title="1. 인증 코드 발급"><TextField label="현재 인증 채널" value={challengeChannel === "REGISTERED_EMAIL" ? "등록된 이메일" : challengeChannel === "REGISTERED_PHONE" ? "등록된 전화번호" : "등록된 연락처"} onValueChange={() => undefined} readOnly /><p>{verifiedChannelCount}/2개 채널 확인 완료</p><Button block loading={busy} disabled={Boolean(challengeChannel) && !failed} onClick={onIssue}>코드 발급</Button></Surface>
+          <Surface title="2. 인증 코드 검증"><TextField label="6자리 인증 코드" inputMode="numeric" maxLength={6} autoComplete="one-time-code" value={verificationCode} onValueChange={(value) => onVerificationCodeChange?.(value.replace(/\D/g, "").slice(0, 6))} /><Button block variant="secondary" loading={busy} disabled={!challengeChannel || verificationCode.length !== 6} onClick={onVerify}>검증</Button>{failed ? <FeedbackState kind="error" title={state === "locked" ? "인증이 잠겼습니다" : state === "expired" ? "인증 코드가 만료됐습니다" : "인증 코드가 올바르지 않습니다"} description="인증 상태를 확인한 뒤 다시 시도해 주세요." /> : null}</Surface>
         <Surface title="3. 승인된 정보 열람">{state === "active" ? <><div className="bf-support-reveal" role="status"><small>승인 범위 내 정보</small><strong>{revealedValue ?? "아직 열람하지 않음"}</strong></div><Button block onClick={revealedValue ? onClear : onReveal}>{revealedValue ? "즉시 숨김" : "정보 열람"}</Button></> : <FeedbackState kind="empty" title={state === "grant-pending" ? "승인 대기 중" : "활성 Grant가 없습니다"} description="승인된 열람 범위가 활성화되면 이 영역에서 확인할 수 있습니다." />}</Surface>
       </div>
     </ScreenGate>

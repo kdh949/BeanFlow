@@ -22,6 +22,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -260,7 +261,17 @@ internal class DataAccessGrantIntegrationTest
         fun `sensitive grant requires enhanced verification and a distinct approver`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
             val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-request-sensitive-0001", "APPROVAL_PENDING")
+            grant(requesterId, "SUPPORT_CASE_READ")
             grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
+
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .param("scope", "MINE")
+                        .param("taskType", "DATA_ACCESS_GRANT")
+                        .with(operatorJwt(requesterId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty)
 
             mockMvc
                 .perform(
@@ -270,6 +281,17 @@ internal class DataAccessGrantIntegrationTest
                         .json("""{"decision":"APPROVE","expectedVersion":0,"reasonCode":"CASE_HANDLING"}"""),
                 ).andExpect(status().isForbidden)
             grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
+            grant(approverId, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .param("scope", "MINE")
+                        .param("taskType", "DATA_ACCESS_GRANT")
+                        .with(operatorJwt(approverId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].resourceId").value(grantId.toString()))
+                .andExpect(jsonPath("$.items[0].allowedActions[0]").value("APPROVE"))
+                .andExpect(jsonPath("$.items[0].allowedActions[1]").value("DENY"))
             mockMvc
                 .perform(
                     post("/api/v1/support/data-access-grants/$grantId/approvals")

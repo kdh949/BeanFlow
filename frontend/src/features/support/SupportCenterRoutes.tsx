@@ -33,6 +33,16 @@ type Grant = components["schemas"]["DataAccessGrantResource"];
 type Reveal = components["schemas"]["RevealedPersonalDataResource"];
 type Timeline = components["schemas"]["SupportTimelinePage"];
 type PersonalField = components["schemas"]["SupportPersonalDataField"];
+type SupportInquiryCategory = components["schemas"]["SupportInquiryCategory"];
+type SupportCasePriority = components["schemas"]["SupportCasePriority"];
+type VerificationChannel = components["schemas"]["VerificationChannel"];
+
+const nextCaseState: Partial<Record<SupportCase["state"], SupportCase["state"]>> = {
+  OPEN: "IN_PROGRESS",
+  IN_PROGRESS: "RESOLVED",
+  WAITING: "IN_PROGRESS",
+  RESOLVED: "CLOSED",
+};
 
 function screenStatus(error: unknown, loading: boolean): ScreenStatus {
   if (loading) return "loading";
@@ -70,6 +80,8 @@ export function SupportCaseIntakeRoute() {
   const navigate = useNavigate();
   const [criterionType, setCriterionType] = useState("PHONE");
   const [criterion, setCriterion] = useState("");
+  const [category, setCategory] = useState<SupportInquiryCategory>("ACCOUNT_RECOVERY");
+  const [priority, setPriority] = useState<SupportCasePriority>("NORMAL");
   const [result, setResult] = useState<SearchResult>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -84,7 +96,7 @@ export function SupportCaseIntakeRoute() {
     } catch (failure) { setError(failure); } finally { setCriterion(""); setBusy(false); }
   }
   async function create(candidate: SearchResult["items"][number]) {
-    const body = { requesterType: candidate.subjectType === "STORE" ? "STORE_OWNER" as const : candidate.subjectType, requesterReference: candidate.subjectId, category: "PAYMENT_OR_REFUND" as const, priority: "NORMAL" as const, reason: "MASKED_EXACT_SEARCH_CASE_INTAKE" };
+    const body = { requesterType: candidate.subjectType === "STORE" ? "STORE_OWNER" as const : candidate.subjectType, requesterReference: candidate.subjectId, category, priority, reason: "MASKED_EXACT_SEARCH_CASE_INTAKE" };
     setBusy(true); setError(undefined);
     try {
       const created = unwrap(await operationsApi.POST("/support/cases", { params: { header: { "Idempotency-Key": caseIntent.current.keyFor(JSON.stringify(body)) } }, body }));
@@ -93,7 +105,7 @@ export function SupportCaseIntakeRoute() {
       caseIntent.current.complete(); linkIntent.current.complete(); navigate(`/support/cases/${created.caseId}`);
     } catch (failure) { setError(failure); } finally { setBusy(false); }
   }
-  return <SupportCaseIntakeScreen status={screenStatus(error, false)} criterionType={criterionType} criterion={criterion} result={result} busy={busy} onCriterionTypeChange={setCriterionType} onCriterionChange={setCriterion} onSearch={() => void search()} onCreate={(candidate) => void create(candidate)} />;
+  return <SupportCaseIntakeScreen status={screenStatus(error, false)} criterionType={criterionType} criterion={criterion} category={category} priority={priority} result={result} busy={busy} onCriterionTypeChange={setCriterionType} onCriterionChange={setCriterion} onCategoryChange={(value) => setCategory(value as SupportInquiryCategory)} onPriorityChange={(value) => setPriority(value as SupportCasePriority)} onSearch={() => void search()} onCreate={(candidate) => void create(candidate)} />;
 }
 
 export function SupportCaseDetailRoute() {
@@ -109,6 +121,7 @@ export function SupportCaseDetailRoute() {
   const [generation, setGeneration] = useState(0);
   const noteIntent = useRef(new SubmissionIntent());
   const interactionIntent = useRef(new SubmissionIntent());
+  const transitionIntent = useRef(new SubmissionIntent());
   useEffect(() => {
     let current = true; setLoading(true); setError(undefined);
     Promise.all([
@@ -139,7 +152,19 @@ export function SupportCaseDetailRoute() {
     } catch (failure) { setMutationMessage(failure instanceof Error ? failure.message : "접촉 기록을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
-  return <SupportCaseDetailScreen status={screenStatus(error, loading)} overview={overview} timeline={timeline?.items} noteContent={noteContent} interactionSummary={interactionSummary} mutationMessage={mutationMessage} busy={busy} onNoteContentChange={setNoteContent} onInteractionSummaryChange={setInteractionSummary} onAppendNote={() => void appendNote()} onAppendInteraction={() => void appendInteraction()} onRefresh={() => setGeneration((value) => value + 1)} />;
+  async function transitionCase() {
+    if (!overview) return;
+    const targetState = nextCaseState[overview.case.state];
+    if (!targetState) return;
+    const body = { targetState, expectedVersion: overview.case.version, reason: `SUPPORT_CENTER_${overview.case.state}_TO_${targetState}` };
+    setBusy(true); setMutationMessage(undefined);
+    try {
+      unwrap(await operationsApi.POST("/support/cases/{caseId}/status-transitions", { params: { path: { caseId }, header: { "Idempotency-Key": transitionIntent.current.keyFor(JSON.stringify(body)) } }, body }));
+      transitionIntent.current.complete(); setMutationMessage(`상담 상태가 ${targetState}(으)로 변경되었습니다.`); setGeneration((value) => value + 1);
+    } catch (failure) { setMutationMessage(failure instanceof Error ? failure.message : "상담 상태를 변경하지 못했습니다."); }
+    finally { setBusy(false); }
+  }
+  return <SupportCaseDetailScreen status={screenStatus(error, loading)} overview={overview} timeline={timeline?.items} noteContent={noteContent} interactionSummary={interactionSummary} mutationMessage={mutationMessage} busy={busy} nextState={overview ? nextCaseState[overview.case.state] : undefined} onNoteContentChange={setNoteContent} onInteractionSummaryChange={setInteractionSummary} onAppendNote={() => void appendNote()} onAppendInteraction={() => void appendInteraction()} onTransition={() => void transitionCase()} onRefresh={() => setGeneration((value) => value + 1)} />;
 }
 
 const fieldBySubject: Partial<Record<components["schemas"]["SupportSubjectType"], PersonalField>> = {
@@ -154,6 +179,7 @@ export function SupportVerificationRoute() {
   const [grant, setGrant] = useState<Grant>();
   const [reveal, setReveal] = useState<Reveal>();
   const [proof, setProof] = useState("");
+  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const sessionIntent = useRef(new SubmissionIntent());
@@ -173,32 +199,44 @@ export function SupportVerificationRoute() {
   }, [reveal]);
   const activeLink = supportCase?.subjectLinks.find((link) => fieldBySubject[link.subjectType]);
   const field = activeLink ? fieldBySubject[activeLink.subjectType] : undefined;
+  async function issueChallenge(sessionId: string, channel: VerificationChannel) {
+    const body = { channel };
+    const issued = unwrap(await operationsApi.POST("/support/verification-sessions/{sessionId}/challenges", { params: { path: { sessionId }, header: { "Idempotency-Key": challengeIntent.current.keyFor(JSON.stringify(body)) } }, body }));
+    challengeIntent.current.complete();
+    return issued;
+  }
   async function issue() {
     if (!activeLink) return;
-    setError(undefined);
+    setBusy(true); setError(undefined);
     try {
       const body = { subjectLinkId: activeLink.linkId, requestedLevel: "ENHANCED" as const, purpose: "CONTACT_CONFIRMATION" as const, actionScope: "PERSONAL_DATA_REVEAL" as const };
       const created = unwrap(await operationsApi.POST("/support/cases/{caseId}/verification-sessions", { params: { path: { caseId }, header: { "Idempotency-Key": sessionIntent.current.keyFor(JSON.stringify(body)) } }, body }));
       setSession(created); sessionIntent.current.complete();
-      const challengeBody = { channel: "REGISTERED_PHONE" as const };
-      setChallenge(unwrap(await operationsApi.POST("/support/verification-sessions/{sessionId}/challenges", { params: { path: { sessionId: created.sessionId }, header: { "Idempotency-Key": challengeIntent.current.keyFor(JSON.stringify(challengeBody)) } }, body: challengeBody })));
-      challengeIntent.current.complete();
+      const issued = await issueChallenge(created.sessionId, "REGISTERED_PHONE");
+      setChallenge(issued); setSession({ ...created, challenges: [...created.challenges, issued] });
     } catch (failure) { setError(failure); }
+    finally { setBusy(false); }
   }
   async function verify() {
     if (!challenge || !session || !field) return;
-    setError(undefined);
+    setBusy(true); setError(undefined);
     try {
       const body = { proof };
       const verified = unwrap(await operationsApi.POST("/support/verification-challenges/{challengeId}/verifications", { params: { path: { challengeId: challenge.challengeId }, header: { "Idempotency-Key": proofIntent.current.keyFor(JSON.stringify(body)) } }, body }));
-      setSession({ ...session, state: verified.sessionState, achievedLevel: verified.achievedLevel, invalidAttempts: verified.invalidAttempts, challenges: [verified.challenge] });
+      const verifiedChallenges = [...session.challenges.filter((item) => item.challengeId !== verified.challenge.challengeId), verified.challenge];
+      setSession({ ...session, state: verified.sessionState, achievedLevel: verified.achievedLevel, invalidAttempts: verified.invalidAttempts, challenges: verifiedChallenges });
       setChallenge(verified.challenge); proofIntent.current.complete(); setProof("");
-      if (verified.sessionState === "VERIFIED") {
+      if (verified.challenge.state === "VERIFIED" && verified.sessionState === "PENDING" && verified.challenge.channel === "REGISTERED_PHONE") {
+        const emailChallenge = await issueChallenge(session.sessionId, "REGISTERED_EMAIL");
+        setChallenge(emailChallenge);
+        setSession({ ...session, state: "PENDING", achievedLevel: verified.achievedLevel, invalidAttempts: verified.invalidAttempts, challenges: [...verifiedChallenges, emailChallenge] });
+      } else if (verified.sessionState === "VERIFIED") {
         const grantBody = { verificationSessionId: session.sessionId, purpose: "CONTACT_CONFIRMATION" as const, fields: [field], reasonCode: "CONTACT_CONFIRMATION" as const };
         setGrant(unwrap(await operationsApi.POST("/support/cases/{caseId}/data-access-grants", { params: { path: { caseId }, header: { "Idempotency-Key": grantIntent.current.keyFor(JSON.stringify(grantBody)) } }, body: grantBody })));
         grantIntent.current.complete();
       }
     } catch (failure) { setError(failure); setProof(""); }
+    finally { setBusy(false); }
   }
   async function revealData() {
     if (!grant || grant.state !== "ACTIVE" || !field) return;
@@ -207,7 +245,8 @@ export function SupportVerificationRoute() {
     try { setReveal(unwrap(await operationsApi.POST("/support/data-access-grants/{grantId}/reveals", { params: { path: { grantId: grant.grantId }, header: { "Idempotency-Key": revealIntent.current.keyFor(JSON.stringify(body)) } }, body }))); revealIntent.current.complete(); } catch (failure) { setError(failure); }
   }
   const visualState: VerificationVisualState = challenge?.state === "EXPIRED" ? "expired" : challenge?.state === "INVALID" ? "invalid" : grant?.state === "ACTIVE" ? "active" : grant ? "grant-pending" : session?.state === "VERIFIED" ? "verified" : "pending";
-  return <SupportVerificationScreen status={screenStatus(error, loading)} state={visualState} verificationCode={proof} revealedValue={reveal?.values[field ?? "CUSTOMER_PRIMARY_PHONE"]} onVerificationCodeChange={setProof} onIssue={() => void issue()} onVerify={() => void verify()} onReveal={() => void revealData()} onClear={() => setReveal(undefined)} />;
+  const verifiedChannelCount = session?.challenges.filter((item) => item.state === "VERIFIED").length ?? 0;
+  return <SupportVerificationScreen status={screenStatus(error, loading)} state={visualState} verificationCode={proof} challengeChannel={challenge?.channel} verifiedChannelCount={verifiedChannelCount} busy={busy} revealedValue={reveal?.values[field ?? "CUSTOMER_PRIMARY_PHONE"]} onVerificationCodeChange={setProof} onIssue={() => void issue()} onVerify={() => void verify()} onReveal={() => void revealData()} onClear={() => setReveal(undefined)} />;
 }
 
 export function SupportOrderActionRoute() {

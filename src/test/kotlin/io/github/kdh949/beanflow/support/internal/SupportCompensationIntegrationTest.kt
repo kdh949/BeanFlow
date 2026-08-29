@@ -38,6 +38,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -409,6 +410,22 @@ internal class SupportCompensationIntegrationTest
             grant(unrelatedActor, "SUPPORT_CASE_READ")
             val created = compensations.create(command(UUID.randomUUID(), 100, "visibility-create-001"))
 
+            mockMvc
+                .perform(get("/api/v1/support/compensations").with(jwt().jwt { it.subject(unrelatedActor.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/compensations")
+                        .param("caseId", caseId.toString())
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) }),
+                ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/compensations/${created.compensationRequestId}")
+                        .with(jwt().jwt { it.subject(unrelatedActor.toString()) }),
+                ).andExpect(status().isForbidden)
+
             assertThatThrownBy { compensations.get(unrelatedActor, created.compensationRequestId) }
                 .isInstanceOf(DomainFailure::class.java)
                 .extracting("code")
@@ -418,6 +435,10 @@ internal class SupportCompensationIntegrationTest
 
             val medium = compensations.create(command(UUID.randomUUID(), 3_001, "visibility-medium-create"))
             approveManager(requireNotNull(medium.actionRequestId), managerId, "visibility-medium-approve")
+            mockMvc
+                .perform(get("/api/v1/support/compensations").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(medium.compensationRequestId.toString()))
             assertThat(compensations.get(managerId, medium.compensationRequestId).compensationRequestId)
                 .isEqualTo(medium.compensationRequestId)
         }

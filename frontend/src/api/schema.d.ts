@@ -2652,7 +2652,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 권한별 승인 작업 목록 조회 */
+        /**
+         * 권한별 승인 작업 목록 조회
+         * @description MINE은 Case 담당 여부가 아니라 task별 권한과 actor 분리 규칙상 현재 actor가 검토할 수 있는 작업을 뜻합니다. ALL은 SUPPORT_CASE_ASSIGN 권한을 추가로 요구합니다.
+         */
         get: operations["listSupportApprovalTasks"];
         put?: never;
         post?: never;
@@ -2703,7 +2706,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 보상 요청 목록 조회 */
+        /**
+         * 보상 요청 목록 조회
+         * @description 기본적으로 현재 actor 담당 Case만 반환하며 SUPPORT_CASE_ASSIGN 또는 SUPPORT_COMPENSATION_APPROVE 권한이 있을 때만 다른 Case까지 조회합니다.
+         */
         get: operations["listSupportCompensations"];
         put?: never;
         post?: never;
@@ -2720,7 +2726,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 계정·정보 변경 요청 목록 조회 */
+        /**
+         * 계정·정보 변경 요청 목록 조회
+         * @description 기본적으로 현재 actor 담당 Case만 반환하며 SUPPORT_CASE_ASSIGN 또는 SUPPORT_PROFILE_R3_APPROVE 권한이 있을 때만 다른 Case까지 조회합니다.
+         */
         get: operations["listSupportProfileChanges"];
         put?: never;
         post?: never;
@@ -8349,6 +8358,7 @@ export interface components {
             nextCursor: string | null;
         };
         /**
+         * @description MINE은 task별 권한과 actor 분리 규칙상 검토 가능한 작업, ALL은 SUPPORT_CASE_ASSIGN을 추가로 요구하는 전체 이력 조회입니다.
          * @default MINE
          * @enum {string}
          */

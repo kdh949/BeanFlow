@@ -25,7 +25,8 @@
 ## Definitions
 
 - **Case queue:** 미담당 큐가 아니라 생성 즉시 담당자가 있는 SupportCase의 bounded 목록이다.
-- **Scope:** `MINE`은 현재 actor 담당 Case, `ALL`은 `SUPPORT_CASE_ASSIGN` 권한도 가진 actor의 전체 Case다.
+- **Case queue scope:** `MINE`은 현재 actor 담당 Case, `ALL`은 `SUPPORT_CASE_ASSIGN` 권한도 가진 actor의 전체 Case다.
+- **Approval task scope:** `MINE`은 Case 담당 여부가 아니라 task별 권한과 actor 분리 규칙상 현재 actor가 검토할 수 있는 작업이다. `ALL`은 같은 task별 권한에 `SUPPORT_CASE_ASSIGN`을 더 요구하는 전체 이력 조회다.
 - **Approval task:** `DATA_ACCESS_GRANT | BREAK_GLASS | SUPPORT_ACTION | COMPENSATION | PROFILE_CHANGE` closed projection이다.
 - **Presentation-safe props:** raw secret 없이 화면 컴포넌트가 렌더할 수 있는 route-local 값이다.
 

@@ -361,7 +361,7 @@ internal class SupportConsoleQueryRepository(
 
     fun approvalTasks(
         types: Set<SupportApprovalTaskType>,
-        assigneeId: UUID?,
+        eligibleReviewerId: UUID?,
         state: String?,
         after: ConsoleSort?,
         limit: Int,
@@ -376,8 +376,9 @@ internal class SupportConsoleQueryRepository(
             clauses += "task_state = ?"
             args += it
         }
-        assigneeId?.let {
-            clauses += "case_assignee_id = ?"
+        eligibleReviewerId?.let {
+            clauses += "requester_actor_id <> ? AND (executor_actor_id IS NULL OR executor_actor_id <> ?)"
+            args += it
             args += it
         }
         after?.let {
@@ -487,6 +488,7 @@ internal class SupportConsoleQueryRepository(
 
     fun compensationPage(
         caseId: UUID?,
+        assigneeId: UUID?,
         state: String?,
         after: ConsoleSort?,
         limit: Int,
@@ -494,15 +496,19 @@ internal class SupportConsoleQueryRepository(
         val clauses = mutableListOf<String>()
         val args = mutableListOf<Any>()
         caseId?.let {
-            clauses += "support_case_id = ?"
+            clauses += "r.support_case_id = ?"
+            args += it
+        }
+        assigneeId?.let {
+            clauses += "c.current_assignee_id = ?"
             args += it
         }
         state?.let {
-            clauses += "state = ?"
+            clauses += "r.state = ?"
             args += it
         }
         after?.let {
-            clauses += "(updated_at < ? OR (updated_at = ? AND id < ?))"
+            clauses += "(r.updated_at < ? OR (r.updated_at = ? AND r.id < ?))"
             args += Timestamp.from(it.changedAt)
             args += Timestamp.from(it.changedAt)
             args += it.id
@@ -510,11 +516,13 @@ internal class SupportConsoleQueryRepository(
         args += limit
         val where = if (clauses.isEmpty()) "" else " WHERE ${clauses.joinToString(" AND ")}"
         return jdbc.query(
-            """SELECT id, support_case_id, benefit_type, amount_krw, band, state,
+            """SELECT r.id, r.support_case_id, r.benefit_type, r.amount_krw, r.band, r.state,
                        CASE WHEN notification_failure_code IS NOT NULL THEN 'MANUAL_REVIEW'
                             WHEN notification_delivery_id IS NOT NULL THEN 'ACCEPTED' ELSE 'NOT_REQUESTED' END notification_state,
-                       version, updated_at
-                  FROM support_compensation_request$where ORDER BY updated_at DESC, id DESC LIMIT ?""",
+                       r.version, r.updated_at
+                  FROM support_compensation_request r
+                  JOIN support_case c ON c.id = r.support_case_id$where
+                 ORDER BY r.updated_at DESC, r.id DESC LIMIT ?""",
             { rs, _ ->
                 SupportCompensationListItemResource(
                     rs.uuid("id"),
@@ -534,6 +542,7 @@ internal class SupportConsoleQueryRepository(
 
     fun profileChangePage(
         caseId: UUID?,
+        assigneeId: UUID?,
         state: String?,
         after: ConsoleSort?,
         limit: Int,
@@ -541,15 +550,19 @@ internal class SupportConsoleQueryRepository(
         val clauses = mutableListOf<String>()
         val args = mutableListOf<Any>()
         caseId?.let {
-            clauses += "support_case_id = ?"
+            clauses += "p.support_case_id = ?"
+            args += it
+        }
+        assigneeId?.let {
+            clauses += "c.current_assignee_id = ?"
             args += it
         }
         state?.let {
-            clauses += "state = ?"
+            clauses += "p.state = ?"
             args += it
         }
         after?.let {
-            clauses += "(updated_at < ? OR (updated_at = ? AND id < ?))"
+            clauses += "(p.updated_at < ? OR (p.updated_at = ? AND p.id < ?))"
             args += Timestamp.from(it.changedAt)
             args += Timestamp.from(it.changedAt)
             args += it.id
@@ -557,9 +570,11 @@ internal class SupportConsoleQueryRepository(
         args += limit
         val where = if (clauses.isEmpty()) "" else " WHERE ${clauses.joinToString(" AND ")}"
         return jdbc.query(
-            """SELECT id, support_case_id, subject_type, purpose, risk_class, state, notification_state,
-                       masked_before, masked_after, version, updated_at
-                  FROM support_profile_change$where ORDER BY updated_at DESC, id DESC LIMIT ?""",
+            """SELECT p.id, p.support_case_id, p.subject_type, p.purpose, p.risk_class, p.state, p.notification_state,
+                       p.masked_before, p.masked_after, p.version, p.updated_at
+                  FROM support_profile_change p
+                  JOIN support_case c ON c.id = p.support_case_id$where
+                 ORDER BY p.updated_at DESC, p.id DESC LIMIT ?""",
             { rs, _ ->
                 SupportProfileChangeListItemResource(
                     rs.uuid("id"),
@@ -746,7 +761,6 @@ internal class SupportConsoleQueryService(
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
             requireApprovalPermission(actorId, type)
             val projection = repository.approvalTask(type, resourceId) ?: notFound("Approval task")
-            visibleCase(actorId, projection.caseId, allowApprover = true)
             val timeline = repository.approvalTimeline(type, resourceId)
             SupportApprovalTaskDetailResource(
                 approvalResource(actorId, projection),
@@ -778,17 +792,29 @@ internal class SupportConsoleQueryService(
     ): SupportCompensationPageResource =
         boundary {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
-            caseId?.let { visibleCase(actorId, it, allowApprover = true) }
+            val broad =
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN) ||
+                    permissions.hasActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            caseId?.let {
+                visibleCase(actorId, it, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+            }
             val size = normalizedLimit(limit)
             val cursorScope = cursorScope("support/compensations", "caseId=${caseId ?: ""}|state=${state.orEmpty()}")
             val after = cursor?.let { cursors.verify(it, cursorScope).sort }
-            val fetched = repository.compensationPage(caseId, state?.trim()?.takeIf(String::isNotEmpty), after, size + 1)
+            val fetched =
+                repository.compensationPage(
+                    caseId,
+                    actorId.takeUnless { broad },
+                    state?.trim()?.takeIf(String::isNotEmpty),
+                    after,
+                    size + 1,
+                )
             page(fetched, size, cursorScope) { it.updatedAt to it.requestId }.let { (items, next) ->
                 SupportCompensationPageResource(items, next)
             }
         }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun profileChanges(
         actorId: UUID,
         caseId: UUID?,
@@ -798,11 +824,23 @@ internal class SupportConsoleQueryService(
     ): SupportProfileChangePageResource =
         boundary {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
-            caseId?.let { visibleCase(actorId, it, allowApprover = true) }
+            val broad =
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN) ||
+                    permissions.hasActive(actorId, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
+            caseId?.let {
+                visibleCase(actorId, it, OperatorPermission.SUPPORT_PROFILE_R3_APPROVE)
+            }
             val size = normalizedLimit(limit)
             val cursorScope = cursorScope("support/profile-changes", "caseId=${caseId ?: ""}|state=${state.orEmpty()}")
             val after = cursor?.let { cursors.verify(it, cursorScope).sort }
-            val fetched = repository.profileChangePage(caseId, state?.trim()?.takeIf(String::isNotEmpty), after, size + 1)
+            val fetched =
+                repository.profileChangePage(
+                    caseId,
+                    actorId.takeUnless { broad },
+                    state?.trim()?.takeIf(String::isNotEmpty),
+                    after,
+                    size + 1,
+                )
             page(fetched, size, cursorScope) { it.updatedAt to it.profileChangeId }.let { (items, next) ->
                 SupportProfileChangePageResource(items, next)
             }
@@ -811,12 +849,13 @@ internal class SupportConsoleQueryService(
     private fun visibleCase(
         actorId: UUID,
         caseId: UUID,
-        allowApprover: Boolean = false,
+        exceptionPermission: OperatorPermission? = null,
     ): QueueProjection {
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val case = repository.case(caseId) ?: notFound("SupportCase")
         val broad = permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
-        if (case.assigneeId != actorId && !broad && !allowApprover) {
+        val explicitException = exceptionPermission?.let { permissions.hasActive(actorId, it) } == true
+        if (case.assigneeId != actorId && !broad && !explicitException) {
             denied("SupportCase is outside the actor scope")
         }
         return case
@@ -917,9 +956,11 @@ internal class SupportConsoleQueryService(
         task: ApprovalProjection,
     ): List<SupportApprovalAction> =
         buildList {
+            val separatedReviewer = task.requesterActorId != actorId && task.executorActorId != actorId
             when (task.taskType) {
                 SupportApprovalTaskType.DATA_ACCESS_GRANT -> {
                     if (
+                        separatedReviewer &&
                         task.state == "APPROVAL_PENDING" &&
                         permissions.hasActive(actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
                     ) {
@@ -929,11 +970,13 @@ internal class SupportConsoleQueryService(
 
                 SupportApprovalTaskType.BREAK_GLASS -> {
                     if (
+                        separatedReviewer &&
                         task.state == "APPROVAL_PENDING" &&
                         permissions.hasActive(actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
                     ) {
                         addAll(listOf(SupportApprovalAction.APPROVE, SupportApprovalAction.DENY))
                     } else if (
+                        separatedReviewer &&
                         task.state == "REVIEW_PENDING" &&
                         permissions.hasActive(actorId, OperatorPermission.PRIVACY_BREAK_GLASS_REVIEW)
                     ) {
@@ -942,26 +985,45 @@ internal class SupportConsoleQueryService(
                 }
 
                 SupportApprovalTaskType.SUPPORT_ACTION -> {
-                    actionRequestActions(actorId, task.state)
+                    actionRequestActions(
+                        actorId,
+                        task,
+                        OperatorPermission.SUPPORT_ACTION_APPROVE,
+                        OperatorPermission.SUPPORT_ACTION_EXECUTE,
+                    )
                 }
 
                 SupportApprovalTaskType.COMPENSATION -> {
-                    actionRequestActions(actorId, task.state)
+                    actionRequestActions(
+                        actorId,
+                        task,
+                        OperatorPermission.SUPPORT_COMPENSATION_APPROVE,
+                        OperatorPermission.SUPPORT_COMPENSATION_EXECUTE,
+                    )
                 }
 
                 SupportApprovalTaskType.PROFILE_CHANGE -> {
-                    actionRequestActions(actorId, task.state)
+                    actionRequestActions(
+                        actorId,
+                        task,
+                        OperatorPermission.SUPPORT_PROFILE_R3_APPROVE,
+                        OperatorPermission.SUPPORT_ACTION_EXECUTE,
+                    )
                 }
             }
         }
 
     private fun MutableList<SupportApprovalAction>.actionRequestActions(
         actorId: UUID,
-        state: String,
+        task: ApprovalProjection,
+        approvalPermission: OperatorPermission,
+        executePermission: OperatorPermission,
     ) {
         if (
-            state == "AWAITING_SUPPORT_MANAGER" &&
-            permissions.hasActive(actorId, OperatorPermission.SUPPORT_ACTION_APPROVE)
+            task.requesterActorId != actorId &&
+            task.executorActorId != actorId &&
+            task.state == "AWAITING_SUPPORT_MANAGER" &&
+            permissions.hasActive(actorId, approvalPermission)
         ) {
             addAll(
                 listOf(
@@ -971,9 +1033,15 @@ internal class SupportConsoleQueryService(
                 ),
             )
         }
-        if (state == "READY_FOR_EXECUTION") add(SupportApprovalAction.EXECUTE)
         if (
-            state == "REASSIGNMENT_REQUIRED" &&
+            task.state == "READY_FOR_EXECUTION" &&
+            task.executorActorId == actorId &&
+            permissions.hasActive(actorId, executePermission)
+        ) {
+            add(SupportApprovalAction.EXECUTE)
+        }
+        if (
+            task.state == "REASSIGNMENT_REQUIRED" &&
             permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
         ) {
             add(SupportApprovalAction.REASSIGN)
