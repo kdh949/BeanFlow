@@ -2355,6 +2355,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/case-queue/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 현재 상담원의 Case 대기열 지표 조회 */
+        get: operations["getSupportCaseQueueSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/case-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 상담 대기열을 signed cursor로 조회 */
+        get: operations["listSupportCaseQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases": {
         parameters: {
             query?: never;
@@ -2396,6 +2430,23 @@ export interface paths {
          * @description Case의 현재 상태, 배정, 우선순위, 활성 subject 연결 목록과 버전을 반환합니다. Case가 없거나 조회 권한이 없으면 각각 404, 403을 반환합니다.
          */
         get: operations["getSupportCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/cases/{caseId}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case와 마스킹된 주요 대상 overview 조회 */
+        get: operations["getSupportCaseOverview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2569,6 +2620,108 @@ export interface paths {
          *     내려주기 전에 권한을 다시 검증합니다. Case나 Order가 없거나 연결되어 있지 않으면 404를 반환합니다.
          */
         get: operations["listSupportOrderTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/orders/{orderId}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case에 연결된 주문의 bounded overview 조회 */
+        get: operations["getSupportOrderOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/approval-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 권한별 승인 작업 목록 조회 */
+        get: operations["listSupportApprovalTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/approval-tasks/{taskType}/{resourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 승인 작업 상세와 exact lineage 조회 */
+        get: operations["getSupportApprovalTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/approval-tasks/{taskType}/{resourceId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** PII 없는 승인 감사 timeline 조회 */
+        get: operations["listSupportApprovalTaskTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/compensations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 보상 요청 목록 조회 */
+        get: operations["listSupportCompensations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 계정·정보 변경 요청 목록 조회 */
+        get: operations["listSupportProfileChanges"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7737,10 +7890,56 @@ export interface components {
             ambiguous: boolean;
             hasMore: boolean;
         };
+        SupportCaseQueueSummary: {
+            /** Format: int64 */
+            active: number;
+            /** Format: int64 */
+            open: number;
+            /** Format: int64 */
+            inProgress: number;
+            /** Format: int64 */
+            waiting: number;
+            /** Format: int64 */
+            urgent: number;
+        };
+        /**
+         * @default MINE
+         * @enum {string}
+         */
+        SupportCaseQueueScope: "MINE" | "ALL";
         /** @enum {string} */
         SupportCaseState: "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
         /** @enum {string} */
         SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+        /** @enum {string} */
+        SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
+        /** @enum {string} */
+        SupportInteractionChannel: "PHONE" | "CHAT" | "EMAIL" | "IN_PERSON" | "SYSTEM";
+        /** @enum {string} */
+        SupportSubjectType: "CUSTOMER" | "STORE" | "ORDER" | "DELIVERY";
+        SupportMaskedSubject: {
+            subjectType: components["schemas"]["SupportSubjectType"];
+            subjectId: components["schemas"]["Identifier"];
+            maskedDisplayName?: string;
+            maskedMatchedValue?: string;
+        };
+        SupportCaseQueueItem: {
+            caseId: components["schemas"]["Identifier"];
+            state: components["schemas"]["SupportCaseState"];
+            priority: components["schemas"]["SupportCasePriority"];
+            category: components["schemas"]["SupportInquiryCategory"];
+            assigneeId: components["schemas"]["Identifier"];
+            /** Format: int64 */
+            version: number;
+            openedAt: components["schemas"]["DateTime"];
+            latestChangedAt: components["schemas"]["DateTime"];
+            latestChannel?: components["schemas"]["SupportInteractionChannel"];
+            primarySubject?: components["schemas"]["SupportMaskedSubject"];
+        };
+        SupportCaseQueuePage: {
+            items: components["schemas"]["SupportCaseQueueItem"][];
+            nextCursor?: string;
+        };
         /**
          * @description SupportCase 목록 조회에 쓰이는 요약 표현.
          * @example {
@@ -7783,8 +7982,6 @@ export interface components {
         };
         /** @enum {string} */
         SupportRequesterType: "CUSTOMER" | "STORE_OWNER" | "STORE_MEMBER" | "RIDER" | "THIRD_PARTY" | "INTERNAL_OPERATOR" | "SYSTEM" | "UNKNOWN";
-        /** @enum {string} */
-        SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
         /**
          * @description 새 SupportCase를 열기 위한 요청. 요청자 유형/참조, 문의 분류, 우선순위와 사유를 담습니다.
          * @example {
@@ -7806,8 +8003,6 @@ export interface components {
             /** @description Structured operational reason; secrets and high-risk PII are rejected. */
             reason: string;
         } & unknown;
-        /** @enum {string} */
-        SupportSubjectType: "CUSTOMER" | "STORE" | "ORDER" | "DELIVERY";
         /** @enum {string} */
         SupportSubjectRelationship: "REQUESTER" | "AFFECTED_CUSTOMER" | "AFFECTED_STORE" | "RELATED_ORDER" | "RELATED_DELIVERY" | "OTHER";
         /**
@@ -7861,6 +8056,47 @@ export interface components {
             openedAt: components["schemas"]["DateTime"];
             closedAt?: components["schemas"]["DateTime"];
             subjectLinks: components["schemas"]["SupportSubjectLink"][];
+        };
+        SupportOrderLineOverview: {
+            sequence: number;
+            menuName: string;
+            /** Format: int64 */
+            quantity: number;
+            /** Format: int64 */
+            amountKrw: number;
+        };
+        SupportOrderOverview: {
+            orderId: components["schemas"]["Identifier"];
+            publicReference: string;
+            state: string;
+            /** Format: int64 */
+            version: number;
+            orderedAt: components["schemas"]["DateTime"];
+            pickupWindowStart: components["schemas"]["DateTime"];
+            pickupWindowEnd: components["schemas"]["DateTime"];
+            storeName: string;
+            /** Format: int64 */
+            subtotalKrw: number;
+            /** Format: int64 */
+            couponDiscountKrw: number;
+            /** Format: int64 */
+            pointsAppliedKrw: number;
+            /** Format: int64 */
+            payableKrw: number;
+            /** @enum {string} */
+            currency: "KRW";
+            /** @enum {string} */
+            paymentState: "NOT_PAID" | "PAID";
+            paidAt?: components["schemas"]["DateTime"];
+            customer?: components["schemas"]["SupportMaskedSubject"];
+            store?: components["schemas"]["SupportMaskedSubject"];
+            lines: components["schemas"]["SupportOrderLineOverview"][];
+        };
+        SupportCaseOverview: {
+            case: components["schemas"]["SupportCaseQueueItem"];
+            subjects: components["schemas"]["SupportMaskedSubject"][];
+            orders: components["schemas"]["SupportOrderOverview"][];
+            availableSections: ("DETAIL" | "VERIFICATION" | "ORDER_ACTION" | "COMPENSATION" | "PROFILE_CHANGE" | "AUDIT")[];
         };
         /**
          * @description SupportCase를 새 담당 운영자에게 재배정하기 위한 요청. 낙관적 잠금을 위해 현재 알고 있는 Case 버전을 함께 보냅니다.
@@ -7926,8 +8162,6 @@ export interface components {
             caseVersion: number;
             occurredAt: components["schemas"]["DateTime"];
         };
-        /** @enum {string} */
-        SupportInteractionChannel: "PHONE" | "CHAT" | "EMAIL" | "IN_PERSON" | "SYSTEM";
         /** @enum {string} */
         SupportInteractionDirection: "INBOUND" | "OUTBOUND" | "INTERNAL";
         /**
@@ -8113,6 +8347,91 @@ export interface components {
             items: components["schemas"]["SupportTimelineItem"][];
             /** @description 다음 페이지가 있을 때 서버가 반환하는 문자열입니다. 다음 요청의 `cursor`에 그대로 사용합니다. */
             nextCursor: string | null;
+        };
+        /**
+         * @default MINE
+         * @enum {string}
+         */
+        SupportApprovalTaskScope: "MINE" | "ALL";
+        /** @enum {string} */
+        SupportApprovalTaskType: "DATA_ACCESS_GRANT" | "BREAK_GLASS" | "SUPPORT_ACTION" | "COMPENSATION" | "PROFILE_CHANGE";
+        /** @enum {string} */
+        SupportApprovalAction: "APPROVE" | "DENY" | "RETURN_FOR_REVISION" | "REASSIGN" | "EXECUTE" | "REVIEW";
+        SupportApprovalTask: {
+            taskType: components["schemas"]["SupportApprovalTaskType"];
+            resourceId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            state: string;
+            /** Format: int64 */
+            version: number;
+            revision?: number;
+            requesterActorId: components["schemas"]["Identifier"];
+            executorActorId?: components["schemas"]["Identifier"];
+            updatedAt: components["schemas"]["DateTime"];
+            allowedActions: components["schemas"]["SupportApprovalAction"][];
+        };
+        SupportApprovalTaskPage: {
+            items: components["schemas"]["SupportApprovalTask"][];
+            nextCursor?: string;
+        };
+        SupportApprovalLineage: {
+            step: string;
+            state: string;
+            actorId?: components["schemas"]["Identifier"];
+            occurredAt: components["schemas"]["DateTime"];
+        };
+        SupportApprovalTaskDetail: {
+            task: components["schemas"]["SupportApprovalTask"];
+            lineage: components["schemas"]["SupportApprovalLineage"][];
+        };
+        SupportApprovalTimelineItem: {
+            eventId: components["schemas"]["Identifier"];
+            eventType: string;
+            state: string;
+            actorId?: components["schemas"]["Identifier"];
+            occurredAt: components["schemas"]["DateTime"];
+        };
+        SupportApprovalTimelinePage: {
+            items: components["schemas"]["SupportApprovalTimelineItem"][];
+            nextCursor?: string;
+        };
+        SupportCompensationListItem: {
+            requestId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            benefitType: "POINT" | "COUPON";
+            /** Format: int64 */
+            amountKrw: number;
+            /** @enum {string} */
+            band: "LOW" | "MEDIUM" | "HIGH" | "EXCEPTIONAL";
+            state: string;
+            notificationState: string;
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        SupportCompensationPage: {
+            items: components["schemas"]["SupportCompensationListItem"][];
+            nextCursor?: string;
+        };
+        SupportProfileChangeListItem: {
+            profileChangeId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            subjectType: "CUSTOMER" | "STORE" | "RIDER";
+            purpose: string;
+            riskClass: string;
+            state: string;
+            notificationState: string;
+            maskedBefore?: string;
+            maskedAfter?: string;
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        SupportProfileChangePage: {
+            items: components["schemas"]["SupportProfileChangeListItem"][];
+            nextCursor?: string;
         };
         /**
          * @description 고객센터가 요청할 수 있는 주문 취소, 픽업 시간 변경, 수락 후 문제 해결 작업입니다.
@@ -10680,6 +10999,8 @@ export interface components {
         SupportTimelineLimit: number;
         /** @description SupportCase that currently has the target Order linked as RELATED_ORDER. */
         SupportOrderTimelineCaseId: components["schemas"]["Identifier"];
+        SupportApprovalTaskTypePath: components["schemas"]["SupportApprovalTaskType"];
+        SupportApprovalResourceId: components["schemas"]["Identifier"];
         SupportActionRequestId: components["schemas"]["Identifier"];
         PostAcceptanceResolutionId: components["schemas"]["Identifier"];
         SupportCompensationRequestId: components["schemas"]["Identifier"];
@@ -14213,6 +14534,64 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getSupportCaseQueueSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current actor-bound Case counts */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseQueueSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCaseQueue: {
+        parameters: {
+            query?: {
+                scope?: components["schemas"]["SupportCaseQueueScope"];
+                state?: components["schemas"]["SupportCaseState"];
+                priority?: components["schemas"]["SupportCasePriority"];
+                category?: components["schemas"]["SupportInquiryCategory"];
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Case queue page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseQueuePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listSupportCases: {
         parameters: {
             query?: {
@@ -14300,6 +14679,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupportCase"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportCaseOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded Case overview */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseOverview"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -14617,6 +15023,195 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportOrderOverview: {
+        parameters: {
+            query: {
+                caseId: components["schemas"]["Identifier"];
+            };
+            header?: never;
+            path: {
+                orderId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded order overview */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderOverview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportApprovalTasks: {
+        parameters: {
+            query?: {
+                scope?: components["schemas"]["SupportApprovalTaskScope"];
+                taskType?: components["schemas"]["SupportApprovalTaskType"];
+                state?: string;
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval task page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportApprovalTaskPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportApprovalTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskType: components["parameters"]["SupportApprovalTaskTypePath"];
+                resourceId: components["parameters"]["SupportApprovalResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval task detail */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportApprovalTaskDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportApprovalTaskTimeline: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                taskType: components["parameters"]["SupportApprovalTaskTypePath"];
+                resourceId: components["parameters"]["SupportApprovalResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval timeline page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportApprovalTimelinePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCompensations: {
+        parameters: {
+            query?: {
+                caseId?: components["schemas"]["Identifier"];
+                state?: string;
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compensation request page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportProfileChanges: {
+        parameters: {
+            query?: {
+                caseId?: components["schemas"]["Identifier"];
+                state?: string;
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile change page */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportProfileChangePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
+import io.github.kdh949.beanflow.ordering.api.SupportOrderLineOverview
+import io.github.kdh949.beanflow.ordering.api.SupportOrderOverviewSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderState
 import io.github.kdh949.beanflow.shared.api.SUPPORT_TIMELINE_COMPARATOR
 import io.github.kdh949.beanflow.shared.api.SupportOwnerTimelineFact
@@ -35,6 +37,71 @@ internal class OrderingSupportTimelineQueryService(
         return findOrders(orderIds).map {
             SupportOrderSnapshot(it.id, it.customerId, it.storeId, SupportOrderState.valueOf(it.state), it.version)
         }
+    }
+
+    override fun findOrderOverviews(orderIds: Set<UUID>): List<SupportOrderOverviewSnapshot> {
+        require(orderIds.isNotEmpty() && orderIds.size <= SupportOwnerTimelineQuery.MAX_ORDER_IDS)
+        val ids = orderIds.sortedBy(UUID::toString)
+        val placeholders = ids.joinToString(",") { "?" }
+        val lines =
+            jdbcTemplate.query(
+                """
+                SELECT order_id, line_sequence, menu_name, quantity, gross_krw
+                  FROM ordering_order_line
+                 WHERE order_id IN ($placeholders)
+                 ORDER BY order_id, line_sequence
+                """.trimIndent(),
+                { resultSet, _ ->
+                    resultSet.getObject("order_id", UUID::class.java) to
+                        SupportOrderLineOverview(
+                            resultSet.getInt("line_sequence"),
+                            resultSet.getString("menu_name"),
+                            resultSet.getLong("quantity"),
+                            resultSet.getLong("gross_krw"),
+                        )
+                },
+                *ids.toTypedArray(),
+            ).groupBy({ it.first }, { it.second })
+        return jdbcTemplate.query(
+            """
+            SELECT id, customer_id, store_id, public_reference, store_name_snapshot, state, version,
+                   created_at, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                   subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency, paid_at
+              FROM ordering_order
+             WHERE id IN ($placeholders)
+             ORDER BY id
+            """.trimIndent(),
+            { resultSet, _ ->
+                val orderId = resultSet.getObject("id", UUID::class.java)
+                val orderLines = lines[orderId].orEmpty()
+                if (orderLines.isEmpty() || orderLines.any { it.menuName.isBlank() || it.quantity <= 0 || it.amountKrw < 0 }) {
+                    throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                        io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE,
+                        "Support order overview projection is invalid",
+                    )
+                }
+                SupportOrderOverviewSnapshot(
+                    orderId = orderId,
+                    customerId = resultSet.getObject("customer_id", UUID::class.java),
+                    storeId = resultSet.getObject("store_id", UUID::class.java),
+                    publicReference = resultSet.getString("public_reference"),
+                    storeName = resultSet.getString("store_name_snapshot"),
+                    state = SupportOrderState.valueOf(resultSet.getString("state")),
+                    version = resultSet.getLong("version"),
+                    orderedAt = resultSet.getTimestamp("created_at").toInstant(),
+                    pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
+                    pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
+                    subtotalKrw = resultSet.getLong("subtotal_krw"),
+                    couponDiscountKrw = resultSet.getLong("coupon_discount_krw"),
+                    pointsAppliedKrw = resultSet.getLong("points_applied_krw"),
+                    payableKrw = resultSet.getLong("payable_krw"),
+                    currency = resultSet.getString("currency"),
+                    paidAt = resultSet.getTimestamp("paid_at")?.toInstant(),
+                    lines = orderLines,
+                )
+            },
+            *ids.toTypedArray(),
+        )
     }
 
     private fun findOrders(orderIds: Set<UUID>): List<OrderTimelineRow> {

@@ -27,6 +27,17 @@ internal class CustomerSupportProfileQueryService(
             ).also { it.initCause(exception) }
         }
 
+    @Transactional(readOnly = true)
+    override fun findMaskedById(customerId: UUID): MaskedCustomerSupportProfile? =
+        try {
+            repository.findMaskedById(customerId)?.also(::requireMasked)
+        } catch (exception: DataAccessException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Customer support profile query is unavailable",
+            ).also { it.initCause(exception) }
+        }
+
     private fun requireMasked(profile: MaskedCustomerSupportProfile) {
         if ('*' !in profile.maskedDisplayName || '*' !in profile.maskedMatchedValue) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Customer support profile projection is invalid")
@@ -38,6 +49,26 @@ internal class CustomerSupportProfileQueryService(
 internal class CustomerSupportProfileQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun findMaskedById(customerId: UUID): MaskedCustomerSupportProfile? =
+        jdbcTemplate
+            .query(
+                """
+                SELECT customer_id, masked_display_name,
+                       coalesce(masked_primary_phone, masked_primary_email) AS masked_matched_value
+                  FROM identity_customer_support_profile
+                 WHERE customer_id = ?
+                   AND coalesce(masked_primary_phone, masked_primary_email) IS NOT NULL
+                """.trimIndent(),
+                { resultSet, _ ->
+                    MaskedCustomerSupportProfile(
+                        customerId = resultSet.getObject("customer_id", UUID::class.java),
+                        maskedDisplayName = resultSet.getString("masked_display_name"),
+                        maskedMatchedValue = resultSet.getString("masked_matched_value"),
+                    )
+                },
+                customerId,
+            ).singleOrNull()
+
     fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedCustomerSupportProfile> {
         val requested = query.indexes.joinToString(",") { "(?, ?)" }
         val matchedColumn =
