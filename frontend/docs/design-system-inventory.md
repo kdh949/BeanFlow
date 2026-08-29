@@ -13,7 +13,7 @@ filled success badge와 refresh 전용 primitive/frame은 삭제했으며 compat
 | Foundations | `src/design-system/tokens/*.css` | color, semantic color, typography, spacing, radius, elevation, motion, focus |
 | Components | `src/design-system/components/**` | 한 가지 상호작용·표현 책임을 가진 typed primitive |
 | Patterns | `src/design-system/patterns/**` | component를 조합한 반복 상태와 page structure |
-| Shared presentation | `src/presentation/AppShells.tsx`, `src/presentation/shared/**` | actor/session/API/domain 상태를 presentation-safe props로 변환하고 canonical component를 조합 |
+| Shared presentation | `src/presentation/AppShells.tsx`, `src/presentation/shared/**`, `src/presentation/merchant-workspace/**` | actor/session/API/domain 상태를 presentation-safe props로 변환하고 canonical component를 조합 |
 | Product pages | `src/features/**`, `src/pages/**`, `src/presentation/beanflow-refresh/**` | OpenAPI와 domain state를 canonical public API로 연결 |
 
 Product code는 `src/design-system/index.ts`를 통해서만 canonical component와 pattern을 import한다.
@@ -26,7 +26,7 @@ Feature가 token을 재정의하거나 병렬 button, badge, input, status, shel
 | Brand | `--coral-*`, `--ink-*`, `--slate-*` | coral primary action, navy hierarchy, cool neutral surfaces |
 | Semantic | `--surface-*`, `--text-*`, `--border-*`, `--primary-*`, `--success-*`, `--warning-*`, `--danger-*`, `--info-*`, `--control-*` | component와 page의 의미 및 control interaction state 선택 |
 | Type | `--fs-*`, `--lh-*`, `--fw-*`, `--ls-*` | Korean-first hierarchy; decorative uppercase micro label 금지 |
-| Space/size | `--sp-*`, `--control-h-*`, `--tap-min`, viewport/layout tokens | mobile app와 dense workspace rhythm |
+| Space/size | `--sp-*`, `--control-h-*`, `--tap-min`, `--workspace-sidebar-w-*`, `--workspace-topbar-h`, viewport/layout tokens | mobile app와 dense workspace rhythm |
 | Shape/depth | `--r-*`, `--sh-*` | restrained corner and cool navy elevation |
 | Motion/focus | `--dur-*`, `--ease-*`, `--ring-*` | reduced-motion-safe interaction and keyboard visibility |
 
@@ -56,11 +56,18 @@ Raw color, font family, shadow, static inline style와 반복 pixel 증가는 `n
 | Pattern | Owner | Notes |
 |---|---|---|
 | `PageHeading` | design system | source에 없던 eyebrow 없이 title과 optional action만 구성 |
+| `WorkspaceFrame` | design system | standard/wide/compact sidebar column, shared topbar height와 content slot geometry만 제공 |
 | `LoadingState`, `EmptyState`, `SuccessMark` | design system | presentation-safe feedback와 결과 mark 렌더링 |
 | `ErrorState`, `requestErrorPresentation` | shared presentation | 알려진 `ApiRequestError`만 안전한 문구로 변환하고 correlation reference 보존 |
 | `DomainStatusText` | shared presentation | BeanFlow state를 사용자 label과 visual tone으로 변환하고 unknown code 보존 |
 | `CustomerShell` | shared presentation | 모든 `/app` route가 동일한 brand/header/tab chrome 사용 |
-| `ConsoleShell` | shared presentation | `/store`, `/ops`, `/support`가 동일한 dense workspace chrome 사용 |
+| `MerchantWorkspaceShell` | shared presentation | 모든 `/store` route가 선택된 reference의 sidebar/topbar chrome을 사용하고 page는 content만 제공 |
+| `SupportWorkspaceShell` | shared presentation | 모든 `/support` route가 선택된 reference의 sidebar/topbar chrome을 사용하고 page는 content만 제공 |
+| `OperationsWorkspaceShell` | shared presentation | 모든 `/ops` route가 canonical 운영 sidebar/topbar chrome을 사용하고 page는 content만 제공 |
+| `CustomerReferencePage`, `ReferenceSection` | shared presentation | 고객 reference 화면의 제목, 폭, section geometry를 공유하고 remote state는 소유하지 않음 |
+| `WorkspaceReferencePage` | shared presentation | Store와 Operations content slot의 heading, action, density를 공유하고 chrome은 렌더링하지 않음 |
+| `RefreshStoreCard` | shared presentation | 고객 검색·추천·즐겨찾기에서 계약 기반 매장 정보와 신규 presentation 스타일을 공유함 |
+| `ConsoleShell` | shared presentation | actor에 따라 Store, Support, Operations의 canonical workspace shell을 선택 |
 | `NotificationAction` | shared presentation | loading/read/unread/failure를 숨기지 않는 고객 header action |
 | `RootRedirect` | shared presentation | actor workspace 선택 entry |
 
@@ -74,9 +81,9 @@ primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system
 
 - Customer: 신규 home/search/store/cart/checkout/order-detail과 기존 orders, payment, points, coupons,
   favorites, notifications, account/auth가 같은 customer shell과 canonical components를 사용한다.
-- Store: 신규 order board/refund와 기존 settlements, disputes, region/auth가 같은 console shell을 사용한다.
-- Operations: dashboard, order lookup, merchant accounts, policy와 OIDC gate가 같은 system을 사용한다.
-- Support: masked search, Case, verification, data grant와 terminal state가 같은 system을 사용한다.
+- Store: 신규 order board/refund와 기존 settlements, disputes, region/auth가 같은 `MerchantWorkspaceShell`을 사용한다.
+- Operations: dashboard, order lookup, merchant accounts, policy와 OIDC gate가 같은 `OperationsWorkspaceShell`을 사용한다.
+- Support: masked search, Case, verification, data grant와 terminal state가 같은 `SupportWorkspaceShell`을 사용한다.
 - Storybook: foundations, 모든 canonical component, shared shells, route loading/success/empty/error/permission/
   unknown/reconciling/manual-review state를 문서화한다.
 
@@ -91,7 +98,7 @@ primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system
 - filled green success pill, decorative English eyebrow label
 - product route의 Storybook fixture 또는 implicit fake/fallback data
 
-`presentation-boundary.mjs`가 retired path/import를, `check-design-adherence.mjs`가 style/token/taxonomy drift를
+`presentation-boundary.mjs`가 retired path/import, workspace frame과 store/support chrome 단일 ownership을, `check-design-adherence.mjs`가 style/token/taxonomy drift를
 검사한다. 삭제 기록은 governance와 DD-009에 남기되 삭제된 code를 migration input으로 보존하지 않는다.
 
 ## 7. Validation contract
