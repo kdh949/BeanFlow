@@ -145,7 +145,7 @@ export const Detail: Story = {
     await waitFor(async () => {
       await expect(canvas.getByText("메모가 비식별 기록으로 저장되었습니다.")).toBeVisible();
     });
-    await userEvent.click(canvas.getByRole("button", { name: "다음 상태: RESOLVED" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "다음 상태: RESOLVED" }));
     await expect(await canvas.findByText("상담 상태가 RESOLVED(으)로 변경되었습니다.")).toBeVisible();
   },
 };
