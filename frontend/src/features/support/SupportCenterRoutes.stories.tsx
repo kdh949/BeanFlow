@@ -140,13 +140,19 @@ export const Detail: Story = {
   render: () => inWorkspace(<SupportCaseDetailRoute />),
   parameters: { routing: { path: "/support/cases/:caseId", initialEntry: `/support/cases/${caseId}` } },
   play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "다음 상태: RESOLVED" }));
+    await expect(await canvas.findByText("상담 상태가 RESOLVED(으)로 변경되었습니다.")).toBeVisible();
+  },
+};
+export const DetailNote: Story = {
+  render: () => inWorkspace(<SupportCaseDetailRoute />),
+  parameters: { routing: { path: "/support/cases/:caseId", initialEntry: `/support/cases/${caseId}` } },
+  play: async ({ canvas }) => {
     await userEvent.type(await canvas.findByLabelText("새 내부 메모"), "고객이 재배송을 원하지 않는다고 확인함");
     await userEvent.click(canvas.getByRole("button", { name: "메모 추가" }));
     await waitFor(async () => {
       await expect(canvas.getByText("메모가 비식별 기록으로 저장되었습니다.")).toBeVisible();
     });
-    await userEvent.click(await canvas.findByRole("button", { name: "다음 상태: RESOLVED" }));
-    await expect(await canvas.findByText("상담 상태가 RESOLVED(으)로 변경되었습니다.")).toBeVisible();
   },
 };
 export const Verification: Story = {
