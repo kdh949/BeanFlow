@@ -14,7 +14,7 @@ const meta = {
       description: { component: "현재 고객이 저장한 매장을 조회하고 서버 멱등 DELETE로 해제하는 목록입니다." },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/favorites", initialEntry: "/app/favorites" },
+    routing: { surface: "customer", path: "/app/favorites", initialEntry: "/app/favorites" },
   },
 } satisfies Meta<typeof FavoriteStoresPage>;
 

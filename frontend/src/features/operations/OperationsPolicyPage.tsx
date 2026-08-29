@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
+import { Button, EmptyState, LoadingState, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
+import { WorkspaceReferencePage } from "../../presentation/beanflow-refresh";
 
 type PointPolicy = components["schemas"]["OrdinaryPointAccrualPolicyVersion"];
 type RestorationPolicy = components["schemas"]["ExpiredBenefitRestorationPolicy"];
@@ -27,8 +28,7 @@ function mutationError(error: unknown, intent: SubmissionIntent) {
 export function OperationsPolicyPage() {
   const [workspace, setWorkspace] = useState<Workspace>("points");
   return (
-    <div className="console-page operations-policy-page">
-      <PageHeading title="운영 정책 관리" />
+    <WorkspaceReferencePage title="정책 관리" description="매장 운영에 적용되는 정책을 조회하고 관리합니다." density="dense">
       <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
         <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
         <TabPanel value="points"><PointPolicyWorkspace /></TabPanel>
@@ -36,7 +36,7 @@ export function OperationsPolicyPage() {
         <TabPanel value="brands"><BrandWorkspace /></TabPanel>
         <TabPanel value="search"><SearchIndexWorkspace /></TabPanel>
       </Tabs>
-    </div>
+    </WorkspaceReferencePage>
   );
 }
 

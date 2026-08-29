@@ -59,7 +59,7 @@ const meta = {
       },
       story: { inline: false, height: "820px" },
     },
-    routing: { path: "/store/region", initialEntry: "/store/region" },
+    routing: { surface: "store", path: "/store/region", initialEntry: "/store/region" },
     msw: { handlers: [...merchantSignedInHandlers, ownerStores, regionSearch, assignSuccess] },
   },
 } satisfies Meta<typeof StoreRegionPage>;

@@ -5,9 +5,9 @@ import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
+import { CustomerReferencePage, ReferenceSection } from "../../presentation/beanflow-refresh";
 import { shortDateTime, won } from "../../lib/format";
 import { couponSelection, useCouponSelection } from "./couponSelection";
 
@@ -62,14 +62,13 @@ export function CouponWalletPage() {
 
   if (!storeId) {
     return (
-      <div className="customer-page coupon-wallet-page">
-        <PageHeading title="쿠폰" />
+      <CustomerReferencePage title="쿠폰" layout="list">
         <EmptyState
           title="쿠폰을 사용할 매장을 골라주세요"
           description="매장별 적용 범위가 달라서 매장을 선택해야 사용할 수 있는 쿠폰을 정확히 보여드릴 수 있어요."
           action={<ButtonLink to="/app/stores">매장 찾기</ButtonLink>}
         />
-      </div>
+      </CustomerReferencePage>
     );
   }
 
@@ -77,11 +76,11 @@ export function CouponWalletPage() {
   if (!wallet) return <ErrorState error={error} retry={() => void load()} />;
 
   return (
-    <div className="customer-page coupon-wallet-page">
+    <CustomerReferencePage title="쿠폰" layout="list">
       <Link className="back-link" to={`/app/stores/${storeId}`}><ArrowLeft size={17} /> {wallet.store.name}</Link>
-      <PageHeading
-        title={`${wallet.store.name} 쿠폰`}
-      />
+      <ReferenceSection tone="soft">
+        <div className="bfr-coupon-store"><strong>선택 매장 · {wallet.store.name}</strong><span>쿠폰은 선택한 매장에서만 사용할 수 있어요.</span></div>
+      </ReferenceSection>
       {error ? <ErrorState error={error} retry={() => void load(wallet.page.page.nextCursor, true)} /> : null}
       {wallet.page.items.length === 0 ? (
         <EmptyState
@@ -131,6 +130,6 @@ export function CouponWalletPage() {
           <ButtonLink to="/app/cart">장바구니 보기</ButtonLink>
         </div>
       ) : null}
-    </div>
+    </CustomerReferencePage>
   );
 }

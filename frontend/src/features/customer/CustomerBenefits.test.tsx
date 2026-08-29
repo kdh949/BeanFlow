@@ -76,7 +76,8 @@ describe("customer coupon selection", () => {
     renderRoute("/app/coupons?storeId=store-1", <CouponWalletPage />);
     const user = userEvent.setup();
 
-    expect(await screen.findByRole("heading", { name: "시청점 쿠폰" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "쿠폰" })).toBeInTheDocument();
+    expect(screen.getByText("선택 매장 · 시청점")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /이 매장에서는 사용할 수 없음/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /₩1,000 할인 쿠폰 선택/ }));
 

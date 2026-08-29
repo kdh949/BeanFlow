@@ -39,7 +39,7 @@ const meta = {
       },
       story: { inline: false, height: "560px" },
     },
-    routing: { path: "/store/login", initialEntry: "/store/login?next=%2Fstore" },
+    routing: { surface: "store", path: "/store/login", initialEntry: "/store/login?next=%2Fstore" },
     msw: { handlers: unauthenticated },
   },
   beforeEach: () => {
@@ -80,7 +80,7 @@ export const RejectedCredentials: Story = {
 export const InitialPasswordChange: Story = {
   render: () => <MerchantPasswordChangePage />,
   parameters: {
-    routing: { path: "/store/password", initialEntry: "/store/password" },
+    routing: { surface: "store", path: "/store/password", initialEntry: "/store/password" },
     msw: { handlers: initialPassword },
   },
   play: async ({ canvas }) => {
@@ -92,7 +92,7 @@ export const InitialPasswordChange: Story = {
 export const RejectedNewPassword: Story = {
   render: () => <MerchantPasswordChangePage />,
   parameters: {
-    routing: { path: "/store/password", initialEntry: "/store/password" },
+    routing: { surface: "store", path: "/store/password", initialEntry: "/store/password" },
     msw: {
       handlers: [
         ...initialPassword,

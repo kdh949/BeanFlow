@@ -3,9 +3,10 @@ import { useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
+import { Button, EmptyState, LoadingState, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
+import { WorkspaceReferencePage } from "../../presentation/beanflow-refresh";
 
 type MerchantAccount = components["schemas"]["MerchantAccountView"];
 type OneTimePassword = components["schemas"]["MerchantTemporaryPasswordResult"] | components["schemas"]["MerchantAccountCreationResult"];
@@ -160,8 +161,7 @@ export function MerchantAccountsPage() {
   const notFound = lookupError instanceof ApiRequestError && lookupError.status === 404;
 
   return (
-    <div className="console-page">
-      <PageHeading title="점주 계정 관리" />
+    <WorkspaceReferencePage title="점주 계정 관리" description="점주 계정을 정확히 조회하고 권한이 필요한 작업을 감사 사유와 함께 처리합니다." density="dense">
       <Tabs value={mode} onValueChange={(value) => { setMode(value as typeof mode); clearSensitiveResult(); }}>
         <TabList label="점주 계정 업무 선택"><Tab value="lookup">계정 조회·복구</Tab><Tab value="create">새 계정 발급</Tab></TabList>
       <TabPanel value="lookup">
@@ -240,7 +240,7 @@ export function MerchantAccountsPage() {
       </Tabs>
 
       {passwordResult ? <OneTimePasswordPanel result={passwordResult} onDismiss={clearSensitiveResult} /> : null}
-    </div>
+    </WorkspaceReferencePage>
   );
 }
 

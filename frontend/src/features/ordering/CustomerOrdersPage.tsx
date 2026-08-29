@@ -4,8 +4,9 @@ import { Link, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
-import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, TextField } from "../../design-system";
+import { Button, ButtonLink, EmptyState, LoadingState, Tab, TabList, TabPanel, Tabs, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
+import { CustomerReferencePage } from "../../presentation/beanflow-refresh";
 import { shortDateTime, won } from "../../lib/format";
 
 type CustomerOrderPage = components["schemas"]["CustomerOrderPage"];
@@ -52,7 +53,7 @@ export function CustomerOrdersPage() {
     setSearchParams(values, { replace: true });
   }
   const content = <>{!page && !error ? <LoadingState label="주문을 불러오는 중" /> : null}{error ? <ErrorState error={error} retry={() => void load()} /> : null}{page?.items.length === 0 ? <EmptyState title={status === "ACTIVE" ? "진행 중인 주문이 없어요" : "이 기간의 주문이 없어요"} description={status === "ACTIVE" ? "새 주문을 시작하면 픽업 상태가 여기에 표시됩니다." : "조회 기간을 넓혀 다시 확인해 보세요."} action={<ButtonLink to="/app/stores">매장 찾기</ButtonLink>} /> : null}{page?.items.length ? <section className="customer-order-list" aria-label={status === "ACTIVE" ? "진행 중인 주문" : "지난 주문"}>{page.items.map((order) => <OrderRow key={order.orderReference} order={order} active={status === "ACTIVE"} />)}</section> : null}{page?.page.nextCursor ? <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}><RefreshCw size={16} />{loadingMore ? "더 불러오는 중" : "주문 더 보기"}</Button> : null}</>;
-  return <div className="customer-page customer-orders-page"><PageHeading title="주문" /><Tabs value={status} onValueChange={(value) => update({ status: value as CustomerOrderStatus })}><TabList label="주문 상태"><Tab value="ACTIVE">진행 중</Tab><Tab value="PAST">지난 주문</Tab></TabList><div className="order-date-filter surface-card"><CalendarDays size={18} /><TextField label="조회 시작일" id="customer-orders-from" type="date" value={from} max={to} onValueChange={(value) => update({ from: value })} /><TextField label="조회 종료일" id="customer-orders-to" type="date" value={to} min={from} onValueChange={(value) => update({ to: value })} /></div><TabPanel value="ACTIVE">{status === "ACTIVE" ? content : null}</TabPanel><TabPanel value="PAST">{status === "PAST" ? content : null}</TabPanel></Tabs></div>;
+  return <CustomerReferencePage title="주문 내역" layout="list"><Tabs value={status} onValueChange={(value) => update({ status: value as CustomerOrderStatus })}><TabList label="주문 상태"><Tab value="ACTIVE">진행 중</Tab><Tab value="PAST">지난 주문</Tab></TabList><div className="order-date-filter surface-card"><CalendarDays size={18} /><TextField label="조회 시작일" id="customer-orders-from" type="date" value={from} max={to} onValueChange={(value) => update({ from: value })} /><TextField label="조회 종료일" id="customer-orders-to" type="date" value={to} min={from} onValueChange={(value) => update({ to: value })} /></div><TabPanel value="ACTIVE">{status === "ACTIVE" ? content : null}</TabPanel><TabPanel value="PAST">{status === "PAST" ? content : null}</TabPanel></Tabs></CustomerReferencePage>;
 }
 
 function OrderRow({ order, active }: { order: CustomerOrderSummary; active: boolean }) {

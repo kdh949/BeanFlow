@@ -13,7 +13,7 @@ const meta = {
       description: { component: "clean callback URL에서 server payment status를 읽고 공개 주문 번호로 안전하게 추적합니다." },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/payments/:paymentId/success", initialEntry: `/app/payments/${ids.payment}/success` },
+    routing: { surface: "customer", path: "/app/payments/:paymentId/success", initialEntry: `/app/payments/${ids.payment}/success` },
   },
 } satisfies Meta<typeof PaymentSuccessPage>;
 

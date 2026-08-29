@@ -4,11 +4,11 @@ import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
 import { shortDateTime } from "../../lib/format";
 import { useResource } from "../shared/useResource";
 import { Button } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
+import { CustomerReferencePage } from "../../presentation/beanflow-refresh";
 
 type CustomerPointSummary = components["schemas"]["CustomerPointSummary"];
 type PointTransactionPage = components["schemas"]["PointTransactionPage"];
@@ -31,13 +31,12 @@ export function CustomerPointsPage() {
   const summary = useResource<CustomerPointSummary>(loadSummary);
 
   return (
-    <div className="customer-page points-page">
-      <PageHeading title="포인트" />
+    <CustomerReferencePage title="포인트" layout="list">
       {summary.state.status === "loading" ? <LoadingState label="포인트를 불러오는 중" /> : null}
       {summary.state.status === "failed" ? <PointsFailure error={summary.state.error} retry={summary.reload} /> : null}
       {summary.state.status === "ready" ? <PointsSummary summary={summary.state.value} /> : null}
       {summary.state.status === "ready" ? <PointLedger /> : null}
-    </div>
+    </CustomerReferencePage>
   );
 }
 

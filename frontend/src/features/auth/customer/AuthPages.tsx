@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { Button, PageHeading, TextField } from "../../../design-system";
+import { Button, IconButton, TextField } from "../../../design-system";
+import { CustomerReferencePage, ReferenceSection } from "../../../presentation/beanflow-refresh";
 import { customerSession, sanitizeReturnPath, useCustomerSession } from "./customerSession";
 
 const PASSWORD_MIN_LENGTH = 15;
@@ -16,6 +18,7 @@ export function CustomerLoginPage() {
   const returnPath = sanitizeReturnPath(searchParams.get("next"));
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,11 +44,14 @@ export function CustomerLoginPage() {
   const code = codeOf(failure);
   const rateLimited = code === "AUTHENTICATION_RATE_LIMITED";
   return (
-    <div className="customer-page auth-page">
-      <PageHeading title="로그인" />
-      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+    <CustomerReferencePage title="로그인" layout="auth">
+      <ReferenceSection>
+      <form className="bfr-auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <TextField
           label="아이디"
+          labelVisibility="sr-only"
+          placeholder="아이디"
+          leading={<UserRound size={19} />}
           id="customer-login-id"
           name="loginId"
           value={loginId}
@@ -59,9 +65,13 @@ export function CustomerLoginPage() {
         />
         <TextField
           label="비밀번호"
+          labelVisibility="sr-only"
+          placeholder="비밀번호"
+          leading={<LockKeyhole size={19} />}
+          trailing={<IconButton label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} variant="ghost" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</IconButton>}
           id="customer-login-password"
           name="password"
-          type="password"
+          type={showPassword ? "text" : "password"}
           value={password}
           autoComplete="current-password"
           required
@@ -82,10 +92,11 @@ export function CustomerLoginPage() {
           {submitting ? "로그인 중" : "로그인"}
         </Button>
       </form>
+      </ReferenceSection>
       <p className="auth-switch">
         처음이신가요? <Link to={`/app/signup?next=${encodeURIComponent(returnPath)}`}>회원가입</Link>
       </p>
-    </div>
+    </CustomerReferencePage>
   );
 }
 
@@ -96,6 +107,7 @@ export function CustomerSignupPage() {
   const returnPath = sanitizeReturnPath(searchParams.get("next"));
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -137,9 +149,9 @@ export function CustomerSignupPage() {
   const duplicateLoginId = !registered && code === "LOGIN_ID_UNAVAILABLE";
   const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
   return (
-    <div className="customer-page auth-page">
-      <PageHeading title="회원가입" />
-      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+    <CustomerReferencePage title="회원가입" description="간편하게 가입하고 다양한 혜택을 만나보세요." layout="auth">
+      <ReferenceSection>
+      <form className="bfr-auth-form" onSubmit={(event) => void submit(event)} noValidate>
         {registered ? (
           <p className="inline-note" role="status">
             회원가입은 완료됐어요. 아이디는 <strong>{normalizedLoginId}</strong>입니다.
@@ -176,7 +188,8 @@ export function CustomerSignupPage() {
           label="비밀번호"
           id="customer-signup-password"
           name="password"
-          type="password"
+          type={showPassword ? "text" : "password"}
+          trailing={<IconButton label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} variant="ghost" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</IconButton>}
           value={password}
           autoComplete="new-password"
           required
@@ -201,9 +214,10 @@ export function CustomerSignupPage() {
           {submitting ? (registered ? "로그인 중" : "가입 중") : (registered ? "다시 로그인" : "가입하고 시작하기")}
         </Button>
       </form>
+      </ReferenceSection>
       <p className="auth-switch">
         이미 계정이 있으신가요? <Link to={`/app/login?next=${encodeURIComponent(returnPath)}`}>로그인</Link>
       </p>
-    </div>
+    </CustomerReferencePage>
   );
 }

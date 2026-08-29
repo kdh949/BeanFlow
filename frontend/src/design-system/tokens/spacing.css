@@ -22,8 +22,11 @@
   --control-h-lg: 50px;
   --control-h-xl: 56px;
   --tap-min: 44px;
-  --sidebar-w: 176px;
-  --topbar-h: 64px;
+  --workspace-sidebar-w-standard: 216px;
+  --workspace-sidebar-w-wide: 260px;
+  --workspace-sidebar-w-compact: 72px;
+  --workspace-topbar-h: 70px;
+  --workspace-field-min: 150px;
   --tabbar-h: 68px;
   --a11y-hidden-size: 1px;
 }
