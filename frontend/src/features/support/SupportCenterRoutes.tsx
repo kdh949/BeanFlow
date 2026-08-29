@@ -159,8 +159,10 @@ export function SupportCaseDetailRoute() {
     const body = { targetState, expectedVersion: overview.case.version, reason: `SUPPORT_CENTER_${overview.case.state}_TO_${targetState}` };
     setBusy(true); setMutationMessage(undefined);
     try {
-      unwrap(await operationsApi.POST("/support/cases/{caseId}/status-transitions", { params: { path: { caseId }, header: { "Idempotency-Key": transitionIntent.current.keyFor(JSON.stringify(body)) } }, body }));
-      transitionIntent.current.complete(); setMutationMessage(`상담 상태가 ${targetState}(으)로 변경되었습니다.`); setGeneration((value) => value + 1);
+      const transitioned = unwrap(await operationsApi.POST("/support/cases/{caseId}/status-transitions", { params: { path: { caseId }, header: { "Idempotency-Key": transitionIntent.current.keyFor(JSON.stringify(body)) } }, body }));
+      transitionIntent.current.complete();
+      setOverview({ ...overview, case: { ...overview.case, state: transitioned.currentState, version: transitioned.caseVersion } });
+      setMutationMessage(`상담 상태가 ${transitioned.currentState}(으)로 변경되었습니다.`);
     } catch (failure) { setMutationMessage(failure instanceof Error ? failure.message : "상담 상태를 변경하지 못했습니다."); }
     finally { setBusy(false); }
   }
