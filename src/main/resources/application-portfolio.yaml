@@ -1,0 +1,7 @@
+beanflow:
+  pagination:
+    cursor-hmac:
+      active-key-id: ${BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID}
+      keys:
+        - id: ${BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID}
+          secret-base64-url: ${BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL}

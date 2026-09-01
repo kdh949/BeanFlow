@@ -17,7 +17,7 @@ internal class VaultTransitPersonalDataConfiguration {
     ): VaultTransitPersonalDataAdapter = VaultTransitPersonalDataAdapter(properties, objectMapper)
 
     @Bean
-    @Profile("prod")
+    @Profile("vault-enforced")
     fun vaultTransitPersonalDataStartupValidator(
         properties: VaultTransitPersonalDataProperties,
         adapter: VaultTransitPersonalDataAdapter,

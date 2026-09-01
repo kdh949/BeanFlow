@@ -1,0 +1,67 @@
+{
+  "realm": "beanflow",
+  "enabled": true,
+  "displayName": "BeanFlow Portfolio",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "PLATFORM_OPERATOR",
+        "description": "BeanFlow audited operations API role"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "beanflow-operations",
+      "name": "BeanFlow Operations SPA",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "${BEANFLOW_PUBLIC_ORIGIN}/ops/auth/callback"
+      ],
+      "webOrigins": [
+        "${BEANFLOW_PUBLIC_ORIGIN}"
+      ],
+      "attributes": {
+        "code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${BEANFLOW_PUBLIC_ORIGIN}/ops"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "operations access-token audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "beanflow-operations",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}
