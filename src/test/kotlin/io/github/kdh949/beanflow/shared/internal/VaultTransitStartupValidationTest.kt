@@ -43,6 +43,16 @@ internal class VaultTransitStartupValidationTest {
     }
 
     @Test
+    fun `portfolio fails startup when configured Proxy is unreachable`() {
+        contextRunner("portfolio,vault-enforced")
+            .withPropertyValues(*validProperties("http://127.0.0.1:1").toTypedArray())
+            .run { context ->
+                assertThat(context.startupFailure).isNotNull
+                assertThat(context.startupFailure).hasMessageContaining("Vault Transit personal-data startup validation failed")
+            }
+    }
+
+    @Test
     fun `production validates distinct encryption and HMAC key metadata through the loopback Proxy`() {
         startServer { exchange ->
             val isEncryption = exchange.requestURI.path.endsWith("/keys/customer-profile")
@@ -118,11 +128,11 @@ internal class VaultTransitStartupValidationTest {
         }
     }
 
-    private fun contextRunner() =
+    private fun contextRunner(activeProfiles: String = "prod,vault-enforced") =
         ApplicationContextRunner()
             .withUserConfiguration(VaultTransitPersonalDataConfiguration::class.java)
             .withBean(ObjectMapper::class.java, { ObjectMapper() })
-            .withPropertyValues("spring.profiles.active=prod")
+            .withPropertyValues("spring.profiles.active=$activeProfiles")
 
     private fun validProperties(
         proxyBaseUri: String,

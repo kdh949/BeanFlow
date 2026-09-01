@@ -54,3 +54,14 @@ __pycache__/
 **/demo-identity.env
 **/workload-token.txt
 **/jwks.json
+
+### Deployment secrets ###
+.env
+.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
