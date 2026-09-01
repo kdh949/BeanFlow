@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-02
-- **Implementation owner:** [포트폴리오 배포 스택](../exec-plans/active/portfolio-deployment-stack.md)
+- **Implementation owner:** [포트폴리오 배포 스택](../exec-plans/completed/portfolio-deployment-stack.md)
 
 ## Context
 

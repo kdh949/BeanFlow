@@ -1,11 +1,11 @@
 # Sophos 뒤 개인 서버용 포트폴리오 배포 스택을 만든다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-02`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 구현 중 `Progress`, `Surprises & Discoveries`,
 `Decision Log`, `Outcomes & Retrospective`를 실제 결과로 갱신한다.
@@ -106,7 +106,7 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
 
 - `portfolio` required profile 조합, forbidden overlap와 Vault validator 활성
 - tracked secret/key 차단과 example 파일의 placeholder-only 검사
-- Dockerfile non-root runtime, healthcheck와 pinned base image 검사
+- backend의 root launcher와 별도 non-root JVM/Vault Proxy UID, healthcheck와 pinned base image 검사
 - Nginx `/api`, `/auth/realms`, `/auth/admin` 차단, SPA fallback과 query 없는 log 검사
 - staging/prod Compose의 single published port, persistent volumes, secret files, healthchecks, image tag,
   sandbox profile과 private service 검사
@@ -146,7 +146,7 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
 - [x] frontend Nginx image
 - [x] Compose/Keycloak/preflight
 - [x] runbook과 로컬 검증
-- [ ] PR 원격 CI 확인
+- [x] PR 원격 CI 확인
 
 ## Surprises & Discoveries
 
@@ -173,16 +173,20 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
 
 - `portfolio` profile이 Toss sandbox와 scripted notification을 의도적으로 선택하면서 `prod` guard와 Vault
   startup fail-closed 조건은 유지한다.
-- backend/frontend non-root image, path-only Nginx access log, 단일 published port, 영구 PostGIS volume,
-  Keycloak PKCE realm, config-tree secret과 Vault AppRole bootstrap을 하나의 Compose 계약으로 묶었다.
+- backend의 별도 non-root JVM/Vault Proxy UID, frontend non-root image, path-only Nginx access log, 단일
+  published port, 영구 PostGIS volume, Keycloak PKCE realm, config-tree secret과 Vault AppRole bootstrap을
+  하나의 Compose 계약으로 묶었다.
 - staging/prod Compose 계약, backend/frontend image 계약, 실제 PostGIS+Keycloak realm import smoke,
   관련 Spring 안전 테스트 18개, backend build without tests, frontend production build와 site test 4개,
   production npm audit, CI script와 문서 검증이 통과했다.
 - 로컬 unsharded 전체 Gradle test는 46분 동안 실패 출력 없이 진행됐지만 완료 전에 중단했다. PR의 공식
-  6-way shard 결과를 완료 근거로 사용하며 통과 전에는 이 plan을 completed로 이동하지 않는다.
+  6-way shard와 최종 build gate가 모두 통과한 결과를 완료 근거로 사용했다.
+- PR 리뷰에서 확인된 raw Referer, OIDC issuer/audience, Vault AppRole UID·파일 경계, Proxy readiness
+  deadline, root 전용 runbook 권한과 trusted proxy allowlist 문제를 각각 회귀 계약과 함께 수정했다.
 - Sophos, 외부 Vault, AIStor와 실제 서버 smoke는 이 checkout에서 실행하지 않았다. runbook의 서버
   preflight와 네 서비스 health가 실제 배포 승인 기준이다.
 
 ## Revision Notes
 
 - 2026-09-02: 사용자 확정 범위와 현재 코드/인프라 조사 결과로 최초 작성.
+- 2026-09-02: 실제 이미지·identity stack 검증과 PR의 전체 CI 통과 후 완료 상태로 이동.
