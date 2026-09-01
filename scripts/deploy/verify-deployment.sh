@@ -47,10 +47,7 @@ readonly trusted_proxies="$(env_value BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS)"
   echo "BEANFLOW_IMAGE_TAG must be an explicit immutable candidate tag" >&2
   exit 1
 }
-[[ ",$trusted_proxies," == *",$frontend_ip,"* ]] || {
-  echo "BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS must trust only the environment frontend IP plus explicit Sophos CIDRs" >&2
-  exit 1
-}
+python3 "$root/scripts/deploy/validate-trusted-proxies.py" "$frontend_ip" "$trusted_proxies"
 
 required_secrets=(
   BEANFLOW_POSTGRES_PASSWORD

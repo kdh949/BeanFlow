@@ -36,7 +36,8 @@ sudoedit /etc/beanflow/staging/deployment.env
 - `BEANFLOW_BIND_ADDRESS`: 서버의 DMZ IP
 - `BEANFLOW_PUBLIC_ORIGIN`: `https://` 공개 주소, 끝 `/` 없음
 - `BEANFLOW_IMAGE_TAG`: 배포할 Git SHA. `latest` 금지
-- `BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS`: staging frontend `172.28.0.10/32`와 필요한 Sophos CIDR만
+- `BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS`: staging frontend `172.28.0.10/32`와 Sophos 주소만. 각 주소는
+  단일 호스트 `/32` 또는 `/128`로 작성하며 Sophos 주소를 하나 이상 포함
 - AIStor와 Vault 주소·bucket·key version
 
 ## 2. secret 파일 채우기

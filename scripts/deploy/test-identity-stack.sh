@@ -46,7 +46,7 @@ printf '%s\n' \
   "BEANFLOW_WEB_IMAGE_REPOSITORY=beanflow-web" \
   "BEANFLOW_PULL_POLICY=never" \
   "BEANFLOW_POSTGRES_PLATFORM=linux/amd64" \
-  "BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS=172.28.0.10/32" \
+  "BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS=172.28.0.10/32,192.0.2.1/32" \
   "BEANFLOW_AISTOR_ENDPOINT=https://aistor.internal.example.test" \
   "BEANFLOW_AISTOR_PUBLIC_ENDPOINT=https://objects.example.test" \
   "BEANFLOW_AISTOR_BUCKET=beanflow-contract" \

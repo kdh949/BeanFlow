@@ -64,6 +64,26 @@ for environment in staging prod; do
   "$root/scripts/deploy/verify-deployment.sh" "$environment" --env-file "$env_file"
 done
 
+validator="$root/scripts/deploy/validate-trusted-proxies.py"
+
+expect_trusted_proxy_rejection() {
+  local frontend_cidr="$1"
+  local trusted_cidrs="$2"
+  if python3 "$validator" "$frontend_cidr" "$trusted_cidrs" >/dev/null 2>&1; then
+    echo "trusted proxy contract unexpectedly accepted: $trusted_cidrs" >&2
+    exit 1
+  fi
+}
+
+python3 "$validator" "172.28.0.10/32" "172.28.0.10/32,192.0.2.1/32"
+python3 "$validator" "172.28.0.10/32" "192.0.2.1/32,172.28.0.10/32,2001:db8::1/128"
+expect_trusted_proxy_rejection "172.28.0.10/32" "172.28.0.10/32"
+expect_trusted_proxy_rejection "172.28.0.10/32" "172.28.0.10/32,0.0.0.0/0"
+expect_trusted_proxy_rejection "172.28.0.10/32" "172.28.0.10/32,192.0.2.0/24"
+expect_trusted_proxy_rejection "172.28.0.10/32" "192.0.2.1/32"
+expect_trusted_proxy_rejection "172.28.0.10/32" "172.28.0.10/32,172.28.0.10/32,192.0.2.1/32"
+expect_trusted_proxy_rejection "172.28.0.10/32" "172.28.0.10/32,not-a-cidr"
+
 grep -q '"code.challenge.method": "S256"' "$root/deploy/keycloak/beanflow-realm.json"
 grep -q '"claim.name": "roles"' "$root/deploy/keycloak/beanflow-realm.json"
 grep -q '"protocolMapper": "oidc-audience-mapper"' "$root/deploy/keycloak/beanflow-realm.json"
