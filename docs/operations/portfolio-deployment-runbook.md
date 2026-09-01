@@ -78,9 +78,12 @@ sudo find /etc/beanflow/staging -type f -exec chmod 0600 {} \;
 ## 3. 배포 전 검사
 
 ```bash
-bash scripts/deploy/verify-deployment.sh staging \
+sudo bash scripts/deploy/verify-deployment.sh staging \
   --env-file /etc/beanflow/staging/deployment.env
 ```
+
+`/etc/beanflow`은 root 전용(0700/0600)이므로 이 단계부터 secret 또는 환경 파일을 읽는 모든 명령은
+`sudo`로 실행한다.
 
 `deployment preflight passed`가 아니면 배포하지 않는다. 특히 live Toss key, 빈 secret, 느슨한 파일 권한,
 wildcard bind 주소와 `latest` tag는 실패해야 정상이다.
@@ -88,12 +91,12 @@ wildcard bind 주소와 `latest` tag는 실패해야 정상이다.
 ## 4. 이미지 빌드와 기동
 
 ```bash
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   build --pull api frontend
 
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   up -d --wait
@@ -102,12 +105,12 @@ docker compose \
 완료 조건은 네 서비스가 모두 `healthy`인 것이다.
 
 ```bash
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   ps
 
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   exec api curl --fail --silent http://127.0.0.1:8080/actuator/health
@@ -118,7 +121,7 @@ docker compose \
 Keycloak admin URL은 Nginx가 차단한다. 서버 SSH에서 CLI로만 초기화한다.
 
 ```bash
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   exec keycloak /bin/bash -ec \
@@ -128,7 +131,7 @@ docker compose \
 ```
 
 관리자 password는 출력하거나 shell argument에 넣지 않고 컨테이너 secret 파일에서 읽는다. 인증 후 같은
-`docker compose ... exec keycloak` 접두어로 실행한다. `set-password`는 새 운영자 password만 대화형으로
+`sudo docker compose ... exec keycloak` 접두어로 실행한다. `set-password`는 새 운영자 password만 대화형으로
 입력받는다.
 
 ```bash
@@ -173,9 +176,9 @@ profile과 Toss sandbox만 사용한다. 이를 실결제 또는 상용 운영�
 
 ```bash
 sudoedit /etc/beanflow/staging/deployment.env
-bash scripts/deploy/verify-deployment.sh staging \
+sudo bash scripts/deploy/verify-deployment.sh staging \
   --env-file /etc/beanflow/staging/deployment.env
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   up -d --no-build --wait api frontend
@@ -187,12 +190,12 @@ docker compose \
 ## 빠른 진단
 
 ```bash
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   ps
 
-docker compose \
+sudo docker compose \
   --env-file /etc/beanflow/staging/deployment.env \
   -f compose.portfolio.yml -f compose.staging.yml \
   logs --tail=200 api frontend keycloak postgres
