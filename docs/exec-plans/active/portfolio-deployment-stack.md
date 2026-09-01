@@ -141,11 +141,12 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
 ## Progress
 
 - [x] ADR과 Implementation-Ready plan 작성
-- [ ] profile/Vault enforcement와 secret boundary
-- [ ] backend image와 Vault Proxy
-- [ ] frontend Nginx image
-- [ ] Compose/Keycloak/preflight
-- [ ] runbook, 전체 검증과 PR
+- [x] profile/Vault enforcement와 secret boundary
+- [x] backend image와 Vault Proxy
+- [x] frontend Nginx image
+- [x] Compose/Keycloak/preflight
+- [x] runbook과 로컬 검증
+- [ ] PR 원격 CI 확인
 
 ## Surprises & Discoveries
 
@@ -155,6 +156,10 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
   검증을 넓히지 않고 backend 컨테이너 안에 전용 Vault Proxy process를 둔다.
 - 2026-09-02: AIStor production 배포는 license와 TLS/KMS 경계를 요구한다. 저장소가 임의 container를
   bootstrap하지 않고 외부 private endpoint와 최소 bucket credential만 받는다.
+- 2026-09-02: 공식 `postgis/postgis:17-3.5` image는 ARM64 manifest가 없다. 배포 계약은
+  `linux/amd64`를 기본값으로 명시하고 ARM 서버 사용은 별도 검증 대상으로 남긴다.
+- 2026-09-02: Keycloak의 management health endpoint도 `KC_HTTP_RELATIVE_PATH=/auth`를 상속한다.
+  실제 기동 테스트에서 `/health/ready`의 404를 확인하고 `/auth/health/ready`로 수정했다.
 
 ## Decision Log
 
@@ -166,7 +171,17 @@ ADR-119의 네 대안을 따른다. Compose 전체 복제와 공통 base+overrid
 
 ## Outcomes & Retrospective
 
-구현과 검증 완료 후 실제 결과를 기록한다.
+- `portfolio` profile이 Toss sandbox와 scripted notification을 의도적으로 선택하면서 `prod` guard와 Vault
+  startup fail-closed 조건은 유지한다.
+- backend/frontend non-root image, path-only Nginx access log, 단일 published port, 영구 PostGIS volume,
+  Keycloak PKCE realm, config-tree secret과 Vault AppRole bootstrap을 하나의 Compose 계약으로 묶었다.
+- staging/prod Compose 계약, backend/frontend image 계약, 실제 PostGIS+Keycloak realm import smoke,
+  관련 Spring 안전 테스트 18개, backend build without tests, frontend production build와 site test 4개,
+  production npm audit, CI script와 문서 검증이 통과했다.
+- 로컬 unsharded 전체 Gradle test는 46분 동안 실패 출력 없이 진행됐지만 완료 전에 중단했다. PR의 공식
+  6-way shard 결과를 완료 근거로 사용하며 통과 전에는 이 plan을 completed로 이동하지 않는다.
+- Sophos, 외부 Vault, AIStor와 실제 서버 smoke는 이 checkout에서 실행하지 않았다. runbook의 서버
+  preflight와 네 서비스 health가 실제 배포 승인 기준이다.
 
 ## Revision Notes
 
