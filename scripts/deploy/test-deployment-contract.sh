@@ -66,6 +66,8 @@ done
 
 grep -q '"code.challenge.method": "S256"' "$root/deploy/keycloak/beanflow-realm.json"
 grep -q '"claim.name": "roles"' "$root/deploy/keycloak/beanflow-realm.json"
+grep -q '"protocolMapper": "oidc-audience-mapper"' "$root/deploy/keycloak/beanflow-realm.json"
+grep -q '"included.client.audience": "beanflow-operations"' "$root/deploy/keycloak/beanflow-realm.json"
 bash -n "$root/deploy/keycloak/start.sh"
 bash -n "$root/deploy/postgres/init-keycloak-database.sh"
 bash -n "$root/deploy/vault/bootstrap-transit.sh"
