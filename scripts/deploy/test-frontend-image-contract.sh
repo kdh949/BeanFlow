@@ -30,6 +30,7 @@ grep -q 'try_files \$uri \$uri/ /index.html' "$nginx_config" || fail "SPA fallba
 grep -q 'proxy_set_header X-Forwarded-Proto https' "$nginx_config" || fail "Sophos TLS termination must be explicit"
 grep -q '\$request_method \$uri \$server_protocol' "$nginx_config" || fail "safe request log format is required"
 ! grep -q '\$request_uri' "$nginx_config" || fail "query-bearing request_uri must not be logged"
+! grep -q '\$http_referer' "$nginx_config" || fail "raw Referer must not be logged"
 grep -Eq 'location[[:space:]]+=[[:space:]]+/healthz' "$nginx_config" || fail "health endpoint is required"
 
 echo "Frontend image contract passed."
