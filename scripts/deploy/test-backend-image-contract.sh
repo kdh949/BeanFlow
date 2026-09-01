@@ -39,6 +39,10 @@ grep -q 'setpriv --reuid=vault-proxy --regid=vault-proxy' "$entrypoint" || fail 
 grep -q 'setpriv --reuid=beanflow --regid=beanflow' "$entrypoint" || fail "JVM must run as the beanflow UID"
 grep -q 'install --owner=vault-proxy --group=vault-proxy --mode=0400' "$entrypoint" || fail "Vault credentials must be copied with Proxy-only ownership"
 ! grep -q '/run/secrets/BEANFLOW_VAULT' "$entrypoint" || fail "entrypoint must not expose Vault credentials through the JVM config tree"
+grep -q -- '--connect-timeout' "$entrypoint" || fail "Vault readiness probe requires a connect timeout"
+grep -q -- '--max-time' "$entrypoint" || fail "Vault readiness probe requires a total timeout"
+grep -q 'proxy_deadline_epoch' "$entrypoint" || fail "Vault readiness must use a wall-clock deadline"
+! grep -q 'seq 1 60' "$entrypoint" || fail "probe count must not stand in for the startup deadline"
 ! grep -Eq 'echo.*(ROLE_ID|SECRET_ID|TOKEN|PASSWORD|SECRET)' "$entrypoint" || fail "entrypoint must not print secret values"
 
 echo "Backend image contract passed."

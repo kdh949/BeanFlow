@@ -52,19 +52,32 @@ proxy_pid="$!"
 unset BEANFLOW_VAULT_UPSTREAM_ADDR
 
 proxy_ready=false
-for _ in $(seq 1 60); do
+readonly proxy_startup_timeout_seconds=60
+readonly proxy_deadline_epoch=$(($(date +%s) + proxy_startup_timeout_seconds))
+while (($(date +%s) < proxy_deadline_epoch)); do
   kill -0 "$proxy_pid" 2>/dev/null || {
     wait "$proxy_pid"
     exit "$?"
   }
-  health_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/sys/health || true)"
+  remaining_seconds=$((proxy_deadline_epoch - $(date +%s)))
+  probe_max_time=2
+  ((remaining_seconds < probe_max_time)) && probe_max_time="$remaining_seconds"
+  health_status="$(
+    curl \
+      --connect-timeout 1 \
+      --max-time "$probe_max_time" \
+      --silent \
+      --output /dev/null \
+      --write-out '%{http_code}' \
+      http://127.0.0.1:8100/v1/sys/health || true
+  )"
   case "$health_status" in
     200 | 429 | 472 | 473)
       proxy_ready=true
       break
       ;;
   esac
-  sleep 1
+  (($(date +%s) + 1 < proxy_deadline_epoch)) && sleep 1
 done
 [[ "$proxy_ready" == true ]] || {
   echo "Vault Proxy did not become ready before the startup deadline" >&2
