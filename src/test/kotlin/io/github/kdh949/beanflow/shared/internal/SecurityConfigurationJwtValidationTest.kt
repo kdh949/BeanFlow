@@ -73,7 +73,11 @@ internal class SecurityConfigurationJwtValidationTest {
                 .build()
         val jwt =
             SignedJWT(
-                JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.keyID).type(JOSEObjectType.JWT).build(),
+                JWSHeader
+                    .Builder(JWSAlgorithm.RS256)
+                    .keyID(key.keyID)
+                    .type(JOSEObjectType.JWT)
+                    .build(),
                 claims,
             )
         jwt.sign(RSASSASigner(key))
