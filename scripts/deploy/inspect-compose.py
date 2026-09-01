@@ -50,12 +50,30 @@ required_api_secrets = {
     "BEANFLOW_AISTOR_SECRET_KEY",
     "TOSS_CLIENT_KEY",
     "TOSS_SECRET_KEY",
-    "BEANFLOW_VAULT_ROLE_ID",
-    "BEANFLOW_VAULT_SECRET_ID",
-    "BEANFLOW_VAULT_CA_PEM",
 }
 if not required_api_secrets.issubset(api_secret_targets):
     fail("API secret target set is incomplete")
+
+vault_secret_targets = {
+    secret.get("source"): secret.get("target")
+    for secret in services["api"].get("secrets", [])
+    if secret.get("source") in {"vault_role_id", "vault_secret_id", "vault_ca_pem"}
+}
+expected_vault_secret_targets = {
+    "vault_role_id": "/run/beanflow-vault-bootstrap/BEANFLOW_VAULT_ROLE_ID",
+    "vault_secret_id": "/run/beanflow-vault-bootstrap/BEANFLOW_VAULT_SECRET_ID",
+    "vault_ca_pem": "/run/beanflow-vault-bootstrap/BEANFLOW_VAULT_CA_PEM",
+}
+if vault_secret_targets != expected_vault_secret_targets:
+    fail("Vault bootstrap secrets must be mounted outside the JVM config tree")
+
+api_tmpfs = services["api"].get("tmpfs", [])
+if not any(
+    (isinstance(mount, str) and mount.split(":", 1)[0] == "/run/beanflow-vault")
+    or (isinstance(mount, dict) and mount.get("target") == "/run/beanflow-vault")
+    for mount in api_tmpfs
+):
+    fail("Vault Proxy requires an isolated runtime tmpfs")
 
 networks = document.get("networks", {})
 if not networks.get("backend", {}).get("internal"):

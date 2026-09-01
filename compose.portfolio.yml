@@ -90,6 +90,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m
+      - /run/beanflow-vault:rw,noexec,nosuid,size=1m,mode=0700
     environment:
       SPRING_PROFILES_ACTIVE: portfolio
       SPRING_CONFIG_IMPORT: configtree:/run/secrets/
@@ -119,7 +120,7 @@ services:
       BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY: ${BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY:-beanflow-blind-index}
       BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION: ${BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION:?BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION is required}
       BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS: ${BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS:?BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS is required}
-      VAULT_ADDR: ${BEANFLOW_VAULT_ADDR:?BEANFLOW_VAULT_ADDR is required}
+      BEANFLOW_VAULT_UPSTREAM_ADDR: ${BEANFLOW_VAULT_ADDR:?BEANFLOW_VAULT_ADDR is required}
     secrets:
       - source: postgres_password
         target: BEANFLOW_DB_PASSWORD
@@ -136,11 +137,11 @@ services:
       - source: toss_secret_key
         target: TOSS_SECRET_KEY
       - source: vault_role_id
-        target: BEANFLOW_VAULT_ROLE_ID
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_ROLE_ID
       - source: vault_secret_id
-        target: BEANFLOW_VAULT_SECRET_ID
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_SECRET_ID
       - source: vault_ca_pem
-        target: BEANFLOW_VAULT_CA_PEM
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_CA_PEM
     depends_on:
       postgres:
         condition: service_healthy

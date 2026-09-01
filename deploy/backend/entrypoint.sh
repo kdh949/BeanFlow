@@ -2,24 +2,38 @@
 set -euo pipefail
 
 readonly proxy_config="/etc/beanflow/vault-proxy.hcl"
-readonly role_id_file="/run/secrets/BEANFLOW_VAULT_ROLE_ID"
-readonly secret_id_file="/run/secrets/BEANFLOW_VAULT_SECRET_ID"
-readonly ca_file="/run/secrets/BEANFLOW_VAULT_CA_PEM"
+readonly bootstrap_dir="/run/beanflow-vault-bootstrap"
+readonly runtime_dir="/run/beanflow-vault"
+readonly role_id_source="$bootstrap_dir/BEANFLOW_VAULT_ROLE_ID"
+readonly secret_id_source="$bootstrap_dir/BEANFLOW_VAULT_SECRET_ID"
+readonly ca_source="$bootstrap_dir/BEANFLOW_VAULT_CA_PEM"
+readonly role_id_file="$runtime_dir/BEANFLOW_VAULT_ROLE_ID"
+readonly secret_id_file="$runtime_dir/BEANFLOW_VAULT_SECRET_ID"
+readonly ca_file="$runtime_dir/BEANFLOW_VAULT_CA_PEM"
 
-: "${VAULT_ADDR:?VAULT_ADDR is required}"
-[[ "$VAULT_ADDR" == https://* ]] || {
-  echo "VAULT_ADDR must use HTTPS" >&2
+: "${BEANFLOW_VAULT_UPSTREAM_ADDR:?BEANFLOW_VAULT_UPSTREAM_ADDR is required}"
+[[ "$BEANFLOW_VAULT_UPSTREAM_ADDR" == https://* ]] || {
+  echo "BEANFLOW_VAULT_UPSTREAM_ADDR must use HTTPS" >&2
   exit 1
 }
 
-for required_file in "$role_id_file" "$secret_id_file" "$ca_file"; do
+[[ "$(id -u)" == 0 ]] || {
+  echo "Entrypoint must start as root before dropping child privileges" >&2
+  exit 1
+}
+
+for required_file in "$role_id_source" "$secret_id_source" "$ca_source"; do
   [[ -r "$required_file" && -s "$required_file" ]] || {
     echo "Required Vault credential file is missing or empty" >&2
     exit 1
   }
 done
 
-export VAULT_CACERT="$ca_file"
+chown vault-proxy:vault-proxy "$runtime_dir"
+chmod 0700 "$runtime_dir"
+install --owner=vault-proxy --group=vault-proxy --mode=0400 "$role_id_source" "$role_id_file"
+install --owner=vault-proxy --group=vault-proxy --mode=0400 "$secret_id_source" "$secret_id_file"
+install --owner=vault-proxy --group=vault-proxy --mode=0400 "$ca_source" "$ca_file"
 
 proxy_pid=""
 app_pid=""
@@ -31,8 +45,11 @@ terminate_children() {
 
 trap terminate_children TERM INT EXIT
 
-vault proxy -config="$proxy_config" &
+VAULT_ADDR="$BEANFLOW_VAULT_UPSTREAM_ADDR" VAULT_CACERT="$ca_file" \
+  setpriv --reuid=vault-proxy --regid=vault-proxy --init-groups \
+  vault proxy -config="$proxy_config" &
 proxy_pid="$!"
+unset BEANFLOW_VAULT_UPSTREAM_ADDR
 
 proxy_ready=false
 for _ in $(seq 1 60); do
@@ -54,7 +71,7 @@ done
   exit 1
 }
 
-java -jar /opt/beanflow/app.jar &
+setpriv --reuid=beanflow --regid=beanflow --init-groups java -jar /opt/beanflow/app.jar &
 app_pid="$!"
 
 set +e

@@ -10,9 +10,9 @@ auto_auth {
     mount_path = "auth/approle"
 
     config = {
-      role_id_file_path                   = "/run/secrets/BEANFLOW_VAULT_ROLE_ID"
-      secret_id_file_path                 = "/run/secrets/BEANFLOW_VAULT_SECRET_ID"
-      remove_secret_id_file_after_reading = false
+      role_id_file_path                   = "/run/beanflow-vault/BEANFLOW_VAULT_ROLE_ID"
+      secret_id_file_path                 = "/run/beanflow-vault/BEANFLOW_VAULT_SECRET_ID"
+      remove_secret_id_file_after_reading = true
     }
   }
 }
