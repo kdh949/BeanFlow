@@ -35,6 +35,7 @@ import {
   RefreshCartPage,
   RefreshCheckoutPage,
   RefreshCustomerHomePage,
+  EventCampaignPage,
   RefreshCustomerOrderDetailPage,
   RefreshStoreDetailPage,
   RefreshStoreOrderBoardPage,
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
         element: <CustomerSessionGate />, children: [
           { element: <CustomerShell />, children: [
             { index: true, element: <RefreshCustomerHomePage /> },
+            { path: "events", element: <EventCampaignPage /> },
             { path: "stores", element: <RefreshStoreSearchPage /> },
             { path: "stores/:storeId", element: <RefreshStoreDetailPage /> },
             { path: "cart", element: <RefreshCartPage /> },

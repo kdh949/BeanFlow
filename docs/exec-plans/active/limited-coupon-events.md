@@ -24,7 +24,9 @@
 - [x] 2026-09-02: Slice 2의 1200x450 Campaign banner 정규화·저장, immutable pointer commit,
   멱등 응답 저장(V70), publication, OpenAPI, 운영 화면과 canonical FileField를 구현했다. 외부 저장은 DB
   트랜잭션 밖에서 수행하고 한국어 변경 사유는 multipart 본문으로 전달한다.
-- [ ] Slice 3: 로그인 고객 event campaign list.
+- [x] 2026-09-02: Slice 3의 로그인 고객 event list API와 `/app/events` 페이지를 구현했다.
+  게시·활성·다운로드 기간·잔여 수량을 모두 만족하는 캠페인만 최근 게시순으로 노출하고, 배너 접근 URL은
+  DB read transaction이 끝난 뒤 발급한다. 홈 화면에서 이벤트 페이지로 진입할 수 있다.
 - [ ] Slice 4: atomic limited coupon claim과 기존 CouponIssuance 연계.
 - [ ] Slice 5: STOP, observability, full regression과 plan completion.
 

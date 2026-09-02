@@ -799,6 +799,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 다운로드 가능한 선착순 쿠폰 이벤트 조회
+         * @description 게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 최근 게시순으로
+         *     최대 50개 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드 성공은
+         *     다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+         */
+        get: operations["listCurrentCustomerEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/orders/{orderReference}": {
         parameters: {
             query?: never;
@@ -5801,6 +5823,39 @@ export interface components {
             items: components["schemas"]["CustomerCouponWalletItem"][];
             page: components["schemas"]["PageInfo"];
         };
+        CouponCampaignStore: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        CouponCampaignBanner: {
+            /** Format: uri */
+            url: string;
+            expiresAt: components["schemas"]["DateTime"];
+        };
+        CouponCampaignDiscount: {
+            /** @enum {string} */
+            discountType: "FIXED_KRW" | "RATE_BPS";
+            /** Format: int64 */
+            fixedAmountKrw: number | null;
+            rateBps: number | null;
+            /** Format: int64 */
+            maximumDiscountKrw: number | null;
+        };
+        CustomerEventCampaign: {
+            campaignId: components["schemas"]["Identifier"];
+            store: components["schemas"]["CouponCampaignStore"];
+            title: string;
+            summary: string;
+            bannerAltText: string;
+            banner: components["schemas"]["CouponCampaignBanner"];
+            benefit: components["schemas"]["CouponCampaignDiscount"];
+            /** Format: int64 */
+            minimumOrderKrw: number;
+            /** @description 조회 시점의 참고값이며 다운로드 성공을 보장하지 않습니다. */
+            remainingCount: number;
+            claimEndsAt: components["schemas"]["DateTime"];
+            couponExpiresAt: components["schemas"]["DateTime"];
+        };
         /** @description 주문 생성 시 확정해 저장한 불변 가격 요약입니다. */
         CustomerOrderPricing: {
             subtotalKrw: components["schemas"]["MoneyKrw"];
@@ -7441,26 +7496,8 @@ export interface components {
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
         };
-        CouponCampaignStore: {
-            storeId: components["schemas"]["Identifier"];
-            name: string;
-        };
         /** @enum {string} */
         CouponCampaignState: "DRAFT" | "PUBLISHED" | "STOPPED";
-        CouponCampaignBanner: {
-            /** Format: uri */
-            url: string;
-            expiresAt: components["schemas"]["DateTime"];
-        };
-        CouponCampaignDiscount: {
-            /** @enum {string} */
-            discountType: "FIXED_KRW" | "RATE_BPS";
-            /** Format: int64 */
-            fixedAmountKrw: number | null;
-            rateBps: number | null;
-            /** Format: int64 */
-            maximumDiscountKrw: number | null;
-        };
         CouponCampaignCost: {
             /** @enum {string} */
             costBearer: "PLATFORM" | "STORE" | "SHARED";
@@ -12027,6 +12064,29 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listCurrentCustomerEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 노출 가능한 이벤트 배너 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerEventCampaign"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getCurrentCustomerOrder: {

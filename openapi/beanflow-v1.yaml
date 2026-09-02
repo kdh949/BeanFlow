@@ -389,6 +389,29 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /me/events:
+    get:
+      tags: [Promotion]
+      operationId: listCurrentCustomerEvents
+      summary: 현재 다운로드 가능한 선착순 쿠폰 이벤트 조회
+      description: |
+        게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 최근 게시순으로
+        최대 50개 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드 성공은
+        다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      responses:
+        "200":
+          description: 현재 노출 가능한 이벤트 배너 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items: { $ref: "#/components/schemas/CustomerEventCampaign" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /me/orders/{orderReference}:
     get:
       tags: [Ordering]
@@ -8180,6 +8203,25 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CustomerCouponWalletItem" }
         page: { $ref: "#/components/schemas/PageInfo" }
+    CustomerEventCampaign:
+      type: object
+      additionalProperties: false
+      required: [campaignId, store, title, summary, bannerAltText, banner, benefit, minimumOrderKrw, remainingCount, claimEndsAt, couponExpiresAt]
+      properties:
+        campaignId: { $ref: "#/components/schemas/Identifier" }
+        store: { $ref: "#/components/schemas/CouponCampaignStore" }
+        title: { type: string, minLength: 1, maxLength: 80 }
+        summary: { type: string, minLength: 1, maxLength: 160 }
+        bannerAltText: { type: string, minLength: 1, maxLength: 200 }
+        banner: { $ref: "#/components/schemas/CouponCampaignBanner" }
+        benefit: { $ref: "#/components/schemas/CouponCampaignDiscount" }
+        minimumOrderKrw: { type: integer, format: int64, minimum: 0 }
+        remainingCount:
+          type: integer
+          minimum: 1
+          description: 조회 시점의 참고값이며 다운로드 성공을 보장하지 않습니다.
+        claimEndsAt: { $ref: "#/components/schemas/DateTime" }
+        couponExpiresAt: { $ref: "#/components/schemas/DateTime" }
     CustomerOrderLine:
       type: object
       additionalProperties: false
