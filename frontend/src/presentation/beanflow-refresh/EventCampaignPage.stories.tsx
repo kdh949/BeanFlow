@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { EventCampaignPage } from "./EventCampaignPage";
 
@@ -17,6 +17,7 @@ const campaign = (index: number, title: string, color: string, accent: string) =
   remainingCount: [93, 42, 18][index],
   claimEndsAt: [`2026-09-06T23:59:59+09:00`, `2026-09-08T23:59:59+09:00`, `2026-09-10T23:59:59+09:00`][index],
   couponExpiresAt: "2026-09-30T23:59:59+09:00",
+  claimed: false,
 });
 
 const events = [
@@ -32,7 +33,15 @@ const meta = {
   parameters: {
     docs: { description: { component: "게시 중이고 다운로드 가능한 선착순 쿠폰 배너를 고객 앱 프레임 안에 세로로 보여주는 이벤트 화면입니다." }, story: { inline: false, height: "920px" } },
     routing: { path: "/app/events", initialEntry: "/app/events", surface: "refresh-customer" },
-    msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json(events))] },
+    msw: { handlers: [
+      http.get("/api/v1/me/events", () => HttpResponse.json(events)),
+      http.post("/api/v1/me/events/:campaignId/claims", async ({ params, request }) => {
+        if (!request.headers.get("Idempotency-Key") || !request.headers.get("X-BEANFLOW-CSRF")) {
+          return HttpResponse.json({ code: "INVALID_REQUEST", message: "required headers missing" }, { status: 400 });
+        }
+        return HttpResponse.json({ campaignId: params.campaignId, couponIssuanceId: "ce192922-5a03-4f85-84d4-a46330243670", claimedAt: "2026-09-02T19:47:00+09:00", couponExpiresAt: "2026-09-30T23:59:59+09:00" }, { status: 201 });
+      }),
+    ] },
   },
 } satisfies Meta<typeof EventCampaignPage>;
 
@@ -41,10 +50,34 @@ type Story = StoryObj<typeof meta>;
 
 export const ActiveEvents: Story = {
   play: async ({ canvas }) => {
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=storybook-csrf; path=/";
     await expect(await canvas.findByRole("heading", { name: "가을 라떼 선착순 쿠폰" })).toBeVisible();
     await expect(canvas.getAllByRole("article")).toHaveLength(3);
     await expect(canvas.getByText("~ 09.06까지")).toBeVisible();
     await expect(canvas.getByText("선착순 93명")).toBeVisible();
+    await userEvent.click(canvas.getAllByRole("button", { name: "쿠폰 받기" })[0]!);
+    await expect(await canvas.findByText("쿠폰을 받았어요. 쿠폰함에서 바로 확인할 수 있어요.")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "쿠폰함 보기" })).toHaveAttribute("href", `/app/coupons?storeId=${events[0]!.store.storeId}`);
+  },
+};
+
+export const AlreadyClaimed: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json([{ ...events[0], claimed: true }]))] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: "쿠폰함 보기" })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "쿠폰 받기" })).not.toBeInTheDocument();
+  },
+};
+
+export const SoldOutDuringClaim: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/me/events", () => HttpResponse.json([events[0]])),
+    http.post("/api/v1/me/events/:campaignId/claims", () => HttpResponse.json({ code: "CAMPAIGN_QUOTA_EXHAUSTED", message: "quota exhausted" }, { status: 409 })),
+  ] } },
+  play: async ({ canvas }) => {
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=storybook-csrf; path=/";
+    await userEvent.click(await canvas.findByRole("button", { name: "쿠폰 받기" }));
+    await expect(await canvas.findByText("방금 쿠폰이 모두 소진됐어요.")).toBeVisible();
   },
 };
 

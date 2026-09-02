@@ -6,14 +6,21 @@ import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import jakarta.validation.constraints.Size
 import org.springframework.dao.DataAccessException
+import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.sql.Timestamp
 import java.time.Clock
@@ -35,6 +42,7 @@ internal data class CustomerEventCampaignRecord(
     val remainingCount: Int,
     val claimEndsAt: Instant,
     val couponExpiresAt: Instant,
+    val claimed: Boolean,
 )
 
 internal data class CustomerEventCampaignView(
@@ -47,6 +55,7 @@ internal class CustomerEventCampaignQueryRepository(
     private val jdbc: JdbcTemplate,
 ) {
     fun listAvailable(
+        customerId: UUID,
         now: Instant,
         limit: Int,
     ): List<CustomerEventCampaignRecord> =
@@ -58,7 +67,11 @@ internal class CustomerEventCampaignQueryRepository(
                        campaign.fixed_amount_krw, campaign.rate_bps, campaign.maximum_discount_krw,
                        campaign.minimum_eligible_subtotal_krw,
                        counter.total_quota - counter.issued_count AS remaining_count,
-                       limited.claim_ends_at, limited.coupon_expires_at
+                       limited.claim_ends_at, limited.coupon_expires_at,
+                       EXISTS (
+                           SELECT 1 FROM promotion_limited_coupon_claim claim
+                            WHERE claim.campaign_id = campaign.id AND claim.customer_id = ?
+                       ) AS claimed
                   FROM promotion_limited_campaign limited
                   JOIN promotion_campaign campaign ON campaign.id = limited.campaign_id
                   JOIN promotion_limited_campaign_counter counter ON counter.campaign_id = limited.campaign_id
@@ -87,8 +100,10 @@ internal class CustomerEventCampaignQueryRepository(
                         remainingCount = row.getInt("remaining_count"),
                         claimEndsAt = row.getTimestamp("claim_ends_at").toInstant(),
                         couponExpiresAt = row.getTimestamp("coupon_expires_at").toInstant(),
+                        claimed = row.getBoolean("claimed"),
                     )
                 },
+                customerId,
                 Timestamp.from(now),
                 Timestamp.from(now),
                 limit,
@@ -104,8 +119,11 @@ internal class CustomerEventCampaignReadTransaction(
     private val stores: StoreDisplaySnapshotOperations,
 ) {
     @Transactional(readOnly = true)
-    fun list(now: Instant): List<CustomerEventCampaignView> =
-        repository.listAvailable(now, MAX_EVENTS).map { campaign ->
+    fun list(
+        customerId: UUID,
+        now: Instant,
+    ): List<CustomerEventCampaignView> =
+        repository.listAvailable(customerId, now, MAX_EVENTS).map { campaign ->
             CustomerEventCampaignView(campaign, stores.require(campaign.storeId).name)
         }
 
@@ -119,8 +137,11 @@ internal class CustomerEventCampaignService(
     private val transactions: CustomerEventCampaignReadTransaction,
     private val storage: StorefrontImageStorageOperations,
 ) {
-    fun list(now: Instant): List<CustomerEventCampaignResponse> =
-        transactions.list(now).map { view ->
+    fun list(
+        customerId: UUID,
+        now: Instant,
+    ): List<CustomerEventCampaignResponse> =
+        transactions.list(customerId, now).map { view ->
             val access = storage.access(view.campaign.bannerThumbnailKey)
             CustomerEventCampaignResponse.of(view, access.url, access.expiresAt)
         }
@@ -155,6 +176,7 @@ internal data class CustomerEventCampaignResponse(
     val remainingCount: Int,
     val claimEndsAt: Instant,
     val couponExpiresAt: Instant,
+    val claimed: Boolean,
 ) {
     companion object {
         fun of(
@@ -181,6 +203,7 @@ internal data class CustomerEventCampaignResponse(
                 remainingCount = campaign.remainingCount,
                 claimEndsAt = campaign.claimEndsAt,
                 couponExpiresAt = campaign.couponExpiresAt,
+                claimed = campaign.claimed,
             )
         }
     }
@@ -188,14 +211,22 @@ internal data class CustomerEventCampaignResponse(
 
 @RestController
 @RequestMapping("/api/v1/me/events")
+@Validated
 internal class CustomerEventCampaignController(
     private val service: CustomerEventCampaignService,
+    private val claims: LimitedCouponClaimService,
     private val clock: Clock,
 ) {
     @GetMapping
     @PreAuthorize("hasRole('CUSTOMER')")
-    fun list(actor: CustomerActor): List<CustomerEventCampaignResponse> {
-        actor.actorId
-        return service.list(clock.instant())
-    }
+    fun list(actor: CustomerActor): List<CustomerEventCampaignResponse> = service.list(actor.actorId, clock.instant())
+
+    @PostMapping("/{campaignId}/claims")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun claim(
+        actor: CustomerActor,
+        @PathVariable campaignId: UUID,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+    ): CustomerCouponClaimResponse = claims.claim(actor.actorId, campaignId, idempotencyKey, clock.instant())
 }

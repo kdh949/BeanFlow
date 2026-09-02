@@ -69,6 +69,7 @@ internal class CustomerEventCampaignControllerTest
                 .andExpect(jsonPath("$[0].benefit.discountType").value("FIXED_KRW"))
                 .andExpect(jsonPath("$[0].benefit.fixedAmountKrw").value(1_000))
                 .andExpect(jsonPath("$[0].remainingCount").value(93))
+                .andExpect(jsonPath("$[0].claimed").value(false))
                 .andExpect(jsonPath("$[0].bannerThumbnailKey").doesNotExist())
             verify(storage, times(1)).access("campaigns/$visible/thumbnail.jpg")
         }

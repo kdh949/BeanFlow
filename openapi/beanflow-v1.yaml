@@ -412,6 +412,42 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/events/{campaignId}/claims:
+    post:
+      tags: [Promotion]
+      operationId: claimCurrentCustomerLimitedCoupon
+      summary: 선착순 이벤트 쿠폰 다운로드
+      description: |
+        고객과 캠페인별로 한 장만 발급합니다. 별도 대기열이나 HTTP 도착 순서를 만들지 않으며,
+        Campaign root lock 아래에서 claim·조건부 카운터 증가·CouponIssuance·멱등 응답이 한
+        트랜잭션으로 성공한 순서가 발급 순서입니다. 같은 Idempotency-Key와 같은 캠페인은 최초
+        201 응답을 재생합니다. 잔여 수량은 이 트랜잭션에서 다시 확인합니다.
+      x-beanflow-contract-status: TARGET
+      security: [{ customerSession: [] }]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "201":
+          description: 기존 쿠폰함과 주문에 즉시 사용할 수 있는 쿠폰 발급 완료
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerCouponClaim" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: |
+            `CAMPAIGN_QUOTA_EXHAUSTED`, `COUPON_ALREADY_ISSUED`, `CAMPAIGN_NOT_ISSUABLE`
+            또는 `IDEMPOTENCY_KEY_REUSED`입니다. 실패를 빈 성공으로 바꾸지 않습니다.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /me/orders/{orderReference}:
     get:
       tags: [Ordering]
@@ -8206,7 +8242,7 @@ components:
     CustomerEventCampaign:
       type: object
       additionalProperties: false
-      required: [campaignId, store, title, summary, bannerAltText, banner, benefit, minimumOrderKrw, remainingCount, claimEndsAt, couponExpiresAt]
+      required: [campaignId, store, title, summary, bannerAltText, banner, benefit, minimumOrderKrw, remainingCount, claimEndsAt, couponExpiresAt, claimed]
       properties:
         campaignId: { $ref: "#/components/schemas/Identifier" }
         store: { $ref: "#/components/schemas/CouponCampaignStore" }
@@ -8222,6 +8258,20 @@ components:
           description: 조회 시점의 참고값이며 다운로드 성공을 보장하지 않습니다.
         claimEndsAt: { $ref: "#/components/schemas/DateTime" }
         couponExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        claimed:
+          type: boolean
+          description: 현재 고객이 이미 이 캠페인의 쿠폰을 발급받았는지 여부입니다.
+    CustomerCouponClaim:
+      type: object
+      additionalProperties: false
+      required: [campaignId, couponIssuanceId, claimedAt, couponExpiresAt]
+      properties:
+        campaignId: { $ref: "#/components/schemas/Identifier" }
+        couponIssuanceId: { $ref: "#/components/schemas/Identifier" }
+        claimedAt: { $ref: "#/components/schemas/DateTime" }
+        couponExpiresAt:
+          allOf: [{ $ref: "#/components/schemas/DateTime" }]
+          description: 운영자가 캠페인 발행 전에 고정한 절대 만료 시각입니다.
     CustomerOrderLine:
       type: object
       additionalProperties: false

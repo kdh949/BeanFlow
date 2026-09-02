@@ -27,7 +27,9 @@
 - [x] 2026-09-02: Slice 3의 로그인 고객 event list API와 `/app/events` 페이지를 구현했다.
   게시·활성·다운로드 기간·잔여 수량을 모두 만족하는 캠페인만 최근 게시순으로 노출하고, 배너 접근 URL은
   DB read transaction이 끝난 뒤 발급한다. 홈 화면에서 이벤트 페이지로 진입할 수 있다.
-- [ ] Slice 4: atomic limited coupon claim과 기존 CouponIssuance 연계.
+- [x] 2026-09-02: Slice 4의 atomic limited coupon claim과 기존 CouponIssuance 연계를 구현했다.
+  Campaign root lock 뒤 최신 counter를 다시 읽고, 고객별 claim·조건부 증가·AVAILABLE issuance·terminal
+  idempotency response를 한 transaction으로 commit한다. 고객 페이지는 발급 완료와 품절 경쟁을 구분한다.
 - [ ] Slice 5: STOP, observability, full regression과 plan completion.
 
 ## Context and Orientation

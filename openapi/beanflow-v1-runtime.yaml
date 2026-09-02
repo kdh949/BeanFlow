@@ -274,6 +274,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1coupons"
   /me/events:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1events"
+  /me/events/{campaignId}/claims:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1events~1{campaignId}~1claims"
   /me/orders/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
   /me/orders/{orderReference}/cancellations:
