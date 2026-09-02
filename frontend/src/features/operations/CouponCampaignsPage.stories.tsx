@@ -64,7 +64,9 @@ export const CompleteDraftForm: Story = {
     await canvas.findByRole("option", { name: "빈플로우 성수" });
     await userEvent.selectOptions(canvas.getByLabelText("매장"), campaign.store.storeId);
     await userEvent.type(canvas.getByLabelText("캠페인 제목"), "가을 라떼 선착순 쿠폰");
-    await expect(canvas.getByLabelText("쿠폰 만료 시각")).toBeVisible();
+    await expect(canvas.getByLabelText("다운로드 시작 시각")).toHaveAttribute("type", "datetime-local");
+    await expect(canvas.getByLabelText("다운로드 종료 시각")).toHaveAttribute("type", "datetime-local");
+    await expect(canvas.getByLabelText("쿠폰 만료 시각")).toHaveAttribute("type", "datetime-local");
   },
 };
 

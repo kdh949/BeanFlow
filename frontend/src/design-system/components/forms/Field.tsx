@@ -17,7 +17,7 @@ type FieldContentProps = {
   labelVisibility?: FieldLabelVisibility;
 };
 
-export type TextFieldType = "text" | "email" | "tel" | "password" | "number" | "date";
+export type TextFieldType = "text" | "email" | "tel" | "password" | "number" | "date" | "datetime-local";
 
 export type TextFieldProps = FieldContentProps &
   Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "size" | "type" | "value" | "onChange"> & {
@@ -45,7 +45,7 @@ export type FileFieldProps = FieldContentProps &
     onFileChange: (file: File | null) => void;
   };
 
-/** Canonical controlled single-line field. Numeric and date values remain strings so empty input is never coerced. */
+/** Canonical controlled single-line field. Numeric, date, and local date-time values remain strings so empty input is never coerced. */
 export function TextField({
   label,
   description,

@@ -65,6 +65,11 @@ function menuIds(value: string) {
   return value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function toSeoulOffsetDateTime(value: string) {
+  const localDateTime = value.trim();
+  return localDateTime ? `${localDateTime}:00+09:00` : "";
+}
+
 function discountLabel(campaign: Campaign) {
   if (campaign.discount.discountType === "FIXED_KRW") return `${campaign.discount.fixedAmountKrw?.toLocaleString("ko-KR")}원 할인`;
   return `${((campaign.discount.rateBps ?? 0) / 100).toLocaleString("ko-KR")}% 할인`;
@@ -158,9 +163,9 @@ export function CouponCampaignsPage() {
         storeShareBps: percentToBps(form.storeSharePercent),
       },
       totalQuota: Number(form.totalQuota),
-      claimStartsAt: form.claimStartsAt.trim(),
-      claimEndsAt: form.claimEndsAt.trim(),
-      couponExpiresAt: form.couponExpiresAt.trim(),
+      claimStartsAt: toSeoulOffsetDateTime(form.claimStartsAt),
+      claimEndsAt: toSeoulOffsetDateTime(form.claimEndsAt),
+      couponExpiresAt: toSeoulOffsetDateTime(form.couponExpiresAt),
       reason: form.reason.trim(),
     };
     const fingerprint = JSON.stringify(body);
@@ -248,9 +253,9 @@ export function CouponCampaignsPage() {
           <fieldset>
             <legend>다운로드와 쿠폰 유효기간</legend>
             <div className="field-grid">
-              <TextField label="다운로드 시작 시각" description="ISO-8601 예: 2026-10-01T00:00:00+09:00" value={form.claimStartsAt} onValueChange={(value) => update("claimStartsAt", value)} />
-              <TextField label="다운로드 종료 시각" description="시작보다 늦어야 합니다." value={form.claimEndsAt} onValueChange={(value) => update("claimEndsAt", value)} />
-              <TextField label="쿠폰 만료 시각" description="모든 다운로드 쿠폰에 같은 절대 만료 시각이 적용됩니다." value={form.couponExpiresAt} onValueChange={(value) => update("couponExpiresAt", value)} />
+              <TextField label="다운로드 시작 시각" type="datetime-local" step={60} max={form.claimEndsAt || undefined} description="한국 시간(Asia/Seoul) 기준으로 선택합니다." value={form.claimStartsAt} onValueChange={(value) => update("claimStartsAt", value)} />
+              <TextField label="다운로드 종료 시각" type="datetime-local" step={60} min={form.claimStartsAt || undefined} max={form.couponExpiresAt || undefined} description="한국 시간 기준이며 시작보다 늦어야 합니다." value={form.claimEndsAt} onValueChange={(value) => update("claimEndsAt", value)} />
+              <TextField label="쿠폰 만료 시각" type="datetime-local" step={60} min={form.claimEndsAt || undefined} description="한국 시간 기준이며 모든 다운로드 쿠폰에 같은 절대 만료 시각이 적용됩니다." value={form.couponExpiresAt} onValueChange={(value) => update("couponExpiresAt", value)} />
             </div>
           </fieldset>
 
